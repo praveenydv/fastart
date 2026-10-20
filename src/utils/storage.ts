@@ -75,6 +75,44 @@ export const deleteProject = (projectId: string): FastArtProject[] => {
   return filtered;
 };
 
+// --- Uploaded Media & Audio Persistence ---
+const UPLOADED_MEDIA_KEY = '@fastart_uploaded_media_v2';
+const UPLOADED_AUDIO_KEY = '@fastart_uploaded_audio_v2';
+
+export const loadUploadedMedia = (): any[] => {
+  try {
+    const raw = getStorageItem(UPLOADED_MEDIA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+};
+
+export const saveUploadedMedia = (items: any[]): void => {
+  try {
+    setStorageItem(UPLOADED_MEDIA_KEY, JSON.stringify(items));
+  } catch (e) {}
+};
+
+export const loadUploadedAudio = (): any[] => {
+  try {
+    const raw = getStorageItem(UPLOADED_AUDIO_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+};
+
+export const saveUploadedAudio = (items: any[]): void => {
+  try {
+    setStorageItem(UPLOADED_AUDIO_KEY, JSON.stringify(items));
+  } catch (e) {}
+};
+
 // --- Settings ---
 export interface AppSettings {
   defaultResolution: Resolution;

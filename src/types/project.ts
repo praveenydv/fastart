@@ -5,10 +5,13 @@ export type Resolution = '720p' | '1080p' | '2K/4K';
 export type FPS = 24 | 25 | 30 | 50 | 60;
 
 export interface ClipTransform {
-  scale: number;
-  rotation: number;
-  x: number;
-  y: number;
+  scale?: number;
+  rotation?: number;
+  x?: number;
+  y?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+  opacity?: number;
 }
 
 export interface TransitionConfig {
@@ -34,11 +37,15 @@ export interface VideoClip {
   speed?: number;
   speedCurve?: number[] | null;
   volume?: number;
+  fadeIn?: number;
+  fadeOut?: number;
+  reverse?: boolean;
   filter?: string;
   effect?: string;
   transition?: TransitionConfig;
   transform?: ClipTransform;
   keyframes?: KeyframePoint[];
+  trackIndex?: number;
 }
 
 export interface AudioClip {
@@ -50,7 +57,10 @@ export interface AudioClip {
   trimIn?: number;
   trimOut?: number;
   volume?: number;
+  fadeIn?: number;
+  fadeOut?: number;
   url: string;
+  trackIndex?: number;
 }
 
 export interface TextStyle {
@@ -65,6 +75,7 @@ export interface TextStyle {
   borderWidth?: number;
   textAlign?: 'auto' | 'left' | 'right' | 'center' | 'justify';
   letterSpacing?: number;
+  fontFamily?: string;
   textShadowColor?: string;
   textShadowRadius?: number;
   textShadowOffset?: { width: number; height: number };
@@ -80,6 +91,7 @@ export interface TextClip {
   rotation?: number;
   animation?: 'bounce' | 'typewriter' | 'fade' | 'slideUp' | 'pulse' | string;
   style?: TextStyle;
+  trackIndex?: number;
 }
 
 export interface StickerClip {
@@ -90,6 +102,7 @@ export interface StickerClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
+  trackIndex?: number;
 }
 
 export interface EffectClip {
@@ -99,6 +112,7 @@ export interface EffectClip {
   startTime: number;
   duration: number;
   intensity?: number;
+  trackIndex?: number;
 }
 
 export interface ProjectTracks {

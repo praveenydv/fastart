@@ -7,26 +7,106 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
-import { VideoRenderer } from '../../utils/videoRenderer';
+import { VideoRenderer, ExportFormat, ExportResult } from '../../utils/videoRenderer';
 import { soundEngine } from '../../utils/audioEngine';
+
+interface ExportModalProps {
+  visible: boolean;
+  onClose: () => void;
+  project: any;
+  totalDuration: number;
+}
+
+interface MediaFormatOption {
+  id: ExportFormat;
+  label: string;
+  ext: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  badge: string;
+  isRecommended?: boolean;
+  desc: string;
+}
+
+const MEDIA_FORMATS: MediaFormatOption[] = [
+  {
+    id: 'mp4',
+    label: 'MP4 Video',
+    ext: '.mp4',
+    icon: 'videocam',
+    badge: 'Universal',
+    isRecommended: true,
+    desc: 'Compatible with QuickTime, Instagram, YouTube, TikTok, iPhone & Windows',
+  },
+  {
+    id: 'webm',
+    label: 'WebM Video',
+    ext: '.webm',
+    icon: 'globe-outline',
+    badge: 'Web & Fast',
+    isRecommended: false,
+    desc: 'High compression VP9 web video format, lightweight for browser playback',
+  },
+  {
+    id: 'gif',
+    label: 'Animated GIF',
+    ext: '.gif',
+    icon: 'film-outline',
+    badge: 'Looping',
+    isRecommended: false,
+    desc: 'Looped animation clip, perfect for reactions, memes, and Discord stickers',
+  },
+  {
+    id: 'png',
+    label: 'PNG Cover',
+    ext: '.png',
+    icon: 'image-outline',
+    badge: 'HD Still',
+    isRecommended: false,
+    desc: 'Ultra-crisp lossless poster frame snapshot for thumbnails and covers',
+  },
+  {
+    id: 'wav',
+    label: 'WAV Audio',
+    ext: '.wav',
+    icon: 'musical-notes-outline',
+    badge: '16-bit Studio',
+    isRecommended: false,
+    desc: 'Pure uncompressed stereo master soundtrack audio',
+  },
+];
 
 export default function ExportModal({
   visible,
   onClose,
   project,
   totalDuration,
-}) {
+}: ExportModalProps) {
+  const [mediaType, setMediaType] = useState<ExportFormat>('mp4');
   const [resolution, setResolution] = useState(project.resolution || '1080p');
   const [fps, setFps] = useState(30);
-  const [status, setStatus] = useState('idle'); // 'idle' | 'rendering' | 'done' | 'error'
+  const [status, setStatus] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
-  const [exportedUrl, setExportedUrl] = useState(null);
+  const [exportedResult, setExportedResult] = useState<ExportResult | null>(null);
+  const [exportedUrl, setExportedUrl] = useState<string | null>(null);
 
   const resolutions = ['720p', '1080p', '2K/4K'];
   const frameRates = [24, 30, 60];
+
+  const selectedFormatConfig = MEDIA_FORMATS.find((f) => f.id === mediaType) || MEDIA_FORMATS[0];
+
+  const calculateEstimatedSize = () => {
+    const dur = Math.min(totalDuration || 5, 15);
+    if (mediaType === 'png') return '~1.8 MB';
+    if (mediaType === 'wav') return `~${(dur * 0.17).toFixed(1)} MB`;
+    if (mediaType === 'gif') return `~${(dur * 0.55).toFixed(1)} MB`;
+    const resMultiplier = resolution === '2K/4K' ? 2.5 : resolution === '1080p' ? 1.4 : 0.8;
+    const formatMultiplier = mediaType === 'webm' ? 0.75 : 1.0;
+    return `~${(dur * resMultiplier * formatMultiplier).toFixed(1)} MB`;
+  };
 
   const handleStartExport = async () => {
     setStatus('rendering');
@@ -37,7 +117,7 @@ export default function ExportModal({
       if (Platform.OS === 'web') {
         const offscreenCanvas = document.createElement('canvas');
         // Aspect ratio dimensions
-        const ratioMap = {
+        const ratioMap: Record<string, [number, number]> = {
           '9:16': [1080, 1920],
           '16:9': [1920, 1080],
           '1:1': [1080, 1080],
@@ -50,21 +130,26 @@ export default function ExportModal({
 
         const renderer = new VideoRenderer(offscreenCanvas);
         // Preload clips
-        for (const clip of project.tracks.video || []) {
+        for (const clip of project.tracks?.video || []) {
           await renderer.preloadClip(clip);
         }
+
+        const renderDuration = Math.min(Math.max(totalDuration, 2.0), 15.0);
 
         const result = await renderer.exportVideo(
           project,
           {
             fps,
-            duration: Math.min(totalDuration, 15.0), // render up to 15s
+            duration: renderDuration,
+            format: mediaType,
+            currentTime: 0,
           },
           (pct) => {
             setProgress(pct);
           }
         );
 
+        setExportedResult(result);
         setExportedUrl(result.videoUrl);
         setStatus('done');
         soundEngine.playSfx('pop');
@@ -85,16 +170,48 @@ export default function ExportModal({
   };
 
   const handleDownload = () => {
-    if (Platform.OS === 'web' && exportedUrl) {
+    if (!exportedUrl) return;
+
+    const currentFmt = MEDIA_FORMATS.find((f) => f.id === mediaType) || MEDIA_FORMATS[0];
+    const ext = exportedResult?.extension || currentFmt.id;
+    const cleanTitle = (project.title || 'FastArt_Video').replace(/[^a-zA-Z0-9_-]/g, '_');
+    
+    let filename: string;
+    if (mediaType === 'png') {
+      filename = `${cleanTitle}_Cover.${ext}`;
+    } else if (mediaType === 'wav') {
+      filename = `${cleanTitle}_Soundtrack.${ext}`;
+    } else {
+      filename = `${cleanTitle}_${resolution}.${ext}`;
+    }
+
+    if (Platform.OS === 'web') {
       const a = document.createElement('a');
       a.href = exportedUrl;
-      a.download = `${project.title || 'capcut_video'}_${resolution}.webm`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       soundEngine.playSfx('pop');
-    } else if (exportedUrl) {
+    } else {
       Sharing.shareAsync(exportedUrl).catch((err) => console.warn(err));
+    }
+  };
+
+  const getProgressStatusMessage = () => {
+    switch (mediaType) {
+      case 'mp4':
+        return 'Encoding hardware-accelerated MP4 (H.264 / AVC)...';
+      case 'webm':
+        return 'Rendering WebM video frames with VP9 codec...';
+      case 'gif':
+        return 'Generating animated GIF palette and frames...';
+      case 'png':
+        return 'Rendering crisp lossless PNG frame...';
+      case 'wav':
+        return 'Synthesizing 16-bit stereo PCM audio track...';
+      default:
+        return 'Rendering frames...';
     }
   };
 
@@ -104,7 +221,10 @@ export default function ExportModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Export Video</Text>
+            <View style={styles.headerTitleRow}>
+              <Ionicons name="cloud-download-outline" size={20} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>Export & Download Media</Text>
+            </View>
             {status !== 'rendering' && (
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Ionicons name="close" size={20} color="#FFFFFF" />
@@ -112,58 +232,167 @@ export default function ExportModal({
             )}
           </View>
 
-          <View style={styles.sheetBody}>
+          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             {/* IDLE STATE: Settings */}
             {status === 'idle' && (
               <>
-                <Text style={styles.sectionTitle}>RESOLUTION</Text>
-                <View style={styles.row}>
-                  {resolutions.map((r) => (
-                    <TouchableOpacity
-                      key={r}
-                      style={[styles.pill, resolution === r && styles.pillActive]}
-                      onPress={() => setResolution(r)}
-                    >
-                      <Text style={[styles.pillText, resolution === r && styles.pillTextActive]}>
-                        {r}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                {/* 1. MEDIA TYPE SELECTION */}
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>1. MEDIA TYPE / FORMAT</Text>
+                  <Text style={styles.sectionHint}>Select download format</Text>
                 </View>
 
-                <Text style={styles.sectionTitle}>FRAME RATE (FPS)</Text>
-                <View style={styles.row}>
-                  {frameRates.map((f) => (
-                    <TouchableOpacity
-                      key={f}
-                      style={[styles.pill, fps === f && styles.pillActive]}
-                      onPress={() => setFps(f)}
-                    >
-                      <Text style={[styles.pillText, fps === f && styles.pillTextActive]}>
-                        {f} FPS
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                <View style={styles.formatGrid}>
+                  {MEDIA_FORMATS.map((fmt) => {
+                    const isSelected = mediaType === fmt.id;
+                    return (
+                      <TouchableOpacity
+                        key={fmt.id}
+                        style={[
+                          styles.formatCard,
+                          isSelected && styles.formatCardActive,
+                          fmt.isRecommended && !isSelected && styles.formatCardRecommended,
+                        ]}
+                        onPress={() => {
+                          setMediaType(fmt.id);
+                          soundEngine.playSfx('click');
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.formatCardHeader}>
+                          <View
+                            style={[
+                              styles.formatIconCircle,
+                              isSelected && styles.formatIconCircleActive,
+                            ]}
+                          >
+                            <Ionicons
+                              name={fmt.icon}
+                              size={18}
+                              color={isSelected ? '#000000' : '#00F2FE'}
+                            />
+                          </View>
+                          <View
+                            style={[
+                              styles.badgeTag,
+                              fmt.isRecommended && styles.badgeTagRecommended,
+                              isSelected && styles.badgeTagActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.badgeTagText,
+                                isSelected && styles.badgeTagTextActive,
+                              ]}
+                            >
+                              {fmt.badge}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text
+                          style={[
+                            styles.formatLabel,
+                            isSelected && styles.formatLabelActive,
+                          ]}
+                        >
+                          {fmt.label}
+                        </Text>
+                        <Text style={styles.formatExt}>{fmt.ext}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
+                {/* Selected Format Description Banner */}
+                <View style={styles.formatDescriptionBox}>
+                  <Ionicons name="information-circle-outline" size={16} color="#00F2FE" />
+                  <Text style={styles.formatDescriptionText}>
+                    {selectedFormatConfig.desc}
+                  </Text>
+                </View>
+
+                {/* 2. RESOLUTION (For MP4, WebM, PNG) */}
+                {mediaType !== 'wav' && (
+                  <>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionTitle}>2. RESOLUTION</Text>
+                      <Text style={styles.sectionHint}>{project.aspectRatio}</Text>
+                    </View>
+                    <View style={styles.row}>
+                      {resolutions.map((r) => (
+                        <TouchableOpacity
+                          key={r}
+                          style={[styles.pill, resolution === r && styles.pillActive]}
+                          onPress={() => setResolution(r)}
+                        >
+                          <Text
+                            style={[styles.pillText, resolution === r && styles.pillTextActive]}
+                          >
+                            {r}
+                          </Text>
+                          {r === '1080p' && <Text style={styles.subPillTag}>Optimal</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* 3. FRAME RATE (For MP4, WebM, GIF) */}
+                {mediaType !== 'png' && mediaType !== 'wav' && (
+                  <>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionTitle}>3. FRAME RATE (FPS)</Text>
+                      <Text style={styles.sectionHint}>
+                        {mediaType === 'gif' ? 'Max 12fps for GIF' : 'Smooth motion'}
+                      </Text>
+                    </View>
+                    <View style={styles.row}>
+                      {frameRates.map((f) => (
+                        <TouchableOpacity
+                          key={f}
+                          style={[styles.pill, fps === f && styles.pillActive]}
+                          onPress={() => setFps(f)}
+                        >
+                          <Text style={[styles.pillText, fps === f && styles.pillTextActive]}>
+                            {f} FPS
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* Metadata & Estimated Specs */}
                 <View style={styles.metaBox}>
                   <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Download Media Type:</Text>
+                    <View style={styles.metaFormatBadge}>
+                      <Text style={styles.metaFormatText}>
+                        {selectedFormatConfig.label} ({selectedFormatConfig.ext})
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.metaRow}>
                     <Text style={styles.metaLabel}>Estimated Size:</Text>
-                    <Text style={styles.metaVal}>~18.5 MB</Text>
+                    <Text style={styles.metaVal}>{calculateEstimatedSize()}</Text>
                   </View>
                   <View style={styles.metaRow}>
                     <Text style={styles.metaLabel}>Duration:</Text>
-                    <Text style={styles.metaVal}>{totalDuration.toFixed(1)}s</Text>
+                    <Text style={styles.metaVal}>
+                      {mediaType === 'png' ? 'Single Frame' : `${totalDuration.toFixed(1)}s`}
+                    </Text>
                   </View>
                   <View style={styles.metaRow}>
-                    <Text style={styles.metaLabel}>Aspect Ratio:</Text>
+                    <Text style={styles.metaLabel}>Canvas Aspect Ratio:</Text>
                     <Text style={styles.metaVal}>{project.aspectRatio}</Text>
                   </View>
                 </View>
 
                 <TouchableOpacity style={styles.exportCtaBtn} onPress={handleStartExport}>
-                  <Ionicons name="arrow-up-circle" size={24} color="#000000" />
-                  <Text style={styles.exportCtaText}>Export Video Now</Text>
+                  <Ionicons name="download-outline" size={22} color="#000000" />
+                  <Text style={styles.exportCtaText}>
+                    Export & Download as {selectedFormatConfig.label}
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
@@ -173,10 +402,13 @@ export default function ExportModal({
               <View style={styles.progressContainer}>
                 <ActivityIndicator size="large" color="#00F2FE" style={{ marginBottom: 16 }} />
                 <Text style={styles.progressPercent}>{progress}%</Text>
-                <Text style={styles.progressStatusText}>Rendering frames with hardware codecs...</Text>
+                <Text style={styles.progressStatusText}>{getProgressStatusMessage()}</Text>
                 <View style={styles.progressBarTrack}>
                   <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
                 </View>
+                <Text style={styles.formatProgressNotice}>
+                  Generating {selectedFormatConfig.label} ({selectedFormatConfig.ext})
+                </Text>
               </View>
             )}
 
@@ -184,16 +416,34 @@ export default function ExportModal({
             {status === 'done' && (
               <View style={styles.doneContainer}>
                 <View style={styles.successIconBox}>
-                  <Ionicons name="checkmark-circle" size={64} color="#10B981" />
+                  <Ionicons name="checkmark-circle" size={68} color="#10B981" />
                 </View>
-                <Text style={styles.doneTitle}>Ready to Share!</Text>
+                <Text style={styles.doneTitle}>Ready to Download!</Text>
                 <Text style={styles.doneSubtext}>
-                  Video rendered successfully in {resolution} at {fps}fps.
+                  Exported successfully as{' '}
+                  <Text style={{ color: '#00F2FE', fontWeight: '800' }}>
+                    {selectedFormatConfig.label} ({selectedFormatConfig.ext})
+                  </Text>
+                  {mediaType !== 'png' && mediaType !== 'wav' ? ` in ${resolution} @ ${fps}fps` : ''}
                 </Text>
 
+                {/* Primary Download Button */}
                 <TouchableOpacity style={styles.downloadBtn} onPress={handleDownload}>
-                  <Ionicons name="download" size={20} color="#000000" />
-                  <Text style={styles.downloadBtnText}>Download Video File</Text>
+                  <Ionicons name="cloud-download" size={22} color="#000000" />
+                  <Text style={styles.downloadBtnText}>
+                    Download {selectedFormatConfig.label} ({selectedFormatConfig.ext})
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Secondary Option: Switch Format & Re-export */}
+                <TouchableOpacity
+                  style={styles.reExportBtn}
+                  onPress={() => {
+                    setStatus('idle');
+                  }}
+                >
+                  <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
+                  <Text style={styles.reExportBtnText}>Choose Another Media Type / Re-export</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -203,11 +453,11 @@ export default function ExportModal({
                     onClose();
                   }}
                 >
-                  <Text style={styles.doneDismissText}>Done / Back to Edit</Text>
+                  <Text style={styles.doneDismissText}>Done / Back to Editor</Text>
                 </TouchableOpacity>
               </View>
             )}
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -217,14 +467,14 @@ export default function ExportModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#141721',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '75%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: '85%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
   },
@@ -232,46 +482,154 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#1E2333',
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#1E2333',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetBody: {
-    padding: 16,
+    padding: 20,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   sectionTitle: {
     color: '#8E95A5',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  sectionHint: {
+    color: '#6B7280',
+    fontSize: 11,
+  },
+  formatGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  formatCard: {
+    flexBasis: '31%',
+    flexGrow: 1,
+    backgroundColor: '#0F1219',
+    borderWidth: 1.5,
+    borderColor: '#1E2333',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  formatCardActive: {
+    borderColor: '#00F2FE',
+    backgroundColor: '#16222F',
+  },
+  formatCardRecommended: {
+    borderColor: '#2A3B4C',
+  },
+  formatCardHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
+  },
+  formatIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1B2232',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formatIconCircleActive: {
+    backgroundColor: '#00F2FE',
+  },
+  badgeTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#1E2333',
+  },
+  badgeTagRecommended: {
+    backgroundColor: '#053E47',
+  },
+  badgeTagActive: {
+    backgroundColor: '#00F2FE',
+  },
+  badgeTagText: {
+    color: '#8E95A5',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  badgeTagTextActive: {
+    color: '#000000',
+  },
+  formatLabel: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  formatLabelActive: {
+    color: '#00F2FE',
+  },
+  formatExt: {
+    color: '#6B7280',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  formatDescriptionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#0A131C',
+    borderWidth: 1,
+    borderColor: '#133544',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 18,
+  },
+  formatDescriptionText: {
+    color: '#7DD3FC',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
   },
   row: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   pill: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: '#10131A',
     borderWidth: 1,
     borderColor: '#1E2333',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   pillActive: {
     borderColor: '#00F2FE',
@@ -285,16 +643,25 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: '#00F2FE',
   },
+  subPillTag: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: '800',
+    marginTop: 2,
+  },
   metaBox: {
     backgroundColor: '#0B0D13',
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 20,
-    gap: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#1B212D',
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   metaLabel: {
     color: '#8E95A5',
@@ -305,14 +672,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  metaFormatBadge: {
+    backgroundColor: '#1E2333',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  metaFormatText: {
+    color: '#00F2FE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   exportCtaBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#00F2FE',
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 12,
-    gap: 8,
+    gap: 10,
+    marginBottom: 24,
   },
   exportCtaText: {
     color: '#000000',
@@ -321,7 +700,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
+    paddingVertical: 32,
   },
   progressPercent: {
     color: '#FFFFFF',
@@ -332,7 +711,8 @@ const styles = StyleSheet.create({
   progressStatusText: {
     color: '#8E95A5',
     fontSize: 13,
-    marginBottom: 20,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   progressBarTrack: {
     width: '100%',
@@ -345,12 +725,18 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#00F2FE',
   },
+  formatProgressNotice: {
+    color: '#00F2FE',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 14,
+  },
   doneContainer: {
     alignItems: 'center',
     paddingVertical: 20,
   },
   successIconBox: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   doneTitle: {
     color: '#FFFFFF',
@@ -360,9 +746,10 @@ const styles = StyleSheet.create({
   doneSubtext: {
     color: '#8E95A5',
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 6,
     marginBottom: 24,
     textAlign: 'center',
+    lineHeight: 20,
   },
   downloadBtn: {
     flexDirection: 'row',
@@ -370,21 +757,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#10B981',
     width: '100%',
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 12,
-    gap: 8,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 14,
   },
   downloadBtnText: {
     color: '#000000',
     fontSize: 15,
     fontWeight: '800',
   },
+  reExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  reExportBtnText: {
+    color: '#8E95A5',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   doneDismissBtn: {
     paddingVertical: 10,
   },
   doneDismissText: {
-    color: '#8E95A5',
+    color: '#6B7280',
     fontSize: 14,
     fontWeight: '600',
   },

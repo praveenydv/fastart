@@ -1,6 +1,9 @@
 {
   "name": "fastart",
   "version": "1.0.0",
+  "description": "FastArt - Powerful Cross-Platform AI-Powered Video Editor",
+  "author": "FastArt Team",
+  "license": "MIT",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~58.0.14",

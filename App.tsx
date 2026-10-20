@@ -11,6 +11,10 @@ import Player from './src/components/Player';
 import Timeline from './src/components/Timeline';
 import Toolbar from './src/components/Toolbar';
 import HomeDashboard from './src/components/HomeDashboard';
+import SettingsScreen from './src/components/SettingsScreen';
+import NotificationsScreen from './src/components/NotificationsScreen';
+import ProjectNotFoundScreen from './src/components/ProjectNotFoundScreen';
+import { useAppRouter } from './src/utils/router';
 
 // Modals / Panels
 import MediaPickerModal from './src/components/Panels/MediaPickerModal';
@@ -24,8 +28,22 @@ import SpeedModal from './src/components/Panels/SpeedModal';
 import ExportModal from './src/components/Panels/ExportModal';
 import SettingsModal from './src/components/Panels/SettingsModal';
 import NotificationsModal from './src/components/Panels/NotificationsModal';
+import VolumeModal from './src/components/Panels/VolumeModal';
+import CropTransformModal from './src/components/Panels/CropTransformModal';
+import CameraModal from './src/components/Panels/CameraModal';
+import AutoCutModal from './src/components/Panels/AutoCutModal';
+import AIEnhanceModal from './src/components/Panels/AIEnhanceModal';
+import TextToSpeechModal from './src/components/Panels/TextToSpeechModal';
 
-import { createDefaultProject, computeTotalDuration } from './src/types/project';
+import {
+  FastArtProject,
+  VideoClip,
+  AudioClip,
+  ClipTransform,
+  AspectRatio,
+  createDefaultProject,
+  computeTotalDuration,
+} from './src/types/project';
 import {
   loadAllProjects,
   saveProject,
@@ -38,38 +56,115 @@ import {
 import { soundEngine } from './src/utils/audioEngine';
 
 export default function App() {
-  const [screen, setScreen] = useState('home'); // 'home' | 'editor'
-  const [projects, setProjects] = useState([]);
-  const [project, setProject] = useState(null);
+  const { route, navigate, goBack } = useAppRouter();
+  const screen = route.screen;
+  const setScreen = (s: string) => {
+    if (s === 'home') navigate('/');
+    else if (s === 'editor' && project) navigate(`/project/${project.id}`);
+    else navigate(`/${s}`);
+  };
+  const [projects, setProjects] = useState<FastArtProject[]>([]);
+  const [project, setProject] = useState<FastArtProject | null>(null);
   const [settings, setSettings] = useState(loadSettings());
   const [notifications, setNotifications] = useState(loadNotifications());
 
   // Playback state
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [selectedClipId, setSelectedClipId] = useState(null);
-  const [selectedClipType, setSelectedClipType] = useState('video');
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipType, setSelectedClipType] = useState<string>('video');
   const [zoom, setZoom] = useState(60);
 
   // History state (Undo / Redo)
-  const [historyStack, setHistoryStack] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
+  const [historyStack, setHistoryStack] = useState<FastArtProject[]>([]);
+  const [redoStack, setRedoStack] = useState<FastArtProject[]>([]);
 
   // Active modal sheets
-  const [activeModal, setActiveModal] = useState(null);
-  const [transitionTargetClipId, setTransitionTargetClipId] = useState(null);
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [transitionTargetClipId, setTransitionTargetClipId] = useState<string | null>(null);
 
-  const animFrameRef = useRef(null);
-  const lastTimeRef = useRef(null);
+  const animFrameRef = useRef<any>(null);
+  const lastTimeRef = useRef<any>(null);
 
   // Load projects on startup
   useEffect(() => {
     const projs = loadAllProjects();
     setProjects(projs);
-    if (projs.length > 0) {
-      setProject(projs[0]);
-    }
   }, []);
+
+  // Sync route and project / modal selection
+  useEffect(() => {
+    if (projects.length === 0) return;
+
+    if (route.screen === 'editor') {
+      const key = route.projectKey;
+      if (!key) {
+        // e.g. /project without key -> default to first project URL
+        navigate(`/project/${projects[0].id}`, { replace: true });
+        return;
+      }
+
+      if (key === 'new') {
+        handleCreateNewProject();
+        return;
+      }
+
+      // 1. Exact ID match
+      let matched = projects.find((p) => p.id === key);
+
+      // 2. 1-based index match (e.g. key === '1' -> projects[0], key === '2' -> projects[1])
+      if (!matched) {
+        const num = parseInt(key, 10);
+        if (!isNaN(num) && num > 0 && num <= projects.length) {
+          matched = projects[num - 1];
+        }
+      }
+
+      // 3. Title or slug match
+      if (!matched) {
+        matched = projects.find(
+          (p) =>
+            p.id.toLowerCase() === key.toLowerCase() ||
+            p.title.toLowerCase() === key.toLowerCase() ||
+            p.title.toLowerCase().replace(/\s+/g, '-') === key.toLowerCase()
+        );
+      }
+
+      if (matched) {
+        if (!project || project.id !== matched.id) {
+          setProject(matched);
+          setCurrentTime(0);
+          setIsPlaying(false);
+          setSelectedClipId(null);
+        }
+      } else {
+        setProject(null);
+      }
+
+      if (route.tool) {
+        setActiveModal(route.tool);
+      }
+    } else {
+      if (isPlaying) {
+        setIsPlaying(false);
+      }
+    }
+  }, [route.screen, route.projectKey, route.tool, projects]);
+
+  // Modal helpers synced with URL
+  const openModal = (modalName: string) => {
+    setActiveModal(modalName);
+    if (route.screen === 'editor' && project) {
+      navigate(`/project/${project.id}?tool=${modalName}`, { replace: true });
+    }
+  };
+
+  const closeModal = () => {
+    setActiveModal(null);
+    if (route.screen === 'editor' && project) {
+      navigate(`/project/${project.id}`, { replace: true });
+    }
+  };
 
   // Compute total duration
   const totalDuration = project ? computeTotalDuration(project.tracks) : 10.0;
@@ -253,12 +348,12 @@ export default function App() {
     const idx = videoClips.findIndex((c) => c.id === selectedClipId);
     if (idx === -1) return;
 
-    const currentRotation = videoClips[idx].transform?.rotation || 0;
+    const currentTransform = videoClips[idx].transform || { scale: 1, rotation: 0, x: 0, y: 0 };
     videoClips[idx] = {
       ...videoClips[idx],
       transform: {
-        ...(videoClips[idx].transform || {}),
-        rotation: (currentRotation + 90) % 360,
+        ...currentTransform,
+        rotation: ((currentTransform.rotation || 0) + 90) % 360,
       },
     };
 
@@ -433,18 +528,11 @@ export default function App() {
   };
 
   // Project Management Handlers (Home Screen)
-  const handleOpenProject = (id) => {
-    const found = projects.find((p) => p.id === id);
-    if (found) {
-      setProject(found);
-      setCurrentTime(0);
-      setIsPlaying(false);
-      setSelectedClipId(null);
-      setScreen('editor');
-    }
+  const handleOpenProject = (id: string) => {
+    navigate(`/project/${id}`);
   };
 
-  const handleUpdateSettings = (newSettings) => {
+  const handleUpdateSettings = (newSettings: any) => {
     setSettings(newSettings);
     saveSettings(newSettings);
   };
@@ -471,10 +559,10 @@ export default function App() {
     setCurrentTime(0);
     setIsPlaying(false);
     setSelectedClipId(null);
-    setScreen('editor');
+    navigate(`/project/${newProj.id}`);
   };
 
-  const handleDuplicateProject = (id) => {
+  const handleDuplicateProject = (id: string) => {
     const found = projects.find((p) => p.id === id);
     if (found) {
       const clone = {
@@ -488,34 +576,274 @@ export default function App() {
     }
   };
 
-  const handleDeleteProject = (id) => {
+  const handleDeleteProject = (id: string) => {
     const updated = deleteProject(id);
     setProjects(updated);
     if (project?.id === id) {
-      setProject(updated[0] || null);
+      if (updated.length > 0) {
+        setProject(updated[0]);
+        navigate(`/project/${updated[0].id}`, { replace: true });
+      } else {
+        setProject(null);
+        navigate('/', { replace: true });
+      }
     }
   };
 
-  return (
-    <SafeAreaView style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" />
+  const handleRenameProject = (id: string, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    const updated = projects.map((p) => (p.id === id ? { ...p, title: trimmed } : p));
+    setProjects(updated);
+    const targetProj = updated.find((p) => p.id === id);
+    if (targetProj) saveProject(targetProj);
+    if (project?.id === id) {
+      setProject((prev: any) => (prev ? { ...prev, title: trimmed } : null));
+    }
+  };
 
-      {/* 1. HOME DASHBOARD SCREEN */}
-      {screen === 'home' && (
+  // Apply Volume & Dynamics
+  const handleApplyVolume = (vol: number, fadeIn: number, fadeOut: number) => {
+    if (!project || !selectedClip) return;
+    const list = [...(project.tracks[selectedClipType as keyof typeof project.tracks] || [])];
+    const idx = list.findIndex((c: any) => c.id === selectedClipId);
+    if (idx >= 0) {
+      list[idx] = {
+        ...list[idx],
+        volume: vol,
+        fadeIn,
+        fadeOut,
+      };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, [selectedClipType]: list } as any,
+      });
+    }
+  };
+
+  // Apply Transform & Canvas Ratio
+  const handleApplyTransform = (t: ClipTransform, newAspectRatio?: AspectRatio) => {
+    if (!project) return;
+    let updated: any = { ...project };
+    if (newAspectRatio && newAspectRatio !== project.aspectRatio) {
+      updated.aspectRatio = newAspectRatio;
+    }
+    if (selectedClip && selectedClipType === 'video') {
+      const videoClips = [...(project.tracks.video || [])];
+      const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+      if (idx >= 0) {
+        videoClips[idx] = {
+          ...videoClips[idx],
+          transform: { ...(videoClips[idx].transform || {}), ...t },
+        };
+        updated.tracks = { ...project.tracks, video: videoClips };
+      }
+    }
+    updateProjectWithHistory(updated);
+  };
+
+  // Toggle Reverse
+  const handleToggleReverse = () => {
+    if (!project || !selectedClip || selectedClipType !== 'video') return;
+    const videoClips = [...(project.tracks.video || [])];
+    const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+    if (idx >= 0) {
+      videoClips[idx] = {
+        ...videoClips[idx],
+        reverse: !videoClips[idx].reverse,
+      };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, video: videoClips },
+      });
+    }
+  };
+
+  // Apply AI Enhance
+  const handleApplyEnhance = (preset: { filterLut: string }) => {
+    if (!project) return;
+    const videoClips = (project.tracks.video || []).map((c) => {
+      if (!selectedClipId || c.id === selectedClipId) {
+        return { ...c, filter: preset.filterLut };
+      }
+      return c;
+    });
+    updateProjectWithHistory({
+      ...project,
+      tracks: { ...project.tracks, video: videoClips },
+    });
+  };
+
+  // AutoCut Generated Project
+  const handleAutoCutGenerated = (newProj: FastArtProject) => {
+    saveProject(newProj);
+    setProjects((prev: any) => [newProj, ...prev]);
+    setProject(newProj);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setSelectedClipId(null);
+    navigate(`/project/${newProj.id}`);
+  };
+
+  // Live Camera Recording Added
+  const handleAddRecordedClip = (newClip: VideoClip) => {
+    if (!project) {
+      const newProj = createDefaultProject('Camera Recording Project');
+      newClip.startTime = 0;
+      newProj.tracks.video = [newClip];
+      saveProject(newProj);
+      setProjects((prev: any) => [newProj, ...prev]);
+      setProject(newProj);
+      navigate(`/project/${newProj.id}`);
+    } else {
+      handleAddMedia(newClip);
+      navigate(`/project/${project.id}`);
+    }
+  };
+
+  // Draggable Trim Clip for Video, Audio, and Text
+  const handleTrimClip = (
+    clipId: string,
+    updates: { startTime?: number; duration?: number; trimIn?: number; trimOut?: number }
+  ) => {
+    if (!project) return;
+    const tracks = { ...project.tracks };
+
+    let found = false;
+    // Check video clips
+    if (tracks.video) {
+      const idx = tracks.video.findIndex((c) => c.id === clipId);
+      if (idx >= 0) {
+        tracks.video[idx] = { ...tracks.video[idx], ...updates };
+        found = true;
+      }
+    }
+    // Check audio clips
+    if (!found && tracks.audio) {
+      const idx = tracks.audio.findIndex((c) => c.id === clipId);
+      if (idx >= 0) {
+        tracks.audio[idx] = { ...tracks.audio[idx], ...updates };
+        found = true;
+      }
+    }
+    // Check text clips
+    if (!found && tracks.text) {
+      const idx = tracks.text.findIndex((c) => c.id === clipId);
+      if (idx >= 0) {
+        tracks.text[idx] = { ...tracks.text[idx], ...updates };
+        found = true;
+      }
+    }
+    // Check sticker clips
+    if (!found && tracks.stickers) {
+      const idx = tracks.stickers.findIndex((c) => c.id === clipId);
+      if (idx >= 0) {
+        tracks.stickers[idx] = { ...tracks.stickers[idx], ...updates };
+        found = true;
+      }
+    }
+    // Check effect clips
+    if (!found && tracks.effects) {
+      const idx = tracks.effects.findIndex((c) => c.id === clipId);
+      if (idx >= 0) {
+        tracks.effects[idx] = { ...tracks.effects[idx], ...updates };
+        found = true;
+      }
+    }
+
+    updateProjectWithHistory({ ...project, tracks });
+  };
+
+  // Draggable Move Clip along timeline tracks
+  const handleMoveClip = (
+    clipId: string,
+    trackType: 'video' | 'audio' | 'text' | 'sticker' | 'effects',
+    newStartTime: number,
+    newTrackIndex?: number
+  ) => {
+    if (!project) return;
+    const tracks = { ...project.tracks };
+
+    const updateItem = (c: any) =>
+      c.id === clipId
+        ? {
+            ...c,
+            startTime: newStartTime,
+            ...(typeof newTrackIndex === 'number' ? { trackIndex: newTrackIndex } : {}),
+          }
+        : c;
+
+    if (trackType === 'video' && tracks.video) {
+      tracks.video = tracks.video.map(updateItem);
+    } else if (trackType === 'audio' && tracks.audio) {
+      tracks.audio = tracks.audio.map(updateItem);
+    } else if (trackType === 'text' && tracks.text) {
+      tracks.text = tracks.text.map(updateItem);
+    } else if (trackType === 'sticker' && tracks.stickers) {
+      tracks.stickers = tracks.stickers.map(updateItem);
+    } else if (trackType === 'effects' && tracks.effects) {
+      tracks.effects = tracks.effects.map(updateItem);
+    }
+
+    updateProjectWithHistory({ ...project, tracks });
+  };
+
+  return (
+    <View style={styles.rootWrapper}>
+      <StatusBar barStyle="light-content" />
+      <SafeAreaView style={styles.rootContainer}>
+
+      {/* 1. HOME DASHBOARD SCREEN (URL: / or /home) */}
+      {route.screen === 'home' && (
         <HomeDashboard
           projects={projects}
           onOpenProject={handleOpenProject}
           onCreateNewProject={handleCreateNewProject}
           onDuplicateProject={handleDuplicateProject}
           onDeleteProject={handleDeleteProject}
-          onOpenSettings={() => setActiveModal('settings')}
-          onOpenNotifications={() => setActiveModal('notifications')}
+          onRenameProject={handleRenameProject}
+          onOpenSettings={() => navigate('/settings')}
+          onOpenNotifications={() => navigate('/notifications')}
           unreadNotificationsCount={notifications.filter((n) => n.unread).length}
         />
       )}
 
-      {/* 2. FULL CAPCUT EDITOR SUITE */}
-      {screen === 'editor' && project && (
+      {/* 2. DEDICATED SETTINGS SCREEN (URL: /settings) */}
+      {route.screen === 'settings' && (
+        <SettingsScreen
+          settings={settings}
+          onUpdateSettings={handleUpdateSettings}
+          onBack={() => {
+            navigate('/');
+          }}
+        />
+      )}
+
+      {/* 3. DEDICATED NOTIFICATIONS SCREEN (URL: /notifications) */}
+      {route.screen === 'notifications' && (
+        <NotificationsScreen
+          notifications={notifications}
+          onMarkAllAsRead={handleMarkAllAsRead}
+          onClearAll={handleClearAllNotifications}
+          onActionClick={() => handleCreateNewProject()}
+          onBack={() => {
+            navigate('/');
+          }}
+        />
+      )}
+
+      {/* 4. PROJECT NOT FOUND SCREEN (URL: /project/:invalidKey) */}
+      {route.screen === 'editor' && !project && (
+        <ProjectNotFoundScreen
+          projectKey={route.projectKey || ''}
+          onGoHome={() => navigate('/')}
+          onCreateNew={handleCreateNewProject}
+          onOpenDefault={projects.length > 0 ? () => navigate(`/project/${projects[0].id}`) : undefined}
+        />
+      )}
+
+      {/* 5. FULL VIDEO EDITOR SUITE (URL: /project/:key) */}
+      {(route.screen === 'editor' || route.screen === 'export') && project && (
         <View style={styles.editorContainer}>
           {/* Top Header Bar */}
           <Header
@@ -524,120 +852,150 @@ export default function App() {
             onBackToHome={() => {
               soundEngine.playSfx('click');
               setIsPlaying(false);
-              setScreen('home');
+              navigate('/');
             }}
             canUndo={historyStack.length > 0}
             canRedo={redoStack.length > 0}
             onUndo={handleUndo}
             onRedo={handleRedo}
-            onOpenExport={() => setActiveModal('export')}
+            onOpenExport={() => openModal('export')}
           />
 
-          {/* Canvas Viewport & Player Controls */}
-          <Player
-            project={project}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            totalDuration={totalDuration}
-            onTogglePlay={() => {
-              soundEngine.playSfx('click');
-              setIsPlaying(!isPlaying);
-            }}
-            onSeek={(t) => setCurrentTime(t)}
-            onAddKeyframe={handleAddKeyframe}
-            hasKeyframeAtCurrentTime={
-              selectedClip?.keyframes?.some(
-                (k) => Math.abs(k.time - (currentTime - selectedClip.startTime)) < 0.1
-              ) || false
-            }
-            onOpenMediaPicker={() => setActiveModal('media')}
-          />
+          {/* Canvas Viewport & Player Controls in Flex-1 Center Stage */}
+          <View style={styles.playerStage}>
+            <Player
+              project={project}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              totalDuration={totalDuration}
+              onTogglePlay={() => {
+                soundEngine.playSfx('click');
+                if (!isPlaying && (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration)) {
+                  setCurrentTime(0);
+                }
+                setIsPlaying(!isPlaying);
+              }}
+              onSeek={(t) => setCurrentTime(t)}
+              onAddKeyframe={handleAddKeyframe}
+              hasKeyframeAtCurrentTime={
+                selectedClip?.keyframes?.some(
+                  (k: any) => Math.abs(k.time - (currentTime - selectedClip.startTime)) < 0.1
+                ) || false
+              }
+              onOpenMediaPicker={() => openModal('media')}
+            />
+          </View>
 
-          {/* Multi-Track Timeline */}
-          <Timeline
-            project={project}
-            currentTime={currentTime}
-            totalDuration={totalDuration}
-            onSeek={(t) => setCurrentTime(t)}
-            selectedClipId={selectedClipId}
-            onSelectClip={(id, type) => {
-              setSelectedClipId(id);
-              setSelectedClipType(type);
-            }}
-            onOpenTransitions={(clipId) => {
-              setTransitionTargetClipId(clipId);
-              setActiveModal('transitions');
-            }}
-            onOpenMediaPicker={() => setActiveModal('media')}
-            onOpenTextModal={() => setActiveModal('text')}
-            onOpenAudioModal={() => setActiveModal('audio')}
-            onOpenEffectsModal={() => setActiveModal('effects')}
-            onOpenStickersModal={() => setActiveModal('stickers')}
-            zoom={zoom}
-            onZoomChange={setZoom}
-          />
+          {/* Bottom Docked Section: Timeline and Editing Options Toolbar */}
+          <View style={styles.bottomDock}>
+            <Timeline
+              project={project}
+              currentTime={currentTime}
+              totalDuration={totalDuration}
+              onSeek={(t) => setCurrentTime(t)}
+              selectedClipId={selectedClipId}
+              onSelectClip={(id, type) => {
+                setSelectedClipId(id);
+                setSelectedClipType(type);
+              }}
+              onTrimClip={handleTrimClip}
+              onMoveClip={handleMoveClip}
+              onOpenTransitions={(clipId) => {
+                setTransitionTargetClipId(clipId);
+                openModal('transitions');
+              }}
+              onOpenMediaPicker={() => openModal('media')}
+              onOpenTextModal={() => openModal('text')}
+              onOpenAudioModal={() => openModal('audio')}
+              onOpenEffectsModal={() => openModal('effects')}
+              onOpenStickersModal={() => openModal('stickers')}
+              zoom={zoom}
+              onZoomChange={setZoom}
+              onUpdateProject={(updates) => updateProjectWithHistory({ ...project, ...updates })}
+              onAdjustDuration={(delta) => {
+                if (!project || !selectedClipId) return;
+                const key = selectedClipType === 'sticker' ? 'stickers' : selectedClipType;
+                const list = [...((project.tracks as any)[key] || [])];
+                const idx = list.findIndex((c: any) => c.id === selectedClipId);
+                if (idx >= 0) {
+                  const newDur = Math.max(0.05, (list[idx].duration || 0) + delta);
+                  list[idx] = { ...list[idx], duration: Number(newDur.toFixed(3)) };
+                  updateProjectWithHistory({
+                    ...project,
+                    tracks: { ...project.tracks, [key]: list } as any,
+                  });
+                }
+              }}
+            />
 
-          {/* Bottom Docked Toolbar */}
-          <Toolbar
-            selectedClip={selectedClip}
-            onDeselectClip={() => setSelectedClipId(null)}
-            onSplitClip={handleSplitClip}
-            onDeleteClip={handleDeleteClip}
-            onDuplicateClip={handleDuplicateClip}
-            onRotateClip={handleRotateClip}
-            onOpenSpeedModal={() => setActiveModal('speed')}
-            onOpenAudioModal={() => setActiveModal('audio')}
-            onOpenTextModal={() => setActiveModal('text')}
-            onOpenFiltersModal={() => setActiveModal('filters')}
-            onOpenEffectsModal={() => setActiveModal('effects')}
-            onOpenStickersModal={() => setActiveModal('stickers')}
-            onOpenMediaPicker={() => setActiveModal('media')}
-          />
+            <Toolbar
+              selectedClip={selectedClip}
+              onDeselectClip={() => setSelectedClipId(null)}
+              onSplitClip={handleSplitClip}
+              onDeleteClip={handleDeleteClip}
+              onDuplicateClip={handleDuplicateClip}
+              onRotateClip={handleRotateClip}
+              onToggleReverse={handleToggleReverse}
+              onOpenSpeedModal={() => openModal('speed')}
+              onOpenVolumeModal={() => openModal('volume')}
+              onOpenCropModal={() => openModal('crop')}
+              onOpenAudioModal={() => openModal('audio')}
+              onOpenTextModal={() => openModal('text')}
+              onOpenFiltersModal={() => openModal('filters')}
+              onOpenEffectsModal={() => openModal('effects')}
+              onOpenStickersModal={() => openModal('stickers')}
+              onOpenMediaPicker={() => openModal('media')}
+              onOpenTTS={() => openModal('tts')}
+              onOpenCamera={() => openModal('camera')}
+              onOpenEnhance={() => openModal('enhance')}
+              onOpenAutoCut={() => openModal('autocut')}
+            />
+          </View>
         </View>
       )}
 
       {/* MODALS */}
       <MediaPickerModal
         visible={activeModal === 'media'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         onAddMedia={handleAddMedia}
       />
 
       <TextModal
         visible={activeModal === 'text'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         onAddText={handleAddText}
       />
 
       <AudioModal
         visible={activeModal === 'audio'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         onAddAudio={handleAddAudio}
       />
 
       <FiltersModal
         visible={activeModal === 'filters'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         activeFilter={selectedClip?.filter || 'normal'}
         onSelectFilter={handleApplyFilter}
       />
 
       <EffectsModal
         visible={activeModal === 'effects'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         activeEffect={selectedClip?.effect || 'none'}
         onAddEffect={handleAddEffect}
       />
 
       <StickersModal
         visible={activeModal === 'stickers'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         onAddSticker={handleAddSticker}
       />
 
       <TransitionsModal
         visible={activeModal === 'transitions'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         activeTransition={
           project?.tracks?.video?.find((c) => c.id === transitionTargetClipId)?.transition
         }
@@ -646,15 +1004,15 @@ export default function App() {
 
       <SpeedModal
         visible={activeModal === 'speed'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         currentSpeed={selectedClip?.speed || 1.0}
         onApplySpeed={handleApplySpeed}
       />
 
       {project && (
         <ExportModal
-          visible={activeModal === 'export'}
-          onClose={() => setActiveModal(null)}
+          visible={activeModal === 'export' || route.screen === 'export'}
+          onClose={closeModal}
           project={project}
           totalDuration={totalDuration}
         />
@@ -662,30 +1020,95 @@ export default function App() {
 
       <SettingsModal
         visible={activeModal === 'settings'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
       />
 
       <NotificationsModal
         visible={activeModal === 'notifications'}
-        onClose={() => setActiveModal(null)}
+        onClose={closeModal}
         notifications={notifications}
         onMarkAllAsRead={handleMarkAllAsRead}
         onClearAll={handleClearAllNotifications}
         onActionClick={() => handleCreateNewProject()}
       />
+
+      <VolumeModal
+        visible={activeModal === 'volume'}
+        onClose={closeModal}
+        currentVolume={selectedClip?.volume ?? 1.0}
+        currentFadeIn={selectedClip?.fadeIn ?? 0}
+        currentFadeOut={selectedClip?.fadeOut ?? 0}
+        onApplyVolume={handleApplyVolume}
+      />
+
+      <CropTransformModal
+        visible={activeModal === 'crop'}
+        onClose={closeModal}
+        currentTransform={selectedClip?.transform}
+        currentAspectRatio={project?.aspectRatio || '9:16'}
+        onApplyTransform={handleApplyTransform}
+      />
+
+      <CameraModal
+        visible={activeModal === 'camera'}
+        onClose={closeModal}
+        onAddRecordedClip={handleAddRecordedClip}
+      />
+
+      <AutoCutModal
+        visible={activeModal === 'autocut'}
+        onClose={closeModal}
+        onAutoCutGenerated={handleAutoCutGenerated}
+      />
+
+      <AIEnhanceModal
+        visible={activeModal === 'enhance'}
+        onClose={closeModal}
+        onApplyEnhance={handleApplyEnhance}
+      />
+
+      <TextToSpeechModal
+        visible={activeModal === 'tts'}
+        onClose={closeModal}
+        onAddAudio={handleAddAudio}
+      />
     </SafeAreaView>
+    </View>
   );
 }
 
+const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 0;
+
 const styles = StyleSheet.create({
+  rootWrapper: {
+    flex: 1,
+    backgroundColor: '#0B0D13',
+    paddingTop: STATUS_BAR_HEIGHT,
+  },
   rootContainer: {
     flex: 1,
     backgroundColor: '#0B0D13',
+    overflow: 'hidden' as any,
   },
   editorContainer: {
     flex: 1,
+    flexDirection: 'column',
     justifyContent: 'space-between',
+    backgroundColor: '#0B0D13',
+    overflow: 'hidden' as any,
+  },
+  playerStage: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden' as any,
+  },
+  bottomDock: {
+    width: '100%',
+    flexShrink: 0,
+    backgroundColor: '#0E1118',
   },
 });

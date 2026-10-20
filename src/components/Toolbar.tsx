@@ -2,6 +2,30 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../utils/audioEngine';
+import { VideoClip } from '../types/project';
+
+interface ToolbarProps {
+  selectedClip: VideoClip | null;
+  onDeselectClip: () => void;
+  onSplitClip: () => void;
+  onDeleteClip: () => void;
+  onDuplicateClip: () => void;
+  onRotateClip: () => void;
+  onToggleReverse?: () => void;
+  onOpenSpeedModal: () => void;
+  onOpenVolumeModal?: () => void;
+  onOpenCropModal?: () => void;
+  onOpenAudioModal: () => void;
+  onOpenTextModal: () => void;
+  onOpenFiltersModal: () => void;
+  onOpenEffectsModal: () => void;
+  onOpenStickersModal: () => void;
+  onOpenMediaPicker: () => void;
+  onOpenTTS?: () => void;
+  onOpenCamera?: () => void;
+  onOpenEnhance?: () => void;
+  onOpenAutoCut?: () => void;
+}
 
 export default function Toolbar({
   selectedClip,
@@ -10,14 +34,21 @@ export default function Toolbar({
   onDeleteClip,
   onDuplicateClip,
   onRotateClip,
+  onToggleReverse,
   onOpenSpeedModal,
+  onOpenVolumeModal,
+  onOpenCropModal,
   onOpenAudioModal,
   onOpenTextModal,
   onOpenFiltersModal,
   onOpenEffectsModal,
   onOpenStickersModal,
   onOpenMediaPicker,
-}) {
+  onOpenTTS,
+  onOpenCamera,
+  onOpenEnhance,
+  onOpenAutoCut,
+}: ToolbarProps) {
   // If a clip is actively selected, show Clip Editing Tools
   if (selectedClip) {
     return (
@@ -67,7 +98,37 @@ export default function Toolbar({
             <Text style={styles.toolLabel}>Speed</Text>
           </TouchableOpacity>
 
-          {/* 3. Filters */}
+          {/* 3. Volume & Dynamics */}
+          <TouchableOpacity
+            style={styles.toolItem}
+            onPress={() => {
+              soundEngine.playSfx('click');
+              if (onOpenVolumeModal) onOpenVolumeModal();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="volume-high-outline" size={20} color="#10B981" />
+            </View>
+            <Text style={styles.toolLabel}>Volume</Text>
+          </TouchableOpacity>
+
+          {/* 4. Crop & Transform */}
+          <TouchableOpacity
+            style={styles.toolItem}
+            onPress={() => {
+              soundEngine.playSfx('click');
+              if (onOpenCropModal) onOpenCropModal();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="crop-outline" size={20} color="#38BDF8" />
+            </View>
+            <Text style={styles.toolLabel}>Transform</Text>
+          </TouchableOpacity>
+
+          {/* 5. Filters */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {
@@ -82,7 +143,7 @@ export default function Toolbar({
             <Text style={styles.toolLabel}>Filters</Text>
           </TouchableOpacity>
 
-          {/* 4. Effects */}
+          {/* 6. Effects */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {
@@ -97,7 +158,28 @@ export default function Toolbar({
             <Text style={styles.toolLabel}>Effects</Text>
           </TouchableOpacity>
 
-          {/* 5. Rotate 90 deg */}
+          {/* 7. Reverse */}
+          <TouchableOpacity
+            style={styles.toolItem}
+            onPress={() => {
+              soundEngine.playSfx('pop');
+              if (onToggleReverse) onToggleReverse();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconCircle, selectedClip.reverse && styles.activeCircle]}>
+              <Ionicons
+                name="play-back-outline"
+                size={20}
+                color={selectedClip.reverse ? '#000000' : '#FFFFFF'}
+              />
+            </View>
+            <Text style={[styles.toolLabel, selectedClip.reverse && { color: '#00F2FE' }]}>
+              {selectedClip.reverse ? 'Reversed' : 'Reverse'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* 8. Rotate 90 deg */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {
@@ -112,7 +194,7 @@ export default function Toolbar({
             <Text style={styles.toolLabel}>Rotate</Text>
           </TouchableOpacity>
 
-          {/* 6. Duplicate */}
+          {/* 9. Duplicate */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {
@@ -127,7 +209,7 @@ export default function Toolbar({
             <Text style={styles.toolLabel}>Duplicate</Text>
           </TouchableOpacity>
 
-          {/* 7. Delete */}
+          {/* 10. Delete */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {
@@ -199,7 +281,67 @@ export default function Toolbar({
           <Text style={styles.toolLabel}>Text</Text>
         </TouchableOpacity>
 
-        {/* 4. Stickers */}
+        {/* 4. AI Voice (TTS) */}
+        <TouchableOpacity
+          style={styles.toolItem}
+          onPress={() => {
+            soundEngine.playSfx('click');
+            if (onOpenTTS) onOpenTTS();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconCircle}>
+            <Ionicons name="mic-outline" size={20} color="#10B981" />
+          </View>
+          <Text style={styles.toolLabel}>AI Voice</Text>
+        </TouchableOpacity>
+
+        {/* 5. Live Camera Record */}
+        <TouchableOpacity
+          style={styles.toolItem}
+          onPress={() => {
+            soundEngine.playSfx('click');
+            if (onOpenCamera) onOpenCamera();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconCircle}>
+            <Ionicons name="camera-outline" size={20} color="#F59E0B" />
+          </View>
+          <Text style={styles.toolLabel}>Camera</Text>
+        </TouchableOpacity>
+
+        {/* 6. AI Enhance */}
+        <TouchableOpacity
+          style={styles.toolItem}
+          onPress={() => {
+            soundEngine.playSfx('click');
+            if (onOpenEnhance) onOpenEnhance();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconCircle}>
+            <Ionicons name="sparkles" size={20} color="#A855F7" />
+          </View>
+          <Text style={styles.toolLabel}>AI Magic</Text>
+        </TouchableOpacity>
+
+        {/* 7. Canvas Aspect Ratio */}
+        <TouchableOpacity
+          style={styles.toolItem}
+          onPress={() => {
+            soundEngine.playSfx('click');
+            if (onOpenCropModal) onOpenCropModal();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconCircle}>
+            <Ionicons name="crop-outline" size={20} color="#38BDF8" />
+          </View>
+          <Text style={styles.toolLabel}>Canvas</Text>
+        </TouchableOpacity>
+
+        {/* 8. Stickers */}
         <TouchableOpacity
           style={styles.toolItem}
           onPress={() => {
@@ -214,7 +356,7 @@ export default function Toolbar({
           <Text style={styles.toolLabel}>Stickers</Text>
         </TouchableOpacity>
 
-        {/* 5. Effects */}
+        {/* 9. Effects */}
         <TouchableOpacity
           style={styles.toolItem}
           onPress={() => {
@@ -229,7 +371,7 @@ export default function Toolbar({
           <Text style={styles.toolLabel}>Effects</Text>
         </TouchableOpacity>
 
-        {/* 6. Filters */}
+        {/* 10. Filters */}
         <TouchableOpacity
           style={styles.toolItem}
           onPress={() => {
@@ -243,6 +385,21 @@ export default function Toolbar({
           </View>
           <Text style={styles.toolLabel}>Filters</Text>
         </TouchableOpacity>
+
+        {/* 11. AutoCut */}
+        <TouchableOpacity
+          style={styles.toolItem}
+          onPress={() => {
+            soundEngine.playSfx('click');
+            if (onOpenAutoCut) onOpenAutoCut();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconCircle}>
+            <Ionicons name="flash-outline" size={20} color="#00F2FE" />
+          </View>
+          <Text style={styles.toolLabel}>AutoCut</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -250,21 +407,22 @@ export default function Toolbar({
 
 const styles = StyleSheet.create({
   toolbarContainer: {
-    height: 72,
+    height: 78,
     backgroundColor: '#0B0D13',
     borderTopWidth: 1,
     borderTopColor: '#1A1E29',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
+    flexShrink: 0,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 10,
     backgroundColor: '#1E2333',
+    borderRadius: 8,
     marginRight: 6,
   },
   backButtonText: {
@@ -275,22 +433,25 @@ const styles = StyleSheet.create({
   },
   toolsScroll: {
     alignItems: 'center',
-    gap: 12,
     paddingRight: 16,
+    gap: 4,
   },
   toolItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 54,
+    width: 62,
   },
   iconCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#141721',
+    backgroundColor: '#161A26',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
+  },
+  activeCircle: {
+    backgroundColor: '#00F2FE',
   },
   deleteCircle: {
     backgroundColor: 'rgba(255, 0, 80, 0.15)',
