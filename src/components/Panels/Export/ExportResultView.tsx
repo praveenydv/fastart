@@ -15,9 +15,10 @@ interface ExportResultViewProps {
   fps: number;
   isSaved: boolean;
   isSaving: boolean;
+  downloadDestination?: string;
+  downloadFilename?: string;
   errorMessage: string | null;
   onDownload: () => void;
-  onShare: () => void;
   onReExport: () => void;
   onClose: () => void;
 }
@@ -32,9 +33,10 @@ export default function ExportResultView({
   fps,
   isSaved,
   isSaving,
+  downloadDestination,
+  downloadFilename,
   errorMessage,
   onDownload,
-  onShare,
   onReExport,
   onClose,
 }: ExportResultViewProps) {
@@ -56,21 +58,23 @@ export default function ExportResultView({
           />
         </View>
         <Text style={styles.formatProgressNotice}>
-          Generating {selectedFormatConfig.label} ({selectedFormatConfig.ext})
+          Generating {selectedFormatConfig.label} ({selectedFormatConfig.ext}) with all edits
         </Text>
       </View>
     );
   }
 
   if (status === "done") {
+    const finalLocation = downloadDestination || "Device Gallery / DCIM / FastArt";
+
     return (
       <View style={styles.doneContainer}>
         <View style={styles.successIconBox}>
           <Ionicons name="checkmark-circle" size={68} color="#10B981" />
         </View>
-        <Text style={styles.doneTitle}>Ready to Download!</Text>
+        <Text style={styles.doneTitle}>Export Ready!</Text>
         <Text style={styles.doneSubtext}>
-          Exported successfully as{" "}
+          Successfully rendered all text, stickers & video layers as{" "}
           <Text style={{ color: "#00F2FE", fontWeight: "800" }}>
             {selectedFormatConfig.label} ({selectedFormatConfig.ext})
           </Text>
@@ -79,17 +83,13 @@ export default function ExportResultView({
             : ""}
         </Text>
 
-        {isSaved && (
-          <View style={styles.savedBanner}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={styles.savedBannerText}>
-              Saved directly to Photos / Gallery!
-            </Text>
-          </View>
-        )}
-
+        {/* 1. Primary Direct Download Button */}
         <TouchableOpacity
-          style={[styles.downloadBtn, isSaving && { opacity: 0.8 }]}
+          style={[
+            styles.downloadBtn,
+            isSaved && { backgroundColor: "#00F2FE" },
+            isSaving && { opacity: 0.8 },
+          ]}
           onPress={onDownload}
           disabled={isSaving}
           activeOpacity={0.8}
@@ -107,26 +107,32 @@ export default function ExportResultView({
             {isSaving
               ? "Saving directly to device..."
               : isSaved
-              ? `Saved to Photos (Tap to Save Again)`
-              : `Download / Save to Device (${selectedFormatConfig.shortLabel})`}
+              ? "✓ Downloaded to Device Gallery (Save Copy)"
+              : `Download to Device Gallery (${selectedFormatConfig.shortLabel})`}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.shareOptionBtn}
-          onPress={onShare}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="share-social-outline" size={18} color="#00F2FE" />
-          <Text style={styles.shareOptionBtnText}>
-            Share via Apps (WhatsApp, AirDrop, etc.)
+        {/* 2. Download Location Info Card */}
+        <View style={styles.downloadLocationCard}>
+          <View style={styles.downloadLocationHeader}>
+            <Ionicons name="folder-open-outline" size={16} color="#00F2FE" />
+            <Text style={styles.downloadLocationTitle}>Saved Location</Text>
+          </View>
+          <Text style={styles.downloadLocationPath} numberOfLines={2}>
+            {finalLocation}
           </Text>
-        </TouchableOpacity>
+          <Text style={styles.downloadLocationHint}>
+            {isSaved
+              ? "✓ File saved to device storage and notified in Android status bar. Accessible in your device Gallery & Files."
+              : "Tap the button above to download directly to your Android device Gallery."}
+          </Text>
+        </View>
 
+        {/* 3. Clean Secondary Actions */}
         <TouchableOpacity style={styles.reExportBtn} onPress={onReExport}>
           <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
           <Text style={styles.reExportBtnText}>
-            Choose Another Media Type / Re-export
+            Choose Another Format / Re-Export
           </Text>
         </TouchableOpacity>
 
@@ -146,7 +152,7 @@ export default function ExportResultView({
         <Text style={styles.doneTitle}>Export Issue</Text>
         <Text style={styles.doneSubtext}>
           {errorMessage ||
-            "Unable to encode video in the selected format. Please try WebM or PNG cover snapshot."}
+            "Unable to encode video in the selected format. Please try PNG cover or GIF."}
         </Text>
         <TouchableOpacity style={styles.downloadBtn} onPress={onReExport}>
           <Ionicons name="refresh-outline" size={20} color="#000000" />

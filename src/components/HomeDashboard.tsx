@@ -86,9 +86,6 @@ function HomeDashboard({
         <View style={styles.logoRow}>
           <FastArtLogo size={30} />
           <Text style={styles.logoText}>FastArt</Text>
-          <View style={styles.proBadge}>
-            <Text style={styles.proText}>PRO</Text>
-          </View>
         </View>
 
         <View style={styles.navActions}>

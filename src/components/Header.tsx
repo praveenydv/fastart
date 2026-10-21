@@ -15,6 +15,7 @@ interface HeaderProps {
   onUndo: () => void;
   onRedo: () => void;
   onOpenExport: () => void;
+  onOpenCanvasModal?: () => void;
 }
 
 function Header({
@@ -26,8 +27,8 @@ function Header({
   onUndo,
   onRedo,
   onOpenExport,
+  onOpenCanvasModal,
 }: HeaderProps) {
-  const [ratioModalVisible, setRatioModalVisible] = useState(false);
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
 
@@ -39,22 +40,27 @@ function Header({
           style={styles.iconButton}
           onPress={onBackToHome}
           activeOpacity={0.7}
+          accessibilityLabel="Back to Home"
         >
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.ratioPill}
-          onPress={() => setRatioModalVisible(true)}
+          onPress={() => {
+            soundEngine.playSfx("click");
+            if (onOpenCanvasModal) onOpenCanvasModal();
+          }}
           activeOpacity={0.7}
+          accessibilityLabel="Change Canvas Ratio"
         >
           <Ionicons
             name={currentRatio.icon || "phone-portrait-outline"}
-            size={14}
+            size={13}
             color="#00F2FE"
           />
           <Text style={styles.ratioText}>{currentRatio.label}</Text>
-          <Ionicons name="chevron-down" size={12} color="#8E95A5" />
+          <Ionicons name="chevron-down" size={11} color="#8E95A5" />
         </TouchableOpacity>
       </View>
 
@@ -65,10 +71,11 @@ function Header({
           onPress={onUndo}
           disabled={!canUndo}
           activeOpacity={0.7}
+          accessibilityLabel="Undo"
         >
           <Ionicons
             name="arrow-undo-outline"
-            size={20}
+            size={18}
             color={canUndo ? "#FFFFFF" : "#4B5563"}
           />
         </TouchableOpacity>
@@ -77,10 +84,11 @@ function Header({
           onPress={onRedo}
           disabled={!canRedo}
           activeOpacity={0.7}
+          accessibilityLabel="Redo"
         >
           <Ionicons
             name="arrow-redo-outline"
-            size={20}
+            size={18}
             color={canRedo ? "#FFFFFF" : "#4B5563"}
           />
         </TouchableOpacity>
@@ -92,55 +100,12 @@ function Header({
           style={styles.exportButton}
           onPress={onOpenExport}
           activeOpacity={0.8}
+          accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={18} color="#000000" />
+          <Ionicons name="arrow-up" size={16} color="#000000" />
           <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Aspect Ratio Modal */}
-      <Modal visible={ratioModalVisible} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setRatioModalVisible(false)}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Canvas Aspect Ratio</Text>
-            {ASPECT_RATIOS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.modalItem,
-                  project.aspectRatio === item.id && styles.modalItemActive,
-                ]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  onUpdateProject({ aspectRatio: item.id });
-                  setRatioModalVisible(false);
-                }}
-              >
-                <View style={styles.modalItemLeft}>
-                  <Ionicons
-                    name={item.icon}
-                    size={20}
-                    color={
-                      project.aspectRatio === item.id ? "#00F2FE" : "#8E95A5"
-                    }
-                  />
-                  <View style={{ marginLeft: 12 }}>
-                    <Text style={styles.modalItemLabel}>{item.label}</Text>
-                    <Text style={styles.modalItemDesc}>{item.desc}</Text>
-                  </View>
-                </View>
-                {project.aspectRatio === item.id && (
-                  <Ionicons name="checkmark-circle" size={20} color="#00F2FE" />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -227,52 +192,6 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontSize: 12,
     fontWeight: "800",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: 300,
-    backgroundColor: "#141721",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#252B3B",
-  },
-  modalTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  modalItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 4,
-  },
-  modalItemActive: {
-    backgroundColor: "#1E2333",
-  },
-  modalItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  modalItemLabel: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  modalItemDesc: {
-    color: "#8E95A5",
-    fontSize: 11,
   },
 });
 

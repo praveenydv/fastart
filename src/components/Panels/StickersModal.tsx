@@ -34,16 +34,28 @@ export default function StickersModal({
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [duration, setDuration] = useState(3.0);
+  const [selectedAnim, setSelectedAnim] = useState<string>('bounce');
 
   React.useEffect(() => {
     if (visible) {
       if (editingClip) {
         setDuration(editingClip.duration || 3.0);
+        setSelectedAnim(editingClip.animation || 'bounce');
       } else {
         setDuration(3.0);
+        setSelectedAnim('bounce');
       }
     }
   }, [visible, editingClip]);
+
+  const STICKER_ANIMATIONS = [
+    { id: 'none', label: 'None', icon: 'remove-circle-outline' },
+    { id: 'bounce', label: 'Bounce', icon: 'trending-up' },
+    { id: 'pulse', label: 'Pulse', icon: 'heart-outline' },
+    { id: 'wave', label: 'Wave', icon: 'water-outline' },
+    { id: 'fade', label: 'Fade In', icon: 'eye-outline' },
+    { id: 'pop', label: 'Pop In', icon: 'expand-outline' },
+  ];
 
   const categories = [
     { id: 'All', label: 'All' },
@@ -73,6 +85,7 @@ export default function StickersModal({
         ...editingClip,
         char: item.char,
         duration,
+        animation: selectedAnim as any,
         scale: isBadge ? 1.0 : (editingClip.scale || 1.2),
       };
       soundEngine.playSfx('pop');
@@ -89,6 +102,7 @@ export default function StickersModal({
       position: { x: 50, y: isBadge ? 45 : 50 },
       scale: isBadge ? 1.0 : 1.2,
       rotation: 0,
+      animation: selectedAnim as any,
     };
     soundEngine.playSfx('pop');
     onAddSticker(stickerClip);
@@ -99,6 +113,9 @@ export default function StickersModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View>
@@ -166,6 +183,41 @@ export default function StickersModal({
                 );
               })}
             </ScrollView>
+
+            {/* Animation Selector */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.categoryScroll, { marginTop: 6 }]}>
+              {STICKER_ANIMATIONS.map((anim) => {
+                const isActive = selectedAnim === anim.id;
+                return (
+                  <TouchableOpacity
+                    key={anim.id}
+                    style={[
+                      styles.categoryPill,
+                      isActive && { backgroundColor: '#00F2FE', borderColor: '#00F2FE' },
+                    ]}
+                    onPress={() => {
+                      soundEngine.playSfx('click');
+                      setSelectedAnim(anim.id);
+                    }}
+                  >
+                    <Ionicons
+                      name={anim.icon as any}
+                      size={12}
+                      color={isActive ? '#000000' : '#8E95A5'}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        isActive && { color: '#000000', fontWeight: '800' },
+                      ]}
+                    >
+                      {anim.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           <ScrollView style={styles.sheetBody}>
@@ -205,19 +257,27 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#141721',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '75%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '80%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
+  },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1.5,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1E2333',
   },

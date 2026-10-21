@@ -42,12 +42,15 @@ export const FONT_OPTIONS = [
 ];
 
 export const ANIMATION_OPTIONS = [
-  { id: "bounce", label: "Bounce In", icon: "trending-up" },
-  { id: "typewriter", label: "Typewriter", icon: "keypad-outline" },
+  { id: "none", label: "None (Static)", icon: "remove-circle-outline" },
   { id: "fade", label: "Fade In", icon: "eye-outline" },
   { id: "slideUp", label: "Slide Up", icon: "arrow-up-circle-outline" },
   { id: "slideDown", label: "Slide Down", icon: "arrow-down-circle-outline" },
+  { id: "slide", label: "Slide Left", icon: "arrow-back-circle-outline" },
+  { id: "slideRight", label: "Slide Right", icon: "arrow-forward-circle-outline" },
   { id: "zoomIn", label: "Zoom In", icon: "expand-outline" },
+  { id: "bounce", label: "Bounce In", icon: "trending-up" },
+  { id: "typewriter", label: "Typewriter", icon: "keypad-outline" },
   { id: "pulse", label: "Heartbeat Pulse", icon: "heart-outline" },
   { id: "glitch", label: "Glitch Jitter", icon: "flash-outline" },
   { id: "shake", label: "Camera Shake", icon: "radio-outline" },

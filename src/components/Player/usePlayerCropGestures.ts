@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Platform } from "react-native";
+import { Platform, PanResponder } from "react-native";
 import { soundEngine } from "../../utils/audioEngine";
 import { CustomCrop, FastArtProject } from "../../types/project";
 import { CROP_PRESETS } from "./playerUtils";
@@ -54,6 +54,9 @@ export function usePlayerCropGestures({
   const onUpdateClipCropRef = useRef(onUpdateClipCrop);
   onUpdateClipCropRef.current = onUpdateClipCrop;
 
+  const cropBoxRef = useRef(cropBox);
+  cropBoxRef.current = cropBox;
+
   const activeVideos = useMemo(
     () =>
       (project.tracks.video || []).filter(
@@ -64,7 +67,7 @@ export function usePlayerCropGestures({
   );
 
   const selectedVideo =
-    selectedClipType === "video"
+    selectedClipType === "video" || selectedClipType === "photo"
       ? activeVideos.find((v) => v.id === selectedClipId) || null
       : null;
 
@@ -410,6 +413,145 @@ export function usePlayerCropGestures({
     }
   }, [cropDragState]);
 
+  const mediaDisplayWRef = useRef(mediaDisplayW);
+  mediaDisplayWRef.current = mediaDisplayW;
+
+  const mediaDisplayHRef = useRef(mediaDisplayH);
+  mediaDisplayHRef.current = mediaDisplayH;
+
+  const createCropResponder = (
+    handle: "pan" | "tl" | "tr" | "bl" | "br" | "t" | "b" | "l" | "r",
+  ) => {
+    const startRef = {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    };
+
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        startRef.x = cropBoxRef.current.x;
+        startRef.y = cropBoxRef.current.y;
+        startRef.width = cropBoxRef.current.width;
+        startRef.height = cropBoxRef.current.height;
+      },
+      onPanResponderMove: (_, gs) => {
+        const dw = mediaDisplayWRef.current;
+        const dh = mediaDisplayHRef.current;
+        if (dw <= 0 || dh <= 0) return;
+        const dxPct = (gs.dx / dw) * 100;
+        const dyPct = (gs.dy / dh) * 100;
+
+        let nextX = startRef.x;
+        let nextY = startRef.y;
+        let nextW = startRef.width;
+        let nextH = startRef.height;
+
+        if (handle === "pan") {
+          nextX = Math.max(
+            0,
+            Math.min(100 - startRef.width, startRef.x + dxPct),
+          );
+          nextY = Math.max(
+            0,
+            Math.min(100 - startRef.height, startRef.y + dyPct),
+          );
+        } else if (handle === "br") {
+          nextW = Math.max(
+            10,
+            Math.min(100 - startRef.x, startRef.width + dxPct),
+          );
+          nextH = Math.max(
+            10,
+            Math.min(100 - startRef.y, startRef.height + dyPct),
+          );
+        } else if (handle === "tl") {
+          const candidateX = Math.max(
+            0,
+            Math.min(startRef.x + startRef.width - 10, startRef.x + dxPct),
+          );
+          const candidateY = Math.max(
+            0,
+            Math.min(startRef.y + startRef.height - 10, startRef.y + dyPct),
+          );
+          nextW = startRef.width - (candidateX - startRef.x);
+          nextH = startRef.height - (candidateY - startRef.y);
+          nextX = candidateX;
+          nextY = candidateY;
+        } else if (handle === "tr") {
+          const candidateY = Math.max(
+            0,
+            Math.min(startRef.y + startRef.height - 10, startRef.y + dyPct),
+          );
+          nextW = Math.max(
+            10,
+            Math.min(100 - startRef.x, startRef.width + dxPct),
+          );
+          nextH = startRef.height - (candidateY - startRef.y);
+          nextY = candidateY;
+        } else if (handle === "bl") {
+          const candidateX = Math.max(
+            0,
+            Math.min(startRef.x + startRef.width - 10, startRef.x + dxPct),
+          );
+          nextW = startRef.width - (candidateX - startRef.x);
+          nextH = Math.max(
+            10,
+            Math.min(100 - startRef.y, startRef.height + dyPct),
+          );
+          nextX = candidateX;
+        } else if (handle === "t") {
+          const candidateY = Math.max(
+            0,
+            Math.min(startRef.y + startRef.height - 10, startRef.y + dyPct),
+          );
+          nextH = startRef.height - (candidateY - startRef.y);
+          nextY = candidateY;
+        } else if (handle === "b") {
+          nextH = Math.max(
+            10,
+            Math.min(100 - startRef.y, startRef.height + dyPct),
+          );
+        } else if (handle === "l") {
+          const candidateX = Math.max(
+            0,
+            Math.min(startRef.x + startRef.width - 10, startRef.x + dxPct),
+          );
+          nextW = startRef.width - (candidateX - startRef.x);
+          nextX = candidateX;
+        } else if (handle === "r") {
+          nextW = Math.max(
+            10,
+            Math.min(100 - startRef.x, startRef.width + dxPct),
+          );
+        }
+
+        setCropBox({
+          x: Number(nextX.toFixed(2)),
+          y: Number(nextY.toFixed(2)),
+          width: Number(nextW.toFixed(2)),
+          height: Number(nextH.toFixed(2)),
+        });
+      },
+    });
+  };
+
+  const cropPanResponder = useRef(createCropResponder("pan")).current;
+  const cropTLResponder = useRef(createCropResponder("tl")).current;
+  const cropTRResponder = useRef(createCropResponder("tr")).current;
+  const cropBLResponder = useRef(createCropResponder("bl")).current;
+  const cropBRResponder = useRef(createCropResponder("br")).current;
+  const cropTResponder = useRef(createCropResponder("t")).current;
+  const cropBResponder = useRef(createCropResponder("b")).current;
+  const cropLResponder = useRef(createCropResponder("l")).current;
+  const cropRResponder = useRef(createCropResponder("r")).current;
+
   return {
     isCroppingMode,
     cropBox,
@@ -429,5 +571,16 @@ export function usePlayerCropGestures({
     handleResetCrop,
     handleCancelCrop,
     handleConfirmCrop,
+    cropResponders: {
+      pan: cropPanResponder,
+      tl: cropTLResponder,
+      tr: cropTRResponder,
+      bl: cropBLResponder,
+      br: cropBRResponder,
+      t: cropTResponder,
+      b: cropBResponder,
+      l: cropLResponder,
+      r: cropRResponder,
+    },
   };
 }

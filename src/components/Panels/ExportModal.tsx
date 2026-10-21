@@ -39,13 +39,13 @@ export default function ExportModal({
     showDownloadComplete,
     setShowDownloadComplete,
     downloadCompleteFilename,
+    downloadDestination,
     noticeDialog,
     setNoticeDialog,
     selectedFormatConfig,
     calculateEstimatedSize,
     triggerDirectDownload,
     handleStartExport,
-    handleShare,
     getProgressStatusMessage,
   } = useExportProcess(project, totalDuration, visible);
 
@@ -53,6 +53,9 @@ export default function ExportModal({
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View style={styles.headerTitleRow}>
@@ -100,8 +103,8 @@ export default function ExportModal({
                 isSaved={isSaved}
                 isSaving={isSaving}
                 errorMessage={errorMessage}
+                downloadDestination={downloadDestination}
                 onDownload={() => triggerDirectDownload(exportedResult, exportedUrl)}
-                onShare={handleShare}
                 onReExport={() => {
                   setStatus("idle");
                   setIsSaved(false);
@@ -127,6 +130,7 @@ export default function ExportModal({
         }
         formatLabel={selectedFormatConfig.label}
         formatExt={selectedFormatConfig.ext}
+        destinationPath={downloadDestination}
         resolution={
           mediaType !== "png" && mediaType !== "wav" ? resolution : undefined
         }
@@ -134,7 +138,6 @@ export default function ExportModal({
         fileSize={calculateEstimatedSize()}
         duration={totalDuration}
         isSavedToGallery={true}
-        onShare={handleShare}
         onDownloadAgain={() => triggerDirectDownload()}
       />
 

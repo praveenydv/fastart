@@ -341,8 +341,25 @@ class WebGlGpuPipeline {
 
     gl.useProgram(this.chromaProgram);
 
-    // Bind Quad Vertices
+    // Bind Quad Vertices with optional crop UV coordinates
+    const mw = (media as any).videoWidth || (media as any).naturalWidth || (media as any).width || sw;
+    const mh = (media as any).videoHeight || (media as any).naturalHeight || (media as any).height || sh;
+    const u0 = mw > 0 ? Math.max(0, Math.min(1, sx / mw)) : 0;
+    const v0 = mh > 0 ? Math.max(0, Math.min(1, sy / mh)) : 0;
+    const u1 = mw > 0 ? Math.max(0, Math.min(1, (sx + sw) / mw)) : 1;
+    const v1 = mh > 0 ? Math.max(0, Math.min(1, (sy + sh) / mh)) : 1;
+
+    const vertices = new Float32Array([
+      -1.0, -1.0, u0, v1,
+       1.0, -1.0, u1, v1,
+      -1.0,  1.0, u0, v0,
+      -1.0,  1.0, u0, v0,
+       1.0, -1.0, u1, v1,
+       1.0,  1.0, u1, v0,
+    ]);
+
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
     const aPos = gl.getAttribLocation(this.chromaProgram, "a_pos");
     const aTex = gl.getAttribLocation(this.chromaProgram, "a_tex");
     gl.enableVertexAttribArray(aPos);
@@ -458,8 +475,8 @@ export class LowLevelPixelEngine {
     offCanvas: HTMLCanvasElement,
     offCtx: CanvasRenderingContext2D
   ): boolean {
-    // 1. Try Hardware GPU WebGL Shader first (<1ms on mobile GPU)
-    if (this.gpuPipeline.available) {
+    // 1. For chroma mode, try Hardware GPU WebGL Shader first (<1ms on mobile GPU)
+    if (options.mode === "chroma" && this.gpuPipeline.available) {
       const gpuSuccess = this.gpuPipeline.renderChromaCutout(
         media,
         sx,
@@ -475,10 +492,10 @@ export class LowLevelPixelEngine {
         const glCanvas = this.gpuPipeline.getCanvas();
         if (glCanvas) {
           // Glow stroke if requested
-          if (options.strokeColor && options.strokeWidth && options.strokeWidth > 0) {
+          if (options.strokeColor && options.strokeColor !== "none" && options.strokeWidth && options.strokeWidth > 0) {
             ctx.save();
             ctx.shadowColor = options.strokeColor;
-            ctx.shadowBlur = options.strokeWidth * 3;
+            ctx.shadowBlur = Math.max(2, options.strokeWidth * 3);
             ctx.drawImage(glCanvas, dx, dy, dw, dh);
             ctx.restore();
           }
@@ -522,26 +539,53 @@ export class LowLevelPixelEngine {
 
       const isAuto = options.mode === "auto";
 
-      for (let i = 0; i < totalPixels; i++) {
-        const pixel = u32[i];
-        // RGBA byte extraction via direct bit shifts
-        const r = pixel & 0xff;
-        const g = (pixel >> 8) & 0xff;
-        const b = (pixel >> 16) & 0xff;
+      if (isAuto) {
+        // Multi-point perimeter sampling to reliably detect background color & luminance
+        const c0 = u32[0];
+        const c1 = u32[procW - 1];
+        const c2 = u32[(procH - 1) * procW];
+        const c3 = u32[procH * procW - 1];
+        const cMidTop = u32[Math.floor(procW / 2)];
+        const cMidBot = u32[(procH - 1) * procW + Math.floor(procW / 2)];
 
-        if (isAuto) {
-          // Automatic subject luminance contrast
-          const lum = (r * 76 + g * 150 + b * 29) >> 8;
-          const autoDiff = Math.abs(lum - 128);
-          const autoThresh = thresh * 0.75;
-          if (autoDiff < autoThresh) {
-            u32[i] = pixel & 0x00ffffff; // Zero alpha in 1 cycle
-          } else if (autoDiff < autoThresh + feather) {
-            const alpha = Math.floor(((autoDiff - autoThresh) * invFeather) * 255);
+        const bgR = Math.round(((c0 & 0xff) + (c1 & 0xff) + (c2 & 0xff) + (c3 & 0xff) + (cMidTop & 0xff) + (cMidBot & 0xff)) / 6);
+        const bgG = Math.round((((c0 >> 8) & 0xff) + ((c1 >> 8) & 0xff) + ((c2 >> 8) & 0xff) + ((c3 >> 8) & 0xff) + ((cMidTop >> 8) & 0xff) + ((cMidBot >> 8) & 0xff)) / 6);
+        const bgB = Math.round((((c0 >> 16) & 0xff) + ((c1 >> 16) & 0xff) + ((c2 >> 16) & 0xff) + ((c3 >> 16) & 0xff) + ((cMidTop >> 16) & 0xff) + ((cMidBot >> 16) & 0xff)) / 6);
+
+        const autoThresh = Math.max(12, ((options.intensity ?? 45) / 100) * 165);
+        const autoThreshSq = autoThresh * autoThresh;
+        const autoFeather = Math.max(2, ((options.shadow ?? 25) / 100) * 65);
+        const autoOuterDist = autoThresh + autoFeather;
+        const autoOuterSq = autoOuterDist * autoOuterDist;
+        const autoInvFeather = 1.0 / autoFeather;
+
+        for (let i = 0; i < totalPixels; i++) {
+          const pixel = u32[i];
+          const r = pixel & 0xff;
+          const g = (pixel >> 8) & 0xff;
+          const b = (pixel >> 16) & 0xff;
+
+          const dr = r - bgR;
+          const dg = g - bgG;
+          const db = b - bgB;
+          const distSq = dr * dr + dg * dg + db * db;
+
+          if (distSq < autoThreshSq) {
+            u32[i] = pixel & 0x00ffffff; // Background removed in 1 cycle
+          } else if (distSq < autoOuterSq) {
+            const dist = Math.sqrt(distSq);
+            const alpha = Math.floor(((dist - autoThresh) * autoInvFeather) * 255);
             u32[i] = (pixel & 0x00ffffff) | (alpha << 24);
           }
-        } else {
-          // Squared distance integer comparison completely eliminates Math.sqrt for 98% of pixels!
+        }
+      } else {
+        // Chroma Key mode (e.g. green screen #00FF00, blue screen, or custom color)
+        for (let i = 0; i < totalPixels; i++) {
+          const pixel = u32[i];
+          let r = pixel & 0xff;
+          let g = (pixel >> 8) & 0xff;
+          let b = (pixel >> 16) & 0xff;
+
           const dr = r - rKey;
           const dg = g - gKey;
           const db = b - bKey;
@@ -552,7 +596,11 @@ export class LowLevelPixelEngine {
           } else if (distSq < outerSq) {
             const dist = Math.sqrt(distSq);
             const alpha = Math.floor(((dist - thresh) * invFeather) * 255);
-            u32[i] = (pixel & 0x00ffffff) | (alpha << 24);
+            // Edge green/blue spill suppression
+            if (gKey > rKey && gKey > bKey && g > Math.max(r, b)) {
+              g = Math.round(g * 0.45 + Math.max(r, b) * 0.55);
+            }
+            u32[i] = (alpha << 24) | (b << 16) | (g << 8) | r;
           }
         }
       }
@@ -560,10 +608,10 @@ export class LowLevelPixelEngine {
       offCtx.putImageData(imgData, 0, 0);
 
       // Glow outline if requested
-      if (options.strokeColor && options.strokeWidth && options.strokeWidth > 0) {
+      if (options.strokeColor && options.strokeColor !== "none" && options.strokeWidth && options.strokeWidth > 0) {
         ctx.save();
         ctx.shadowColor = options.strokeColor;
-        ctx.shadowBlur = options.strokeWidth * 3;
+        ctx.shadowBlur = Math.max(2, options.strokeWidth * 3);
         ctx.drawImage(offCanvas, 0, 0, procW, procH, dx, dy, dw, dh);
         ctx.restore();
       }

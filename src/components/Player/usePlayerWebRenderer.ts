@@ -23,6 +23,15 @@ export function usePlayerWebRenderer({
   const canvasBoxRef = useRef<any>(null);
   const rendererRef = useRef<VideoRenderer | null>(null);
 
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const boxWidthRef = useRef(boxWidth);
+  boxWidthRef.current = boxWidth;
+  const canvasHeightRef = useRef(canvasHeight);
+  canvasHeightRef.current = canvasHeight;
+
   // Initialize VideoRenderer for Web
   useEffect(() => {
     if (Platform.OS === "web" && canvasRef.current) {
@@ -30,11 +39,11 @@ export function usePlayerWebRenderer({
       rendererRef.current.onFrameNeeded = () => {
         if (rendererRef.current && canvasRef.current) {
           rendererRef.current.renderFrame(
-            project,
-            currentTime,
+            projectRef.current,
+            currentTimeRef.current,
             isPlaying,
-            boxWidth,
-            canvasHeight,
+            boxWidthRef.current,
+            canvasHeightRef.current,
           );
         }
       };

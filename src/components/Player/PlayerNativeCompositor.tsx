@@ -5,6 +5,7 @@ import { styles } from "./PlayerStyles";
 import { formatTime } from "./playerUtils";
 import { TransientTransformState } from "./playerTypes";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
+import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
@@ -17,11 +18,16 @@ interface PlayerNativeCompositorProps {
   boxWidth: number;
   canvasHeight: number;
   onSelectClip?: (id: string | null, type?: string) => void;
+  canvasBackground?: string;
   getItemBaseDimensions: (
     type: "text" | "sticker" | "video",
     clip: any,
   ) => { baseW: number; baseH: number };
-  getInterpolatedTransform: (clip: any, curTime: number) => any;
+  getInterpolatedTransform: (
+    clip: any,
+    curTime: number,
+    clipType?: string,
+  ) => any;
 }
 
 export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
@@ -34,40 +40,137 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
   isPlaying,
   boxWidth,
   canvasHeight,
+  canvasBackground,
   onSelectClip,
   getItemBaseDimensions,
   getInterpolatedTransform,
 }) => {
   return (
     <View
-      style={[StyleSheet.absoluteFill, styles.nativeCompositorContainer]}
+      style={[
+        StyleSheet.absoluteFill,
+        styles.nativeCompositorContainer,
+        { backgroundColor: canvasBackground || "#000000" },
+      ]}
       pointerEvents="box-none"
     >
       {/* Layer 1: Active Video / Image Clips */}
       {activeVideos.map((vid) => {
         const isTrans = activeTransient && activeTransient.clipId === vid.id;
         const kfT = getInterpolatedTransform(vid, currentTime);
-        const posX = isTrans ? activeTransient!.x : kfT.x;
-        const posY = isTrans ? activeTransient!.y : kfT.y;
+        const posX = isTrans
+          ? activeTransient!.x
+          : (kfT?.x ?? vid.transform?.x ?? 0);
+        const posY = isTrans
+          ? activeTransient!.y
+          : (kfT?.y ?? vid.transform?.y ?? 0);
         const baseScale = isTrans
           ? activeTransient!.scale
-          : kfT.scale * (vid.scale || 1);
+          : (kfT?.scale ?? vid.transform?.scale ?? vid.scale ?? 1.0);
         const rot = isTrans
           ? activeTransient!.rotation
-          : kfT.rotation + (vid.rotation || 0);
+          : (kfT?.rotation ?? vid.transform?.rotation ?? vid.rotation ?? 0);
         const opacity =
-          kfT.opacity * (vid.opacity !== undefined ? vid.opacity : 1);
+          (kfT?.opacity ?? 1) * (vid.opacity !== undefined ? vid.opacity : 1);
+
+        let motionX = 0;
+        let motionY = 0;
+        let motionScale = 1.0;
+        let motionRot = 0;
+        if (vid.motionTrack && vid.motionTrack.enabled) {
+          const motion = applyMotionTracking(currentTime, vid.startTime, vid.duration, vid.motionTrack);
+          motionX = motion.dx;
+          motionY = motion.dy;
+          motionScale = motion.dScale;
+          motionRot = motion.dRot;
+        }
+
+        const effScale = baseScale * motionScale;
+        const effRot = rot + motionRot;
         const { baseW, baseH } = getItemBaseDimensions("video", vid);
-        const w = Math.round(baseW * baseScale);
-        const h = Math.round(baseH * baseScale);
-        const cx = boxWidth / 2 + posX;
-        const cy = canvasHeight / 2 + posY;
+        const w = Math.round(baseW * effScale);
+        const h = Math.round(baseH * effScale);
+        const cx = boxWidth / 2 + posX + motionX;
+        const cy = canvasHeight / 2 + posY + motionY;
+
+        const mask = vid.mask || vid.transform?.mask;
+        let maskBorderRadius: number | undefined = undefined;
+        let hasMaskShape = false;
+        if (mask && mask.shape && mask.shape !== "none") {
+          hasMaskShape = true;
+          if (mask.shape === "circle") {
+            maskBorderRadius = Math.round(Math.min(w, h) / 2);
+          } else if (mask.shape === "rectangle") {
+            maskBorderRadius = Math.max(0, mask.roundness ?? 16);
+          }
+        }
+
+        const crop = vid.crop || vid.transform?.crop;
+        const hasCrop =
+          !!crop &&
+          (crop.width < 100 ||
+            crop.height < 100 ||
+            crop.x > 0 ||
+            crop.y > 0);
+
+        if (hasCrop) {
+          const cropW = Math.max(0.01, crop.width / 100);
+          const cropH = Math.max(0.01, crop.height / 100);
+          const cropX = Math.max(0, crop.x / 100);
+          const cropY = Math.max(0, crop.y / 100);
+          const croppedContainerW = Math.round(w * cropW);
+          const croppedContainerH = Math.round(h * cropH);
+
+          return (
+            <TouchableOpacity
+              key={vid.id}
+              activeOpacity={0.98}
+              onPress={() => onSelectClip?.(vid.id, vid.type || "video")}
+              style={[
+                {
+                  position: "absolute",
+                  left: cx - croppedContainerW / 2,
+                  top: cy - croppedContainerH / 2,
+                  width: croppedContainerW,
+                  height: croppedContainerH,
+                  overflow: "hidden",
+                  borderRadius: maskBorderRadius,
+                  opacity,
+                  transform: [
+                    { scaleX: vid.transform?.flipX ? -1 : 1 },
+                    { scaleY: vid.transform?.flipY ? -1 : 1 },
+                    { rotate: `${effRot}deg` },
+                  ],
+                },
+              ]}
+            >
+              <View
+                style={{
+                  position: "absolute",
+                  left: -Math.round(w * cropX),
+                  top: -Math.round(h * cropY),
+                  width: w,
+                  height: h,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <NativeVideoClipPlayer
+                  clip={vid}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        }
 
         return (
           <TouchableOpacity
             key={vid.id}
             activeOpacity={0.98}
-            onPress={() => onSelectClip?.(vid.id, "video")}
+            onPress={() => onSelectClip?.(vid.id, vid.type || "video")}
             style={[
               {
                 position: "absolute",
@@ -78,10 +181,12 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                 justifyContent: "center",
                 alignItems: "center",
                 opacity,
+                overflow: hasMaskShape ? "hidden" : "visible",
+                borderRadius: maskBorderRadius,
                 transform: [
                   { scaleX: vid.transform?.flipX ? -1 : 1 },
                   { scaleY: vid.transform?.flipY ? -1 : 1 },
-                  { rotate: `${rot}deg` },
+                  { rotate: `${effRot}deg` },
                 ],
               },
             ]}
@@ -90,7 +195,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               clip={vid}
               currentTime={currentTime}
               isPlaying={isPlaying}
-              onSelect={() => onSelectClip?.(vid.id, "video")}
+              onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
             />
           </TouchableOpacity>
         );
@@ -99,21 +204,123 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
       {/* Layer 2: Active Text Overlays */}
       {activeTexts.map((txt) => {
         const isTrans = activeTransient && activeTransient.clipId === txt.id;
-        const kfT = getInterpolatedTransform(txt, currentTime);
-        const effX = isTrans
-          ? activeTransient!.x
-          : (txt.position?.x ?? 50) + (kfT.x / boxWidth) * 100;
-        const effY = isTrans
-          ? activeTransient!.y
-          : (txt.position?.y ?? 35) + (kfT.y / canvasHeight) * 100;
-        const cx = (effX / 100) * boxWidth;
-        const cy = (effY / 100) * canvasHeight;
-        const s = isTrans
-          ? activeTransient!.scale
-          : (txt.scale || 1.0) * kfT.scale;
-        const rot = isTrans
-          ? activeTransient!.rotation
-          : (txt.rotation || 0) + kfT.rotation;
+        const kfT = getInterpolatedTransform(txt, currentTime, "text");
+        const effX = isTrans ? activeTransient!.x : kfT.x;
+        const effY = isTrans ? activeTransient!.y : kfT.y;
+        const baseS = isTrans ? activeTransient!.scale : kfT.scale;
+        const rot = isTrans ? activeTransient!.rotation : kfT.rotation;
+        const baseOpacity =
+          (kfT.opacity ?? 1) * (txt.opacity !== undefined ? txt.opacity : 1);
+
+        const elapsed = Math.max(0, currentTime - (txt.startTime || 0));
+        const duration = Math.max(0.5, txt.duration || 3.0);
+        const timeLeft = Math.max(0, duration - elapsed);
+        let animScale = 1.0;
+        let animAlpha = 1.0;
+        let animOffsetX = 0;
+        let animOffsetY = 0;
+        let displayText = txt.text || "";
+        const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
+        const introDur = Math.min(0.5, duration * 0.35);
+        const exitDur = Math.min(0.35, duration * 0.25);
+
+        if (anim === "typewriter") {
+          const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
+          displayText = displayText.slice(0, chars);
+        } else if (anim === "bounce") {
+          if (elapsed < introDur) {
+            const p = elapsed / introDur;
+            animScale = 0.45 + Math.sin(p * Math.PI) * 0.75;
+            animAlpha = Math.min(1, p * 2);
+          }
+        } else if (anim === "fade" || anim === "fadein") {
+          if (elapsed < introDur) {
+            animAlpha = elapsed / introDur;
+          } else if (timeLeft < exitDur) {
+            animAlpha = timeLeft / exitDur;
+          }
+        } else if (anim === "slideup" || anim === "up") {
+          if (elapsed < introDur) {
+            const p = elapsed / introDur;
+            const easeOut = Math.sin((p * Math.PI) / 2);
+            animOffsetY = (1 - easeOut) * 45;
+            animAlpha = p;
+          } else if (timeLeft < exitDur) {
+            const p = 1 - (timeLeft / exitDur);
+            animOffsetY = -p * 25;
+            animAlpha = 1 - p;
+          }
+        } else if (anim === "slidedown" || anim === "down") {
+          if (elapsed < introDur) {
+            const p = elapsed / introDur;
+            const easeOut = Math.sin((p * Math.PI) / 2);
+            animOffsetY = -(1 - easeOut) * 45;
+            animAlpha = p;
+          } else if (timeLeft < exitDur) {
+            const p = 1 - (timeLeft / exitDur);
+            animOffsetY = p * 25;
+            animAlpha = 1 - p;
+          }
+        } else if (anim === "slide" || anim === "slideleft") {
+          if (elapsed < introDur) {
+            const p = elapsed / introDur;
+            const easeOut = Math.sin((p * Math.PI) / 2);
+            animOffsetX = (1 - easeOut) * 60;
+            animAlpha = p;
+          } else if (timeLeft < exitDur) {
+            const p = 1 - (timeLeft / exitDur);
+            animOffsetX = -p * 35;
+            animAlpha = 1 - p;
+          }
+        } else if (anim === "slideright") {
+          if (elapsed < introDur) {
+            const p = elapsed / introDur;
+            const easeOut = Math.sin((p * Math.PI) / 2);
+            animOffsetX = -(1 - easeOut) * 60;
+            animAlpha = p;
+          } else if (timeLeft < exitDur) {
+            const p = 1 - (timeLeft / exitDur);
+            animOffsetX = p * 35;
+            animAlpha = 1 - p;
+          }
+        } else if (anim === "zoomin" || anim === "zoom") {
+          if (elapsed < introDur) {
+            const p = elapsed / introDur;
+            const easeOut = Math.sin((p * Math.PI) / 2);
+            animScale = 0.35 + easeOut * 0.75;
+            animAlpha = p;
+          } else if (timeLeft < exitDur) {
+            const p = 1 - (timeLeft / exitDur);
+            animScale = 1.0 + p * 0.25;
+            animAlpha = 1 - p;
+          }
+        } else if (anim === "pulse") {
+          animScale = 1.0 + Math.sin(elapsed * 6) * 0.08;
+        } else if (anim === "shake") {
+          if (elapsed < 0.8) {
+            animOffsetX = Math.sin(elapsed * 40) * 4;
+          }
+        } else if (anim === "wave") {
+          animOffsetY = Math.sin(elapsed * 4) * 6;
+        }
+
+        let motionX = 0;
+        let motionY = 0;
+        let motionScale = 1.0;
+        let motionRot = 0;
+        if (txt.motionTrack && txt.motionTrack.enabled) {
+          const motion = applyMotionTracking(currentTime, txt.startTime, txt.duration, txt.motionTrack);
+          motionX = motion.dx;
+          motionY = motion.dy;
+          motionScale = motion.dScale;
+          motionRot = motion.dRot;
+        }
+
+        const s = baseS * animScale * motionScale;
+        const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
+        const cx = (effX / 100) * boxWidth + animOffsetX + motionX;
+        const cy = (effY / 100) * canvasHeight + animOffsetY + motionY;
+        const effRot = rot + motionRot;
         const { baseW, baseH } = getItemBaseDimensions("text", txt);
         const w = Math.round(baseW * s);
         const h = Math.round(baseH * s);
@@ -132,7 +339,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               height: h,
               alignItems: "center",
               justifyContent: "center",
-              transform: [{ rotate: `${rot}deg` }],
+              opacity,
+              transform: [{ rotate: `${effRot}deg` }],
             }}
           >
             <Text
@@ -150,7 +358,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                 },
               ]}
             >
-              {txt.text}
+              {displayText}
             </Text>
           </TouchableOpacity>
         );
@@ -159,21 +367,53 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
       {/* Layer 3: Active Stickers */}
       {activeStickers.map((stk) => {
         const isTrans = activeTransient && activeTransient.clipId === stk.id;
-        const kfT = getInterpolatedTransform(stk, currentTime);
-        const effX = isTrans
-          ? activeTransient!.x
-          : (stk.position?.x ?? 50) + (kfT.x / boxWidth) * 100;
-        const effY = isTrans
-          ? activeTransient!.y
-          : (stk.position?.y ?? 50) + (kfT.y / canvasHeight) * 100;
-        const cx = (effX / 100) * boxWidth;
-        const cy = (effY / 100) * canvasHeight;
-        const s = isTrans
-          ? activeTransient!.scale
-          : (stk.scale || 1.2) * kfT.scale;
-        const rot = isTrans
-          ? activeTransient!.rotation
-          : (stk.rotation || 0) + kfT.rotation;
+        const kfT = getInterpolatedTransform(stk, currentTime, "sticker");
+        const effX = isTrans ? activeTransient!.x : kfT.x;
+        const effY = isTrans ? activeTransient!.y : kfT.y;
+        const baseS = isTrans ? activeTransient!.scale : kfT.scale;
+        const rot = isTrans ? activeTransient!.rotation : kfT.rotation;
+        const baseOpacity =
+          (kfT.opacity ?? 1) * (stk.opacity !== undefined ? stk.opacity : 1);
+
+        let motionX = 0;
+        let motionY = 0;
+        let motionScale = 1.0;
+        let motionRot = 0;
+        if (stk.motionTrack && stk.motionTrack.enabled) {
+          const motion = applyMotionTracking(currentTime, stk.startTime, stk.duration, stk.motionTrack);
+          motionX = motion.dx;
+          motionY = motion.dy;
+          motionScale = motion.dScale;
+          motionRot = motion.dRot;
+        }
+
+        const elapsed = Math.max(0, currentTime - (stk.startTime || 0));
+        let animScale = 1.0;
+        let animAlpha = 1.0;
+        let animOffsetY = 0;
+        const anim = stk.animation || "bounce";
+
+        if (anim === "bounce") {
+          animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;
+        } else if (anim === "pulse") {
+          animScale = 1.0 + Math.sin(elapsed * 6) * 0.1;
+        } else if (anim === "wave") {
+          animOffsetY = Math.sin(elapsed * 4) * 8;
+        } else if (anim === "fade") {
+          if (elapsed < 0.35) animAlpha = elapsed / 0.35;
+        } else if (anim === "pop") {
+          if (elapsed < 0.3) {
+            const p = elapsed / 0.3;
+            animScale = 0.3 + p * 0.85;
+            animAlpha = p;
+          }
+        } // if "none", animScale stays 1.0 without bounce
+
+        const s = baseS * animScale * motionScale;
+        const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
+        const cx = (effX / 100) * boxWidth + motionX;
+        const cy = (effY / 100) * canvasHeight + animOffsetY + motionY;
+        const effRot = rot + motionRot;
         const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
         const w = Math.round(baseW * s);
         const h = Math.round(baseH * s);
@@ -192,7 +432,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               height: h,
               alignItems: "center",
               justifyContent: "center",
-              transform: [{ rotate: `${rot}deg` }],
+              opacity,
+              transform: [{ rotate: `${effRot}deg` }],
             }}
           >
             <Text
@@ -242,18 +483,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           );
         }
         if (eff.type === "glitch" || eff.type === "rgb_split") {
-          return (
-            <View
-              key={eff.id}
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: "rgba(255, 0, 80, 0.14)",
-                },
-              ]}
-            />
-          );
+          return null;
         }
         if (eff.type === "flash") {
           const flashVal = Math.sin(currentTime * 12);
@@ -294,8 +524,13 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
       {activeVideos.length === 0 &&
         activeTexts.length === 0 &&
         activeStickers.length === 0 && (
-          <View style={styles.nativeEmptyScrub}>
-            <Ionicons name="film-outline" size={32} color="#374151" />
+          <View
+            style={[
+              styles.nativeEmptyScrub,
+              { backgroundColor: "transparent" },
+            ]}
+          >
+            <Ionicons name="film-outline" size={32} color="#6B7280" />
             <Text style={styles.nativeEmptyScrubText}>
               No clip at {formatTime(currentTime)}
             </Text>

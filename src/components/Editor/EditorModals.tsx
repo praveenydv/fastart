@@ -293,7 +293,6 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           visible={true}
           onClose={closeModal}
           currentTransform={selectedClip?.transform}
-          currentAspectRatio={project?.aspectRatio || "9:16"}
           currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
           initialTab="mask"
           onApplyTransform={handleApplyTransform}

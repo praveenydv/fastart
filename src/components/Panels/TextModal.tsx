@@ -206,6 +206,9 @@ export default function TextModal({
     >
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.sheetHeader}>
             <TouchableOpacity onPress={onClose} style={styles.navBtn}>

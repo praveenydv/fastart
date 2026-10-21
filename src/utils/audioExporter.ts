@@ -1,11 +1,11 @@
 // FastArt PCM 16-bit WAV Audio Exporter (TypeScript)
 import { FastArtProject } from '../types/project';
 
-export async function exportProjectAudioToWav(
+export function exportProjectAudioToWavBytes(
   project: FastArtProject,
   duration: number = 10,
   sampleRate: number = 44100
-): Promise<Blob> {
+): Uint8Array {
   const numChannels = 2; // Stereo
   const totalSamples = Math.ceil(duration * sampleRate);
   const bytesPerSample = 2; // 16-bit
@@ -87,5 +87,21 @@ export async function exportProjectAudioToWav(
     offset += 4;
   }
 
-  return new Blob([buffer], { type: 'audio/wav' });
+  return new Uint8Array(buffer);
+}
+
+export async function exportProjectAudioToWav(
+  project: FastArtProject,
+  duration: number = 10,
+  sampleRate: number = 44100
+): Promise<Blob> {
+  const bytes = exportProjectAudioToWavBytes(project, duration, sampleRate);
+  if (typeof Blob !== 'undefined') {
+    return new Blob([bytes.buffer as ArrayBuffer], { type: 'audio/wav' });
+  }
+  return {
+    size: bytes.length,
+    type: 'audio/wav',
+    arrayBuffer: async () => bytes.buffer as ArrayBuffer,
+  } as unknown as Blob;
 }

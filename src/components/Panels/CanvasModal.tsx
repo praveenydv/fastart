@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
@@ -19,16 +20,113 @@ interface CanvasModalProps {
   onUpdateProject: (updates: Partial<FastArtProject>) => void;
 }
 
-const CANVAS_COLORS = [
-  { id: '#000000', name: 'Black' },
-  { id: '#0B0D13', name: 'Studio Dark' },
-  { id: '#1A1E29', name: 'Slate' },
-  { id: '#0A192F', name: 'Navy' },
-  { id: '#1E1035', name: 'Violet' },
-  { id: '#06251E', name: 'Emerald' },
-  { id: '#2B0E1E', name: 'Crimson' },
-  { id: '#FFFFFF', name: 'White' },
+export interface CanvasColorOption {
+  id: string;
+  name: string;
+}
+
+export interface ColorPaletteGroup {
+  category: string;
+  colors: CanvasColorOption[];
+}
+
+export const CANVAS_PALETTES: ColorPaletteGroup[] = [
+  {
+    category: 'Studio & Neutrals',
+    colors: [
+      { id: '#000000', name: 'Black' },
+      { id: '#0B0D13', name: 'Studio Dark' },
+      { id: '#1E293B', name: 'Slate' },
+      { id: '#475569', name: 'Steel' },
+      { id: '#94A3B8', name: 'Silver' },
+      { id: '#F1F5F9', name: 'Soft White' },
+      { id: '#FFFFFF', name: 'Pure White' },
+    ],
+  },
+  {
+    category: 'Vibrant & Creators',
+    colors: [
+      { id: '#EF4444', name: 'Crimson' },
+      { id: '#F43F5E', name: 'Rose' },
+      { id: '#F97316', name: 'Sunset' },
+      { id: '#F59E0B', name: 'Amber' },
+      { id: '#10B981', name: 'Emerald' },
+      { id: '#06B6D4', name: 'Cyan' },
+      { id: '#00F2FE', name: 'FastArt Cyan' },
+      { id: '#3B82F6', name: 'Electric Blue' },
+      { id: '#6366F1', name: 'Indigo' },
+      { id: '#8B5CF6', name: 'Neon Violet' },
+      { id: '#EC4899', name: 'Hot Pink' },
+    ],
+  },
+  {
+    category: 'Production Keying',
+    colors: [
+      { id: '#00FF00', name: 'Chroma Green' },
+      { id: '#0000FF', name: 'Chroma Blue' },
+      { id: '#FF00FF', name: 'Chroma Magenta' },
+    ],
+  },
 ];
+
+const QUICK_PRESETS = [
+  '#000000',
+  '#FFFFFF',
+  '#00FF00',
+  '#00F2FE',
+  '#EF4444',
+  '#F59E0B',
+  '#8B5CF6',
+  '#EC4899',
+];
+
+function isLightColor(color: string): boolean {
+  if (!color) return false;
+  const hex = color.replace('#', '').trim();
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16);
+    const g = parseInt(hex[1] + hex[1], 16);
+    const b = parseInt(hex[2] + hex[2], 16);
+    return !isNaN(r) && !isNaN(g) && !isNaN(b) && (r * 299 + g * 587 + b * 114) / 1000 > 155;
+  }
+  if (hex.length >= 6) {
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return !isNaN(r) && !isNaN(g) && !isNaN(b) && (r * 299 + g * 587 + b * 114) / 1000 > 155;
+  }
+  return false;
+}
+
+function normalizeHex(input: string): string | null {
+  const val = input.trim().toLowerCase();
+  const NAMED_COLORS: Record<string, string> = {
+    black: '#000000',
+    white: '#FFFFFF',
+    transparent: 'transparent',
+    red: '#EF4444',
+    green: '#10B981',
+    blue: '#3B82F6',
+    yellow: '#F59E0B',
+    purple: '#8B5CF6',
+    pink: '#EC4899',
+    cyan: '#00F2FE',
+    orange: '#F97316',
+    gray: '#6B7280',
+    grey: '#6B7280',
+    dark: '#121622',
+  };
+  if (NAMED_COLORS[val]) return NAMED_COLORS[val];
+  if (val === '0' || val === '000' || val === '000000') return '#000000';
+  const clean = val.replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/.test(clean)) {
+    return `#${clean[0]}${clean[0]}${clean[1]}${clean[1]}${clean[2]}${clean[2]}`.toUpperCase();
+  }
+  if (/^[0-9a-f]{6}$/.test(clean)) {
+    return `#${clean}`.toUpperCase();
+  }
+  return null;
+}
 
 export default function CanvasModal({
   visible,
@@ -39,10 +137,27 @@ export default function CanvasModal({
   if (!project) return null;
 
   const currentRatio = project.aspectRatio || '9:16';
-  const currentBg = project.canvasBackground || '#000000';
-  const activeColorObj = CANVAS_COLORS.find(
-    (c) => c.id.toLowerCase() === currentBg.toLowerCase(),
-  );
+  const currentBg = (project.canvasBackground || '#000000').toUpperCase();
+
+  const [customHexInput, setCustomHexInput] = useState(currentBg);
+
+  useEffect(() => {
+    setCustomHexInput(currentBg);
+  }, [currentBg]);
+
+  // Find label for active color across all groups
+  let activeColorName = 'Custom';
+  for (const group of CANVAS_PALETTES) {
+    const found = group.colors.find(
+      (c) => c.id.toUpperCase() === currentBg.toUpperCase(),
+    );
+    if (found) {
+      activeColorName = found.name;
+      break;
+    }
+  }
+
+  const isLight = isLightColor(currentBg);
 
   // Compute preview aspect ratio box dimensions (fit in 100x100)
   const getPreviewBoxStyle = () => {
@@ -69,13 +184,26 @@ export default function CanvasModal({
 
   const handleSelectColor = (color: string) => {
     soundEngine.playSfx('pop');
-    onUpdateProject({ canvasBackground: color });
+    const formatted = normalizeHex(color) || color.toUpperCase();
+    setCustomHexInput(formatted);
+    onUpdateProject({ canvasBackground: formatted });
+  };
+
+  const handleCustomHexChange = (text: string) => {
+    setCustomHexInput(text);
+    const validHex = normalizeHex(text);
+    if (validHex) {
+      onUpdateProject({ canvasBackground: validHex });
+    }
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
@@ -108,12 +236,13 @@ export default function CanvasModal({
                     styles.previewRatioBox,
                     getPreviewBoxStyle(),
                     { backgroundColor: currentBg },
+                    isLight && { borderColor: 'rgba(0,0,0,0.35)' },
                   ]}
                 >
                   <Text
                     style={[
                       styles.previewRatioText,
-                      currentBg === '#FFFFFF' ? { color: '#000000' } : { color: '#00F2FE' },
+                      isLight ? { color: '#0F172A' } : { color: '#00F2FE' },
                     ]}
                   >
                     {currentRatio}
@@ -128,18 +257,41 @@ export default function CanvasModal({
                 <View style={styles.metaBadge}>
                   <View
                     style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 5,
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
                       backgroundColor: currentBg,
-                      borderWidth: currentBg.toLowerCase() === '#ffffff' ? 1 : 0,
+                      borderWidth: isLight ? 1 : 0,
                       borderColor: '#4B5563',
                     }}
                   />
                   <Text style={styles.metaBadgeText}>
-                    {activeColorObj?.name || 'Background'}
+                    {activeColorName} ({currentBg})
                   </Text>
                 </View>
+                {currentBg !== '#000000' && (
+                  <TouchableOpacity
+                    style={[
+                      styles.metaBadge,
+                      {
+                        backgroundColor: 'rgba(0, 242, 254, 0.15)',
+                        borderColor: '#00F2FE',
+                      },
+                    ]}
+                    onPress={() => handleSelectColor('#000000')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="refresh-outline" size={13} color="#00F2FE" />
+                    <Text
+                      style={[
+                        styles.metaBadgeText,
+                        { color: '#00F2FE', fontWeight: '700' },
+                      ]}
+                    >
+                      Reset Black
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
@@ -178,54 +330,144 @@ export default function CanvasModal({
               </View>
             </View>
 
-            {/* 2. Canvas Background Colors */}
+            {/* 2. Custom Hex Color Input */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>2. Canvas Background Color</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.colorRow}
-              >
-                {CANVAS_COLORS.map((col) => {
-                  const isSelected = currentBg.toLowerCase() === col.id.toLowerCase();
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>2. Custom Color / Hex Code</Text>
+                <Text style={styles.sectionBadge}>{currentBg}</Text>
+              </View>
+
+              <View style={styles.customColorRow}>
+                <View
+                  style={[
+                    styles.customColorPreview,
+                    { backgroundColor: currentBg },
+                    isLight && { borderColor: 'rgba(0,0,0,0.3)' },
+                  ]}
+                >
+                  <Ionicons
+                    name="color-palette-outline"
+                    size={16}
+                    color={isLight ? '#0F172A' : '#FFFFFF'}
+                  />
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.hashSymbol}>#</Text>
+                  <TextInput
+                    style={styles.hexInput}
+                    value={customHexInput.replace(/^#/, '')}
+                    onChangeText={(val) => handleCustomHexChange(val)}
+                    placeholder="FFFFFF"
+                    placeholderTextColor="#4B5563"
+                    maxLength={8}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.applyColorBtn,
+                    normalizeHex(customHexInput) && styles.applyColorBtnActive,
+                  ]}
+                  onPress={() => {
+                    const valid = normalizeHex(customHexInput);
+                    if (valid) handleSelectColor(valid);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="checkmark" size={18} color="#000000" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick Preset Pills */}
+              <View style={styles.quickPresetRow}>
+                {QUICK_PRESETS.map((pCol) => {
+                  const isPSelected = currentBg.toUpperCase() === pCol.toUpperCase();
+                  const pLight = isLightColor(pCol);
                   return (
                     <TouchableOpacity
-                      key={col.id}
+                      key={pCol}
                       style={[
-                        styles.colorSwatchBtn,
-                        isSelected && styles.colorSwatchBtnActive,
+                        styles.quickPresetPill,
+                        { backgroundColor: pCol },
+                        pLight && { borderWidth: 1, borderColor: '#4B5563' },
+                        isPSelected && styles.quickPresetPillActive,
                       ]}
-                      onPress={() => handleSelectColor(col.id)}
+                      onPress={() => handleSelectColor(pCol)}
                       activeOpacity={0.7}
                     >
-                      <View
-                        style={[
-                          styles.colorCircle,
-                          { backgroundColor: col.id },
-                          col.id === '#FFFFFF' && { borderWidth: 1, borderColor: '#4B5563' },
-                        ]}
-                      >
-                        {isSelected && (
-                          <Ionicons
-                            name="checkmark"
-                            size={16}
-                            color={col.id === '#FFFFFF' ? '#000000' : '#00F2FE'}
-                          />
-                        )}
-                      </View>
-                      <Text
-                        style={[
-                          styles.colorName,
-                          isSelected && styles.colorNameActive,
-                        ]}
-                      >
-                        {col.name}
-                      </Text>
+                      {isPSelected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={13}
+                          color={pLight ? '#000000' : '#FFFFFF'}
+                        />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
-              </ScrollView>
+              </View>
             </View>
+
+            {/* 3. Canvas Background Palettes */}
+            {CANVAS_PALETTES.map((group) => (
+              <View key={group.category} style={styles.section}>
+                <Text style={styles.sectionTitle}>{group.category}</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.colorRow}
+                >
+                  {group.colors.map((col) => {
+                    const isSelected = currentBg.toUpperCase() === col.id.toUpperCase();
+                    const itemIsLight = isLightColor(col.id);
+                    return (
+                      <TouchableOpacity
+                        key={col.id}
+                        style={[
+                          styles.colorSwatchBtn,
+                          isSelected && styles.colorSwatchBtnActive,
+                        ]}
+                        onPress={() => handleSelectColor(col.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View
+                          style={[
+                            styles.colorCircle,
+                            { backgroundColor: col.id },
+                            itemIsLight && { borderWidth: 1, borderColor: '#4B5563' },
+                            isSelected && {
+                              borderColor: '#00F2FE',
+                              borderWidth: 2.5,
+                              transform: [{ scale: 1.08 }],
+                            },
+                          ]}
+                        >
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark"
+                              size={16}
+                              color={itemIsLight ? '#000000' : '#00F2FE'}
+                            />
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.colorName,
+                            isSelected && styles.colorNameActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {col.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ))}
           </ScrollView>
 
           {/* Footer Action */}
@@ -256,10 +498,10 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#0E1118',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    maxHeight: '88%',
-    paddingBottom: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '82%',
+    paddingBottom: 16,
     borderWidth: 1,
     borderColor: '#1E2333',
     shadowColor: '#000',
@@ -268,12 +510,20 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 20,
   },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1.5,
+    alignSelf: 'center',
+    marginTop: 8,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1E29',
   },
@@ -333,10 +583,10 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00F2FE',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   previewRatioText: {
     fontSize: 11,
@@ -372,6 +622,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E2436',
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   sectionTitle: {
     color: '#8E95A5',
     fontSize: 11,
@@ -379,6 +635,88 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 10,
+  },
+  sectionBadge: {
+    backgroundColor: '#1E2436',
+    color: '#00F2FE',
+    fontSize: 11,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2B354F',
+    letterSpacing: 0.5,
+  },
+  customColorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  customColorPreview: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2A324B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1B202E',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#2A324B',
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  hashSymbol: {
+    color: '#00F2FE',
+    fontSize: 15,
+    fontWeight: '800',
+    marginRight: 4,
+  },
+  hexInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1,
+    padding: 0,
+  },
+  applyColorBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.5,
+  },
+  applyColorBtnActive: {
+    backgroundColor: '#00F2FE',
+    opacity: 1,
+  },
+  quickPresetRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  quickPresetPill: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickPresetPillActive: {
+    borderWidth: 2,
+    borderColor: '#00F2FE',
+    transform: [{ scale: 1.15 }],
   },
   ratioGrid: {
     flexDirection: 'row',
@@ -424,6 +762,7 @@ const styles = StyleSheet.create({
   colorSwatchBtn: {
     alignItems: 'center',
     gap: 6,
+    width: 58,
   },
   colorSwatchBtnActive: {
     opacity: 1,
@@ -439,8 +778,9 @@ const styles = StyleSheet.create({
   },
   colorName: {
     color: '#8E95A5',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
+    textAlign: 'center',
   },
   colorNameActive: {
     color: '#00F2FE',
@@ -469,3 +809,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 });
+

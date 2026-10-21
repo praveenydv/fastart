@@ -92,6 +92,9 @@ export default function MotionTrackingModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View style={styles.titleRow}>
@@ -220,19 +223,27 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#141721',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     borderWidth: 1,
     borderColor: '#1F2637',
     maxHeight: '80%',
+  },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1.5,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1A2030',
   },

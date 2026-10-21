@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 import { FastArtProject, CustomCrop } from "../types/project";
 import { clampClipTrimUpdates } from "../utils/mediaDuration";
+import {
+  applyTransformUpdateToClip,
+  getInterpolatedTransform,
+} from "../utils/keyframeEngine";
 
 interface UseClipTransformOperationsParams {
   project: FastArtProject | null;
@@ -32,31 +36,26 @@ export function useClipTransformOperations({
       const current = projectRef.current;
       if (!current) return;
       const key = (
-        clipType === "sticker" || clipType === "stickers" ? "stickers" : clipType
+        clipType === "sticker" || clipType === "stickers"
+          ? "stickers"
+          : clipType === "photo" || clipType === "video"
+            ? "video"
+            : clipType === "text" || clipType === "texts"
+              ? "text"
+              : clipType === "effect" || clipType === "effects"
+                ? "effects"
+                : clipType
       ) as keyof typeof current.tracks;
       const list = [...(((current.tracks as any)[key] as any[]) || [])];
       const idx = list.findIndex((c) => c.id === clipId);
       if (idx < 0) return;
 
-      if (clipType === "video" || clipType === "photo") {
-        list[idx] = {
-          ...list[idx],
-          transform: {
-            ...(list[idx].transform || {}),
-            x: transform.x,
-            y: transform.y,
-            scale: transform.scale,
-            rotation: transform.rotation,
-          },
-        };
-      } else {
-        list[idx] = {
-          ...list[idx],
-          position: { x: transform.x, y: transform.y },
-          scale: transform.scale,
-          rotation: transform.rotation,
-        };
-      }
+      list[idx] = applyTransformUpdateToClip(
+        list[idx],
+        clipType,
+        transform,
+        current.currentTime || 0,
+      );
 
       const updated = {
         ...current,
@@ -76,29 +75,42 @@ export function useClipTransformOperations({
   // Rotate clip 90 degrees
   const handleRotateClip = useCallback(() => {
     if (!project || !selectedClip) return;
-    const videoClips = [...(project.tracks.video || [])];
-    const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+    const key = (
+      selectedClipType === "sticker" || selectedClipType === "stickers"
+        ? "stickers"
+        : selectedClipType === "photo" || selectedClipType === "video"
+          ? "video"
+          : selectedClipType === "text" || selectedClipType === "texts"
+            ? "text"
+            : selectedClipType
+    ) as keyof typeof project.tracks;
+
+    const list = [...(((project.tracks as any)[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === selectedClipId);
     if (idx === -1) return;
 
-    const currentTransform = videoClips[idx].transform || {
-      scale: 1,
-      rotation: 0,
-      x: 0,
-      y: 0,
-    };
-    videoClips[idx] = {
-      ...videoClips[idx],
-      transform: {
-        ...currentTransform,
-        rotation: ((currentTransform.rotation || 0) + 90) % 360,
+    const currentT = getInterpolatedTransform(
+      list[idx],
+      project.currentTime || 0,
+      selectedClipType,
+    );
+    const newRotation = (currentT.rotation + 90) % 360;
+
+    list[idx] = applyTransformUpdateToClip(
+      list[idx],
+      selectedClipType,
+      {
+        ...currentT,
+        rotation: newRotation,
       },
-    };
+      project.currentTime || 0,
+    );
 
     updateProjectWithHistory({
       ...project,
-      tracks: { ...project.tracks, video: videoClips },
+      tracks: { ...project.tracks, [key]: list },
     });
-  }, [project, selectedClip, selectedClipId, updateProjectWithHistory]);
+  }, [project, selectedClip, selectedClipId, selectedClipType, updateProjectWithHistory]);
 
   // Toggle Reverse
   const handleToggleReverse = useCallback(() => {

@@ -1,4 +1,5 @@
 import { VideoClip } from "../../types/project";
+import { getInterpolatedTransform } from "../keyframeEngine";
 import {
   applyMaskPath,
   drawClipWithCutout,
@@ -51,57 +52,23 @@ export function drawClip(
   }
   let yOffset = 0;
 
-  let t = clip.transform || { scale: 1, rotation: 0, x: 0, y: 0 };
-  let keyframeOpacity = 1.0;
+  const t = getInterpolatedTransform(clip, time, "video");
+  const keyframeOpacity = t.opacity;
 
-  if (clip.keyframes && clip.keyframes.length > 0) {
-    const kfs = [...clip.keyframes].sort((a, b) => a.time - b.time);
-    if (clipLocalTime <= kfs[0].time) {
-      t = { ...t, ...(kfs[0].transform || {}) };
-      if (kfs[0].opacity !== undefined) keyframeOpacity = kfs[0].opacity;
-    } else if (clipLocalTime >= kfs[kfs.length - 1].time) {
-      const last = kfs[kfs.length - 1];
-      t = { ...t, ...(last.transform || {}) };
-      if (last.opacity !== undefined) keyframeOpacity = last.opacity;
-    } else {
-      for (let i = 0; i < kfs.length - 1; i++) {
-        const k1 = kfs[i];
-        const k2 = kfs[i + 1];
-        if (clipLocalTime >= k1.time && clipLocalTime <= k2.time) {
-          const span = k2.time - k1.time;
-          const progress = span > 0 ? (clipLocalTime - k1.time) / span : 0;
-          const ease = progress * progress * (3 - 2 * progress);
-          const t1 = k1.transform || {};
-          const t2 = k2.transform || {};
-          t = {
-            scale: (t1.scale ?? 1) + ((t2.scale ?? 1) - (t1.scale ?? 1)) * ease,
-            rotation: (t1.rotation ?? 0) + ((t2.rotation ?? 0) - (t1.rotation ?? 0)) * ease,
-            x: (t1.x ?? 0) + ((t2.x ?? 0) - (t1.x ?? 0)) * ease,
-            y: (t1.y ?? 0) + ((t2.y ?? 0) - (t1.y ?? 0)) * ease,
-            flipX: t2.flipX !== undefined ? t2.flipX : t1.flipX,
-            flipY: t2.flipY !== undefined ? t2.flipY : t1.flipY,
-          };
-          const op1 = k1.opacity ?? 1.0;
-          const op2 = k2.opacity ?? 1.0;
-          keyframeOpacity = op1 + (op2 - op1) * ease;
-          break;
-        }
-      }
-    }
-  }
-
+  let motionRot = 0;
   if (clip.motionTrack && clip.motionTrack.enabled) {
     const motion = applyMotionTracking(time, clip.startTime, clip.duration, clip.motionTrack);
     xOffset += motion.dx;
     yOffset += motion.dy;
     scaleModifier *= motion.dScale;
+    motionRot = motion.dRot || 0;
   }
 
   const clipOpacity = (t?.opacity !== undefined ? t.opacity : 1.0) * keyframeOpacity;
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha * clipOpacity));
 
   ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y + yOffset);
-  ctx.rotate(((t.rotation || 0) * Math.PI) / 180);
+  ctx.rotate((((t.rotation || 0) + motionRot) * Math.PI) / 180);
 
   const scaleX = (t.flipX ? -1 : 1) * (t.scale || 1) * scaleModifier;
   const scaleY = (t.flipY ? -1 : 1) * (t.scale || 1) * scaleModifier;
@@ -196,10 +163,31 @@ export function drawClip(
     }
   } else {
     const hasError = Boolean(mediaEl && (mediaEl as any).error);
-    drawLoadingPreview(ctx, clip, clipLocalTime, w, h, hasError);
+    const aspect = 16 / 9;
+    let dw = w;
+    let dh = w / aspect;
+    const fitMode = clip.fit || "contain";
+    if (fitMode === "cover") {
+      if (dh < h) {
+        dh = h;
+        dw = h * aspect;
+      }
+    } else {
+      if (dh > h) {
+        dh = h;
+        dw = h * aspect;
+      }
+    }
+    drawLoadingPreview(ctx, clip, clipLocalTime, dw, dh, hasError);
   }
 
+  ctx.filter = "none";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1.0;
   ctx.restore();
+  ctx.filter = "none";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1.0;
 
   if (clip.effect && clip.effect !== "none") {
     applyEffectOverlay(

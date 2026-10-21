@@ -224,8 +224,10 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                 {clip.title}
               </Text>
               <Text style={styles.clipDurationSubtext} numberOfLines={1}>
-                {displayDuration.toFixed(2)}s •{" "}
-                {Math.round(displayDuration * 1000)}ms
+                {displayDuration.toFixed(2)}s
+                {clip.rawClip?.speed && clip.rawClip.speed !== 1
+                  ? ` • ${clip.rawClip.speed}x`
+                  : ""}
               </Text>
             </View>
 
@@ -261,7 +263,10 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
 
           {/* Keyframe Diamond Markers */}
           {clip.rawClip?.keyframes && clip.rawClip.keyframes.length > 0 && (
-            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View
+              style={[StyleSheet.absoluteFill, { zIndex: 60 }]}
+              pointerEvents="none"
+            >
               {clip.rawClip.keyframes.map((kf: any, kfIdx: number) => {
                 const kfPos = kf.time * pxPerSec;
                 if (kfPos < 0 || kfPos > width) return null;
@@ -272,14 +277,15 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                     key={`kf-${kfIdx}`}
                     style={[
                       styles.timelineKfMarker,
-                      { left: Math.max(0, kfPos - 6) },
+                      { left: Math.max(2, Math.min(width - 16, kfPos - 7)) },
                       isPlayheadNear && styles.timelineKfMarkerActive,
                     ]}
                   >
-                    <Ionicons
-                      name="diamond"
-                      size={11}
-                      color={isPlayheadNear ? "#FFE600" : "#FFFFFF"}
+                    <View
+                      style={[
+                        styles.timelineKfMarkerInner,
+                        isPlayheadNear && { backgroundColor: "#FFFFFF" },
+                      ]}
                     />
                   </View>
                 );

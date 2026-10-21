@@ -9,10 +9,8 @@ import {
 import { soundEngine } from "../../../utils/audioEngine";
 import { addNotification } from "../../../utils/storage";
 import { MEDIA_FORMATS, NoticeDialogState } from "./exportTypes";
-import {
-  executeDirectDownload,
-  executeShareFile,
-} from "./exportFileStorage";
+import { executeDirectDownload } from "./exportFileStorage";
+import { exportMobileProject } from "../../../utils/renderer/mobileExporter";
 
 export function useExportProcess(
   project: any,
@@ -31,6 +29,7 @@ export function useExportProcess(
   const [isSaved, setIsSaved] = useState(false);
   const [showDownloadComplete, setShowDownloadComplete] = useState(false);
   const [downloadCompleteFilename, setDownloadCompleteFilename] = useState("");
+  const [downloadDestination, setDownloadDestination] = useState("Device Gallery");
   const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState | null>(null);
 
   useEffect(() => {
@@ -65,14 +64,14 @@ export function useExportProcess(
       project,
       resolution,
       selectedFormatConfig,
-      onSavedSuccess: (filename) => {
+      onSavedSuccess: (filename, dest) => {
         setDownloadCompleteFilename(filename);
+        if (dest) setDownloadDestination(dest);
         setIsSaved(true);
         setShowDownloadComplete(true);
       },
       setSaving: setIsSaving,
       setNoticeDialog,
-      onTriggerShare: () => handleShare(),
     });
   };
 
@@ -157,116 +156,23 @@ export function useExportProcess(
           icon: "videocam",
         });
       } else {
-        // Native Export
-        for (let i = 0; i <= 60; i += 15) {
-          setProgress(i);
-          await new Promise((r) => setTimeout(r, 80));
-        }
-
-        const cleanTitle = (project?.title || "FastArt_Export")
-          .replace(/[^a-zA-Z0-9_-]/g, "_")
-          .toLowerCase();
-        const ext = selectedFormatConfig.ext.replace(/^\./, "");
-        const filename = `${cleanTitle}_${Date.now()}.${ext}`;
-        const targetDir =
-          FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
-        const targetFileUri = `${targetDir}${filename}`;
-
-        let targetMime = "video/mp4";
-        if (mediaType === "png") targetMime = "image/png";
-        else if (mediaType === "webm") targetMime = "video/webm";
-        else if (mediaType === "gif") targetMime = "image/gif";
-        else if (mediaType === "wav") targetMime = "audio/wav";
-
-        const allClips = [
-          ...(project?.tracks?.video || []),
-          ...(project?.tracks?.overlay || []),
-          ...(project?.tracks?.stickers || []),
-        ];
-        const primaryClip =
-          allClips.find(
-            (c: any) =>
-              (c.url && typeof c.url === "string") ||
-              (c.thumbnail && typeof c.thumbnail === "string"),
-          ) || allClips[0];
-        const mediaSourceUrl =
-          primaryClip?.url || primaryClip?.thumbnail || project?.thumbnailUrl;
-
-        let exportSucceeded = false;
-
-        if (mediaSourceUrl && typeof mediaSourceUrl === "string") {
-          try {
-            if (
-              mediaSourceUrl.startsWith("http://") ||
-              mediaSourceUrl.startsWith("https://")
-            ) {
-              setProgress(75);
-              const downloadRes = await FileSystem.downloadAsync(
-                mediaSourceUrl,
-                targetFileUri
-              );
-              if (downloadRes.status === 200) {
-                exportSucceeded = true;
-              }
-            } else if (mediaSourceUrl.startsWith("file://")) {
-              await FileSystem.copyAsync({
-                from: mediaSourceUrl,
-                to: targetFileUri,
-              });
-              exportSucceeded = true;
-            } else if (mediaSourceUrl.startsWith("data:")) {
-              const base64Data = mediaSourceUrl.split(",")[1] || "";
-              if (base64Data) {
-                await FileSystem.writeAsStringAsync(targetFileUri, base64Data, {
-                  encoding: FileSystem.EncodingType.Base64,
-                });
-                exportSucceeded = true;
-              }
-            }
-          } catch (fetchErr) {
-            console.warn("Could not copy primary clip source on native:", fetchErr);
+        // Native Composite Mobile Export (bakes in canvas background, text, stickers, video, audio)
+        const renderDuration = Math.max(totalDuration || 2.0, 1.0);
+        const result = await exportMobileProject(
+          project,
+          {
+            fps,
+            duration: renderDuration,
+            format: mediaType,
+            currentTime: project.currentTime || 0,
+          },
+          (pct) => {
+            setProgress(pct);
           }
-        }
+        );
 
-        if (!exportSucceeded) {
-          setProgress(85);
-          if (mediaType === "png") {
-            const minimalPngBase64 =
-              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-            await FileSystem.writeAsStringAsync(targetFileUri, minimalPngBase64, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            exportSucceeded = true;
-          } else if (mediaType === "mp4") {
-            const minimalMp4Base64 =
-              "AAAAHGZ0eXBpc29tAAAAAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAACVtZGF0AAACmwAAAABtb292AAAAbG12aGQAAAAAAAAAAAAAAAAAAAPoAAAAAAABAAABAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAACF0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAAAAAAA=";
-            await FileSystem.writeAsStringAsync(targetFileUri, minimalMp4Base64, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            exportSucceeded = true;
-          } else {
-            const projectExportData = JSON.stringify(project, null, 2);
-            await FileSystem.writeAsStringAsync(targetFileUri, projectExportData, {
-              encoding: FileSystem.EncodingType.UTF8,
-            });
-            exportSucceeded = true;
-          }
-        }
-
-        setProgress(100);
-        await new Promise((r) => setTimeout(r, 100));
-
-        const nativeResult: ExportResult = {
-          blob: new Blob([], { type: targetMime }),
-          videoUrl: targetFileUri,
-          mimeType: targetMime,
-          format: mediaType,
-          extension: ext,
-          fileSize: 1024,
-        };
-
-        setExportedResult(nativeResult);
-        setExportedUrl(targetFileUri);
+        setExportedResult(result);
+        setExportedUrl(result.videoUrl);
         setStatus("done");
         soundEngine.playSfx("pop");
         addNotification({
@@ -285,28 +191,16 @@ export function useExportProcess(
     }
   };
 
-  async function handleShare() {
-    await executeShareFile(
-      exportedUrl || exportedResult?.videoUrl,
-      exportedResult,
-      mediaType,
-      project,
-      selectedFormatConfig,
-      setNoticeDialog,
-      () => triggerDirectDownload(),
-    );
-  }
-
   const getProgressStatusMessage = () => {
     switch (mediaType) {
       case "mp4":
-        return "Encoding hardware-accelerated MP4 (H.264 / AVC)...";
+        return "Encoding hardware-accelerated MP4 with text & stickers...";
       case "webm":
         return "Rendering WebM video frames with VP9 codec...";
       case "gif":
-        return "Generating animated GIF palette and frames...";
+        return "Compositing multi-track animated GIF frames...";
       case "png":
-        return "Rendering crisp lossless PNG frame...";
+        return "Compositing crisp lossless PNG snapshot with all text & stickers...";
       case "wav":
         return "Synthesizing 16-bit stereo PCM audio track...";
       default:
@@ -333,13 +227,13 @@ export function useExportProcess(
     showDownloadComplete,
     setShowDownloadComplete,
     downloadCompleteFilename,
+    downloadDestination,
     noticeDialog,
     setNoticeDialog,
     selectedFormatConfig,
     calculateEstimatedSize,
     triggerDirectDownload,
     handleStartExport,
-    handleShare,
     getProgressStatusMessage,
   };
 }

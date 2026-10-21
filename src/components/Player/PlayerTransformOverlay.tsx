@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { soundEngine } from "../../utils/audioEngine";
 import { styles } from "./PlayerStyles";
 import { ActiveTransformItem } from "./playerTypes";
 
@@ -34,7 +35,11 @@ interface PlayerTransformOverlayProps {
     type: "text" | "sticker" | "video",
     clip: any,
   ) => { baseW: number; baseH: number };
-  getInterpolatedTransform: (clip: any, curTime: number) => any;
+  getInterpolatedTransform: (
+    clip: any,
+    curTime: number,
+    clipType?: string,
+  ) => any;
 }
 
 export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
@@ -81,10 +86,11 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
           if (selectedClipId === vid.id) return null;
           const vidTrackZ =
             (typeof vid.trackIndex === "number" ? vid.trackIndex : 0) * 2 + 10;
-          const kfT = getInterpolatedTransform(vid, currentTime);
-          const cx = (50 + ((kfT.x / boxWidth) * 100) / 100) * boxWidth;
-          const cy = (50 + ((kfT.y / canvasHeight) * 100) / 100) * canvasHeight;
-          const s = (vid.scale || 1) * kfT.scale;
+          const kfT = getInterpolatedTransform(vid, currentTime, "video");
+          const cx = boxWidth / 2 + kfT.x;
+          const cy = canvasHeight / 2 + kfT.y;
+          const s = kfT.scale;
+          const rot = kfT.rotation;
           const { baseW, baseH } = getItemBaseDimensions("video", vid);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -93,11 +99,11 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
             type: "video" as const,
             label: vid.title,
             pos: {
-              x: 50 + ((vid.transform?.x || 0) / boxWidth) * 100,
-              y: 50 + ((vid.transform?.y || 0) / canvasHeight) * 100,
+              x: 50 + (kfT.x / boxWidth) * 100,
+              y: 50 + (kfT.y / canvasHeight) * 100,
             },
             scale: s,
-            rotation: vid.transform?.rotation ?? 0,
+            rotation: rot,
             width: w,
             height: h,
           };
@@ -105,7 +111,7 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
             <TouchableOpacity
               key={vid.id}
               activeOpacity={0.85}
-              onPress={() => onSelectClip?.(vid.id, "video")}
+              onPress={() => onSelectClip?.(vid.id, vid.type || "video")}
               style={[
                 styles.unselectedHitBox,
                 {
@@ -114,17 +120,17 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
                   width: w,
                   height: h,
                   zIndex: vidTrackZ,
-                  transform: [{ rotate: `${vid.transform?.rotation || 0}deg` }],
+                  transform: [{ rotate: `${rot}deg` }],
                 },
               ]}
               {...(Platform.OS === "web"
                 ? ({
                     onMouseDown: (e: any) => {
-                      onSelectClip?.(vid.id, "video");
+                      onSelectClip?.(vid.id, vid.type || "video");
                       handleStartDrag(e, "move", undefined, itemObj);
                     },
                     onTouchStart: (e: any) => {
-                      onSelectClip?.(vid.id, "video");
+                      onSelectClip?.(vid.id, vid.type || "video");
                       handleStartDrag(e, "move", undefined, itemObj);
                     },
                   } as any)
@@ -138,9 +144,11 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
           if (txt.id === selectedClipId) return null;
           const txtTrackZ =
             (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 2 + 30;
-          const cx = ((txt.position?.x ?? 50) / 100) * boxWidth;
-          const cy = ((txt.position?.y ?? 35) / 100) * canvasHeight;
-          const s = txt.scale || 1.0;
+          const kfT = getInterpolatedTransform(txt, currentTime, "text");
+          const cx = (kfT.x / 100) * boxWidth;
+          const cy = (kfT.y / 100) * canvasHeight;
+          const s = kfT.scale;
+          const rot = kfT.rotation;
           const { baseW, baseH } = getItemBaseDimensions("text", txt);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -148,9 +156,9 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
             id: txt.id,
             type: "text" as const,
             label: txt.text,
-            pos: txt.position || { x: 50, y: 35 },
-            scale: txt.scale ?? 1.0,
-            rotation: txt.rotation ?? 0,
+            pos: { x: kfT.x, y: kfT.y },
+            scale: s,
+            rotation: rot,
             width: w,
             height: h,
           };
@@ -167,7 +175,7 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
                   width: w,
                   height: h,
                   zIndex: txtTrackZ,
-                  transform: [{ rotate: `${txt.rotation || 0}deg` }],
+                  transform: [{ rotate: `${rot}deg` }],
                 },
               ]}
               {...(Platform.OS === "web"
@@ -191,9 +199,11 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
           if (stk.id === selectedClipId) return null;
           const stkTrackZ =
             (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 2 + 32;
-          const cx = ((stk.position?.x ?? 50) / 100) * boxWidth;
-          const cy = ((stk.position?.y ?? 50) / 100) * canvasHeight;
-          const s = stk.scale || 1.2;
+          const kfT = getInterpolatedTransform(stk, currentTime, "sticker");
+          const cx = (kfT.x / 100) * boxWidth;
+          const cy = (kfT.y / 100) * canvasHeight;
+          const s = kfT.scale;
+          const rot = kfT.rotation;
           const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -201,9 +211,9 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
             id: stk.id,
             type: "sticker" as const,
             label: stk.char,
-            pos: stk.position || { x: 50, y: 50 },
-            scale: stk.scale ?? 1.2,
-            rotation: stk.rotation ?? 0,
+            pos: { x: kfT.x, y: kfT.y },
+            scale: s,
+            rotation: rot,
             width: w,
             height: h,
           };
@@ -220,7 +230,7 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
                   width: w,
                   height: h,
                   zIndex: stkTrackZ,
-                  transform: [{ rotate: `${stk.rotation || 0}deg` }],
+                  transform: [{ rotate: `${rot}deg` }],
                 },
               ]}
               {...(Platform.OS === "web"
@@ -342,26 +352,32 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
       {/* Quick Action HUD Bar for Selected Item */}
       {activeTransformItem && (
         <View style={styles.floatingHudContainer} pointerEvents="box-none">
-          <View style={styles.floatingHudContentCompact}>
-            {/* Primary Action */}
-            {activeTransformItem.type === "video" ? (
+          <View style={styles.floatingHudContentCompact} pointerEvents="auto">
+            {/* Edit Action (for text and stickers only; videos/images use Crop) */}
+            {(activeTransformItem.type === "text" ||
+              activeTransformItem.type === "sticker") && (
               <TouchableOpacity
                 style={styles.floatingActionBtn}
-                onPress={() => handleEnterCropMode(activeTransformItem.id)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="crop" size={13} color="#00F2FE" />
-                <Text style={styles.floatingBtnText}>Crop</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.floatingActionBtn}
-                onPress={() =>
+                onPress={() => {
+                  soundEngine.playSfx("click");
                   onOpenEditModal?.(
                     activeTransformItem.id,
                     activeTransformItem.type,
-                  )
-                }
+                  );
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        onOpenEditModal?.(
+                          activeTransformItem.id,
+                          activeTransformItem.type,
+                        );
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Ionicons name="pencil" size={13} color="#00F2FE" />
@@ -369,12 +385,48 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
               </TouchableOpacity>
             )}
 
+            {/* Video Crop Action */}
+            {activeTransformItem.type === "video" && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  handleEnterCropMode(activeTransformItem.id);
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        handleEnterCropMode(activeTransformItem.id);
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="crop" size={13} color="#00F2FE" />
+                <Text style={styles.floatingBtnText}>Crop</Text>
+              </TouchableOpacity>
+            )}
+
             {/* Delete */}
             <TouchableOpacity
               style={[styles.floatingActionBtn, styles.floatingDeleteBtn]}
-              onPress={() =>
-                onDeleteClip?.(activeTransformItem.id, activeTransformItem.type)
-              }
+              onPress={() => {
+                soundEngine.playSfx("click");
+                onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
+              }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onClick: (e: any) => {
+                      e.stopPropagation?.();
+                      soundEngine.playSfx("click");
+                      onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
+                    },
+                    onMouseDown: (e: any) => e.stopPropagation?.(),
+                  } as any)
+                : {})}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="trash-outline" size={13} color="#FB7185" />
@@ -386,7 +438,20 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
             {/* Done */}
             <TouchableOpacity
               style={[styles.floatingActionBtn, styles.floatingDoneBtn]}
-              onPress={() => onSelectClip?.(null)}
+              onPress={() => {
+                soundEngine.playSfx("pop");
+                onSelectClip?.(null);
+              }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onClick: (e: any) => {
+                      e.stopPropagation?.();
+                      soundEngine.playSfx("pop");
+                      onSelectClip?.(null);
+                    },
+                    onMouseDown: (e: any) => e.stopPropagation?.(),
+                  } as any)
+                : {})}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons

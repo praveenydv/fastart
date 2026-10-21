@@ -10,6 +10,8 @@ interface UseTimelineDragTrimParams {
   pxPerSec: number;
   isSnappingEnabled: boolean;
   isHapticEnabled: boolean;
+  currentTime?: number;
+  onSeek?: (time: number) => void;
   onSelectClip: (
     id: string,
     type: "video" | "audio" | "text" | "sticker" | "effects",
@@ -41,6 +43,8 @@ export function useTimelineDragTrim({
   pxPerSec,
   isSnappingEnabled,
   isHapticEnabled,
+  currentTime,
+  onSeek,
   onSelectClip,
   onOpenEditModal,
   onMoveClip,
@@ -57,6 +61,11 @@ export function useTimelineDragTrim({
     handleClipPress,
     handleClipLongPress,
     handleClipMouseDown,
+    handleClipTouchStart,
+    handleClipTouchMove,
+    handleClipTouchEnd,
+    handleClipTouchCancel,
+    cancelClipDrag,
   } = useTimelineClipDrag({
     allClips,
     selectedClipId,
@@ -65,6 +74,8 @@ export function useTimelineDragTrim({
     isSnappingEnabled,
     isHapticEnabled,
     isTrimmingActiveRef,
+    currentTime,
+    onSeek,
     onSelectClip,
     onOpenEditModal,
     onMoveClip,
@@ -99,6 +110,11 @@ export function useTimelineDragTrim({
     handleClipPress,
     handleClipLongPress,
     handleClipMouseDown,
+    handleClipTouchStart,
+    handleClipTouchMove,
+    handleClipTouchEnd,
+    handleClipTouchCancel,
+    cancelClipDrag,
     handleLeftTrimStart,
     handleRightTrimStart,
   };

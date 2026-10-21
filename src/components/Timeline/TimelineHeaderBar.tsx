@@ -20,6 +20,7 @@ interface TimelineHeaderBarProps {
   } | null;
   pxPerSec: number;
   onZoomChange: (zoom: number) => void;
+  onDeselectClip?: () => void;
 }
 
 export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
@@ -33,6 +34,7 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
   activeClipInfo,
   pxPerSec,
   onZoomChange,
+  onDeselectClip,
 }) => {
   return (
     <>
@@ -87,11 +89,21 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
                 </Text>
               </View>
               <Ionicons name="time-outline" size={10} color="#00F2FE" />
-              <Text style={styles.activeClipTimeframeText}>
-                {activeClipInfo.start.toFixed(2)}s ➔{" "}
-                {(activeClipInfo.start + activeClipInfo.duration).toFixed(2)}s (
-                {activeClipInfo.duration.toFixed(2)}s)
+              <Text style={styles.activeClipTimeframeText} numberOfLines={1}>
+                {isMobile
+                  ? `${activeClipInfo.duration.toFixed(1)}s`
+                  : `${activeClipInfo.start.toFixed(2)}s ➔ ${(activeClipInfo.start + activeClipInfo.duration).toFixed(2)}s (${activeClipInfo.duration.toFixed(2)}s)`}
               </Text>
+              {onDeselectClip && (
+                <TouchableOpacity
+                  onPress={onDeselectClip}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ marginLeft: 4, opacity: 0.8 }}
+                  accessibilityLabel="Deselect clip"
+                >
+                  <Ionicons name="close-circle" size={13} color="#EF4444" />
+                </TouchableOpacity>
+              )}
             </View>
           ) : null}
         </View>
@@ -102,18 +114,20 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
             style={styles.zoomBtn}
             onPress={() => onZoomChange(Math.max(20, pxPerSec - 25))}
             activeOpacity={0.7}
+            accessibilityLabel="Zoom Out"
           >
-            <Ionicons name="remove" size={13} color="#8E95A5" />
+            <Ionicons name="remove" size={12} color="#8E95A5" />
           </TouchableOpacity>
 
-          <Text style={styles.zoomText}>{pxPerSec}px/s</Text>
+          <Text style={styles.zoomText}>{isMobile ? `${pxPerSec}` : `${pxPerSec}px/s`}</Text>
 
           <TouchableOpacity
             style={styles.zoomBtn}
             onPress={() => onZoomChange(Math.min(1000, pxPerSec + 25))}
             activeOpacity={0.7}
+            accessibilityLabel="Zoom In"
           >
-            <Ionicons name="add" size={13} color="#8E95A5" />
+            <Ionicons name="add" size={12} color="#8E95A5" />
           </TouchableOpacity>
         </View>
       </View>

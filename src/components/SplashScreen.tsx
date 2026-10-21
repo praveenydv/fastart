@@ -160,12 +160,9 @@ export default function SplashScreen({
           />
         </Animated.View>
 
-        {/* App Title & Badge */}
+        {/* App Title */}
         <View style={styles.titleRow}>
           <Text style={styles.appName}>FastArt</Text>
-          <View style={styles.proBadge}>
-            <Text style={styles.proBadgeText}>PRO</Text>
-          </View>
         </View>
 
         {/* Subtitle */}
@@ -257,18 +254,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     letterSpacing: 1.2,
-  },
-  proBadge: {
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  proBadgeText: {
-    color: "#0B0D13",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.8,
   },
   subtitle: {
     color: "#7E8B9B",

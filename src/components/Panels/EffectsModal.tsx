@@ -98,6 +98,9 @@ export default function EffectsModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View>
@@ -222,19 +225,27 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#141721',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '75%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '80%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
+  },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1.5,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1E2333',
   },

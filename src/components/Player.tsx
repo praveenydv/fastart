@@ -68,6 +68,11 @@ function Player({
   const [activeTransient, setActiveTransient] =
     useState<TransientTransformState | null>(null);
 
+  // Clear transient state when changing selected clip to prevent transform bleed
+  useEffect(() => {
+    setActiveTransient(null);
+  }, [selectedClipId]);
+
   // Viewport & Dimensions hook
   const {
     viewportWrapperRef,
@@ -98,6 +103,17 @@ function Player({
     (project.tracks.audio && project.tracks.audio.length > 0),
   );
   const isProjectEmpty = !hasAnyTrackContent;
+
+  const isLightBg = useMemo(() => {
+    const bg = (project.canvasBackground || "#000000").toLowerCase();
+    return (
+      bg === "#ffffff" ||
+      bg === "white" ||
+      bg === "#f8fafc" ||
+      bg === "#f1f5f9" ||
+      bg === "#e2e8f0"
+    );
+  }, [project.canvasBackground]);
 
   // ESC key listener to exit fullscreen mode
   useEffect(() => {
@@ -171,6 +187,7 @@ function Player({
     handleResetCrop,
     handleCancelCrop,
     handleConfirmCrop,
+    cropResponders,
   } = usePlayerCropGestures({
     project,
     currentTime,
@@ -197,6 +214,9 @@ function Player({
     activeTransient,
     boxWidth,
     canvasHeight,
+    currentTime,
+    project,
+    getInterpolatedTransform,
   });
 
   // Transform Gestures Hook
@@ -350,6 +370,7 @@ function Player({
               isPlaying={isPlaying}
               boxWidth={boxWidth}
               canvasHeight={canvasHeight}
+              canvasBackground={project.canvasBackground}
               onSelectClip={onSelectClip}
               getItemBaseDimensions={getItemDimsHelper}
               getInterpolatedTransform={getInterpolatedTransform}
@@ -369,6 +390,7 @@ function Player({
                 mw={mw}
                 mh={mh}
                 handleCropDragStart={handleCropDragStart}
+                cropResponders={cropResponders}
               />
             ) : (
               <PlayerTransformOverlay
@@ -409,23 +431,41 @@ function Player({
           {/* Empty State Overlay */}
           {isProjectEmpty && (
             <TouchableOpacity
-              style={styles.emptyCanvasOverlay}
+              style={[
+                styles.emptyCanvasOverlay,
+                { backgroundColor: "transparent" },
+              ]}
               activeOpacity={0.85}
               onPress={onOpenMediaPicker}
             >
-              <View style={styles.emptyUploadCircle}>
-                <Ionicons name="film-outline" size={32} color="#00F2FE" />
+              <View
+                style={[
+                  styles.emptyUploadCircle,
+                  isLightBg && { backgroundColor: "rgba(0, 0, 0, 0.08)" },
+                ]}
+              >
+                <Ionicons
+                  name="film-outline"
+                  size={32}
+                  color={isLightBg ? "#00A3BF" : "#00F2FE"}
+                />
               </View>
-              <Text style={styles.emptyCanvasTitle}>No Media Added</Text>
-              <Text style={styles.emptyCanvasSubtitle}>
+              <Text
+                style={[
+                  styles.emptyCanvasTitle,
+                  isLightBg && { color: "#0F172A" },
+                ]}
+              >
+                No Media Added
+              </Text>
+              <Text
+                style={[
+                  styles.emptyCanvasSubtitle,
+                  isLightBg && { color: "#64748B" },
+                ]}
+              >
                 Import photos, videos, or pick from verified library
               </Text>
-              {/* <View style={styles.emptyActionRow}>
-                <View style={styles.emptyUploadBtn}>
-                  <Ionicons name="add" size={16} color="#000000" />
-                  <Text style={styles.emptyUploadBtnText}>Add Media</Text>
-                </View>
-              </View> */}
             </TouchableOpacity>
           )}
 

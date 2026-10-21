@@ -8,11 +8,19 @@ export const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: "#141721",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "88%",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "82%",
     borderTopWidth: 1,
     borderColor: "#252B3B",
+  },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 1.5,
+    alignSelf: "center",
+    marginTop: 8,
   },
   sheetHeader: {
     flexDirection: "row",

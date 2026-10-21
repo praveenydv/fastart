@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
 import { CustomCrop } from "../../types/project";
@@ -14,6 +14,7 @@ interface PlayerCropOverlayProps {
   mw: number;
   mh: number;
   handleCropDragStart: (e: any, handle: string) => void;
+  cropResponders?: Record<string, any>;
 }
 
 export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
@@ -26,7 +27,18 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
   mw,
   mh,
   handleCropDragStart,
+  cropResponders,
 }) => {
+  const getResponderProps = (handle: string) => {
+    if (Platform.OS === "web") {
+      return {
+        onMouseDown: (e: any) => handleCropDragStart(e, handle),
+        onTouchStart: (e: any) => handleCropDragStart(e, handle),
+      };
+    }
+    return cropResponders?.[handle]?.panHandlers || {};
+  };
+
   return (
     <>
       {/* 4 Dimmed Scrim Panels outside crop area */}
@@ -126,19 +138,13 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
         {/* Center Pan Hit Area */}
         <View
           style={styles.cropPanHitArea}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "pan"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "pan"),
-          } as any)}
+          {...getResponderProps("pan")}
         />
 
         {/* 4 Corner Handles */}
         <View
           style={[styles.cropCornerHitArea, styles.cropCornerTL]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "tl"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "tl"),
-          } as any)}
+          {...getResponderProps("tl")}
         >
           <View style={[styles.cropCornerArmH, { top: 0, left: 0 }]} />
           <View style={[styles.cropCornerArmV, { top: 0, left: 0 }]} />
@@ -146,10 +152,7 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
 
         <View
           style={[styles.cropCornerHitArea, styles.cropCornerTR]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "tr"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "tr"),
-          } as any)}
+          {...getResponderProps("tr")}
         >
           <View style={[styles.cropCornerArmH, { top: 0, right: 0 }]} />
           <View style={[styles.cropCornerArmV, { top: 0, right: 0 }]} />
@@ -157,10 +160,7 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
 
         <View
           style={[styles.cropCornerHitArea, styles.cropCornerBL]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "bl"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "bl"),
-          } as any)}
+          {...getResponderProps("bl")}
         >
           <View style={[styles.cropCornerArmH, { bottom: 0, left: 0 }]} />
           <View style={[styles.cropCornerArmV, { bottom: 0, left: 0 }]} />
@@ -168,10 +168,7 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
 
         <View
           style={[styles.cropCornerHitArea, styles.cropCornerBR]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "br"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "br"),
-          } as any)}
+          {...getResponderProps("br")}
         >
           <View style={[styles.cropCornerArmH, { bottom: 0, right: 0 }]} />
           <View style={[styles.cropCornerArmV, { bottom: 0, right: 0 }]} />
@@ -180,40 +177,28 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
         {/* 4 Edge Handles */}
         <View
           style={[styles.cropEdgeHitAreaH, styles.cropEdgeTop]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "t"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "t"),
-          } as any)}
+          {...getResponderProps("t")}
         >
           <View style={styles.cropEdgePillH} />
         </View>
 
         <View
           style={[styles.cropEdgeHitAreaH, styles.cropEdgeBottom]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "b"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "b"),
-          } as any)}
+          {...getResponderProps("b")}
         >
           <View style={styles.cropEdgePillH} />
         </View>
 
         <View
           style={[styles.cropEdgeHitAreaV, styles.cropEdgeLeft]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "l"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "l"),
-          } as any)}
+          {...getResponderProps("l")}
         >
           <View style={styles.cropEdgePillV} />
         </View>
 
         <View
           style={[styles.cropEdgeHitAreaV, styles.cropEdgeRight]}
-          {...({
-            onMouseDown: (e: any) => handleCropDragStart(e, "r"),
-            onTouchStart: (e: any) => handleCropDragStart(e, "r"),
-          } as any)}
+          {...getResponderProps("r")}
         >
           <View style={styles.cropEdgePillV} />
         </View>

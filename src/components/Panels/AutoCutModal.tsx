@@ -224,6 +224,9 @@ export default function AutoCutModal({
     >
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>

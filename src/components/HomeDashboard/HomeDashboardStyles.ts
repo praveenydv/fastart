@@ -25,17 +25,6 @@ export const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.3,
   },
-  proBadge: {
-    backgroundColor: "#FFE600",
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 4,
-  },
-  proText: {
-    color: "#000000",
-    fontSize: 9,
-    fontWeight: "900",
-  },
   navActions: {
     flexDirection: "row",
     gap: 8,

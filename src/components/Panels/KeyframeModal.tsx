@@ -9,6 +9,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { ClipTransform, KeyframePoint } from "../../types/project";
+import {
+  cleanAndSortKeyframes,
+  findKeyframeAtTime,
+  getInterpolatedTransform,
+} from "../../utils/keyframeEngine";
 import { styles } from "./Keyframe/KeyframeModalStyles";
 import KeyframeNoClipView from "./Keyframe/KeyframeNoClipView";
 import KeyframePropertyControls from "./Keyframe/KeyframePropertyControls";
@@ -57,19 +62,22 @@ export default function KeyframeModal({
   const localTime = Math.max(0, currentTime - clipStart);
 
   const rawKeyframes: KeyframePoint[] = selectedClip?.keyframes || [];
-  const keyframes = [...rawKeyframes].sort((a, b) => a.time - b.time);
+  const keyframes = cleanAndSortKeyframes(rawKeyframes);
 
-  const currentKeyframe = keyframes.find(
-    (k) => Math.abs(k.time - localTime) < 0.12,
+  const currentKeyframe = findKeyframeAtTime(keyframes, localTime, 0.12);
+
+  const interpolatedT = getInterpolatedTransform(
+    selectedClip,
+    currentTime,
+    selectedClipType,
   );
 
-  const activeTransform: ClipTransform = currentKeyframe?.transform ||
-    selectedClip?.transform || {
-      scale: 1,
-      rotation: 0,
-      x: 0,
-      y: 0,
-    };
+  const activeTransform: ClipTransform = currentKeyframe?.transform || {
+    scale: interpolatedT.scale,
+    rotation: interpolatedT.rotation,
+    x: interpolatedT.x,
+    y: interpolatedT.y,
+  };
   const activeScale = activeTransform.scale ?? 1.0;
   const activeRotation = activeTransform.rotation ?? 0;
   const activeX = Math.round(activeTransform.x ?? 0);
@@ -106,6 +114,9 @@ export default function KeyframeModal({
     >
       <View style={styles.backdrop}>
         <View style={styles.modalCard}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header Bar */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>

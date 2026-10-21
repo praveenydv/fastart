@@ -61,18 +61,21 @@ export default function AIEnhanceModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <Ionicons name="sparkles" size={20} color="#D946EF" />
+              <Ionicons name="sparkles" size={18} color="#D946EF" />
               <Text style={styles.headerTitle}>AI Enhance</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#8E95A5" />
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+              <Ionicons name="close" size={18} color="#8E95A5" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.contentScroll}>
+          <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
             {/* Presets Grid */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Style Profiles</Text>
@@ -87,6 +90,7 @@ export default function AIEnhanceModal({
                         soundEngine.playSfx('pop');
                         setSelectedPreset(p.id as any);
                       }}
+                      activeOpacity={0.7}
                     >
                       <View style={styles.presetHeader}>
                         <Text style={[styles.presetName, isSelected && styles.presetNameActive]}>
@@ -94,7 +98,7 @@ export default function AIEnhanceModal({
                         </Text>
                         <Ionicons
                           name={isSelected ? 'sparkles' : 'sparkles-outline'}
-                          size={16}
+                          size={15}
                           color={isSelected ? '#00F2FE' : '#8E95A5'}
                         />
                       </View>
@@ -112,11 +116,11 @@ export default function AIEnhanceModal({
               {/* Sharpness */}
               <View style={styles.sliderRow}>
                 <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>{"Clarity & Sharpness"}</Text>
+                  <Text style={styles.sliderLabel}>Clarity & Sharpness</Text>
                   <Text style={styles.badge}>{sharpness}%</Text>
                 </View>
-                {Platform.OS === 'web' && (
-                  <WebDiv style={{ margin: '8px 0' }}>
+                {Platform.OS === 'web' ? (
+                  <WebDiv style={{ margin: '6px 0' }}>
                     <WebInput
                       type="range"
                       min="0"
@@ -126,23 +130,39 @@ export default function AIEnhanceModal({
                       style={{
                         width: '100%',
                         accentColor: '#D946EF',
-                        height: 5,
-                        borderRadius: 3,
+                        height: 4,
+                        borderRadius: 2,
                         cursor: 'pointer',
                       }}
                     />
                   </WebDiv>
+                ) : (
+                  <View style={styles.stepperRow}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setSharpness((s) => Math.max(0, s - 5))}
+                    >
+                      <Ionicons name="remove" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperVal}>{sharpness}%</Text>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setSharpness((s) => Math.min(100, s + 5))}
+                    >
+                      <Ionicons name="add" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
 
               {/* Color Boost */}
               <View style={styles.sliderRow}>
                 <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>Dynamic Color Saturation</Text>
+                  <Text style={styles.sliderLabel}>Color Saturation</Text>
                   <Text style={styles.badge}>{colorBoost}%</Text>
                 </View>
-                {Platform.OS === 'web' && (
-                  <WebDiv style={{ margin: '8px 0' }}>
+                {Platform.OS === 'web' ? (
+                  <WebDiv style={{ margin: '6px 0' }}>
                     <WebInput
                       type="range"
                       min="0"
@@ -152,12 +172,28 @@ export default function AIEnhanceModal({
                       style={{
                         width: '100%',
                         accentColor: '#00F2FE',
-                        height: 5,
-                        borderRadius: 3,
+                        height: 4,
+                        borderRadius: 2,
                         cursor: 'pointer',
                       }}
                     />
                   </WebDiv>
+                ) : (
+                  <View style={styles.stepperRow}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setColorBoost((c) => Math.max(0, c - 5))}
+                    >
+                      <Ionicons name="remove" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperVal}>{colorBoost}%</Text>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setColorBoost((c) => Math.min(100, c + 5))}
+                    >
+                      <Ionicons name="add" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             </View>
@@ -172,6 +208,7 @@ export default function AIEnhanceModal({
                   soundEngine.playSfx('click');
                   setHdr(!hdr);
                 }}
+                activeOpacity={0.7}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={styles.toggleTitle}>Auto HDR Tone Mapping</Text>
@@ -179,7 +216,7 @@ export default function AIEnhanceModal({
                 </View>
                 <Ionicons
                   name={hdr ? 'checkbox' : 'square-outline'}
-                  size={22}
+                  size={20}
                   color={hdr ? '#00F2FE' : '#8E95A5'}
                 />
               </TouchableOpacity>
@@ -190,6 +227,7 @@ export default function AIEnhanceModal({
                   soundEngine.playSfx('click');
                   setDenoise(!denoise);
                 }}
+                activeOpacity={0.7}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={styles.toggleTitle}>Low-Light Denoise</Text>
@@ -197,7 +235,7 @@ export default function AIEnhanceModal({
                 </View>
                 <Ionicons
                   name={denoise ? 'checkbox' : 'square-outline'}
-                  size={22}
+                  size={20}
                   color={denoise ? '#00F2FE' : '#8E95A5'}
                 />
               </TouchableOpacity>
@@ -206,8 +244,8 @@ export default function AIEnhanceModal({
 
           {/* Footer Action */}
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.enhanceBtn} onPress={handleApply}>
-              <Ionicons name="sparkles" size={18} color="#000000" />
+            <TouchableOpacity style={styles.enhanceBtn} onPress={handleApply} activeOpacity={0.8}>
+              <Ionicons name="sparkles" size={16} color="#000000" />
               <Text style={styles.enhanceBtnText}>Apply</Text>
             </TouchableOpacity>
           </View>
@@ -225,18 +263,27 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#121620',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-    paddingBottom: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '80%',
+    paddingBottom: 16,
     borderWidth: 1,
     borderColor: '#1E2333',
+  },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1.5,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1E2333',
   },
@@ -325,6 +372,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginVertical: 4,
+  },
+  stepBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#1E2333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperVal: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    minWidth: 44,
+    textAlign: 'center',
   },
   toggleRow: {
     flexDirection: 'row',

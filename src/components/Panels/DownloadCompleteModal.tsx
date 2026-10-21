@@ -17,12 +17,12 @@ export interface DownloadCompleteModalProps {
   filename: string;
   formatLabel: string;
   formatExt: string;
+  destinationPath?: string | null;
   resolution?: string;
   fps?: number;
   fileSize?: string;
   duration?: number;
   isSavedToGallery?: boolean;
-  onShare?: () => void;
   onDownloadAgain?: () => void;
 }
 
@@ -32,12 +32,12 @@ export default function DownloadCompleteModal({
   filename,
   formatLabel,
   formatExt,
+  destinationPath,
   resolution,
   fps,
   fileSize,
   duration,
   isSavedToGallery = true,
-  onShare,
   onDownloadAgain,
 }: DownloadCompleteModalProps) {
   React.useEffect(() => {
@@ -51,9 +51,11 @@ export default function DownloadCompleteModal({
   const isWeb = Platform.OS === "web";
   const displayLocation = isWeb
     ? "Saved to your browser Downloads folder"
-    : isSavedToGallery
-      ? "Saved directly to Photos & Gallery"
-      : "Exported to device storage";
+    : destinationPath
+      ? `Saved to: ${destinationPath}`
+      : isSavedToGallery
+        ? "Saved directly to Photos & Gallery"
+        : "Exported to device storage";
 
   return (
     <Modal
@@ -133,39 +135,48 @@ export default function DownloadCompleteModal({
                 ) : null}
               </View>
 
+              {/* Exact Destination Path Card */}
+              {destinationPath ? (
+                <View style={styles.destinationCard}>
+                  <Ionicons name="folder-open" size={16} color="#00F2FE" />
+                  <View style={styles.destinationTextContainer}>
+                    <Text style={styles.destinationHeader}>File Location</Text>
+                    <Text
+                      style={styles.destinationValue}
+                      numberOfLines={2}
+                      ellipsizeMode="middle"
+                    >
+                      {destinationPath}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
               {/* Status Verification Pill */}
               <View style={styles.verifiedRow}>
                 <Ionicons name="shield-checkmark" size={14} color="#10B981" />
                 <Text style={styles.verifiedText}>
                   {isWeb
-                    ? "Verified download • Ready to play or upload"
-                    : "Verified in Camera Roll • Ready to post"}
+                    ? "Verified download • Check your Downloads folder"
+                    : "Notification sent • Ready to view in Gallery or Files"}
                 </Text>
               </View>
             </View>
 
             {/* Action Buttons */}
             <View style={styles.actionsContainer}>
-              {/* Primary Action: Share */}
-              {onShare && (
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    onShare();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name="share-social-outline"
-                    size={20}
-                    color="#000000"
-                  />
-                  <Text style={styles.primaryBtnText}>
-                    Share via Apps (WhatsApp, IG, etc.)
-                  </Text>
-                </TouchableOpacity>
-              )}
+              {/* Primary Action: Done / Back to Editor */}
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => {
+                  soundEngine.playSfx("pop");
+                  onClose();
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-sharp" size={18} color="#000000" />
+                <Text style={styles.primaryBtnText}>Done / Back to Editor</Text>
+              </TouchableOpacity>
 
               {/* Secondary Action: Save/Download Again */}
               {onDownloadAgain && (
@@ -179,7 +190,7 @@ export default function DownloadCompleteModal({
                 >
                   <Ionicons
                     name="cloud-download-outline"
-                    size={18}
+                    size={17}
                     color="#00F2FE"
                   />
                   <Text style={styles.secondaryBtnText}>
@@ -187,18 +198,6 @@ export default function DownloadCompleteModal({
                   </Text>
                 </TouchableOpacity>
               )}
-
-              {/* Done / Return to Editor */}
-              <TouchableOpacity
-                style={styles.doneBtn}
-                onPress={() => {
-                  soundEngine.playSfx("pop");
-                  onClose();
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.doneBtnText}>Done / Back to Editor</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -332,6 +331,34 @@ const styles = StyleSheet.create({
     color: "#10B981",
     fontSize: 11,
     fontWeight: "600",
+  },
+  destinationCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "rgba(0, 242, 254, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.2)",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  destinationTextContainer: {
+    flex: 1,
+  },
+  destinationHeader: {
+    color: "#00F2FE",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  destinationValue: {
+    color: "#C2C9D6",
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 15,
   },
   actionsContainer: {
     width: "100%",

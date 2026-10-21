@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { ActiveTransformItem, TransientTransformState } from "./playerTypes";
 import { getItemBaseDimensions } from "./playerUtils";
+import { FastArtProject } from "../../types/project";
 
 interface UseActiveTransformItemProps {
   isCroppingMode: boolean;
@@ -12,6 +13,13 @@ interface UseActiveTransformItemProps {
   activeTransient: TransientTransformState | null;
   boxWidth: number;
   canvasHeight: number;
+  currentTime?: number;
+  project?: FastArtProject;
+  getInterpolatedTransform?: (
+    clip: any,
+    curTime: number,
+    clipType?: string,
+  ) => any;
 }
 
 export function useActiveTransformItem({
@@ -24,16 +32,44 @@ export function useActiveTransformItem({
   activeTransient,
   boxWidth,
   canvasHeight,
+  currentTime = 0,
+  project,
+  getInterpolatedTransform,
 }: UseActiveTransformItemProps): ActiveTransformItem | null {
   return useMemo(() => {
-    if (isCroppingMode) return null;
+    if (isCroppingMode || !selectedClipId) return null;
 
-    const selectedText = activeTexts.find((t) => t.id === selectedClipId);
-    const selectedSticker = activeStickers.find((s) => s.id === selectedClipId);
-    const selectedVideo =
-      selectedClipType === "video"
-        ? activeVideos.find((v) => v.id === selectedClipId) || null
-        : null;
+    const isTextType =
+      !selectedClipType ||
+      selectedClipType === "text" ||
+      selectedClipType === "texts";
+    const isStickerType =
+      !selectedClipType ||
+      selectedClipType === "sticker" ||
+      selectedClipType === "stickers";
+    const isVideoType =
+      !selectedClipType ||
+      selectedClipType === "video" ||
+      selectedClipType === "photo" ||
+      selectedClipType === "videos";
+
+    const selectedText = isTextType
+      ? activeTexts.find((t) => t.id === selectedClipId) ||
+        project?.tracks?.text?.find((t) => t.id === selectedClipId) ||
+        null
+      : null;
+
+    const selectedSticker = isStickerType
+      ? activeStickers.find((s) => s.id === selectedClipId) ||
+        project?.tracks?.stickers?.find((s) => s.id === selectedClipId) ||
+        null
+      : null;
+
+    const selectedVideo = isVideoType
+      ? activeVideos.find((v) => v.id === selectedClipId) ||
+        project?.tracks?.video?.find((v) => v.id === selectedClipId) ||
+        null
+      : null;
 
     const isTransText =
       activeTransient &&
@@ -55,15 +91,21 @@ export function useActiveTransformItem({
         boxWidth,
         canvasHeight,
       );
+      const kfT = getInterpolatedTransform
+        ? getInterpolatedTransform(selectedText, currentTime, "text")
+        : null;
       const s = isTransText
         ? activeTransient!.scale
-        : (selectedText.scale ?? 1.0);
+        : (kfT?.scale ?? selectedText.scale ?? 1.0);
       const rot = isTransText
         ? activeTransient!.rotation
-        : (selectedText.rotation ?? 0);
+        : (kfT?.rotation ?? selectedText.rotation ?? 0);
       const pos = isTransText
         ? { x: activeTransient!.x, y: activeTransient!.y }
-        : selectedText.position || { x: 50, y: 35 };
+        : {
+            x: kfT ? kfT.x : (selectedText.position?.x ?? 50),
+            y: kfT ? kfT.y : (selectedText.position?.y ?? 35),
+          };
       return {
         id: selectedText.id,
         type: "text",
@@ -85,15 +127,21 @@ export function useActiveTransformItem({
         boxWidth,
         canvasHeight,
       );
+      const kfT = getInterpolatedTransform
+        ? getInterpolatedTransform(selectedSticker, currentTime, "sticker")
+        : null;
       const s = isTransStk
         ? activeTransient!.scale
-        : (selectedSticker.scale ?? 1.2);
+        : (kfT?.scale ?? selectedSticker.scale ?? 1.2);
       const rot = isTransStk
         ? activeTransient!.rotation
-        : (selectedSticker.rotation ?? 0);
+        : (kfT?.rotation ?? selectedSticker.rotation ?? 0);
       const pos = isTransStk
         ? { x: activeTransient!.x, y: activeTransient!.y }
-        : selectedSticker.position || { x: 50, y: 50 };
+        : {
+            x: kfT ? kfT.x : (selectedSticker.position?.x ?? 50),
+            y: kfT ? kfT.y : (selectedSticker.position?.y ?? 50),
+          };
       return {
         id: selectedSticker.id,
         type: "sticker",
@@ -115,20 +163,23 @@ export function useActiveTransformItem({
         boxWidth,
         canvasHeight,
       );
+      const kfT = getInterpolatedTransform
+        ? getInterpolatedTransform(selectedVideo, currentTime, "video")
+        : null;
       const s = isTransVid
         ? activeTransient!.scale
-        : (selectedVideo.transform?.scale ?? 1.0);
+        : (kfT?.scale ?? selectedVideo.transform?.scale ?? selectedVideo.scale ?? 1.0);
       const rot = isTransVid
         ? activeTransient!.rotation
-        : (selectedVideo.transform?.rotation ?? 0);
+        : (kfT?.rotation ?? selectedVideo.transform?.rotation ?? selectedVideo.rotation ?? 0);
       const pos = isTransVid
         ? {
             x: 50 + (activeTransient!.x / boxWidth) * 100,
             y: 50 + (activeTransient!.y / canvasHeight) * 100,
           }
         : {
-            x: 50 + ((selectedVideo.transform?.x || 0) / boxWidth) * 100,
-            y: 50 + ((selectedVideo.transform?.y || 0) / canvasHeight) * 100,
+            x: 50 + ((kfT ? kfT.x : (selectedVideo.transform?.x || 0)) / boxWidth) * 100,
+            y: 50 + ((kfT ? kfT.y : (selectedVideo.transform?.y || 0)) / canvasHeight) * 100,
           };
       return {
         id: selectedVideo.id,
@@ -155,5 +206,8 @@ export function useActiveTransformItem({
     activeTransient,
     boxWidth,
     canvasHeight,
+    currentTime,
+    project,
+    getInterpolatedTransform,
   ]);
 }

@@ -12,14 +12,34 @@ export function drawSticker(
   const motion = applyMotionTracking(time, stk.startTime, stk.duration, stk.motionTrack);
   const px = (stk.position?.x ?? 50) * (w / 100) + motion.dx;
   const py = (stk.position?.y ?? 50) * (h / 100) + motion.dy;
-  const scale = (stk.scale || 1.0) * motion.dScale;
+  const elapsed = Math.max(0, time - stk.startTime);
+  let scale = (stk.scale || 1.0) * motion.dScale;
   const rot = (stk.rotation || 0) + motion.dRot;
-  const bounce = Math.sin((time - stk.startTime) * 4) * 0.08;
-  const finalScale = scale + bounce;
+  let alpha = 1.0;
+  let offsetY = 0;
 
-  ctx.translate(px, py);
+  const anim = stk.animation || "bounce";
+  if (anim === "bounce") {
+    const bounce = Math.sin(elapsed * 4) * 0.08;
+    scale += bounce;
+  } else if (anim === "pulse") {
+    scale *= (1.0 + Math.sin(elapsed * 6) * 0.1);
+  } else if (anim === "wave") {
+    offsetY = Math.sin(elapsed * 4) * 8;
+  } else if (anim === "fade") {
+    if (elapsed < 0.35) alpha = elapsed / 0.35;
+  } else if (anim === "pop") {
+    if (elapsed < 0.3) {
+      const p = elapsed / 0.3;
+      scale *= (0.3 + p * 0.85);
+      alpha = p;
+    }
+  } // if anim === 'none', static without bounce
+
+  ctx.translate(px, py + offsetY);
   ctx.rotate((rot * Math.PI) / 180);
-  ctx.scale(finalScale, finalScale);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
   const charText = stk.char || "🔥";
   const isBadge = charText.length > 2;
@@ -73,61 +93,106 @@ export function drawTextOverlay(
   const px = (txt.position?.x ?? 50) * (w / 100) + motion.dx;
   const py = (txt.position?.y ?? 50) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - txt.startTime);
+  const duration = Math.max(0.5, txt.duration || 3.0);
+  const timeLeft = Math.max(0, duration - elapsed);
   let displayText = txt.text || "";
   let scale = (txt.scale || 1.0) * motion.dScale;
   let alpha = 1.0;
   let xOffset = 0;
   let yOffset = 0;
 
-  const anim = txt.animation || "fade";
+  const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
+  const introDur = Math.min(0.5, duration * 0.35);
+  const exitDur = Math.min(0.35, duration * 0.25);
 
-  if (isPlaying) {
-    if (anim === "typewriter") {
-      const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
-      displayText = displayText.slice(0, chars);
-    } else if (anim === "bounce") {
-      if (elapsed < 0.45) {
-        const p = elapsed / 0.45;
-        scale = (0.5 + Math.sin(p * Math.PI) * 0.7) * (txt.scale || 1.0);
-      }
-    } else if (anim === "fade") {
-      if (elapsed < 0.4) alpha = elapsed / 0.4;
-    } else if (anim === "slideUp") {
-      if (elapsed < 0.35) {
-        const p = elapsed / 0.35;
-        yOffset = (1 - p) * 45;
-        alpha = p;
-      }
-    } else if (anim === "slideDown") {
-      if (elapsed < 0.35) {
-        const p = elapsed / 0.35;
-        yOffset = -(1 - p) * 45;
-        alpha = p;
-      }
-    } else if (anim === "zoomIn") {
-      if (elapsed < 0.4) {
-        const p = elapsed / 0.4;
-        scale = (p * 1.15) * (txt.scale || 1.0);
-        alpha = p;
-      }
-    } else if (anim === "pulse") {
-      scale = (1.0 + Math.sin(elapsed * 6) * 0.08) * (txt.scale || 1.0);
-    } else if (anim === "glitch") {
-      if (Math.random() > 0.7) {
-        xOffset = (Math.random() - 0.5) * 8;
-        yOffset = (Math.random() - 0.5) * 4;
-      }
-    } else if (anim === "shake") {
-      if (elapsed < 0.8) {
-        xOffset = Math.sin(elapsed * 40) * 4;
-      }
-    } else if (anim === "wave") {
-      yOffset = Math.sin(elapsed * 4) * 8;
+  if (anim === "typewriter") {
+    const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
+    displayText = displayText.slice(0, chars);
+  } else if (anim === "bounce") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      scale = (0.45 + Math.sin(p * Math.PI) * 0.75) * (txt.scale || 1.0);
+      alpha = Math.min(1, p * 2);
     }
+  } else if (anim === "fade" || anim === "fadein") {
+    if (elapsed < introDur) {
+      alpha = elapsed / introDur;
+    } else if (timeLeft < exitDur) {
+      alpha = timeLeft / exitDur;
+    }
+  } else if (anim === "slideup" || anim === "up") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      yOffset = (1 - easeOut) * 50;
+      alpha = p;
+    } else if (timeLeft < exitDur) {
+      const p = 1 - (timeLeft / exitDur);
+      yOffset = -p * 30;
+      alpha = 1 - p;
+    }
+  } else if (anim === "slidedown" || anim === "down") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      yOffset = -(1 - easeOut) * 50;
+      alpha = p;
+    } else if (timeLeft < exitDur) {
+      const p = 1 - (timeLeft / exitDur);
+      yOffset = p * 30;
+      alpha = 1 - p;
+    }
+  } else if (anim === "slide" || anim === "slideleft") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      xOffset = (1 - easeOut) * 70;
+      alpha = p;
+    } else if (timeLeft < exitDur) {
+      const p = 1 - (timeLeft / exitDur);
+      xOffset = -p * 40;
+      alpha = 1 - p;
+    }
+  } else if (anim === "slideright") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      xOffset = -(1 - easeOut) * 70;
+      alpha = p;
+    } else if (timeLeft < exitDur) {
+      const p = 1 - (timeLeft / exitDur);
+      xOffset = p * 40;
+      alpha = 1 - p;
+    }
+  } else if (anim === "zoomin" || anim === "zoom") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      scale = (0.35 + easeOut * 0.75) * (txt.scale || 1.0);
+      alpha = p;
+    } else if (timeLeft < exitDur) {
+      const p = 1 - (timeLeft / exitDur);
+      scale = (1.0 + p * 0.25) * (txt.scale || 1.0);
+      alpha = 1 - p;
+    }
+  } else if (anim === "pulse") {
+    scale = (1.0 + Math.sin(elapsed * 6) * 0.08) * (txt.scale || 1.0);
+  } else if (anim === "glitch") {
+    if (isPlaying && Math.random() > 0.7) {
+      xOffset = (Math.random() - 0.5) * 8;
+      yOffset = (Math.random() - 0.5) * 4;
+    }
+  } else if (anim === "shake") {
+    if (elapsed < 0.8) {
+      xOffset = Math.sin(elapsed * 40) * 4;
+    }
+  } else if (anim === "wave") {
+    yOffset = Math.sin(elapsed * 4) * 8;
   }
 
   ctx.translate(px + xOffset, py + yOffset);
-  ctx.rotate(((txt.rotation || 0) * Math.PI) / 180);
+  const rot = (txt.rotation || 0) + (motion ? motion.dRot : 0);
+  ctx.rotate((rot * Math.PI) / 180);
   ctx.scale(scale, scale);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
@@ -248,11 +313,21 @@ export function drawProceduralPlaceholder(
   time: number,
   canvasBackground?: string,
 ) {
-  const bg = canvasBackground || "#0B0D13";
+  const bg = canvasBackground || "#000000";
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
 
-  const isLight = bg.toLowerCase() === "#ffffff" || bg.toLowerCase() === "white";
+  const cleanHex = bg.replace("#", "").trim();
+  let isLight = false;
+  if (cleanHex.length === 3 || cleanHex.length === 6) {
+    const full = cleanHex.length === 3
+      ? cleanHex[0] + cleanHex[0] + cleanHex[1] + cleanHex[1] + cleanHex[2] + cleanHex[2]
+      : cleanHex;
+    const r = parseInt(full.substring(0, 2), 16);
+    const g = parseInt(full.substring(2, 4), 16);
+    const b = parseInt(full.substring(4, 6), 16);
+    isLight = (r * 299 + g * 587 + b * 114) / 1000 > 155;
+  }
 
   ctx.strokeStyle = isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.1)";
   ctx.lineWidth = 2;

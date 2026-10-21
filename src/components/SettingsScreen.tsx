@@ -77,11 +77,7 @@ export default function SettingsScreen({
 
         <Text style={styles.navTitle}>Settings</Text>
 
-        <View style={styles.navRight}>
-          <View style={styles.proBadge}>
-            <Text style={styles.proText}>PRO</Text>
-          </View>
-        </View>
+        <View style={styles.navRight} />
       </View>
 
       <ScrollView
@@ -93,14 +89,7 @@ export default function SettingsScreen({
           <View style={styles.profileCard}>
             <FastArtLogo size={52} />
             <View style={{ flex: 1, marginLeft: 16 }}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <Text style={styles.profileTitle}>FastArt</Text>
-                <View style={styles.proTag}>
-                  <Text style={styles.proTagText}>PRO</Text>
-                </View>
-              </View>
+              <Text style={styles.profileTitle}>FastArt</Text>
               <Text style={styles.profileSubtitle}>
                 v1.0.0 • Hardware Acceleration Enabled
               </Text>
@@ -302,17 +291,6 @@ const styles = StyleSheet.create({
     width: 60,
     alignItems: "flex-end",
   },
-  proBadge: {
-    backgroundColor: "#FFE600",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  proText: {
-    color: "#000000",
-    fontSize: 11,
-    fontWeight: "900",
-  },
   scrollView: {
     flex: 1,
   },
@@ -343,17 +321,6 @@ const styles = StyleSheet.create({
     color: "#8E95A5",
     fontSize: 12,
     marginTop: 3,
-  },
-  proTag: {
-    backgroundColor: "#FFE600",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  proTagText: {
-    color: "#000000",
-    fontSize: 9,
-    fontWeight: "900",
   },
   sectionHeader: {
     color: "#8E95A5",

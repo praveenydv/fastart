@@ -292,7 +292,7 @@ export const STICKER_LIBRARY = [
   { id: 'stk-b5', char: '🌟 4K HDR', label: '4K Ultra HD', category: 'Creator' },
   { id: 'stk-b6', char: '⚡️ VIRAL', label: 'Viral', category: 'Creator' },
   { id: 'stk-b7', char: '🏷️ NEW', label: 'New Tag', category: 'Creator' },
-  { id: 'stk-b8', char: '💎 PRO', label: 'Pro Badge', category: 'Creator' },
+  { id: 'stk-b8', char: '💎 VIP', label: 'VIP Badge', category: 'Creator' },
   { id: 'stk-b9', char: '🎬 SCENE 1', label: 'Scene 1', category: 'Creator' },
 
   // Comic & Action

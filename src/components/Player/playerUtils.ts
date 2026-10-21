@@ -63,98 +63,13 @@ export function getItemBaseDimensions(
   return { baseW: boxWidth, baseH: canvasHeight };
 }
 
-export function getInterpolatedTransform(
-  clip: any,
-  curTime: number,
-): {
-  x: number;
-  y: number;
-  scale: number;
-  rotation: number;
-  opacity: number;
-} {
-  const baseT = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
-  const baseOp = clip.opacity !== undefined ? clip.opacity : 1.0;
-  if (
-    !clip.keyframes ||
-    !Array.isArray(clip.keyframes) ||
-    clip.keyframes.length === 0
-  ) {
-    return {
-      x: baseT.x || 0,
-      y: baseT.y || 0,
-      scale: baseT.scale ?? 1.0,
-      rotation: baseT.rotation ?? 0,
-      opacity: baseOp,
-    };
-  }
-
-  const localTime = Math.max(0, curTime - (clip.startTime || 0));
-  const kfs = [...clip.keyframes].sort((a: any, b: any) => a.time - b.time);
-
-  if (localTime <= kfs[0].time) {
-    const t0 = kfs[0].transform || {};
-    return {
-      x: t0.x ?? baseT.x ?? 0,
-      y: t0.y ?? baseT.y ?? 0,
-      scale: t0.scale ?? baseT.scale ?? 1.0,
-      rotation: t0.rotation ?? baseT.rotation ?? 0,
-      opacity: kfs[0].opacity !== undefined ? kfs[0].opacity : baseOp,
-    };
-  }
-
-  if (localTime >= kfs[kfs.length - 1].time) {
-    const last = kfs[kfs.length - 1];
-    const tLast = last.transform || {};
-    return {
-      x: tLast.x ?? baseT.x ?? 0,
-      y: tLast.y ?? baseT.y ?? 0,
-      scale: tLast.scale ?? baseT.scale ?? 1.0,
-      rotation: tLast.rotation ?? baseT.rotation ?? 0,
-      opacity: last.opacity !== undefined ? last.opacity : baseOp,
-    };
-  }
-
-  for (let i = 0; i < kfs.length - 1; i++) {
-    const k1 = kfs[i];
-    const k2 = kfs[i + 1];
-    if (localTime >= k1.time && localTime <= k2.time) {
-      const span = k2.time - k1.time;
-      const progress = span > 0 ? (localTime - k1.time) / span : 0;
-      const ease = progress * progress * (3 - 2 * progress);
-      const t1 = k1.transform || {};
-      const t2 = k2.transform || {};
-      const op1 = k1.opacity !== undefined ? k1.opacity : baseOp;
-      const op2 = k2.opacity !== undefined ? k2.opacity : baseOp;
-      return {
-        x:
-          (t1.x ?? baseT.x ?? 0) +
-          ((t2.x ?? baseT.x ?? 0) - (t1.x ?? baseT.x ?? 0)) * ease,
-        y:
-          (t1.y ?? baseT.y ?? 0) +
-          ((t2.y ?? baseT.y ?? 0) - (t1.y ?? baseT.y ?? 0)) * ease,
-        scale:
-          (t1.scale ?? baseT.scale ?? 1.0) +
-          ((t2.scale ?? baseT.scale ?? 1.0) - (t1.scale ?? baseT.scale ?? 1.0)) *
-            ease,
-        rotation:
-          (t1.rotation ?? baseT.rotation ?? 0) +
-          ((t2.rotation ?? baseT.rotation ?? 0) -
-            (t1.rotation ?? baseT.rotation ?? 0)) *
-            ease,
-        opacity: op1 + (op2 - op1) * ease,
-      };
-    }
-  }
-
-  return {
-    x: baseT.x || 0,
-    y: baseT.y || 0,
-    scale: baseT.scale ?? 1.0,
-    rotation: baseT.rotation ?? 0,
-    opacity: baseOp,
-  };
-}
+export {
+  getInterpolatedTransform,
+  getBaseTransform,
+  cleanAndSortKeyframes,
+  findKeyframeAtTime,
+  applyTransformUpdateToClip,
+} from "../../utils/keyframeEngine";
 
 export function calculateProjectTargetDims(
   resolution: string = "1080p",

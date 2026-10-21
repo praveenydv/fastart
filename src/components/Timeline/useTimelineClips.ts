@@ -158,21 +158,13 @@ export function useTimelineClips({
     );
 
     allClipsWithTracks.forEach((clip) => {
-      if (dragState && dragState.clipId === clip.id) {
-        const targetTrack = Math.min(
-          activeTrackCount - 1,
-          dragState.currentTrack,
-        );
-        rows[targetTrack].push(clip);
-      } else {
-        const trk = Math.min(activeTrackCount - 1, clip.effectiveTrackIndex);
-        rows[trk].push(clip);
-      }
+      const trk = Math.min(activeTrackCount - 1, clip.effectiveTrackIndex);
+      rows[trk].push(clip);
     });
 
     rows.forEach((row) => row.sort((a, b) => a.startTime - b.startTime));
     return rows;
-  }, [allClipsWithTracks, activeTrackCount, dragState]);
+  }, [allClipsWithTracks, activeTrackCount]);
 
   const activeClipInfo = useMemo(() => {
     if (!selectedClipId) return null;

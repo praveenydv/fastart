@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   Asset,
@@ -10,6 +9,7 @@ import * as MediaLibraryLegacy from "expo-media-library/legacy";
 import { soundEngine } from "../../../utils/audioEngine";
 import { ExportResult } from "../../../utils/videoRenderer";
 import { MediaFormatOption, NoticeDialogState } from "./exportTypes";
+import { triggerDownloadNotification } from "../../../utils/downloadNotification";
 
 export interface DirectDownloadOptions {
   activeResult?: ExportResult | null;
@@ -18,10 +18,9 @@ export interface DirectDownloadOptions {
   project: any;
   resolution: string;
   selectedFormatConfig: MediaFormatOption;
-  onSavedSuccess: (filename: string) => void;
+  onSavedSuccess: (filename: string, destinationPath?: string) => void;
   setSaving: (saving: boolean) => void;
   setNoticeDialog: (dialog: NoticeDialogState | null) => void;
-  onTriggerShare: () => void;
 }
 
 export async function executeDirectDownload({
@@ -34,7 +33,6 @@ export async function executeDirectDownload({
   onSavedSuccess,
   setSaving,
   setNoticeDialog,
-  onTriggerShare,
 }: DirectDownloadOptions) {
   const targetUrl = activeUrl || activeResult?.videoUrl;
   if (!activeResult && !targetUrl) return;
@@ -51,6 +49,7 @@ export async function executeDirectDownload({
     filename = `${cleanTitle}_${resolution}.${ext}`;
   }
 
+  // --- 1. WEB DIRECT DOWNLOAD ---
   if (Platform.OS === "web" && typeof window !== "undefined") {
     try {
       let blob = activeResult?.blob;
@@ -63,6 +62,7 @@ export async function executeDirectDownload({
         }
       }
 
+      // Modern File System Access API
       if ("showSaveFilePicker" in window && blob && blob.size > 0) {
         try {
           const mime = activeResult?.mimeType || "application/octet-stream";
@@ -82,7 +82,16 @@ export async function executeDirectDownload({
           await writable.write(blob);
           await writable.close();
           soundEngine.playSfx("pop");
-          onSavedSuccess(filename);
+
+          const destPath = `Downloads / ${filename}`;
+          await triggerDownloadNotification({
+            filename,
+            destinationPath: destPath,
+            projectId: project?.id,
+            projectTitle: project?.title,
+            fileSize: blob.size,
+          });
+          onSavedSuccess(filename, destPath);
           return;
         } catch (pickerErr: any) {
           if (pickerErr?.name === "AbortError") {
@@ -91,6 +100,7 @@ export async function executeDirectDownload({
         }
       }
 
+      // Classic Browser Download Anchor
       const downloadBlob =
         blob && blob.size > 0
           ? new Blob([blob], { type: "application/octet-stream" })
@@ -108,14 +118,19 @@ export async function executeDirectDownload({
       a.rel = "noopener noreferrer";
       a.target = "_self";
 
-      a.addEventListener("click", (e) => {
-        e.stopPropagation();
-      });
-
       document.body.appendChild(a);
       a.click();
       soundEngine.playSfx("pop");
-      onSavedSuccess(filename);
+
+      const destPath = `Downloads / ${filename}`;
+      await triggerDownloadNotification({
+        filename,
+        destinationPath: destPath,
+        projectId: project?.id,
+        projectTitle: project?.title,
+        fileSize: blob?.size,
+      });
+      onSavedSuccess(filename, destPath);
 
       setTimeout(() => {
         if (document.body.contains(a)) {
@@ -127,6 +142,7 @@ export async function executeDirectDownload({
       console.warn("Web download error:", err);
     }
   } else {
+    // --- 2. MOBILE DIRECT DOWNLOAD (ANDROID / IOS) ---
     try {
       setSaving(true);
       const fileToSave = targetUrl;
@@ -145,7 +161,9 @@ export async function executeDirectDownload({
       }
 
       let savedSuccess = false;
+      let savedPath = "Gallery / FastArt";
       let hasPermission = false;
+
       try {
         const permStatus = await getPermissionsAsync();
         if (permStatus.granted) {
@@ -166,8 +184,9 @@ export async function executeDirectDownload({
       if (hasPermission) {
         try {
           if (Asset && typeof Asset.create === "function") {
-            await Asset.create(fileToSave);
+            const asset = await Asset.create(fileToSave);
             savedSuccess = true;
+            savedPath = (asset as any)?.uri ? `Gallery / DCIM / FastArt / ${filename}` : "Gallery / FastArt";
           }
         } catch (createErr) {
           console.warn("Asset.create failed, trying legacy save:", createErr);
@@ -178,9 +197,11 @@ export async function executeDirectDownload({
             if (MediaLibraryLegacy?.saveToLibraryAsync) {
               await MediaLibraryLegacy.saveToLibraryAsync(fileToSave);
               savedSuccess = true;
+              savedPath = "Gallery / Photos / FastArt";
             } else if (MediaLibraryLegacy?.createAssetAsync) {
-              await MediaLibraryLegacy.createAssetAsync(fileToSave);
+              const asset = await MediaLibraryLegacy.createAssetAsync(fileToSave);
               savedSuccess = true;
+              savedPath = asset?.uri || "Gallery / DCIM / FastArt";
             }
           } catch (legacyErr) {
             console.warn("Legacy saveToLibraryAsync error:", legacyErr);
@@ -188,6 +209,7 @@ export async function executeDirectDownload({
         }
       }
 
+      // Android StorageAccessFramework Fallback (Downloads folder picker)
       if (
         !savedSuccess &&
         Platform.OS === "android" &&
@@ -217,6 +239,7 @@ export async function executeDirectDownload({
               encoding: FileSystem.EncodingType.Base64,
             });
             savedSuccess = true;
+            savedPath = "Device Downloads / " + filename;
           }
         } catch (safErr) {
           console.warn("StorageAccessFramework save error:", safErr);
@@ -227,38 +250,54 @@ export async function executeDirectDownload({
 
       if (savedSuccess) {
         soundEngine.playSfx("pop");
-        onSavedSuccess(filename);
+
+        // Trigger Android status bar notification & in-app notification center
+        await triggerDownloadNotification({
+          filename,
+          destinationPath: savedPath,
+          projectId: project?.id,
+          projectTitle: project?.title,
+          fileSize: activeResult?.fileSize,
+        });
+
+        onSavedSuccess(filename, savedPath);
       } else if (!hasPermission) {
         setNoticeDialog({
           visible: true,
           title: "Permission Required",
           message:
-            "Photos & Media Library access is required to save directly to your device gallery. You can still share the video directly to WhatsApp, Instagram, and other apps.",
+            "Photos & Media Library permission is required to save directly to your Android device gallery. Please grant permission to download.",
           icon: "lock-closed-outline",
           iconColor: "#FFE600",
-          primaryText: "Share via Apps",
-          onPrimary: () => {
+          primaryText: "Grant Permission",
+          onPrimary: async () => {
             setNoticeDialog(null);
-            onTriggerShare();
+            await requestPermissionsAsync();
           },
           secondaryText: "Dismiss",
           onSecondary: () => setNoticeDialog(null),
         });
       } else {
+        // Fallback file location
+        const fallbackPath = fileToSave.replace("file://", "");
+        await triggerDownloadNotification({
+          filename,
+          destinationPath: fallbackPath,
+          projectId: project?.id,
+          projectTitle: project?.title,
+          fileSize: activeResult?.fileSize,
+        });
+
         setNoticeDialog({
           visible: true,
-          title: "Download Notice",
-          message: `File exported successfully to:\n${fileToSave}\n\nWould you like to share it to another app?`,
-          icon: "information-circle-outline",
-          iconColor: "#00F2FE",
-          primaryText: "Share via Apps",
-          onPrimary: () => {
-            setNoticeDialog(null);
-            onTriggerShare();
-          },
-          secondaryText: "Dismiss",
+          title: "File Saved to Device",
+          message: `Saved successfully to:\n${fallbackPath}\n\nAccessible via device Files app.`,
+          icon: "checkmark-circle-outline",
+          iconColor: "#10B981",
+          secondaryText: "Got it",
           onSecondary: () => setNoticeDialog(null),
         });
+        onSavedSuccess(filename, fallbackPath);
       }
     } catch (err: any) {
       setSaving(false);
@@ -274,92 +313,5 @@ export async function executeDirectDownload({
         onSecondary: () => setNoticeDialog(null),
       });
     }
-  }
-}
-
-export async function executeShareFile(
-  fileToShare: string | null | undefined,
-  exportedResult: ExportResult | null,
-  mediaType: string,
-  project: any,
-  selectedFormatConfig: MediaFormatOption,
-  setNoticeDialog: (dialog: NoticeDialogState | null) => void,
-  onFallbackDownload: () => void,
-) {
-  if (!fileToShare) {
-    setNoticeDialog({
-      visible: true,
-      title: "File Not Ready",
-      message: "Please wait for export to finish or re-export your video first.",
-      icon: "hourglass-outline",
-      iconColor: "#FFE600",
-      secondaryText: "Dismiss",
-      onSecondary: () => setNoticeDialog(null),
-    });
-    return;
-  }
-
-  try {
-    if (Platform.OS === "web") {
-      if (
-        typeof navigator !== "undefined" &&
-        (navigator as any).share &&
-        exportedResult?.blob
-      ) {
-        try {
-          const file = new File(
-            [exportedResult.blob],
-            `${(project?.title || "FastArt").replace(/[^a-zA-Z0-9_-]/g, "_")}.${selectedFormatConfig.ext.replace(/^\./, "")}`,
-            { type: exportedResult.mimeType || "video/mp4" }
-          );
-          await (navigator as any).share({
-            title: project?.title || "FastArt Video",
-            files: [file],
-          });
-          soundEngine.playSfx("pop");
-          return;
-        } catch (webShareErr) {
-          console.warn("Web share dismissed or unavailable:", webShareErr);
-        }
-      }
-      onFallbackDownload();
-      return;
-    }
-
-    const isAvailable = await Sharing.isAvailableAsync();
-    if (!isAvailable) {
-      setNoticeDialog({
-        visible: true,
-        title: "Share Unavailable",
-        message: `Direct app sharing is not supported in this environment. Your file is saved at: ${fileToShare}`,
-        icon: "share-social-outline",
-        iconColor: "#00F2FE",
-        secondaryText: "Got It",
-        onSecondary: () => setNoticeDialog(null),
-      });
-      return;
-    }
-
-    const mime =
-      exportedResult?.mimeType ||
-      (mediaType === "mp4"
-        ? "video/mp4"
-        : mediaType === "png"
-        ? "image/png"
-        : "application/octet-stream");
-
-    await Sharing.shareAsync(fileToShare, {
-      mimeType: mime,
-      dialogTitle: `Share ${project?.title || "Video"}`,
-      UTI:
-        mediaType === "mp4"
-          ? "public.movie"
-          : mediaType === "png"
-          ? "public.image"
-          : undefined,
-    });
-    soundEngine.playSfx("pop");
-  } catch (err: any) {
-    console.warn("Native share error:", err);
   }
 }

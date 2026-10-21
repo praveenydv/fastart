@@ -23,7 +23,7 @@ export const CutoutStrokeControls: React.FC<CutoutStrokeControlsProps> = ({
 }) => {
   return (
     <View style={styles.sectionBox}>
-      <Text style={styles.sectionHeader}>{"CUTOUT STROKE & GLOW (PRO)"}</Text>
+      <Text style={styles.sectionHeader}>{"CUTOUT STROKE & GLOW"}</Text>
       <View style={styles.strokeGrid}>
         {strokePresets.map((sp) => {
           const isSelected = strokeColor === sp.color;

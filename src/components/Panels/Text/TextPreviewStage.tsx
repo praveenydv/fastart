@@ -33,27 +33,117 @@ export default function TextPreviewStage({
   selectedFont,
 }: TextPreviewStageProps) {
   let previewTextValue = inputText || "Your Text Here";
-  if (selectedAnim === "typewriter") {
-    const len = Math.max(1, (animTick * 2) % (previewTextValue.length + 6));
-    previewTextValue = previewTextValue.slice(
-      0,
-      Math.min(len, previewTextValue.length),
-    );
-  }
+
+  const cycleTicks = 34;
+  const tickInCycle = animTick % cycleTicks;
+  const cycleProgress = tickInCycle / cycleTicks; // 0.0 to 1.0
 
   let animScale = 1.0;
   let animTranslateY = 0;
   let animTranslateX = 0;
+  let animOpacity = 1.0;
 
-  if (selectedAnim === "pulse") {
-    animScale = 1.0 + Math.sin(animTick * 0.4) * 0.08;
-  } else if (selectedAnim === "bounce") {
-    animScale = 1.0 + Math.abs(Math.sin(animTick * 0.5)) * 0.12;
-  } else if (selectedAnim === "wave") {
-    animTranslateY = Math.sin(animTick * 0.35) * 5;
-  } else if (selectedAnim === "glitch") {
-    animTranslateX = animTick % 7 === 0 ? 3 : animTick % 9 === 0 ? -3 : 0;
-  } else if (selectedAnim === "shake") {
+  const animNorm = (selectedAnim || "none").toLowerCase().replace(/[-_]/g, "");
+
+  if (animNorm === "typewriter") {
+    const totalChars = previewTextValue.length;
+    const charProgress = Math.min(1, cycleProgress / 0.65);
+    const len = Math.max(1, Math.floor(charProgress * totalChars));
+    previewTextValue = previewTextValue.slice(0, len);
+  } else if (animNorm === "bounce") {
+    if (cycleProgress < 0.42) {
+      const p = cycleProgress / 0.42;
+      animScale = 0.4 + Math.sin(p * Math.PI) * 0.75;
+      animOpacity = Math.min(1, p * 2.5);
+    } else {
+      animScale = 1.0;
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "fade" || animNorm === "fadein") {
+    if (cycleProgress < 0.35) {
+      animOpacity = cycleProgress / 0.35;
+    } else if (cycleProgress > 0.88) {
+      animOpacity = (1.0 - cycleProgress) / 0.12;
+    } else {
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "slideup" || animNorm === "up") {
+    if (cycleProgress < 0.38) {
+      const p = cycleProgress / 0.38;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      animTranslateY = (1 - easeOut) * 38;
+      animOpacity = p;
+    } else if (cycleProgress > 0.88) {
+      const p = (cycleProgress - 0.88) / 0.12;
+      animTranslateY = -p * 20;
+      animOpacity = 1 - p;
+    } else {
+      animTranslateY = 0;
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "slidedown" || animNorm === "down") {
+    if (cycleProgress < 0.38) {
+      const p = cycleProgress / 0.38;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      animTranslateY = -(1 - easeOut) * 38;
+      animOpacity = p;
+    } else if (cycleProgress > 0.88) {
+      const p = (cycleProgress - 0.88) / 0.12;
+      animTranslateY = p * 20;
+      animOpacity = 1 - p;
+    } else {
+      animTranslateY = 0;
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "slide" || animNorm === "slideleft") {
+    if (cycleProgress < 0.38) {
+      const p = cycleProgress / 0.38;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      animTranslateX = (1 - easeOut) * 55;
+      animOpacity = p;
+    } else if (cycleProgress > 0.88) {
+      const p = (cycleProgress - 0.88) / 0.12;
+      animTranslateX = -p * 30;
+      animOpacity = 1 - p;
+    } else {
+      animTranslateX = 0;
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "slideright") {
+    if (cycleProgress < 0.38) {
+      const p = cycleProgress / 0.38;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      animTranslateX = -(1 - easeOut) * 55;
+      animOpacity = p;
+    } else if (cycleProgress > 0.88) {
+      const p = (cycleProgress - 0.88) / 0.12;
+      animTranslateX = p * 30;
+      animOpacity = 1 - p;
+    } else {
+      animTranslateX = 0;
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "zoomin" || animNorm === "zoom") {
+    if (cycleProgress < 0.38) {
+      const p = cycleProgress / 0.38;
+      const easeOut = Math.sin((p * Math.PI) / 2);
+      animScale = 0.3 + easeOut * 0.7;
+      animOpacity = p;
+    } else if (cycleProgress > 0.88) {
+      const p = (cycleProgress - 0.88) / 0.12;
+      animScale = 1.0 + p * 0.2;
+      animOpacity = 1 - p;
+    } else {
+      animScale = 1.0;
+      animOpacity = 1.0;
+    }
+  } else if (animNorm === "pulse") {
+    animScale = 1.0 + Math.sin(animTick * 0.4) * 0.09;
+  } else if (animNorm === "wave") {
+    animTranslateY = Math.sin(animTick * 0.35) * 6;
+  } else if (animNorm === "glitch") {
+    animTranslateX = animTick % 6 === 0 ? 4 : animTick % 8 === 0 ? -4 : 0;
+  } else if (animNorm === "shake") {
     animTranslateX = Math.sin(animTick * 1.8) * 3;
   }
 
@@ -129,6 +219,7 @@ export default function TextPreviewStage({
             backgroundColor: selectedBg,
             borderColor: selectedBorderColor || "transparent",
             borderWidth: selectedBorderColor ? 2 : 0,
+            opacity: animOpacity,
             transform: [
               { scale: selectedScale * animScale },
               { rotate: `${selectedRotation}deg` },

@@ -250,20 +250,42 @@ export function useProjectFilterEffects({
 
   // Apply AI Enhance
   const handleApplyEnhance = useCallback(
-    (preset: { filterLut: string }) => {
-      if (!project) return;
-      const videoClips = (project.tracks.video || []).map((c) => {
+    (preset: {
+      hdr?: boolean;
+      sharpness?: number;
+      colorBoost?: number;
+      denoise?: boolean;
+      filterLut: string;
+    }) => {
+      const current = projectRef.current;
+      if (!current) return;
+      const boostVal = (preset.colorBoost ?? 80) / 100;
+      const sharpVal = (preset.sharpness ?? 75) / 100;
+      const sat = 1.0 + boostVal * 0.55;
+      const cont = 1.0 + sharpVal * 0.3 + (preset.hdr ? 0.15 : 0);
+      const bright = preset.hdr ? 1.05 : 1.0;
+      const cssFilter = `contrast(${cont.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})`;
+
+      const videoClips = (current.tracks.video || []).map((c) => {
         if (!selectedClipId || c.id === selectedClipId) {
-          return { ...c, filter: preset.filterLut };
+          return {
+            ...c,
+            filter: preset.filterLut,
+            customLut: {
+              id: "ai_enhance",
+              name: "AI Enhanced",
+              cssFilter,
+            },
+          };
         }
         return c;
       });
       updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, video: videoClips },
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
       });
     },
-    [project, selectedClipId, updateProjectWithHistory],
+    [projectRef, selectedClipId, updateProjectWithHistory],
   );
 
   return {

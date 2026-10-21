@@ -1,6 +1,11 @@
 import { useMemo, useCallback } from "react";
 import { FastArtProject } from "../types/project";
 import { soundEngine } from "../utils/audioEngine";
+import {
+  cleanAndSortKeyframes,
+  findKeyframeAtTime,
+  getInterpolatedTransform,
+} from "../utils/keyframeEngine";
 
 interface UseProjectKeyframesParams {
   project: FastArtProject | null;
@@ -14,6 +19,14 @@ interface UseProjectKeyframesParams {
   updateProjectWithHistory: (proj: any) => void;
   openModal: (modal: string) => void;
 }
+
+const getTrackKey = (type: string): "video" | "audio" | "text" | "stickers" | "effects" => {
+  if (type === "sticker" || type === "stickers") return "stickers";
+  if (type === "effect" || type === "effects") return "effects";
+  if (type === "text" || type === "texts") return "text";
+  if (type === "audio") return "audio";
+  return "video"; // video, photo, etc.
+};
 
 export function useProjectKeyframes({
   project,
@@ -40,10 +53,10 @@ export function useProjectKeyframes({
     }
     if (!clip?.keyframes || clip.keyframes.length === 0) return false;
     const localTime = Math.max(0, currentTime - (clip.startTime || 0));
-    return clip.keyframes.some((k: any) => Math.abs(k.time - localTime) < 0.12);
+    return !!findKeyframeAtTime(clip.keyframes, localTime, 0.12);
   }, [selectedClip, project?.tracks?.video, currentTime]);
 
-  // Add Keyframe to active clip (Modern - zero system alerts!)
+  // Add or Remove Keyframe to active clip
   const handleAddKeyframe = useCallback((): { action: "added" | "removed"; time: number } | void => {
     let targetClip = selectedClip;
     let targetType = selectedClipType;
@@ -74,49 +87,41 @@ export function useProjectKeyframes({
     }
 
     soundEngine.playSfx("pop");
-    // Toggle keyframe stamp
-    const keyframes = targetClip.keyframes || [];
-    const localTime = Math.max(0, currentTime - targetClip.startTime);
-    const exists = keyframes.some(
-      (k: any) => Math.abs(k.time - localTime) < 0.12,
-    );
+    const rawKeyframes = targetClip.keyframes || [];
+    const localTime = Math.max(0, currentTime - (targetClip.startTime || 0));
+    const existing = findKeyframeAtTime(rawKeyframes, localTime, 0.12);
 
     let updatedKf = [];
     let actionType: "added" | "removed" = "added";
-    if (exists) {
+    if (existing) {
       actionType = "removed";
-      updatedKf = keyframes.filter(
+      updatedKf = rawKeyframes.filter(
         (k: any) => Math.abs(k.time - localTime) >= 0.12,
       );
     } else {
       actionType = "added";
+      // Sample exact interpolated state at currentTime so there is NO jumping or snapping
+      const curT = getInterpolatedTransform(targetClip, currentTime, targetType);
+      const curOpacity =
+        targetClip.opacity !== undefined ? targetClip.opacity : 1.0;
       updatedKf = [
-        ...keyframes,
+        ...rawKeyframes,
         {
-          time: localTime,
+          time: Number(localTime.toFixed(3)),
           transform: {
-            ...(targetClip.transform || {
-              scale: 1,
-              rotation: 0,
-              x: 0,
-              y: 0,
-            }),
+            scale: Number(curT.scale.toFixed(3)),
+            rotation: Number(curT.rotation.toFixed(2)),
+            x: Math.round(curT.x),
+            y: Math.round(curT.y),
           },
-          opacity: targetClip.opacity !== undefined ? targetClip.opacity : 1.0,
+          opacity: Number(curOpacity.toFixed(2)),
         },
       ];
     }
 
-    const key = (
-      targetType === "sticker" || targetType === "stickers"
-        ? "stickers"
-        : targetType === "effect" || targetType === "effects"
-          ? "effects"
-          : targetType === "text" || targetType === "texts"
-            ? "text"
-            : targetType
-    ) as keyof typeof project.tracks;
+    updatedKf = cleanAndSortKeyframes(updatedKf);
 
+    const key = getTrackKey(targetType);
     const list = [...(((project?.tracks as any)?.[key] as any[]) || [])];
     const idx = list.findIndex((c) => c.id === targetId);
     if (idx >= 0) {
@@ -147,12 +152,12 @@ export function useProjectKeyframes({
     opacity?: number,
   ) => {
     if (!selectedClip || !project) return;
-    const keyframes: any[] = selectedClip.keyframes || [];
-    const existingIndex = keyframes.findIndex(
+    const rawKeyframes: any[] = selectedClip.keyframes || [];
+    const existingIndex = rawKeyframes.findIndex(
       (k) => Math.abs(k.time - time) < 0.12,
     );
 
-    let updatedKf = [...keyframes];
+    let updatedKf = [...rawKeyframes];
     if (existingIndex >= 0) {
       const existing = updatedKf[existingIndex];
       updatedKf[existingIndex] = {
@@ -161,23 +166,27 @@ export function useProjectKeyframes({
         opacity: opacity !== undefined ? opacity : (existing.opacity ?? 1.0),
       };
     } else {
+      const curT = getInterpolatedTransform(
+        selectedClip,
+        (selectedClip.startTime || 0) + time,
+        selectedClipType,
+      );
       updatedKf.push({
-        time,
-        transform: { ...(selectedClip.transform || {}), ...transform },
+        time: Number(time.toFixed(3)),
+        transform: {
+          scale: curT.scale,
+          rotation: curT.rotation,
+          x: curT.x,
+          y: curT.y,
+          ...transform,
+        },
         opacity: opacity !== undefined ? opacity : (selectedClip.opacity ?? 1.0),
       });
     }
 
-    const key = (
-      selectedClipType === "sticker" || selectedClipType === "stickers"
-        ? "stickers"
-        : selectedClipType === "effect" || selectedClipType === "effects"
-          ? "effects"
-          : selectedClipType === "text" || selectedClipType === "texts"
-            ? "text"
-            : selectedClipType
-    ) as keyof typeof project.tracks;
+    updatedKf = cleanAndSortKeyframes(updatedKf);
 
+    const key = getTrackKey(selectedClipType);
     const list = [...(((project.tracks as any)?.[key] as any[]) || [])];
     const idx = list.findIndex((c) => c.id === selectedClipId);
     if (idx >= 0) {
@@ -196,19 +205,12 @@ export function useProjectKeyframes({
 
   const handleDeleteKeyframeAtTime = useCallback((time: number) => {
     if (!selectedClip || !project) return;
-    const keyframes: any[] = selectedClip.keyframes || [];
-    const updatedKf = keyframes.filter((k) => Math.abs(k.time - time) >= 0.12);
+    const rawKeyframes: any[] = selectedClip.keyframes || [];
+    const updatedKf = cleanAndSortKeyframes(
+      rawKeyframes.filter((k) => Math.abs(k.time - time) >= 0.12),
+    );
 
-    const key = (
-      selectedClipType === "sticker" || selectedClipType === "stickers"
-        ? "stickers"
-        : selectedClipType === "effect" || selectedClipType === "effects"
-          ? "effects"
-          : selectedClipType === "text" || selectedClipType === "texts"
-            ? "text"
-            : selectedClipType
-    ) as keyof typeof project.tracks;
-
+    const key = getTrackKey(selectedClipType);
     const list = [...(((project.tracks as any)?.[key] as any[]) || [])];
     const idx = list.findIndex((c) => c.id === selectedClipId);
     if (idx >= 0) {
@@ -222,16 +224,7 @@ export function useProjectKeyframes({
 
   const handleClearAllKeyframes = useCallback(() => {
     if (!selectedClip || !project) return;
-    const key = (
-      selectedClipType === "sticker" || selectedClipType === "stickers"
-        ? "stickers"
-        : selectedClipType === "effect" || selectedClipType === "effects"
-          ? "effects"
-          : selectedClipType === "text" || selectedClipType === "texts"
-            ? "text"
-            : selectedClipType
-    ) as keyof typeof project.tracks;
-
+    const key = getTrackKey(selectedClipType);
     const list = [...(((project.tracks as any)?.[key] as any[]) || [])];
     const idx = list.findIndex((c) => c.id === selectedClipId);
     if (idx >= 0) {

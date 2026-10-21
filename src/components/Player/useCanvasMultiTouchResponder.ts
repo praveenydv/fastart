@@ -97,7 +97,7 @@ export function useCanvasMultiTouchResponder({
         const bw = boxWidthRef.current;
         const ch = canvasHeightRef.current;
 
-        if (s.clipType === "video") {
+        if (s.clipType === "video" || s.clipType === "photo") {
           scheduleTransformUpdateRef.current(
             s.clipId,
             "video",

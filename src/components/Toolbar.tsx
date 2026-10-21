@@ -110,7 +110,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="cut-outline" size={20} color="#00F2FE" />
+                  <Ionicons name="cut-outline" size={18} color="#00F2FE" />
                 </View>
                 <Text style={styles.toolLabel}>Split</Text>
               </TouchableOpacity>
@@ -125,7 +125,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
+                  <Ionicons name="speedometer-outline" size={18} color="#38BDF8" />
                 </View>
                 <Text style={styles.toolLabel}>Speed</Text>
               </TouchableOpacity>
@@ -140,7 +140,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="volume-high-outline" size={20} color="#10B981" />
+                  <Ionicons name="volume-high-outline" size={18} color="#10B981" />
                 </View>
                 <Text style={styles.toolLabel}>Volume</Text>
               </TouchableOpacity>
@@ -155,7 +155,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="crop-outline" size={20} color="#38BDF8" />
+                  <Ionicons name="crop-outline" size={18} color="#38BDF8" />
                 </View>
                 <Text style={styles.toolLabel}>Crop</Text>
               </TouchableOpacity>
@@ -170,7 +170,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="refresh-outline" size={20} color="#38BDF8" />
+                  <Ionicons name="refresh-outline" size={18} color="#38BDF8" />
                 </View>
                 <Text style={styles.toolLabel}>Rotate</Text>
               </TouchableOpacity>
@@ -185,7 +185,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="shapes-outline" size={20} color="#F43F5E" />
+                  <Ionicons name="shapes-outline" size={18} color="#F43F5E" />
                 </View>
                 <Text style={styles.toolLabel}>Mask</Text>
               </TouchableOpacity>
@@ -200,7 +200,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="person-remove-outline" size={20} color="#00F2FE" />
+                  <Ionicons name="person-remove-outline" size={18} color="#00F2FE" />
                 </View>
                 <Text style={styles.toolLabel}>Cutout</Text>
               </TouchableOpacity>
@@ -215,7 +215,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="scan-outline" size={20} color="#FFE600" />
+                  <Ionicons name="scan-outline" size={18} color="#FFE600" />
                 </View>
                 <Text style={styles.toolLabel}>Tracking</Text>
               </TouchableOpacity>
@@ -236,7 +236,7 @@ function Toolbar({
                       styles.activeKeyframeCircle,
                   ]}
                 >
-                  <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+                  <Ionicons name="diamond-outline" size={18} color="#FFE600" />
                 </View>
                 <Text style={styles.toolLabel}>Keyframe</Text>
               </TouchableOpacity>
@@ -251,7 +251,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="color-filter-outline" size={20} color="#FBBF24" />
+                  <Ionicons name="color-filter-outline" size={18} color="#FBBF24" />
                 </View>
                 <Text style={styles.toolLabel}>Filters</Text>
               </TouchableOpacity>
@@ -266,7 +266,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="sparkles" size={20} color="#A855F7" />
+                  <Ionicons name="sparkles" size={18} color="#A855F7" />
                 </View>
                 <Text style={styles.toolLabel}>AI Magic</Text>
               </TouchableOpacity>
@@ -281,7 +281,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="sparkles-outline" size={20} color="#D946EF" />
+                  <Ionicons name="sparkles-outline" size={18} color="#D946EF" />
                 </View>
                 <Text style={styles.toolLabel}>Effects</Text>
               </TouchableOpacity>
@@ -299,7 +299,7 @@ function Toolbar({
                 <View style={[styles.iconCircle, selectedClip.reverse && styles.activeCircle]}>
                   <Ionicons
                     name="play-back-outline"
-                    size={20}
+                    size={18}
                     color={selectedClip.reverse ? '#000000' : '#FFFFFF'}
                   />
                 </View>
@@ -323,7 +323,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="volume-high-outline" size={20} color="#10B981" />
+                  <Ionicons name="volume-high-outline" size={18} color="#10B981" />
                 </View>
                 <Text style={styles.toolLabel}>Volume</Text>
               </TouchableOpacity>
@@ -338,7 +338,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="cut-outline" size={20} color="#00F2FE" />
+                  <Ionicons name="cut-outline" size={18} color="#00F2FE" />
                 </View>
                 <Text style={styles.toolLabel}>Split</Text>
               </TouchableOpacity>
@@ -353,7 +353,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
+                  <Ionicons name="speedometer-outline" size={18} color="#38BDF8" />
                 </View>
                 <Text style={styles.toolLabel}>Speed</Text>
               </TouchableOpacity>
@@ -373,29 +373,12 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="pencil" size={20} color="#00F2FE" />
+                  <Ionicons name="pencil" size={18} color="#00F2FE" />
                 </View>
                 <Text style={styles.toolLabel}>Edit</Text>
               </TouchableOpacity>
 
-              {/* 2. AI Motion Tracking for Text */}
-              {onOpenMotionTracking && (
-                <TouchableOpacity
-                  style={styles.toolItem}
-                  onPress={() => {
-                    soundEngine.playSfx('click');
-                    onOpenMotionTracking();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="scan-outline" size={20} color="#FFE600" />
-                  </View>
-                  <Text style={styles.toolLabel}>Tracking</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* 3. Keyframe Animation for Text */}
+              {/* 2. Keyframe Animation for Text */}
               <TouchableOpacity
                 style={styles.toolItem}
                 onPress={() => {
@@ -411,7 +394,7 @@ function Toolbar({
                       styles.activeKeyframeCircle,
                   ]}
                 >
-                  <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+                  <Ionicons name="diamond-outline" size={18} color="#FFE600" />
                 </View>
                 <Text style={styles.toolLabel}>Keyframe</Text>
               </TouchableOpacity>
@@ -431,29 +414,12 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="pencil" size={20} color="#FBBF24" />
+                  <Ionicons name="pencil" size={18} color="#FBBF24" />
                 </View>
                 <Text style={styles.toolLabel}>Edit</Text>
               </TouchableOpacity>
 
-              {/* 2. AI Motion Tracking for Stickers */}
-              {onOpenMotionTracking && (
-                <TouchableOpacity
-                  style={styles.toolItem}
-                  onPress={() => {
-                    soundEngine.playSfx('click');
-                    onOpenMotionTracking();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="scan-outline" size={20} color="#FFE600" />
-                  </View>
-                  <Text style={styles.toolLabel}>Tracking</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* 3. Keyframe Animation for Stickers */}
+              {/* 2. Keyframe Animation for Stickers */}
               <TouchableOpacity
                 style={styles.toolItem}
                 onPress={() => {
@@ -469,7 +435,7 @@ function Toolbar({
                       styles.activeKeyframeCircle,
                   ]}
                 >
-                  <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+                  <Ionicons name="diamond-outline" size={18} color="#FFE600" />
                 </View>
                 <Text style={styles.toolLabel}>Keyframe</Text>
               </TouchableOpacity>
@@ -489,7 +455,7 @@ function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="pencil" size={20} color="#818CF8" />
+                  <Ionicons name="pencil" size={18} color="#818CF8" />
                 </View>
                 <Text style={styles.toolLabel}>Edit</Text>
               </TouchableOpacity>
@@ -507,7 +473,7 @@ function Toolbar({
             activeOpacity={0.7}
           >
             <View style={styles.iconCircle}>
-              <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="copy-outline" size={18} color="#FFFFFF" />
             </View>
             <Text style={styles.toolLabel}>Duplicate</Text>
           </TouchableOpacity>
@@ -522,7 +488,7 @@ function Toolbar({
             activeOpacity={0.7}
           >
             <View style={[styles.iconCircle, styles.deleteCircle]}>
-              <Ionicons name="trash-outline" size={20} color="#FF0050" />
+              <Ionicons name="trash-outline" size={18} color="#FF0050" />
             </View>
             <Text style={[styles.toolLabel, { color: '#FF0050' }]}>Delete</Text>
           </TouchableOpacity>
@@ -549,7 +515,7 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="film-outline" size={20} color="#00F2FE" />
+            <Ionicons name="film-outline" size={18} color="#00F2FE" />
           </View>
           <Text style={styles.toolLabel}>Media</Text>
         </TouchableOpacity>
@@ -564,7 +530,7 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="musical-notes-outline" size={20} color="#10B981" />
+            <Ionicons name="musical-notes-outline" size={18} color="#10B981" />
           </View>
           <Text style={styles.toolLabel}>Audio</Text>
         </TouchableOpacity>
@@ -580,7 +546,7 @@ function Toolbar({
             activeOpacity={0.7}
           >
             <View style={styles.iconCircle}>
-              <Ionicons name="mic-outline" size={20} color="#A855F7" />
+              <Ionicons name="mic-outline" size={18} color="#A855F7" />
             </View>
             <Text style={styles.toolLabel}>AI Voice</Text>
           </TouchableOpacity>
@@ -596,7 +562,7 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="text-outline" size={20} color="#D946EF" />
+            <Ionicons name="text-outline" size={18} color="#D946EF" />
           </View>
           <Text style={styles.toolLabel}>Text</Text>
         </TouchableOpacity>
@@ -611,7 +577,7 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="happy-outline" size={20} color="#FBBF24" />
+            <Ionicons name="happy-outline" size={18} color="#FBBF24" />
           </View>
           <Text style={styles.toolLabel}>Stickers</Text>
         </TouchableOpacity>
@@ -626,7 +592,7 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="sparkles-outline" size={20} color="#818CF8" />
+            <Ionicons name="sparkles-outline" size={18} color="#818CF8" />
           </View>
           <Text style={styles.toolLabel}>Effects</Text>
         </TouchableOpacity>
@@ -642,7 +608,7 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="scan-outline" size={20} color="#38BDF8" />
+            <Ionicons name="scan-outline" size={18} color="#38BDF8" />
           </View>
           <Text style={styles.toolLabel}>Canvas</Text>
         </TouchableOpacity>
@@ -657,24 +623,9 @@ function Toolbar({
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="flash-outline" size={20} color="#00F2FE" />
+            <Ionicons name="flash-outline" size={18} color="#00F2FE" />
           </View>
           <Text style={styles.toolLabel}>AutoCut</Text>
-        </TouchableOpacity>
-
-        {/* 8. Keyframe Animation Studio */}
-        <TouchableOpacity
-          style={styles.toolItem}
-          onPress={() => {
-            soundEngine.playSfx('click');
-            if (onOpenKeyframeModal) onOpenKeyframeModal();
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.iconCircle}>
-            <Ionicons name="diamond-outline" size={20} color="#FFE600" />
-          </View>
-          <Text style={styles.toolLabel}>Keyframe</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -683,48 +634,48 @@ function Toolbar({
 
 const styles = StyleSheet.create({
   toolbarContainer: {
-    height: 68,
+    height: 56,
     backgroundColor: '#0B0D13',
     borderTopWidth: 1,
     borderTopColor: '#1A1E29',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     flexShrink: 0,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 7,
     backgroundColor: '#1E2333',
-    borderRadius: 8,
+    borderRadius: 6,
     marginRight: 6,
   },
   backButtonText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     marginLeft: 2,
   },
   toolsScroll: {
     alignItems: 'center',
-    paddingRight: 16,
-    gap: 2,
+    paddingRight: 12,
+    gap: 1,
   },
   toolItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 56,
+    width: 48,
   },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#161A26',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   activeCircle: {
     backgroundColor: '#00F2FE',
@@ -739,7 +690,7 @@ const styles = StyleSheet.create({
   },
   toolLabel: {
     color: '#8E95A5',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
   },
 });

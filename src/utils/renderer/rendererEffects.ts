@@ -79,45 +79,55 @@ export function applyMaskPath(
   dw: number,
   dh: number,
 ) {
-  const size = mask.size || 50;
+  if (!mask || !mask.shape || mask.shape === "none") return;
+
+  const size = Math.max(1, mask.size ?? 50);
   const offsetX = (mask.x || 0) * (dw / 100);
   const offsetY = (mask.y || 0) * (dh / 100);
   const rot = ((mask.rotation || 0) * Math.PI) / 180;
 
-  ctx.save();
+  // Translate and rotate into mask coordinate system
   ctx.translate(offsetX, offsetY);
   ctx.rotate(rot);
 
   ctx.beginPath();
   if (mask.inverted) {
-    ctx.rect(-dw * 2, -dh * 2, dw * 4, dh * 4);
+    // Large outer rectangle for evenodd inverted cutout
+    const outerExtent = Math.max(dw, dh) * 4;
+    ctx.rect(-outerExtent, -outerExtent, outerExtent * 2, outerExtent * 2);
   }
 
   if (mask.shape === "circle") {
-    const radius = (Math.min(dw, dh) * size) / 200;
+    const radius = Math.max(1, (Math.min(dw, dh) * size) / 200);
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
   } else if (mask.shape === "rectangle") {
     const rw = (dw * size) / 100;
     const rh = (dh * size) / 100;
-    const rad = mask.roundness || 12;
+    const maxRad = Math.min(rw, rh) / 2;
+    const rad = Math.max(0, Math.min(mask.roundness ?? 16, maxRad));
     if ((ctx as any).roundRect) {
       (ctx as any).roundRect(-rw / 2, -rh / 2, rw, rh, rad);
     } else {
       ctx.rect(-rw / 2, -rh / 2, rw, rh);
     }
   } else if (mask.shape === "linear") {
-    ctx.rect(-dw * 2, -dh * 2, dw * 4, dh * 2);
+    // Sweep split line across the frame based on size (50% is center)
+    const splitY = ((50 - size) / 100) * dh;
+    const outerExtent = Math.max(dw, dh) * 4;
+    ctx.rect(-outerExtent, splitY, outerExtent * 2, outerExtent * 2);
   } else if (mask.shape === "mirror") {
-    const bandH = (dh * size) / 100;
-    ctx.rect(-dw * 2, -bandH / 2, dw * 4, bandH);
+    // Central horizontal slot/band of height bandH
+    const bandH = Math.max(2, (dh * size) / 100);
+    const outerExtent = Math.max(dw, dh) * 4;
+    ctx.rect(-outerExtent, -bandH / 2, outerExtent * 2, bandH);
   } else if (mask.shape === "heart") {
-    const s = (Math.min(dw, dh) * size) / 150;
-    ctx.moveTo(0, s * 0.3);
-    ctx.bezierCurveTo(-s * 0.5, -s * 0.2, -s * 0.8, s * 0.3, 0, s * 0.9);
-    ctx.bezierCurveTo(s * 0.8, s * 0.3, s * 0.5, -s * 0.2, 0, s * 0.3);
+    const s = Math.max(2, (Math.min(dw, dh) * size) / 100);
+    ctx.moveTo(0, s * 0.28);
+    ctx.bezierCurveTo(-s * 0.5, -s * 0.35, -s * 0.85, s * 0.15, 0, s * 0.85);
+    ctx.bezierCurveTo(s * 0.85, s * 0.15, s * 0.5, -s * 0.35, 0, s * 0.28);
   } else if (mask.shape === "star") {
-    const outerR = (Math.min(dw, dh) * size) / 200;
-    const innerR = outerR * 0.45;
+    const outerR = Math.max(2, (Math.min(dw, dh) * size) / 200);
+    const innerR = outerR * 0.42;
     const points = 5;
     for (let i = 0; i < points * 2; i++) {
       const r = i % 2 === 0 ? outerR : innerR;
@@ -129,8 +139,15 @@ export function applyMaskPath(
     }
     ctx.closePath();
   }
+
+  // Clip the canvas using the mask path
   ctx.clip(mask.inverted ? "evenodd" : "nonzero");
-  ctx.restore();
+
+  // Revert mask coordinate system back so drawImage has (0, 0) at clip center!
+  // Note: We deliberately do NOT call ctx.restore() here, because ctx.restore() would destroy the clipping region.
+  // The outer drawClip wrapper already calls ctx.restore() when finished with this clip.
+  ctx.rotate(-rot);
+  ctx.translate(-offsetX, -offsetY);
 }
 
 export function drawLoadingPreview(
@@ -224,6 +241,11 @@ export function applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: strin
     return;
   }
 
+  if (!filterId || filterId === "none" || filterId === "normal") {
+    ctx.filter = "none";
+    return;
+  }
+
   if (filterId === "teal_orange") {
     ctx.filter = "contrast(1.25) saturate(1.35) hue-rotate(15deg)";
   } else if (filterId === "vintage") {
@@ -307,11 +329,13 @@ export function applyEffectOverlay(
 ) {
   if (!canvas) return;
   ctx.save();
+  ctx.filter = "none";
+  ctx.globalCompositeOperation = "source-over";
   const intensity = eff.intensity !== undefined ? eff.intensity : 0.8;
   const cw = canvas.width;
   const ch = canvas.height;
   const sourceCanvas =
-    eff.type === "glitch" || eff.type === "mirror" || eff.type === "shake"
+    eff.type === "glitch" || eff.type === "mirror" || eff.type === "shake" || eff.type === "blur" || eff.type === "blur_cinematic"
       ? ensureOffscreen(cw, ch) || canvas
       : canvas;
 
@@ -325,8 +349,6 @@ export function applyEffectOverlay(
         ctx.drawImage(sourceCanvas, 0, sy, cw, sh, shift, y, w, sliceH);
       }
     }
-    ctx.fillStyle = "rgba(255, 0, 80, 0.14)";
-    ctx.fillRect(0, 0, w, h);
   } else if (eff.type === "vhs") {
     ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
     for (let y = 0; y < h; y += 4) {
@@ -347,6 +369,7 @@ export function applyEffectOverlay(
     ctx.fillRect(offset, 0, w, h);
     ctx.fillStyle = "rgba(255, 0, 80, 0.28)";
     ctx.fillRect(-offset, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
   } else if (eff.type === "film_grain") {
     const numDots = Math.floor(300 * intensity);
     ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
@@ -368,8 +391,13 @@ export function applyEffectOverlay(
     ctx.lineWidth = Math.max(2, w * 0.008) * intensity;
     ctx.strokeRect(10, 10, w - 20, h - 20);
   } else if (eff.type === "blur" || eff.type === "blur_cinematic") {
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.1 * intensity})`;
-    ctx.fillRect(0, 0, w, h);
+    if (sourceCanvas && sourceCanvas !== canvas) {
+      ctx.save();
+      ctx.filter = `blur(${Math.max(1, Math.round(intensity * 5))}px)`;
+      ctx.globalAlpha = Math.min(0.6, intensity * 0.6);
+      ctx.drawImage(sourceCanvas, 0, 0, cw, ch, 0, 0, w, h);
+      ctx.restore();
+    }
   } else if (eff.type === "flash") {
     const flashVal = Math.sin(time * 12);
     if (flashVal > 0.6) {
@@ -393,5 +421,12 @@ export function applyEffectOverlay(
     ctx.fillStyle = `hsla(${hue}, 90%, 50%, 0.15)`;
     ctx.fillRect(0, 0, w, h);
   }
+
+  ctx.filter = "none";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1.0;
   ctx.restore();
+  ctx.filter = "none";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1.0;
 }

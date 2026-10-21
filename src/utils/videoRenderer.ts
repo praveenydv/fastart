@@ -239,14 +239,21 @@ export class VideoRenderer {
     const w = logicalWidth && logicalWidth > 0 ? logicalWidth : (this.canvas.clientWidth || canvasW);
     const h = logicalHeight && logicalHeight > 0 ? logicalHeight : (this.canvas.clientHeight || canvasH);
 
+    ctx.clearRect(0, 0, canvasW, canvasH);
+
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = isPlaying ? "medium" : "high";
     ctx.scale(canvasW / w, canvasH / h);
+    ctx.filter = "none";
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1.0;
 
-    const canvasBg = project.canvasBackground || "#000000";
-    ctx.fillStyle = canvasBg;
-    ctx.fillRect(0, 0, w, h);
+    const canvasBg = (project.canvasBackground && project.canvasBackground.trim()) || "#000000";
+    if (canvasBg.toLowerCase() !== "transparent") {
+      ctx.fillStyle = canvasBg;
+      ctx.fillRect(0, 0, w, h);
+    }
 
     const videoClips = project.tracks.video || [];
     const textClips = project.tracks.text || [];
@@ -269,13 +276,19 @@ export class VideoRenderer {
     );
 
     if (activeVideos.length === 0 && !hasAnyTrackContent) {
-      this.drawProceduralPlaceholder(ctx, w, h, "No Media Added", time, canvasBg);
+      if (canvasBg.toLowerCase() !== "transparent") {
+        ctx.fillStyle = canvasBg;
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1.0;
       ctx.restore();
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1.0;
       return;
     }
-
-    ctx.fillStyle = canvasBg;
-    ctx.fillRect(0, 0, w, h);
 
     type VisualItem =
       | { kind: "video"; clip: VideoClip; trackIndex: number }
@@ -349,7 +362,13 @@ export class VideoRenderer {
       }
     });
 
+    ctx.filter = "none";
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1.0;
     ctx.restore();
+    ctx.filter = "none";
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1.0;
   }
 
   drawClip(

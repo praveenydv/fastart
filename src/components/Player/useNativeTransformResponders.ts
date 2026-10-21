@@ -111,7 +111,7 @@ export function useNativeTransformResponders({
           const dx = midX - (s.touch2StartX || midX);
           const dy = midY - (s.touch2StartY || midY);
 
-          if (s.clipType === "video") {
+          if (s.clipType === "video" || s.clipType === "photo") {
             scheduleTransformUpdateRef.current(
               s.clipId,
               "video",
@@ -147,7 +147,7 @@ export function useNativeTransformResponders({
         } else {
           const dx = gs.dx;
           const dy = gs.dy;
-          if (s.clipType === "video") {
+          if (s.clipType === "video" || s.clipType === "photo") {
             scheduleTransformUpdateRef.current(
               s.clipId,
               "video",
@@ -255,7 +255,7 @@ export function useNativeTransformResponders({
           if (Math.abs(newRot - deg) < 5) snappedRot = deg % 360;
         });
 
-        if (s.clipType === "video") {
+        if (s.clipType === "video" || s.clipType === "photo") {
           scheduleTransformUpdateRef.current(
             s.clipId,
             "video",
@@ -343,7 +343,7 @@ export function useNativeTransformResponders({
           ),
         );
 
-        if (startRef.clipType === "video") {
+        if (startRef.clipType === "video" || startRef.clipType === "photo") {
           scheduleTransformUpdateRef.current(
             startRef.clipId,
             "video",

@@ -44,16 +44,16 @@ export const PlayerControlsBar: React.FC<PlayerControlsBarProps> = ({
       ]}
     >
       <View style={styles.controlGroupLeft}>
-        <View style={styles.timecodePill}>
+        <View style={[styles.timecodePill, isMobile && { paddingHorizontal: 5 }]}>
           <Ionicons
             name="time-outline"
-            size={11}
+            size={isMobile ? 10 : 11}
             color="#00F2FE"
-            style={{ marginRight: 3 }}
+            style={{ marginRight: 2 }}
           />
-          <Text style={styles.timecodeText}>
+          <Text style={[styles.timecodeText, isMobile && { fontSize: 10 }]}>
             {formatTime(currentTime)}
-            <Text style={styles.timecodeTotalText}>
+            <Text style={[styles.timecodeTotalText, isMobile && { fontSize: 9.5 }]}>
               {" "}
               / {formatTime(totalDuration)}
             </Text>
@@ -61,7 +61,10 @@ export const PlayerControlsBar: React.FC<PlayerControlsBarProps> = ({
         </View>
       </View>
 
-      <View style={styles.controlGroupCenter} pointerEvents="box-none">
+      <View
+        style={[styles.controlGroupCenter, isMobile && { gap: 6 }]}
+        pointerEvents="box-none"
+      >
         <TouchableOpacity
           style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
           onPress={() => stepFrame(-1)}

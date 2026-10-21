@@ -108,6 +108,10 @@ export const Timeline: React.FC<TimelineProps> = ({
     handleClipPress,
     handleClipLongPress,
     handleClipMouseDown,
+    handleClipTouchStart,
+    handleClipTouchMove,
+    handleClipTouchEnd,
+    handleClipTouchCancel,
     handleLeftTrimStart,
     handleRightTrimStart,
   } = useTimelineDragTrim({
@@ -117,6 +121,8 @@ export const Timeline: React.FC<TimelineProps> = ({
     pxPerSec,
     isSnappingEnabled,
     isHapticEnabled,
+    currentTime,
+    onSeek,
     onSelectClip,
     onOpenEditModal,
     onMoveClip,
@@ -299,6 +305,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         activeClipInfo={activeClipInfo}
         pxPerSec={pxPerSec}
         onZoomChange={onZoomChange}
+        onDeselectClip={() => onSelectClip("", "video")}
       />
 
       {/* Synchronized Vertical Scroll for all tracks */}
@@ -378,6 +385,10 @@ export const Timeline: React.FC<TimelineProps> = ({
               handleClipPress={handleClipPress}
               handleClipLongPress={handleClipLongPress}
               handleClipMouseDown={handleClipMouseDown}
+              handleClipTouchStart={handleClipTouchStart}
+              handleClipTouchMove={handleClipTouchMove}
+              handleClipTouchEnd={handleClipTouchEnd}
+              handleClipTouchCancel={handleClipTouchCancel}
               leftTrimPanResponder={leftTrimPanResponder}
               rightTrimPanResponder={rightTrimPanResponder}
               clipMovePanResponder={clipMovePanResponder}

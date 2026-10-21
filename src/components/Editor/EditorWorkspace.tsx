@@ -45,8 +45,8 @@ interface EditorWorkspaceProps {
   ) => void;
   handleUpdateClipCrop: (clipId: string, crop: any, isFinal?: boolean) => void;
   handleSplitClip: () => void;
-  handleDuplicateClip: () => void;
-  handleDeleteClip: () => void;
+  handleDuplicateClip: (targetId?: string, targetType?: string) => void;
+  handleDeleteClip: (targetId?: string, targetType?: string) => void;
   handleMoveClip: (
     clipId: string,
     trackType: "video" | "audio" | "text" | "sticker" | "effects",
@@ -144,6 +144,43 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   handleOpenCutoutModal,
   handleOpenMotionTracking,
 }) => {
+  const handleOpenEditModal = React.useCallback(
+    (clipId: string, clipType?: string) => {
+      soundEngine.playSfx("click");
+      setSelectedClipId(clipId);
+      let resolvedType = clipType || selectedClipType;
+      if (!resolvedType && project) {
+        if (project.tracks.text?.some((c) => c.id === clipId)) resolvedType = "text";
+        else if (project.tracks.stickers?.some((c) => c.id === clipId)) resolvedType = "stickers";
+        else if (project.tracks.video?.some((c) => c.id === clipId)) resolvedType = "video";
+        else if (project.tracks.audio?.some((c) => c.id === clipId)) resolvedType = "audio";
+        else if (project.tracks.effects?.some((c) => c.id === clipId)) resolvedType = "effects";
+      }
+
+      const normalizedType =
+        resolvedType === "sticker" || resolvedType === "stickers"
+          ? "stickers"
+          : resolvedType === "effect" || resolvedType === "effects"
+            ? "effects"
+            : resolvedType;
+
+      setSelectedClipType(normalizedType);
+
+      if (normalizedType === "text") {
+        openModal("text");
+      } else if (normalizedType === "stickers") {
+        openModal("stickers");
+      } else if (normalizedType === "audio") {
+        openModal("volume");
+      } else if (normalizedType === "effects") {
+        openModal("effects");
+      } else if (normalizedType === "video") {
+        setIsCroppingPreview(true);
+      }
+    },
+    [project, selectedClipType, setSelectedClipId, setSelectedClipType, openModal, setIsCroppingPreview]
+  );
+
   return (
     <View style={styles.editorContainer}>
       {/* Top Header Bar */}
@@ -157,6 +194,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           onUndo={onUndo}
           onRedo={onRedo}
           onOpenExport={onOpenExport}
+          onOpenCanvasModal={handleOpenCanvasModal}
         />
       )}
 
@@ -197,6 +235,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             if (type) setSelectedClipType(type);
           }}
           onUpdateClipTransform={handleUpdateClipTransform}
+          onOpenEditModal={handleOpenEditModal}
+          onDeleteClip={(clipId, clipType) => {
+            soundEngine.playSfx("click");
+            handleDeleteClip(clipId, clipType);
+          }}
+          onDuplicateClip={(clipId, clipType) => {
+            soundEngine.playSfx("click");
+            handleDuplicateClip(clipId, clipType);
+          }}
+          onSplitClip={handleSplitClip}
+          onOpenCropModal={handleOpenCropModal}
           isCroppingPreview={isCroppingPreview}
           onToggleCropPreview={setIsCroppingPreview}
           onUpdateClipCrop={handleUpdateClipCrop}
@@ -254,21 +303,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             onSplitClip={handleSplitClip}
             onDuplicateClip={handleDuplicateClip}
             onDeleteClip={handleDeleteClip}
-            onOpenEditModal={(clipId, clipType) => {
-              setSelectedClipId(clipId);
-              const normalizedType =
-                clipType === "sticker" || clipType === "stickers"
-                  ? "stickers"
-                  : clipType === "effect" || clipType === "effects"
-                    ? "effects"
-                    : clipType;
-              setSelectedClipType(normalizedType);
-              if (normalizedType === "text") openModal("text");
-              else if (normalizedType === "stickers") openModal("stickers");
-              else if (normalizedType === "audio") openModal("volume");
-              else if (normalizedType === "effects") openModal("effects");
-              else setIsCroppingPreview(true);
-            }}
+            onOpenEditModal={handleOpenEditModal}
           />
 
           <Toolbar
