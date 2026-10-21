@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import FastArtLogo from '../FastArtLogo';
 import { soundEngine } from '../../utils/audioEngine';
+import { clearAppCache } from '../../utils/storage';
 
 export default function SettingsModal({
   visible,
@@ -21,6 +22,12 @@ export default function SettingsModal({
 }) {
   const [localSettings, setLocalSettings] = useState(settings || {});
   const [cacheClearedMsg, setCacheClearedMsg] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
 
   const toggleSwitch = (key) => {
     soundEngine.playSfx('click');
@@ -38,6 +45,7 @@ export default function SettingsModal({
 
   const handleClearCache = () => {
     soundEngine.playSfx('split');
+    clearAppCache();
     const updated = { ...localSettings, cachedSizeMb: 0.0 };
     setLocalSettings(updated);
     onUpdateSettings(updated);
@@ -180,6 +188,19 @@ export default function SettingsModal({
               <Switch
                 value={localSettings.hapticFeedback !== false}
                 onValueChange={() => toggleSwitch('hapticFeedback')}
+                trackColor={{ false: '#334155', true: '#00F2FE' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.toggleTitle}>Interface Sound Effects (SFX)</Text>
+                <Text style={styles.toggleSubtitle}>Play acoustic clicks, pops, and whooshes</Text>
+              </View>
+              <Switch
+                value={localSettings.soundEffects !== false}
+                onValueChange={() => toggleSwitch('soundEffects')}
                 trackColor={{ false: '#334155', true: '#00F2FE' }}
                 thumbColor="#FFFFFF"
               />

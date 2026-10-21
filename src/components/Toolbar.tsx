@@ -5,7 +5,8 @@ import { soundEngine } from '../utils/audioEngine';
 import { VideoClip } from '../types/project';
 
 interface ToolbarProps {
-  selectedClip: VideoClip | null;
+  selectedClip: any | null;
+  selectedClipType?: string;
   onDeselectClip: () => void;
   onSplitClip: () => void;
   onDeleteClip: () => void;
@@ -15,6 +16,7 @@ interface ToolbarProps {
   onOpenSpeedModal: () => void;
   onOpenVolumeModal?: () => void;
   onOpenCropModal?: () => void;
+  onOpenMaskModal?: () => void;
   onOpenAudioModal: () => void;
   onOpenTextModal: () => void;
   onOpenFiltersModal: () => void;
@@ -29,6 +31,7 @@ interface ToolbarProps {
 
 export default function Toolbar({
   selectedClip,
+  selectedClipType = 'video',
   onDeselectClip,
   onSplitClip,
   onDeleteClip,
@@ -38,6 +41,7 @@ export default function Toolbar({
   onOpenSpeedModal,
   onOpenVolumeModal,
   onOpenCropModal,
+  onOpenMaskModal,
   onOpenAudioModal,
   onOpenTextModal,
   onOpenFiltersModal,
@@ -49,18 +53,37 @@ export default function Toolbar({
   onOpenEnhance,
   onOpenAutoCut,
 }: ToolbarProps) {
-  // If a clip is actively selected, show Clip Editing Tools
+  // If a clip is actively selected, show Contextual Editing Tools based on clip type
   if (selectedClip) {
+    const isVideo = selectedClipType === 'video';
+    const isAudio = selectedClipType === 'audio';
+    const isText = selectedClipType === 'text';
+    const isSticker = selectedClipType === 'sticker' || selectedClipType === 'stickers';
+    const isEffect = selectedClipType === 'effects' || selectedClipType === 'effect';
+
+    const categoryTitle = isVideo
+      ? 'Video'
+      : isAudio
+      ? 'Audio'
+      : isText
+      ? 'Text'
+      : isSticker
+      ? 'Sticker'
+      : isEffect
+      ? 'Effect'
+      : 'Clip';
+
     return (
       <View style={styles.toolbarContainer}>
-        {/* Deselect / Back handle */}
+        {/* Deselect / Back handle with Category indicator */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={onDeselectClip}
           activeOpacity={0.7}
+          accessibilityLabel={`Back from ${categoryTitle} editing`}
         >
-          <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
-          <Text style={styles.backButtonText}>Back</Text>
+          <Ionicons name="chevron-back" size={18} color="#00F2FE" />
+          <Text style={styles.backButtonText}>{categoryTitle}</Text>
         </TouchableOpacity>
 
         <ScrollView
@@ -68,133 +91,354 @@ export default function Toolbar({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.toolsScroll}
         >
-          {/* 1. Split */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('split');
-              onSplitClip();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="cut-outline" size={20} color="#00F2FE" />
-            </View>
-            <Text style={styles.toolLabel}>Split</Text>
-          </TouchableOpacity>
+          {/* ================= VIDEO TOOLS ================= */}
+          {isVideo && (
+            <>
+              {/* 1. Split */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('split');
+                  onSplitClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="cut-outline" size={20} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Split</Text>
+              </TouchableOpacity>
 
-          {/* 2. Speed */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onOpenSpeedModal();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="speedometer-outline" size={20} color="#FFFFFF" />
-            </View>
-            <Text style={styles.toolLabel}>Speed</Text>
-          </TouchableOpacity>
+              {/* 2. Speed */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenSpeedModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
+                </View>
+                <Text style={styles.toolLabel}>Speed</Text>
+              </TouchableOpacity>
 
-          {/* 3. Volume & Dynamics */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              if (onOpenVolumeModal) onOpenVolumeModal();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="volume-high-outline" size={20} color="#10B981" />
-            </View>
-            <Text style={styles.toolLabel}>Volume</Text>
-          </TouchableOpacity>
+              {/* 3. Volume & Dynamics */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenVolumeModal) onOpenVolumeModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="volume-high-outline" size={20} color="#10B981" />
+                </View>
+                <Text style={styles.toolLabel}>Volume</Text>
+              </TouchableOpacity>
 
-          {/* 4. Crop & Transform */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              if (onOpenCropModal) onOpenCropModal();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="crop-outline" size={20} color="#38BDF8" />
-            </View>
-            <Text style={styles.toolLabel}>Transform</Text>
-          </TouchableOpacity>
+              {/* 4. Crop & Transform */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenCropModal) onOpenCropModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="crop-outline" size={20} color="#38BDF8" />
+                </View>
+                <Text style={styles.toolLabel}>Crop</Text>
+              </TouchableOpacity>
 
-          {/* 5. Filters */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onOpenFiltersModal();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="color-filter-outline" size={20} color="#FBBF24" />
-            </View>
-            <Text style={styles.toolLabel}>Filters</Text>
-          </TouchableOpacity>
+              {/* 5. Masking */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenMaskModal) onOpenMaskModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="shapes-outline" size={20} color="#F43F5E" />
+                </View>
+                <Text style={styles.toolLabel}>Mask</Text>
+              </TouchableOpacity>
 
-          {/* 6. Effects */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onOpenEffectsModal();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="sparkles-outline" size={20} color="#D946EF" />
-            </View>
-            <Text style={styles.toolLabel}>Effects</Text>
-          </TouchableOpacity>
+              {/* 6. Filters */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenFiltersModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="color-filter-outline" size={20} color="#FBBF24" />
+                </View>
+                <Text style={styles.toolLabel}>Filters</Text>
+              </TouchableOpacity>
 
-          {/* 7. Reverse */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('pop');
-              if (onToggleReverse) onToggleReverse();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconCircle, selectedClip.reverse && styles.activeCircle]}>
-              <Ionicons
-                name="play-back-outline"
-                size={20}
-                color={selectedClip.reverse ? '#000000' : '#FFFFFF'}
-              />
-            </View>
-            <Text style={[styles.toolLabel, selectedClip.reverse && { color: '#00F2FE' }]}>
-              {selectedClip.reverse ? 'Reversed' : 'Reverse'}
-            </Text>
-          </TouchableOpacity>
+              {/* 7. Effects */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenEffectsModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="sparkles-outline" size={20} color="#D946EF" />
+                </View>
+                <Text style={styles.toolLabel}>Effects</Text>
+              </TouchableOpacity>
 
-          {/* 8. Rotate 90 deg */}
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onRotateClip();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="refresh-outline" size={20} color="#FFFFFF" />
-            </View>
-            <Text style={styles.toolLabel}>Rotate</Text>
-          </TouchableOpacity>
+              {/* 8. Rotate 90 deg */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onRotateClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="refresh-outline" size={20} color="#FFFFFF" />
+                </View>
+                <Text style={styles.toolLabel}>Rotate</Text>
+              </TouchableOpacity>
 
-          {/* 9. Duplicate */}
+              {/* 9. Reverse */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('pop');
+                  if (onToggleReverse) onToggleReverse();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.iconCircle, selectedClip.reverse && styles.activeCircle]}>
+                  <Ionicons
+                    name="play-back-outline"
+                    size={20}
+                    color={selectedClip.reverse ? '#000000' : '#FFFFFF'}
+                  />
+                </View>
+                <Text style={[styles.toolLabel, selectedClip.reverse && { color: '#00F2FE' }]}>
+                  {selectedClip.reverse ? 'Reversed' : 'Reverse'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* ================= AUDIO TOOLS ================= */}
+          {isAudio && (
+            <>
+              {/* 1. Volume & Dynamics */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenVolumeModal) onOpenVolumeModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="volume-high-outline" size={20} color="#10B981" />
+                </View>
+                <Text style={styles.toolLabel}>Volume</Text>
+              </TouchableOpacity>
+
+              {/* 2. Split Audio */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('split');
+                  onSplitClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="cut-outline" size={20} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Split</Text>
+              </TouchableOpacity>
+
+              {/* 3. Speed / Pitch */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenSpeedModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="speedometer-outline" size={20} color="#38BDF8" />
+                </View>
+                <Text style={styles.toolLabel}>Speed</Text>
+              </TouchableOpacity>
+
+              {/* 4. Audio Tracks Library (Swap/Add) */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenAudioModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="musical-notes-outline" size={20} color="#A855F7" />
+                </View>
+                <Text style={styles.toolLabel}>Library</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* ================= TEXT TOOLS ================= */}
+          {isText && (
+            <>
+              {/* 1. Edit Text & Live Effects */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenTextModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="pencil" size={20} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Edit</Text>
+              </TouchableOpacity>
+
+              {/* 2. Font & Style */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenTextModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="text-outline" size={20} color="#D946EF" />
+                </View>
+                <Text style={styles.toolLabel}>Style</Text>
+              </TouchableOpacity>
+
+              {/* 3. Text Effects (Neon, 3D, Shadow) */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenTextModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="sparkles-outline" size={20} color="#FBBF24" />
+                </View>
+                <Text style={styles.toolLabel}>Effects</Text>
+              </TouchableOpacity>
+
+              {/* 4. Split Text Duration */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('split');
+                  onSplitClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="cut-outline" size={20} color="#38BDF8" />
+                </View>
+                <Text style={styles.toolLabel}>Split</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* ================= STICKER TOOLS ================= */}
+          {isSticker && (
+            <>
+              {/* 1. Change Sticker / Emojis */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenStickersModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="happy-outline" size={20} color="#FBBF24" />
+                </View>
+                <Text style={styles.toolLabel}>Stickers</Text>
+              </TouchableOpacity>
+
+              {/* 2. Split Sticker Duration */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('split');
+                  onSplitClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="cut-outline" size={20} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Split</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* ================= EFFECT TOOLS ================= */}
+          {isEffect && (
+            <>
+              {/* 1. Change / Adjust Effect */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenEffectsModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="sparkles-outline" size={20} color="#818CF8" />
+                </View>
+                <Text style={styles.toolLabel}>Effect</Text>
+              </TouchableOpacity>
+
+              {/* 2. Split Effect Duration */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('split');
+                  onSplitClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="cut-outline" size={20} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Split</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* ================= COMMON ACTIONS (Duplicate & Delete) ================= */}
+          {/* Duplicate */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {
@@ -209,7 +453,7 @@ export default function Toolbar({
             <Text style={styles.toolLabel}>Duplicate</Text>
           </TouchableOpacity>
 
-          {/* 10. Delete */}
+          {/* Delete */}
           <TouchableOpacity
             style={styles.toolItem}
             onPress={() => {

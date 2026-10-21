@@ -19,13 +19,12 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B0D13"
-      }
+      },
+      "package": "com.FastArt"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-sharing"
-    ]
+    "plugins": ["expo-sharing"]
   }
 }

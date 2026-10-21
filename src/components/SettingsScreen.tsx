@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,24 +7,41 @@ import {
   ScrollView,
   Switch,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import FastArtLogo from './FastArtLogo';
 import { soundEngine } from '../utils/audioEngine';
+import {
+  clearAppCache,
+  exportAllAppData,
+  importAllAppData,
+  resetAllAppData,
+} from '../utils/storage';
 
 interface SettingsScreenProps {
   settings: any;
   onUpdateSettings: (newSettings: any) => void;
   onBack: () => void;
+  onReloadData?: () => void;
 }
 
 export default function SettingsScreen({
   settings,
   onUpdateSettings,
   onBack,
+  onReloadData,
 }: SettingsScreenProps) {
   const [localSettings, setLocalSettings] = useState(settings || {});
   const [cacheClearedMsg, setCacheClearedMsg] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
 
   const toggleSwitch = (key: string) => {
     soundEngine.playSfx('click');
@@ -42,11 +59,78 @@ export default function SettingsScreen({
 
   const handleClearCache = () => {
     soundEngine.playSfx('split');
+    clearAppCache();
     const updated = { ...localSettings, cachedSizeMb: 0.0 };
     setLocalSettings(updated);
     onUpdateSettings(updated);
     setCacheClearedMsg(true);
     setTimeout(() => setCacheClearedMsg(false), 3000);
+  };
+
+  const handleExportBackup = () => {
+    soundEngine.playSfx('pop');
+    try {
+      const json = exportAllAppData();
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fastart_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setStatusMsg({ type: 'success', text: 'All projects & settings exported to backup file!' });
+      } else {
+        setStatusMsg({ type: 'success', text: 'Backup data generated successfully!' });
+      }
+    } catch (err) {
+      setStatusMsg({ type: 'error', text: 'Could not export backup.' });
+    }
+    setTimeout(() => setStatusMsg(null), 4000);
+  };
+
+  const handleImportBackup = () => {
+    soundEngine.playSfx('click');
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.onchange = (e: any) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const content = event.target?.result as string;
+            if (content) {
+              const ok = importAllAppData(content);
+              if (ok) {
+                soundEngine.playSfx('pop');
+                setStatusMsg({ type: 'success', text: 'Projects and settings restored successfully!' });
+                onReloadData?.();
+              } else {
+                setStatusMsg({ type: 'error', text: 'Invalid backup file format.' });
+              }
+            }
+          };
+          reader.readAsText(file);
+        }
+      };
+      input.click();
+    } else {
+      setStatusMsg({ type: 'error', text: 'Import file picker available on Web.' });
+    }
+    setTimeout(() => setStatusMsg(null), 4000);
+  };
+
+  const handleConfirmReset = () => {
+    soundEngine.playSfx('split');
+    resetAllAppData();
+    setShowResetConfirm(false);
+    setStatusMsg({ type: 'success', text: 'All app data reset to factory defaults.' });
+    onReloadData?.();
+    setTimeout(() => setStatusMsg(null), 4000);
   };
 
   const resolutions = ['720p', '1080p', '2K/4K'];
@@ -255,6 +339,84 @@ export default function SettingsScreen({
             </View>
           )}
 
+          {/* DATA PERSISTENCE & BACKUP */}
+          <Text style={styles.sectionHeader}>DATA PERSISTENCE & BACKUP</Text>
+
+          <View style={styles.persistenceCard}>
+            <View style={styles.persistenceHeader}>
+              <View style={styles.persistenceIconBox}>
+                <Ionicons name="shield-checkmark" size={22} color="#00F2FE" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.persistenceTitle}>Persistent Storage Engine</Text>
+                <Text style={styles.persistenceSubtitle}>
+                  {Platform.OS === 'web'
+                    ? 'Browser LocalStorage & Fast In-Memory Sync (Active)'
+                    : 'Mobile File System Persistent Sandbox (Active)'}
+                </Text>
+              </View>
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveBadgeText}>SYNCED</Text>
+              </View>
+            </View>
+
+            <View style={styles.persistenceButtons}>
+              <TouchableOpacity
+                style={styles.backupBtn}
+                onPress={handleExportBackup}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="download-outline" size={16} color="#000000" />
+                <Text style={styles.backupBtnText}>Export Backup</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.restoreBtn}
+                onPress={handleImportBackup}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cloud-upload-outline" size={16} color="#00F2FE" />
+                <Text style={styles.restoreBtnText}>Import Backup</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.resetBtn}
+              onPress={() => setShowResetConfirm(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="trash-outline" size={16} color="#FF0050" />
+              <Text style={styles.resetBtnText}>Reset All App Data</Text>
+            </TouchableOpacity>
+          </View>
+
+          {statusMsg && (
+            <View
+              style={[
+                styles.toast,
+                statusMsg.type === 'error' && {
+                  backgroundColor: 'rgba(255, 0, 80, 0.15)',
+                  borderColor: '#FF0050',
+                },
+              ]}
+            >
+              <Ionicons
+                name={statusMsg.type === 'error' ? 'alert-circle' : 'checkmark-circle'}
+                size={16}
+                color={statusMsg.type === 'error' ? '#FF0050' : '#10B981'}
+              />
+              <Text
+                style={[
+                  styles.toastText,
+                  statusMsg.type === 'error' && { color: '#FF0050' },
+                ]}
+              >
+                {statusMsg.text}
+              </Text>
+            </View>
+          )}
+
           {/* ABOUT & SYSTEM */}
           <Text style={styles.sectionHeader}>ABOUT & SYSTEM</Text>
           <View style={styles.infoRow}>
@@ -275,6 +437,37 @@ export default function SettingsScreen({
           </View>
         </View>
       </ScrollView>
+
+      {/* Reset Confirmation Modal */}
+      <Modal visible={showResetConfirm} transparent animationType="fade">
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmBox}>
+            <View style={styles.confirmIconBox}>
+              <Ionicons name="warning" size={32} color="#FF0050" />
+            </View>
+            <Text style={styles.confirmTitle}>Reset All FastArt Data?</Text>
+            <Text style={styles.confirmMessage}>
+              This will delete all saved projects, uploaded media, custom audio, and restore factory default settings. This action cannot be undone.
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowResetConfirm(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmBtn}
+                onPress={handleConfirmReset}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.deleteConfirmBtnText}>Reset Everything</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -512,5 +705,184 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  persistenceCard: {
+    backgroundColor: '#141721',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#1E2333',
+    marginBottom: 10,
+  },
+  persistenceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  persistenceIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.25)',
+  },
+  persistenceTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  persistenceSubtitle: {
+    color: '#8E95A5',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    gap: 5,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  liveBadgeText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  persistenceButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  backupBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00F2FE',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  backupBtnText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  restoreBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10131A',
+    borderWidth: 1,
+    borderColor: '#00F2FE',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  restoreBtnText: {
+    color: '#00F2FE',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  resetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 0, 80, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 80, 0.3)',
+    paddingVertical: 9,
+    borderRadius: 8,
+    gap: 6,
+  },
+  resetBtnText: {
+    color: '#FF0050',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  confirmBox: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#141721',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#252B3B',
+    alignItems: 'center',
+  },
+  confirmIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 0, 80, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 80, 0.3)',
+  },
+  confirmTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  confirmMessage: {
+    color: '#8E95A5',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 22,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: '#1E2333',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    backgroundColor: '#FF0050',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  deleteConfirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

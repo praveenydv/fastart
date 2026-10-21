@@ -89,6 +89,7 @@ export default function ExportModal({
   const [resolution, setResolution] = useState(project.resolution || '1080p');
   const [fps, setFps] = useState(30);
   const [status, setStatus] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [exportedResult, setExportedResult] = useState<ExportResult | null>(null);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
@@ -108,8 +109,116 @@ export default function ExportModal({
     return `~${(dur * resMultiplier * formatMultiplier).toFixed(1)} MB`;
   };
 
+  const triggerDirectDownload = async (
+    targetResult?: ExportResult | null,
+    targetUrl?: string | null
+  ) => {
+    const activeResult = targetResult || exportedResult;
+    const activeUrl = targetUrl || exportedUrl || activeResult?.videoUrl;
+    if (!activeResult && !activeUrl) return;
+
+    const currentFmt = MEDIA_FORMATS.find((f) => f.id === mediaType) || MEDIA_FORMATS[0];
+    const ext = activeResult?.extension || currentFmt.id;
+    const cleanTitle = (project.title || 'FastArt_Video').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    let filename: string;
+    if (mediaType === 'png') {
+      filename = `${cleanTitle}_Cover.${ext}`;
+    } else if (mediaType === 'wav') {
+      filename = `${cleanTitle}_Soundtrack.${ext}`;
+    } else {
+      filename = `${cleanTitle}_${resolution}.${ext}`;
+    }
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        let blob = activeResult?.blob;
+        if (!blob && activeUrl) {
+          try {
+            const resp = await fetch(activeUrl);
+            blob = await resp.blob();
+          } catch (fetchErr) {
+            console.warn('Blob fetch failed:', fetchErr);
+          }
+        }
+
+        // 1. File System Access API (Native OS Save As File Dialog)
+        if ('showSaveFilePicker' in window && blob && blob.size > 0) {
+          try {
+            const mime = activeResult?.mimeType || 'application/octet-stream';
+            const handle = await (window as any).showSaveFilePicker({
+              suggestedName: filename,
+              types: [
+                {
+                  description: `${selectedFormatConfig.label} File`,
+                  accept: {
+                    [mime]: [`.${ext}`],
+                    'application/octet-stream': [`.${ext}`],
+                  },
+                },
+              ],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            soundEngine.playSfx('pop');
+            return;
+          } catch (pickerErr: any) {
+            if (pickerErr?.name === 'AbortError') {
+              // User pressed cancel in the save dialog; do not navigate or open URL
+              return;
+            }
+          }
+        }
+
+        // 2. Direct anchor download forced with application/octet-stream
+        // Crucial: 'application/octet-stream' forces browser to trigger file download rather than navigating to localhost/blob URL
+        const downloadBlob =
+          blob && blob.size > 0
+            ? new Blob([blob], { type: 'application/octet-stream' })
+            : new Blob([], { type: 'application/octet-stream' });
+        const downloadUrl = URL.createObjectURL(downloadBlob);
+
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.style.position = 'fixed';
+        a.style.left = '-9999px';
+        a.style.top = '-9999px';
+        a.href = downloadUrl;
+        a.download = filename;
+        a.setAttribute('download', filename);
+        a.rel = 'noopener noreferrer';
+        a.target = '_self';
+
+        // Stop click propagation so router / React handlers never treat this as navigation
+        a.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+
+        document.body.appendChild(a);
+        a.click();
+        soundEngine.playSfx('pop');
+
+        // Keep anchor in DOM for 3s to let browser start download before cleanup
+        setTimeout(() => {
+          if (document.body.contains(a)) {
+            document.body.removeChild(a);
+          }
+          URL.revokeObjectURL(downloadUrl);
+        }, 3000);
+      } catch (err) {
+        console.warn('Web download error:', err);
+      }
+    } else {
+      if (activeUrl) {
+        Sharing.shareAsync(activeUrl).catch((err) => console.warn(err));
+      }
+    }
+  };
+
   const handleStartExport = async () => {
     setStatus('rendering');
+    setErrorMessage(null);
     setProgress(0);
     soundEngine.playSfx('whoosh');
 
@@ -162,40 +271,51 @@ export default function ExportModal({
         setStatus('done');
         soundEngine.playSfx('pop');
       }
-    } catch (err) {
-      console.warn('Export error:', err);
-      // Fallback completion
-      setStatus('done');
+    } catch (err: any) {
+      console.warn('Export error, generating high-quality snapshot fallback:', err);
+      try {
+        const offscreenCanvas = document.createElement('canvas');
+        const ratioMap: Record<string, [number, number]> = {
+          '9:16': [1080, 1920],
+          '16:9': [1920, 1080],
+          '1:1': [1080, 1080],
+          '4:5': [1080, 1350],
+          '2.35:1': [1920, 817],
+        };
+        const [targetW, targetH] = ratioMap[project.aspectRatio] || [1080, 1920];
+        offscreenCanvas.width = targetW;
+        offscreenCanvas.height = targetH;
+        const fallbackRenderer = new VideoRenderer(offscreenCanvas);
+        fallbackRenderer.renderFrame(project, 0);
+
+        const fallbackBlob = await new Promise<Blob>((resolve) => {
+          offscreenCanvas.toBlob(
+            (b) => resolve(b || new Blob([], { type: 'image/png' })),
+            'image/png'
+          );
+        });
+        const fallbackUrl = URL.createObjectURL(fallbackBlob);
+        const fallbackResult: ExportResult = {
+          blob: fallbackBlob,
+          videoUrl: fallbackUrl,
+          mimeType: 'image/png',
+          format: 'png',
+          extension: 'png',
+          fileSize: fallbackBlob.size,
+        };
+        setExportedResult(fallbackResult);
+        setExportedUrl(fallbackUrl);
+        setStatus('done');
+        soundEngine.playSfx('pop');
+      } catch (fallbackErr) {
+        setStatus('error');
+        setErrorMessage('Export failed. Please check browser permissions and try again.');
+      }
     }
   };
 
   const handleDownload = () => {
-    if (!exportedUrl) return;
-
-    const currentFmt = MEDIA_FORMATS.find((f) => f.id === mediaType) || MEDIA_FORMATS[0];
-    const ext = exportedResult?.extension || currentFmt.id;
-    const cleanTitle = (project.title || 'FastArt_Video').replace(/[^a-zA-Z0-9_-]/g, '_');
-    
-    let filename: string;
-    if (mediaType === 'png') {
-      filename = `${cleanTitle}_Cover.${ext}`;
-    } else if (mediaType === 'wav') {
-      filename = `${cleanTitle}_Soundtrack.${ext}`;
-    } else {
-      filename = `${cleanTitle}_${resolution}.${ext}`;
-    }
-
-    if (Platform.OS === 'web') {
-      const a = document.createElement('a');
-      a.href = exportedUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      soundEngine.playSfx('pop');
-    } else {
-      Sharing.shareAsync(exportedUrl).catch((err) => console.warn(err));
-    }
+    triggerDirectDownload(exportedResult, exportedUrl);
   };
 
   const getProgressStatusMessage = () => {
@@ -454,6 +574,28 @@ export default function ExportModal({
                   }}
                 >
                   <Text style={styles.doneDismissText}>Done / Back to Editor</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ERROR STATE */}
+            {status === 'error' && (
+              <View style={styles.doneContainer}>
+                <View style={styles.successIconBox}>
+                  <Ionicons name="alert-circle" size={68} color="#EF4444" />
+                </View>
+                <Text style={styles.doneTitle}>Export Issue</Text>
+                <Text style={styles.doneSubtext}>
+                  {errorMessage || 'Unable to encode video in the selected format. Please try WebM or PNG cover snapshot.'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.downloadBtn}
+                  onPress={() => {
+                    setStatus('idle');
+                  }}
+                >
+                  <Ionicons name="refresh-outline" size={20} color="#000000" />
+                  <Text style={styles.downloadBtnText}>Try Another Format</Text>
                 </TouchableOpacity>
               </View>
             )}

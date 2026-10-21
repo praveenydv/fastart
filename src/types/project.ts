@@ -4,6 +4,26 @@ export type AspectRatio = '9:16' | '16:9' | '1:1' | '4:5' | '2.35:1';
 export type Resolution = '720p' | '1080p' | '2K/4K';
 export type FPS = 24 | 25 | 30 | 50 | 60;
 
+export type MaskShape = 'none' | 'linear' | 'mirror' | 'circle' | 'rectangle' | 'heart' | 'star';
+
+export interface MaskConfig {
+  shape: MaskShape;
+  size?: number; // 10% to 100%
+  feather?: number; // 0 to 50 blur
+  roundness?: number; // 0 to 50 for rectangle
+  inverted?: boolean;
+  x?: number; // offset x %
+  y?: number; // offset y %
+  rotation?: number; // mask angle
+}
+
+export interface CustomCrop {
+  x: number; // 0..100%
+  y: number; // 0..100%
+  width: number; // 0..100%
+  height: number; // 0..100%
+}
+
 export interface ClipTransform {
   scale?: number;
   rotation?: number;
@@ -12,6 +32,8 @@ export interface ClipTransform {
   flipX?: boolean;
   flipY?: boolean;
   opacity?: number;
+  mask?: MaskConfig;
+  crop?: CustomCrop;
 }
 
 export interface TransitionConfig {
@@ -44,6 +66,8 @@ export interface VideoClip {
   effect?: string;
   transition?: TransitionConfig;
   transform?: ClipTransform;
+  mask?: MaskConfig;
+  crop?: CustomCrop;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
 }
@@ -79,6 +103,9 @@ export interface TextStyle {
   textShadowColor?: string;
   textShadowRadius?: number;
   textShadowOffset?: { width: number; height: number };
+  textEffect?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
 }
 
 export interface TextClip {
@@ -121,6 +148,7 @@ export interface ProjectTracks {
   text: TextClip[];
   stickers: StickerClip[];
   effects: EffectClip[];
+  filters?: any[];
 }
 
 export interface FastArtProject {
@@ -132,8 +160,9 @@ export interface FastArtProject {
   resolution: Resolution;
   fps: FPS;
   currentTime: number;
-  isPlaying: boolean;
+  isPlaying?: boolean;
   zoom: number;
+  thumbnailUrl?: string;
   tracks: ProjectTracks;
 }
 

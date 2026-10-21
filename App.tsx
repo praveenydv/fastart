@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
-  SafeAreaView,
   StatusBar,
   Platform,
 } from 'react-native';
@@ -34,13 +33,18 @@ import CameraModal from './src/components/Panels/CameraModal';
 import AutoCutModal from './src/components/Panels/AutoCutModal';
 import AIEnhanceModal from './src/components/Panels/AIEnhanceModal';
 import TextToSpeechModal from './src/components/Panels/TextToSpeechModal';
+import ConfirmDeleteModal from './src/components/ConfirmDeleteModal';
 
 import {
   FastArtProject,
   VideoClip,
   AudioClip,
+  TextClip,
+  StickerClip,
   ClipTransform,
   AspectRatio,
+  MaskConfig,
+  CustomCrop,
   createDefaultProject,
   computeTotalDuration,
 } from './src/types/project';
@@ -52,6 +56,12 @@ import {
   saveSettings,
   loadNotifications,
   saveNotifications,
+  loadLastSession,
+  saveLastSession,
+  LastEditSession,
+  AppSettings,
+  AppNotification,
+  initNativeStorageAsync,
 } from './src/utils/storage';
 import { soundEngine } from './src/utils/audioEngine';
 
@@ -63,10 +73,11 @@ export default function App() {
     else if (s === 'editor' && project) navigate(`/project/${project.id}`);
     else navigate(`/${s}`);
   };
-  const [projects, setProjects] = useState<FastArtProject[]>([]);
+  const [projects, setProjects] = useState<FastArtProject[]>(() => loadAllProjects());
   const [project, setProject] = useState<FastArtProject | null>(null);
-  const [settings, setSettings] = useState(loadSettings());
-  const [notifications, setNotifications] = useState(loadNotifications());
+  const [lastSession, setLastSession] = useState<LastEditSession | null>(() => loadLastSession());
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => loadNotifications());
 
   // Playback state
   const [currentTime, setCurrentTime] = useState(0);
@@ -74,6 +85,12 @@ export default function App() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedClipType, setSelectedClipType] = useState<string>('video');
   const [zoom, setZoom] = useState(60);
+  const [clipToDelete, setClipToDelete] = useState<{
+    id: string;
+    type: string;
+    name?: string;
+    duration?: number;
+  } | null>(null);
 
   // History state (Undo / Redo)
   const [historyStack, setHistoryStack] = useState<FastArtProject[]>([]);
@@ -86,10 +103,22 @@ export default function App() {
   const animFrameRef = useRef<any>(null);
   const lastTimeRef = useRef<any>(null);
 
-  // Load projects on startup
+  // Load and hydrate projects, settings & notifications on startup
   useEffect(() => {
-    const projs = loadAllProjects();
-    setProjects(projs);
+    if (settings) {
+      soundEngine.setEnabled(settings.soundEffects !== false);
+    }
+    initNativeStorageAsync().then(() => {
+      const projs = loadAllProjects();
+      const currentSettings = loadSettings();
+      const currentNotifs = loadNotifications();
+      const session = loadLastSession();
+      setProjects(projs);
+      setSettings(currentSettings);
+      setNotifications(currentNotifs);
+      setLastSession(session);
+      soundEngine.setEnabled(currentSettings.soundEffects !== false);
+    });
   }, []);
 
   // Sync route and project / modal selection
@@ -133,9 +162,14 @@ export default function App() {
       if (matched) {
         if (!project || project.id !== matched.id) {
           setProject(matched);
-          setCurrentTime(0);
+          const session = loadLastSession();
+          const resumeTime =
+            session && session.projectId === matched.id && typeof session.currentTime === 'number'
+              ? session.currentTime
+              : (matched.currentTime || 0);
+          setCurrentTime(resumeTime);
           setIsPlaying(false);
-          setSelectedClipId(null);
+          setSelectedClipId(session && session.projectId === matched.id ? session.selectedClipId || null : null);
         }
       } else {
         setProject(null);
@@ -150,6 +184,21 @@ export default function App() {
       }
     }
   }, [route.screen, route.projectKey, route.tool, projects]);
+
+  // Persist last active editing session (playhead, zoom, selection)
+  useEffect(() => {
+    if (project && route.screen === 'editor' && !isPlaying) {
+      const session: LastEditSession = {
+        projectId: project.id,
+        currentTime,
+        zoom,
+        selectedClipId,
+        updatedAt: Date.now(),
+      };
+      saveLastSession(session);
+      setLastSession(session);
+    }
+  }, [project?.id, currentTime, zoom, selectedClipId, route.screen, isPlaying]);
 
   // Modal helpers synced with URL
   const openModal = (modalName: string) => {
@@ -202,11 +251,12 @@ export default function App() {
   }, [isPlaying, totalDuration]);
 
   // Push state to undo stack
-  const updateProjectWithHistory = (updatedProject) => {
+  const updateProjectWithHistory = (updatedProject: any) => {
     setHistoryStack((prev) => [...prev.slice(-30), JSON.parse(JSON.stringify(project))]);
     setRedoStack([]);
-    setProject(updatedProject);
-    saveProject(updatedProject);
+    const saved = saveProject(updatedProject);
+    setProject(saved);
+    setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
   };
 
   const handleUndo = () => {
@@ -214,7 +264,9 @@ export default function App() {
     const prev = historyStack[historyStack.length - 1];
     setHistoryStack((s) => s.slice(0, -1));
     setRedoStack((r) => [...r, JSON.parse(JSON.stringify(project))]);
-    setProject(prev);
+    const saved = saveProject(prev);
+    setProject(saved);
+    setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
     soundEngine.playSfx('click');
   };
 
@@ -223,7 +275,9 @@ export default function App() {
     const next = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
     setHistoryStack((s) => [...s, JSON.parse(JSON.stringify(project))]);
-    setProject(next);
+    const saved = saveProject(next);
+    setProject(saved);
+    setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
     soundEngine.playSfx('click');
   };
 
@@ -239,56 +293,99 @@ export default function App() {
   // Split active clip at currentTime
   const handleSplitClip = () => {
     if (!project || !selectedClipId) return;
-    const videoClips = [...(project.tracks.video || [])];
-    const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+    const key = (selectedClipType === 'sticker' || selectedClipType === 'stickers'
+      ? 'stickers'
+      : selectedClipType === 'effect' || selectedClipType === 'effects'
+      ? 'effects'
+      : selectedClipType) as keyof typeof project.tracks;
+
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === selectedClipId);
     if (idx === -1) return;
 
-    const clip = videoClips[idx];
-    const clipStart = clip.startTime;
-    const clipEnd = clip.startTime + clip.duration;
+    const clip = list[idx];
+    const clipStart = clip.startTime || 0;
+    const clipEnd = clipStart + (clip.duration || 0);
 
     // Check if playhead is within clip boundaries
-    if (currentTime <= clipStart + 0.2 || currentTime >= clipEnd - 0.2) return;
+    if (currentTime <= clipStart + 0.05 || currentTime >= clipEnd - 0.05) return;
 
     const firstDuration = currentTime - clipStart;
     const secondDuration = clipEnd - currentTime;
 
     const firstClip = {
       ...clip,
-      duration: firstDuration,
-      trimOut: (clip.trimIn || 0) + firstDuration,
+      duration: Number(firstDuration.toFixed(3)),
+      ...(clip.trimIn !== undefined ? { trimOut: Number(((clip.trimIn || 0) + firstDuration).toFixed(3)) } : {}),
     };
 
     const secondClip = {
       ...clip,
-      id: 'clip-v-' + Date.now(),
-      startTime: currentTime,
-      duration: secondDuration,
-      trimIn: (clip.trimIn || 0) + firstDuration,
-      trimOut: clip.trimOut,
+      id: `clip-${String(key)[0]}-${Date.now()}`,
+      startTime: Number(currentTime.toFixed(3)),
+      duration: Number(secondDuration.toFixed(3)),
+      ...(clip.trimIn !== undefined
+        ? {
+            trimIn: Number(((clip.trimIn || 0) + firstDuration).toFixed(3)),
+            trimOut: clip.trimOut,
+          }
+        : {}),
     };
 
-    videoClips.splice(idx, 1, firstClip, secondClip);
+    list.splice(idx, 1, firstClip, secondClip);
 
     const updated = {
       ...project,
       tracks: {
         ...project.tracks,
-        video: videoClips,
+        [key]: list,
       },
     };
     setSelectedClipId(secondClip.id);
     updateProjectWithHistory(updated);
   };
 
-  // Delete selected clip
-  const handleDeleteClip = () => {
-    if (!project || !selectedClipId) return;
-    const list = [...(project.tracks[selectedClipType] || [])];
-    const filtered = list.filter((c) => c.id !== selectedClipId);
+  // Request delete clip with confirmation modal
+  const handleDeleteClip = (targetId?: string, targetType?: string) => {
+    if (!project) return;
+    const clipId = targetId || selectedClipId;
+    const clipType = targetType || selectedClipType;
+    if (!clipId) return;
+
+    const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const clip = list.find((c) => c.id === clipId);
+
+    let name = `${clipType.charAt(0).toUpperCase() + clipType.slice(1)} Clip`;
+    if (clip) {
+      if (clipType === 'text' && clip.text) {
+        name = `"${clip.text.length > 25 ? clip.text.slice(0, 25) + '...' : clip.text}"`;
+      } else if (clip.name) {
+        name = clip.name;
+      } else if (clip.label) {
+        name = clip.label;
+      }
+    }
+
+    setClipToDelete({
+      id: clipId,
+      type: clipType,
+      name,
+      duration: clip?.duration,
+    });
+  };
+
+  // Perform actual deletion after confirmation
+  const handleConfirmDeleteClip = () => {
+    if (!project || !clipToDelete) return;
+    const { id: clipId, type: clipType } = clipToDelete;
+
+    const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const filtered = list.filter((c) => c.id !== clipId);
 
     // Ripple reposition if video track
-    if (selectedClipType === 'video') {
+    if (clipType === 'video') {
       let t = 0;
       filtered.forEach((c) => {
         c.startTime = t;
@@ -300,45 +397,270 @@ export default function App() {
       ...project,
       tracks: {
         ...project.tracks,
-        [selectedClipType]: filtered,
+        [key]: filtered,
       },
     };
     setSelectedClipId(null);
     updateProjectWithHistory(updated);
+    setClipToDelete(null);
   };
 
-  // Duplicate selected clip
-  const handleDuplicateClip = () => {
-    if (!project || !selectedClip) return;
-    const videoClips = [...(project.tracks.video || [])];
-    const idx = videoClips.findIndex((c) => c.id === selectedClipId);
-    if (idx === -1) return;
+  // Desktop / Laptop Keyboard Shortcuts:
+  // Space: Play/Pause, S / Cmd+K: Split, D: Duplicate, Del: Delete, Cmd+Z: Undo, Esc: Deselect/Close, Arrows: Step
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-    const original = videoClips[idx];
-    const clone = {
-      ...JSON.parse(JSON.stringify(original)),
-      id: 'clip-v-' + Date.now(),
-      startTime: original.startTime + original.duration,
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          (target as any).isContentEditable)
+      ) {
+        return;
+      }
+
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+
+      // 1. Play / Pause with Space
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        soundEngine.playSfx('click');
+        if (!isPlaying && (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration)) {
+          setCurrentTime(0);
+        }
+        setIsPlaying((p) => !p);
+        return;
+      }
+
+      // 2. Undo / Redo
+      if (isCmdOrCtrl && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+      if (isCmdOrCtrl && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // 3. Split Clip (S or Cmd+K)
+      if ((e.key === 's' || e.key === 'S') && !isCmdOrCtrl) {
+        if (selectedClipId && route.screen === 'editor' && !activeModal) {
+          e.preventDefault();
+          soundEngine.playSfx('split');
+          handleSplitClip();
+        }
+        return;
+      }
+      if (isCmdOrCtrl && (e.key === 'k' || e.key === 'K')) {
+        if (selectedClipId && route.screen === 'editor' && !activeModal) {
+          e.preventDefault();
+          soundEngine.playSfx('split');
+          handleSplitClip();
+        }
+        return;
+      }
+
+      // 4. Duplicate Clip (D or Cmd+D)
+      if ((e.key === 'd' || e.key === 'D') && !e.shiftKey) {
+        if (selectedClipId && route.screen === 'editor' && !activeModal) {
+          e.preventDefault();
+          soundEngine.playSfx('pop');
+          handleDuplicateClip();
+        }
+        return;
+      }
+
+      // 5. Delete Clip (Delete or Backspace)
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedClipId && route.screen === 'editor' && !activeModal && !clipToDelete) {
+          e.preventDefault();
+          handleDeleteClip();
+        }
+        return;
+      }
+
+      // 6. Escape (Close modal or deselect)
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (clipToDelete) {
+          setClipToDelete(null);
+        } else if (activeModal) {
+          closeModal();
+        } else if (selectedClipId) {
+          setSelectedClipId(null);
+        }
+        return;
+      }
+
+      // 7. Arrow Left / Right Frame Step
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const delta = e.shiftKey ? 1.0 : 1 / 30;
+        setCurrentTime((t) => Math.max(0, t - delta));
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const delta = e.shiftKey ? 1.0 : 1 / 30;
+        setCurrentTime((t) => Math.min(totalDuration, t + delta));
+        return;
+      }
+
+      // 8. Zoom in / out (+ / -)
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        setZoom((z) => Math.min(120, z + 10));
+        return;
+      }
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        setZoom((z) => Math.max(20, z - 10));
+        return;
+      }
+      if (e.key === '0') {
+        e.preventDefault();
+        setZoom(60);
+        return;
+      }
     };
 
-    videoClips.splice(idx + 1, 0, clone);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    selectedClipId,
+    route.screen,
+    activeModal,
+    clipToDelete,
+    project,
+    selectedClipType,
+    isPlaying,
+    currentTime,
+    totalDuration,
+    historyStack,
+    redoStack,
+  ]);
 
-    // Recalculate start times for subsequent clips
-    let t = 0;
-    videoClips.forEach((c) => {
-      c.startTime = t;
-      t += c.duration;
-    });
+  // Duplicate selected clip (video, text, sticker, etc.)
+  const handleDuplicateClip = (targetId?: string, targetType?: string) => {
+    if (!project) return;
+    const clipId = targetId || selectedClipId;
+    const clipType = targetType || selectedClipType;
+    if (!clipId) return;
+
+    const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === clipId);
+    if (idx === -1) return;
+
+    const original = list[idx];
+    const clone = {
+      ...JSON.parse(JSON.stringify(original)),
+      id: `clip-${clipType[0]}-${Date.now()}`,
+      startTime: original.startTime + 0.2,
+      position: original.position
+        ? {
+            x: Math.min(85, (original.position.x || 50) + 5),
+            y: Math.min(85, (original.position.y || 50) + 5),
+          }
+        : undefined,
+    };
+
+    if (clipType === 'video') {
+      clone.startTime = original.startTime + original.duration;
+      list.splice(idx + 1, 0, clone);
+      let t = 0;
+      list.forEach((c) => {
+        c.startTime = t;
+        t += c.duration;
+      });
+    } else {
+      list.push(clone);
+    }
 
     const updated = {
       ...project,
       tracks: {
         ...project.tracks,
-        video: videoClips,
+        [key]: list,
       },
     };
     setSelectedClipId(clone.id);
+    setSelectedClipType(clipType);
     updateProjectWithHistory(updated);
+  };
+
+  // Direct on-canvas transform update (move with hand, resize, rotate)
+  const handleUpdateClipTransform = (
+    clipId: string,
+    clipType: string,
+    transform: { x: number; y: number; scale: number; rotation: number }
+  ) => {
+    if (!project) return;
+    const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === clipId);
+    if (idx < 0) return;
+
+    if (clipType === 'video' || clipType === 'photo') {
+      list[idx] = {
+        ...list[idx],
+        transform: {
+          ...(list[idx].transform || {}),
+          x: transform.x,
+          y: transform.y,
+          scale: transform.scale,
+          rotation: transform.rotation,
+        },
+      };
+    } else {
+      list[idx] = {
+        ...list[idx],
+        position: { x: transform.x, y: transform.y },
+        scale: transform.scale,
+        rotation: transform.rotation,
+      };
+    }
+
+    updateProjectWithHistory({
+      ...project,
+      tracks: { ...project.tracks, [key]: list } as any,
+    });
+  };
+
+  // Update text clip from modal
+  const handleUpdateText = (updatedClip: TextClip) => {
+    if (!project) return;
+    const list = [...(project.tracks.text || [])];
+    const idx = list.findIndex((c) => c.id === updatedClip.id);
+    if (idx >= 0) {
+      list[idx] = updatedClip;
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, text: list },
+      });
+    }
+  };
+
+  // Update sticker clip from modal
+  const handleUpdateSticker = (updatedClip: StickerClip) => {
+    if (!project) return;
+    const list = [...(project.tracks.stickers || [])];
+    const idx = list.findIndex((c) => c.id === updatedClip.id);
+    if (idx >= 0) {
+      list[idx] = updatedClip;
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, stickers: list },
+      });
+    }
   };
 
   // Rotate clip 90 degrees
@@ -533,8 +855,26 @@ export default function App() {
   };
 
   const handleUpdateSettings = (newSettings: any) => {
-    setSettings(newSettings);
-    saveSettings(newSettings);
+    const updated = saveSettings(newSettings);
+    setSettings(updated);
+    soundEngine.setEnabled(updated.soundEffects !== false);
+  };
+
+  const handleReloadAllData = () => {
+    const projs = loadAllProjects();
+    const currentSettings = loadSettings();
+    const currentNotifs = loadNotifications();
+    const currentSession = loadLastSession();
+    setProjects(projs);
+    setSettings(currentSettings);
+    setNotifications(currentNotifs);
+    setLastSession(currentSession);
+    soundEngine.setEnabled(currentSettings.soundEffects !== false);
+    if (projs.length > 0) {
+      setProject(projs[0]);
+    } else {
+      setProject(null);
+    }
   };
 
   const handleMarkAllAsRead = () => {
@@ -621,8 +961,13 @@ export default function App() {
     }
   };
 
-  // Apply Transform & Canvas Ratio
-  const handleApplyTransform = (t: ClipTransform, newAspectRatio?: AspectRatio) => {
+  // Apply Transform, Mask, Crop & Canvas Ratio
+  const handleApplyTransform = (
+    t: ClipTransform,
+    newAspectRatio?: AspectRatio,
+    newMask?: MaskConfig,
+    newCrop?: CustomCrop
+  ) => {
     if (!project) return;
     let updated: any = { ...project };
     if (newAspectRatio && newAspectRatio !== project.aspectRatio) {
@@ -632,9 +977,18 @@ export default function App() {
       const videoClips = [...(project.tracks.video || [])];
       const idx = videoClips.findIndex((c) => c.id === selectedClipId);
       if (idx >= 0) {
+        const finalMask = newMask !== undefined ? newMask : t.mask !== undefined ? t.mask : videoClips[idx].mask;
+        const finalCrop = newCrop !== undefined ? newCrop : t.crop !== undefined ? t.crop : videoClips[idx].crop;
         videoClips[idx] = {
           ...videoClips[idx],
-          transform: { ...(videoClips[idx].transform || {}), ...t },
+          transform: {
+            ...(videoClips[idx].transform || {}),
+            ...t,
+            mask: finalMask,
+            crop: finalCrop,
+          },
+          mask: finalMask,
+          crop: finalCrop,
         };
         updated.tracks = { ...project.tracks, video: videoClips };
       }
@@ -791,7 +1145,7 @@ export default function App() {
   return (
     <View style={styles.rootWrapper}>
       <StatusBar barStyle="light-content" />
-      <SafeAreaView style={styles.rootContainer}>
+      <View style={styles.rootContainer}>
 
       {/* 1. HOME DASHBOARD SCREEN (URL: / or /home) */}
       {route.screen === 'home' && (
@@ -805,6 +1159,7 @@ export default function App() {
           onOpenSettings={() => navigate('/settings')}
           onOpenNotifications={() => navigate('/notifications')}
           unreadNotificationsCount={notifications.filter((n) => n.unread).length}
+          lastSession={lastSession}
         />
       )}
 
@@ -816,6 +1171,7 @@ export default function App() {
           onBack={() => {
             navigate('/');
           }}
+          onReloadData={handleReloadAllData}
         />
       )}
 
@@ -883,6 +1239,30 @@ export default function App() {
                 ) || false
               }
               onOpenMediaPicker={() => openModal('media')}
+              selectedClipId={selectedClipId}
+              selectedClipType={selectedClipType}
+              onSelectClip={(id, type) => {
+                setSelectedClipId(id);
+                if (type) setSelectedClipType(type);
+              }}
+              onUpdateClipTransform={handleUpdateClipTransform}
+              onOpenEditModal={(clipId, clipType) => {
+                setSelectedClipId(clipId);
+                setSelectedClipType(clipType);
+                openModal(clipType === 'text' ? 'text' : clipType === 'stickers' || clipType === 'sticker' ? 'stickers' : 'crop');
+              }}
+              onOpenCropModal={(clipId) => {
+                setSelectedClipId(clipId);
+                setSelectedClipType('video');
+                openModal('crop');
+              }}
+              onOpenMaskModal={(clipId) => {
+                setSelectedClipId(clipId);
+                setSelectedClipType('video');
+                openModal('mask');
+              }}
+              onDeleteClip={handleDeleteClip}
+              onDuplicateClip={handleDuplicateClip}
             />
           </View>
 
@@ -930,6 +1310,7 @@ export default function App() {
 
             <Toolbar
               selectedClip={selectedClip}
+              selectedClipType={selectedClipType}
               onDeselectClip={() => setSelectedClipId(null)}
               onSplitClip={handleSplitClip}
               onDeleteClip={handleDeleteClip}
@@ -939,6 +1320,7 @@ export default function App() {
               onOpenSpeedModal={() => openModal('speed')}
               onOpenVolumeModal={() => openModal('volume')}
               onOpenCropModal={() => openModal('crop')}
+              onOpenMaskModal={() => openModal('mask')}
               onOpenAudioModal={() => openModal('audio')}
               onOpenTextModal={() => openModal('text')}
               onOpenFiltersModal={() => openModal('filters')}
@@ -965,6 +1347,9 @@ export default function App() {
         visible={activeModal === 'text'}
         onClose={closeModal}
         onAddText={handleAddText}
+        editingClip={selectedClipType === 'text' ? (selectedClip as TextClip) : null}
+        onUpdateText={handleUpdateText}
+        currentPlayheadTime={currentTime}
       />
 
       <AudioModal
@@ -991,6 +1376,13 @@ export default function App() {
         visible={activeModal === 'stickers'}
         onClose={closeModal}
         onAddSticker={handleAddSticker}
+        editingClip={
+          selectedClipType === 'stickers' || selectedClipType === 'sticker'
+            ? (selectedClip as StickerClip)
+            : null
+        }
+        onUpdateSticker={handleUpdateSticker}
+        currentPlayheadTime={currentTime}
       />
 
       <TransitionsModal
@@ -1044,10 +1436,13 @@ export default function App() {
       />
 
       <CropTransformModal
-        visible={activeModal === 'crop'}
+        visible={activeModal === 'crop' || activeModal === 'mask'}
         onClose={closeModal}
         currentTransform={selectedClip?.transform}
         currentAspectRatio={project?.aspectRatio || '9:16'}
+        currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
+        currentCrop={selectedClip?.crop || selectedClip?.transform?.crop}
+        initialTab={activeModal === 'mask' ? 'mask' : 'crop'}
         onApplyTransform={handleApplyTransform}
       />
 
@@ -1074,7 +1469,21 @@ export default function App() {
         onClose={closeModal}
         onAddAudio={handleAddAudio}
       />
-    </SafeAreaView>
+
+      {/* Clip Deletion Confirmation Modal */}
+      <ConfirmDeleteModal
+        visible={!!clipToDelete}
+        title="Delete Clip?"
+        message="Are you sure you want to delete this clip from the timeline?"
+        itemName={clipToDelete?.name}
+        itemType={clipToDelete?.type}
+        itemDetails={clipToDelete?.duration ? `Duration: ${clipToDelete.duration.toFixed(1)}s` : undefined}
+        confirmText="Delete Clip"
+        cancelText="Cancel"
+        onConfirm={handleConfirmDeleteClip}
+        onCancel={() => setClipToDelete(null)}
+      />
+    </View>
     </View>
   );
 }

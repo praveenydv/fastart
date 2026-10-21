@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
+import ConfirmDeleteModal from "./ConfirmDeleteModal";
 
 interface HomeDashboardProps {
   projects: any[];
@@ -22,6 +23,20 @@ interface HomeDashboardProps {
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
   unreadNotificationsCount?: number;
+  lastSession?: any;
+}
+
+function formatPlayheadTime(sec = 0) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  const ms = Math.floor((sec % 1) * 10);
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
+}
+
+function formatDuration(sec = 0) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
 export default function HomeDashboard({
@@ -34,12 +49,14 @@ export default function HomeDashboard({
   onOpenSettings,
   onOpenNotifications,
   unreadNotificationsCount = 0,
+  lastSession,
 }: HomeDashboardProps) {
   const [renamingProject, setRenamingProject] = useState<{
     id: string;
     title: string;
   } | null>(null);
   const [newTitleText, setNewTitleText] = useState("");
+  const [projectToDelete, setProjectToDelete] = useState<any | null>(null);
 
   const handleOpenRename = (id: string, currentTitle: string) => {
     setRenamingProject({ id, title: currentTitle });
@@ -54,6 +71,10 @@ export default function HomeDashboard({
     }
     setRenamingProject(null);
   };
+  const lastProject = lastSession
+    ? projects.find((p) => p.id === lastSession.projectId)
+    : null;
+
   return (
     <View style={styles.container}>
       {/* Top Navbar */}
@@ -98,6 +119,44 @@ export default function HomeDashboard({
       </View>
 
       <ScrollView style={styles.scrollArea}>
+        {/* "Resume Last Edit" Hero Card if available */}
+        {lastProject && (
+          <TouchableOpacity
+            style={styles.resumeCard}
+            onPress={() => {
+              soundEngine.playSfx("whoosh");
+              onOpenProject(lastProject.id);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.resumeLeft}>
+              <View style={styles.resumePlayCircle}>
+                <Ionicons name="play" size={20} color="#000000" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 14 }}>
+                <View style={styles.resumeTagRow}>
+                  <View style={styles.resumeTag}>
+                    <Text style={styles.resumeTagText}>RESUME LAST EDIT</Text>
+                  </View>
+                  <Text style={styles.resumeTimeText}>
+                    At {formatPlayheadTime(lastSession?.currentTime || 0)}
+                  </Text>
+                </View>
+                <Text style={styles.resumeTitle} numberOfLines={1}>
+                  {lastProject.title}
+                </Text>
+                <Text style={styles.resumeMeta}>
+                  {lastProject.tracks?.video?.length || 0} clips • {lastProject.aspectRatio} • {lastProject.resolution || "1080p"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.resumeBtn}>
+              <Text style={styles.resumeBtnText}>Continue</Text>
+              <Ionicons name="arrow-forward" size={14} color="#000000" />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* "+ New Project" Hero Card */}
         <TouchableOpacity
           style={styles.newProjectCard}
@@ -202,7 +261,7 @@ export default function HomeDashboard({
                   onPress={(e: any) => {
                     e?.stopPropagation?.();
                     soundEngine.playSfx("pop");
-                    onDeleteProject(proj.id);
+                    setProjectToDelete(proj);
                   }}
                   accessibilityLabel="Delete Project"
                 >
@@ -275,6 +334,29 @@ export default function HomeDashboard({
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Delete Project Confirmation Modal */}
+      <ConfirmDeleteModal
+        visible={!!projectToDelete}
+        title="Delete Project?"
+        message="Are you sure you want to delete this project? This will permanently delete the project and all timeline clips."
+        itemName={projectToDelete?.title}
+        itemType="Project"
+        itemDetails={
+          projectToDelete
+            ? `${projectToDelete.aspectRatio || "9:16"} • ${projectToDelete.resolution || "1080p"} • ${formatDuration(projectToDelete.duration || 0)}`
+            : undefined
+        }
+        confirmText="Delete Project"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (projectToDelete) {
+            onDeleteProject(projectToDelete.id);
+            setProjectToDelete(null);
+          }
+        }}
+        onCancel={() => setProjectToDelete(null)}
+      />
     </View>
   );
 }
@@ -564,5 +646,81 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontSize: 13,
     fontWeight: "900",
+  },
+  resumeCard: {
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "rgba(0, 242, 254, 0.4)",
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  resumeLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  resumePlayCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#00F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
+  resumeTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  resumeTag: {
+    backgroundColor: "#00F2FE",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  resumeTagText: {
+    color: "#000000",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  resumeTimeText: {
+    color: "#00F2FE",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  resumeTitle: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  resumeMeta: {
+    color: "#8E95A5",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  resumeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#00F2FE",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  resumeBtnText: {
+    color: "#000000",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });

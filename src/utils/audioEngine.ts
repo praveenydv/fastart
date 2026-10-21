@@ -3,6 +3,15 @@
 class SoundEngine {
   private audioCtx: AudioContext | null = null;
   private lastBeat: number = -1;
+  private isEnabled: boolean = true;
+
+  setEnabled(enabled: boolean) {
+    this.isEnabled = enabled;
+  }
+
+  getEnabled(): boolean {
+    return this.isEnabled;
+  }
 
   getAudioContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -20,6 +29,7 @@ class SoundEngine {
 
   // Play procedural sound effects for instant feedback
   playSfx(type: 'whoosh' | 'split' | 'cut' | 'pop' | 'boom' | 'click' = 'click') {
+    if (!this.isEnabled) return;
     const ctx = this.getAudioContext();
     if (!ctx) return;
 

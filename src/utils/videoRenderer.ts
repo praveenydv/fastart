@@ -186,13 +186,23 @@ export class VideoRenderer {
     // Synchronize HTML5 video playback
     this.syncPlayback(activeClip, time, isPlaying);
 
-    // 1. Draw Active Video Clip Frame
+    const hasAnyTrackContent = Boolean(
+      videoClips.length > 0 ||
+      (project.tracks.text && project.tracks.text.length > 0) ||
+      (project.tracks.stickers && project.tracks.stickers.length > 0) ||
+      (project.tracks.effects && project.tracks.effects.length > 0) ||
+      (project.tracks.audio && project.tracks.audio.length > 0)
+    );
+
+    // 1. Draw Active Video Clip Frame or Studio Canvas Background
     if (activeClip) {
       this.drawClip(ctx, activeClip, time, w, h, nextClip);
-    } else if (videoClips.length > 0) {
-      this.drawProceduralPlaceholder(ctx, w, h, "FastArt Video Engine", time);
-    } else {
+    } else if (!hasAnyTrackContent) {
       this.drawProceduralPlaceholder(ctx, w, h, "No Media Added", time);
+    } else {
+      // Solid sleek dark studio canvas for tracks with text, stickers, effects, or timeline gaps
+      ctx.fillStyle = "#0B0E14";
+      ctx.fillRect(0, 0, w, h);
     }
 
     // 2. Draw Active Effects
@@ -296,14 +306,35 @@ export class VideoRenderer {
         (mediaEl as any).naturalHeight ||
         (mediaEl as any).height ||
         720;
-      const aspect = mw / mh;
+
+      // Custom Size Crop
+      const crop = clip.crop || clip.transform?.crop;
+      let sx = 0;
+      let sy = 0;
+      let sw = mw;
+      let sh = mh;
+      if (crop && crop.width > 0 && crop.height > 0) {
+        sx = Math.max(0, (crop.x / 100) * mw);
+        sy = Math.max(0, (crop.y / 100) * mh);
+        sw = Math.min(mw - sx, (crop.width / 100) * mw);
+        sh = Math.min(mh - sy, (crop.height / 100) * mh);
+      }
+
+      const aspect = sw / sh;
       let dw = w;
       let dh = w / aspect;
       if (dh < h) {
         dh = h;
         dw = h * aspect;
       }
-      ctx.drawImage(mediaEl, -dw / 2, -dh / 2, dw, dh);
+
+      // Video Masking
+      const mask = clip.mask || clip.transform?.mask;
+      if (mask && mask.shape && mask.shape !== "none") {
+        this.applyMaskPath(ctx, mask, dw, dh);
+      }
+
+      ctx.drawImage(mediaEl, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
     } else {
       this.drawLoadingPreview(ctx, clip, clipLocalTime, w, h);
     }
@@ -317,6 +348,62 @@ export class VideoRenderer {
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
     }
+  }
+
+  applyMaskPath(
+    ctx: CanvasRenderingContext2D,
+    mask: any,
+    dw: number,
+    dh: number,
+  ) {
+    const size = mask.size || 50;
+    const offsetX = (mask.x || 0) * (dw / 100);
+    const offsetY = (mask.y || 0) * (dh / 100);
+    const rot = ((mask.rotation || 0) * Math.PI) / 180;
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.rotate(rot);
+
+    ctx.beginPath();
+    if (mask.shape === "circle") {
+      const radius = (Math.min(dw, dh) * size) / 200;
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    } else if (mask.shape === "rectangle") {
+      const rw = (dw * size) / 100;
+      const rh = (dh * size) / 100;
+      const rad = mask.roundness || 12;
+      if ((ctx as any).roundRect) {
+        (ctx as any).roundRect(-rw / 2, -rh / 2, rw, rh, rad);
+      } else {
+        ctx.rect(-rw / 2, -rh / 2, rw, rh);
+      }
+    } else if (mask.shape === "linear") {
+      ctx.rect(-dw, -dh, dw * 2, dh);
+    } else if (mask.shape === "mirror") {
+      const bandH = (dh * size) / 100;
+      ctx.rect(-dw, -bandH / 2, dw * 2, bandH);
+    } else if (mask.shape === "heart") {
+      const s = (Math.min(dw, dh) * size) / 150;
+      ctx.moveTo(0, s * 0.3);
+      ctx.bezierCurveTo(-s * 0.5, -s * 0.2, -s * 0.8, s * 0.3, 0, s * 0.9);
+      ctx.bezierCurveTo(s * 0.8, s * 0.3, s * 0.5, -s * 0.2, 0, s * 0.3);
+    } else if (mask.shape === "star") {
+      const outerR = (Math.min(dw, dh) * size) / 200;
+      const innerR = outerR * 0.45;
+      const points = 5;
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const a = (i * Math.PI) / points - Math.PI / 2;
+        const x = r * Math.cos(a);
+        const y = r * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    }
+    ctx.restore();
+    ctx.clip();
   }
 
   drawLoadingPreview(
@@ -651,12 +738,62 @@ export class VideoRenderer {
       }
     }
 
-    // Text Shadow / Glow
-    if (style.textShadowColor) {
+    // Text Effects & Shadows
+    const effect = style.textEffect || "none";
+
+    if (effect === "neon") {
+      const glowColor = style.borderColor || style.color || "#00F2FE";
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    } else if (effect === "3d") {
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+      for (let offset = 4; offset >= 1; offset--) {
+        ctx.fillText(displayText, offset, offset);
+      }
+      ctx.restore();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 4;
+      ctx.shadowOffsetY = 4;
+    } else if (effect === "shadow") {
+      ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 5;
+    } else if (effect === "cyber") {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 0, 80, 0.85)";
+      ctx.fillText(displayText, 3, 2);
+      ctx.fillStyle = "rgba(0, 242, 254, 0.85)";
+      ctx.fillText(displayText, -2, -2);
+      ctx.restore();
+    } else if (effect === "gold") {
+      ctx.shadowColor = "#FFE600";
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    } else if (effect === "glitch") {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 0, 80, 0.8)";
+      ctx.fillText(displayText, 3, 0);
+      ctx.fillStyle = "rgba(0, 242, 254, 0.8)";
+      ctx.fillText(displayText, -3, 0);
+      ctx.restore();
+    } else if (style.textShadowColor) {
       ctx.shadowColor = style.textShadowColor;
       ctx.shadowBlur = style.textShadowRadius || 12;
       ctx.shadowOffsetX = style.textShadowOffset?.width || 0;
       ctx.shadowOffsetY = style.textShadowOffset?.height || 0;
+    }
+
+    // Optional Stroke / Outline
+    if (effect === "stroke" || (style.strokeColor && (style.strokeWidth || 2))) {
+      ctx.strokeStyle = style.strokeColor || style.borderColor || "#000000";
+      ctx.lineWidth = style.strokeWidth || 3;
+      ctx.strokeText(displayText, 0, 0);
     }
 
     ctx.fillStyle = style.color || "#FFFFFF";
@@ -713,6 +850,8 @@ export class VideoRenderer {
     exportCanvas.width = this.canvas.width;
     exportCanvas.height = this.canvas.height;
     const exportRenderer = new VideoRenderer(exportCanvas);
+    // Inherit preloaded media cache from this renderer so clips render immediately
+    exportRenderer.videoElements = new Map(this.videoElements);
 
     // 1. PNG Snapshot / Poster Frame Export
     if (format === "png") {
@@ -808,6 +947,30 @@ export class VideoRenderer {
 
     // 4. Video Recording (MP4 or WebM)
     const totalFrames = Math.ceil(duration * fps);
+
+    // Initial frame render so canvas has raster pixels before stream capture
+    exportRenderer.renderFrame(project, 0);
+
+    // Safari fallback check if captureStream is not supported
+    if (typeof (exportCanvas as any).captureStream !== "function") {
+      const captureTime = Math.max(0, Math.min(currentTime, duration));
+      exportRenderer.renderFrame(project, captureTime);
+      return new Promise((resolve) => {
+        exportCanvas.toBlob((blob) => {
+          const finalBlob = blob || new Blob([], { type: "image/png" });
+          const videoUrl = URL.createObjectURL(finalBlob);
+          resolve({
+            blob: finalBlob,
+            videoUrl,
+            mimeType: "image/png",
+            format: "png",
+            extension: "png",
+            fileSize: finalBlob.size,
+          });
+        }, "image/png");
+      });
+    }
+
     const stream = (exportCanvas as any).captureStream(fps);
 
     // Pick best MIME type supported by browser
@@ -819,19 +982,24 @@ export class VideoRenderer {
     let targetExtension = "webm";
 
     if (format === "mp4") {
-      targetExtension = "mp4";
       if (isSupported("video/mp4;codecs=avc1")) {
         mimeType = "video/mp4;codecs=avc1";
+        targetExtension = "mp4";
       } else if (isSupported("video/mp4")) {
         mimeType = "video/mp4";
+        targetExtension = "mp4";
       } else if (isSupported("video/mp4;codecs=h264")) {
         mimeType = "video/mp4;codecs=h264";
+        targetExtension = "mp4";
       } else if (isSupported("video/webm;codecs=h264")) {
         mimeType = "video/webm;codecs=h264";
+        targetExtension = "webm";
       } else if (isSupported("video/webm;codecs=vp9")) {
         mimeType = "video/webm;codecs=vp9";
+        targetExtension = "webm";
       } else {
         mimeType = "video/webm";
+        targetExtension = "webm";
       }
     } else {
       // webm
@@ -859,22 +1027,25 @@ export class VideoRenderer {
 
     return new Promise(async (resolve, reject) => {
       mediaRecorder.onstop = () => {
-        const finalMime = format === "mp4" ? "video/mp4" : mimeType;
-        const blob = new Blob(recordedChunks, { type: finalMime });
-        const videoUrl = URL.createObjectURL(blob);
+        const finalBlob =
+          recordedChunks.length > 0
+            ? new Blob(recordedChunks, { type: mimeType })
+            : new Blob([], { type: mimeType });
+        const videoUrl = URL.createObjectURL(finalBlob);
         resolve({
-          blob,
+          blob: finalBlob,
           videoUrl,
-          mimeType: finalMime,
+          mimeType,
           format,
           extension: targetExtension,
-          fileSize: blob.size,
+          fileSize: finalBlob.size,
         });
       };
 
       mediaRecorder.onerror = (err: any) => reject(err);
 
-      mediaRecorder.start();
+      // Start recording with 100ms timeslice to ensure continuous chunk buffer delivery
+      mediaRecorder.start(100);
 
       for (let frame = 0; frame < totalFrames; frame++) {
         const frameTime = frame / fps;
@@ -888,6 +1059,11 @@ export class VideoRenderer {
         await new Promise((r) => setTimeout(r, 1000 / fps));
       }
 
+      if (typeof mediaRecorder.requestData === "function" && mediaRecorder.state === "recording") {
+        try {
+          mediaRecorder.requestData();
+        } catch (e) {}
+      }
       mediaRecorder.stop();
     });
   }
