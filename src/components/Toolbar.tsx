@@ -29,9 +29,10 @@ interface ToolbarProps {
   onOpenAutoCut?: () => void;
   onOpenCutoutModal?: () => void;
   onOpenMotionTracking?: () => void;
+  onOpenCanvasModal?: () => void;
 }
 
-export default function Toolbar({
+function Toolbar({
   selectedClip,
   selectedClipType = 'video',
   onDeselectClip,
@@ -56,6 +57,7 @@ export default function Toolbar({
   onOpenAutoCut,
   onOpenCutoutModal,
   onOpenMotionTracking,
+  onOpenCanvasModal,
 }: ToolbarProps) {
   // If a clip is actively selected, show Contextual Editing Tools based on clip type
   if (selectedClip) {
@@ -156,6 +158,21 @@ export default function Toolbar({
                   <Ionicons name="crop-outline" size={20} color="#38BDF8" />
                 </View>
                 <Text style={styles.toolLabel}>Crop</Text>
+              </TouchableOpacity>
+
+              {/* 4b. Rotate 90° */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('pop');
+                  if (onRotateClip) onRotateClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="refresh-outline" size={20} color="#38BDF8" />
+                </View>
+                <Text style={styles.toolLabel}>Rotate</Text>
               </TouchableOpacity>
 
               {/* 5. Masking */}
@@ -339,13 +356,30 @@ export default function Toolbar({
                 </View>
                 <Text style={styles.toolLabel}>Edit</Text>
               </TouchableOpacity>
+
+              {/* 2. AI Motion Tracking for Text */}
+              {onOpenMotionTracking && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx('click');
+                    onOpenMotionTracking();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="scan-outline" size={20} color="#FFE600" />
+                  </View>
+                  <Text style={styles.toolLabel}>Tracking</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
           {/* ================= STICKER TOOLS ================= */}
           {isSticker && (
             <>
-              {/* 1. Change Sticker / Emojis */}
+              {/* 1. Edit / Change Sticker / Emojis */}
               <TouchableOpacity
                 style={styles.toolItem}
                 onPress={() => {
@@ -355,17 +389,34 @@ export default function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="happy-outline" size={20} color="#FBBF24" />
+                  <Ionicons name="pencil" size={20} color="#FBBF24" />
                 </View>
-                <Text style={styles.toolLabel}>Stickers</Text>
+                <Text style={styles.toolLabel}>Edit</Text>
               </TouchableOpacity>
+
+              {/* 2. AI Motion Tracking for Stickers */}
+              {onOpenMotionTracking && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx('click');
+                    onOpenMotionTracking();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="scan-outline" size={20} color="#FFE600" />
+                  </View>
+                  <Text style={styles.toolLabel}>Tracking</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
           {/* ================= EFFECT TOOLS ================= */}
           {isEffect && (
             <>
-              {/* 1. Change / Adjust Effect */}
+              {/* 1. Edit / Adjust Effect Preset & Intensity */}
               <TouchableOpacity
                 style={styles.toolItem}
                 onPress={() => {
@@ -375,9 +426,9 @@ export default function Toolbar({
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="sparkles-outline" size={20} color="#818CF8" />
+                  <Ionicons name="pencil" size={20} color="#818CF8" />
                 </View>
-                <Text style={styles.toolLabel}>Effect</Text>
+                <Text style={styles.toolLabel}>Edit</Text>
               </TouchableOpacity>
             </>
           )}
@@ -439,6 +490,23 @@ export default function Toolbar({
           </View>
           <Text style={styles.toolLabel}>Media</Text>
         </TouchableOpacity>
+
+        {/* 1b. Camera Record */}
+        {onOpenCamera && (
+          <TouchableOpacity
+            style={styles.toolItem}
+            onPress={() => {
+              soundEngine.playSfx('click');
+              onOpenCamera();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="camera-outline" size={20} color="#FF0050" />
+            </View>
+            <Text style={styles.toolLabel}>Camera</Text>
+          </TouchableOpacity>
+        )}
 
         {/* 2. Audio Library */}
         <TouchableOpacity
@@ -517,17 +585,18 @@ export default function Toolbar({
           <Text style={styles.toolLabel}>Effects</Text>
         </TouchableOpacity>
 
-        {/* 6. Canvas Aspect Ratio */}
+        {/* 6. Canvas Aspect Ratio & Format */}
         <TouchableOpacity
           style={styles.toolItem}
           onPress={() => {
             soundEngine.playSfx('click');
-            if (onOpenCropModal) onOpenCropModal();
+            if (onOpenCanvasModal) onOpenCanvasModal();
+            else if (onOpenCropModal) onOpenCropModal();
           }}
           activeOpacity={0.7}
         >
           <View style={styles.iconCircle}>
-            <Ionicons name="crop-outline" size={20} color="#38BDF8" />
+            <Ionicons name="scan-outline" size={20} color="#38BDF8" />
           </View>
           <Text style={styles.toolLabel}>Canvas</Text>
         </TouchableOpacity>
@@ -608,3 +677,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default React.memo(Toolbar);

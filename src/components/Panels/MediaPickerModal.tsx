@@ -26,9 +26,10 @@ interface MediaPickerModalProps {
   visible: boolean;
   onClose: () => void;
   onAddMedia: (clip: any) => void;
+  onOpenCamera?: () => void;
 }
 
-export default function MediaPickerModal({ visible, onClose, onAddMedia }: MediaPickerModalProps) {
+export default function MediaPickerModal({ visible, onClose, onAddMedia, onOpenCamera }: MediaPickerModalProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'video' | 'photo' | 'uploaded'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaItems, setMediaItems] = useState<OpenMediaItem[]>([]);
@@ -89,10 +90,12 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 title,
                 type: isVideo ? 'video' : 'photo',
                 url: saved.url,
+                thumbnail: saved.thumbnail,
                 duration: saved.duration,
                 startTime: 0,
                 trimIn: 0,
                 trimOut: saved.duration,
+                mediaDuration: saved.duration,
                 speed: 1.0,
                 volume: 1.0,
                 filter: 'normal',
@@ -139,6 +142,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
             startTime: 0,
             trimIn: 0,
             trimOut: dur,
+            mediaDuration: dur,
             speed: 1.0,
             volume: 1.0,
             filter: 'normal',
@@ -179,6 +183,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
       startTime: 0,
       trimIn: 0,
       trimOut: item.duration,
+      mediaDuration: item.duration,
       speed: 1.0,
       volume: 1.0,
       filter: 'normal',
@@ -197,6 +202,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
       startTime: 0,
       trimIn: 0,
       trimOut: item.duration || 5.0,
+      mediaDuration: item.mediaDuration || item.duration || 5.0,
     };
     soundEngine.playSfx('pop');
     onAddMedia(clip);
@@ -311,6 +317,31 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
               </View>
             </TouchableOpacity>
 
+            {/* Live Camera Record Card */}
+            {onOpenCamera && (
+              <TouchableOpacity
+                style={[styles.deviceImportCard, { borderColor: 'rgba(255, 0, 80, 0.35)', backgroundColor: 'rgba(255, 0, 80, 0.06)' }]}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenCamera();
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.deviceIconBox, { backgroundColor: 'rgba(255, 0, 80, 0.15)' }]}>
+                  <Ionicons name="camera" size={24} color="#FF0050" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 14 }}>
+                  <Text style={[styles.deviceCardTitle, { color: '#FFFFFF' }]}>Record with Camera</Text>
+                  <Text style={styles.deviceCardSubtext}>
+                    Capture live video or photo with your phone/webcam
+                  </Text>
+                </View>
+                <View style={[styles.uploadChevronBox, { backgroundColor: 'rgba(255, 0, 80, 0.15)' }]}>
+                  <Ionicons name="videocam" size={16} color="#FF0050" />
+                </View>
+              </TouchableOpacity>
+            )}
+
             {/* TAB: UPLOADED MEDIA */}
             {activeTab === 'uploaded' && (
               <>
@@ -385,7 +416,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                     </Text>
                     <View style={styles.ossBadge}>
                       <Ionicons name="globe-outline" size={10} color="#00F2FE" />
-                      <Text style={styles.ossBadgeText}>CC0 & Creative Commons</Text>
+                      <Text style={styles.ossBadgeText}>{"CC0 & Creative Commons"}</Text>
                     </View>
                   </View>
                 </View>

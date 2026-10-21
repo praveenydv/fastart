@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { EFFECT_PRESETS } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
+import { EffectClip } from '../../types/project';
 
 interface EffectsModalProps {
   visible: boolean;
   onClose: () => void;
   activeEffect?: string;
   onAddEffect: (effect: any) => void;
+  editingClip?: EffectClip | null;
+  onUpdateEffect?: (effect: EffectClip) => void;
 }
 
 export default function EffectsModal({
@@ -23,9 +26,29 @@ export default function EffectsModal({
   onClose,
   activeEffect,
   onAddEffect,
+  editingClip,
+  onUpdateEffect,
 }: EffectsModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [intensity, setIntensity] = useState<number>(0.8);
+  const [selectedEffectId, setSelectedEffectId] = useState<string>(activeEffect || 'glitch');
+
+  useEffect(() => {
+    if (visible) {
+      if (editingClip) {
+        const effType = editingClip.type || 'glitch';
+        setSelectedEffectId(effType);
+        setIntensity(editingClip.intensity !== undefined ? editingClip.intensity : 0.8);
+        const preset = EFFECT_PRESETS.find((p) => p.type === effType || p.id === effType);
+        if (preset && preset.category) {
+          setActiveCategory(preset.category);
+        }
+      } else {
+        setSelectedEffectId(activeEffect || 'glitch');
+        setIntensity(0.8);
+      }
+    }
+  }, [visible, editingClip, activeEffect]);
 
   const categories = [
     { id: 'All', label: 'All' },
@@ -41,11 +64,34 @@ export default function EffectsModal({
 
   const handleSelect = (item: any) => {
     soundEngine.playSfx('pop');
+    setSelectedEffectId(item.type || item.id);
+    if (editingClip && onUpdateEffect) {
+      const updated: EffectClip = {
+        ...editingClip,
+        type: item.type || item.id,
+        name: item.name,
+        intensity: item.id === 'none' ? 0 : intensity,
+      };
+      onUpdateEffect(updated);
+      onClose();
+      return;
+    }
     onAddEffect({
       ...item,
       intensity: item.id === 'none' ? 0 : intensity,
     });
     onClose();
+  };
+
+  const handleIntensityChange = (val: number) => {
+    soundEngine.playSfx('click');
+    setIntensity(val);
+    if (editingClip && onUpdateEffect) {
+      onUpdateEffect({
+        ...editingClip,
+        intensity: val,
+      });
+    }
   };
 
   return (
@@ -54,10 +100,31 @@ export default function EffectsModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Effects</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View>
+              <Text style={styles.sheetTitle}>
+                {editingClip ? 'Edit Effect' : 'Effects'}
+              </Text>
+              {editingClip && (
+                <Text style={styles.sheetSubtitle}>
+                  {editingClip.name || editingClip.type} • {(editingClip.duration || 0).toFixed(1)}s
+                </Text>
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {editingClip && (
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={styles.doneBtn}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={15} color="#10B981" />
+                  <Text style={styles.doneBtnText}>Done</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Category Filter Pills */}
@@ -92,15 +159,12 @@ export default function EffectsModal({
                 { label: 'Standard', val: 0.8 },
                 { label: 'Intense', val: 1.0 },
               ].map((opt) => {
-                const isSelected = intensity === opt.val;
+                const isSelected = Math.abs(intensity - opt.val) < 0.05;
                 return (
                   <TouchableOpacity
                     key={opt.label}
                     style={[styles.intensityPill, isSelected && styles.intensityPillActive]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      setIntensity(opt.val);
-                    }}
+                    onPress={() => handleIntensityChange(opt.val)}
                   >
                     <Text style={[styles.intensityText, isSelected && styles.intensityTextActive]}>
                       {opt.label}
@@ -114,23 +178,27 @@ export default function EffectsModal({
           <ScrollView style={styles.sheetBody}>
             <View style={styles.grid}>
               {filteredEffects.map((item) => {
-                const isActive = activeEffect === item.id;
+                const isCurrentActive =
+                  selectedEffectId === item.id ||
+                  selectedEffectId === item.type ||
+                  activeEffect === item.id ||
+                  activeEffect === item.type;
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.effectCard, isActive && styles.effectCardActive]}
+                    style={[styles.effectCard, isCurrentActive && styles.effectCardActive]}
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.8}
                   >
-                    <View style={[styles.iconBox, isActive && styles.iconBoxActive]}>
+                    <View style={[styles.iconBox, isCurrentActive && styles.iconBoxActive]}>
                       <Ionicons
                         name={(item.icon || 'sparkles-outline') as any}
                         size={24}
-                        color={isActive ? '#00F2FE' : '#D946EF'}
+                        color={isCurrentActive ? '#00F2FE' : '#D946EF'}
                       />
                     </View>
                     <Text
-                      style={[styles.effectLabel, isActive && styles.effectLabelActive]}
+                      style={[styles.effectLabel, isCurrentActive && styles.effectLabelActive]}
                       numberOfLines={1}
                     >
                       {item.name}
@@ -187,6 +255,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E2333',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  doneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  doneBtnText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '700',
   },
   categoryRow: {
     paddingHorizontal: 16,

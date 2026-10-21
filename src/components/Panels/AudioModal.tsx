@@ -132,6 +132,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
       startTime: 0,
       trimIn: 0,
       trimOut: item.duration || 10.0,
+      mediaDuration: item.duration || 10.0,
       volume: 0.9,
       url: item.url,
     };
@@ -192,6 +193,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
               startTime: 0,
               trimIn: 0,
               trimOut: validDuration,
+              mediaDuration: validDuration,
               volume: 1.0,
               url: saved.url,
             };
@@ -222,14 +224,16 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
         });
         if (!result.canceled && result.assets?.[0]) {
           const asset = result.assets[0];
+          const dur = asset.duration ? asset.duration / 1000 : 15.0;
           const audioClip: AudioClip = {
             id: 'clip-a-' + Date.now(),
             title: asset.fileName || 'Uploaded Audio',
             artist: 'Device Library',
-            duration: asset.duration ? asset.duration / 1000 : 15.0,
+            duration: dur,
             startTime: 0,
             trimIn: 0,
-            trimOut: asset.duration ? asset.duration / 1000 : 15.0,
+            trimOut: dur,
+            mediaDuration: dur,
             volume: 1.0,
             url: asset.uri,
           };
@@ -398,7 +402,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
                   </Text>
                   <View style={styles.ossBadge}>
                     <Ionicons name="globe-outline" size={10} color="#00F2FE" />
-                    <Text style={styles.ossBadgeText}>Openverse & CC0 Library</Text>
+                    <Text style={styles.ossBadgeText}>{"Openverse & CC0 Library"}</Text>
                   </View>
                 </View>
 

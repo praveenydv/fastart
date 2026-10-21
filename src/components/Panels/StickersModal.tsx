@@ -101,12 +101,31 @@ export default function StickersModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>
-              {editingClip ? 'Edit Sticker' : 'Stickers'}
-            </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View>
+              <Text style={styles.sheetTitle}>
+                {editingClip ? 'Edit Sticker' : 'Stickers'}
+              </Text>
+              {editingClip && (
+                <Text style={styles.sheetSubtitle}>
+                  Current: {editingClip.char} • {(editingClip.duration || 3.0).toFixed(1)}s
+                </Text>
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {editingClip && (
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={styles.doneBtn}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={15} color="#10B981" />
+                  <Text style={styles.doneBtnText}>Done</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Search Bar */}
@@ -153,17 +172,18 @@ export default function StickersModal({
             <View style={styles.grid}>
               {filteredStickers.map((item) => {
                 const isBadge = item.char.length > 2;
+                const isSelected = editingClip?.char === item.char;
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.stickerCard, isBadge && styles.badgeCard]}
+                    style={[styles.stickerCard, isBadge && styles.badgeCard, isSelected && styles.selectedStickerCard]}
                     onPress={() => handleSelectSticker(item)}
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.stickerEmoji, isBadge && styles.badgeText]}>
                       {item.char}
                     </Text>
-                    <Text style={styles.stickerLabel} numberOfLines={1}>
+                    <Text style={[styles.stickerLabel, isSelected && { color: '#00F2FE', fontWeight: '800' }]} numberOfLines={1}>
                       {item.label}
                     </Text>
                   </TouchableOpacity>
@@ -307,5 +327,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  doneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  doneBtnText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectedStickerCard: {
+    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
   },
 });

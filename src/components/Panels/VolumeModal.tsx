@@ -66,7 +66,7 @@ export default function VolumeModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Ionicons name="volume-high" size={20} color="#00F2FE" />
-              <Text style={styles.headerTitle}>Volume & Fade</Text>
+              <Text style={styles.headerTitle}>{"Volume & Fade"}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#8E95A5" />

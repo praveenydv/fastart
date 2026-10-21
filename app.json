@@ -7,11 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B0D13"
-    },
+    "backgroundColor": "#0B0D13",
     "ios": {
       "supportsTablet": true
     },
@@ -20,11 +16,36 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B0D13"
       },
-      "package": "com.FastArt"
+      "package": "com.FastArt",
+      "backgroundColor": "#0B0D13"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "backgroundColor": "#0B0D13"
     },
-    "plugins": ["expo-sharing"]
+    "plugins": [
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "FastArt requires access to save exported videos and photos to your device gallery.",
+          "savePhotosPermission": "FastArt requires permission to save videos and photos to your device gallery."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0D13",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#0B0D13"
+          }
+        }
+      ],
+      "expo-font"
+    ]
   }
 }

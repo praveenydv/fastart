@@ -112,7 +112,7 @@ export default function AIEnhanceModal({
               {/* Sharpness */}
               <View style={styles.sliderRow}>
                 <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>Clarity & Sharpness</Text>
+                  <Text style={styles.sliderLabel}>{"Clarity & Sharpness"}</Text>
                   <Text style={styles.badge}>{sharpness}%</Text>
                 </View>
                 {Platform.OS === 'web' && (

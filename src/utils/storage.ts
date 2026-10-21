@@ -505,10 +505,17 @@ export const addNotification = (
   const updated = [newNotif, ...current].slice(0, 50);
   saveNotifications(updated);
 
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('fastart:notification_added', { detail: newNotif })
-    );
+  if (
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    typeof window.dispatchEvent === 'function' &&
+    typeof CustomEvent !== 'undefined'
+  ) {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('fastart:notification_added', { detail: newNotif })
+      );
+    } catch (_) {}
   }
 
   return newNotif;
@@ -517,10 +524,17 @@ export const addNotification = (
 export const deleteNotification = (id: string): AppNotification[] => {
   const current = loadNotifications().filter((n) => n.id !== id);
   saveNotifications(current);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('fastart:notifications_changed', { detail: current })
-    );
+  if (
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    typeof window.dispatchEvent === 'function' &&
+    typeof CustomEvent !== 'undefined'
+  ) {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('fastart:notifications_changed', { detail: current })
+      );
+    } catch (_) {}
   }
   return current;
 };

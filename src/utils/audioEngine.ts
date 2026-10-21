@@ -1,5 +1,4 @@
-// Web Audio API Synthesizer and Zero-Latency Touch Audio Engine (TypeScript)
-// Pre-renders acoustic impulse buffers for instantaneous touch/click feedback without audio delay
+import { Platform } from 'react-native';
 
 export type SfxType = 'whoosh' | 'split' | 'cut' | 'pop' | 'boom' | 'click';
 
@@ -12,10 +11,10 @@ class SoundEngine {
 
   constructor() {
     this.setupAutoUnlock();
-    // Disabled by default; initialize from saved settings if user explicitly enabled it
-    if (typeof window !== 'undefined') {
+    // Disabled by default; initialize from saved settings on web if user explicitly enabled it
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
       try {
-        const raw = localStorage.getItem('@fastart_settings_v1');
+        const raw = window.localStorage.getItem('@fastart_settings_v1');
         if (raw) {
           const parsed = JSON.parse(raw);
           this.isEnabled = parsed.soundEffects === true;
@@ -40,7 +39,7 @@ class SoundEngine {
    * Initializes or returns the current AudioContext with lowest latency interactive mode
    */
   getAudioContext(): AudioContext | null {
-    if (typeof window === 'undefined') return null;
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
 
     if (!this.audioCtx) {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -65,14 +64,22 @@ class SoundEngine {
    * Automatically warm up and unlock audio context on very first user interaction in the capture phase
    */
   private setupAutoUnlock() {
-    if (typeof window === 'undefined') return;
+    if (
+      Platform.OS !== 'web' ||
+      typeof window === 'undefined' ||
+      typeof window.addEventListener !== 'function'
+    ) {
+      return;
+    }
 
     const unlock = () => {
       this.initAudio();
       // Once running, remove listeners
       if (this.audioCtx && this.audioCtx.state === 'running') {
         ['pointerdown', 'touchstart', 'mousedown', 'keydown'].forEach((evt) => {
-          window.removeEventListener(evt, unlock, true);
+          if (typeof window.removeEventListener === 'function') {
+            window.removeEventListener(evt, unlock, true);
+          }
         });
       }
     };
@@ -216,6 +223,14 @@ class SoundEngine {
       const gain = ctx.createGain();
       const now = ctx.currentTime;
 
+      // Automatically reclaim Web Audio nodes from mobile RAM when sound ends
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {}
+      };
+
       if (type === 'whoosh') {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(180, now);
@@ -288,6 +303,12 @@ class SoundEngine {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         const now = ctx.currentTime;
+        osc.onended = () => {
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch {}
+        };
         osc.type = 'sine';
         osc.frequency.setValueAtTime(beat % 2 === 0 ? 110 : 85, now);
         gain.gain.setValueAtTime(0.08, now);

@@ -733,7 +733,7 @@ export default function TextModal({
                 </ScrollView>
 
                 {/* Border & Outline */}
-                <Text style={styles.sectionTitle}>BORDER & GLOW OUTLINE</Text>
+                <Text style={styles.sectionTitle}>{"BORDER & GLOW OUTLINE"}</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -817,7 +817,7 @@ export default function TextModal({
                 </ScrollView>
 
                 {/* Viral Presets & Hooks */}
-                <Text style={styles.sectionTitle}>VIRAL HOOKS & PRESETS</Text>
+                <Text style={styles.sectionTitle}>{"VIRAL HOOKS & PRESETS"}</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}

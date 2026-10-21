@@ -27,7 +27,7 @@ const objectUrlCache = new Map<string, string>();
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function getIndexedDB(): Promise<IDBDatabase> {
-  if (typeof window === 'undefined' || !window.indexedDB) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.indexedDB) {
     return Promise.reject(new Error('IndexedDB not supported in this environment'));
   }
   if (!dbPromise) {
@@ -54,7 +54,7 @@ export async function persistLargeMedia(
   name: string,
   type: 'video' | 'photo' | 'audio',
   metadata?: { duration?: number; width?: number; height?: number; thumbnail?: string }
-): Promise<{ id: string; url: string; size: number; duration: number }> {
+): Promise<{ id: string; url: string; size: number; duration: number; thumbnail?: string }> {
   const mimeType = fileOrBlob.type || (type === 'video' ? 'video/mp4' : type === 'audio' ? 'audio/mpeg' : 'image/jpeg');
   const size = fileOrBlob.size;
 
@@ -117,7 +117,7 @@ export async function persistLargeMedia(
     }
   }
 
-  return { id, url: liveUrl, size, duration };
+  return { id, url: liveUrl, size, duration, thumbnail };
 }
 
 // Retrieve live object URL for a media ID from IndexedDB
@@ -153,7 +153,7 @@ export function extractVideoMetadata(
   fileOrBlob: Blob | File | string
 ): Promise<{ duration: number; width: number; height: number; thumbnail: string }> {
   return new Promise((resolve) => {
-    if (typeof window === 'undefined') {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') {
       return resolve({ duration: 6.0, width: 1920, height: 1080, thumbnail: '' });
     }
 

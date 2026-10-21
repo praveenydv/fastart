@@ -149,7 +149,7 @@ export default function FiltersModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Filters & LUTs</Text>
+            <Text style={styles.sheetTitle}>{"Filters & LUTs"}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
             </TouchableOpacity>

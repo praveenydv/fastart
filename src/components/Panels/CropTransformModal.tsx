@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
-import { ClipTransform, AspectRatio, MaskConfig, CustomCrop, MaskShape } from '../../types/project';
+import { ClipTransform, AspectRatio, MaskConfig, MaskShape } from '../../types/project';
 
 interface CropTransformModalProps {
   visible: boolean;
@@ -18,13 +18,11 @@ interface CropTransformModalProps {
   currentTransform?: ClipTransform;
   currentAspectRatio?: AspectRatio;
   currentMask?: MaskConfig;
-  currentCrop?: CustomCrop;
-  initialTab?: 'crop' | 'mask';
+  initialTab?: 'mask' | 'adjust';
   onApplyTransform: (
     transform: ClipTransform,
     newAspectRatio?: AspectRatio,
-    newMask?: MaskConfig,
-    newCrop?: CustomCrop
+    newMask?: MaskConfig
   ) => void;
 }
 
@@ -37,11 +35,10 @@ export default function CropTransformModal({
   currentTransform,
   currentAspectRatio = '9:16',
   currentMask,
-  currentCrop,
-  initialTab = 'crop',
+  initialTab = 'mask',
   onApplyTransform,
 }: CropTransformModalProps) {
-  const [activeTab, setActiveTab] = useState<'crop' | 'mask' | 'adjust'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'mask' | 'adjust'>(initialTab === 'adjust' ? 'adjust' : 'mask');
   const [scale, setScale] = useState(currentTransform?.scale || 1.0);
   const [rotation, setRotation] = useState(currentTransform?.rotation || 0);
   const [x, setX] = useState(currentTransform?.x || 0);
@@ -57,13 +54,6 @@ export default function CropTransformModal({
   const [maskFeather, setMaskFeather] = useState<number>(currentMask?.feather || 0);
   const [maskRoundness, setMaskRoundness] = useState<number>(currentMask?.roundness || 16);
   const [maskInverted, setMaskInverted] = useState<boolean>(currentMask?.inverted || false);
-
-  // Custom Crop state
-  const [cropX, setCropX] = useState<number>(currentCrop?.x || 0);
-  const [cropY, setCropY] = useState<number>(currentCrop?.y || 0);
-  const [cropWidth, setCropWidth] = useState<number>(currentCrop?.width || 100);
-  const [cropHeight, setCropHeight] = useState<number>(currentCrop?.height || 100);
-  const [selectedCropPreset, setSelectedCropPreset] = useState<string>('free');
 
   React.useEffect(() => {
     if (visible) {
@@ -83,14 +73,9 @@ export default function CropTransformModal({
       setMaskRoundness(m?.roundness || 16);
       setMaskInverted(m?.inverted || false);
 
-      const c = currentCrop || currentTransform?.crop;
-      setCropX(c?.x || 0);
-      setCropY(c?.y || 0);
-      setCropWidth(c?.width || 100);
-      setCropHeight(c?.height || 100);
-      setActiveTab(initialTab);
+      setActiveTab(initialTab === 'adjust' ? 'adjust' : 'mask');
     }
-  }, [visible, currentTransform, currentAspectRatio, currentMask, currentCrop, initialTab]);
+  }, [visible, currentTransform, currentAspectRatio, currentMask, initialTab]);
 
   const ratios: { id: AspectRatio; label: string; icon: string }[] = [
     { id: '9:16', label: '9:16 (TikTok)', icon: 'phone-portrait-outline' },
@@ -110,26 +95,6 @@ export default function CropTransformModal({
     { id: 'star', label: 'Star', icon: 'star-outline', desc: 'Creator Badge' },
   ];
 
-  const cropPresets = [
-    { id: 'free', label: 'Freeform', w: 100, h: 100 },
-    { id: '16:9', label: '16:9 Wide', w: 100, h: 56.25 },
-    { id: '9:16', label: '9:16 Story', w: 56.25, h: 100 },
-    { id: '1:1', label: '1:1 Square', w: 80, h: 80 },
-    { id: '4:5', label: '4:5 Portrait', w: 75, h: 93.75 },
-    { id: '2.35:1', label: '2.35:1 Movie', w: 100, h: 42.5 },
-  ];
-
-  const handleApplyPresetCrop = (preset: any) => {
-    soundEngine.playSfx('click');
-    setSelectedCropPreset(preset.id);
-    const newW = preset.w;
-    const newH = preset.h;
-    setCropWidth(newW);
-    setCropHeight(newH);
-    setCropX(Number(((100 - newW) / 2).toFixed(1)));
-    setCropY(Number(((100 - newH) / 2).toFixed(1)));
-  };
-
   const handleApply = () => {
     soundEngine.playSfx('click');
     const newMask: MaskConfig = {
@@ -143,13 +108,6 @@ export default function CropTransformModal({
       rotation: 0,
     };
 
-    const newCrop: CustomCrop = {
-      x: Math.round(cropX),
-      y: Math.round(cropY),
-      width: Math.round(cropWidth),
-      height: Math.round(cropHeight),
-    };
-
     onApplyTransform(
       {
         scale: currentTransform?.scale ?? scale,
@@ -160,11 +118,9 @@ export default function CropTransformModal({
         flipY,
         opacity,
         mask: newMask,
-        crop: newCrop,
       },
       aspectRatio,
-      newMask,
-      newCrop
+      newMask
     );
     onClose();
   };
@@ -183,11 +139,6 @@ export default function CropTransformModal({
     setMaskFeather(0);
     setMaskRoundness(16);
     setMaskInverted(false);
-    setCropX(0);
-    setCropY(0);
-    setCropWidth(100);
-    setCropHeight(100);
-    setSelectedCropPreset('free');
   };
 
   return (
@@ -198,7 +149,7 @@ export default function CropTransformModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Ionicons name="shapes-outline" size={20} color="#00F2FE" />
-              <Text style={styles.headerTitle}>Crop & Mask</Text>
+              <Text style={styles.headerTitle}>{"Video Mask & Transform"}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#8E95A5" />
@@ -207,23 +158,6 @@ export default function CropTransformModal({
 
           {/* Tab Navigation */}
           <View style={styles.tabBar}>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'crop' && styles.tabBtnActive]}
-              onPress={() => {
-                soundEngine.playSfx('click');
-                setActiveTab('crop');
-              }}
-            >
-              <Ionicons
-                name="crop"
-                size={16}
-                color={activeTab === 'crop' ? '#00F2FE' : '#8E95A5'}
-              />
-              <Text style={[styles.tabBtnText, activeTab === 'crop' && styles.tabBtnTextActive]}>
-                Crop
-              </Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'mask' && styles.tabBtnActive]}
               onPress={() => {
@@ -260,172 +194,7 @@ export default function CropTransformModal({
           </View>
 
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
-            {/* TAB 1: CUSTOM SIZE CROP */}
-            {activeTab === 'crop' && (
-              <View>
-                {/* Crop Visual Stage Preview */}
-                <View style={styles.cropPreviewStage}>
-                  <View style={styles.cropBackdrop}>
-                    <View
-                      style={[
-                        styles.cropActiveBox,
-                        {
-                          left: `${cropX}%`,
-                          top: `${cropY}%`,
-                          width: `${cropWidth}%`,
-                          height: `${cropHeight}%`,
-                        },
-                      ]}
-                    >
-                      <View style={styles.cropCornerTL} />
-                      <View style={styles.cropCornerTR} />
-                      <View style={styles.cropCornerBL} />
-                      <View style={styles.cropCornerBR} />
-                      <View style={styles.cropCenterTag}>
-                        <Text style={styles.cropCenterTagText}>
-                          {Math.round(cropWidth)}% × {Math.round(cropHeight)}%
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Preset Aspect Ratios */}
-                <Text style={styles.sectionTitle}>ASPECT RATIO PRESETS</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-                  <View style={styles.ratioRow}>
-                    {cropPresets.map((p) => {
-                      const isSelected = selectedCropPreset === p.id;
-                      return (
-                        <TouchableOpacity
-                          key={p.id}
-                          style={[styles.ratioCard, isSelected && styles.ratioCardActive]}
-                          onPress={() => handleApplyPresetCrop(p)}
-                        >
-                          <Text style={[styles.ratioCardText, isSelected && styles.ratioCardTextActive]}>
-                            {p.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-
-                {/* Fine-Tuning Sliders for Custom Size Crop */}
-                <View style={styles.section}>
-                  <View style={styles.labelValueRow}>
-                    <Text style={styles.sectionTitle}>Crop Width</Text>
-                    <Text style={styles.badge}>{Math.round(cropWidth)}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '8px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="10"
-                        max="100"
-                        step="1"
-                        value={cropWidth}
-                        onChange={(e: any) => {
-                          setSelectedCropPreset('custom');
-                          setCropWidth(parseFloat(e.target.value));
-                        }}
-                        style={{ width: '100%', accentColor: '#00F2FE', height: 6, cursor: 'pointer' }}
-                      />
-                    </WebDiv>
-                  ) : null}
-
-                  <View style={styles.labelValueRow}>
-                    <Text style={styles.sectionTitle}>Crop Height</Text>
-                    <Text style={styles.badge}>{Math.round(cropHeight)}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '8px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="10"
-                        max="100"
-                        step="1"
-                        value={cropHeight}
-                        onChange={(e: any) => {
-                          setSelectedCropPreset('custom');
-                          setCropHeight(parseFloat(e.target.value));
-                        }}
-                        style={{ width: '100%', accentColor: '#00F2FE', height: 6, cursor: 'pointer' }}
-                      />
-                    </WebDiv>
-                  ) : null}
-
-                  <View style={styles.labelValueRow}>
-                    <Text style={styles.sectionTitle}>Crop Position (X Offset)</Text>
-                    <Text style={styles.badge}>{Math.round(cropX)}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '8px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="0"
-                        max={Math.max(0, 100 - cropWidth)}
-                        step="1"
-                        value={cropX}
-                        onChange={(e: any) => setCropX(parseFloat(e.target.value))}
-                        style={{ width: '100%', accentColor: '#00F2FE', height: 6, cursor: 'pointer' }}
-                      />
-                    </WebDiv>
-                  ) : null}
-
-                  <View style={styles.labelValueRow}>
-                    <Text style={styles.sectionTitle}>Crop Position (Y Offset)</Text>
-                    <Text style={styles.badge}>{Math.round(cropY)}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '8px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="0"
-                        max={Math.max(0, 100 - cropHeight)}
-                        step="1"
-                        value={cropY}
-                        onChange={(e: any) => setCropY(parseFloat(e.target.value))}
-                        style={{ width: '100%', accentColor: '#00F2FE', height: 6, cursor: 'pointer' }}
-                      />
-                    </WebDiv>
-                  ) : null}
-                </View>
-
-                {/* Overall Canvas Aspect Ratio */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>CANVAS RATIO</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                    <View style={styles.ratioRow}>
-                      {ratios.map((r) => {
-                        const isSelected = aspectRatio === r.id;
-                        return (
-                          <TouchableOpacity
-                            key={r.id}
-                            style={[styles.ratioCard, isSelected && styles.ratioCardActive]}
-                            onPress={() => {
-                              soundEngine.playSfx('pop');
-                              setAspectRatio(r.id);
-                            }}
-                          >
-                            <Ionicons
-                              name={r.icon as any}
-                              size={16}
-                              color={isSelected ? '#000000' : '#8E95A5'}
-                            />
-                            <Text style={[styles.ratioCardText, isSelected && styles.ratioCardTextActive]}>
-                              {r.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </ScrollView>
-                </View>
-              </View>
-            )}
-
-            {/* TAB 2: VIDEO MASKING */}
+            {/* TAB 1: VIDEO MASKING */}
             {activeTab === 'mask' && (
               <View>
                 {/* Mask Shape Selection */}
@@ -543,7 +312,7 @@ export default function CropTransformModal({
               <View>
                 {/* Flip & Rotate Buttons */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>ORIENTATION & FLIPS</Text>
+                  <Text style={styles.sectionTitle}>{"ORIENTATION & FLIPS"}</Text>
                   <View style={styles.toolsRow}>
                     <TouchableOpacity
                       style={[styles.toolBtn, flipX && styles.toolBtnActive]}

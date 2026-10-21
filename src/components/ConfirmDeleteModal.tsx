@@ -77,13 +77,13 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 180,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
           friction: 8,
           tension: 110,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]).start();
     } else if (modalVisible && !isClosingRef.current) {
@@ -92,35 +92,40 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   }, [visible]);
 
   const closeWithAnimation = (callback: () => void) => {
-    if (isClosingRef.current) return;
+    if (isClosingRef.current) {
+      callback();
+      return;
+    }
     isClosingRef.current = true;
+    callback();
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
+        duration: 120,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.timing(scaleAnim, {
         toValue: 0.94,
-        duration: 150,
-        useNativeDriver: true,
+        duration: 120,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start(() => {
       setModalVisible(false);
       isClosingRef.current = false;
-      callback();
     });
   };
 
   const handleCancel = () => {
     soundEngine.playSfx('click');
-    closeWithAnimation(onCancel);
+    onCancel();
+    setModalVisible(false);
   };
 
   const handleConfirm = () => {
     soundEngine.playSfx('pop');
-    closeWithAnimation(onConfirm);
+    onConfirm();
+    setModalVisible(false);
   };
 
   if (!modalVisible) return null;
@@ -155,7 +160,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
       >
         {/* Backdrop touch to cancel */}
         <TouchableOpacity
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
           activeOpacity={1}
           onPress={handleCancel}
         />
@@ -257,6 +262,8 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   card: {
+    position: 'relative',
+    zIndex: 10,
     width: 360,
     maxWidth: '92%',
     backgroundColor: '#141721',

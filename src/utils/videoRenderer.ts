@@ -8,7 +8,10 @@ import {
 } from "../types/project";
 
 import { createGif, GifFrame } from "./gifEncoder";
+import { LowLevelPixelEngine } from "./lowLevelEngine";
 import { exportProjectAudioToWav } from "./audioExporter";
+import { getLiveMediaUrl } from "./largeMediaStorage";
+import { setCachedMediaDuration } from "./mediaDuration";
 
 export type ExportFormat = "mp4" | "webm" | "gif" | "png" | "wav";
 
@@ -35,6 +38,7 @@ export class VideoRenderer {
   public canvas: HTMLCanvasElement | null;
   public ctx: CanvasRenderingContext2D | null;
   public videoElements: Map<string, HTMLVideoElement | HTMLImageElement>;
+  public thumbnailElements: Map<string, HTMLImageElement> = new Map();
   public lastUsedTimestamp: Map<string, number> = new Map();
   public onFrameNeeded?: () => void;
   public offscreenCanvas: HTMLCanvasElement | null = null;
@@ -43,11 +47,12 @@ export class VideoRenderer {
     typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
       ? 4
       : 6;
+  public previewCropClipId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? (canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+      ? (canvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D | null) ||
         canvas.getContext("2d")
       : null;
     if (this.ctx) {
@@ -60,13 +65,52 @@ export class VideoRenderer {
   setCanvas(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? (canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+      ? (canvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D | null) ||
         canvas.getContext("2d")
       : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
       this.ctx.imageSmoothingQuality = "high";
     }
+  }
+
+  setPreviewCropMode(clipId: string | null) {
+    this.previewCropClipId = clipId;
+  }
+
+  getMediaNaturalDimensions(clipUrl: string): { width: number; height: number } | null {
+    const el = this.videoElements.get(clipUrl);
+    if (el) {
+      const w = (el as any).videoWidth || (el as any).naturalWidth || (el as any).width || 0;
+      const h = (el as any).videoHeight || (el as any).naturalHeight || (el as any).height || 0;
+      if (w > 0 && h > 0) return { width: w, height: h };
+    }
+    for (const thumb of this.thumbnailElements.values()) {
+      if (thumb.naturalWidth > 0 && thumb.naturalHeight > 0) {
+        return { width: thumb.naturalWidth, height: thumb.naturalHeight };
+      }
+    }
+    return null;
+  }
+
+  // Ensure offscreen buffer for effects reading from canvas to prevent mobile WebKit pipeline stalls
+  ensureOffscreen(w?: number, h?: number): HTMLCanvasElement | null {
+    if (typeof document === "undefined" || !this.canvas) return null;
+    if (!this.offscreenCanvas) {
+      this.offscreenCanvas = document.createElement("canvas");
+      this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
+    }
+    const targetW = w && w > 0 ? Math.round(w) : this.canvas.width;
+    const targetH = h && h > 0 ? Math.round(h) : this.canvas.height;
+    if (this.offscreenCanvas.width !== targetW || this.offscreenCanvas.height !== targetH) {
+      this.offscreenCanvas.width = targetW;
+      this.offscreenCanvas.height = targetH;
+    }
+    if (this.offscreenCtx && this.canvas) {
+      this.offscreenCtx.clearRect(0, 0, targetW, targetH);
+      this.offscreenCtx.drawImage(this.canvas, 0, 0, targetW, targetH);
+    }
+    return this.offscreenCanvas;
   }
 
   // Release resources and hardware decoders to prevent mobile browser memory leaks
@@ -81,7 +125,14 @@ export class VideoRenderer {
       }
     });
     this.videoElements.clear();
+    this.thumbnailElements.clear();
     this.lastUsedTimestamp.clear();
+    if (this.offscreenCanvas) {
+      this.offscreenCanvas.width = 1;
+      this.offscreenCanvas.height = 1;
+      this.offscreenCanvas = null;
+      this.offscreenCtx = null;
+    }
     this.canvas = null;
     this.ctx = null;
   }
@@ -109,6 +160,16 @@ export class VideoRenderer {
   ): Promise<HTMLVideoElement | HTMLImageElement | null> {
     if (typeof window === "undefined") return null;
     this.lastUsedTimestamp.set(clip.url, Date.now());
+
+    // Preload clip thumbnail immediately for instant preview rendering & fallback
+    if (clip.thumbnail && !this.thumbnailElements.has(clip.id)) {
+      const thumb = new Image();
+      thumb.onload = () => {
+        if (this.onFrameNeeded) this.onFrameNeeded();
+      };
+      thumb.src = clip.thumbnail;
+      this.thumbnailElements.set(clip.id, thumb);
+    }
 
     if (this.videoElements.has(clip.url)) {
       return this.videoElements.get(clip.url)!;
@@ -148,9 +209,17 @@ export class VideoRenderer {
         vid.crossOrigin = "anonymous";
       }
       vid.muted = true;
+      vid.defaultMuted = true;
       vid.playsInline = true;
-      // Use metadata preload for memory safety on multi-gigabyte 4K files
-      vid.preload = "metadata";
+      vid.setAttribute("playsinline", "true");
+      vid.setAttribute("webkit-playsinline", "true");
+      vid.setAttribute("x5-playsinline", "true");
+      vid.setAttribute("disablePictureInPicture", "true");
+      vid.setAttribute("disableRemotePlayback", "true");
+      vid.setAttribute("controlsList", "nodownload nofullscreen noremoteplayback");
+      vid.setAttribute("muted", "");
+      // Auto preload video to ensure mobile Safari/Chrome starts buffering frame
+      vid.preload = "auto";
       vid.src = clip.url;
 
       const trigger = () => {
@@ -160,6 +229,28 @@ export class VideoRenderer {
       vid.addEventListener("loadeddata", trigger);
       vid.addEventListener("canplay", trigger);
       vid.addEventListener("seeked", trigger);
+      vid.addEventListener("loadedmetadata", () => {
+        if (vid.duration && !isNaN(vid.duration) && isFinite(vid.duration) && vid.duration > 0) {
+          setCachedMediaDuration(clip.url, vid.duration);
+          if (clip.id) setCachedMediaDuration(clip.id, vid.duration);
+        }
+        trigger();
+      });
+      vid.addEventListener("error", async () => {
+        // Blob URL may have expired from a past session. Attempt to rehydrate from IndexedDB:
+        try {
+          const freshUrl = await getLiveMediaUrl(clip.id);
+          if (freshUrl && freshUrl !== clip.url) {
+            this.videoElements.delete(clip.url);
+            clip.url = freshUrl;
+            this.videoElements.set(freshUrl, vid);
+            vid.src = freshUrl;
+            vid.load();
+            return;
+          }
+        } catch (e) {}
+        if (this.onFrameNeeded) this.onFrameNeeded();
+      });
       vid.load();
 
       this.videoElements.set(clip.url, vid);
@@ -205,6 +296,11 @@ export class VideoRenderer {
       if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
       const vid = mediaEl as HTMLVideoElement;
 
+      if (vid.duration && !isNaN(vid.duration) && isFinite(vid.duration) && vid.duration > 0) {
+        setCachedMediaDuration(activeClip.url, vid.duration);
+        if (activeClip.id) setCachedMediaDuration(activeClip.id, vid.duration);
+      }
+
       const clipLocalTime = Math.max(0, time - activeClip.startTime);
       let effectiveSpeed = Math.max(0.1, Math.min(16, activeClip.speed || 1.0));
       if (
@@ -218,13 +314,17 @@ export class VideoRenderer {
         );
       }
 
-      const mediaTime = activeClip.reverse
+      const rawMediaTime = activeClip.reverse
         ? Math.max(
             0,
             (activeClip.trimOut || activeClip.duration) -
               clipLocalTime * effectiveSpeed,
           )
         : (activeClip.trimIn || 0) + clipLocalTime * effectiveSpeed;
+
+      const mediaTime = vid.duration && vid.duration > 0
+        ? Math.min(vid.duration, Math.max(0, rawMediaTime))
+        : Math.max(0, rawMediaTime);
 
       const speed = Math.max(0.1, Math.min(16, effectiveSpeed));
       if (vid.playbackRate !== speed) {
@@ -233,15 +333,25 @@ export class VideoRenderer {
 
       if (isPlaying) {
         if (vid.paused) {
-          if (Math.abs(vid.currentTime - mediaTime) > 0.1) {
+          if (Math.abs(vid.currentTime - mediaTime) > 0.15) {
             vid.currentTime = Math.max(0, mediaTime);
           }
           vid.play().catch(() => {});
         } else {
-          // Active playback drift correction: only seek if drifted by >0.35s
-          // This avoids destroying the 60fps hardware decoder pipeline
-          if (Math.abs(vid.currentTime - mediaTime) > 0.35) {
+          const drift = vid.currentTime - mediaTime;
+          if (Math.abs(drift) > 0.6) {
+            // Hard seek only if severely desynced (>0.6s) to preserve mobile hardware decoding pipeline
             vid.currentTime = Math.max(0, mediaTime);
+          } else if (Math.abs(drift) > 0.06) {
+            // Silent micro-drift correction via temporary 5% rate compensation (zero stutter/freeze)
+            const compRate = drift > 0 ? speed * 0.95 : speed * 1.05;
+            if (Math.abs(vid.playbackRate - compRate) > 0.02) {
+              vid.playbackRate = Math.max(0.1, Math.min(16, compRate));
+            }
+          } else {
+            if (vid.playbackRate !== speed) {
+              vid.playbackRate = speed;
+            }
           }
         }
       } else {
@@ -283,14 +393,14 @@ export class VideoRenderer {
     const h = logicalHeight && logicalHeight > 0 ? logicalHeight : (this.canvas.clientHeight || canvasH);
 
     ctx.save();
-    // Enable high-quality image smoothing for zero degradation
+    // Adaptive image smoothing: medium during 60fps playback for mobile GPU efficiency, high when paused/exporting
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    ctx.imageSmoothingQuality = isPlaying ? "medium" : "high";
     // Scale canvas context to normalize all draw operations to logical (w, h) coordinates
     ctx.scale(canvasW / w, canvasH / h);
 
     // Clear background
-    ctx.fillStyle = "#0B0D13";
+    ctx.fillStyle = project.canvasBackground || "#0B0D13";
     ctx.fillRect(0, 0, w, h);
 
     const videoClips = project.tracks.video || [];
@@ -330,7 +440,7 @@ export class VideoRenderer {
     }
 
     // Studio canvas background
-    ctx.fillStyle = "#0B0E14";
+    ctx.fillStyle = project.canvasBackground || "#0B0E14";
     ctx.fillRect(0, 0, w, h);
 
     // Build unified list of active visual items across all tracks
@@ -411,12 +521,60 @@ export class VideoRenderer {
         if (progress > 0.5) alpha = 1 - (progress - 0.5) * 2;
       }
     }
-    const t = clip.transform || { scale: 1, rotation: 0, x: 0, y: 0 };
+    let yOffset = 0;
 
-    const clipOpacity = t?.opacity !== undefined ? t.opacity : 1.0;
+    // Keyframe Animation & Interpolation
+    let t = clip.transform || { scale: 1, rotation: 0, x: 0, y: 0 };
+    let keyframeOpacity = 1.0;
+
+    if (clip.keyframes && clip.keyframes.length > 0) {
+      const kfs = [...clip.keyframes].sort((a, b) => a.time - b.time);
+      if (clipLocalTime <= kfs[0].time) {
+        t = { ...t, ...(kfs[0].transform || {}) };
+        if (kfs[0].opacity !== undefined) keyframeOpacity = kfs[0].opacity;
+      } else if (clipLocalTime >= kfs[kfs.length - 1].time) {
+        const last = kfs[kfs.length - 1];
+        t = { ...t, ...(last.transform || {}) };
+        if (last.opacity !== undefined) keyframeOpacity = last.opacity;
+      } else {
+        for (let i = 0; i < kfs.length - 1; i++) {
+          const k1 = kfs[i];
+          const k2 = kfs[i + 1];
+          if (clipLocalTime >= k1.time && clipLocalTime <= k2.time) {
+            const span = k2.time - k1.time;
+            const progress = span > 0 ? (clipLocalTime - k1.time) / span : 0;
+            const ease = progress * progress * (3 - 2 * progress);
+            const t1 = k1.transform || {};
+            const t2 = k2.transform || {};
+            t = {
+              scale: (t1.scale ?? 1) + ((t2.scale ?? 1) - (t1.scale ?? 1)) * ease,
+              rotation: (t1.rotation ?? 0) + ((t2.rotation ?? 0) - (t1.rotation ?? 0)) * ease,
+              x: (t1.x ?? 0) + ((t2.x ?? 0) - (t1.x ?? 0)) * ease,
+              y: (t1.y ?? 0) + ((t2.y ?? 0) - (t1.y ?? 0)) * ease,
+              flipX: t2.flipX !== undefined ? t2.flipX : t1.flipX,
+              flipY: t2.flipY !== undefined ? t2.flipY : t1.flipY,
+            };
+            const op1 = k1.opacity ?? 1.0;
+            const op2 = k2.opacity ?? 1.0;
+            keyframeOpacity = op1 + (op2 - op1) * ease;
+            break;
+          }
+        }
+      }
+    }
+
+    // Motion Tracking on Video
+    if (clip.motionTrack && clip.motionTrack.enabled) {
+      const motion = this.applyMotionTracking(time, clip.startTime, clip.duration, clip.motionTrack);
+      xOffset += motion.dx;
+      yOffset += motion.dy;
+      scaleModifier *= motion.dScale;
+    }
+
+    const clipOpacity = (t?.opacity !== undefined ? t.opacity : 1.0) * keyframeOpacity;
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha * clipOpacity));
 
-    ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y);
+    ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y + yOffset);
     ctx.rotate(((t.rotation || 0) * Math.PI) / 180);
 
     const scaleX = (t.flipX ? -1 : 1) * (t.scale || 1) * scaleModifier;
@@ -438,28 +596,49 @@ export class VideoRenderer {
       (mediaEl && (mediaEl as any).tagName === "VIDEO");
 
     // Check genuine readiness: Images use complete & naturalWidth, Videos use readyState & dimensions
-    const isReady = isImage
-      ? (mediaEl as HTMLImageElement).complete &&
-        (mediaEl as HTMLImageElement).naturalWidth > 0
-      : isVideo
-        ? (mediaEl as HTMLVideoElement).readyState >= 1 &&
-          (mediaEl as HTMLVideoElement).videoWidth > 0
-        : false;
+    const isVideoReady =
+      isVideo &&
+      (mediaEl as HTMLVideoElement).readyState >= 1 &&
+      (mediaEl as HTMLVideoElement).videoWidth > 0;
+    const isImageReady =
+      isImage &&
+      (mediaEl as HTMLImageElement).complete &&
+      (mediaEl as HTMLImageElement).naturalWidth > 0;
+    const isReady = isImageReady || isVideoReady;
 
-    if (isReady && mediaEl) {
+    let activeMedia: any = isReady ? mediaEl : null;
+
+    // Instant fallback to high-res thumbnail if video is still buffering, decoding, or has expired blob
+    if (!activeMedia && clip.thumbnail) {
+      let thumbEl = this.thumbnailElements.get(clip.id);
+      if (!thumbEl) {
+        thumbEl = new Image();
+        thumbEl.onload = () => {
+          if (this.onFrameNeeded) this.onFrameNeeded();
+        };
+        thumbEl.src = clip.thumbnail;
+        this.thumbnailElements.set(clip.id, thumbEl);
+      }
+      if (thumbEl.complete && thumbEl.naturalWidth > 0) {
+        activeMedia = thumbEl;
+      }
+    }
+
+    if (activeMedia) {
       const mw =
-        (mediaEl as any).videoWidth ||
-        (mediaEl as any).naturalWidth ||
-        (mediaEl as any).width ||
-        1280;
+        (activeMedia as any).videoWidth ||
+        (activeMedia as any).naturalWidth ||
+        (activeMedia as any).width ||
+        1920;
       const mh =
-        (mediaEl as any).videoHeight ||
-        (mediaEl as any).naturalHeight ||
-        (mediaEl as any).height ||
-        720;
+        (activeMedia as any).videoHeight ||
+        (activeMedia as any).naturalHeight ||
+        (activeMedia as any).height ||
+        1080;
 
-      // Custom Size Crop
-      const crop = clip.crop || clip.transform?.crop;
+      // Custom Size Crop (bypassed when in live on-preview crop mode for this clip)
+      const isPreviewCropping = this.previewCropClipId === clip.id;
+      const crop = isPreviewCropping ? null : (clip.crop || clip.transform?.crop);
       let sx = 0;
       let sy = 0;
       let sw = mw;
@@ -474,9 +653,16 @@ export class VideoRenderer {
       const aspect = sw / sh;
       let dw = w;
       let dh = w / aspect;
-      if (dh < h) {
-        dh = h;
-        dw = h * aspect;
+      if (isPreviewCropping) {
+        if (dh > h) {
+          dh = h;
+          dw = h * aspect;
+        }
+      } else {
+        if (dh < h) {
+          dh = h;
+          dw = h * aspect;
+        }
       }
 
       // Video Masking
@@ -488,9 +674,9 @@ export class VideoRenderer {
       // Smart Cutout / Chroma Key (CapCut Pro)
       const cutout = clip.cutout || clip.transform?.cutout;
       if (cutout && cutout.enabled) {
-        this.drawClipWithCutout(ctx, mediaEl as any, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh, cutout);
+        this.drawClipWithCutout(ctx, activeMedia as any, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh, cutout);
       } else {
-        ctx.drawImage(mediaEl, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+        ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
       }
 
       // Smooth Slow-Mo (Frame Blending / Optical Flow simulation)
@@ -500,7 +686,7 @@ export class VideoRenderer {
       ) {
         ctx.save();
         ctx.globalAlpha = clip.smoothSlowMo === "optical_flow" ? 0.35 : 0.22;
-        ctx.drawImage(mediaEl, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
+        ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
         ctx.restore();
       }
     } else {
@@ -508,6 +694,24 @@ export class VideoRenderer {
     }
 
     ctx.restore();
+
+    // Render clip-assigned effect (e.g. from Toolbar / Effects modal)
+    if (clip.effect && clip.effect !== "none") {
+      this.applyEffectOverlay(
+        ctx,
+        {
+          id: "clip-eff-" + clip.id,
+          type: clip.effect,
+          name: clip.effect,
+          startTime: clip.startTime,
+          duration: clip.duration,
+          intensity: 0.8,
+        },
+        time,
+        w,
+        h,
+      );
+    }
 
     if (trans && trans.type === "flash_white" && timeLeft <= trans.duration) {
       const p = 1 - timeLeft / trans.duration;
@@ -591,24 +795,88 @@ export class VideoRenderer {
     const left = -dw / 2;
     const top = -dh / 2;
 
+    const mediaEl = this.videoElements.get(clip.url);
+    const hasError = Boolean(mediaEl && (mediaEl as any).error);
+
+    ctx.save();
+
     // Dark cinematic canvas background
-    ctx.fillStyle = "#10131A";
+    const grad = ctx.createLinearGradient(left, top, left, top + dh);
+    grad.addColorStop(0, "#161924");
+    grad.addColorStop(1, "#0A0C11");
+    ctx.fillStyle = grad;
     ctx.fillRect(left, top, dw, dh);
 
-    // Subtle neon cyan loading spinner
-    const angle = (localTime * 5) % (Math.PI * 2);
-    ctx.save();
-    ctx.strokeStyle = "#00F2FE";
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.arc(0, 0, 22, angle, angle + Math.PI * 1.3);
-    ctx.stroke();
+    // Subtle neon border
+    ctx.strokeStyle = hasError ? "rgba(0, 242, 254, 0.4)" : "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(left + 1, top + 1, dw - 2, dh - 2);
 
-    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
-    ctx.fillStyle = "#8E95A5";
-    ctx.textAlign = "center";
-    ctx.fillText("Loading...", 0, 38);
+    if (hasError) {
+      // Dynamic live animated preview during playback so playback is always visually working & smooth
+      const boxSize = Math.min(54, Math.min(dw, dh) * 0.3);
+      ctx.fillStyle = "rgba(0, 242, 254, 0.14)";
+      ctx.beginPath();
+      if ((ctx as any).roundRect) {
+        (ctx as any).roundRect(-boxSize / 2, -boxSize / 2 - 30, boxSize, boxSize, 12);
+      } else {
+        ctx.rect(-boxSize / 2, -boxSize / 2 - 30, boxSize, boxSize);
+      }
+      ctx.fill();
+
+      // Film reel icon
+      ctx.fillStyle = "#00F2FE";
+      ctx.beginPath();
+      ctx.arc(0, -30, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Clip title
+      ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      const cleanTitle = clip.title ? (clip.title.length > 22 ? clip.title.slice(0, 20) + "…" : clip.title) : "Video Clip";
+      ctx.fillText(cleanTitle, 0, 10);
+
+      // Duration & scrubber info
+      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = "#00F2FE";
+      ctx.fillText(`${localTime.toFixed(1)}s / ${clip.duration.toFixed(1)}s`, 0, 28);
+
+      // Dynamic animated audio/video motion equalizer bars during playback
+      const barCount = 10;
+      const totalBarW = 80;
+      const barW = 4;
+      const barGap = (totalBarW - barCount * barW) / (barCount - 1);
+      ctx.fillStyle = "#00F2FE";
+      for (let i = 0; i < barCount; i++) {
+        const hFactor = 0.25 + 0.75 * Math.abs(Math.sin(localTime * 7 + i * 0.7));
+        const barH = 16 * hFactor;
+        const bx = -totalBarW / 2 + i * (barW + barGap);
+        ctx.fillRect(bx, 48 - barH / 2, barW, barH);
+      }
+
+      // Live playhead progress bar along bottom edge
+      const pct = Math.max(0, Math.min(1, localTime / Math.max(0.1, clip.duration)));
+      ctx.fillStyle = "rgba(0, 242, 254, 0.2)";
+      ctx.fillRect(left, top + dh - 4, dw, 4);
+      ctx.fillStyle = "#00F2FE";
+      ctx.fillRect(left, top + dh - 4, dw * pct, 4);
+    } else {
+      // Subtle neon cyan loading spinner
+      const angle = (localTime * 5) % (Math.PI * 2);
+      ctx.strokeStyle = "#00F2FE";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(0, -10, 20, angle, angle + Math.PI * 1.3);
+      ctx.stroke();
+
+      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      ctx.fillStyle = "#8E95A5";
+      ctx.textAlign = "center";
+      ctx.fillText("Buffering...", 0, 28);
+    }
+
     ctx.restore();
   }
 
@@ -674,7 +942,7 @@ export class VideoRenderer {
 
     if (!this.offscreenCanvas) {
       this.offscreenCanvas = document.createElement("canvas");
-      this.offscreenCtx = this.offscreenCanvas.getContext("2d");
+      this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
     }
     const offCanvas = this.offscreenCanvas;
     const offCtx = this.offscreenCtx;
@@ -683,73 +951,24 @@ export class VideoRenderer {
       return;
     }
 
-    // High performance resolution clamp for 60fps mobile execution
-    const procW = Math.min(640, Math.max(16, Math.floor(Math.abs(dw))));
-    const procH = Math.min(480, Math.max(16, Math.floor(Math.abs(dh))));
-    if (offCanvas.width !== procW || offCanvas.height !== procH) {
-      offCanvas.width = procW;
-      offCanvas.height = procH;
-    }
+    // Hardware GPU WebGL Shader -> 32-bit SIMD integer fallback pipeline
+    const handled = LowLevelPixelEngine.processCutout(
+      ctx,
+      mediaEl as any,
+      sx,
+      sy,
+      sw,
+      sh,
+      dx,
+      dy,
+      dw,
+      dh,
+      cutout,
+      offCanvas,
+      offCtx
+    );
 
-    offCtx.clearRect(0, 0, procW, procH);
-    try {
-      offCtx.drawImage(mediaEl, sx, sy, sw, sh, 0, 0, procW, procH);
-      const imgData = offCtx.getImageData(0, 0, procW, procH);
-      const data = imgData.data;
-
-      const hex = cutout.keyColor || "#00FF00";
-      const rKey = parseInt(hex.slice(1, 3), 16) || 0;
-      const gKey = parseInt(hex.slice(3, 5), 16) || 255;
-      const bKey = parseInt(hex.slice(5, 7), 16) || 0;
-
-      const threshold = ((cutout.intensity ?? 45) / 100) * 195;
-      const feather = Math.max(1, ((cutout.shadow ?? 25) / 100) * 70);
-      const isAuto = cutout.mode === "auto";
-
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        if (isAuto) {
-          // Automatic subject luminance/edge contrast isolation
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          const autoDiff = Math.abs(lum - 128);
-          if (autoDiff < threshold * 0.75) {
-            data[i + 3] = 0;
-          } else if (autoDiff < threshold * 0.75 + feather) {
-            data[i + 3] = Math.floor(((autoDiff - threshold * 0.75) / feather) * 255);
-          }
-        } else {
-          // High-precision Chroma Key Euclidean RGB color distance
-          const dr = r - rKey;
-          const dg = g - gKey;
-          const db = b - bKey;
-          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-
-          if (dist < threshold) {
-            data[i + 3] = 0;
-          } else if (dist < threshold + feather) {
-            data[i + 3] = Math.floor(((dist - threshold) / feather) * 255);
-          }
-        }
-      }
-
-      offCtx.putImageData(imgData, 0, 0);
-
-      // Optional glowing edge outline (CapCut Pro Cutout Stroke)
-      if (cutout.strokeColor && cutout.strokeWidth && cutout.strokeWidth > 0) {
-        offCtx.save();
-        offCtx.globalCompositeOperation = "destination-over";
-        offCtx.shadowColor = cutout.strokeColor;
-        offCtx.shadowBlur = cutout.strokeWidth * 3;
-        offCtx.drawImage(offCanvas, 0, 0);
-        offCtx.restore();
-      }
-
-      ctx.drawImage(offCanvas, 0, 0, procW, procH, dx, dy, dw, dh);
-    } catch (e) {
-      // Fallback if cross-origin tainted canvas
+    if (!handled) {
       ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
     }
   }
@@ -837,25 +1056,33 @@ export class VideoRenderer {
   ) {
     if (!this.canvas) return;
     ctx.save();
-    const intensity = eff.intensity || 0.8;
+    const intensity = eff.intensity !== undefined ? eff.intensity : 0.8;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    const sourceCanvas =
+      eff.type === "glitch" || eff.type === "mirror" || eff.type === "shake"
+        ? this.ensureOffscreen(cw, ch) || this.canvas
+        : this.canvas;
 
     if (eff.type === "glitch") {
-      const sliceH = 18;
+      const sliceH = Math.max(12, h * 0.035);
       for (let y = 0; y < h; y += sliceH * 1.5) {
         if (Math.random() > 0.35) {
-          const shift = (Math.random() - 0.5) * 45 * intensity;
-          ctx.drawImage(this.canvas, 0, y, w, sliceH, shift, y, w, sliceH);
+          const shift = (Math.random() - 0.5) * (w * 0.12) * intensity;
+          const sy = (y / h) * ch;
+          const sh = (sliceH / h) * ch;
+          ctx.drawImage(sourceCanvas, 0, sy, cw, sh, shift, y, w, sliceH);
         }
       }
-      ctx.fillStyle = "rgba(255, 0, 80, 0.12)";
+      ctx.fillStyle = "rgba(255, 0, 80, 0.14)";
       ctx.fillRect(0, 0, w, h);
     } else if (eff.type === "vhs") {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
       for (let y = 0; y < h; y += 4) {
         ctx.fillRect(0, y, w, 2);
       }
       const barY = (time * 260) % h;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.24)";
       ctx.fillRect(0, barY, w, 14);
       ctx.font = "bold 16px Courier, monospace";
       ctx.fillStyle = "#00FF66";
@@ -864,13 +1091,13 @@ export class VideoRenderer {
       ctx.fillText(`PLAY ▶ SP 00:${secs}:${frames}`, 24, h - 32);
     } else if (eff.type === "rgb_split") {
       ctx.globalCompositeOperation = "screen";
-      const offset = 6 * intensity;
+      const offset = Math.max(4, w * 0.015) * intensity;
       ctx.fillStyle = "rgba(0, 242, 254, 0.28)";
       ctx.fillRect(offset, 0, w, h);
       ctx.fillStyle = "rgba(255, 0, 80, 0.28)";
       ctx.fillRect(-offset, 0, w, h);
     } else if (eff.type === "film_grain") {
-      const numDots = Math.floor(200 * intensity);
+      const numDots = Math.floor(300 * intensity);
       ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
       for (let i = 0; i < numDots; i++) {
         const rx = Math.random() * w;
@@ -878,42 +1105,42 @@ export class VideoRenderer {
         ctx.fillRect(rx, ry, 2, 2);
       }
     } else if (eff.type === "zoom_pulse") {
-      const pulseScale = 1.0 + Math.sin(time * 8) * 0.05 * intensity;
+      const pulseScale = 1.0 + Math.sin(time * 8) * 0.06 * intensity;
       ctx.translate(w / 2, h / 2);
       ctx.scale(pulseScale, pulseScale);
       ctx.translate(-w / 2, -h / 2);
     } else if (eff.type === "neon_edge") {
-      ctx.strokeStyle = "rgba(0, 242, 254, 0.6)";
-      ctx.lineWidth = 8 * intensity;
+      ctx.strokeStyle = "rgba(0, 242, 254, 0.7)";
+      ctx.lineWidth = Math.max(4, w * 0.015) * intensity;
       ctx.strokeRect(4, 4, w - 8, h - 8);
-      ctx.strokeStyle = "rgba(255, 0, 80, 0.4)";
-      ctx.lineWidth = 4 * intensity;
+      ctx.strokeStyle = "rgba(255, 0, 80, 0.5)";
+      ctx.lineWidth = Math.max(2, w * 0.008) * intensity;
       ctx.strokeRect(10, 10, w - 20, h - 20);
     } else if (eff.type === "blur" || eff.type === "blur_cinematic") {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.1 * intensity})`;
       ctx.fillRect(0, 0, w, h);
     } else if (eff.type === "flash") {
       const flashVal = Math.sin(time * 12);
-      if (flashVal > 0.7) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${(flashVal - 0.7) * 2 * intensity})`;
+      if (flashVal > 0.6) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${(flashVal - 0.6) * 2.5 * intensity})`;
         ctx.fillRect(0, 0, w, h);
       }
     } else if (eff.type === "vignette") {
-      const gradient = ctx.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, h * 0.75);
+      const gradient = ctx.createRadialGradient(w / 2, h / 2, h * 0.25, w / 2, h / 2, Math.max(w, h) * 0.65);
       gradient.addColorStop(0, "rgba(0,0,0,0)");
-      gradient.addColorStop(1, `rgba(0,0,0,${0.75 * intensity})`);
+      gradient.addColorStop(1, `rgba(0,0,0,${0.85 * intensity})`);
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, w, h);
     } else if (eff.type === "mirror") {
-      // Bilateral vertical mirror split
-      ctx.drawImage(this.canvas, 0, 0, w / 2, h, w / 2, 0, w / 2, h);
+      // Bilateral vertical mirror split from offscreen buffer
+      ctx.drawImage(sourceCanvas, 0, 0, cw / 2, ch, w / 2, 0, w / 2, h);
     } else if (eff.type === "shake") {
-      const sx = (Math.random() - 0.5) * 12 * intensity;
-      const sy = (Math.random() - 0.5) * 12 * intensity;
-      ctx.drawImage(this.canvas, 0, 0, w, h, sx, sy, w, h);
+      const sx = (Math.random() - 0.5) * (w * 0.035) * intensity;
+      const sy = (Math.random() - 0.5) * (h * 0.035) * intensity;
+      ctx.drawImage(sourceCanvas, 0, 0, cw, ch, sx, sy, w, h);
     } else if (eff.type === "rainbow_flow") {
       const hue = Math.floor((time * 120) % 360);
-      ctx.fillStyle = `hsla(${hue}, 90%, 50%, 0.12)`;
+      ctx.fillStyle = `hsla(${hue}, 90%, 50%, 0.15)`;
       ctx.fillRect(0, 0, w, h);
     }
     ctx.restore();
@@ -1484,27 +1711,66 @@ export class VideoRenderer {
         reject(err);
       };
 
+      // Mute video elements and cue to start
+      (project.tracks.video || []).forEach((c) => {
+        const el = exportRenderer.videoElements.get(c.url);
+        if (el && el instanceof HTMLVideoElement) {
+          el.muted = true;
+          el.currentTime = Math.max(0, c.trimIn || 0);
+        }
+      });
+
       // Start recording with 100ms timeslice to ensure continuous chunk buffer delivery
       mediaRecorder.start(100);
-
-      for (let frame = 0; frame < totalFrames; frame++) {
-        const frameTime = frame / fps;
-        exportRenderer.renderFrame(project, frameTime, false, exportLogicalW, exportLogicalH);
-
-        if (onProgress) {
-          const percent = Math.round((frame / totalFrames) * 100);
-          onProgress(percent, frameTime, duration);
-        }
-
-        await new Promise((r) => setTimeout(r, 1000 / fps));
-      }
-
-      if (typeof mediaRecorder.requestData === "function" && mediaRecorder.state === "recording") {
+      if (audioSourceNode) {
         try {
-          mediaRecorder.requestData();
+          audioSourceNode.start(0);
         } catch (e) {}
       }
-      mediaRecorder.stop();
+
+      const recStartTime = performance.now();
+      let completed = false;
+
+      const renderTick = () => {
+        if (completed) return;
+        const now = performance.now();
+        const elapsed = (now - recStartTime) / 1000;
+        const curTime = Math.min(elapsed, duration);
+
+        // Render live frame with isPlaying = true so all video elements play continuously without seek stalls
+        exportRenderer.renderFrame(project, curTime, true, exportLogicalW, exportLogicalH);
+
+        if (onProgress) {
+          const percent = Math.min(99, Math.round((curTime / duration) * 100));
+          onProgress(percent, curTime, duration);
+        }
+
+        if (elapsed < duration) {
+          requestAnimationFrame(renderTick);
+        } else {
+          completed = true;
+          if (onProgress) onProgress(100, duration, duration);
+
+          // Pause all video elements
+          (project.tracks.video || []).forEach((c) => {
+            const el = exportRenderer.videoElements.get(c.url);
+            if (el && el instanceof HTMLVideoElement) {
+              try {
+                el.pause();
+              } catch {}
+            }
+          });
+
+          if (typeof mediaRecorder.requestData === "function" && mediaRecorder.state === "recording") {
+            try {
+              mediaRecorder.requestData();
+            } catch (e) {}
+          }
+          mediaRecorder.stop();
+        }
+      };
+
+      requestAnimationFrame(renderTick);
     });
   }
 }

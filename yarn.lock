@@ -1182,14 +1182,6 @@
     invariant "^2.2.4"
     nullthrows "^1.1.1"
 
-"@react-native/virtualized-lists@^0.72.4":
-  version "0.72.8"
-  resolved "https://registry.yarnpkg.com/@react-native/virtualized-lists/-/virtualized-lists-0.72.8.tgz#a2c6a91ea0f1d40eb5a122fb063daedb92ed1dc3"
-  integrity sha512-J3Q4Bkuo99k7mu+jPS9gSUSgq+lLRSI/+ahXNwV92XgJ/8UgOTxu2LPwhJnBk/sQKxq7E8WkZBnBiozukQMqrw==
-  dependencies:
-    invariant "^2.2.4"
-    nullthrows "^1.1.1"
-
 "@sinclair/typebox@^0.27.8":
   version "0.27.12"
   resolved "https://registry.yarnpkg.com/@sinclair/typebox/-/typebox-0.27.12.tgz#0cacd3cff047a32936b1ace47ea7c86eaab60a7f"
@@ -1221,15 +1213,7 @@
   dependencies:
     undici-types "~8.9.0"
 
-"@types/react-native@^0.72.8":
-  version "0.72.8"
-  resolved "https://registry.yarnpkg.com/@types/react-native/-/react-native-0.72.8.tgz#eb6238fab289f5f132f7ccf138bdfe6f21ed93e1"
-  integrity sha512-St6xA7+EoHN5mEYfdWnfYt0e8u6k2FR0P9s2arYgakQGFgU1f9FlPrIEcj0X24pLCF5c5i3WVuLCUdiCYHmOoA==
-  dependencies:
-    "@react-native/virtualized-lists" "^0.72.4"
-    "@types/react" "*"
-
-"@types/react@*", "@types/react@~19.3.0":
+"@types/react@~19.3.0":
   version "19.3.0"
   resolved "https://registry.yarnpkg.com/@types/react/-/react-19.3.0.tgz#3b3ce8d8c1627fb5ccd4dadd57ef445c5a153b77"
   integrity sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==
@@ -1867,6 +1851,11 @@ expo-linear-gradient@~58.0.3:
   resolved "https://registry.yarnpkg.com/expo-linear-gradient/-/expo-linear-gradient-58.0.3.tgz#e910f55d49518323ba396d1e7ad24eb98d40e643"
   integrity sha512-sh6LXrlaCtlDlZ1CPPFRJWd3bl9lAr8e0hT61PvzMmkxd5sd3POe9QuWtct58wpp7PgOH2okB3iw4tq3ICA4Sg==
 
+expo-media-library@~58.0.11:
+  version "58.0.11"
+  resolved "https://registry.yarnpkg.com/expo-media-library/-/expo-media-library-58.0.11.tgz#da8a9978bb2542c9242f4c1e8eed316b95d2680a"
+  integrity sha512-kLwnmsDF80UbzOUdstvfCVDzvCrr+wYqnvT80MWh8uQysC9Ky7d00bZDZISJjBsxe9wTKzEsd4h7UqcVe2vAqQ==
+
 expo-modules-autolinking@~58.0.13:
   version "58.0.13"
   resolved "https://registry.yarnpkg.com/expo-modules-autolinking/-/expo-modules-autolinking-58.0.13.tgz#5714a6acbc5d83fc736c5d099428fbe1e17ae212"
@@ -1923,10 +1912,27 @@ expo-sharing@~58.0.19:
     "@expo/config-types" "^58.0.3"
     "@expo/plist" "^0.10.1"
 
+expo-splash-screen@~58.0.10:
+  version "58.0.10"
+  resolved "https://registry.yarnpkg.com/expo-splash-screen/-/expo-splash-screen-58.0.10.tgz#83f0df8f4847f1662ecd8ab27387fc88da895b5e"
+  integrity sha512-rjzCLKo7SHSOkaFnVnh+bYWK/pO/vC05qvJe++AjaQidTSGLxD2buj7zWFLlbEEpkqP+wZYQHRyx2mvHyZrUQw==
+  dependencies:
+    "@expo/config-plugins" "~58.0.9"
+    "@expo/image-utils" "^0.12.5"
+    xml2js "0.6.0"
+
 expo-status-bar@~58.0.3:
   version "58.0.3"
   resolved "https://registry.yarnpkg.com/expo-status-bar/-/expo-status-bar-58.0.3.tgz#2646aabefe4b47293ce1eebdfda8e54e1c68e466"
   integrity sha512-+GMLHLA81LB+/m2DteQAN7kvH8unVj3zYGSj8D6Csf+mCrc4P6jJwaSbrz17qTizzEIJ5lv6SuU9Zfyy2vSNoQ==
+
+expo-system-ui@~58.0.6:
+  version "58.0.6"
+  resolved "https://registry.yarnpkg.com/expo-system-ui/-/expo-system-ui-58.0.6.tgz#6ffc6789fa36af8d8fe40eca4a5a6baff88a87a4"
+  integrity sha512-K1+GIYhNDc4J0lJAL0m8giesP1dgfavhN+joA6FQ45r1FXAWwS1PaueCiCJaq5hB6z5iAYT7b9XqYp76UU65yw==
+  dependencies:
+    "@react-native/normalize-colors" "0.88.0"
+    debug "^4.3.2"
 
 expo@~58.0.16:
   version "58.0.16"

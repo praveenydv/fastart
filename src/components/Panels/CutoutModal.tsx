@@ -106,7 +106,7 @@ export default function CutoutModal({
           <View style={styles.sheetHeader}>
             <View style={styles.titleRow}>
               <Ionicons name="person-remove-outline" size={20} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Cutout & Chroma</Text>
+              <Text style={styles.sheetTitle}>{"Cutout & Chroma"}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
@@ -388,7 +388,7 @@ export default function CutoutModal({
 
             {/* Cutout Stroke / Glowing Edge (CapCut Pro feature) */}
             <View style={styles.sectionBox}>
-              <Text style={styles.sectionHeader}>CUTOUT STROKE & GLOW (PRO)</Text>
+              <Text style={styles.sectionHeader}>{"CUTOUT STROKE & GLOW (PRO)"}</Text>
               <View style={styles.strokeGrid}>
                 {strokePresets.map((sp) => {
                   const isSelected = strokeColor === sp.color;

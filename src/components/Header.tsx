@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
 import { ASPECT_RATIOS } from "../constants/sampleMedia";
-import { FastArtProject, AspectRatio, Resolution } from "../types/project";
+import { FastArtProject, AspectRatio } from "../types/project";
 
 interface HeaderProps {
   project: FastArtProject;
@@ -17,7 +17,7 @@ interface HeaderProps {
   onOpenExport: () => void;
 }
 
-export default function Header({
+function Header({
   project,
   onUpdateProject,
   onBackToHome,
@@ -28,11 +28,8 @@ export default function Header({
   onOpenExport,
 }: HeaderProps) {
   const [ratioModalVisible, setRatioModalVisible] = useState(false);
-  const [resModalVisible, setResModalVisible] = useState(false);
-  ``;
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
-  const resolutions: Resolution[] = ["720p", "1080p", "2K/4K"];
 
   return (
     <View style={styles.header}>
@@ -89,17 +86,8 @@ export default function Header({
         </TouchableOpacity>
       </View>
 
-      {/* Right: Resolution selector & Export CTA */}
+      {/* Right: Export CTA */}
       <View style={styles.rightSection}>
-        <TouchableOpacity
-          style={styles.resPill}
-          onPress={() => setResModalVisible(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.resText}>{project.resolution || "1080p"}</Text>
-          <Ionicons name="caret-down" size={10} color="#8E95A5" />
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.exportButton}
           onPress={onOpenExport}
@@ -145,37 +133,6 @@ export default function Header({
                   </View>
                 </View>
                 {project.aspectRatio === item.id && (
-                  <Ionicons name="checkmark-circle" size={20} color="#00F2FE" />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Resolution Modal */}
-      <Modal visible={resModalVisible} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setResModalVisible(false)}
-        >
-          <View style={[styles.modalContent, { width: 260 }]}>
-            <Text style={styles.modalTitle}>Export Resolution</Text>
-            {resolutions.map((res) => (
-              <TouchableOpacity
-                key={res}
-                style={[
-                  styles.modalItem,
-                  project.resolution === res && styles.modalItemActive,
-                ]}
-                onPress={() => {
-                  onUpdateProject({ resolution: res });
-                  setResModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalItemLabel}>{res}</Text>
-                {project.resolution === res && (
                   <Ionicons name="checkmark-circle" size={20} color="#00F2FE" />
                 )}
               </TouchableOpacity>
@@ -250,20 +207,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  resPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#141721",
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 10,
-    gap: 3,
-  },
-  resText: {
-    color: "#8E95A5",
-    fontSize: 11,
-    fontWeight: "700",
-  },
+
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -330,3 +274,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+
+export default React.memo(Header);

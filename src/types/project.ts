@@ -82,10 +82,12 @@ export interface VideoClip {
   title: string;
   type: 'video' | 'photo';
   url: string;
+  thumbnail?: string;
   duration: number;
   startTime: number;
   trimIn?: number;
   trimOut?: number;
+  mediaDuration?: number;
   speed?: number;
   speedCurve?: number[] | SpeedCurvePoint[] | null;
   smoothSlowMo?: 'none' | 'blend' | 'optical_flow';
@@ -98,10 +100,14 @@ export interface VideoClip {
   effect?: string;
   transition?: TransitionConfig;
   transform?: ClipTransform;
+  scale?: number;
+  rotation?: number;
+  opacity?: number;
   mask?: MaskConfig;
   crop?: CustomCrop;
   cutout?: CutoutConfig;
   keyframes?: KeyframePoint[];
+  motionTrack?: MotionTrackConfig;
   trackIndex?: number;
   isEnding?: boolean;
 }
@@ -114,6 +120,7 @@ export interface AudioClip {
   startTime: number;
   trimIn?: number;
   trimOut?: number;
+  mediaDuration?: number;
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;
@@ -199,6 +206,7 @@ export interface FastArtProject {
   isPlaying?: boolean;
   zoom: number;
   thumbnailUrl?: string;
+  canvasBackground?: string;
   tracks: ProjectTracks;
 }
 
@@ -213,6 +221,7 @@ export const createDefaultProject = (title = 'New Project'): FastArtProject => (
   currentTime: 0,
   isPlaying: false,
   zoom: 60,
+  canvasBackground: '#000000',
   tracks: {
     video: [],
     audio: [],

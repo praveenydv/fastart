@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, useWindowDimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, useWindowDimensions, ScrollView, Image, PanResponder, GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../utils/audioEngine';
 import { VideoRenderer } from '../utils/videoRenderer';
-import { FastArtProject } from '../types/project';
+import { FastArtProject, CustomCrop, AspectRatio, Resolution } from '../types/project';
+import { getLiveMediaUrl } from '../utils/largeMediaStorage';
+import { getPointerCoords } from './Timeline';
+import { setCachedMediaDuration } from '../utils/mediaDuration';
 
 interface PlayerProps {
   project: FastArtProject;
@@ -32,9 +35,21 @@ interface PlayerProps {
   onSplitClip?: () => void;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  isCroppingPreview?: boolean;
+  onToggleCropPreview?: (isCropping: boolean) => void;
+  onUpdateClipCrop?: (clipId: string, crop: CustomCrop, isFinal?: boolean) => void;
 }
 
-export default function Player({
+const CROP_PRESETS = [
+  { id: 'free', label: 'Free', ratio: 0 },
+  { id: '16:9', label: '16:9', ratio: 16 / 9 },
+  { id: '9:16', label: '9:16', ratio: 9 / 16 },
+  { id: '1:1', label: '1:1', ratio: 1 },
+  { id: '4:5', label: '4:5', ratio: 4 / 5 },
+  { id: '2.35:1', label: '2.35:1', ratio: 2.35 },
+];
+
+function Player({
   project,
   currentTime,
   isPlaying,
@@ -56,6 +71,9 @@ export default function Player({
   onSplitClip,
   fullscreen: fullscreenProp,
   onToggleFullscreen,
+  isCroppingPreview: isCroppingPreviewProp,
+  onToggleCropPreview,
+  onUpdateClipCrop,
 }: PlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasBoxRef = useRef<any>(null);
@@ -63,6 +81,21 @@ export default function Player({
   const audioElementsRef = useRef<{ [id: string]: HTMLAudioElement }>({});
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const fullscreen = fullscreenProp !== undefined ? fullscreenProp : internalFullscreen;
+
+  // On-Preview interactive crop state
+  const [internalCroppingMode, setInternalCroppingMode] = useState(false);
+  const isCroppingMode = isCroppingPreviewProp !== undefined ? isCroppingPreviewProp : internalCroppingMode;
+  const [cropBox, setCropBox] = useState<CustomCrop>({ x: 0, y: 0, width: 100, height: 100 });
+  const [cropPreset, setCropPreset] = useState<string>('free');
+  const [cropTargetClipId, setCropTargetClipId] = useState<string | null>(null);
+  const [cropDragState, setCropDragState] = useState<{
+    handle: 'pan' | 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r';
+    startClientX: number;
+    startClientY: number;
+    startCrop: CustomCrop;
+    mediaDisplayW: number;
+    mediaDisplayH: number;
+  } | null>(null);
 
   const toggleFullscreen = () => {
     soundEngine.playSfx('click');
@@ -83,6 +116,8 @@ export default function Player({
     startClientY: number;
     startCenterX: number;
     startCenterY: number;
+    absCenterX: number;
+    absCenterY: number;
     startScale: number;
     startRotation: number;
     startDist: number;
@@ -99,6 +134,7 @@ export default function Player({
   } | null>(null);
 
   const lastTapRef = useRef<{ time: number; id: string }>({ time: 0, id: '' });
+  const [mediaLoadErrors, setMediaLoadErrors] = useState<Record<string, boolean>>({});
 
   const { width: winW, height: winH } = useWindowDimensions();
   const isMobile = winW < 640;
@@ -226,14 +262,18 @@ export default function Player({
 
   // ESC key listener to exit fullscreen mode
   useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && fullscreen) {
         toggleFullscreen();
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      if (typeof window.removeEventListener === 'function') {
+        window.removeEventListener('keydown', onKeyDown);
+      }
+    };
   }, [fullscreen]);
 
   // Initialize renderer
@@ -272,6 +312,27 @@ export default function Player({
     }
   }, [project.tracks.video]);
 
+  // Rehydrate live media URLs from IndexedDB for clips with expired blob URLs
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const clips = project.tracks.video || [];
+      clips.forEach(async (clip) => {
+        if (clip.url.startsWith('blob:')) {
+          try {
+            const freshUrl = await getLiveMediaUrl(clip.id);
+            if (freshUrl && freshUrl !== clip.url) {
+              clip.url = freshUrl;
+              if (rendererRef.current && canvasRef.current) {
+                rendererRef.current.preloadClip(clip);
+                rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
+              }
+            }
+          } catch (e) {}
+        }
+      });
+    }
+  }, [project.id]);
+
   // Render frame on timestamp, project, or playback state change
   useEffect(() => {
     if (rendererRef.current && canvasRef.current) {
@@ -286,10 +347,15 @@ export default function Player({
     const audioClips = project.tracks.audio || [];
     const activeIds = new Set(audioClips.map((a) => a.id));
 
-    // Cleanup removed audio tracks
+    // Cleanup and release hardware audio decoders for removed audio tracks
     Object.keys(audioElementsRef.current).forEach((id) => {
       if (!activeIds.has(id)) {
-        audioElementsRef.current[id].pause();
+        const el = audioElementsRef.current[id];
+        try {
+          el.pause();
+          el.removeAttribute('src');
+          el.load();
+        } catch {}
         delete audioElementsRef.current[id];
       }
     });
@@ -297,8 +363,20 @@ export default function Player({
     audioClips.forEach((clip) => {
       let el = audioElementsRef.current[clip.id];
       if (!el || el.src !== clip.url) {
-        if (el) el.pause();
+        if (el) {
+          try {
+            el.pause();
+            el.removeAttribute('src');
+            el.load();
+          } catch {}
+        }
         el = new Audio(clip.url);
+        el.addEventListener('loadedmetadata', () => {
+          if (el.duration && !isNaN(el.duration) && isFinite(el.duration) && el.duration > 0) {
+            setCachedMediaDuration(clip.url, el.duration);
+            if (clip.id) setCachedMediaDuration(clip.id, el.duration);
+          }
+        });
         audioElementsRef.current[clip.id] = el;
       }
 
@@ -321,6 +399,16 @@ export default function Player({
         }
       }
     });
+
+    return () => {
+      if (!isPlaying) {
+        Object.values(audioElementsRef.current).forEach((el: any) => {
+          try {
+            el.pause();
+          } catch {}
+        });
+      }
+    };
   }, [isPlaying, project.tracks.audio, currentTime]);
 
   const formatTime = (secs: number) => {
@@ -339,6 +427,9 @@ export default function Player({
   const activeVideos = (project.tracks.video || []).filter(
     (v) => currentTime >= v.startTime && currentTime <= v.startTime + v.duration
   );
+  const activeEffects = (project.tracks.effects || []).filter(
+    (e) => currentTime >= e.startTime && currentTime <= e.startTime + e.duration
+  );
 
   const selectedText = activeTexts.find((t) => t.id === selectedClipId);
   const selectedSticker = activeStickers.find((s) => s.id === selectedClipId);
@@ -347,7 +438,81 @@ export default function Player({
       ? activeVideos.find((v) => v.id === selectedClipId) || null
       : null;
 
-  const activeTransformItem = selectedText
+  // Resolved video clip for on-preview cropping
+  const targetCropClip =
+    (project.tracks.video || []).find((v) => v.id === (cropTargetClipId || selectedClipId)) ||
+    selectedVideo ||
+    activeVideos[0] ||
+    (project.tracks.video || [])[0] ||
+    null;
+
+  // Natural or project target reference dimensions for accurate resolution display and cropping
+  const projectTargetDims = React.useMemo(() => {
+    const res = project.resolution || '1080p';
+    const aspect = project.aspectRatio || '9:16';
+    let baseH = 1080;
+    if (res === '720p') baseH = 720;
+    else if (res === '2K/4K') baseH = 2160;
+    else baseH = 1080;
+
+    switch (aspect) {
+      case '9:16':
+        return {
+          width: baseH === 720 ? 720 : baseH === 2160 ? 2160 : 1080,
+          height: baseH === 720 ? 1280 : baseH === 2160 ? 3840 : 1920,
+        };
+      case '1:1':
+        return {
+          width: baseH === 720 ? 720 : baseH === 2160 ? 2160 : 1080,
+          height: baseH === 720 ? 720 : baseH === 2160 ? 2160 : 1080,
+        };
+      case '4:5':
+        return {
+          width: baseH === 720 ? 720 : baseH === 2160 ? 2160 : 1080,
+          height: Math.round(baseH * 1.25),
+        };
+      case '2.35:1':
+        return {
+          width: Math.round(baseH * 2.35),
+          height: baseH,
+        };
+      case '16:9':
+      default:
+        return {
+          width: baseH === 720 ? 1280 : baseH === 2160 ? 3840 : 1920,
+          height: baseH,
+        };
+    }
+  }, [project.resolution, project.aspectRatio]);
+
+  const mediaNaturalDims = targetCropClip
+    ? rendererRef.current?.getMediaNaturalDimensions(targetCropClip.url)
+    : null;
+  const naturalW = mediaNaturalDims?.width || 0;
+  const naturalH = mediaNaturalDims?.height || 0;
+  // Natural video size or project target resolution, minimum 1080p height so crop can increase above 720 smoothly
+  const mw = Math.max(naturalW, projectTargetDims.width, 1080);
+  const mh = Math.max(naturalH, projectTargetDims.height, 1080);
+  const mediaAspect = naturalW > 0 && naturalH > 0 ? naturalW / naturalH : projectTargetDims.width / projectTargetDims.height;
+
+  let mediaDisplayW = boxWidth;
+  let mediaDisplayH = boxWidth / mediaAspect;
+  if (mediaDisplayH > canvasHeight) {
+    mediaDisplayH = canvasHeight;
+    mediaDisplayW = canvasHeight * mediaAspect;
+  }
+  const mediaDisplayLeft = (boxWidth - mediaDisplayW) / 2;
+  const mediaDisplayTop = (canvasHeight - mediaDisplayH) / 2;
+
+  // Real pixel coordinates of crop box relative to canvasBox
+  const cropPixelX = mediaDisplayLeft + (cropBox.x / 100) * mediaDisplayW;
+  const cropPixelY = mediaDisplayTop + (cropBox.y / 100) * mediaDisplayH;
+  const cropPixelW = (cropBox.width / 100) * mediaDisplayW;
+  const cropPixelH = (cropBox.height / 100) * mediaDisplayH;
+
+  const activeTransformItem = isCroppingMode
+    ? null
+    : selectedText
     ? {
         id: selectedText.id,
         type: 'text',
@@ -397,6 +562,413 @@ export default function Player({
     transform: { x: number; y: number; scale: number; rotation: number };
   } | null>(null);
   const rafIdRef = useRef<number | null>(null);
+
+  const activeTransformItemRef = useRef(activeTransformItem);
+  activeTransformItemRef.current = activeTransformItem;
+
+  const boxWidthRef = useRef(boxWidth);
+  boxWidthRef.current = boxWidth;
+
+  const canvasHeightRef = useRef(canvasHeight);
+  canvasHeightRef.current = canvasHeight;
+
+  // 1. Native Box PanResponder (Move + 2-Finger Pinch/Twist on selected item)
+  const nativeBoxStartRef = useRef<{
+    clipId: string;
+    clipType: string;
+    startCenterX: number;
+    startCenterY: number;
+    startScale: number;
+    startRotation: number;
+    initialDist?: number;
+    initialAngle?: number;
+    touch2StartX?: number;
+    touch2StartY?: number;
+  } | null>(null);
+
+  const nativeBoxPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => Platform.OS !== 'web',
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Platform.OS !== 'web' && (Math.abs(gs.dx) > 1 || Math.abs(gs.dy) > 1),
+      onPanResponderGrant: (evt) => {
+        if (Platform.OS === 'web') return;
+        const item = activeTransformItemRef.current;
+        if (!item) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        const startCenterX = (item.pos.x / 100) * bw;
+        const startCenterY = (item.pos.y / 100) * ch;
+        const touches = evt.nativeEvent.touches;
+        if (touches && touches.length >= 2) {
+          const t1 = touches[0];
+          const t2 = touches[1];
+          const dist = Math.hypot(t2.pageX - t1.pageX, t2.pageY - t1.pageY);
+          const angle = Math.atan2(t2.pageY - t1.pageY, t2.pageX - t1.pageX);
+          const midX = (t1.pageX + t2.pageX) / 2;
+          const midY = (t1.pageY + t2.pageY) / 2;
+          nativeBoxStartRef.current = {
+            clipId: item.id,
+            clipType: item.type,
+            startCenterX,
+            startCenterY,
+            startScale: item.scale,
+            startRotation: item.rotation,
+            initialDist: Math.max(10, dist),
+            initialAngle: angle,
+            touch2StartX: midX,
+            touch2StartY: midY,
+          };
+        } else {
+          nativeBoxStartRef.current = {
+            clipId: item.id,
+            clipType: item.type,
+            startCenterX,
+            startCenterY,
+            startScale: item.scale,
+            startRotation: item.rotation,
+          };
+        }
+      },
+      onPanResponderMove: (evt, gs) => {
+        if (Platform.OS === 'web') return;
+        const s = nativeBoxStartRef.current;
+        if (!s) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        const touches = evt.nativeEvent.touches;
+        if (touches && touches.length >= 2) {
+          const t1 = touches[0];
+          const t2 = touches[1];
+          const dist = Math.hypot(t2.pageX - t1.pageX, t2.pageY - t1.pageY);
+          const angle = Math.atan2(t2.pageY - t1.pageY, t2.pageX - t1.pageX);
+          const midX = (t1.pageX + t2.pageX) / 2;
+          const midY = (t1.pageY + t2.pageY) / 2;
+
+          if (!s.initialDist) {
+            s.initialDist = Math.max(10, dist);
+            s.initialAngle = angle;
+            s.touch2StartX = midX;
+            s.touch2StartY = midY;
+            return;
+          }
+
+          const scaleRatio = dist / s.initialDist;
+          const newScale = Math.max(0.2, Math.min(4.0, Number((s.startScale * scaleRatio).toFixed(2))));
+          const angleDiffDeg = ((angle - (s.initialAngle || 0)) * 180) / Math.PI;
+          const rawDeg = (s.startRotation + angleDiffDeg) % 360;
+          const newRotation = Math.round(((rawDeg % 360) + 360) % 360);
+
+          const dx = midX - (s.touch2StartX || midX);
+          const dy = midY - (s.touch2StartY || midY);
+
+          if (s.clipType === 'video') {
+            scheduleTransformUpdate(s.clipId, 'video', {
+              x: Math.round(s.startCenterX - bw / 2 + dx),
+              y: Math.round(s.startCenterY - ch / 2 + dy),
+              scale: newScale,
+              rotation: newRotation,
+            }, false);
+          } else {
+            const newPctX = Math.max(5, Math.min(95, ((s.startCenterX + dx) / bw) * 100));
+            const newPctY = Math.max(5, Math.min(95, ((s.startCenterY + dy) / ch) * 100));
+            scheduleTransformUpdate(s.clipId, s.clipType, {
+              x: Number(newPctX.toFixed(1)),
+              y: Number(newPctY.toFixed(1)),
+              scale: newScale,
+              rotation: newRotation,
+            }, false);
+          }
+        } else {
+          // Single-finger drag: move
+          const dx = gs.dx;
+          const dy = gs.dy;
+          if (s.clipType === 'video') {
+            scheduleTransformUpdate(s.clipId, 'video', {
+              x: Math.round(s.startCenterX - bw / 2 + dx),
+              y: Math.round(s.startCenterY - ch / 2 + dy),
+              scale: s.startScale,
+              rotation: s.startRotation,
+            }, false);
+          } else {
+            const newPctX = Math.max(5, Math.min(95, ((s.startCenterX + dx) / bw) * 100));
+            const newPctY = Math.max(5, Math.min(95, ((s.startCenterY + dy) / ch) * 100));
+            scheduleTransformUpdate(s.clipId, s.clipType, {
+              x: Number(newPctX.toFixed(1)),
+              y: Number(newPctY.toFixed(1)),
+              scale: s.startScale,
+              rotation: s.startRotation,
+            }, false);
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        if (latestTransformRef.current) {
+          scheduleTransformUpdate(
+            latestTransformRef.current.clipId,
+            latestTransformRef.current.clipType,
+            latestTransformRef.current.transform,
+            true
+          );
+        }
+        nativeBoxStartRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        nativeBoxStartRef.current = null;
+      },
+    })
+  ).current;
+
+  // 2. Native Rotation Handle PanResponder
+  const nativeRotStartRef = useRef<{
+    clipId: string;
+    clipType: string;
+    startRotation: number;
+    startScale: number;
+    startCenterX: number;
+    startCenterY: number;
+  } | null>(null);
+
+  const nativeRotPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => Platform.OS !== 'web',
+      onMoveShouldSetPanResponder: () => Platform.OS !== 'web',
+      onPanResponderGrant: () => {
+        if (Platform.OS === 'web') return;
+        const item = activeTransformItemRef.current;
+        if (!item) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        nativeRotStartRef.current = {
+          clipId: item.id,
+          clipType: item.type,
+          startRotation: item.rotation,
+          startScale: item.scale,
+          startCenterX: (item.pos.x / 100) * bw,
+          startCenterY: (item.pos.y / 100) * ch,
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        if (Platform.OS === 'web') return;
+        const s = nativeRotStartRef.current;
+        if (!s) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        const rotDelta = gs.dx * 0.85;
+        const rawDeg = (s.startRotation + rotDelta) % 360;
+        const newRot = Math.round(((rawDeg % 360) + 360) % 360);
+        let snappedRot = newRot;
+        [0, 90, 180, 270, 360].forEach((deg) => {
+          if (Math.abs(newRot - deg) < 5) snappedRot = deg % 360;
+        });
+
+        if (s.clipType === 'video') {
+          scheduleTransformUpdate(s.clipId, 'video', {
+            x: Math.round(s.startCenterX - bw / 2),
+            y: Math.round(s.startCenterY - ch / 2),
+            scale: s.startScale,
+            rotation: snappedRot,
+          }, false);
+        } else {
+          const newPctX = (s.startCenterX / bw) * 100;
+          const newPctY = (s.startCenterY / ch) * 100;
+          scheduleTransformUpdate(s.clipId, s.clipType, {
+            x: Number(newPctX.toFixed(1)),
+            y: Number(newPctY.toFixed(1)),
+            scale: s.startScale,
+            rotation: snappedRot,
+          }, false);
+        }
+      },
+      onPanResponderRelease: () => {
+        if (latestTransformRef.current) {
+          scheduleTransformUpdate(
+            latestTransformRef.current.clipId,
+            latestTransformRef.current.clipType,
+            latestTransformRef.current.transform,
+            true
+          );
+        }
+        nativeRotStartRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        nativeRotStartRef.current = null;
+      },
+    })
+  ).current;
+
+  // 3. Native Corner Resize Handle PanResponder
+  const nativeScaleStartRef = useRef<{
+    clipId: string;
+    clipType: string;
+    startRotation: number;
+    startScale: number;
+    startCenterX: number;
+    startCenterY: number;
+  } | null>(null);
+
+  const nativeScalePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => Platform.OS !== 'web',
+      onMoveShouldSetPanResponder: () => Platform.OS !== 'web',
+      onPanResponderGrant: () => {
+        if (Platform.OS === 'web') return;
+        const item = activeTransformItemRef.current;
+        if (!item) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        nativeScaleStartRef.current = {
+          clipId: item.id,
+          clipType: item.type,
+          startRotation: item.rotation,
+          startScale: item.scale,
+          startCenterX: (item.pos.x / 100) * bw,
+          startCenterY: (item.pos.y / 100) * ch,
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        if (Platform.OS === 'web') return;
+        const s = nativeScaleStartRef.current;
+        if (!s) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        const delta = (Math.abs(gs.dx) > Math.abs(gs.dy) ? gs.dx : gs.dy) / 110;
+        const newScale = Math.max(0.2, Math.min(4.0, Number((s.startScale * (1 + delta)).toFixed(2))));
+
+        if (s.clipType === 'video') {
+          scheduleTransformUpdate(s.clipId, 'video', {
+            x: Math.round(s.startCenterX - bw / 2),
+            y: Math.round(s.startCenterY - ch / 2),
+            scale: newScale,
+            rotation: s.startRotation,
+          }, false);
+        } else {
+          const newPctX = (s.startCenterX / bw) * 100;
+          const newPctY = (s.startCenterY / ch) * 100;
+          scheduleTransformUpdate(s.clipId, s.clipType, {
+            x: Number(newPctX.toFixed(1)),
+            y: Number(newPctY.toFixed(1)),
+            scale: newScale,
+            rotation: s.startRotation,
+          }, false);
+        }
+      },
+      onPanResponderRelease: () => {
+        if (latestTransformRef.current) {
+          scheduleTransformUpdate(
+            latestTransformRef.current.clipId,
+            latestTransformRef.current.clipType,
+            latestTransformRef.current.transform,
+            true
+          );
+        }
+        nativeScaleStartRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        nativeScaleStartRef.current = null;
+      },
+    })
+  ).current;
+
+  // 4. Two-finger Canvas PanResponder for multi-touch gestures anywhere on the preview
+  const nativeCanvasPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt) =>
+        Platform.OS !== 'web' && !!activeTransformItemRef.current && (evt.nativeEvent.touches?.length || 0) >= 2,
+      onPanResponderGrant: (evt) => {
+        if (Platform.OS === 'web') return;
+        const item = activeTransformItemRef.current;
+        if (!item) return;
+        const touches = evt.nativeEvent.touches;
+        if (!touches || touches.length < 2) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        const t1 = touches[0];
+        const t2 = touches[1];
+        const dist = Math.hypot(t2.pageX - t1.pageX, t2.pageY - t1.pageY);
+        const angle = Math.atan2(t2.pageY - t1.pageY, t2.pageX - t1.pageX);
+        const midX = (t1.pageX + t2.pageX) / 2;
+        const midY = (t1.pageY + t2.pageY) / 2;
+        nativeBoxStartRef.current = {
+          clipId: item.id,
+          clipType: item.type,
+          startCenterX: (item.pos.x / 100) * bw,
+          startCenterY: (item.pos.y / 100) * ch,
+          startScale: item.scale,
+          startRotation: item.rotation,
+          initialDist: Math.max(10, dist),
+          initialAngle: angle,
+          touch2StartX: midX,
+          touch2StartY: midY,
+        };
+      },
+      onPanResponderMove: (evt) => {
+        if (Platform.OS === 'web') return;
+        const s = nativeBoxStartRef.current;
+        if (!s) return;
+        const touches = evt.nativeEvent.touches;
+        if (!touches || touches.length < 2) return;
+        const bw = boxWidthRef.current;
+        const ch = canvasHeightRef.current;
+        const t1 = touches[0];
+        const t2 = touches[1];
+        const dist = Math.hypot(t2.pageX - t1.pageX, t2.pageY - t1.pageY);
+        const angle = Math.atan2(t2.pageY - t1.pageY, t2.pageX - t1.pageX);
+        const midX = (t1.pageX + t2.pageX) / 2;
+        const midY = (t1.pageY + t2.pageY) / 2;
+
+        if (!s.initialDist) {
+          s.initialDist = Math.max(10, dist);
+          s.initialAngle = angle;
+          s.touch2StartX = midX;
+          s.touch2StartY = midY;
+          return;
+        }
+
+        const scaleRatio = dist / s.initialDist;
+        const newScale = Math.max(0.2, Math.min(4.0, Number((s.startScale * scaleRatio).toFixed(2))));
+        const angleDiffDeg = ((angle - (s.initialAngle || 0)) * 180) / Math.PI;
+        const rawDeg = (s.startRotation + angleDiffDeg) % 360;
+        const newRotation = Math.round(((rawDeg % 360) + 360) % 360);
+
+        const dx = midX - (s.touch2StartX || midX);
+        const dy = midY - (s.touch2StartY || midY);
+
+        if (s.clipType === 'video') {
+          scheduleTransformUpdate(s.clipId, 'video', {
+            x: Math.round(s.startCenterX - bw / 2 + dx),
+            y: Math.round(s.startCenterY - ch / 2 + dy),
+            scale: newScale,
+            rotation: newRotation,
+          }, false);
+        } else {
+          const newPctX = Math.max(5, Math.min(95, ((s.startCenterX + dx) / bw) * 100));
+          const newPctY = Math.max(5, Math.min(95, ((s.startCenterY + dy) / ch) * 100));
+          scheduleTransformUpdate(s.clipId, s.clipType, {
+            x: Number(newPctX.toFixed(1)),
+            y: Number(newPctY.toFixed(1)),
+            scale: newScale,
+            rotation: newRotation,
+          }, false);
+        }
+      },
+      onPanResponderRelease: () => {
+        if (latestTransformRef.current) {
+          scheduleTransformUpdate(
+            latestTransformRef.current.clipId,
+            latestTransformRef.current.clipType,
+            latestTransformRef.current.transform,
+            true
+          );
+        }
+        nativeBoxStartRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        nativeBoxStartRef.current = null;
+      },
+    })
+  ).current;
 
   const scheduleTransformUpdate = (
     clipId: string,
@@ -489,20 +1061,62 @@ export default function Player({
     }
   };
 
+  const handleQuickScale = (item: any, delta: number) => {
+    soundEngine.playSfx('click');
+    const newScale = Math.max(0.2, Math.min(4.0, Number(((item.scale || 1.0) + delta).toFixed(2))));
+    if (item.type === 'video') {
+      const curX = item.pos ? (item.pos.x / 100) * boxWidth - boxWidth / 2 : 0;
+      const curY = item.pos ? (item.pos.y / 100) * canvasHeight - canvasHeight / 2 : 0;
+      onUpdateClipTransform?.(
+        item.id,
+        'video',
+        {
+          x: Math.round(curX),
+          y: Math.round(curY),
+          scale: newScale,
+          rotation: item.rotation || 0,
+        },
+        true
+      );
+    } else {
+      onUpdateClipTransform?.(
+        item.id,
+        item.type,
+        {
+          x: item.pos.x,
+          y: item.pos.y,
+          scale: newScale,
+          rotation: item.rotation || 0,
+        },
+        true
+      );
+    }
+  };
+
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.();
+    };
+  }, []);
+
   const handleStartDrag = (
     e: any,
     mode: 'move' | 'scale' | 'rotate',
     corner?: 'tl' | 'tr' | 'bl' | 'br',
     overrideItem?: any
   ) => {
-    e.stopPropagation?.();
-    if (e.preventDefault && Platform.OS === 'web') {
-      e.preventDefault();
-    }
+    if (e.stopPropagation) e.stopPropagation();
+    if (e.nativeEvent && e.nativeEvent.stopPropagation) e.nativeEvent.stopPropagation();
+    if (e.cancelable && e.preventDefault) e.preventDefault();
+
     const targetItem = overrideItem || activeTransformItem;
     if (!targetItem) return;
 
-    // Fast 1-click editing: Double-tap or double-click to immediately open editor
+    soundEngine.playSfx('click');
+
+    // Fast 1-click editing: Double-tap text or sticker opens edit modal
     const now = Date.now();
     if (
       mode === 'move' &&
@@ -514,40 +1128,35 @@ export default function Player({
       soundEngine.playSfx('click');
       if (targetItem.type === 'text' || targetItem.type === 'sticker') {
         onOpenEditModal?.(targetItem.id, targetItem.type);
-      } else if (targetItem.type === 'video') {
-        onOpenCropModal?.(targetItem.id);
       }
       return;
     }
     lastTapRef.current = { time: now, id: targetItem.id };
 
-    const clientX =
-      e.touches && e.touches.length > 0
-        ? e.touches[0].clientX
-        : e.clientX !== undefined
-        ? e.clientX
-        : e.nativeEvent?.pageX || 0;
-    const clientY =
-      e.touches && e.touches.length > 0
-        ? e.touches[0].clientY
-        : e.clientY !== undefined
-        ? e.clientY
-        : e.nativeEvent?.pageY || 0;
+    const coords = getPointerCoords(e);
+    const clientX = coords.clientX;
+    const clientY = coords.clientY;
 
     const itemCenterX = (targetItem.pos.x / 100) * boxWidth;
     const itemCenterY = (targetItem.pos.y / 100) * canvasHeight;
 
-    const boxRect = canvasBoxRef.current?.getBoundingClientRect?.() || {
-      left: 0,
-      top: 0,
-    };
-    const absCenterX = boxRect.left + itemCenterX;
-    const absCenterY = boxRect.top + itemCenterY;
+    let rectLeft = 0;
+    let rectTop = 0;
+    if (typeof window !== 'undefined') {
+      const el = canvasRef.current || (canvasBoxRef.current as any);
+      if (el && typeof el.getBoundingClientRect === 'function') {
+        const r = el.getBoundingClientRect();
+        rectLeft = r.left;
+        rectTop = r.top;
+      }
+    }
+    const absCenterX = rectLeft + itemCenterX;
+    const absCenterY = rectTop + itemCenterY;
 
     const startDist = Math.hypot(clientX - absCenterX, clientY - absCenterY);
     const startAngle = Math.atan2(clientY - absCenterY, clientX - absCenterX);
 
-    setDragState({
+    const dragSession = {
       mode,
       corner,
       clipId: targetItem.id,
@@ -556,142 +1165,134 @@ export default function Player({
       startClientY: clientY,
       startCenterX: itemCenterX,
       startCenterY: itemCenterY,
-      startScale: targetItem.scale,
-      startRotation: targetItem.rotation,
+      absCenterX,
+      absCenterY,
+      startScale: targetItem.scale ?? 1.0,
+      startRotation: targetItem.rotation ?? 0,
       startDist: Math.max(10, startDist),
       startAngle,
-    });
-  };
+    };
 
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined' || !dragState) return;
+    setDragState(dragSession);
 
-    const handlePointerMove = (e: any) => {
-      const clientX =
-        e.touches && e.touches.length > 0
-          ? e.touches[0].clientX
-          : e.clientX !== undefined
-          ? e.clientX
-          : 0;
-      const clientY =
-        e.touches && e.touches.length > 0
-          ? e.touches[0].clientY
-          : e.clientY !== undefined
-          ? e.clientY
-          : 0;
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-      if (dragState.mode === 'move') {
-        const dx = clientX - dragState.startClientX;
-        const dy = clientY - dragState.startClientY;
-        const newCenterX = dragState.startCenterX + dx;
-        const newCenterY = dragState.startCenterY + dy;
+    // Clean up any existing listeners before attaching new ones
+    dragCleanupRef.current?.();
 
-        if (dragState.clipType === 'video') {
+    const handlePointerMove = (moveEvt: any) => {
+      if (moveEvt.cancelable && moveEvt.preventDefault) {
+        moveEvt.preventDefault();
+      }
+      const mCoords = getPointerCoords(moveEvt);
+      const curX = mCoords.clientX;
+      const curY = mCoords.clientY;
+
+      if (dragSession.mode === 'move') {
+        const dx = curX - dragSession.startClientX;
+        const dy = curY - dragSession.startClientY;
+        const newCenterX = dragSession.startCenterX + dx;
+        const newCenterY = dragSession.startCenterY + dy;
+
+        if (dragSession.clipType === 'video') {
           const transformX = newCenterX - boxWidth / 2;
           const transformY = newCenterY - canvasHeight / 2;
           scheduleTransformUpdate(
-            dragState.clipId,
+            dragSession.clipId,
             'video',
             {
               x: Math.round(transformX),
               y: Math.round(transformY),
-              scale: dragState.startScale,
-              rotation: dragState.startRotation,
+              scale: dragSession.startScale,
+              rotation: dragSession.startRotation,
             },
             false
           );
         } else {
-          const newPctX = Math.max(5, Math.min(95, Number(((newCenterX / boxWidth) * 100).toFixed(1))));
-          const newPctY = Math.max(5, Math.min(95, Number(((newCenterY / canvasHeight) * 100).toFixed(1))));
+          const newPctX = Math.max(0, Math.min(100, Number(((newCenterX / boxWidth) * 100).toFixed(1))));
+          const newPctY = Math.max(0, Math.min(100, Number(((newCenterY / canvasHeight) * 100).toFixed(1))));
           scheduleTransformUpdate(
-            dragState.clipId,
-            dragState.clipType,
+            dragSession.clipId,
+            dragSession.clipType,
             {
               x: newPctX,
               y: newPctY,
-              scale: dragState.startScale,
-              rotation: dragState.startRotation,
+              scale: dragSession.startScale,
+              rotation: dragSession.startRotation,
             },
             false
           );
         }
-      } else if (dragState.mode === 'scale') {
-        const boxRect = canvasBoxRef.current?.getBoundingClientRect?.() || { left: 0, top: 0 };
-        const absCenterX = boxRect.left + dragState.startCenterX;
-        const absCenterY = boxRect.top + dragState.startCenterY;
+      } else if (dragSession.mode === 'scale') {
+        const currentDist = Math.hypot(curX - dragSession.absCenterX, curY - dragSession.absCenterY);
+        const scaleRatio = currentDist / Math.max(10, dragSession.startDist);
+        const newScale = Math.max(0.15, Math.min(5.0, Number((dragSession.startScale * scaleRatio).toFixed(2))));
 
-        const currentDist = Math.hypot(clientX - absCenterX, clientY - absCenterY);
-        const ratio = currentDist / Math.max(10, dragState.startDist);
-        const newScale = Math.max(0.2, Math.min(4.0, Number((dragState.startScale * ratio).toFixed(2))));
-
-        if (dragState.clipType === 'video') {
-          const transformX = dragState.startCenterX - boxWidth / 2;
-          const transformY = dragState.startCenterY - canvasHeight / 2;
+        if (dragSession.clipType === 'video') {
+          const transformX = dragSession.startCenterX - boxWidth / 2;
+          const transformY = dragSession.startCenterY - canvasHeight / 2;
           scheduleTransformUpdate(
-            dragState.clipId,
+            dragSession.clipId,
             'video',
             {
               x: Math.round(transformX),
               y: Math.round(transformY),
               scale: newScale,
-              rotation: dragState.startRotation,
+              rotation: dragSession.startRotation,
             },
             false
           );
         } else {
-          const posX = (dragState.startCenterX / boxWidth) * 100;
-          const posY = (dragState.startCenterY / canvasHeight) * 100;
+          const posX = (dragSession.startCenterX / boxWidth) * 100;
+          const posY = (dragSession.startCenterY / canvasHeight) * 100;
           scheduleTransformUpdate(
-            dragState.clipId,
-            dragState.clipType,
+            dragSession.clipId,
+            dragSession.clipType,
             {
-              x: posX,
-              y: posY,
+              x: Number(posX.toFixed(1)),
+              y: Number(posY.toFixed(1)),
               scale: newScale,
-              rotation: dragState.startRotation,
+              rotation: dragSession.startRotation,
             },
             false
           );
         }
-      } else if (dragState.mode === 'rotate') {
-        const boxRect = canvasBoxRef.current?.getBoundingClientRect?.() || { left: 0, top: 0 };
-        const absCenterX = boxRect.left + dragState.startCenterX;
-        const absCenterY = boxRect.top + dragState.startCenterY;
-
-        const currentAngle = Math.atan2(clientY - absCenterY, clientX - absCenterX);
-        const angleDiffDeg = ((currentAngle - dragState.startAngle) * 180) / Math.PI;
-        const rawDeg = (dragState.startRotation + angleDiffDeg) % 360;
-        const normalized = ((rawDeg % 360) + 360) % 360;
-
-        let snapped = Math.round(normalized);
-        [0, 90, 180, 270, 360].forEach((snap) => {
-          if (Math.abs(snapped - snap) <= 4) snapped = snap % 360;
+      } else if (dragSession.mode === 'rotate') {
+        const currentAngle = Math.atan2(curY - dragSession.absCenterY, curX - dragSession.absCenterX);
+        const angleDiffDeg = ((currentAngle - dragSession.startAngle) * 180) / Math.PI;
+        const rawRotation = (dragSession.startRotation + angleDiffDeg) % 360;
+        const normalized = Math.round(((rawRotation % 360) + 360) % 360);
+        let snapped = normalized;
+        [0, 90, 180, 270, 360].forEach((snapAngle) => {
+          if (Math.abs(normalized - snapAngle) < 6) {
+            snapped = snapAngle % 360;
+          }
         });
 
-        if (dragState.clipType === 'video') {
-          const transformX = dragState.startCenterX - boxWidth / 2;
-          const transformY = dragState.startCenterY - canvasHeight / 2;
+        if (dragSession.clipType === 'video') {
+          const transformX = dragSession.startCenterX - boxWidth / 2;
+          const transformY = dragSession.startCenterY - canvasHeight / 2;
           scheduleTransformUpdate(
-            dragState.clipId,
+            dragSession.clipId,
             'video',
             {
               x: Math.round(transformX),
               y: Math.round(transformY),
-              scale: dragState.startScale,
+              scale: dragSession.startScale,
               rotation: snapped,
             },
             false
           );
         } else {
-          const posX = (dragState.startCenterX / boxWidth) * 100;
-          const posY = (dragState.startCenterY / canvasHeight) * 100;
+          const posX = (dragSession.startCenterX / boxWidth) * 100;
+          const posY = (dragSession.startCenterY / canvasHeight) * 100;
           scheduleTransformUpdate(
-            dragState.clipId,
-            dragState.clipType,
+            dragSession.clipId,
+            dragSession.clipType,
             {
-              x: posX,
-              y: posY,
-              scale: dragState.startScale,
+              x: Number(posX.toFixed(1)),
+              y: Number(posY.toFixed(1)),
+              scale: dragSession.startScale,
               rotation: snapped,
             },
             false
@@ -701,6 +1302,8 @@ export default function Player({
     };
 
     const handlePointerUp = () => {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
       if (latestTransformRef.current) {
         scheduleTransformUpdate(
           latestTransformRef.current.clipId,
@@ -716,14 +1319,16 @@ export default function Player({
     window.addEventListener('mouseup', handlePointerUp);
     window.addEventListener('touchmove', handlePointerMove, { passive: false });
     window.addEventListener('touchend', handlePointerUp);
+    window.addEventListener('touchcancel', handlePointerUp);
 
-    return () => {
+    dragCleanupRef.current = () => {
       window.removeEventListener('mousemove', handlePointerMove);
       window.removeEventListener('mouseup', handlePointerUp);
       window.removeEventListener('touchmove', handlePointerMove);
       window.removeEventListener('touchend', handlePointerUp);
+      window.removeEventListener('touchcancel', handlePointerUp);
     };
-  }, [dragState, boxWidth, canvasHeight]);
+  };
 
   // Two-Finger Gesture Support for Mobile touchscreens (Pinch-to-scale, Twist-to-rotate, Pan-to-move)
   useEffect(() => {
@@ -833,6 +1438,274 @@ export default function Player({
     };
   }, [activeTransformItem, boxWidth, canvasHeight]);
 
+  // Sync preview crop mode with VideoRenderer
+  useEffect(() => {
+    if (isCroppingMode) {
+      const targetId = cropTargetClipId || selectedClipId || activeVideos[0]?.id;
+      if (targetId) {
+        setCropTargetClipId(targetId);
+        rendererRef.current?.setPreviewCropMode(targetId);
+        const clip = (project.tracks.video || []).find((c) => c.id === targetId);
+        if (clip) {
+          const c = clip.crop || clip.transform?.crop;
+          if (c && c.width > 0 && c.height > 0) {
+            setCropBox({
+              x: Math.max(0, Math.min(90, c.x)),
+              y: Math.max(0, Math.min(90, c.y)),
+              width: Math.max(10, Math.min(100, c.width)),
+              height: Math.max(10, Math.min(100, c.height)),
+            });
+          } else {
+            setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+          }
+          setCropPreset('free');
+        }
+      }
+    } else {
+      rendererRef.current?.setPreviewCropMode(null);
+      setCropTargetClipId(null);
+    }
+    if (rendererRef.current && canvasRef.current) {
+      rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
+    }
+  }, [isCroppingMode]);
+
+  const handleEnterCropMode = (clipId?: string) => {
+    soundEngine.playSfx('click');
+    const targetId = clipId || selectedClipId || activeVideos[0]?.id;
+    if (!targetId) return;
+    const clip = (project.tracks.video || []).find((c) => c.id === targetId);
+    if (!clip) return;
+
+    setCropTargetClipId(targetId);
+    if (selectedClipId !== targetId) {
+      onSelectClip?.(targetId, 'video');
+    }
+    const c = clip.crop || clip.transform?.crop;
+    if (c && c.width > 0 && c.height > 0) {
+      setCropBox({
+        x: Math.max(0, Math.min(90, c.x)),
+        y: Math.max(0, Math.min(90, c.y)),
+        width: Math.max(10, Math.min(100, c.width)),
+        height: Math.max(10, Math.min(100, c.height)),
+      });
+    } else {
+      setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+    }
+    setCropPreset('free');
+    rendererRef.current?.setPreviewCropMode(targetId);
+    if (onToggleCropPreview) {
+      onToggleCropPreview(true);
+    } else {
+      setInternalCroppingMode(true);
+    }
+    if (rendererRef.current && canvasRef.current) {
+      rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
+    }
+  };
+
+  const handleCropDragStart = (
+    e: any,
+    handle: 'pan' | 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r'
+  ) => {
+    e.stopPropagation?.();
+    e.nativeEvent?.stopPropagation?.();
+    if (e.cancelable && e.preventDefault) {
+      e.preventDefault();
+    }
+    const { clientX, clientY } = getPointerCoords(e);
+
+    setCropDragState({
+      handle,
+      startClientX: clientX,
+      startClientY: clientY,
+      startCrop: { ...cropBox },
+      mediaDisplayW,
+      mediaDisplayH,
+    });
+  };
+
+  const handleApplyPresetCrop = (presetId: string) => {
+    soundEngine.playSfx('click');
+    setCropPreset(presetId);
+    if (presetId === 'free') {
+      return;
+    }
+    const preset = CROP_PRESETS.find((p) => p.id === presetId);
+    if (!preset || preset.ratio <= 0) return;
+
+    const targetRatio = preset.ratio;
+    const ratioFactor = targetRatio / mediaAspect;
+
+    let newW = 100;
+    let newH = newW / ratioFactor;
+    if (newH > 100) {
+      newH = 100;
+      newW = newH * ratioFactor;
+    }
+    newW = Math.max(10, Math.min(100, Number(newW.toFixed(2))));
+    newH = Math.max(10, Math.min(100, Number(newH.toFixed(2))));
+    const newX = Number(((100 - newW) / 2).toFixed(2));
+    const newY = Number(((100 - newH) / 2).toFixed(2));
+
+    setCropBox({
+      x: newX,
+      y: newY,
+      width: newW,
+      height: newH,
+    });
+  };
+
+  const handleResetCrop = () => {
+    soundEngine.playSfx('click');
+    setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+    setCropPreset('free');
+  };
+
+  const handleCancelCrop = () => {
+    soundEngine.playSfx('click');
+    rendererRef.current?.setPreviewCropMode(null);
+    if (onToggleCropPreview) {
+      onToggleCropPreview(false);
+    } else {
+      setInternalCroppingMode(false);
+    }
+    if (rendererRef.current && canvasRef.current) {
+      rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
+    }
+  };
+
+  const handleConfirmCrop = () => {
+    soundEngine.playSfx('click');
+    const targetId = cropTargetClipId || selectedClipId || activeVideos[0]?.id;
+    if (targetId && onUpdateClipCrop) {
+      onUpdateClipCrop(
+        targetId,
+        {
+          x: Math.round(cropBox.x),
+          y: Math.round(cropBox.y),
+          width: Math.round(cropBox.width),
+          height: Math.round(cropBox.height),
+        },
+        true
+      );
+    }
+    rendererRef.current?.setPreviewCropMode(null);
+    if (onToggleCropPreview) {
+      onToggleCropPreview(false);
+    } else {
+      setInternalCroppingMode(false);
+    }
+    if (rendererRef.current && canvasRef.current) {
+      rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
+    }
+  };
+
+  useEffect(() => {
+    if (!cropDragState) return;
+
+    let pendingRaf: number | null = null;
+    let latestBox = { ...cropBox };
+
+    const handlePointerMove = (e: any) => {
+      if (e.cancelable && e.preventDefault) {
+        e.preventDefault();
+      }
+      const { clientX, clientY } = getPointerCoords(e);
+
+      const dxPx = clientX - cropDragState.startClientX;
+      const dyPx = clientY - cropDragState.startClientY;
+      const dxPct = (dxPx / cropDragState.mediaDisplayW) * 100;
+      const dyPct = (dyPx / cropDragState.mediaDisplayH) * 100;
+
+      const { handle, startCrop } = cropDragState;
+      let nextX = startCrop.x;
+      let nextY = startCrop.y;
+      let nextW = startCrop.width;
+      let nextH = startCrop.height;
+
+      if (handle === 'pan') {
+        nextX = Math.max(0, Math.min(100 - startCrop.width, startCrop.x + dxPct));
+        nextY = Math.max(0, Math.min(100 - startCrop.height, startCrop.y + dyPct));
+      } else if (handle === 'br') {
+        nextW = Math.max(10, Math.min(100 - startCrop.x, startCrop.width + dxPct));
+        nextH = Math.max(10, Math.min(100 - startCrop.y, startCrop.height + dyPct));
+      } else if (handle === 'tl') {
+        const candidateX = Math.max(0, Math.min(startCrop.x + startCrop.width - 10, startCrop.x + dxPct));
+        const candidateY = Math.max(0, Math.min(startCrop.y + startCrop.height - 10, startCrop.y + dyPct));
+        nextW = startCrop.width - (candidateX - startCrop.x);
+        nextH = startCrop.height - (candidateY - startCrop.y);
+        nextX = candidateX;
+        nextY = candidateY;
+      } else if (handle === 'tr') {
+        const candidateY = Math.max(0, Math.min(startCrop.y + startCrop.height - 10, startCrop.y + dyPct));
+        nextW = Math.max(10, Math.min(100 - startCrop.x, startCrop.width + dxPct));
+        nextH = startCrop.height - (candidateY - startCrop.y);
+        nextY = candidateY;
+      } else if (handle === 'bl') {
+        const candidateX = Math.max(0, Math.min(startCrop.x + startCrop.width - 10, startCrop.x + dxPct));
+        nextW = startCrop.width - (candidateX - startCrop.x);
+        nextH = Math.max(10, Math.min(100 - startCrop.y, startCrop.height + dyPct));
+        nextX = candidateX;
+      } else if (handle === 't') {
+        const candidateY = Math.max(0, Math.min(startCrop.y + startCrop.height - 10, startCrop.y + dyPct));
+        nextH = startCrop.height - (candidateY - startCrop.y);
+        nextY = candidateY;
+      } else if (handle === 'b') {
+        nextH = Math.max(10, Math.min(100 - startCrop.y, startCrop.height + dyPct));
+      } else if (handle === 'l') {
+        const candidateX = Math.max(0, Math.min(startCrop.x + startCrop.width - 10, startCrop.x + dxPct));
+        nextW = startCrop.width - (candidateX - startCrop.x);
+        nextX = candidateX;
+      } else if (handle === 'r') {
+        nextW = Math.max(10, Math.min(100 - startCrop.x, startCrop.width + dxPct));
+      }
+
+      latestBox = {
+        x: Number(nextX.toFixed(2)),
+        y: Number(nextY.toFixed(2)),
+        width: Number(nextW.toFixed(2)),
+        height: Number(nextH.toFixed(2)),
+      };
+
+      if (pendingRaf === null) {
+        pendingRaf = requestAnimationFrame(() => {
+          pendingRaf = null;
+          setCropBox(latestBox);
+        });
+      }
+    };
+
+    const handlePointerUp = () => {
+      if (pendingRaf !== null) {
+        cancelAnimationFrame(pendingRaf);
+        pendingRaf = null;
+      }
+      setCropBox(latestBox);
+      setCropDragState(null);
+    };
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('mousemove', handlePointerMove);
+      window.addEventListener('mouseup', handlePointerUp);
+      window.addEventListener('touchmove', handlePointerMove, { passive: false });
+      window.addEventListener('touchend', handlePointerUp);
+      window.addEventListener('touchcancel', handlePointerUp);
+      return () => {
+        if (pendingRaf !== null) {
+          cancelAnimationFrame(pendingRaf);
+        }
+        if (typeof window.removeEventListener === 'function') {
+          window.removeEventListener('mousemove', handlePointerMove);
+          window.removeEventListener('mouseup', handlePointerUp);
+          window.removeEventListener('touchmove', handlePointerMove);
+          window.removeEventListener('touchend', handlePointerUp);
+          window.removeEventListener('touchcancel', handlePointerUp);
+        }
+      };
+    }
+  }, [cropDragState]);
+
   const stepFrame = (frames: number) => {
     const fps = 30;
     const nextTime = Math.max(0, Math.min(totalDuration, currentTime + frames / fps));
@@ -840,7 +1713,13 @@ export default function Player({
   };
 
   return (
-    <View style={[styles.container, fullscreen && styles.containerFullscreen]}>
+    <View
+      style={[
+        styles.container,
+        fullscreen && styles.containerFullscreen,
+        Platform.OS === 'web' ? ({ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' } as any) : undefined,
+      ]}
+    >
       {/* Floating Exit Fullscreen Button in Cinema Fullscreen Mode */}
       {fullscreen && (
         <TouchableOpacity
@@ -861,13 +1740,20 @@ export default function Player({
       >
         <View
           ref={canvasBoxRef}
-          style={[styles.canvasBox, { width: boxWidth, height: canvasHeight }]}
+          style={[
+            styles.canvasBox,
+            {
+              width: boxWidth,
+              height: canvasHeight,
+              backgroundColor: project.canvasBackground || '#000000',
+            },
+          ]}
         >
           {Platform.OS === 'web' ? (
             <canvas
               ref={canvasRef as any}
-              width={Math.round(canvasWidth * (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2))}
-              height={Math.round(canvasHeight * (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2))}
+              width={Math.round(canvasWidth * (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2.0) : 1))}
+              height={Math.round(canvasHeight * (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2.0) : 1))}
               style={{
                 width: '100%',
                 height: '100%',
@@ -876,16 +1762,419 @@ export default function Player({
               }}
             />
           ) : (
-            <View style={styles.nativeFallback}>
-              <Ionicons name="film-outline" size={48} color="#4B5563" />
-              <Text style={styles.nativeFallbackText}>Live Canvas Engine</Text>
+            <View style={[StyleSheet.absoluteFill, styles.nativeCompositorContainer]} pointerEvents="box-none">
+              {/* Layer 1: Active Video / Image Clips */}
+              {activeVideos.map((vid) => {
+                const t = vid.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+                const posX = t.x || 0;
+                const posY = t.y || 0;
+                const scaleX = (t.flipX ? -1 : 1) * (t.scale || 1) * (vid.scale || 1);
+                const scaleY = (t.flipY ? -1 : 1) * (t.scale || 1) * (vid.scale || 1);
+                const rot = (t.rotation || 0) + (vid.rotation || 0);
+                const opacity = (t.opacity !== undefined ? t.opacity : 1) * (vid.opacity !== undefined ? vid.opacity : 1);
+                const mediaUri = vid.thumbnail || vid.url;
+
+                return (
+                  <TouchableOpacity
+                    key={vid.id}
+                    activeOpacity={0.98}
+                    onPress={() => onSelectClip?.(vid.id, 'video')}
+                    style={[
+                      StyleSheet.absoluteFill,
+                      {
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        opacity,
+                        transform: [
+                          { translateX: posX },
+                          { translateY: posY },
+                          { scaleX },
+                          { scaleY },
+                          { rotate: `${rot}deg` },
+                        ],
+                      },
+                    ]}
+                  >
+                    {mediaUri && !mediaLoadErrors[vid.id] ? (
+                      <Image
+                        source={{ uri: mediaUri }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="contain"
+                        onError={() =>
+                          setMediaLoadErrors((prev) => ({ ...prev, [vid.id]: true }))
+                        }
+                      />
+                    ) : (
+                      <View style={styles.nativeCardFallback}>
+                        <View style={styles.nativePlaceholderMedia}>
+                          <Ionicons name="film" size={32} color="#00F2FE" />
+                        </View>
+                        <Text style={styles.nativeCardTitle} numberOfLines={1}>
+                          {vid.title || 'Video Clip'}
+                        </Text>
+                        <Text style={styles.nativeCardSubtitle}>
+                          {(vid.duration || 0).toFixed(1)}s
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Layer 2: Active Text Overlays */}
+              {activeTexts.map((txt) => {
+                const cx = ((txt.position?.x ?? 50) / 100) * boxWidth;
+                const cy = ((txt.position?.y ?? 35) / 100) * canvasHeight;
+                const s = txt.scale || 1.0;
+                const rot = txt.rotation || 0;
+                return (
+                  <TouchableOpacity
+                    key={txt.id}
+                    activeOpacity={0.9}
+                    onPress={() => onSelectClip?.(txt.id, 'text')}
+                    style={{
+                      position: 'absolute',
+                      left: cx,
+                      top: cy,
+                      transform: [
+                        { translateX: -60 },
+                        { translateY: -20 },
+                        { scale: s },
+                        { rotate: `${rot}deg` },
+                      ],
+                    }}
+                  >
+                    <Text
+                      style={[
+                        {
+                          color: txt.style?.color || '#FFFFFF',
+                          fontSize: txt.style?.fontSize || 22,
+                          fontWeight: (txt.style?.fontWeight as any) || '700',
+                          backgroundColor: txt.style?.backgroundColor || 'transparent',
+                          textAlign: 'center',
+                        },
+                      ]}
+                    >
+                      {txt.text}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Layer 3: Active Stickers */}
+              {activeStickers.map((stk) => {
+                const cx = ((stk.position?.x ?? 50) / 100) * boxWidth;
+                const cy = ((stk.position?.y ?? 50) / 100) * canvasHeight;
+                const s = stk.scale || 1.2;
+                const rot = stk.rotation || 0;
+                return (
+                  <TouchableOpacity
+                    key={stk.id}
+                    activeOpacity={0.9}
+                    onPress={() => onSelectClip?.(stk.id, 'sticker')}
+                    style={{
+                      position: 'absolute',
+                      left: cx,
+                      top: cy,
+                      transform: [
+                        { translateX: -20 },
+                        { translateY: -20 },
+                        { scale: s },
+                        { rotate: `${rot}deg` },
+                      ],
+                    }}
+                  >
+                    <Text style={{ fontSize: 32 }}>{stk.char}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Layer 4: Active Effects Overlays on Native Mobile */}
+              {activeEffects.map((eff) => {
+                const intensity = eff.intensity || 0.8;
+                if (eff.type === 'vignette') {
+                  return (
+                    <View
+                      key={eff.id}
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          borderWidth: 24 * intensity,
+                          borderColor: 'rgba(0,0,0,0.65)',
+                          borderRadius: 8,
+                        },
+                      ]}
+                    />
+                  );
+                }
+                if (eff.type === 'neon_edge') {
+                  return (
+                    <View
+                      key={eff.id}
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          borderWidth: 6 * intensity,
+                          borderColor: 'rgba(0, 242, 254, 0.75)',
+                          borderRadius: 8,
+                        },
+                      ]}
+                    />
+                  );
+                }
+                if (eff.type === 'glitch' || eff.type === 'rgb_split') {
+                  return (
+                    <View
+                      key={eff.id}
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          backgroundColor: 'rgba(255, 0, 80, 0.14)',
+                        },
+                      ]}
+                    />
+                  );
+                }
+                if (eff.type === 'flash') {
+                  const flashVal = Math.sin(currentTime * 12);
+                  if (flashVal > 0.6) {
+                    return (
+                      <View
+                        key={eff.id}
+                        pointerEvents="none"
+                        style={[
+                          StyleSheet.absoluteFill,
+                          {
+                            backgroundColor: `rgba(255, 255, 255, ${(flashVal - 0.6) * 2 * intensity})`,
+                          },
+                        ]}
+                      />
+                    );
+                  }
+                }
+                if (eff.type === 'rainbow_flow') {
+                  const hue = Math.floor((currentTime * 120) % 360);
+                  return (
+                    <View
+                      key={eff.id}
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          backgroundColor: `hsla(${hue}, 90%, 50%, 0.12)`,
+                        },
+                      ]}
+                    />
+                  );
+                }
+                return null;
+              })}
+
+              {/* Empty State when no clips at playhead */}
+              {activeVideos.length === 0 && activeTexts.length === 0 && activeStickers.length === 0 && (
+                <View style={styles.nativeEmptyScrub}>
+                  <Ionicons name="film-outline" size={32} color="#374151" />
+                  <Text style={styles.nativeEmptyScrubText}>No clip at {formatTime(currentTime)}</Text>
+                </View>
+              )}
             </View>
           )}
 
           {/* Interactive On-Canvas Transform Overlay Layer */}
-          {/* Interactive On-Canvas Transform Overlay Layer */}
-          <View style={styles.interactiveCanvasLayer} pointerEvents="box-none">
-            {/* Unselected Clickable & Immediately Draggable Hit Areas for Active Videos (Track-layered) */}
+          <View
+            style={styles.interactiveCanvasLayer}
+            pointerEvents="box-none"
+            {...(Platform.OS !== 'web' ? nativeCanvasPanResponder.panHandlers : {})}
+          >
+            {isCroppingMode && targetCropClip ? (
+              <>
+                {/* 4 Dimmed Scrim Panels outside crop area */}
+                <View
+                  style={[
+                    styles.cropScrim,
+                    {
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: Math.max(0, cropPixelY),
+                    },
+                  ]}
+                  pointerEvents="none"
+                />
+                <View
+                  style={[
+                    styles.cropScrim,
+                    {
+                      top: cropPixelY + cropPixelH,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                    },
+                  ]}
+                  pointerEvents="none"
+                />
+                <View
+                  style={[
+                    styles.cropScrim,
+                    {
+                      top: cropPixelY,
+                      left: 0,
+                      width: Math.max(0, cropPixelX),
+                      height: cropPixelH,
+                    },
+                  ]}
+                  pointerEvents="none"
+                />
+                <View
+                  style={[
+                    styles.cropScrim,
+                    {
+                      top: cropPixelY,
+                      left: cropPixelX + cropPixelW,
+                      right: 0,
+                      height: cropPixelH,
+                    },
+                  ]}
+                  pointerEvents="none"
+                />
+
+                {/* Interactive Crop Box Frame */}
+                <View
+                  style={[
+                    styles.cropBoxFrame,
+                    {
+                      left: cropPixelX,
+                      top: cropPixelY,
+                      width: cropPixelW,
+                      height: cropPixelH,
+                    },
+                  ]}
+                >
+                  {/* Rule-of-Thirds Composition Grid */}
+                  <View style={[styles.cropGridLine, styles.cropGridLineH, { top: '33.33%' }]} pointerEvents="none" />
+                  <View style={[styles.cropGridLine, styles.cropGridLineH, { top: '66.66%' }]} pointerEvents="none" />
+                  <View style={[styles.cropGridLine, styles.cropGridLineV, { left: '33.33%' }]} pointerEvents="none" />
+                  <View style={[styles.cropGridLine, styles.cropGridLineV, { left: '66.66%' }]} pointerEvents="none" />
+
+                  {/* Viewfinder Badge */}
+                  <View style={styles.cropBadgePill} pointerEvents="none">
+                    <Ionicons name="crop" size={10} color="#00F2FE" style={{ marginRight: 4 }} />
+                    <Text style={styles.cropBadgeText}>
+                      {cropPreset.toUpperCase()} • {Math.round((cropBox.width / 100) * mw)}×{Math.round((cropBox.height / 100) * mh)}
+                    </Text>
+                  </View>
+
+                  {/* Center Pan Hit Area */}
+                  <View
+                    style={styles.cropPanHitArea}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'pan'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'pan'),
+                    } as any)}
+                  />
+
+                  {/* 4 Corner Handles */}
+                  <View
+                    style={[styles.cropCornerHitArea, styles.cropCornerTL]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'tl'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'tl'),
+                    } as any)}
+                  >
+                    <View style={[styles.cropCornerArmH, { top: 0, left: 0 }]} />
+                    <View style={[styles.cropCornerArmV, { top: 0, left: 0 }]} />
+                  </View>
+
+                  <View
+                    style={[styles.cropCornerHitArea, styles.cropCornerTR]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'tr'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'tr'),
+                    } as any)}
+                  >
+                    <View style={[styles.cropCornerArmH, { top: 0, right: 0 }]} />
+                    <View style={[styles.cropCornerArmV, { top: 0, right: 0 }]} />
+                  </View>
+
+                  <View
+                    style={[styles.cropCornerHitArea, styles.cropCornerBL]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'bl'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'bl'),
+                    } as any)}
+                  >
+                    <View style={[styles.cropCornerArmH, { bottom: 0, left: 0 }]} />
+                    <View style={[styles.cropCornerArmV, { bottom: 0, left: 0 }]} />
+                  </View>
+
+                  <View
+                    style={[styles.cropCornerHitArea, styles.cropCornerBR]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'br'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'br'),
+                    } as any)}
+                  >
+                    <View style={[styles.cropCornerArmH, { bottom: 0, right: 0 }]} />
+                    <View style={[styles.cropCornerArmV, { bottom: 0, right: 0 }]} />
+                  </View>
+
+                  {/* 4 Edge Handles */}
+                  <View
+                    style={[styles.cropEdgeHitAreaH, styles.cropEdgeTop]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 't'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 't'),
+                    } as any)}
+                  >
+                    <View style={styles.cropEdgePillH} />
+                  </View>
+
+                  <View
+                    style={[styles.cropEdgeHitAreaH, styles.cropEdgeBottom]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'b'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'b'),
+                    } as any)}
+                  >
+                    <View style={styles.cropEdgePillH} />
+                  </View>
+
+                  <View
+                    style={[styles.cropEdgeHitAreaV, styles.cropEdgeLeft]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'l'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'l'),
+                    } as any)}
+                  >
+                    <View style={styles.cropEdgePillV} />
+                  </View>
+
+                  <View
+                    style={[styles.cropEdgeHitAreaV, styles.cropEdgeRight]}
+                    {...({
+                      onMouseDown: (e: any) => handleCropDragStart(e, 'r'),
+                      onTouchStart: (e: any) => handleCropDragStart(e, 'r'),
+                    } as any)}
+                  >
+                    <View style={styles.cropEdgePillV} />
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Background Tap on empty canvas area to cleanly Deselect */}
+                <TouchableOpacity
+                  style={StyleSheet.absoluteFill}
+                  activeOpacity={1}
+                  onPress={() => {
+                    if (selectedClipId) onSelectClip?.(null);
+                  }}
+                />
+
+                {/* Unselected Clickable & Immediately Draggable Hit Areas for Active Videos (Track-layered) */}
             {activeVideos.map((vid) => {
               if (selectedClipId === vid.id) return null;
               const vidTrackZ = (typeof vid.trackIndex === 'number' ? vid.trackIndex : 0) * 2 + 10;
@@ -904,10 +2193,14 @@ export default function Player({
                 },
                 scale: s,
                 rotation: vid.transform?.rotation ?? 0,
+                width: w,
+                height: h,
               };
               return (
-                <View
+                <TouchableOpacity
                   key={vid.id}
+                  activeOpacity={0.85}
+                  onPress={() => onSelectClip?.(vid.id, 'video')}
                   style={[
                     styles.unselectedHitBox,
                     {
@@ -919,24 +2212,26 @@ export default function Player({
                       transform: [{ rotate: `${vid.transform?.rotation || 0}deg` }],
                     },
                   ]}
-                  {...({
-                    onMouseDown: (e: any) => {
-                      onSelectClip?.(vid.id, 'video');
-                      handleStartDrag(e, 'move', undefined, itemObj);
-                    },
-                    onTouchStart: (e: any) => {
-                      onSelectClip?.(vid.id, 'video');
-                      handleStartDrag(e, 'move', undefined, itemObj);
-                    },
-                  } as any)}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => {
+                          onSelectClip?.(vid.id, 'video');
+                          handleStartDrag(e, 'move', undefined, itemObj);
+                        },
+                        onTouchStart: (e: any) => {
+                          onSelectClip?.(vid.id, 'video');
+                          handleStartDrag(e, 'move', undefined, itemObj);
+                        },
+                      } as any)
+                    : {})}
                 />
               );
             })}
 
-            {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Texts */}
+            {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Texts (Higher Z-Index so always reachable) */}
             {activeTexts.map((txt) => {
               if (txt.id === selectedClipId) return null;
-              const txtTrackZ = (typeof txt.trackIndex === 'number' ? txt.trackIndex : 2) * 2 + 10;
+              const txtTrackZ = (typeof txt.trackIndex === 'number' ? txt.trackIndex : 2) * 2 + 30;
               const cx = ((txt.position?.x ?? 50) / 100) * boxWidth;
               const cy = ((txt.position?.y ?? 35) / 100) * canvasHeight;
               const s = txt.scale || 1.0;
@@ -949,10 +2244,14 @@ export default function Player({
                 pos: txt.position || { x: 50, y: 35 },
                 scale: txt.scale ?? 1.0,
                 rotation: txt.rotation ?? 0,
+                width: w,
+                height: h,
               };
               return (
-                <View
+                <TouchableOpacity
                   key={txt.id}
+                  activeOpacity={0.85}
+                  onPress={() => onSelectClip?.(txt.id, 'text')}
                   style={[
                     styles.unselectedHitBox,
                     {
@@ -964,16 +2263,18 @@ export default function Player({
                       transform: [{ rotate: `${txt.rotation || 0}deg` }],
                     },
                   ]}
-                  {...({
-                    onMouseDown: (e: any) => {
-                      onSelectClip?.(txt.id, 'text');
-                      handleStartDrag(e, 'move', undefined, itemObj);
-                    },
-                    onTouchStart: (e: any) => {
-                      onSelectClip?.(txt.id, 'text');
-                      handleStartDrag(e, 'move', undefined, itemObj);
-                    },
-                  } as any)}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => {
+                          onSelectClip?.(txt.id, 'text');
+                          handleStartDrag(e, 'move', undefined, itemObj);
+                        },
+                        onTouchStart: (e: any) => {
+                          onSelectClip?.(txt.id, 'text');
+                          handleStartDrag(e, 'move', undefined, itemObj);
+                        },
+                      } as any)
+                    : {})}
                 />
               );
             })}
@@ -981,7 +2282,7 @@ export default function Player({
             {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Stickers */}
             {activeStickers.map((stk) => {
               if (stk.id === selectedClipId) return null;
-              const stkTrackZ = (typeof stk.trackIndex === 'number' ? stk.trackIndex : 3) * 2 + 10;
+              const stkTrackZ = (typeof stk.trackIndex === 'number' ? stk.trackIndex : 3) * 2 + 32;
               const cx = ((stk.position?.x ?? 50) / 100) * boxWidth;
               const cy = ((stk.position?.y ?? 50) / 100) * canvasHeight;
               const s = stk.scale || 1.2;
@@ -995,10 +2296,14 @@ export default function Player({
                 pos: stk.position || { x: 50, y: 50 },
                 scale: stk.scale ?? 1.2,
                 rotation: stk.rotation ?? 0,
+                width: w,
+                height: h,
               };
               return (
-                <View
+                <TouchableOpacity
                   key={stk.id}
+                  activeOpacity={0.85}
+                  onPress={() => onSelectClip?.(stk.id, 'sticker')}
                   style={[
                     styles.unselectedHitBox,
                     {
@@ -1010,16 +2315,18 @@ export default function Player({
                       transform: [{ rotate: `${stk.rotation || 0}deg` }],
                     },
                   ]}
-                  {...({
-                    onMouseDown: (e: any) => {
-                      onSelectClip?.(stk.id, 'sticker');
-                      handleStartDrag(e, 'move', undefined, itemObj);
-                    },
-                    onTouchStart: (e: any) => {
-                      onSelectClip?.(stk.id, 'sticker');
-                      handleStartDrag(e, 'move', undefined, itemObj);
-                    },
-                  } as any)}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => {
+                          onSelectClip?.(stk.id, 'sticker');
+                          handleStartDrag(e, 'move', undefined, itemObj);
+                        },
+                        onTouchStart: (e: any) => {
+                          onSelectClip?.(stk.id, 'sticker');
+                          handleStartDrag(e, 'move', undefined, itemObj);
+                        },
+                      } as any)
+                    : {})}
                 />
               );
             })}
@@ -1037,82 +2344,95 @@ export default function Player({
                     transform: [{ rotate: `${activeTransformItem.rotation}deg` }],
                   },
                 ]}
-                {...({
-                  onMouseDown: (e: any) => handleStartDrag(e, 'move'),
-                  onTouchStart: (e: any) => handleStartDrag(e, 'move'),
-                  onDoubleClick: (e: any) => {
-                    e.stopPropagation?.();
-                    if (activeTransformItem.type === 'text' || activeTransformItem.type === 'sticker') {
-                      onOpenEditModal?.(activeTransformItem.id, activeTransformItem.type);
-                    } else if (activeTransformItem.type === 'video') {
-                      onOpenCropModal?.(activeTransformItem.id);
-                    }
-                  },
-                } as any)}
+                {...(Platform.OS === 'web'
+                  ? ({
+                      onMouseDown: (e: any) => handleStartDrag(e, 'move'),
+                      onTouchStart: (e: any) => handleStartDrag(e, 'move'),
+                      onDoubleClick: (e: any) => {
+                        e.stopPropagation?.();
+                        if (activeTransformItem.type === 'text' || activeTransformItem.type === 'sticker') {
+                          onOpenEditModal?.(activeTransformItem.id, activeTransformItem.type);
+                        } else if (activeTransformItem.type === 'video') {
+                          handleEnterCropMode(activeTransformItem.id);
+                        }
+                      },
+                    } as any)
+                  : nativeBoxPanResponder.panHandlers)}
               >
                 {/* Top Rotation Stem Line */}
                 <View style={styles.rotStem} pointerEvents="none" />
 
-                {/* Top Rotation Handle Knob */}
+                {/* Top Rotation Handle Knob with Generous Finger Touch Hit Area */}
                 <View
                   style={styles.rotKnob}
-                  {...({
-                    onMouseDown: (e: any) => handleStartDrag(e, 'rotate'),
-                    onTouchStart: (e: any) => handleStartDrag(e, 'rotate'),
-                  } as any)}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => handleStartDrag(e, 'rotate'),
+                        onTouchStart: (e: any) => handleStartDrag(e, 'rotate'),
+                      } as any)
+                    : nativeRotPanResponder.panHandlers)}
                 >
-                  <Ionicons name="sync-outline" size={13} color="#000000" />
+                  <Ionicons name="sync-outline" size={16} color="#000000" />
                 </View>
 
-                {/* 4 Corner Resize Handles */}
+                {/* 4 Corner Resize Handles with Generous Finger Touch Hit Areas */}
                 <View
                   style={[styles.cornerHandle, styles.handleTL]}
-                  {...({
-                    onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'tl'),
-                    onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'tl'),
-                  } as any)}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'tl'),
+                        onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'tl'),
+                      } as any)
+                    : nativeScalePanResponder.panHandlers)}
                 />
                 <View
                   style={[styles.cornerHandle, styles.handleTR]}
-                  {...({
-                    onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'tr'),
-                    onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'tr'),
-                  } as any)}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'tr'),
+                        onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'tr'),
+                      } as any)
+                    : nativeScalePanResponder.panHandlers)}
                 />
                 <View
                   style={[styles.cornerHandle, styles.handleBL]}
-                  {...({
-                    onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'bl'),
-                    onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'bl'),
-                  } as any)}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'bl'),
+                        onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'bl'),
+                      } as any)
+                    : nativeScalePanResponder.panHandlers)}
                 />
                 <View
                   style={[styles.cornerHandle, styles.handleBR]}
-                  {...({
-                    onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'br'),
-                    onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'br'),
-                  } as any)}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  {...(Platform.OS === 'web'
+                    ? ({
+                        onMouseDown: (e: any) => handleStartDrag(e, 'scale', 'br'),
+                        onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'br'),
+                      } as any)
+                    : nativeScalePanResponder.panHandlers)}
                 />
               </View>
             )}
 
-            {/* Quick Action HUD Bar for Selected Item - Clean 3 options */}
+            {/* Quick Action HUD Bar for Selected Item - Clean action options */}
             {activeTransformItem && (
               <View
                 style={styles.floatingHudContainer}
                 pointerEvents="box-none"
-                {...({
-                  onMouseDown: (e: any) => e.stopPropagation?.(),
-                  onTouchStart: (e: any) => e.stopPropagation?.(),
-                } as any)}
               >
                 <View style={styles.floatingHudContentCompact}>
                   {/* Option 1: Primary Action (Edit for text/sticker, Crop for video) */}
                   {activeTransformItem.type === 'video' ? (
                     <TouchableOpacity
                       style={styles.floatingActionBtn}
-                      onPress={() => onOpenCropModal?.(activeTransformItem.id)}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      onPress={() => handleEnterCropMode(activeTransformItem.id)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Ionicons name="crop" size={13} color="#00F2FE" />
                       <Text style={styles.floatingBtnText}>Crop</Text>
@@ -1121,34 +2441,76 @@ export default function Player({
                     <TouchableOpacity
                       style={styles.floatingActionBtn}
                       onPress={() => onOpenEditModal?.(activeTransformItem.id, activeTransformItem.type)}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Ionicons name="pencil" size={13} color="#00F2FE" />
                       <Text style={styles.floatingBtnText}>Edit</Text>
                     </TouchableOpacity>
                   )}
 
-                  {/* Option 2: Delete */}
+                  {/* Option 2: 1-Tap Scale -10% for easy finger control */}
+                  <TouchableOpacity
+                    style={styles.floatingActionBtn}
+                    onPress={() => handleQuickScale(activeTransformItem, -0.1)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="remove-circle-outline" size={13} color="#38BDF8" />
+                    <Text style={[styles.floatingBtnText, { color: '#38BDF8' }]}>−Size</Text>
+                  </TouchableOpacity>
+
+                  {/* Option 3: 1-Tap Scale +10% for easy finger control */}
+                  <TouchableOpacity
+                    style={styles.floatingActionBtn}
+                    onPress={() => handleQuickScale(activeTransformItem, 0.1)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="add-circle-outline" size={13} color="#38BDF8" />
+                    <Text style={[styles.floatingBtnText, { color: '#38BDF8' }]}>+Size</Text>
+                  </TouchableOpacity>
+
+                  {/* Option 4: Quick Rotate 90° */}
+                  <TouchableOpacity
+                    style={styles.floatingActionBtn}
+                    onPress={() => handleQuickRotate(activeTransformItem)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="sync-outline" size={13} color="#A78BFA" />
+                    <Text style={[styles.floatingBtnText, { color: '#A78BFA' }]}>90°</Text>
+                  </TouchableOpacity>
+
+                  {/* Option 5: Quick Reset */}
+                  <TouchableOpacity
+                    style={styles.floatingActionBtn}
+                    onPress={() => handleQuickReset(activeTransformItem)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="refresh-outline" size={13} color="#FBBF24" />
+                    <Text style={[styles.floatingBtnText, { color: '#FBBF24' }]}>Reset</Text>
+                  </TouchableOpacity>
+
+                  {/* Option 6: Delete */}
                   <TouchableOpacity
                     style={[styles.floatingActionBtn, styles.floatingDeleteBtn]}
                     onPress={() => onDeleteClip?.(activeTransformItem.id, activeTransformItem.type)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Ionicons name="trash-outline" size={13} color="#FB7185" />
                     <Text style={[styles.floatingBtnText, { color: '#FB7185' }]}>Delete</Text>
                   </TouchableOpacity>
 
-                  {/* Option 3: Done */}
+                  {/* Option 7: Done */}
                   <TouchableOpacity
                     style={[styles.floatingActionBtn, styles.floatingDoneBtn]}
                     onPress={() => onSelectClip?.(null)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Ionicons name="checkmark-circle-outline" size={14} color="#10B981" />
                     <Text style={[styles.floatingBtnText, { color: '#10B981' }]}>Done</Text>
                   </TouchableOpacity>
                 </View>
               </View>
+            )}
+              </>
             )}
           </View>
 
@@ -1190,91 +2552,148 @@ export default function Player({
         </View>
       </View>
 
-      {/* Control Bar beneath player */}
-      <View style={[styles.controlBar, isMobile && styles.controlBarCompact, fullscreen && styles.controlBarFullscreen]}>
-        <View style={styles.controlGroupLeft}>
-          <View style={styles.timecodePill}>
-            <Ionicons name="time-outline" size={11} color="#00F2FE" style={{ marginRight: 3 }} />
-            <Text style={styles.timecodeText}>
-              {formatTime(currentTime)}
-              <Text style={styles.timecodeTotalText}> / {formatTime(totalDuration)}</Text>
-            </Text>
+      {/* Control Bar beneath player OR on-preview crop bar card */}
+      {isCroppingMode ? (
+        <View style={[styles.previewCropBarCard, isMobile && styles.previewCropBarCardCompact]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.cropPresetScroll}
+          >
+            {CROP_PRESETS.map((preset) => {
+              const isSelected = cropPreset === preset.id;
+              return (
+                <TouchableOpacity
+                  key={preset.id}
+                  style={[styles.cropPresetChip, isSelected && styles.cropPresetChipActive]}
+                  onPress={() => handleApplyPresetCrop(preset.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.cropPresetText, isSelected && styles.cropPresetTextActive]}>
+                    {preset.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.cropActionsRow}>
+            <TouchableOpacity
+              style={styles.cropResetBtn}
+              onPress={handleResetCrop}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="refresh-outline" size={13} color="#94A3B8" />
+              <Text style={styles.cropResetText}>Reset</Text>
+            </TouchableOpacity>
+
+            <View style={styles.cropActionsRight}>
+              <TouchableOpacity
+                style={styles.cropCancelBtn}
+                onPress={handleCancelCrop}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={14} color="#CBD5E1" />
+                <Text style={styles.cropCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cropApplyBtn}
+                onPress={handleConfirmCrop}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark" size={14} color="#000000" />
+                <Text style={styles.cropApplyText}>Apply Crop</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+      ) : (
+        <View style={[styles.controlBar, isMobile && styles.controlBarCompact, fullscreen && styles.controlBarFullscreen]}>
+          <View style={styles.controlGroupLeft}>
+            <View style={styles.timecodePill}>
+              <Ionicons name="time-outline" size={11} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={styles.timecodeText}>
+                {formatTime(currentTime)}
+                <Text style={styles.timecodeTotalText}> / {formatTime(totalDuration)}</Text>
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.controlGroupCenter}>
-          <TouchableOpacity
-            style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
-            onPress={() => stepFrame(-1)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Previous Frame"
-          >
-            <Ionicons name="play-skip-back" size={isMobile ? 12 : 14} color="#8E95A5" />
-          </TouchableOpacity>
+          <View style={styles.controlGroupCenter} pointerEvents="box-none">
+            <TouchableOpacity
+              style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
+              onPress={() => stepFrame(-1)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Previous Frame"
+            >
+              <Ionicons name="play-skip-back" size={isMobile ? 12 : 14} color="#8E95A5" />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.playPauseBtn, isMobile && styles.playPauseBtnMobile]}
-            onPress={onTogglePlay}
-            activeOpacity={0.8}
-            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-          >
-            <Ionicons
-              name={isPlaying ? 'pause' : 'play'}
-              size={isMobile ? 16 : 20}
-              color="#FFFFFF"
-              style={!isPlaying ? { marginLeft: 2 } : undefined}
-            />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.playPauseBtn, isMobile && styles.playPauseBtnMobile]}
+              onPress={onTogglePlay}
+              activeOpacity={0.8}
+              accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+            >
+              <Ionicons
+                name={isPlaying ? 'pause' : 'play'}
+                size={isMobile ? 16 : 20}
+                color="#FFFFFF"
+                style={!isPlaying ? { marginLeft: 2 } : undefined}
+              />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
-            onPress={() => stepFrame(1)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Next Frame"
-          >
-            <Ionicons name="play-skip-forward" size={isMobile ? 12 : 14} color="#8E95A5" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
+              onPress={() => stepFrame(1)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Next Frame"
+            >
+              <Ionicons name="play-skip-forward" size={isMobile ? 12 : 14} color="#8E95A5" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.controlGroupRight}>
+            <TouchableOpacity
+              style={[styles.smallBtn, showSafeZone && styles.smallBtnActive]}
+              onPress={() => setShowSafeZone(!showSafeZone)}
+              activeOpacity={0.7}
+              accessibilityLabel="Toggle Safe Zone Grid"
+            >
+              <Ionicons name="grid-outline" size={isMobile ? 13 : 15} color={showSafeZone ? '#00F2FE' : '#8E95A5'} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.smallBtn, hasKeyframeAtCurrentTime && styles.keyframeActive]}
+              onPress={onAddKeyframe}
+              activeOpacity={0.7}
+              accessibilityLabel="Add or Remove Keyframe"
+            >
+              <Ionicons
+                name={hasKeyframeAtCurrentTime ? 'diamond' : 'diamond-outline'}
+                size={isMobile ? 13 : 15}
+                color={hasKeyframeAtCurrentTime ? '#FFE600' : '#8E95A5'}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.smallBtn, fullscreen && styles.smallBtnActive]}
+              onPress={toggleFullscreen}
+              activeOpacity={0.7}
+              accessibilityLabel={fullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            >
+              <Ionicons
+                name={fullscreen ? 'contract-outline' : 'expand-outline'}
+                size={isMobile ? 13 : 15}
+                color={fullscreen ? '#00F2FE' : '#8E95A5'}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
-
-        <View style={styles.controlGroupRight}>
-          <TouchableOpacity
-            style={[styles.smallBtn, showSafeZone && styles.smallBtnActive]}
-            onPress={() => setShowSafeZone(!showSafeZone)}
-            activeOpacity={0.7}
-            accessibilityLabel="Toggle Safe Zone Grid"
-          >
-            <Ionicons name="grid-outline" size={isMobile ? 13 : 15} color={showSafeZone ? '#00F2FE' : '#8E95A5'} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.smallBtn, hasKeyframeAtCurrentTime && styles.keyframeActive]}
-            onPress={onAddKeyframe}
-            activeOpacity={0.7}
-            accessibilityLabel="Add or Remove Keyframe"
-          >
-            <Ionicons
-              name={hasKeyframeAtCurrentTime ? 'diamond' : 'diamond-outline'}
-              size={isMobile ? 13 : 15}
-              color={hasKeyframeAtCurrentTime ? '#FFE600' : '#8E95A5'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.smallBtn, fullscreen && styles.smallBtnActive]}
-            onPress={toggleFullscreen}
-            activeOpacity={0.7}
-            accessibilityLabel={fullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-          >
-            <Ionicons
-              name={fullscreen ? 'contract-outline' : 'expand-outline'}
-              size={isMobile ? 13 : 15}
-              color={fullscreen ? '#00F2FE' : '#8E95A5'}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -1366,7 +2785,7 @@ const styles = StyleSheet.create({
   },
   interactiveCanvasLayer: {
     ...StyleSheet.absoluteFill,
-    zIndex: 20,
+    zIndex: 50,
     overflow: 'visible' as any,
   },
   unselectedHitBox: {
@@ -1375,79 +2794,90 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderRadius: 8,
     cursor: 'pointer' as any,
-    zIndex: 21,
+    zIndex: 25,
+    touchAction: 'none' as any,
   },
   unselectedVideoHitBox: {
     ...StyleSheet.absoluteFill,
     zIndex: 10,
     cursor: 'pointer' as any,
+    touchAction: 'none' as any,
   },
   activeTransformBox: {
     position: 'absolute',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#00F2FE',
     borderStyle: 'dashed',
-    backgroundColor: 'rgba(0, 242, 254, 0.05)',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
     borderRadius: 8,
-    zIndex: 25,
+    zIndex: 100,
     cursor: 'move' as any,
-    boxShadow: '0 0 14px rgba(0, 242, 254, 0.35)' as any,
+    boxShadow: '0 0 16px rgba(0, 242, 254, 0.45)' as any,
+    touchAction: 'none' as any,
+    userSelect: 'none' as any,
+    WebkitUserSelect: 'none' as any,
   },
   rotStem: {
     position: 'absolute',
-    top: -24,
+    top: -30,
     left: '50%',
-    width: 1.5,
-    height: 24,
+    width: 2,
+    height: 30,
     backgroundColor: '#00F2FE',
-    marginLeft: -0.75,
+    marginLeft: -1,
   },
   rotKnob: {
     position: 'absolute',
-    top: -42,
+    top: -56,
     left: '50%',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#00F2FE',
+    borderWidth: 2.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -18,
+    cursor: 'grab' as any,
+    boxShadow: '0 2px 10px rgba(0,0,0,0.6)' as any,
+    zIndex: 110,
+    touchAction: 'none' as any,
+    userSelect: 'none' as any,
+    WebkitUserSelect: 'none' as any,
+  },
+  cornerHandle: {
+    position: 'absolute',
     width: 26,
     height: 26,
     borderRadius: 13,
     backgroundColor: '#00F2FE',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -13,
-    cursor: 'grab' as any,
-    boxShadow: '0 2px 6px rgba(0,0,0,0.6)' as any,
-    zIndex: 28,
-  },
-  cornerHandle: {
-    position: 'absolute',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#00F2FE',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.6)' as any,
-    zIndex: 27,
+    boxShadow: '0 2px 10px rgba(0,0,0,0.6)' as any,
+    zIndex: 110,
+    touchAction: 'none' as any,
+    userSelect: 'none' as any,
+    WebkitUserSelect: 'none' as any,
   },
   handleTL: {
-    top: -8,
-    left: -8,
+    top: -12,
+    left: -12,
     cursor: 'nwse-resize' as any,
   },
   handleTR: {
-    top: -8,
-    right: -8,
+    top: -12,
+    right: -12,
     cursor: 'nesw-resize' as any,
   },
   handleBL: {
-    bottom: -8,
-    left: -8,
+    bottom: -12,
+    left: -12,
     cursor: 'nesw-resize' as any,
   },
   handleBR: {
-    bottom: -8,
-    right: -8,
+    bottom: -12,
+    right: -12,
     cursor: 'nwse-resize' as any,
   },
   floatingHudContainer: {
@@ -1555,6 +2985,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  nativeCompositorContainer: {
+    backgroundColor: '#000000',
+    borderRadius: 8,
+    overflow: 'hidden' as any,
+  },
+  nativeCardFallback: {
+    width: '90%',
+    height: '90%',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
+    backgroundColor: '#141824',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    gap: 8,
+  },
+  nativeCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  nativeCardSubtitle: {
+    color: '#00F2FE',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  nativePlaceholderMedia: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: '#1E2333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nativeEmptyScrub: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0D1017',
+    borderRadius: 8,
+    gap: 8,
+  },
+  nativeEmptyScrubText: {
+    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   nativeFallback: {
     flex: 1,
     alignItems: 'center',
@@ -1609,20 +3089,21 @@ const styles = StyleSheet.create({
   },
   controlBar: {
     width: '100%',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 34,
-    marginTop: 0,
-    marginBottom: 0,
+    position: 'relative',
+    height: 48,
+    marginTop: 2,
+    marginBottom: 4,
     flexShrink: 0,
   },
   controlBarCompact: {
-    paddingHorizontal: 4,
-    height: 32,
-    marginTop: 0,
-    marginBottom: 0,
+    paddingHorizontal: 8,
+    height: 42,
+    marginTop: 1,
+    marginBottom: 3,
   },
   controlBarFullscreen: {
     position: 'absolute',
@@ -1648,14 +3129,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     flexShrink: 0,
+    zIndex: 3,
   },
   controlGroupCenter: {
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    flexShrink: 0,
+    zIndex: 2,
   },
   controlGroupRight: {
     flexDirection: 'row',
@@ -1663,6 +3149,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 6,
     flexShrink: 0,
+    zIndex: 3,
   },
   smallBtn: {
     width: 28,
@@ -1727,4 +3214,251 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
-});
+  cropScrim: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    zIndex: 22,
+  },
+  cropBoxFrame: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    borderColor: '#00F2FE',
+    zIndex: 25,
+    boxShadow: '0 0 12px rgba(0, 242, 254, 0.45)' as any,
+    touchAction: 'none',
+  } as any,
+  cropGridLine: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  cropGridLineH: {
+    left: 0,
+    right: 0,
+    height: 1,
+  },
+  cropGridLineV: {
+    top: 0,
+    bottom: 0,
+    width: 1,
+  },
+  cropBadgePill: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(10, 13, 22, 0.82)',
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
+    zIndex: 28,
+  },
+  cropBadgeText: {
+    color: '#00F2FE',
+    fontSize: 10,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.3,
+  },
+  cropPanHitArea: {
+    ...StyleSheet.absoluteFill,
+    cursor: 'move' as any,
+    zIndex: 26,
+    touchAction: 'none',
+  } as any,
+  cropCornerHitArea: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    zIndex: 35,
+    touchAction: 'none',
+  } as any,
+  cropCornerTL: {
+    top: -14,
+    left: -14,
+    cursor: 'nwse-resize' as any,
+  },
+  cropCornerTR: {
+    top: -14,
+    right: -14,
+    cursor: 'nesw-resize' as any,
+  },
+  cropCornerBL: {
+    bottom: -14,
+    left: -14,
+    cursor: 'nesw-resize' as any,
+  },
+  cropCornerBR: {
+    bottom: -14,
+    right: -14,
+    cursor: 'nwse-resize' as any,
+  },
+  cropCornerArmH: {
+    position: 'absolute',
+    width: 18,
+    height: 4,
+    backgroundColor: '#00F2FE',
+    borderRadius: 2,
+  },
+  cropCornerArmV: {
+    position: 'absolute',
+    width: 4,
+    height: 18,
+    backgroundColor: '#00F2FE',
+    borderRadius: 2,
+  },
+  cropEdgeHitAreaH: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -26,
+    width: 52,
+    height: 36,
+    zIndex: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    touchAction: 'none',
+  } as any,
+  cropEdgeTop: {
+    top: -18,
+    cursor: 'ns-resize' as any,
+  },
+  cropEdgeBottom: {
+    bottom: -18,
+    cursor: 'ns-resize' as any,
+  },
+  cropEdgePillH: {
+    width: 28,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#00F2FE',
+  },
+  cropEdgeHitAreaV: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -26,
+    width: 36,
+    height: 52,
+    zIndex: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    touchAction: 'none',
+  } as any,
+  cropEdgeLeft: {
+    left: -18,
+    cursor: 'ew-resize' as any,
+  },
+  cropEdgeRight: {
+    right: -18,
+    cursor: 'ew-resize' as any,
+  },
+  cropEdgePillV: {
+    width: 5,
+    height: 28,
+    borderRadius: 2.5,
+    backgroundColor: '#00F2FE',
+  },
+  previewCropBarCard: {
+    width: '100%',
+    backgroundColor: 'rgba(15, 18, 28, 0.95)',
+    borderTopWidth: 1,
+    borderColor: '#1E2333',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  previewCropBarCardCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  cropPresetScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  cropPresetChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#1E2333',
+    borderWidth: 1,
+    borderColor: '#2D3548',
+  },
+  cropPresetChipActive: {
+    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    borderColor: '#00F2FE',
+  },
+  cropPresetText: {
+    color: '#8E95A5',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  cropPresetTextActive: {
+    color: '#00F2FE',
+    fontWeight: '700',
+  },
+  cropActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cropResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1A1E2C',
+  },
+  cropResetText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cropActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cropCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1E2333',
+    borderWidth: 1,
+    borderColor: '#2D3548',
+  },
+  cropCancelText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cropApplyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#00F2FE',
+    shadowColor: '#00F2FE',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  cropApplyText: {
+    color: '#00F2FE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+} as any);
+
+export default React.memo(Player);

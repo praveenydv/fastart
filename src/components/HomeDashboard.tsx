@@ -40,7 +40,7 @@ function formatDuration(sec = 0) {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function HomeDashboard({
+function HomeDashboard({
   projects,
   onOpenProject,
   onCreateNewProject,
@@ -939,3 +939,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
+
+export default React.memo(HomeDashboard);
