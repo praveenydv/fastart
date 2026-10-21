@@ -45,19 +45,12 @@ export default function StickersModal({
     }
   }, [visible, editingClip]);
 
-  const durationPresets = [1.5, 3.0, 5.0, 8.0, 10.0, 15.0];
-
-  const handleAdjustDuration = (delta: number) => {
-    soundEngine.playSfx('click');
-    setDuration((prev) => Math.max(0.5, Math.min(60, Number((prev + delta).toFixed(1)))));
-  };
-
   const categories = [
-    { id: 'All', label: 'All Stickers' },
-    { id: 'Reactions', label: 'Reactions 🔥' },
-    { id: 'Creator', label: 'Creator Badges 🎬' },
-    { id: 'Comic', label: 'Comic Words 💥' },
-    { id: 'Symbols', label: 'Symbols 🎯' },
+    { id: 'All', label: 'All' },
+    { id: 'Reactions', label: 'Reactions' },
+    { id: 'Creator', label: 'Badges' },
+    { id: 'Comic', label: 'Comic' },
+    { id: 'Symbols', label: 'Symbols' },
   ];
 
   const filteredStickers = STICKER_LIBRARY.filter((item) => {
@@ -108,79 +101,12 @@ export default function StickersModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>
-                {editingClip ? 'Change Sticker / Emoji' : 'Stickers & Emojis Suite'}
-              </Text>
-              <Text style={styles.sheetSubtitle}>
-                Tap any sticker to insert at {startTimeDisplay.toFixed(1)}s (Duration: {duration.toFixed(1)}s)
-              </Text>
-            </View>
+            <Text style={styles.sheetTitle}>
+              {editingClip ? 'Edit Sticker' : 'Stickers'}
+            </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
             </TouchableOpacity>
-          </View>
-
-          {/* Time Frame & Duration Control Panel */}
-          <View style={styles.timeframeBar}>
-            <View style={styles.timeframeTopRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="time-outline" size={15} color="#FBBF24" style={{ marginRight: 6 }} />
-                <Text style={styles.timeframeTitle}>TIME FRAME & DURATION</Text>
-              </View>
-              <View style={styles.timeframeRangePill}>
-                <Text style={styles.timeframeRangeText}>
-                  {startTimeDisplay.toFixed(1)}s ➔ {endTimeDisplay.toFixed(1)}s
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.stepperRow}>
-              <TouchableOpacity
-                style={styles.stepperBtn}
-                onPress={() => handleAdjustDuration(-0.5)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="remove" size={16} color="#FFFFFF" />
-                <Text style={styles.stepperBtnSubtext}>-0.5s</Text>
-              </TouchableOpacity>
-
-              <View style={styles.stepperCenter}>
-                <Text style={styles.stepperValue}>{duration.toFixed(1)}s</Text>
-                <Text style={styles.stepperLabel}>Display Duration</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.stepperBtn}
-                onPress={() => handleAdjustDuration(0.5)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={16} color="#FFFFFF" />
-                <Text style={styles.stepperBtnSubtext}>+0.5s</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quick Duration Pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-              {durationPresets.map((d) => {
-                const isActive = Math.abs(duration - d) < 0.05;
-                return (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.durPill, isActive && styles.durPillActive]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      setDuration(d);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.durPillText, isActive && styles.durPillTextActive]}>
-                      {d.toFixed(1)}s
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
           </View>
 
           {/* Search Bar */}
@@ -191,7 +117,7 @@ export default function StickersModal({
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search stickers, emojis, or badges..."
+                placeholder="Search stickers & emojis..."
                 placeholderTextColor="#64748B"
               />
               {searchQuery.length > 0 && (
@@ -381,99 +307,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  timeframeBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#0E1118',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
-  },
-  timeframeTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  timeframeTitle: {
-    color: '#FBBF24',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  timeframeRangePill: {
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
-  },
-  timeframeRangeText: {
-    color: '#FBBF24',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#151922',
-    borderRadius: 10,
-    padding: 6,
-    borderWidth: 1,
-    borderColor: '#232938',
-  },
-  stepperBtn: {
-    width: 54,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#1E2433',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperBtnSubtext: {
-    color: '#8E95A5',
-    fontSize: 9,
-    fontWeight: '700',
-    marginTop: 1,
-  },
-  stepperCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  stepperValue: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  stepperLabel: {
-    color: '#FBBF24',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  durPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: '#151922',
-    borderWidth: 1,
-    borderColor: '#232938',
-    marginRight: 6,
-  },
-  durPillActive: {
-    backgroundColor: '#FBBF24',
-    borderColor: '#FBBF24',
-  },
-  durPillText: {
-    color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  durPillTextActive: {
-    color: '#000000',
-    fontWeight: '800',
   },
 });

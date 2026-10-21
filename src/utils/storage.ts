@@ -359,7 +359,7 @@ export const defaultSettings: AppSettings = {
   autoAddEnding: false,
   magneticSnapping: true,
   hapticFeedback: true,
-  soundEffects: true,
+  soundEffects: false,
   hardwareAcceleration: true,
   cachedSizeMb: 142.8,
   language: 'English (US)',
@@ -397,53 +397,80 @@ export const clearAppCache = (): number => {
 export interface AppNotification {
   id: string;
   title: string;
-  body: string;
+  message: string;
+  body?: string;
+  description?: string;
   timestamp: string;
-  type: 'system' | 'creative' | 'update' | string;
+  createdAt: number;
   unread: boolean;
+  projectId?: string;
+  projectTitle?: string;
+  actionText?: string;
+  actionType?: 'open_project' | 'navigate' | string;
+  icon?: string;
 }
 
-export const defaultNotifications: AppNotification[] = [
-  {
-    id: 'notif-1',
-    title: 'Welcome to FastArt Pro 🚀',
-    body: 'Hardware-accelerated video editing with real-time LUT filters & non-linear speed ramping is now active.',
-    timestamp: 'Just now',
-    type: 'system',
-    unread: true,
-  },
-  {
-    id: 'notif-2',
-    title: 'Viral Phonk & Lo-Fi Beats Added 🎵',
-    body: 'Fresh royalty-free audio tracks and sound effects have been added to your audio studio.',
-    timestamp: '1 hour ago',
-    type: 'creative',
-    unread: true,
-  },
-  {
-    id: 'notif-3',
-    title: 'New Shaders: Glitch & VHS 90s ✨',
-    body: 'Updated 60 FPS real-time WebGL video shader effects are available in the Effects tab.',
-    timestamp: 'Yesterday',
-    type: 'update',
-    unread: false,
-  },
-];
+export const formatNotificationTime = (timestamp: number | string): string => {
+  const time = typeof timestamp === 'number' ? timestamp : Date.now();
+  const diffSec = Math.floor((Date.now() - time) / 1000);
+  if (diffSec < 45) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return new Date(time).toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+// No hardcoded fake promo notifications; notifications reflect real project events
+export const defaultNotifications: AppNotification[] = [];
 
 export const loadNotifications = (): AppNotification[] => {
   try {
     const raw = getStorageItem(NOTIFICATIONS_STORAGE_KEY);
-    // If raw is present (even if '[]' because user cleared all), respect it!
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        // Strip out old hardcoded dummy notifications
+        const cleaned = parsed
+          .filter(
+            (n: any) =>
+              n &&
+              n.id !== 'notif-1' &&
+              n.id !== 'notif-2' &&
+              n.id !== 'notif-3' &&
+              !n.title?.includes('Viral Phonk') &&
+              !n.title?.includes('New Shaders') &&
+              !n.title?.includes('Welcome to FastArt Pro')
+          )
+          .map((n: any) => ({
+            id: n.id || 'notif-' + Date.now(),
+            title: n.title || 'Notification',
+            message: n.message || n.body || n.description || '',
+            body: n.message || n.body || n.description || '',
+            description: n.message || n.body || n.description || '',
+            timestamp:
+              n.timestamp ||
+              (n.createdAt ? formatNotificationTime(n.createdAt) : 'Recently'),
+            createdAt: typeof n.createdAt === 'number' ? n.createdAt : Date.now(),
+            unread: n.unread !== false,
+            projectId: n.projectId,
+            projectTitle: n.projectTitle,
+            actionText: n.actionText || (n.projectId ? 'Open Project' : undefined),
+            actionType: n.actionType || (n.projectId ? 'open_project' : undefined),
+            icon: n.icon || (n.projectId ? 'videocam' : 'notifications-outline'),
+          }));
+
+        if (cleaned.length !== parsed.length) {
+          saveNotifications(cleaned);
+        }
+        return cleaned;
       }
     }
   } catch (e) {}
 
-  // Only seed default notifications on very first launch
-  saveNotifications(defaultNotifications);
   return defaultNotifications;
 };
 
@@ -451,6 +478,51 @@ export const saveNotifications = (notifs: AppNotification[]): void => {
   try {
     setStorageItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifs));
   } catch (e) {}
+};
+
+export const addNotification = (
+  notif: Partial<AppNotification> & { title: string; message?: string; body?: string }
+): AppNotification => {
+  const current = loadNotifications();
+  const now = Date.now();
+  const msg = notif.message || notif.body || notif.description || '';
+  const newNotif: AppNotification = {
+    id: notif.id || 'notif-' + now + '-' + Math.random().toString(36).substring(2, 7),
+    title: notif.title,
+    message: msg,
+    body: msg,
+    description: msg,
+    timestamp: notif.timestamp || formatNotificationTime(now),
+    createdAt: notif.createdAt || now,
+    unread: notif.unread !== undefined ? notif.unread : true,
+    projectId: notif.projectId,
+    projectTitle: notif.projectTitle,
+    actionText: notif.actionText || (notif.projectId ? 'Open Project' : undefined),
+    actionType: notif.actionType || (notif.projectId ? 'open_project' : undefined),
+    icon: notif.icon || (notif.projectId ? 'videocam' : 'notifications-outline'),
+  };
+
+  const updated = [newNotif, ...current].slice(0, 50);
+  saveNotifications(updated);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('fastart:notification_added', { detail: newNotif })
+    );
+  }
+
+  return newNotif;
+};
+
+export const deleteNotification = (id: string): AppNotification[] => {
+  const current = loadNotifications().filter((n) => n.id !== id);
+  saveNotifications(current);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('fastart:notifications_changed', { detail: current })
+    );
+  }
+  return current;
 };
 
 // --- Clean Export / Backup & Import All App Data ---

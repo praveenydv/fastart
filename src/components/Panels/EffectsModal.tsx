@@ -28,10 +28,10 @@ export default function EffectsModal({
   const [intensity, setIntensity] = useState<number>(0.8);
 
   const categories = [
-    { id: 'All', label: 'All Effects' },
-    { id: 'Glitch', label: 'Glitch & Cyber' },
-    { id: 'Retro', label: 'Retro & Film' },
-    { id: 'Motion', label: 'Motion & Zoom' },
+    { id: 'All', label: 'All' },
+    { id: 'Glitch', label: 'Glitch' },
+    { id: 'Retro', label: 'Retro' },
+    { id: 'Motion', label: 'Motion' },
   ];
 
   const filteredEffects = EFFECT_PRESETS.filter((item) => {
@@ -54,10 +54,7 @@ export default function EffectsModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>Video Effects & Shaders</Text>
-              <Text style={styles.sheetSubtitle}>Real-time GPU visual effects & distortions</Text>
-            </View>
+            <Text style={styles.sheetTitle}>Effects</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
             </TouchableOpacity>
@@ -88,7 +85,7 @@ export default function EffectsModal({
 
           {/* Intensity Selector */}
           <View style={styles.intensityRow}>
-            <Text style={styles.intensityLabel}>EFFECT INTENSITY:</Text>
+            <Text style={styles.intensityLabel}>Intensity:</Text>
             <View style={styles.intensityBtns}>
               {[
                 { label: 'Mild', val: 0.4 },

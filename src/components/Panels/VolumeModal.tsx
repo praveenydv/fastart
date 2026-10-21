@@ -66,7 +66,7 @@ export default function VolumeModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Ionicons name="volume-high" size={20} color="#00F2FE" />
-              <Text style={styles.headerTitle}>Audio Volume & Dynamics</Text>
+              <Text style={styles.headerTitle}>Volume & Fade</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#8E95A5" />
@@ -77,7 +77,7 @@ export default function VolumeModal({
             {/* Main Volume Level */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Volume Level</Text>
+                <Text style={styles.sectionTitle}>Volume</Text>
                 <Text style={styles.valueBadge}>{Math.round(volume * 100)}%</Text>
               </View>
 
@@ -152,7 +152,7 @@ export default function VolumeModal({
 
             {/* Fade In & Fade Out Controls */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Fade Envelopes</Text>
+              <Text style={styles.sectionTitle}>Fade In / Out</Text>
 
               {/* Fade In */}
               <View style={styles.fadeRow}>
@@ -161,7 +161,7 @@ export default function VolumeModal({
                   <Text style={styles.fadeLabel}>Fade In</Text>
                 </View>
                 <Text style={styles.fadeValText}>{fadeIn.toFixed(1)}s</Text>
-                {Platform.OS === 'web' && (
+                {Platform.OS === 'web' ? (
                   <WebDiv style={{ flex: 1, margin: '0 12px' }}>
                     <WebInput
                       type="range"
@@ -179,6 +179,21 @@ export default function VolumeModal({
                       }}
                     />
                   </WebDiv>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setFadeIn((f) => Math.max(0, parseFloat((f - 0.2).toFixed(1))))}
+                    >
+                      <Ionicons name="remove" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setFadeIn((f) => Math.min(5, parseFloat((f + 0.2).toFixed(1))))}
+                    >
+                      <Ionicons name="add" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
 
@@ -189,7 +204,7 @@ export default function VolumeModal({
                   <Text style={styles.fadeLabel}>Fade Out</Text>
                 </View>
                 <Text style={styles.fadeValText}>{fadeOut.toFixed(1)}s</Text>
-                {Platform.OS === 'web' && (
+                {Platform.OS === 'web' ? (
                   <WebDiv style={{ flex: 1, margin: '0 12px' }}>
                     <WebInput
                       type="range"
@@ -207,6 +222,21 @@ export default function VolumeModal({
                       }}
                     />
                   </WebDiv>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setFadeOut((f) => Math.max(0, parseFloat((f - 0.2).toFixed(1))))}
+                    >
+                      <Ionicons name="remove" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setFadeOut((f) => Math.min(5, parseFloat((f + 0.2).toFixed(1))))}
+                    >
+                      <Ionicons name="add" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             </View>
@@ -216,7 +246,7 @@ export default function VolumeModal({
           <View style={styles.footer}>
             <TouchableOpacity style={styles.applyBtn} onPress={handleApply}>
               <Ionicons name="checkmark" size={18} color="#000000" />
-              <Text style={styles.applyBtnText}>Apply Audio Changes</Text>
+              <Text style={styles.applyBtnText}>Apply</Text>
             </TouchableOpacity>
           </View>
         </View>

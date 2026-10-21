@@ -7,6 +7,7 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
@@ -51,6 +52,7 @@ export default function HomeDashboard({
   unreadNotificationsCount = 0,
   lastSession,
 }: HomeDashboardProps) {
+  const [optionsProject, setOptionsProject] = useState<any | null>(null);
   const [renamingProject, setRenamingProject] = useState<{
     id: string;
     title: string;
@@ -61,6 +63,7 @@ export default function HomeDashboard({
   const handleOpenRename = (id: string, currentTitle: string) => {
     setRenamingProject({ id, title: currentTitle });
     setNewTitleText(currentTitle);
+    setOptionsProject(null);
   };
 
   const handleSaveRename = () => {
@@ -71,6 +74,7 @@ export default function HomeDashboard({
     }
     setRenamingProject(null);
   };
+
   const lastProject = lastSession
     ? projects.find((p) => p.id === lastSession.projectId)
     : null;
@@ -80,7 +84,7 @@ export default function HomeDashboard({
       {/* Top Navbar */}
       <View style={styles.navBar}>
         <View style={styles.logoRow}>
-          <FastArtLogo size={34} />
+          <FastArtLogo size={30} />
           <Text style={styles.logoText}>FastArt</Text>
           <View style={styles.proBadge}>
             <Text style={styles.proText}>PRO</Text>
@@ -96,7 +100,7 @@ export default function HomeDashboard({
               onOpenNotifications();
             }}
           >
-            <Ionicons name="notifications-outline" size={20} color="#8E95A5" />
+            <Ionicons name="notifications-outline" size={19} color="#94A3B8" />
             {unreadNotificationsCount > 0 && (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
@@ -113,165 +117,281 @@ export default function HomeDashboard({
               onOpenSettings();
             }}
           >
-            <Ionicons name="settings-outline" size={20} color="#8E95A5" />
+            <Ionicons name="settings-outline" size={19} color="#94A3B8" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.scrollArea}>
-        {/* "Resume Last Edit" Hero Card if available */}
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Compact "Resume Last Edit" Banner */}
         {lastProject && (
           <TouchableOpacity
-            style={styles.resumeCard}
+            style={styles.resumeBanner}
             onPress={() => {
               soundEngine.playSfx("whoosh");
               onOpenProject(lastProject.id);
             }}
-            activeOpacity={0.85}
+            activeOpacity={0.8}
           >
-            <View style={styles.resumeLeft}>
-              <View style={styles.resumePlayCircle}>
-                <Ionicons name="play" size={20} color="#000000" />
-              </View>
-              <View style={{ flex: 1, marginLeft: 14 }}>
-                <View style={styles.resumeTagRow}>
-                  <View style={styles.resumeTag}>
-                    <Text style={styles.resumeTagText}>RESUME LAST EDIT</Text>
-                  </View>
-                  <Text style={styles.resumeTimeText}>
-                    At {formatPlayheadTime(lastSession?.currentTime || 0)}
-                  </Text>
-                </View>
-                <Text style={styles.resumeTitle} numberOfLines={1}>
+            <View style={styles.resumePlayIcon}>
+              <Ionicons name="play" size={13} color="#000000" />
+            </View>
+            <View style={styles.resumeTextContainer}>
+              <Text style={styles.resumeLabel} numberOfLines={1}>
+                Resume:{" "}
+                <Text style={styles.resumeProjectName}>
                   {lastProject.title}
                 </Text>
-                <Text style={styles.resumeMeta}>
-                  {lastProject.tracks?.video?.length || 0} clips • {lastProject.aspectRatio} • {lastProject.resolution || "1080p"}
-                </Text>
-              </View>
+              </Text>
+              <Text style={styles.resumeTimestamp}>
+                at {formatPlayheadTime(lastSession?.currentTime || 0)}
+              </Text>
             </View>
-            <View style={styles.resumeBtn}>
-              <Text style={styles.resumeBtnText}>Continue</Text>
-              <Ionicons name="arrow-forward" size={14} color="#000000" />
-            </View>
+            <Ionicons name="chevron-forward" size={16} color="#00F2FE" />
           </TouchableOpacity>
         )}
 
-        {/* "+ New Project" Hero Card */}
+        {/* Sleek Horizontal "+ New Project" Action Hero */}
         <TouchableOpacity
-          style={styles.newProjectCard}
+          style={styles.newProjectHero}
           onPress={() => {
             soundEngine.playSfx("whoosh");
             onCreateNewProject();
           }}
           activeOpacity={0.85}
         >
-          <View style={styles.newProjectPlusCircle}>
-            <Ionicons name="add" size={32} color="#000000" />
+          <View style={styles.newProjectIconBox}>
+            <Ionicons name="add" size={24} color="#000000" />
           </View>
-          <Text style={styles.newProjectTitle}>New Project</Text>
-          <Text style={styles.newProjectSubtext}>
-            Start creating with videos, photos, and music
-          </Text>
+          <View style={styles.newProjectTextCol}>
+            <Text style={styles.newProjectTitle}>New Project</Text>
+            <Text style={styles.newProjectSubtitle}>
+              Start creating with video, photos & music
+            </Text>
+          </View>
+          {/* <View style={styles.newProjectArrowBtn}>
+            <Ionicons name="arrow-forward" size={16} color="#00F2FE" />
+          </View> */}
         </TouchableOpacity>
 
-        {/* Recent Projects List */}
-        <View style={styles.projectsHeaderRow}>
-          <Text style={styles.sectionHeader}>
-            RECENT PROJECTS ({projects.length})
-          </Text>
+        {/* Recent Projects Section Header */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Recent Projects</Text>
+          <View style={styles.countPill}>
+            <Text style={styles.countPillText}>{projects.length}</Text>
+          </View>
         </View>
 
-        {projects.map((proj) => {
-          const videoClips = proj.tracks?.video || [];
-          const numClips = videoClips.length;
-          return (
-            <TouchableOpacity
-              key={proj.id}
-              style={styles.projectCard}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                onOpenProject(proj.id);
-              }}
-              activeOpacity={0.8}
-            >
-              {/* Thumbnail representation */}
-              <View style={styles.projectThumb}>
-                <Ionicons name="film" size={24} color="#00F2FE" />
-                <View style={styles.thumbDurationBadge}>
-                  <Text style={styles.thumbDurationText}>
-                    {proj.aspectRatio}
-                  </Text>
-                </View>
-              </View>
+        {/* Projects List or Clean Empty State */}
+        {projects.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="film-outline" size={28} color="#475569" />
+            </View>
+            <Text style={styles.emptyTitle}>No Projects Yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Tap New Project above to start your first video edit.
+            </Text>
+          </View>
+        ) : (
+          projects.map((proj) => {
+            const videoClips = proj.tracks?.video || [];
+            const numClips = videoClips.length;
+            const thumbUrl = videoClips[0]?.thumbnail;
 
-              <View style={{ flex: 1, marginLeft: 14 }}>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
+            return (
+              <TouchableOpacity
+                key={proj.id}
+                style={styles.projectCard}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  onOpenProject(proj.id);
+                }}
+                activeOpacity={0.75}
+              >
+                {/* Clean Thumbnail */}
+                <View style={styles.projectThumb}>
+                  {thumbUrl ? (
+                    <Image
+                      source={{ uri: thumbUrl }}
+                      style={styles.thumbImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Ionicons name="film" size={20} color="#00F2FE" />
+                  )}
+                  <View style={styles.aspectBadge}>
+                    <Text style={styles.aspectBadgeText}>
+                      {proj.aspectRatio || "9:16"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Info Column */}
+                <View style={styles.projectInfoCol}>
                   <Text style={styles.projectTitle} numberOfLines={1}>
                     {proj.title}
                   </Text>
-                  {/* <TouchableOpacity
-                    style={styles.inlineRenameBtn}
-                    onPress={(e: any) => {
-                      e?.stopPropagation?.();
-                      soundEngine.playSfx('click');
-                      handleOpenRename(proj.id, proj.title);
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="pencil" size={12} color="#00F2FE" />
-                  </TouchableOpacity> */}
+                  <Text style={styles.projectMeta} numberOfLines={1}>
+                    {numClips} {numClips === 1 ? "clip" : "clips"} •{" "}
+                    {proj.resolution || "1080p"} • {proj.fps || 30}fps
+                  </Text>
                 </View>
-                <Text style={styles.projectMeta}>
-                  {numClips} clips • {proj.resolution || "1080p"} • Updated
-                  today
-                </Text>
-              </View>
 
-              {/* Action Buttons: Rename, Duplicate & Delete */}
-              <View style={styles.projectActions}>
+                {/* Minimalist Options Button (replaces 3 cluttered buttons) */}
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnRename]}
+                  style={styles.optionsBtn}
                   onPress={(e: any) => {
                     e?.stopPropagation?.();
                     soundEngine.playSfx("click");
-                    handleOpenRename(proj.id, proj.title);
+                    setOptionsProject(proj);
                   }}
-                  accessibilityLabel="Rename Project"
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel="Project options"
                 >
-                  <Ionicons name="pencil-outline" size={15} color="#00F2FE" />
+                  <Ionicons
+                    name="ellipsis-horizontal"
+                    size={18}
+                    color="#94A3B8"
+                  />
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={(e: any) => {
-                    e?.stopPropagation?.();
-                    soundEngine.playSfx("pop");
-                    onDuplicateProject(proj.id);
-                  }}
-                  accessibilityLabel="Duplicate Project"
-                >
-                  <Ionicons name="copy-outline" size={15} color="#8E95A5" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={(e: any) => {
-                    e?.stopPropagation?.();
-                    soundEngine.playSfx("pop");
-                    setProjectToDelete(proj);
-                  }}
-                  accessibilityLabel="Delete Project"
-                >
-                  <Ionicons name="trash-outline" size={15} color="#FF0050" />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
+
+      {/* Project Options Bottom Sheet Modal */}
+      <Modal
+        visible={!!optionsProject}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOptionsProject(null)}
+      >
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={() => setOptionsProject(null)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.sheetContainer}>
+            {/* Sheet Handle */}
+            <View style={styles.sheetHandle} />
+
+            {/* Project Header Info */}
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetThumb}>
+                <Ionicons name="film" size={18} color="#00F2FE" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetProjectTitle} numberOfLines={1}>
+                  {optionsProject?.title}
+                </Text>
+                <Text style={styles.sheetProjectMeta}>
+                  {optionsProject?.aspectRatio} •{" "}
+                  {optionsProject?.resolution || "1080p"} •{" "}
+                  {optionsProject?.tracks?.video?.length || 0} clips
+                </Text>
+              </View>
+            </View>
+
+            {/* Actions */}
+            <View style={styles.sheetActionsList}>
+              <TouchableOpacity
+                style={styles.sheetActionItem}
+                onPress={() => {
+                  if (optionsProject) {
+                    soundEngine.playSfx("whoosh");
+                    onOpenProject(optionsProject.id);
+                    setOptionsProject(null);
+                  }
+                }}
+              >
+                <View
+                  style={[
+                    styles.actionIconBox,
+                    { backgroundColor: "rgba(0, 242, 254, 0.12)" },
+                  ]}
+                >
+                  <Ionicons name="play" size={17} color="#00F2FE" />
+                </View>
+                <Text
+                  style={[
+                    styles.sheetActionText,
+                    { color: "#00F2FE", fontWeight: "700" },
+                  ]}
+                >
+                  Open in Editor
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetActionItem}
+                onPress={() => {
+                  if (optionsProject) {
+                    handleOpenRename(optionsProject.id, optionsProject.title);
+                  }
+                }}
+              >
+                <View style={styles.actionIconBox}>
+                  <Ionicons name="pencil-outline" size={17} color="#94A3B8" />
+                </View>
+                <Text style={styles.sheetActionText}>Rename Project</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetActionItem}
+                onPress={() => {
+                  if (optionsProject) {
+                    soundEngine.playSfx("pop");
+                    onDuplicateProject(optionsProject.id);
+                    setOptionsProject(null);
+                  }
+                }}
+              >
+                <View style={styles.actionIconBox}>
+                  <Ionicons name="copy-outline" size={17} color="#94A3B8" />
+                </View>
+                <Text style={styles.sheetActionText}>Duplicate Project</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.sheetActionItem, styles.sheetActionItemDanger]}
+                onPress={() => {
+                  if (optionsProject) {
+                    soundEngine.playSfx("click");
+                    setProjectToDelete(optionsProject);
+                    setOptionsProject(null);
+                  }
+                }}
+              >
+                <View
+                  style={[
+                    styles.actionIconBox,
+                    { backgroundColor: "rgba(255, 0, 80, 0.12)" },
+                  ]}
+                >
+                  <Ionicons name="trash-outline" size={17} color="#FF0050" />
+                </View>
+                <Text style={[styles.sheetActionText, { color: "#FF0050" }]}>
+                  Delete Project
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setOptionsProject(null)}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Rename Project Modal */}
       <Modal
@@ -288,14 +408,10 @@ export default function HomeDashboard({
           <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderIcon}>
-                <Ionicons name="create-outline" size={20} color="#00F2FE" />
+                <Ionicons name="create-outline" size={18} color="#00F2FE" />
               </View>
               <Text style={styles.modalTitle}>Rename Project</Text>
             </View>
-
-            <Text style={styles.modalSubtitle}>
-              Give your video project a custom title
-            </Text>
 
             <TextInput
               style={styles.titleInput}
@@ -367,42 +483,34 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B0D13",
   },
   navBar: {
-    height: 56,
+    height: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A1E29",
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
   },
   logoRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  logoBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    backgroundColor: "#00F2FE",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   logoText: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   proBadge: {
     backgroundColor: "#FFE600",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
     borderRadius: 4,
   },
   proText: {
     color: "#000000",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
   },
   navActions: {
@@ -410,10 +518,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#141721",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#131722",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -423,135 +531,333 @@ const styles = StyleSheet.create({
     top: -2,
     right: -2,
     backgroundColor: "#FF0050",
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 7.5,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 3,
+    paddingHorizontal: 2,
     borderWidth: 1.5,
     borderColor: "#0B0D13",
   },
   bellBadgeText: {
     color: "#FFFFFF",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
   },
   scrollArea: {
     flex: 1,
-    padding: 16,
   },
-  newProjectCard: {
-    backgroundColor: "#141721",
-    borderRadius: 16,
-    padding: 24,
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  // Slim, elegant Resume Banner
+  resumeBanner: {
+    flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#252B3B",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    backgroundColor: "rgba(0, 242, 254, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.22)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
   },
-  newProjectPlusCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  resumePlayIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginRight: 10,
+  },
+  resumeTextContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    overflow: "hidden",
+  },
+  resumeLabel: {
+    color: "#94A3B8",
+    fontSize: 12,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  resumeProjectName: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  resumeTimestamp: {
+    color: "#00F2FE",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  // Sleek, compact Horizontal New Project Card
+  newProjectHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#131722",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  newProjectIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#00F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
     shadowColor: "#00F2FE",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+  newProjectTextCol: {
+    flex: 1,
   },
   newProjectTitle: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
+    letterSpacing: -0.2,
   },
-  newProjectSubtext: {
+  newProjectSubtitle: {
     color: "#8E95A5",
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 2,
   },
-  projectsHeaderRow: {
-    marginBottom: 12,
+  newProjectArrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  sectionHeader: {
-    color: "#8E95A5",
-    fontSize: 11,
+  // Section Header
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: {
+    color: "#94A3B8",
+    fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
+  countPill: {
+    backgroundColor: "#1E2538",
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+  },
+  countPillText: {
+    color: "#00F2FE",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  // Project Card
   projectCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#141721",
-    padding: 12,
+    backgroundColor: "#131722",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#1E2333",
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   projectThumb: {
-    width: 60,
-    height: 60,
+    width: 48,
+    height: 48,
     borderRadius: 8,
-    backgroundColor: "#1E293B",
+    backgroundColor: "#1A2030",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
     overflow: "hidden",
   },
-  thumbDurationBadge: {
+  thumbImage: {
+    width: "100%",
+    height: "100%",
+  },
+  aspectBadge: {
     position: "absolute",
     bottom: 2,
     right: 2,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
     borderRadius: 3,
   },
-  thumbDurationText: {
+  aspectBadgeText: {
     color: "#00F2FE",
-    fontSize: 8,
+    fontSize: 7.5,
     fontWeight: "800",
+  },
+  projectInfoCol: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 6,
   },
   projectTitle: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: "700",
   },
   projectMeta: {
     color: "#8E95A5",
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 2.5,
   },
-  projectActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  actionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#1E2333",
+  optionsBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
-  actionBtnRename: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+  // Empty State
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#141824",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    color: "#64748B",
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  // Project Options Sheet
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "flex-end",
+  },
+  sheetContainer: {
+    backgroundColor: "#141721",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 28,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
   },
-  inlineRenameBtn: {
-    padding: 3,
-    borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#334155",
+    alignSelf: "center",
+    marginBottom: 14,
   },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 14,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
+  },
+  sheetThumb: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: "#1E2538",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  sheetProjectTitle: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  sheetProjectMeta: {
+    color: "#8E95A5",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  sheetActionsList: {
+    gap: 4,
+  },
+  sheetActionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  sheetActionItemDanger: {
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.04)",
+  },
+  actionIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#1E2538",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  sheetActionText: {
+    color: "#E2E8F0",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  sheetCancelBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#1E2538",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetCancelText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  // Rename Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.75)",
@@ -565,37 +871,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#141721",
     borderRadius: 16,
     padding: 20,
-    borderWidth: 1.5,
-    borderColor: "#252B3B",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   modalHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 6,
+    marginBottom: 16,
   },
   modalHeaderIcon: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   modalTitle: {
     color: "#FFFFFF",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
-  },
-  modalSubtitle: {
-    color: "#8E95A5",
-    fontSize: 12,
-    marginBottom: 16,
   },
   titleInput: {
     backgroundColor: "#0B0D13",
@@ -605,9 +901,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
-    marginBottom: 20,
+    marginBottom: 18,
   },
   modalButtonsRow: {
     flexDirection: "row",
@@ -615,29 +911,24 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#1E2333",
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#1E2538",
     alignItems: "center",
     justifyContent: "center",
   },
   cancelBtnText: {
-    color: "#8E95A5",
+    color: "#94A3B8",
     fontSize: 13,
     fontWeight: "700",
   },
   saveBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
   },
   saveBtnDisabled: {
     opacity: 0.4,
@@ -645,82 +936,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: "#000000",
     fontSize: 13,
-    fontWeight: "900",
-  },
-  resumeCard: {
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: "rgba(0, 242, 254, 0.4)",
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  resumeLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  resumePlayCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#00F2FE",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-  },
-  resumeTagRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  resumeTag: {
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  resumeTagText: {
-    color: "#000000",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  resumeTimeText: {
-    color: "#00F2FE",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  resumeTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  resumeMeta: {
-    color: "#8E95A5",
-    fontSize: 11,
-    marginTop: 2,
-  },
-  resumeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginLeft: 12,
-  },
-  resumeBtnText: {
-    color: "#000000",
-    fontSize: 12,
     fontWeight: "800",
   },
 });

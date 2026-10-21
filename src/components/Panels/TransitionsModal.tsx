@@ -35,7 +35,7 @@ export default function TransitionsModal({
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Video Transitions</Text>
+            <Text style={styles.sheetTitle}>Transitions</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
             </TouchableOpacity>
@@ -43,7 +43,7 @@ export default function TransitionsModal({
 
           <ScrollView style={styles.sheetBody}>
             {/* Duration selector */}
-            <Text style={styles.sectionTitle}>TRANSITION DURATION</Text>
+            <Text style={styles.sectionTitle}>Duration</Text>
             <View style={styles.durationRow}>
               {durations.map((d) => (
                 <TouchableOpacity
@@ -63,7 +63,7 @@ export default function TransitionsModal({
               ))}
             </View>
 
-            <Text style={styles.sectionTitle}>TRANSITION PRESETS</Text>
+            <Text style={styles.sectionTitle}>Presets</Text>
             <View style={styles.grid}>
               {TRANSITION_PRESETS.map((item) => {
                 const isActive = activeTransition?.type === item.id;

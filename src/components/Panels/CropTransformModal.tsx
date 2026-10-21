@@ -152,10 +152,10 @@ export default function CropTransformModal({
 
     onApplyTransform(
       {
-        scale,
-        rotation,
-        x,
-        y,
+        scale: currentTransform?.scale ?? scale,
+        rotation: currentTransform?.rotation ?? rotation,
+        x: currentTransform?.x ?? x,
+        y: currentTransform?.y ?? y,
         flipX,
         flipY,
         opacity,
@@ -198,7 +198,7 @@ export default function CropTransformModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Ionicons name="shapes-outline" size={20} color="#00F2FE" />
-              <Text style={styles.headerTitle}>Crop, Masking & Visual Transform</Text>
+              <Text style={styles.headerTitle}>Crop & Mask</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#8E95A5" />
@@ -220,7 +220,7 @@ export default function CropTransformModal({
                 color={activeTab === 'crop' ? '#00F2FE' : '#8E95A5'}
               />
               <Text style={[styles.tabBtnText, activeTab === 'crop' && styles.tabBtnTextActive]}>
-                Custom Crop
+                Crop
               </Text>
             </TouchableOpacity>
 
@@ -237,7 +237,7 @@ export default function CropTransformModal({
                 color={activeTab === 'mask' ? '#00F2FE' : '#8E95A5'}
               />
               <Text style={[styles.tabBtnText, activeTab === 'mask' && styles.tabBtnTextActive]}>
-                Video Masking
+                Mask
               </Text>
             </TouchableOpacity>
 
@@ -254,7 +254,7 @@ export default function CropTransformModal({
                 color={activeTab === 'adjust' ? '#00F2FE' : '#8E95A5'}
               />
               <Text style={[styles.tabBtnText, activeTab === 'adjust' && styles.tabBtnTextActive]}>
-                Opacity & Flips
+                Transform
               </Text>
             </TouchableOpacity>
           </View>
@@ -291,7 +291,7 @@ export default function CropTransformModal({
                 </View>
 
                 {/* Preset Aspect Ratios */}
-                <Text style={styles.sectionTitle}>CUSTOM CROP ASPECT RATIO PRESETS</Text>
+                <Text style={styles.sectionTitle}>ASPECT RATIO PRESETS</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                   <View style={styles.ratioRow}>
                     {cropPresets.map((p) => {
@@ -394,7 +394,7 @@ export default function CropTransformModal({
 
                 {/* Overall Canvas Aspect Ratio */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>PROJECT CANVAS RATIO</Text>
+                  <Text style={styles.sectionTitle}>CANVAS RATIO</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                     <View style={styles.ratioRow}>
                       {ratios.map((r) => {
@@ -429,7 +429,7 @@ export default function CropTransformModal({
             {activeTab === 'mask' && (
               <View>
                 {/* Mask Shape Selection */}
-                <Text style={styles.sectionTitle}>MASK SHAPES & EFFECTS</Text>
+                <Text style={styles.sectionTitle}>MASK SHAPES</Text>
                 <View style={styles.maskGrid}>
                   {maskShapes.map((m) => {
                     const isSelected = maskShape === m.id;
@@ -579,16 +579,6 @@ export default function CropTransformModal({
                       </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.toolBtn}
-                      onPress={() => {
-                        soundEngine.playSfx('click');
-                        setRotation((r) => (r + 90) % 360);
-                      }}
-                    >
-                      <Ionicons name="refresh" size={20} color="#FFFFFF" />
-                      <Text style={styles.toolBtnText}>+90° ({rotation}°)</Text>
-                    </TouchableOpacity>
                   </View>
                 </View>
 

@@ -17,12 +17,14 @@ interface TextToSpeechModalProps {
   visible: boolean;
   onClose: () => void;
   onAddAudio: (clip: AudioClip) => void;
+  initialScript?: string;
 }
 
 export default function TextToSpeechModal({
   visible,
   onClose,
   onAddAudio,
+  initialScript,
 }: TextToSpeechModalProps) {
   const [script, setScript] = useState('Welcome to FastArt Pro, the ultimate video editing studio.');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -30,6 +32,12 @@ export default function TextToSpeechModal({
   const [pitch, setPitch] = useState(1.0);
   const [rate, setRate] = useState(1.0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  useEffect(() => {
+    if (visible && initialScript && initialScript.trim()) {
+      setScript(initialScript.trim());
+    }
+  }, [visible, initialScript]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -101,7 +109,7 @@ export default function TextToSpeechModal({
           <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="mic" size={20} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>AI Text to Speech</Text>
+              <Text style={styles.sheetTitle}>AI Voice</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
@@ -109,7 +117,7 @@ export default function TextToSpeechModal({
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionTitle}>SCRIPT TO SPEAK</Text>
+            <Text style={styles.sectionTitle}>Script</Text>
             <TextInput
               style={styles.scriptInput}
               value={script}
@@ -120,7 +128,7 @@ export default function TextToSpeechModal({
               placeholderTextColor="#6B7280"
             />
 
-            <Text style={styles.sectionTitle}>SELECT AI VOICE</Text>
+            <Text style={styles.sectionTitle}>Voices</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {(voices.length > 0 ? voices.slice(0, 10) : [{ name: 'Default AI Voice', lang: 'en-US' }]).map(
                 (v: any, idx) => {
@@ -151,7 +159,7 @@ export default function TextToSpeechModal({
               )}
             </ScrollView>
 
-            <Text style={styles.sectionTitle}>SPEED (RATE)</Text>
+            <Text style={styles.sectionTitle}>Speed</Text>
             <View style={styles.rateRow}>
               {[0.75, 1.0, 1.25, 1.5].map((r) => (
                 <TouchableOpacity
@@ -177,13 +185,13 @@ export default function TextToSpeechModal({
                   color={isSpeaking ? '#FF0050' : '#FFFFFF'}
                 />
                 <Text style={styles.previewBtnText}>
-                  {isSpeaking ? 'Stop Preview' : 'Listen Preview'}
+                  {isSpeaking ? 'Stop' : 'Preview'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.useBtn} onPress={handleUseVoiceover}>
                 <Ionicons name="add-circle" size={20} color="#000000" />
-                <Text style={styles.useBtnText}>Add to Project</Text>
+                <Text style={styles.useBtnText}>Add Voice</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

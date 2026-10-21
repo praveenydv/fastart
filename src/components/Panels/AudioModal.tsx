@@ -16,6 +16,7 @@ import { soundEngine } from '../../utils/audioEngine';
 import { AudioClip } from '../../types/project';
 import { openMediaService, OpenAudioItem } from '../../services/openMediaService';
 import { loadUploadedAudio, saveUploadedAudio } from '../../utils/storage';
+import { persistLargeMedia } from '../../utils/largeMediaStorage';
 
 interface AudioModalProps {
   visible: boolean;
@@ -146,29 +147,31 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac';
-        input.onchange = (e: any) => {
+        input.onchange = async (e: any) => {
           const file = e.target.files?.[0];
           if (!file) return;
 
-          const url = URL.createObjectURL(file);
           const fileName = file.name.replace(/\.[^/.]+$/, '');
+          const trackId = 'user-audio-' + Date.now();
 
-          const probe = new Audio(url);
+          const probe = new Audio(URL.createObjectURL(file));
           let handled = false;
 
-          const commitAudio = (dur: number) => {
+          const commitAudio = async (dur: number) => {
             if (handled) return;
             handled = true;
             const validDuration = dur && !isNaN(dur) && isFinite(dur) && dur > 0
               ? Math.round(dur * 10) / 10
               : 15.0;
 
+            const saved = await persistLargeMedia(file, trackId, fileName, 'audio', { duration: validDuration });
+
             const newTrack = {
-              id: 'user-audio-' + Date.now(),
+              id: trackId,
               title: fileName || 'Uploaded Audio Track',
               artist: 'Local Device Audio',
               duration: validDuration,
-              url,
+              url: saved.url,
               bpm: 120,
               icon: 'musical-notes',
               license: 'Personal Upload',
@@ -190,7 +193,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
               trimIn: 0,
               trimOut: validDuration,
               volume: 1.0,
-              url,
+              url: saved.url,
             };
 
             soundEngine.playSfx('pop');
@@ -263,7 +266,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
                     color={activeTab === 'sfx' ? '#00F2FE' : '#8E95A5'}
                   />
                   <Text style={[styles.tabText, activeTab === 'sfx' && styles.tabTextActive]}>
-                    Sound Effects
+                    SFX
                   </Text>
                 </TouchableOpacity>
 
@@ -294,7 +297,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
                     color={activeTab === 'upload' ? '#00F2FE' : '#8E95A5'}
                   />
                   <Text style={[styles.tabText, activeTab === 'upload' && styles.tabTextActive]}>
-                    Uploads {uploadedTracks.length > 0 ? `(${uploadedTracks.length})` : ''}
+                    Uploads{uploadedTracks.length > 0 ? ` (${uploadedTracks.length})` : ''}
                   </Text>
                 </TouchableOpacity>
               </View>

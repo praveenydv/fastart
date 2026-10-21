@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,20 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FILTER_PRESETS } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
+import { parseCubeLut, PRO_3D_LUTS } from '../../utils/lutParser';
+import { CustomLutConfig } from '../../types/project';
+import { getStorageItem, setStorageItem } from '../../utils/storage';
 
 interface FiltersModalProps {
   visible: boolean;
   onClose: () => void;
   activeFilter?: string;
-  onSelectFilter: (filterId: string) => void;
+  onSelectFilter: (filterId: string, customLut?: CustomLutConfig) => void;
 }
 
 export default function FiltersModal({
@@ -25,12 +29,32 @@ export default function FiltersModal({
   onSelectFilter,
 }: FiltersModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
+  const [customLuts, setCustomLuts] = useState<CustomLutConfig[]>(PRO_3D_LUTS);
+  const [selectedLutId, setSelectedLutId] = useState<string>(activeFilter);
+
+  useEffect(() => {
+    setSelectedLutId(activeFilter);
+    // Load stored user custom LUTs
+    const loadStoredLuts = async () => {
+      try {
+        const stored = await getStorageItem('fastart_custom_luts');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setCustomLuts([...PRO_3D_LUTS, ...parsed]);
+          }
+        }
+      } catch (e) {}
+    };
+    loadStoredLuts();
+  }, [visible, activeFilter]);
 
   const categories = [
-    { id: 'All', label: 'All LUTs' },
-    { id: 'Cinematic', label: 'Cinematic 🎬' },
-    { id: 'Retro', label: 'Vintage & B&W 🎞️' },
-    { id: 'Vibrant', label: 'Vibrant & Neon ⚡' },
+    { id: 'All', label: 'All' },
+    { id: '3D_LUTs', label: '3D LUTs' },
+    { id: 'Cinematic', label: 'Cinematic' },
+    { id: 'Retro', label: 'Vintage' },
+    { id: 'Vibrant', label: 'Vibrant' },
   ];
 
   const filterColorMap: Record<string, string> = {
@@ -50,12 +74,74 @@ export default function FiltersModal({
     high_contrast: '#60A5FA',
     polaroid_fade: '#CBD5E1',
     solar_pop: '#A855F7',
+    lut_kodak_2383: '#D97706',
+    lut_fuji_pro400h: '#38BDF8',
+    lut_bleach_bypass: '#E2E8F0',
+    lut_teal_orange_film: '#00F2FE',
+  };
+
+  const handleImportCubeFile = () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.cube,.txt';
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+          const content = evt.target?.result as string;
+          if (!content) return;
+
+          const parsed = parseCubeLut(content, file.name);
+          const newLut: CustomLutConfig = {
+            id: `custom_lut_${Date.now()}`,
+            name: parsed.title,
+            cssFilter: parsed.cssFilter,
+            size: parsed.size,
+          };
+
+          const updated = [...customLuts, newLut];
+          setCustomLuts(updated);
+          setSelectedLutId(newLut.id);
+          soundEngine.playSfx('whoosh');
+
+          // Save custom user LUTs to local storage
+          try {
+            const userOnly = updated.filter(
+              (l) => !PRO_3D_LUTS.some((pl) => pl.id === l.id)
+            );
+            setStorageItem('fastart_custom_luts', JSON.stringify(userOnly));
+          } catch (err) {}
+
+          onSelectFilter(newLut.id, newLut);
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+  };
+
+  const handleSelectStandardPreset = (presetId: string) => {
+    soundEngine.playSfx('click');
+    setSelectedLutId(presetId);
+    onSelectFilter(presetId);
+  };
+
+  const handleSelectCustomLut = (lut: CustomLutConfig) => {
+    soundEngine.playSfx('click');
+    setSelectedLutId(lut.id);
+    onSelectFilter(lut.id, lut);
   };
 
   const filteredPresets = FILTER_PRESETS.filter((item) => {
     if (activeCategory === 'All') return true;
+    if (activeCategory === '3D_LUTs') return false;
     return item.category === activeCategory;
   });
+
+  const showCustomLuts = activeCategory === 'All' || activeCategory === '3D_LUTs';
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -63,18 +149,30 @@ export default function FiltersModal({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>Color Filters & Cinematic LUTs</Text>
-              <Text style={styles.sheetSubtitle}>Hollywood color grading & atmospheric presets</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <Text style={styles.sheetTitle}>Filters & LUTs</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
               <Ionicons name="close" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Category Filter Pills */}
+          {/* Import .cube LUT CTA & Category Filter Pills */}
+          <View style={styles.topActionRow}>
+            <TouchableOpacity
+              style={styles.importBtn}
+              onPress={handleImportCubeFile}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color="#000000" />
+              <Text style={styles.importBtnText}>+ Import LUT (.cube)</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.categoryRow}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+            >
               {categories.map((cat) => {
                 const isActive = activeCategory === cat.id;
                 return (
@@ -86,7 +184,12 @@ export default function FiltersModal({
                       setActiveCategory(cat.id);
                     }}
                   >
-                    <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        isActive && styles.categoryPillTextActive,
+                      ]}
+                    >
                       {cat.label}
                     </Text>
                   </TouchableOpacity>
@@ -96,48 +199,91 @@ export default function FiltersModal({
           </View>
 
           <ScrollView style={styles.sheetBody}>
-            <View style={styles.grid}>
-              {filteredPresets.map((item) => {
-                const isActive = activeFilter === item.id;
-                const accentColor = filterColorMap[item.id] || '#00F2FE';
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.filterCard, isActive && styles.filterCardActive]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      onSelectFilter(item.id);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <View
-                      style={[
-                        styles.colorPreviewCircle,
-                        { backgroundColor: `${accentColor}25`, borderColor: accentColor },
-                        isActive && styles.circleActive,
-                      ]}
-                    >
-                      <Ionicons
-                        name="color-wand"
-                        size={22}
-                        color={accentColor}
-                      />
-                    </View>
-                    <Text
-                      style={[styles.filterLabel, isActive && styles.filterLabelActive]}
-                      numberOfLines={1}
-                    >
-                      {item.name}
-                    </Text>
-                    {isActive && (
-                      <View style={styles.activeCheckBadge}>
-                        <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* 3D LUTs Section */}
+            {showCustomLuts && (
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionHeader}>PRO 3D LUT FILES (.CUBE)</Text>
+                <View style={styles.grid}>
+                  {customLuts.map((lut) => {
+                    const isSelected = selectedLutId === lut.id;
+                    const sampleColor = filterColorMap[lut.id] || '#00F2FE';
+                    return (
+                      <TouchableOpacity
+                        key={lut.id}
+                        style={[styles.card, isSelected && styles.cardActive]}
+                        onPress={() => handleSelectCustomLut(lut)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.colorPreview, { backgroundColor: sampleColor }]}>
+                          <Ionicons
+                            name="cube-outline"
+                            size={22}
+                            color={sampleColor === '#FFFFFF' ? '#000' : '#FFF'}
+                          />
+                          {isSelected && (
+                            <View style={styles.activeCheckBadge}>
+                              <Ionicons name="checkmark" size={14} color="#000000" />
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.metaBox}>
+                          <Text
+                            style={[styles.filterName, isSelected && styles.filterNameActive]}
+                            numberOfLines={1}
+                          >
+                            {lut.name}
+                          </Text>
+                          <Text style={styles.categoryTag}>3D LUT</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Standard Presets Section */}
+            {activeCategory !== '3D_LUTs' && (
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionHeader}>CANVAS COLOR PRESETS</Text>
+                <View style={styles.grid}>
+                  {filteredPresets.map((item) => {
+                    const isSelected = selectedLutId === item.id;
+                    const sampleColor = filterColorMap[item.id] || '#00F2FE';
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[styles.card, isSelected && styles.cardActive]}
+                        onPress={() => handleSelectStandardPreset(item.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.colorPreview, { backgroundColor: sampleColor }]}>
+                          <Ionicons
+                            name="color-filter-outline"
+                            size={20}
+                            color={sampleColor === '#FFFFFF' ? '#000' : '#FFF'}
+                          />
+                          {isSelected && (
+                            <View style={styles.activeCheckBadge}>
+                              <Ionicons name="checkmark" size={14} color="#000000" />
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.metaBox}>
+                          <Text
+                            style={[styles.filterName, isSelected && styles.filterNameActive]}
+                            numberOfLines={1}
+                          >
+                            {item.name}
+                          </Text>
+                          <Text style={styles.categoryTag}>{item.category}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -148,121 +294,156 @@ export default function FiltersModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#141721',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '75%',
+    maxHeight: '80%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
   },
   sheetHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    paddingBottom: 10,
   },
   sheetTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   sheetSubtitle: {
     color: '#8E95A5',
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#1E2333',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  categoryRow: {
+  topActionRow: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingBottom: 10,
+  },
+  importBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#00F2FE',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  importBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  categoryRow: {
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1E29',
+    borderBottomColor: '#1E2333',
+    paddingBottom: 10,
   },
   categoryScroll: {
-    gap: 6,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   categoryPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: '#10131A',
-    borderWidth: 1,
-    borderColor: '#1E2333',
+    borderRadius: 16,
+    backgroundColor: '#1E2333',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    backgroundColor: 'rgba(0, 242, 254, 0.2)',
+    borderWidth: 1,
     borderColor: '#00F2FE',
   },
   categoryPillText: {
     color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
   },
   categoryPillTextActive: {
     color: '#00F2FE',
+    fontWeight: '700',
   },
   sheetBody: {
     padding: 16,
+  },
+  sectionBlock: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    color: '#8E95A5',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 10,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    justifyContent: 'space-between',
   },
-  filterCard: {
-    width: '30.8%',
+  card: {
+    width: '31%',
     backgroundColor: '#10131A',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
+    borderRadius: 10,
+    overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: '#1E2333',
-    position: 'relative',
   },
-  filterCardActive: {
+  cardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
-  colorPreviewCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  colorPreview: {
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 1.5,
-  },
-  circleActive: {
-    transform: [{ scale: 1.05 }],
-  },
-  filterLabel: {
-    color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  filterLabelActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+    position: 'relative',
   },
   activeCheckBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 4,
+    right: 4,
+    backgroundColor: '#00F2FE',
+    borderRadius: 8,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metaBox: {
+    padding: 6,
+    alignItems: 'center',
+  },
+  filterName: {
+    color: '#CBD5E1',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  filterNameActive: {
+    color: '#00F2FE',
+    fontWeight: '700',
+  },
+  categoryTag: {
+    color: '#666',
+    fontSize: 9,
+    marginTop: 2,
   },
 });

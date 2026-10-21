@@ -17,6 +17,9 @@ export interface ExportOptions {
   duration?: number;
   format?: ExportFormat;
   currentTime?: number;
+  logicalWidth?: number;
+  logicalHeight?: number;
+  videoBitsPerSecond?: number;
 }
 
 export interface ExportResult {
@@ -32,36 +35,122 @@ export class VideoRenderer {
   public canvas: HTMLCanvasElement | null;
   public ctx: CanvasRenderingContext2D | null;
   public videoElements: Map<string, HTMLVideoElement | HTMLImageElement>;
+  public lastUsedTimestamp: Map<string, number> = new Map();
   public onFrameNeeded?: () => void;
+  public offscreenCanvas: HTMLCanvasElement | null = null;
+  public offscreenCtx: CanvasRenderingContext2D | null = null;
+  private maxDecoders =
+    typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+      ? 4
+      : 6;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
-    this.ctx = canvas ? canvas.getContext("2d") : null;
+    this.ctx = canvas
+      ? (canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+        canvas.getContext("2d")
+      : null;
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = true;
+      this.ctx.imageSmoothingQuality = "high";
+    }
     this.videoElements = new Map();
   }
 
   setCanvas(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
-    this.ctx = canvas ? canvas.getContext("2d") : null;
+    this.ctx = canvas
+      ? (canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+        canvas.getContext("2d")
+      : null;
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = true;
+      this.ctx.imageSmoothingQuality = "high";
+    }
   }
 
-  // Preload and cache media elements with instant load notifications
+  // Release resources and hardware decoders to prevent mobile browser memory leaks
+  cleanup() {
+    this.videoElements.forEach((el) => {
+      if (el instanceof HTMLVideoElement) {
+        try {
+          el.pause();
+          el.removeAttribute("src");
+          el.load();
+        } catch (e) {}
+      }
+    });
+    this.videoElements.clear();
+    this.lastUsedTimestamp.clear();
+    this.canvas = null;
+    this.ctx = null;
+  }
+
+  // Prune unused media elements to preserve mobile GPU memory and limited hardware decoders
+  pruneUnusedMedia(activeUrls: Set<string>) {
+    this.videoElements.forEach((el, url) => {
+      if (!activeUrls.has(url)) {
+        if (el instanceof HTMLVideoElement) {
+          try {
+            el.pause();
+            el.removeAttribute("src");
+            el.load();
+          } catch (e) {}
+        }
+        this.videoElements.delete(url);
+        this.lastUsedTimestamp.delete(url);
+      }
+    });
+  }
+
+  // Preload and cache media elements with hardware decoder LRU eviction for large files
   async preloadClip(
     clip: VideoClip,
   ): Promise<HTMLVideoElement | HTMLImageElement | null> {
     if (typeof window === "undefined") return null;
+    this.lastUsedTimestamp.set(clip.url, Date.now());
+
     if (this.videoElements.has(clip.url)) {
       return this.videoElements.get(clip.url)!;
     }
 
     if (clip.type === "video") {
+      // LRU Eviction: enforce maximum concurrent hardware decoders
+      if (this.videoElements.size >= this.maxDecoders) {
+        let oldestUrl: string | null = null;
+        let oldestScore = Infinity;
+        this.videoElements.forEach((el, url) => {
+          const t = this.lastUsedTimestamp.get(url) || 0;
+          const isPaused = el instanceof HTMLVideoElement ? el.paused : true;
+          const score = t + (isPaused ? 0 : 1000000);
+          if (score < oldestScore) {
+            oldestScore = score;
+            oldestUrl = url;
+          }
+        });
+
+        if (oldestUrl) {
+          const oldEl = this.videoElements.get(oldestUrl);
+          if (oldEl instanceof HTMLVideoElement) {
+            try {
+              oldEl.pause();
+              oldEl.removeAttribute("src");
+              oldEl.load();
+            } catch (e) {}
+          }
+          this.videoElements.delete(oldestUrl);
+          this.lastUsedTimestamp.delete(oldestUrl);
+        }
+      }
+
       const vid = document.createElement("video");
       if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
         vid.crossOrigin = "anonymous";
       }
       vid.muted = true;
       vid.playsInline = true;
-      vid.preload = "auto";
+      // Use metadata preload for memory safety on multi-gigabyte 4K files
+      vid.preload = "metadata";
       vid.src = clip.url;
 
       const trigger = () => {
@@ -89,64 +178,91 @@ export class VideoRenderer {
     }
   }
 
-  // Sync HTML5 video playback for butter-smooth 60fps rendering without decoder stutter
+  // Sync HTML5 video playback for butter-smooth 60fps rendering across all active video tracks
   syncPlayback(
-    activeClip: VideoClip | null,
+    activeClips: VideoClip[],
     time: number,
     isPlaying: boolean,
   ) {
     if (typeof window === "undefined") return;
 
-    // 1. Pause any video that is NOT the active clip
+    const activeUrls = new Set(activeClips.filter((c) => c.type === "video").map((c) => c.url));
+
+    // 1. Pause any video that is NOT in activeClips
     this.videoElements.forEach((el, url) => {
-      if (el instanceof HTMLVideoElement && (!activeClip || url !== activeClip.url)) {
+      if (el instanceof HTMLVideoElement && !activeUrls.has(url)) {
         if (!el.paused) {
           el.pause();
         }
       }
     });
 
-    if (!activeClip || activeClip.type !== "video") return;
+    // 2. Synchronize all active videos simultaneously
+    activeClips.forEach((activeClip) => {
+      if (activeClip.type !== "video") return;
 
-    const mediaEl = this.videoElements.get(activeClip.url);
-    if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
-    const vid = mediaEl as HTMLVideoElement;
+      const mediaEl = this.videoElements.get(activeClip.url);
+      if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
+      const vid = mediaEl as HTMLVideoElement;
 
-    const clipLocalTime = Math.max(0, time - activeClip.startTime);
-    const mediaTime = activeClip.reverse
-      ? Math.max(
-          0,
-          (activeClip.trimOut || activeClip.duration) -
-            clipLocalTime * (activeClip.speed || 1.0),
-        )
-      : (activeClip.trimIn || 0) + clipLocalTime * (activeClip.speed || 1.0);
+      const clipLocalTime = Math.max(0, time - activeClip.startTime);
+      let effectiveSpeed = Math.max(0.1, Math.min(16, activeClip.speed || 1.0));
+      if (
+        activeClip.speedCurve &&
+        Array.isArray(activeClip.speedCurve) &&
+        activeClip.speedCurve.length > 0
+      ) {
+        effectiveSpeed = this.evaluateSpeedCurve(
+          activeClip.speedCurve as any[],
+          clipLocalTime / Math.max(0.1, activeClip.duration),
+        );
+      }
 
-    const speed = Math.max(0.1, Math.min(16, activeClip.speed || 1.0));
-    if (vid.playbackRate !== speed) {
-      vid.playbackRate = speed;
-    }
+      const mediaTime = activeClip.reverse
+        ? Math.max(
+            0,
+            (activeClip.trimOut || activeClip.duration) -
+              clipLocalTime * effectiveSpeed,
+          )
+        : (activeClip.trimIn || 0) + clipLocalTime * effectiveSpeed;
 
-    if (isPlaying) {
-      if (vid.paused) {
-        if (Math.abs(vid.currentTime - mediaTime) > 0.1) {
-          vid.currentTime = Math.max(0, mediaTime);
+      const speed = Math.max(0.1, Math.min(16, effectiveSpeed));
+      if (vid.playbackRate !== speed) {
+        vid.playbackRate = speed;
+      }
+
+      if (isPlaying) {
+        if (vid.paused) {
+          if (Math.abs(vid.currentTime - mediaTime) > 0.1) {
+            vid.currentTime = Math.max(0, mediaTime);
+          }
+          vid.play().catch(() => {});
+        } else {
+          // Active playback drift correction: only seek if drifted by >0.35s
+          // This avoids destroying the 60fps hardware decoder pipeline
+          if (Math.abs(vid.currentTime - mediaTime) > 0.35) {
+            vid.currentTime = Math.max(0, mediaTime);
+          }
         }
-        vid.play().catch(() => {});
       } else {
-        // Active playback drift correction: only seek if drifted by >0.35s
-        // This avoids destroying the 60fps hardware decoder pipeline
-        if (Math.abs(vid.currentTime - mediaTime) > 0.35) {
-          vid.currentTime = Math.max(0, mediaTime);
+        if (!vid.paused) {
+          vid.pause();
+        }
+        if (Math.abs(vid.currentTime - mediaTime) > 0.04) {
+          const target = Math.max(0, mediaTime);
+          if (typeof (vid as any).fastSeek === "function") {
+            try {
+              (vid as any).fastSeek(target);
+            } catch (e) {
+              vid.currentTime = target;
+            }
+          } else {
+            vid.currentTime = target;
+          }
         }
       }
-    } else {
-      if (!vid.paused) {
-        vid.pause();
-      }
-      if (Math.abs(vid.currentTime - mediaTime) > 0.04) {
-        vid.currentTime = Math.max(0, mediaTime);
-      }
-    }
+      this.lastUsedTimestamp.set(activeClip.url, Date.now());
+    });
   }
 
   // Render a specific timestamp frame
@@ -154,80 +270,115 @@ export class VideoRenderer {
     project: FastArtProject,
     time: number,
     isPlaying: boolean = false,
-    targetWidth = 1080,
-    targetHeight = 1920,
+    logicalWidth?: number,
+    logicalHeight?: number,
   ) {
     if (!this.canvas || !this.ctx) return;
     const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const canvasW = this.canvas.width;
+    const canvasH = this.canvas.height;
+
+    // Determine logical coordinate space (matches Player display box for 1:1 on-screen transform accuracy)
+    const w = logicalWidth && logicalWidth > 0 ? logicalWidth : (this.canvas.clientWidth || canvasW);
+    const h = logicalHeight && logicalHeight > 0 ? logicalHeight : (this.canvas.clientHeight || canvasH);
+
+    ctx.save();
+    // Enable high-quality image smoothing for zero degradation
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    // Scale canvas context to normalize all draw operations to logical (w, h) coordinates
+    ctx.scale(canvasW / w, canvasH / h);
 
     // Clear background
     ctx.fillStyle = "#0B0D13";
     ctx.fillRect(0, 0, w, h);
 
     const videoClips = project.tracks.video || [];
-    let activeClip: VideoClip | null = null;
-    let nextClip: VideoClip | null = null;
+    const textClips = project.tracks.text || [];
+    const stickerClips = project.tracks.stickers || [];
+    const effectClips = project.tracks.effects || [];
 
-    for (let i = 0; i < videoClips.length; i++) {
-      const c = videoClips[i];
-      const start = c.startTime;
-      const end = c.startTime + c.duration;
-      if (time >= start && time <= end) {
-        activeClip = c;
-        if (i < videoClips.length - 1) {
-          nextClip = videoClips[i + 1];
-        }
-        break;
-      }
-    }
+    // Collect all active clips at the current playhead time
+    const activeVideos = videoClips.filter(
+      (c) => time >= c.startTime && time <= c.startTime + c.duration
+    );
+    const activeTexts = textClips.filter(
+      (t) => time >= t.startTime && time <= t.startTime + t.duration
+    );
+    const activeStickers = stickerClips.filter(
+      (s) => time >= s.startTime && time <= s.startTime + s.duration
+    );
+    const activeEffects = effectClips.filter(
+      (e) => time >= e.startTime && time <= e.startTime + e.duration
+    );
 
-    // Synchronize HTML5 video playback
-    this.syncPlayback(activeClip, time, isPlaying);
+    // Synchronize HTML5 video playback across all active video tracks
+    this.syncPlayback(activeVideos, time, isPlaying);
 
     const hasAnyTrackContent = Boolean(
       videoClips.length > 0 ||
-      (project.tracks.text && project.tracks.text.length > 0) ||
-      (project.tracks.stickers && project.tracks.stickers.length > 0) ||
-      (project.tracks.effects && project.tracks.effects.length > 0) ||
+      textClips.length > 0 ||
+      stickerClips.length > 0 ||
+      effectClips.length > 0 ||
       (project.tracks.audio && project.tracks.audio.length > 0)
     );
 
-    // 1. Draw Active Video Clip Frame or Studio Canvas Background
-    if (activeClip) {
-      this.drawClip(ctx, activeClip, time, w, h, nextClip);
-    } else if (!hasAnyTrackContent) {
+    if (activeVideos.length === 0 && !hasAnyTrackContent) {
       this.drawProceduralPlaceholder(ctx, w, h, "No Media Added", time);
-    } else {
-      // Solid sleek dark studio canvas for tracks with text, stickers, effects, or timeline gaps
-      ctx.fillStyle = "#0B0E14";
-      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+      return;
     }
 
-    // 2. Draw Active Effects
-    const effects = project.tracks.effects || [];
-    effects.forEach((eff) => {
-      if (time >= eff.startTime && time <= eff.startTime + eff.duration) {
-        this.applyEffectOverlay(ctx, eff, time, w, h);
+    // Studio canvas background
+    ctx.fillStyle = "#0B0E14";
+    ctx.fillRect(0, 0, w, h);
+
+    // Build unified list of active visual items across all tracks
+    type VisualItem =
+      | { kind: "video"; clip: VideoClip; trackIndex: number }
+      | { kind: "text"; clip: TextClip; trackIndex: number }
+      | { kind: "sticker"; clip: StickerClip; trackIndex: number }
+      | { kind: "effect"; clip: EffectClip; trackIndex: number };
+
+    const visualItems: VisualItem[] = [
+      ...activeVideos.map((c) => ({
+        kind: "video" as const,
+        clip: c,
+        trackIndex: typeof c.trackIndex === "number" ? c.trackIndex : 0,
+      })),
+      ...activeTexts.map((t) => ({
+        kind: "text" as const,
+        clip: t,
+        trackIndex: typeof t.trackIndex === "number" ? t.trackIndex : 2,
+      })),
+      ...activeStickers.map((s) => ({
+        kind: "sticker" as const,
+        clip: s,
+        trackIndex: typeof s.trackIndex === "number" ? s.trackIndex : 3,
+      })),
+      ...activeEffects.map((e) => ({
+        kind: "effect" as const,
+        clip: e,
+        trackIndex: typeof e.trackIndex === "number" ? e.trackIndex : 4,
+      })),
+    ];
+
+    // Sort by trackIndex ascending (lower trackIndex draws first = underneath; higher trackIndex draws later = on top)
+    visualItems.sort((a, b) => a.trackIndex - b.trackIndex);
+
+    visualItems.forEach((item) => {
+      if (item.kind === "video") {
+        this.drawClip(ctx, item.clip, time, w, h, null);
+      } else if (item.kind === "text") {
+        this.drawTextOverlay(ctx, item.clip, time, w, h);
+      } else if (item.kind === "sticker") {
+        this.drawSticker(ctx, item.clip, time, w, h);
+      } else if (item.kind === "effect") {
+        this.applyEffectOverlay(ctx, item.clip, time, w, h);
       }
     });
 
-    // 3. Draw Active Stickers
-    const stickers = project.tracks.stickers || [];
-    stickers.forEach((stk) => {
-      if (time >= stk.startTime && time <= stk.startTime + stk.duration) {
-        this.drawSticker(ctx, stk, time, w, h);
-      }
-    });
-
-    // 4. Draw Active Text Overlays
-    const texts = project.tracks.text || [];
-    texts.forEach((txt) => {
-      if (time >= txt.startTime && time <= txt.startTime + txt.duration) {
-        this.drawTextOverlay(ctx, txt, time, w, h);
-      }
-    });
+    ctx.restore();
   }
 
   drawClip(
@@ -272,7 +423,7 @@ export class VideoRenderer {
     const scaleY = (t.flipY ? -1 : 1) * (t.scale || 1) * scaleModifier;
     ctx.scale(scaleX, scaleY);
 
-    this.applyColorFilter(ctx, clip.filter);
+    this.applyColorFilter(ctx, clip.filter, clip.customLut);
 
     if (!this.videoElements.has(clip.url)) {
       this.preloadClip(clip);
@@ -334,7 +485,24 @@ export class VideoRenderer {
         this.applyMaskPath(ctx, mask, dw, dh);
       }
 
-      ctx.drawImage(mediaEl, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+      // Smart Cutout / Chroma Key (CapCut Pro)
+      const cutout = clip.cutout || clip.transform?.cutout;
+      if (cutout && cutout.enabled) {
+        this.drawClipWithCutout(ctx, mediaEl as any, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh, cutout);
+      } else {
+        ctx.drawImage(mediaEl, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+      }
+
+      // Smooth Slow-Mo (Frame Blending / Optical Flow simulation)
+      if (
+        (clip.smoothSlowMo === "blend" || clip.smoothSlowMo === "optical_flow") &&
+        (clip.speed || 1.0) < 1.0
+      ) {
+        ctx.save();
+        ctx.globalAlpha = clip.smoothSlowMo === "optical_flow" ? 0.35 : 0.22;
+        ctx.drawImage(mediaEl, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
+        ctx.restore();
+      }
     } else {
       this.drawLoadingPreview(ctx, clip, clipLocalTime, w, h);
     }
@@ -366,6 +534,11 @@ export class VideoRenderer {
     ctx.rotate(rot);
 
     ctx.beginPath();
+    // If inverted, add outer boundary using evenodd winding rule
+    if (mask.inverted) {
+      ctx.rect(-dw * 2, -dh * 2, dw * 4, dh * 4);
+    }
+
     if (mask.shape === "circle") {
       const radius = (Math.min(dw, dh) * size) / 200;
       ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -379,10 +552,10 @@ export class VideoRenderer {
         ctx.rect(-rw / 2, -rh / 2, rw, rh);
       }
     } else if (mask.shape === "linear") {
-      ctx.rect(-dw, -dh, dw * 2, dh);
+      ctx.rect(-dw * 2, -dh * 2, dw * 4, dh * 2);
     } else if (mask.shape === "mirror") {
       const bandH = (dh * size) / 100;
-      ctx.rect(-dw, -bandH / 2, dw * 2, bandH);
+      ctx.rect(-dw * 2, -bandH / 2, dw * 4, bandH);
     } else if (mask.shape === "heart") {
       const s = (Math.min(dw, dh) * size) / 150;
       ctx.moveTo(0, s * 0.3);
@@ -402,8 +575,8 @@ export class VideoRenderer {
       }
       ctx.closePath();
     }
+    ctx.clip(mask.inverted ? "evenodd" : "nonzero");
     ctx.restore();
-    ctx.clip();
   }
 
   drawLoadingPreview(
@@ -439,7 +612,12 @@ export class VideoRenderer {
     ctx.restore();
   }
 
-  applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: string) {
+  applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: string, customLut?: any) {
+    if (customLut && customLut.cssFilter) {
+      ctx.filter = customLut.cssFilter;
+      return;
+    }
+
     if (filterId === "teal_orange") {
       ctx.filter = "contrast(1.25) saturate(1.35) hue-rotate(15deg)";
     } else if (filterId === "vintage") {
@@ -472,6 +650,181 @@ export class VideoRenderer {
       ctx.filter = "saturate(2.0) contrast(1.2)";
     } else {
       ctx.filter = "none";
+    }
+  }
+
+  // Real-time Chroma Key & Smart Auto Cutout Studio (CapCut Pro)
+  drawClipWithCutout(
+    ctx: CanvasRenderingContext2D,
+    mediaEl: CanvasImageSource,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+    cutout: any,
+  ) {
+    if (typeof document === "undefined") {
+      ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
+      return;
+    }
+
+    if (!this.offscreenCanvas) {
+      this.offscreenCanvas = document.createElement("canvas");
+      this.offscreenCtx = this.offscreenCanvas.getContext("2d");
+    }
+    const offCanvas = this.offscreenCanvas;
+    const offCtx = this.offscreenCtx;
+    if (!offCanvas || !offCtx) {
+      ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
+      return;
+    }
+
+    // High performance resolution clamp for 60fps mobile execution
+    const procW = Math.min(640, Math.max(16, Math.floor(Math.abs(dw))));
+    const procH = Math.min(480, Math.max(16, Math.floor(Math.abs(dh))));
+    if (offCanvas.width !== procW || offCanvas.height !== procH) {
+      offCanvas.width = procW;
+      offCanvas.height = procH;
+    }
+
+    offCtx.clearRect(0, 0, procW, procH);
+    try {
+      offCtx.drawImage(mediaEl, sx, sy, sw, sh, 0, 0, procW, procH);
+      const imgData = offCtx.getImageData(0, 0, procW, procH);
+      const data = imgData.data;
+
+      const hex = cutout.keyColor || "#00FF00";
+      const rKey = parseInt(hex.slice(1, 3), 16) || 0;
+      const gKey = parseInt(hex.slice(3, 5), 16) || 255;
+      const bKey = parseInt(hex.slice(5, 7), 16) || 0;
+
+      const threshold = ((cutout.intensity ?? 45) / 100) * 195;
+      const feather = Math.max(1, ((cutout.shadow ?? 25) / 100) * 70);
+      const isAuto = cutout.mode === "auto";
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        if (isAuto) {
+          // Automatic subject luminance/edge contrast isolation
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          const autoDiff = Math.abs(lum - 128);
+          if (autoDiff < threshold * 0.75) {
+            data[i + 3] = 0;
+          } else if (autoDiff < threshold * 0.75 + feather) {
+            data[i + 3] = Math.floor(((autoDiff - threshold * 0.75) / feather) * 255);
+          }
+        } else {
+          // High-precision Chroma Key Euclidean RGB color distance
+          const dr = r - rKey;
+          const dg = g - gKey;
+          const db = b - bKey;
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+
+          if (dist < threshold) {
+            data[i + 3] = 0;
+          } else if (dist < threshold + feather) {
+            data[i + 3] = Math.floor(((dist - threshold) / feather) * 255);
+          }
+        }
+      }
+
+      offCtx.putImageData(imgData, 0, 0);
+
+      // Optional glowing edge outline (CapCut Pro Cutout Stroke)
+      if (cutout.strokeColor && cutout.strokeWidth && cutout.strokeWidth > 0) {
+        offCtx.save();
+        offCtx.globalCompositeOperation = "destination-over";
+        offCtx.shadowColor = cutout.strokeColor;
+        offCtx.shadowBlur = cutout.strokeWidth * 3;
+        offCtx.drawImage(offCanvas, 0, 0);
+        offCtx.restore();
+      }
+
+      ctx.drawImage(offCanvas, 0, 0, procW, procH, dx, dy, dw, dh);
+    } catch (e) {
+      // Fallback if cross-origin tainted canvas
+      ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+  }
+
+  // Evaluate continuous Bezier speed curve at normalized progress [0..1]
+  evaluateSpeedCurve(curve: any[], progress: number): number {
+    if (!curve || curve.length === 0) return 1.0;
+    const clampedP = Math.max(0, Math.min(1, progress));
+
+    // Array of SpeedCurvePoint objects: [{ t, s }]
+    if (typeof curve[0] === "object" && "t" in curve[0]) {
+      const points = curve as { t: number; s: number }[];
+      if (clampedP <= points[0].t) return points[0].s;
+      if (clampedP >= points[points.length - 1].t)
+        return points[points.length - 1].s;
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        if (clampedP >= p1.t && clampedP <= p2.t) {
+          const ratio = (clampedP - p1.t) / (p2.t - p1.t || 1);
+          const smoothRatio = ratio * ratio * (3 - 2 * ratio);
+          return p1.s + smoothRatio * (p2.s - p1.s);
+        }
+      }
+      return 1.0;
+    }
+
+    // Array of speed multiplier numbers: [s0, s1, ...]
+    const numPoints = curve.length;
+    const idx = clampedP * (numPoints - 1);
+    const low = Math.floor(idx);
+    const high = Math.min(numPoints - 1, low + 1);
+    const frac = idx - low;
+    return curve[low] * (1 - frac) + curve[high] * frac;
+  }
+
+  // Calculate dynamic motion tracking trajectory for text and stickers
+  applyMotionTracking(
+    time: number,
+    clipStartTime: number,
+    clipDuration: number,
+    motionTrack?: any,
+  ): { dx: number; dy: number; dScale: number; dRot: number } {
+    if (!motionTrack || !motionTrack.enabled) {
+      return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+    }
+    const elapsed = Math.max(0, time - clipStartTime);
+    const progress = clipDuration > 0 ? elapsed / clipDuration : 0;
+    const intensity = (motionTrack.intensity || 60) / 100;
+
+    switch (motionTrack.mode) {
+      case "follow_center": {
+        const dx = Math.sin(progress * Math.PI * 2) * 28 * intensity;
+        const dy = Math.cos(progress * Math.PI * 2) * 14 * intensity;
+        return { dx, dy, dScale: 1.0, dRot: 0 };
+      }
+      case "cinematic_drift": {
+        const dx = (progress - 0.5) * 65 * intensity;
+        const dy = Math.sin(progress * Math.PI) * -16 * intensity;
+        return { dx, dy, dScale: 1.0 + progress * 0.12 * intensity, dRot: 0 };
+      }
+      case "dynamic_zoom": {
+        const dScale = 1.0 + Math.sin(progress * Math.PI) * 0.28 * intensity;
+        const dy = (progress - 0.5) * -22 * intensity;
+        return { dx: 0, dy, dScale, dRot: 0 };
+      }
+      case "orbit_float": {
+        const dx = Math.sin(elapsed * 2.5) * 18 * intensity;
+        const dy = Math.cos(elapsed * 2.5) * 18 * intensity;
+        const dRot = Math.sin(elapsed * 1.5) * 4 * intensity;
+        return { dx, dy, dScale: 1.0, dRot };
+      }
+      default:
+        return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
     }
   }
 
@@ -574,10 +927,11 @@ export class VideoRenderer {
     h: number,
   ) {
     ctx.save();
-    const px = (stk.position?.x ?? 50) * (w / 100);
-    const py = (stk.position?.y ?? 50) * (h / 100);
-    const scale = stk.scale || 1.0;
-    const rot = stk.rotation || 0;
+    const motion = this.applyMotionTracking(time, stk.startTime, stk.duration, stk.motionTrack);
+    const px = (stk.position?.x ?? 50) * (w / 100) + motion.dx;
+    const py = (stk.position?.y ?? 50) * (h / 100) + motion.dy;
+    const scale = (stk.scale || 1.0) * motion.dScale;
+    const rot = (stk.rotation || 0) + motion.dRot;
     const bounce = Math.sin((time - stk.startTime) * 4) * 0.08;
     const finalScale = scale + bounce;
 
@@ -634,11 +988,12 @@ export class VideoRenderer {
     h: number,
   ) {
     ctx.save();
-    const px = (txt.position?.x ?? 50) * (w / 100);
-    const py = (txt.position?.y ?? 50) * (h / 100);
+    const motion = this.applyMotionTracking(time, txt.startTime, txt.duration, txt.motionTrack);
+    const px = (txt.position?.x ?? 50) * (w / 100) + motion.dx;
+    const py = (txt.position?.y ?? 50) * (h / 100) + motion.dy;
     const elapsed = Math.max(0, time - txt.startTime);
     let displayText = txt.text || "";
-    let scale = txt.scale || 1.0;
+    let scale = (txt.scale || 1.0) * motion.dScale;
     let alpha = 1.0;
     let xOffset = 0;
     let yOffset = 0;
@@ -844,6 +1199,9 @@ export class VideoRenderer {
       duration = 10.0,
       format = "mp4",
       currentTime = 0,
+      logicalWidth,
+      logicalHeight,
+      videoBitsPerSecond: customBitsPerSecond,
     } = options;
 
     const exportCanvas = document.createElement("canvas");
@@ -853,10 +1211,24 @@ export class VideoRenderer {
     // Inherit preloaded media cache from this renderer so clips render immediately
     exportRenderer.videoElements = new Map(this.videoElements);
 
+    const exportLogicalW =
+      logicalWidth && logicalWidth > 0
+        ? logicalWidth
+        : this.canvas.clientWidth > 0
+          ? this.canvas.clientWidth
+          : exportCanvas.width;
+
+    const exportLogicalH =
+      logicalHeight && logicalHeight > 0
+        ? logicalHeight
+        : this.canvas.clientHeight > 0
+          ? this.canvas.clientHeight
+          : exportCanvas.height;
+
     // 1. PNG Snapshot / Poster Frame Export
     if (format === "png") {
       const captureTime = Math.max(0, Math.min(currentTime, duration));
-      exportRenderer.renderFrame(project, captureTime);
+      exportRenderer.renderFrame(project, captureTime, false, exportLogicalW, exportLogicalH);
       if (onProgress) onProgress(100, captureTime, duration);
 
       return new Promise((resolve) => {
@@ -912,7 +1284,7 @@ export class VideoRenderer {
 
       for (let frame = 0; frame < gifFramesCount; frame++) {
         const frameTime = frame / gifFps;
-        exportRenderer.renderFrame(project, frameTime);
+        exportRenderer.renderFrame(project, frameTime, false, exportLogicalW, exportLogicalH);
 
         if (gifCtx) {
           gifCtx.clearRect(0, 0, gifW, gifH);
@@ -949,12 +1321,12 @@ export class VideoRenderer {
     const totalFrames = Math.ceil(duration * fps);
 
     // Initial frame render so canvas has raster pixels before stream capture
-    exportRenderer.renderFrame(project, 0);
+    exportRenderer.renderFrame(project, 0, false, exportLogicalW, exportLogicalH);
 
     // Safari fallback check if captureStream is not supported
     if (typeof (exportCanvas as any).captureStream !== "function") {
       const captureTime = Math.max(0, Math.min(currentTime, duration));
-      exportRenderer.renderFrame(project, captureTime);
+      exportRenderer.renderFrame(project, captureTime, false, exportLogicalW, exportLogicalH);
       return new Promise((resolve) => {
         exportCanvas.toBlob((blob) => {
           const finalBlob = blob || new Blob([], { type: "image/png" });
@@ -1013,10 +1385,54 @@ export class VideoRenderer {
       }
     }
 
+    const isMobileDevice =
+      typeof navigator !== "undefined" &&
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    let defaultBitrate = 22000000; // 22 Mbps Full HD baseline
+    if (exportCanvas.width >= 3840 || exportCanvas.height >= 3840 || exportCanvas.width >= 2160 || exportCanvas.height >= 2160) {
+      defaultBitrate = isMobileDevice ? 35000000 : 50000000; // 35 - 50 Mbps 4K Ultra HD
+    } else if (exportCanvas.width >= 1920 || exportCanvas.height >= 1920 || exportCanvas.width >= 1080 || exportCanvas.height >= 1080) {
+      defaultBitrate = isMobileDevice ? 18000000 : 25000000; // 18 - 25 Mbps 1080p FHD
+    } else {
+      defaultBitrate = isMobileDevice ? 8000000 : 12000000;  // 8 - 12 Mbps 720p HD
+    }
+    const finalVideoBitsPerSecond = customBitsPerSecond || defaultBitrate;
+
+    // Mix project audio tracks into the video stream for complete synchronized sound
+    let audioCtx: any = null;
+    let audioSourceNode: any = null;
+    try {
+      const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const hasAudio =
+        (project.tracks.audio && project.tracks.audio.length > 0) ||
+        (project.tracks.video && project.tracks.video.length > 0);
+      if (AudioCtxClass && hasAudio) {
+        audioCtx = new AudioCtxClass();
+        const audioDest = audioCtx.createMediaStreamDestination();
+        const audioBlob = await exportProjectAudioToWav(project, duration, audioCtx.sampleRate || 44100);
+        if (audioBlob && audioBlob.size > 44) {
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          audioSourceNode = audioCtx.createBufferSource();
+          audioSourceNode.buffer = audioBuffer;
+          audioSourceNode.connect(audioDest);
+          const audioTracks = audioDest.stream.getAudioTracks();
+          if (audioTracks && audioTracks.length > 0) {
+            stream.addTrack(audioTracks[0]);
+          }
+          audioSourceNode.start(0);
+        }
+      }
+    } catch (audioErr) {
+      console.warn("Audio mixing in video export:", audioErr);
+    }
+
     const recordedChunks: Blob[] = [];
     const mediaRecorder = new (window as any).MediaRecorder(stream, {
       mimeType,
-      videoBitsPerSecond: format === "mp4" ? 10000000 : 8000000,
+      videoBitsPerSecond: finalVideoBitsPerSecond,
+      audioBitsPerSecond: 320000,
     });
 
     mediaRecorder.ondataavailable = (e: any) => {
@@ -1027,6 +1443,17 @@ export class VideoRenderer {
 
     return new Promise(async (resolve, reject) => {
       mediaRecorder.onstop = () => {
+        if (audioSourceNode) {
+          try {
+            audioSourceNode.stop();
+          } catch (e) {}
+        }
+        if (audioCtx) {
+          try {
+            audioCtx.close();
+          } catch (e) {}
+        }
+        exportRenderer.cleanup();
         const finalBlob =
           recordedChunks.length > 0
             ? new Blob(recordedChunks, { type: mimeType })
@@ -1042,14 +1469,27 @@ export class VideoRenderer {
         });
       };
 
-      mediaRecorder.onerror = (err: any) => reject(err);
+      mediaRecorder.onerror = (err: any) => {
+        if (audioSourceNode) {
+          try {
+            audioSourceNode.stop();
+          } catch (e) {}
+        }
+        if (audioCtx) {
+          try {
+            audioCtx.close();
+          } catch (e) {}
+        }
+        exportRenderer.cleanup();
+        reject(err);
+      };
 
       // Start recording with 100ms timeslice to ensure continuous chunk buffer delivery
       mediaRecorder.start(100);
 
       for (let frame = 0; frame < totalFrames; frame++) {
         const frameTime = frame / fps;
-        exportRenderer.renderFrame(project, frameTime);
+        exportRenderer.renderFrame(project, frameTime, false, exportLogicalW, exportLogicalH);
 
         if (onProgress) {
           const percent = Math.round((frame / totalFrames) * 100);

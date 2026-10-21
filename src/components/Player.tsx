@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform, useWindowDimensions, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { soundEngine } from '../utils/audioEngine';
 import { VideoRenderer } from '../utils/videoRenderer';
 import { FastArtProject } from '../types/project';
 
@@ -28,6 +29,9 @@ interface PlayerProps {
   onOpenMaskModal?: (clipId: string) => void;
   onDeleteClip?: (clipId: string, clipType: string) => void;
   onDuplicateClip?: (clipId: string, clipType: string) => void;
+  onSplitClip?: () => void;
+  fullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export default function Player({
@@ -49,12 +53,26 @@ export default function Player({
   onOpenMaskModal,
   onDeleteClip,
   onDuplicateClip,
+  onSplitClip,
+  fullscreen: fullscreenProp,
+  onToggleFullscreen,
 }: PlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasBoxRef = useRef<any>(null);
   const rendererRef = useRef<VideoRenderer | null>(null);
   const audioElementsRef = useRef<{ [id: string]: HTMLAudioElement }>({});
-  const [fullscreen, setFullscreen] = useState(false);
+  const [internalFullscreen, setInternalFullscreen] = useState(false);
+  const fullscreen = fullscreenProp !== undefined ? fullscreenProp : internalFullscreen;
+
+  const toggleFullscreen = () => {
+    soundEngine.playSfx('click');
+    if (onToggleFullscreen) {
+      onToggleFullscreen();
+    } else {
+      setInternalFullscreen((prev) => !prev);
+    }
+  };
+
   const [showSafeZone, setShowSafeZone] = useState(false);
   const [dragState, setDragState] = useState<{
     mode: 'move' | 'scale' | 'rotate';
@@ -80,12 +98,67 @@ export default function Player({
     initialCenterY: number;
   } | null>(null);
 
+  const lastTapRef = useRef<{ time: number; id: string }>({ time: 0, id: '' });
+
   const { width: winW, height: winH } = useWindowDimensions();
   const isMobile = winW < 640;
 
-  // Responsive canvas dimensions — dynamically optimized to utilize screen space
-  const getAspectRatioDimensions = () => {
+  // Dynamic viewport measurement of actual remaining space between header and timeline
+  const viewportWrapperRef = useRef<any>(null);
+  const [viewportDims, setViewportDims] = useState<{ width: number; height: number } | null>(null);
 
+  const handleViewportLayout = useCallback((e: any) => {
+    const layout = e.nativeEvent?.layout;
+    if (layout && layout.width > 0 && layout.height > 0) {
+      setViewportDims((prev) => {
+        if (
+          prev &&
+          Math.abs(prev.width - layout.width) < 2 &&
+          Math.abs(prev.height - layout.height) < 2
+        ) {
+          return prev;
+        }
+        return {
+          width: Math.round(layout.width),
+          height: Math.round(layout.height),
+        };
+      });
+    }
+  }, []);
+
+  // Web ResizeObserver for instant continuous updates while dragging timeline height
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = viewportWrapperRef.current as unknown as HTMLElement;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setViewportDims((prev) => {
+            if (
+              prev &&
+              Math.abs(prev.width - width) < 2 &&
+              Math.abs(prev.height - height) < 2
+            ) {
+              return prev;
+            }
+            return {
+              width: Math.round(width),
+              height: Math.round(height),
+            };
+          });
+        }
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Responsive canvas dimensions — dynamically fitted to remaining space without clipping or hiding
+  const getAspectRatioDimensions = () => {
     const ratioMap: Record<string, number> = {
       '9:16': 9 / 16,
       '16:9': 16 / 9,
@@ -96,9 +169,9 @@ export default function Player({
     const targetRatio = ratioMap[project.aspectRatio] || 9 / 16;
 
     if (fullscreen) {
-      // Fullscreen Cinema mode: strictly fit within screen dimensions leaving room for top bar & controls
-      const maxFsH = Math.max(200, winH - 130);
-      const maxFsW = Math.max(200, winW - 32);
+      // Fullscreen Cinema mode: maximize canvas space within window
+      const maxFsH = Math.max(120, winH - 64);
+      const maxFsW = Math.max(120, winW - 20);
       let w = maxFsH * targetRatio;
       let h = maxFsH;
       if (w > maxFsW) {
@@ -108,26 +181,32 @@ export default function Player({
       return { width: Math.round(w), height: Math.round(h) };
     }
 
-    // Normal mode: Reserved height for header (52), player control bar (56), timeline (~250), toolbar (74)
-    const reservedH = isMobile ? 420 : 440;
-    const availableH = Math.max(160, winH - reservedH);
+    // Normal mode: dynamically scale canvas to fit strictly inside the measured remaining space of viewportWrapper
+    const availW = viewportDims
+      ? Math.max(60, viewportDims.width - (isMobile ? 12 : 24))
+      : Math.max(60, winW - (isMobile ? 24 : 50));
 
-    const maxContainerH = isMobile
-      ? Math.min(availableH, 320)
-      : Math.min(availableH, 380);
+    const availH = viewportDims
+      ? Math.max(60, viewportDims.height - 10)
+      : Math.max(60, winH - (isMobile ? 240 : 280));
 
-    const containerH = Math.max(160, maxContainerH);
-    const containerW = isMobile ? winW - 24 : Math.min(winW - 60, 720);
+    let w = availH * targetRatio;
+    let h = availH;
 
-    let w = containerH * targetRatio;
-    let h = containerH;
-
-    if (w > containerW) {
-      w = containerW;
+    if (w > availW) {
+      w = availW;
       h = w / targetRatio;
     }
 
-    return { width: Math.round(w), height: Math.round(h) };
+    if (h > availH) {
+      h = availH;
+      w = h * targetRatio;
+    }
+
+    return {
+      width: Math.round(Math.max(40, w)),
+      height: Math.round(Math.max(40, h)),
+    };
   };
 
   const { width: canvasWidth, height: canvasHeight } = getAspectRatioDimensions();
@@ -139,15 +218,18 @@ export default function Player({
     (project.tracks.audio && project.tracks.audio.length > 0)
   );
   const isProjectEmpty = !hasAnyTrackContent;
-  // Ensure empty state has comfortable width for buttons and text
-  const boxWidth = isProjectEmpty ? Math.max(canvasWidth, Math.min(winW - 32, 320)) : canvasWidth;
+  // Ensure empty state has comfortable width bounded by available space
+  const maxBoxW = viewportDims ? Math.max(40, viewportDims.width - 24) : winW - 32;
+  const boxWidth = isProjectEmpty
+    ? Math.min(maxBoxW, Math.max(canvasWidth, Math.min(winW - 32, 320)))
+    : canvasWidth;
 
   // ESC key listener to exit fullscreen mode
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && fullscreen) {
-        setFullscreen(false);
+        toggleFullscreen();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -162,7 +244,7 @@ export default function Player({
       // Re-render frame immediately whenever a media element loads or seeks
       rendererRef.current.onFrameNeeded = () => {
         if (rendererRef.current && canvasRef.current) {
-          rendererRef.current.renderFrame(project, currentTime, isPlaying);
+          rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
         }
       };
 
@@ -171,14 +253,31 @@ export default function Player({
         rendererRef.current?.preloadClip(clip);
       });
     }
+
+    return () => {
+      if (rendererRef.current) {
+        rendererRef.current.cleanup();
+      }
+    };
   }, [project.aspectRatio]);
+
+  // Prune unused media elements when video track clips change to free mobile GPU memory
+  useEffect(() => {
+    if (rendererRef.current && project.tracks.video) {
+      const activeUrls = new Set(project.tracks.video.map((c) => c.url));
+      rendererRef.current.pruneUnusedMedia(activeUrls);
+      project.tracks.video.forEach((clip) => {
+        rendererRef.current?.preloadClip(clip);
+      });
+    }
+  }, [project.tracks.video]);
 
   // Render frame on timestamp, project, or playback state change
   useEffect(() => {
     if (rendererRef.current && canvasRef.current) {
-      rendererRef.current.renderFrame(project, currentTime, isPlaying);
+      rendererRef.current.renderFrame(project, currentTime, isPlaying, boxWidth, canvasHeight);
     }
-  }, [currentTime, project, isPlaying]);
+  }, [currentTime, project, isPlaying, boxWidth, canvasHeight]);
 
   // Multi-Track Audio playback synchronization across all simultaneous audio clips
   useEffect(() => {
@@ -237,15 +336,15 @@ export default function Player({
   const activeStickers = (project.tracks.stickers || []).filter(
     (s) => currentTime >= s.startTime && currentTime <= s.startTime + s.duration
   );
-  const activeVideo = (project.tracks.video || []).find(
+  const activeVideos = (project.tracks.video || []).filter(
     (v) => currentTime >= v.startTime && currentTime <= v.startTime + v.duration
   );
 
   const selectedText = activeTexts.find((t) => t.id === selectedClipId);
   const selectedSticker = activeStickers.find((s) => s.id === selectedClipId);
   const selectedVideo =
-    selectedClipType === 'video' && activeVideo && activeVideo.id === selectedClipId
-      ? activeVideo
+    selectedClipType === 'video'
+      ? activeVideos.find((v) => v.id === selectedClipId) || null
       : null;
 
   const activeTransformItem = selectedText
@@ -256,11 +355,14 @@ export default function Player({
         pos: selectedText.position || { x: 50, y: 35 },
         scale: selectedText.scale ?? 1.0,
         rotation: selectedText.rotation ?? 0,
-        width: Math.min(
-          boxWidth * 0.9,
-          Math.max(80, (selectedText.text || '').length * ((selectedText.style?.fontSize || 24) * 0.58) + 36)
+        width: Math.max(
+          70,
+          Math.min(
+            boxWidth * 0.95,
+            (selectedText.text || '').length * ((selectedText.style?.fontSize || 24) * 0.6) + 32
+          )
         ) * (selectedText.scale ?? 1.0),
-        height: Math.max(44, ((selectedText.style?.fontSize || 24) * 1.4 + 20) * (selectedText.scale ?? 1.0)),
+        height: Math.max(38, ((selectedText.style?.fontSize || 24) * 1.35 + 18)) * (selectedText.scale ?? 1.0),
       }
     : selectedSticker
     ? {
@@ -270,8 +372,8 @@ export default function Player({
         pos: selectedSticker.position || { x: 50, y: 50 },
         scale: selectedSticker.scale ?? 1.2,
         rotation: selectedSticker.rotation ?? 0,
-        width: (selectedSticker.char.length > 2 ? 140 : 68) * (selectedSticker.scale ?? 1.2),
-        height: (selectedSticker.char.length > 2 ? 46 : 68) * (selectedSticker.scale ?? 1.2),
+        width: (selectedSticker.char.length > 2 ? Math.max(100, selectedSticker.char.length * 11 + 32) : 72) * (selectedSticker.scale ?? 1.2),
+        height: (selectedSticker.char.length > 2 ? 42 : 72) * (selectedSticker.scale ?? 1.2),
       }
     : selectedVideo
     ? {
@@ -284,8 +386,8 @@ export default function Player({
         },
         scale: selectedVideo.transform?.scale ?? 1.0,
         rotation: selectedVideo.transform?.rotation ?? 0,
-        width: Math.max(100, boxWidth * 0.85 * (selectedVideo.transform?.scale ?? 1.0)),
-        height: Math.max(80, canvasHeight * 0.85 * (selectedVideo.transform?.scale ?? 1.0)),
+        width: Math.max(80, boxWidth * (selectedVideo.transform?.scale ?? 1.0)),
+        height: Math.max(60, canvasHeight * (selectedVideo.transform?.scale ?? 1.0)),
       }
     : null;
 
@@ -399,6 +501,25 @@ export default function Player({
     }
     const targetItem = overrideItem || activeTransformItem;
     if (!targetItem) return;
+
+    // Fast 1-click editing: Double-tap or double-click to immediately open editor
+    const now = Date.now();
+    if (
+      mode === 'move' &&
+      lastTapRef.current &&
+      lastTapRef.current.id === targetItem.id &&
+      now - lastTapRef.current.time < 320
+    ) {
+      lastTapRef.current = { time: 0, id: '' };
+      soundEngine.playSfx('click');
+      if (targetItem.type === 'text' || targetItem.type === 'sticker') {
+        onOpenEditModal?.(targetItem.id, targetItem.type);
+      } else if (targetItem.type === 'video') {
+        onOpenCropModal?.(targetItem.id);
+      }
+      return;
+    }
+    lastTapRef.current = { time: now, id: targetItem.id };
 
     const clientX =
       e.touches && e.touches.length > 0
@@ -720,25 +841,24 @@ export default function Player({
 
   return (
     <View style={[styles.container, fullscreen && styles.containerFullscreen]}>
-      {/* Fullscreen Mode Top Bar with Clear Revert / Exit Button */}
+      {/* Floating Exit Fullscreen Button in Cinema Fullscreen Mode */}
       {fullscreen && (
-        <View style={styles.fullscreenTopBar}>
-          <View style={styles.hudBadgeFullscreen}>
-            <Text style={styles.hudText}>{project.aspectRatio} • {project.resolution || '1080P'}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.exitFullscreenBtn}
-            onPress={() => setFullscreen(false)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="contract" size={16} color="#000000" />
-            <Text style={styles.exitFullscreenBtnText}>Exit Fullscreen</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.floatingExitBtn}
+          onPress={toggleFullscreen}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="contract" size={15} color="#000000" />
+          <Text style={styles.floatingExitBtnText}>Exit Fullscreen</Text>
+        </TouchableOpacity>
       )}
 
       {/* Canvas Viewport Area */}
-      <View style={styles.viewportWrapper}>
+      <View
+        ref={viewportWrapperRef}
+        style={styles.viewportWrapper}
+        onLayout={handleViewportLayout}
+      >
         <View
           ref={canvasBoxRef}
           style={[styles.canvasBox, { width: boxWidth, height: canvasHeight }]}
@@ -746,8 +866,8 @@ export default function Player({
           {Platform.OS === 'web' ? (
             <canvas
               ref={canvasRef as any}
-              width={canvasWidth * 2}
-              height={canvasHeight * 2}
+              width={Math.round(canvasWidth * (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2))}
+              height={Math.round(canvasHeight * (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2))}
               style={{
                 width: '100%',
                 height: '100%',
@@ -765,46 +885,58 @@ export default function Player({
           {/* Interactive On-Canvas Transform Overlay Layer */}
           {/* Interactive On-Canvas Transform Overlay Layer */}
           <View style={styles.interactiveCanvasLayer} pointerEvents="box-none">
-            {/* Unselected Clickable & Immediately Draggable Hit Area for Active Video */}
-            {activeVideo && selectedClipId !== activeVideo.id && (
-              <View
-                style={styles.unselectedVideoHitBox}
-                {...({
-                  onMouseDown: (e: any) => {
-                    onSelectClip?.(activeVideo.id, 'video');
-                    handleStartDrag(e, 'move', undefined, {
-                      id: activeVideo.id,
-                      type: 'video',
-                      label: activeVideo.title,
-                      pos: {
-                        x: 50 + (((activeVideo.transform?.x || 0) / boxWidth) * 100),
-                        y: 50 + (((activeVideo.transform?.y || 0) / canvasHeight) * 100),
-                      },
-                      scale: activeVideo.transform?.scale ?? 1.0,
-                      rotation: activeVideo.transform?.rotation ?? 0,
-                    });
-                  },
-                  onTouchStart: (e: any) => {
-                    onSelectClip?.(activeVideo.id, 'video');
-                    handleStartDrag(e, 'move', undefined, {
-                      id: activeVideo.id,
-                      type: 'video',
-                      label: activeVideo.title,
-                      pos: {
-                        x: 50 + (((activeVideo.transform?.x || 0) / boxWidth) * 100),
-                        y: 50 + (((activeVideo.transform?.y || 0) / canvasHeight) * 100),
-                      },
-                      scale: activeVideo.transform?.scale ?? 1.0,
-                      rotation: activeVideo.transform?.rotation ?? 0,
-                    });
-                  },
-                } as any)}
-              />
-            )}
+            {/* Unselected Clickable & Immediately Draggable Hit Areas for Active Videos (Track-layered) */}
+            {activeVideos.map((vid) => {
+              if (selectedClipId === vid.id) return null;
+              const vidTrackZ = (typeof vid.trackIndex === 'number' ? vid.trackIndex : 0) * 2 + 10;
+              const cx = (50 + (((vid.transform?.x || 0) / boxWidth) * 100) / 100) * boxWidth;
+              const cy = (50 + (((vid.transform?.y || 0) / canvasHeight) * 100) / 100) * canvasHeight;
+              const s = vid.transform?.scale ?? 1.0;
+              const w = boxWidth * s;
+              const h = canvasHeight * s;
+              const itemObj = {
+                id: vid.id,
+                type: 'video',
+                label: vid.title,
+                pos: {
+                  x: 50 + (((vid.transform?.x || 0) / boxWidth) * 100),
+                  y: 50 + (((vid.transform?.y || 0) / canvasHeight) * 100),
+                },
+                scale: s,
+                rotation: vid.transform?.rotation ?? 0,
+              };
+              return (
+                <View
+                  key={vid.id}
+                  style={[
+                    styles.unselectedHitBox,
+                    {
+                      left: cx - w / 2,
+                      top: cy - h / 2,
+                      width: w,
+                      height: h,
+                      zIndex: vidTrackZ,
+                      transform: [{ rotate: `${vid.transform?.rotation || 0}deg` }],
+                    },
+                  ]}
+                  {...({
+                    onMouseDown: (e: any) => {
+                      onSelectClip?.(vid.id, 'video');
+                      handleStartDrag(e, 'move', undefined, itemObj);
+                    },
+                    onTouchStart: (e: any) => {
+                      onSelectClip?.(vid.id, 'video');
+                      handleStartDrag(e, 'move', undefined, itemObj);
+                    },
+                  } as any)}
+                />
+              );
+            })}
 
             {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Texts */}
             {activeTexts.map((txt) => {
               if (txt.id === selectedClipId) return null;
+              const txtTrackZ = (typeof txt.trackIndex === 'number' ? txt.trackIndex : 2) * 2 + 10;
               const cx = ((txt.position?.x ?? 50) / 100) * boxWidth;
               const cy = ((txt.position?.y ?? 35) / 100) * canvasHeight;
               const s = txt.scale || 1.0;
@@ -828,6 +960,7 @@ export default function Player({
                       top: cy - h / 2,
                       width: w,
                       height: h,
+                      zIndex: txtTrackZ,
                       transform: [{ rotate: `${txt.rotation || 0}deg` }],
                     },
                   ]}
@@ -848,6 +981,7 @@ export default function Player({
             {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Stickers */}
             {activeStickers.map((stk) => {
               if (stk.id === selectedClipId) return null;
+              const stkTrackZ = (typeof stk.trackIndex === 'number' ? stk.trackIndex : 3) * 2 + 10;
               const cx = ((stk.position?.x ?? 50) / 100) * boxWidth;
               const cy = ((stk.position?.y ?? 50) / 100) * canvasHeight;
               const s = stk.scale || 1.2;
@@ -872,6 +1006,7 @@ export default function Player({
                       top: cy - h / 2,
                       width: w,
                       height: h,
+                      zIndex: stkTrackZ,
                       transform: [{ rotate: `${stk.rotation || 0}deg` }],
                     },
                   ]}
@@ -905,6 +1040,14 @@ export default function Player({
                 {...({
                   onMouseDown: (e: any) => handleStartDrag(e, 'move'),
                   onTouchStart: (e: any) => handleStartDrag(e, 'move'),
+                  onDoubleClick: (e: any) => {
+                    e.stopPropagation?.();
+                    if (activeTransformItem.type === 'text' || activeTransformItem.type === 'sticker') {
+                      onOpenEditModal?.(activeTransformItem.id, activeTransformItem.type);
+                    } else if (activeTransformItem.type === 'video') {
+                      onOpenCropModal?.(activeTransformItem.id);
+                    }
+                  },
                 } as any)}
               >
                 {/* Top Rotation Stem Line */}
@@ -950,52 +1093,31 @@ export default function Player({
                     onTouchStart: (e: any) => handleStartDrag(e, 'scale', 'br'),
                   } as any)}
                 />
+              </View>
+            )}
 
-                {/* Floating Quick Action Bar */}
-                <View
-                  style={[
-                    styles.floatingBar,
-                    (activeTransformItem.pos.y / 100) * canvasHeight < 70
-                      ? styles.floatingBarBottom
-                      : styles.floatingBarTop,
-                    { transform: [{ rotate: `${-activeTransformItem.rotation}deg` }] },
-                  ]}
-                  {...({
-                    onMouseDown: (e: any) => e.stopPropagation?.(),
-                    onTouchStart: (e: any) => e.stopPropagation?.(),
-                  } as any)}
-                >
-                  <View style={styles.floatingInfoPill}>
-                    <Text style={styles.floatingInfoText}>
-                      {activeTransformItem.scale.toFixed(1)}x • {Math.round(activeTransformItem.rotation)}°
-                    </Text>
-                  </View>
-
-                  {/* Video specific: Custom Crop & Masking */}
-                  {activeTransformItem.type === 'video' && (
-                    <>
-                      <TouchableOpacity
-                        style={styles.floatingActionBtn}
-                        onPress={() => onOpenCropModal?.(activeTransformItem.id)}
-                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      >
-                        <Ionicons name="crop" size={13} color="#38BDF8" />
-                        <Text style={styles.floatingBtnText}>Crop</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.floatingActionBtn}
-                        onPress={() => onOpenMaskModal?.(activeTransformItem.id)}
-                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      >
-                        <Ionicons name="shapes-outline" size={13} color="#F43F5E" />
-                        <Text style={styles.floatingBtnText}>Mask</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-
-                  {/* Text/Sticker specific: Edit */}
-                  {(activeTransformItem.type === 'text' || activeTransformItem.type === 'sticker') && (
+            {/* Quick Action HUD Bar for Selected Item - Clean 3 options */}
+            {activeTransformItem && (
+              <View
+                style={styles.floatingHudContainer}
+                pointerEvents="box-none"
+                {...({
+                  onMouseDown: (e: any) => e.stopPropagation?.(),
+                  onTouchStart: (e: any) => e.stopPropagation?.(),
+                } as any)}
+              >
+                <View style={styles.floatingHudContentCompact}>
+                  {/* Option 1: Primary Action (Edit for text/sticker, Crop for video) */}
+                  {activeTransformItem.type === 'video' ? (
+                    <TouchableOpacity
+                      style={styles.floatingActionBtn}
+                      onPress={() => onOpenCropModal?.(activeTransformItem.id)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Ionicons name="crop" size={13} color="#00F2FE" />
+                      <Text style={styles.floatingBtnText}>Crop</Text>
+                    </TouchableOpacity>
+                  ) : (
                     <TouchableOpacity
                       style={styles.floatingActionBtn}
                       onPress={() => onOpenEditModal?.(activeTransformItem.id, activeTransformItem.type)}
@@ -1006,51 +1128,24 @@ export default function Player({
                     </TouchableOpacity>
                   )}
 
-                  {/* Quick 90° Rotate */}
-                  <TouchableOpacity
-                    style={styles.floatingActionBtn}
-                    onPress={() => handleQuickRotate(activeTransformItem)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Ionicons name="refresh" size={13} color="#FBBF24" />
-                    <Text style={styles.floatingBtnText}>90°</Text>
-                  </TouchableOpacity>
-
-                  {/* Quick Reset */}
-                  <TouchableOpacity
-                    style={styles.floatingActionBtn}
-                    onPress={() => handleQuickReset(activeTransformItem)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Ionicons name="reload-outline" size={13} color="#94A3B8" />
-                    <Text style={styles.floatingBtnText}>Reset</Text>
-                  </TouchableOpacity>
-
-                  {/* Duplicate */}
-                  <TouchableOpacity
-                    style={styles.floatingActionBtn}
-                    onPress={() => onDuplicateClip?.(activeTransformItem.id, activeTransformItem.type)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Ionicons name="copy-outline" size={13} color="#FFFFFF" />
-                  </TouchableOpacity>
-
-                  {/* Delete */}
+                  {/* Option 2: Delete */}
                   <TouchableOpacity
                     style={[styles.floatingActionBtn, styles.floatingDeleteBtn]}
                     onPress={() => onDeleteClip?.(activeTransformItem.id, activeTransformItem.type)}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
                     <Ionicons name="trash-outline" size={13} color="#FB7185" />
+                    <Text style={[styles.floatingBtnText, { color: '#FB7185' }]}>Delete</Text>
                   </TouchableOpacity>
 
-                  {/* Done */}
+                  {/* Option 3: Done */}
                   <TouchableOpacity
                     style={[styles.floatingActionBtn, styles.floatingDoneBtn]}
                     onPress={() => onSelectClip?.(null)}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Ionicons name="checkmark" size={14} color="#00F2FE" />
+                    <Ionicons name="checkmark-circle-outline" size={14} color="#10B981" />
+                    <Text style={[styles.floatingBtnText, { color: '#10B981' }]}>Done</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1096,178 +1191,89 @@ export default function Player({
       </View>
 
       {/* Control Bar beneath player */}
-      <View style={[styles.controlBar, isMobile && styles.controlBarMobile]}>
-        {isMobile ? (
-          <>
-            {/* Mobile Row 1: Timecode on left, Utilities on right */}
-            <View style={styles.mobileRowTop}>
-              <View style={styles.timecodePill}>
-                <Ionicons name="time-outline" size={13} color="#00F2FE" style={{ marginRight: 5 }} />
-                <Text style={styles.timecodeText}>
-                  {formatTime(currentTime)}
-                  <Text style={styles.timecodeTotalText}> / {formatTime(totalDuration)}</Text>
-                </Text>
-              </View>
+      <View style={[styles.controlBar, isMobile && styles.controlBarCompact, fullscreen && styles.controlBarFullscreen]}>
+        <View style={styles.controlGroupLeft}>
+          <View style={styles.timecodePill}>
+            <Ionicons name="time-outline" size={11} color="#00F2FE" style={{ marginRight: 3 }} />
+            <Text style={styles.timecodeText}>
+              {formatTime(currentTime)}
+              <Text style={styles.timecodeTotalText}> / {formatTime(totalDuration)}</Text>
+            </Text>
+          </View>
+        </View>
 
-              <View style={styles.mobileActionsGroup}>
-                <TouchableOpacity
-                  style={[styles.smallBtn, showSafeZone && styles.smallBtnActive]}
-                  onPress={() => setShowSafeZone(!showSafeZone)}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Toggle Safe Zone Grid"
-                >
-                  <Ionicons name="grid-outline" size={15} color={showSafeZone ? '#00F2FE' : '#8E95A5'} />
-                </TouchableOpacity>
+        <View style={styles.controlGroupCenter}>
+          <TouchableOpacity
+            style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
+            onPress={() => stepFrame(-1)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Previous Frame"
+          >
+            <Ionicons name="play-skip-back" size={isMobile ? 12 : 14} color="#8E95A5" />
+          </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.smallBtn, hasKeyframeAtCurrentTime && styles.keyframeActive]}
-                  onPress={onAddKeyframe}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Add or Remove Keyframe"
-                >
-                  <Ionicons
-                    name={hasKeyframeAtCurrentTime ? 'diamond' : 'diamond-outline'}
-                    size={15}
-                    color={hasKeyframeAtCurrentTime ? '#FFE600' : '#8E95A5'}
-                  />
-                </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.playPauseBtn, isMobile && styles.playPauseBtnMobile]}
+            onPress={onTogglePlay}
+            activeOpacity={0.8}
+            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+          >
+            <Ionicons
+              name={isPlaying ? 'pause' : 'play'}
+              size={isMobile ? 16 : 20}
+              color="#FFFFFF"
+              style={!isPlaying ? { marginLeft: 2 } : undefined}
+            />
+          </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.smallBtn}
-                  onPress={() => setFullscreen(!fullscreen)}
-                  activeOpacity={0.7}
-                  accessibilityLabel={fullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                >
-                  <Ionicons
-                    name={fullscreen ? 'contract-outline' : 'expand-outline'}
-                    size={15}
-                    color="#8E95A5"
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
+          <TouchableOpacity
+            style={[styles.stepBtn, isMobile && styles.stepBtnMobile]}
+            onPress={() => stepFrame(1)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Next Frame"
+          >
+            <Ionicons name="play-skip-forward" size={isMobile ? 12 : 14} color="#8E95A5" />
+          </TouchableOpacity>
+        </View>
 
-            {/* Mobile Row 2: Playback Controls (Previous Frame, Play/Pause, Next Frame) */}
-            <View style={styles.mobilePlaybackRow}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => stepFrame(-1)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Previous Frame"
-              >
-                <Ionicons name="play-skip-back" size={18} color="#8E95A5" />
-              </TouchableOpacity>
+        <View style={styles.controlGroupRight}>
+          <TouchableOpacity
+            style={[styles.smallBtn, showSafeZone && styles.smallBtnActive]}
+            onPress={() => setShowSafeZone(!showSafeZone)}
+            activeOpacity={0.7}
+            accessibilityLabel="Toggle Safe Zone Grid"
+          >
+            <Ionicons name="grid-outline" size={isMobile ? 13 : 15} color={showSafeZone ? '#00F2FE' : '#8E95A5'} />
+          </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.playPauseBtn}
-                onPress={onTogglePlay}
-                activeOpacity={0.8}
-                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-              >
-                <Ionicons
-                  name={isPlaying ? 'pause' : 'play'}
-                  size={22}
-                  color="#FFFFFF"
-                  style={!isPlaying ? { marginLeft: 2 } : undefined}
-                />
-              </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.smallBtn, hasKeyframeAtCurrentTime && styles.keyframeActive]}
+            onPress={onAddKeyframe}
+            activeOpacity={0.7}
+            accessibilityLabel="Add or Remove Keyframe"
+          >
+            <Ionicons
+              name={hasKeyframeAtCurrentTime ? 'diamond' : 'diamond-outline'}
+              size={isMobile ? 13 : 15}
+              color={hasKeyframeAtCurrentTime ? '#FFE600' : '#8E95A5'}
+            />
+          </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => stepFrame(1)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Next Frame"
-              >
-                <Ionicons name="play-skip-forward" size={18} color="#8E95A5" />
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <>
-            {/* Desktop: 3-column layout where items never overlap */}
-            <View style={styles.controlGroupLeft}>
-              <TouchableOpacity
-                style={[styles.smallBtn, showSafeZone && styles.smallBtnActive]}
-                onPress={() => setShowSafeZone(!showSafeZone)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="grid-outline" size={16} color={showSafeZone ? '#00F2FE' : '#8E95A5'} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.smallBtn, hasKeyframeAtCurrentTime && styles.keyframeActive]}
-                onPress={onAddKeyframe}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={hasKeyframeAtCurrentTime ? 'diamond' : 'diamond-outline'}
-                  size={16}
-                  color={hasKeyframeAtCurrentTime ? '#FFE600' : '#8E95A5'}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.controlGroupCenter}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => stepFrame(-1)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Previous Frame"
-              >
-                <Ionicons name="play-skip-back" size={17} color="#8E95A5" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.playPauseBtn}
-                onPress={onTogglePlay}
-                activeOpacity={0.8}
-                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-              >
-                <Ionicons
-                  name={isPlaying ? 'pause' : 'play'}
-                  size={22}
-                  color="#FFFFFF"
-                  style={!isPlaying ? { marginLeft: 2 } : undefined}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => stepFrame(1)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Next Frame"
-              >
-                <Ionicons name="play-skip-forward" size={17} color="#8E95A5" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.controlGroupRight}>
-              <View style={styles.timecodePill}>
-                <Ionicons name="time-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
-                <Text style={styles.timecodeText}>
-                  {formatTime(currentTime)}
-                  <Text style={styles.timecodeTotalText}> / {formatTime(totalDuration)}</Text>
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.smallBtn}
-                onPress={() => setFullscreen(!fullscreen)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={fullscreen ? 'contract-outline' : 'expand-outline'}
-                  size={16}
-                  color="#8E95A5"
-                />
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
+          <TouchableOpacity
+            style={[styles.smallBtn, fullscreen && styles.smallBtnActive]}
+            onPress={toggleFullscreen}
+            activeOpacity={0.7}
+            accessibilityLabel={fullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            <Ionicons
+              name={fullscreen ? 'contract-outline' : 'expand-outline'}
+              size={isMobile ? 13 : 15}
+              color={fullscreen ? '#00F2FE' : '#8E95A5'}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -1280,59 +1286,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B0D13',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingTop: 4,
+    paddingBottom: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1E29',
     overflow: 'hidden' as any,
   },
   containerFullscreen: {
-    position: 'fixed' as any,
+    position: 'absolute' as any,
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
     zIndex: 99999,
     backgroundColor: '#000000',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  fullscreenTopBar: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    marginBottom: 8,
-    zIndex: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  hudBadgeFullscreen: {
-    backgroundColor: 'rgba(20, 23, 33, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#252B3B',
-  },
-  exitFullscreenBtn: {
+  floatingExitBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#00F2FE',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     gap: 6,
+    zIndex: 10000,
     shadowColor: '#00F2FE',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  exitFullscreenBtnText: {
+  floatingExitBtnText: {
     color: '#000000',
     fontSize: 12,
     fontWeight: '800',
+  },
+  floatingHudContentCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(14, 17, 24, 0.94)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    gap: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
   },
   viewportWrapper: {
     flex: 1,
@@ -1440,30 +1450,24 @@ const styles = StyleSheet.create({
     right: -8,
     cursor: 'nwse-resize' as any,
   },
-  floatingBar: {
+  floatingHudContainer: {
     position: 'absolute',
-    left: '50%',
+    top: 8,
+    left: 8,
+    right: 8,
+    zIndex: 35,
+    alignItems: 'center',
+  },
+  floatingHudContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 20, 29, 0.96)',
+    backgroundColor: 'rgba(15, 18, 26, 0.94)',
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#2A3245',
-    boxShadow: '0 6px 16px rgba(0,0,0,0.7)' as any,
-    gap: 5,
-    zIndex: 30,
-  },
-  floatingBarTop: {
-    bottom: '100%',
-    marginBottom: 48,
-    marginLeft: -155,
-  },
-  floatingBarBottom: {
-    top: '100%',
-    marginTop: 22,
-    marginLeft: -155,
+    gap: 4,
   },
   floatingInfoPill: {
     backgroundColor: 'rgba(0, 242, 254, 0.12)',
@@ -1605,67 +1609,64 @@ const styles = StyleSheet.create({
   },
   controlBar: {
     width: '100%',
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 48,
-    marginTop: 4,
-    marginBottom: 4,
+    height: 34,
+    marginTop: 0,
+    marginBottom: 0,
     flexShrink: 0,
   },
-  controlBarMobile: {
-    height: 'auto',
-    minHeight: 72,
-    flexDirection: 'column',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    marginTop: 4,
-    marginBottom: 4,
+  controlBarCompact: {
+    paddingHorizontal: 4,
+    height: 32,
+    marginTop: 0,
+    marginBottom: 0,
   },
-  mobileRowTop: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  controlBarFullscreen: {
+    position: 'absolute',
+    bottom: 12,
+    left: 14,
+    right: 14,
+    width: 'auto',
+    backgroundColor: 'rgba(14, 17, 24, 0.92)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 42,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    zIndex: 9999,
   },
-  mobileActionsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  mobilePlaybackRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 22,
+  playPauseBtnMobile: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
   },
   controlGroupLeft: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 8,
+    flexShrink: 0,
   },
   controlGroupCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  controlGroupRight: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     gap: 10,
+    flexShrink: 0,
+  },
+  controlGroupRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    flexShrink: 0,
   },
   smallBtn: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     borderRadius: 6,
     backgroundColor: '#141721',
     alignItems: 'center',
@@ -1678,17 +1679,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 230, 0, 0.2)',
   },
   stepBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(20, 23, 33, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stepBtnMobile: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
   playPauseBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#FF0050',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1702,21 +1708,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#141721',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#1E2333',
+    flexShrink: 0,
   },
   timecodeText: {
     color: '#00F2FE',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
   timecodeTotalText: {
     color: '#6B7280',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },

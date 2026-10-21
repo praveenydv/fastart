@@ -65,7 +65,7 @@ export default function AIEnhanceModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Ionicons name="sparkles" size={20} color="#D946EF" />
-              <Text style={styles.headerTitle}>AI Magic Video Enhance</Text>
+              <Text style={styles.headerTitle}>AI Enhance</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#8E95A5" />
@@ -75,7 +75,7 @@ export default function AIEnhanceModal({
           <ScrollView style={styles.contentScroll}>
             {/* Presets Grid */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>AI Style Profile</Text>
+              <Text style={styles.sectionTitle}>Style Profiles</Text>
               <View style={styles.presetsGrid}>
                 {presets.map((p) => {
                   const isSelected = selectedPreset === p.id;
@@ -107,7 +107,7 @@ export default function AIEnhanceModal({
 
             {/* AI Sliders */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Neural Enhancements</Text>
+              <Text style={styles.sectionTitle}>Adjustments</Text>
 
               {/* Sharpness */}
               <View style={styles.sliderRow}>
@@ -208,7 +208,7 @@ export default function AIEnhanceModal({
           <View style={styles.footer}>
             <TouchableOpacity style={styles.enhanceBtn} onPress={handleApply}>
               <Ionicons name="sparkles" size={18} color="#000000" />
-              <Text style={styles.enhanceBtnText}>Apply AI Enhancements</Text>
+              <Text style={styles.enhanceBtnText}>Apply</Text>
             </TouchableOpacity>
           </View>
         </View>

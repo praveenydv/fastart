@@ -15,7 +15,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { openMediaService, OpenMediaItem } from '../../services/openMediaService';
-import { loadUploadedMedia, saveUploadedMedia } from '../../utils/storage';
+import {
+  loadUploadedMedia,
+  saveUploadedMedia,
+  addNotification,
+} from '../../utils/storage';
+import { persistLargeMedia } from '../../utils/largeMediaStorage';
 
 interface MediaPickerModalProps {
   visible: boolean;
@@ -68,36 +73,51 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'video/*,image/*';
-        input.onchange = (e: any) => {
+        input.onchange = async (e: any) => {
           const file = e.target.files?.[0];
           if (file) {
-            const url = URL.createObjectURL(file);
-            const isVideo = file.type.startsWith('video');
-            const clip = {
-              id: 'clip-' + Date.now(),
-              title: file.name.replace(/\.[^/.]+$/, ''),
-              type: isVideo ? 'video' : 'photo',
-              url,
-              duration: isVideo ? 6.0 : 4.0,
-              startTime: 0,
-              trimIn: 0,
-              trimOut: isVideo ? 6.0 : 4.0,
-              speed: 1.0,
-              volume: 1.0,
-              filter: 'normal',
-              effect: 'none',
-              transform: { scale: 1, rotation: 0, x: 0, y: 0 },
-            };
+            setIsLoading(true);
+            try {
+              const isVideo = file.type.startsWith('video');
+              const mediaId = 'clip-' + Date.now();
+              const title = file.name.replace(/\.[^/.]+$/, '');
 
-            setUploadedMedia((prev) => {
-              const updated = [clip, ...prev];
-              saveUploadedMedia(updated);
-              return updated;
-            });
+              const saved = await persistLargeMedia(file, mediaId, title, isVideo ? 'video' : 'photo');
 
-            soundEngine.playSfx('pop');
-            onAddMedia(clip);
-            onClose();
+              const clip = {
+                id: mediaId,
+                title,
+                type: isVideo ? 'video' : 'photo',
+                url: saved.url,
+                duration: saved.duration,
+                startTime: 0,
+                trimIn: 0,
+                trimOut: saved.duration,
+                speed: 1.0,
+                volume: 1.0,
+                filter: 'normal',
+                effect: 'none',
+                transform: { scale: 1, rotation: 0, x: 0, y: 0 },
+              };
+
+              setUploadedMedia((prev) => {
+                const updated = [clip, ...prev];
+                saveUploadedMedia(updated);
+                return updated;
+              });
+
+              addNotification({
+                title: 'Media Added',
+                message: `Added "${clip.title}" to project timeline.`,
+                icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
+              });
+
+              soundEngine.playSfx('pop');
+              onAddMedia(clip);
+              onClose();
+            } finally {
+              setIsLoading(false);
+            }
           }
         };
         input.click();
@@ -109,15 +129,16 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
         });
         if (!result.canceled && result.assets?.[0]) {
           const asset = result.assets[0];
+          const dur = asset.duration ? asset.duration / 1000 : asset.type === 'video' ? 6.0 : 4.0;
           const clip = {
             id: 'clip-' + Date.now(),
             title: asset.fileName || 'Imported Clip',
             type: asset.type === 'video' ? 'video' : 'photo',
             url: asset.uri,
-            duration: asset.duration ? asset.duration / 1000 : 5.0,
+            duration: dur,
             startTime: 0,
             trimIn: 0,
-            trimOut: asset.duration ? asset.duration / 1000 : 5.0,
+            trimOut: dur,
             speed: 1.0,
             volume: 1.0,
             filter: 'normal',
@@ -131,6 +152,12 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
             return updated;
           });
 
+          addNotification({
+            title: 'Media Added',
+            message: `Added "${clip.title}" to project timeline.`,
+            icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
+          });
+
           soundEngine.playSfx('pop');
           onAddMedia(clip);
           onClose();
@@ -138,6 +165,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
       }
     } catch (err) {
       console.warn('Error picking media:', err);
+      setIsLoading(false);
     }
   };
 
@@ -186,10 +214,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>Import Media</Text>
-              <Text style={styles.sheetSubtitle}>Upload device files or pick live open-source media</Text>
-            </View>
+            <Text style={styles.sheetTitle}>Media</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={22} color="#FFFFFF" />
             </TouchableOpacity>
@@ -205,8 +230,8 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 onChangeText={setSearchQuery}
                 placeholder={
                   activeTab === 'uploaded'
-                    ? 'Search your uploaded media...'
-                    : 'Search open-source library (cinematic, nature, timelapse)...'
+                    ? 'Search uploads...'
+                    : 'Search stock media...'
                 }
                 placeholderTextColor="#64748B"
               />
@@ -224,7 +249,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 onPress={() => setActiveTab('all')}
               >
                 <Text style={[styles.typePillText, activeTab === 'all' && styles.typePillTextActive]}>
-                  All Open Source
+                  All
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -263,7 +288,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                   color={activeTab === 'uploaded' ? '#00F2FE' : '#8E95A5'}
                 />
                 <Text style={[styles.typePillText, activeTab === 'uploaded' && styles.typePillTextActive]}>
-                  Uploaded ({uploadedMedia.length})
+                  Uploads{uploadedMedia.length > 0 ? ` (${uploadedMedia.length})` : ''}
                 </Text>
               </TouchableOpacity>
             </View>

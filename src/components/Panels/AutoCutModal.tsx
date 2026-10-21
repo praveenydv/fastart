@@ -264,7 +264,7 @@ export default function AutoCutModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Ionicons name="flash" size={20} color="#00F2FE" />
-              <Text style={styles.headerTitle}>AutoCut AI Reel Generator</Text>
+              <Text style={styles.headerTitle}>AutoCut</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color="#8E95A5" />
@@ -276,7 +276,7 @@ export default function AutoCutModal({
             <View style={styles.section}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>
-                  1. Select Media ({selectedClips.length} selected)
+                  1. Media ({selectedClips.length})
                 </Text>
                 {Platform.OS === "web" && (
                   <WebLabel style={styles.uploadBtn}>
@@ -342,7 +342,7 @@ export default function AutoCutModal({
 
             {/* Step 2: Beat Pace */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>2. Cutting Pace & Rhythms</Text>
+              <Text style={styles.sectionTitle}>2. Cutting Pace</Text>
               <View style={styles.paceColumn}>
                 {paceOptions.map((p) => {
                   const isSelected = clipPace === p.id;
@@ -384,11 +384,11 @@ export default function AutoCutModal({
 
             {/* Step 3: Sound Track */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>3. Sync Soundtrack</Text>
+              <Text style={styles.sectionTitle}>3. Soundtrack</Text>
               <View style={styles.audioRow}>
                 {availableMusic.length === 0 ? (
                   <Text style={{ color: '#8E95A5', fontSize: 13, fontStyle: 'italic', paddingVertical: 8 }}>
-                    Loading open-source soundtrack library...
+                    Loading soundtrack library...
                   </Text>
                 ) : (
                   availableMusic.slice(0, 10).map((a) => {
@@ -434,7 +434,7 @@ export default function AutoCutModal({
               onPress={handleGenerate}
             >
               <Ionicons name="flash" size={18} color="#000000" />
-              <Text style={styles.generateBtnText}>Generate AutoCut Video</Text>
+              <Text style={styles.generateBtnText}>Generate Video</Text>
             </TouchableOpacity>
           </View>
         </View>

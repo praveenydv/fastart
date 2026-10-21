@@ -33,6 +33,8 @@ import CameraModal from './src/components/Panels/CameraModal';
 import AutoCutModal from './src/components/Panels/AutoCutModal';
 import AIEnhanceModal from './src/components/Panels/AIEnhanceModal';
 import TextToSpeechModal from './src/components/Panels/TextToSpeechModal';
+import CutoutModal from './src/components/Panels/CutoutModal';
+import MotionTrackingModal from './src/components/Panels/MotionTrackingModal';
 import ConfirmDeleteModal from './src/components/ConfirmDeleteModal';
 
 import {
@@ -45,6 +47,9 @@ import {
   AspectRatio,
   MaskConfig,
   CustomCrop,
+  CutoutConfig,
+  MotionTrackConfig,
+  CustomLutConfig,
   createDefaultProject,
   computeTotalDuration,
 } from './src/types/project';
@@ -56,6 +61,8 @@ import {
   saveSettings,
   loadNotifications,
   saveNotifications,
+  addNotification,
+  deleteNotification,
   loadLastSession,
   saveLastSession,
   LastEditSession,
@@ -64,6 +71,8 @@ import {
   initNativeStorageAsync,
 } from './src/utils/storage';
 import { soundEngine } from './src/utils/audioEngine';
+import { triggerHaptic } from './src/utils/haptics';
+import { getLiveMediaUrl, deleteMedia } from './src/utils/largeMediaStorage';
 
 export default function App() {
   const { route, navigate, goBack } = useAppRouter();
@@ -96,6 +105,9 @@ export default function App() {
   const [historyStack, setHistoryStack] = useState<FastArtProject[]>([]);
   const [redoStack, setRedoStack] = useState<FastArtProject[]>([]);
 
+  // Fullscreen Cinema mode
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Active modal sheets
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [transitionTargetClipId, setTransitionTargetClipId] = useState<string | null>(null);
@@ -103,10 +115,23 @@ export default function App() {
   const animFrameRef = useRef<any>(null);
   const lastTimeRef = useRef<any>(null);
 
+  // ESC key listener to exit fullscreen mode on web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && isFullscreen) {
+          setIsFullscreen(false);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isFullscreen]);
+
   // Load and hydrate projects, settings & notifications on startup
   useEffect(() => {
     if (settings) {
-      soundEngine.setEnabled(settings.soundEffects !== false);
+      soundEngine.setEnabled(settings.soundEffects === true);
     }
     initNativeStorageAsync().then(() => {
       const projs = loadAllProjects();
@@ -117,8 +142,60 @@ export default function App() {
       setSettings(currentSettings);
       setNotifications(currentNotifs);
       setLastSession(session);
-      soundEngine.setEnabled(currentSettings.soundEffects !== false);
+      soundEngine.setEnabled(currentSettings.soundEffects === true);
     });
+
+    // Live notification synchronization
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleSyncNotifs = () => {
+        setNotifications(loadNotifications());
+      };
+      window.addEventListener('fastart:notification_added', handleSyncNotifs);
+      window.addEventListener('fastart:notifications_changed', handleSyncNotifs);
+      return () => {
+        window.removeEventListener('fastart:notification_added', handleSyncNotifs);
+        window.removeEventListener('fastart:notifications_changed', handleSyncNotifs);
+      };
+    }
+  }, []);
+
+  // Mobile web gesture smoothing & touch-action performance optimization
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const styleEl = document.createElement('style');
+      styleEl.innerHTML = `
+        html, body, #root {
+          overscroll-behavior: none !important;
+          overscroll-behavior-y: none !important;
+          touch-action: manipulation;
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+        }
+        * {
+          -webkit-tap-highlight-color: transparent;
+        }
+      `;
+      document.head.appendChild(styleEl);
+
+      const unlockAudio = () => {
+        try {
+          soundEngine.getAudioContext()?.resume();
+        } catch (e) {}
+        window.removeEventListener('touchstart', unlockAudio);
+        window.removeEventListener('pointerdown', unlockAudio);
+      };
+      window.addEventListener('touchstart', unlockAudio, { passive: true });
+      window.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+      return () => {
+        try {
+          document.head.removeChild(styleEl);
+        } catch (e) {}
+        window.removeEventListener('touchstart', unlockAudio);
+        window.removeEventListener('pointerdown', unlockAudio);
+      };
+    }
   }, []);
 
   // Sync route and project / modal selection
@@ -182,6 +259,7 @@ export default function App() {
       if (isPlaying) {
         setIsPlaying(false);
       }
+      setIsFullscreen(false);
     }
   }, [route.screen, route.projectKey, route.tool, projects]);
 
@@ -250,9 +328,44 @@ export default function App() {
     };
   }, [isPlaying, totalDuration]);
 
-  // Push state to undo stack
+  // Restore any large media object URLs stored in IndexedDB across reloads
+  useEffect(() => {
+    if (Platform.OS === 'web' && project) {
+      let changed = false;
+      const checkAndRestore = async () => {
+        const vClips = [...(project.tracks.video || [])];
+        for (let i = 0; i < vClips.length; i++) {
+          const c = vClips[i];
+          if (c.id && (!c.url || c.url.startsWith('blob:'))) {
+            const liveUrl = await getLiveMediaUrl(c.id);
+            if (liveUrl && liveUrl !== c.url) {
+              vClips[i] = { ...c, url: liveUrl };
+              changed = true;
+            }
+          }
+        }
+        const aClips = [...(project.tracks.audio || [])];
+        for (let i = 0; i < aClips.length; i++) {
+          const c = aClips[i];
+          if (c.id && (!c.url || c.url.startsWith('blob:'))) {
+            const liveUrl = await getLiveMediaUrl(c.id);
+            if (liveUrl && liveUrl !== c.url) {
+              aClips[i] = { ...c, url: liveUrl };
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          setProject((prev) => (prev ? { ...prev, tracks: { ...prev.tracks, video: vClips, audio: aClips } } : prev));
+        }
+      };
+      checkAndRestore();
+    }
+  }, [project?.id]);
+
+  // Push state to undo stack with memory cap
   const updateProjectWithHistory = (updatedProject: any) => {
-    setHistoryStack((prev) => [...prev.slice(-30), JSON.parse(JSON.stringify(project))]);
+    setHistoryStack((prev) => [...prev.slice(-20), JSON.parse(JSON.stringify(project))]);
     setRedoStack([]);
     const saved = saveProject(updatedProject);
     setProject(saved);
@@ -310,6 +423,9 @@ export default function App() {
     // Check if playhead is within clip boundaries
     if (currentTime <= clipStart + 0.05 || currentTime >= clipEnd - 0.05) return;
 
+    soundEngine.playSfx('split');
+    triggerHaptic('medium', settings?.hapticFeedback !== false);
+
     const firstDuration = currentTime - clipStart;
     const secondDuration = clipEnd - currentTime;
 
@@ -349,14 +465,38 @@ export default function App() {
   const handleDeleteClip = (targetId?: string, targetType?: string) => {
     if (!project) return;
     const clipId = targetId || selectedClipId;
-    const clipType = targetType || selectedClipType;
     if (!clipId) return;
 
-    const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
-    const list = [...((project.tracks[key] as any[]) || [])];
-    const clip = list.find((c) => c.id === clipId);
+    let clipType = targetType || selectedClipType;
+    let foundTrackKey: keyof typeof project.tracks | null = null;
+    let clip: any = null;
 
-    let name = `${clipType.charAt(0).toUpperCase() + clipType.slice(1)} Clip`;
+    // Search across all tracks to find the exact clip even if trackType is omitted or desynced
+    const trackKeys: Array<keyof typeof project.tracks> = ['video', 'audio', 'text', 'stickers', 'effects'];
+    if (clipType) {
+      const preferredKey = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType === 'effect' || clipType === 'effects' ? 'effects' : clipType) as keyof typeof project.tracks;
+      const list = (project.tracks[preferredKey] as any[]) || [];
+      const match = list.find((c) => c.id === clipId);
+      if (match) {
+        foundTrackKey = preferredKey;
+        clip = match;
+      }
+    }
+
+    if (!clip) {
+      for (const k of trackKeys) {
+        const list = (project.tracks[k] as any[]) || [];
+        const match = list.find((c) => c.id === clipId);
+        if (match) {
+          foundTrackKey = k;
+          clip = match;
+          clipType = k === 'stickers' ? 'sticker' : k === 'effects' ? 'effects' : k;
+          break;
+        }
+      }
+    }
+
+    let name = `${(clipType || 'item').charAt(0).toUpperCase() + (clipType || 'item').slice(1)} Clip`;
     if (clip) {
       if (clipType === 'text' && clip.text) {
         name = `"${clip.text.length > 25 ? clip.text.slice(0, 25) + '...' : clip.text}"`;
@@ -364,12 +504,16 @@ export default function App() {
         name = clip.name;
       } else if (clip.label) {
         name = clip.label;
+      } else if (clip.char) {
+        name = `Sticker ${clip.char}`;
+      } else if (clip.title) {
+        name = clip.title;
       }
     }
 
     setClipToDelete({
       id: clipId,
-      type: clipType,
+      type: clipType || (foundTrackKey === 'stickers' ? 'sticker' : 'video'),
       name,
       duration: clip?.duration,
     });
@@ -380,12 +524,24 @@ export default function App() {
     if (!project || !clipToDelete) return;
     const { id: clipId, type: clipType } = clipToDelete;
 
-    const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
-    const list = [...((project.tracks[key] as any[]) || [])];
+    const trackKeys: Array<keyof typeof project.tracks> = ['video', 'audio', 'text', 'stickers', 'effects'];
+    const preferredKey = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType === 'effect' || clipType === 'effects' ? 'effects' : clipType) as keyof typeof project.tracks;
+
+    let targetKey = preferredKey;
+    if (!((project.tracks[targetKey] as any[]) || []).some((c) => c.id === clipId)) {
+      for (const k of trackKeys) {
+        if (((project.tracks[k] as any[]) || []).some((c) => c.id === clipId)) {
+          targetKey = k;
+          break;
+        }
+      }
+    }
+
+    const list = [...((project.tracks[targetKey] as any[]) || [])];
     const filtered = list.filter((c) => c.id !== clipId);
 
     // Ripple reposition if video track
-    if (clipType === 'video') {
+    if (targetKey === 'video') {
       let t = 0;
       filtered.forEach((c) => {
         c.startTime = t;
@@ -397,12 +553,15 @@ export default function App() {
       ...project,
       tracks: {
         ...project.tracks,
-        [key]: filtered,
+        [targetKey]: filtered,
       },
     };
     setSelectedClipId(null);
+    soundEngine.playSfx('pop');
+    triggerHaptic('warning', settings?.hapticFeedback !== false);
     updateProjectWithHistory(updated);
     setClipToDelete(null);
+    deleteMedia(clipId).catch(() => {});
   };
 
   // Desktop / Laptop Keyboard Shortcuts:
@@ -601,7 +760,8 @@ export default function App() {
   const handleUpdateClipTransform = (
     clipId: string,
     clipType: string,
-    transform: { x: number; y: number; scale: number; rotation: number }
+    transform: { x: number; y: number; scale: number; rotation: number },
+    isFinal: boolean = true
   ) => {
     if (!project) return;
     const key = (clipType === 'sticker' || clipType === 'stickers' ? 'stickers' : clipType) as keyof typeof project.tracks;
@@ -629,10 +789,16 @@ export default function App() {
       };
     }
 
-    updateProjectWithHistory({
+    const updated = {
       ...project,
       tracks: { ...project.tracks, [key]: list } as any,
-    });
+    };
+
+    if (isFinal) {
+      updateProjectWithHistory(updated);
+    } else {
+      setProject(updated);
+    }
   };
 
   // Update text clip from modal
@@ -686,13 +852,26 @@ export default function App() {
   };
 
   // Add new media clip
-  const handleAddMedia = (newClip) => {
+  const handleAddMedia = (newClip: any) => {
     if (!project) return;
     const videoClips = [...(project.tracks.video || [])];
-    const lastClip = videoClips[videoClips.length - 1];
-    const start = lastClip ? lastClip.startTime + lastClip.duration : 0;
-    newClip.startTime = start;
-    videoClips.push(newClip);
+    const endingIdx = videoClips.findIndex((c) => (c as any).isEnding);
+
+    if (endingIdx >= 0) {
+      // Keep ending outro clip at the very end
+      const endingClip = videoClips[endingIdx];
+      videoClips.splice(endingIdx, 1);
+      const lastClip = videoClips[videoClips.length - 1];
+      newClip.startTime = lastClip ? lastClip.startTime + lastClip.duration : 0;
+      videoClips.push(newClip);
+      endingClip.startTime = newClip.startTime + newClip.duration;
+      videoClips.push(endingClip);
+    } else {
+      const lastClip = videoClips[videoClips.length - 1];
+      const start = lastClip ? lastClip.startTime + lastClip.duration : 0;
+      newClip.startTime = start;
+      videoClips.push(newClip);
+    }
 
     updateProjectWithHistory({
       ...project,
@@ -766,14 +945,18 @@ export default function App() {
     setActiveModal(null);
   };
 
-  // Apply color filter
-  const handleApplyFilter = (filterId) => {
+  // Apply color filter or custom 3D LUT
+  const handleApplyFilter = (filterId: string, customLut?: CustomLutConfig) => {
     if (!project) return;
     if (selectedClip && selectedClipType === 'video') {
       const videoClips = [...(project.tracks.video || [])];
       const idx = videoClips.findIndex((c) => c.id === selectedClipId);
       if (idx >= 0) {
-        videoClips[idx] = { ...videoClips[idx], filter: filterId };
+        videoClips[idx] = {
+          ...videoClips[idx],
+          filter: filterId,
+          customLut: customLut,
+        };
         updateProjectWithHistory({
           ...project,
           tracks: { ...project.tracks, video: videoClips },
@@ -783,8 +966,55 @@ export default function App() {
     setActiveModal(null);
   };
 
+  // Apply Cutout (Chroma Key & Auto Cutout)
+  const handleApplyCutout = (cutoutConfig: CutoutConfig) => {
+    if (!project || !selectedClip) return;
+    const videoClips = [...(project.tracks.video || [])];
+    const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+    if (idx >= 0) {
+      videoClips[idx] = {
+        ...videoClips[idx],
+        cutout: cutoutConfig,
+        transform: {
+          ...(videoClips[idx].transform || {}),
+          cutout: cutoutConfig,
+        },
+      };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, video: videoClips },
+      });
+    }
+  };
+
+  // Apply AI Motion Tracking
+  const handleApplyMotionTracking = (motionConfig: MotionTrackConfig) => {
+    if (!project || !selectedClip) return;
+    if (selectedClipType === 'text') {
+      const textClips = [...(project.tracks.text || [])];
+      const idx = textClips.findIndex((t) => t.id === selectedClipId);
+      if (idx >= 0) {
+        textClips[idx] = { ...textClips[idx], motionTrack: motionConfig };
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, text: textClips },
+        });
+      }
+    } else if (selectedClipType === 'stickers' || selectedClipType === 'sticker') {
+      const stickerClips = [...(project.tracks.stickers || [])];
+      const idx = stickerClips.findIndex((s) => s.id === selectedClipId);
+      if (idx >= 0) {
+        stickerClips[idx] = { ...stickerClips[idx], motionTrack: motionConfig };
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, stickers: stickerClips },
+        });
+      }
+    }
+  };
+
   // Apply transition
-  const handleApplyTransition = (trans) => {
+  const handleApplyTransition = (trans: any) => {
     if (!project || !transitionTargetClipId) return;
     const videoClips = [...(project.tracks.video || [])];
     const idx = videoClips.findIndex((c) => c.id === transitionTargetClipId);
@@ -797,8 +1027,12 @@ export default function App() {
     }
   };
 
-  // Apply speed change
-  const handleApplySpeed = (speedVal, curve) => {
+  // Apply speed change (Presets or Custom Bezier Curve + Smooth Slow-Mo)
+  const handleApplySpeed = (
+    speedVal: number,
+    curve?: any,
+    smoothSlowMo?: 'none' | 'blend' | 'optical_flow'
+  ) => {
     if (!project || !selectedClip) return;
     const videoClips = [...(project.tracks.video || [])];
     const idx = videoClips.findIndex((c) => c.id === selectedClipId);
@@ -806,7 +1040,8 @@ export default function App() {
       videoClips[idx] = {
         ...videoClips[idx],
         speed: speedVal,
-        speedCurve: curve ? curve.points : null,
+        speedCurve: curve ? (curve.points || curve) : null,
+        smoothSlowMo: smoothSlowMo || 'none',
       };
       updateProjectWithHistory({
         ...project,
@@ -857,7 +1092,7 @@ export default function App() {
   const handleUpdateSettings = (newSettings: any) => {
     const updated = saveSettings(newSettings);
     setSettings(updated);
-    soundEngine.setEnabled(updated.soundEffects !== false);
+    soundEngine.setEnabled(updated.soundEffects === true);
   };
 
   const handleReloadAllData = () => {
@@ -869,7 +1104,7 @@ export default function App() {
     setSettings(currentSettings);
     setNotifications(currentNotifs);
     setLastSession(currentSession);
-    soundEngine.setEnabled(currentSettings.soundEffects !== false);
+    soundEngine.setEnabled(currentSettings.soundEffects === true);
     if (projs.length > 0) {
       setProject(projs[0]);
     } else {
@@ -888,11 +1123,81 @@ export default function App() {
     saveNotifications([]);
   };
 
+  const handleDeleteNotification = (id: string) => {
+    const updated = notifications.filter((n) => n.id !== id);
+    setNotifications(updated);
+    saveNotifications(updated);
+  };
+
+  const handleNotificationAction = (notification: AppNotification) => {
+    // Mark clicked notification as read
+    const updated = notifications.map((n) =>
+      n.id === notification.id ? { ...n, unread: false } : n
+    );
+    setNotifications(updated);
+    saveNotifications(updated);
+
+    // If notification has a specific projectId, open it directly!
+    if (notification.projectId) {
+      const target = projects.find((p) => p.id === notification.projectId);
+      if (target) {
+        setProject(target);
+        setCurrentTime(0);
+        setIsPlaying(false);
+        setSelectedClipId(null);
+        navigate(`/project/${target.id}`);
+        return;
+      }
+    }
+
+    if (projects.length > 0) {
+      const target = project || projects[0];
+      setProject(target);
+      navigate(`/project/${target.id}`);
+    } else {
+      handleCreateNewProject();
+    }
+  };
+
   const handleCreateNewProject = () => {
     const newProj = createDefaultProject(`Project ${projects.length + 1}`);
     newProj.aspectRatio = settings?.defaultAspectRatio || '9:16';
     newProj.resolution = settings?.defaultResolution || '1080p';
     newProj.fps = settings?.defaultFps || 30;
+
+    // Apply Auto Add Default Ending setting
+    if (settings?.autoAddEnding) {
+      newProj.tracks.video = [
+        {
+          id: 'clip-outro-' + Date.now(),
+          title: 'FastArt Outro',
+          type: 'video',
+          url: 'https://assets.mixkit.co/videos/preview/mixkit-digital-animation-of-screens-with-code-31910-large.mp4',
+          duration: 2.5,
+          startTime: 0,
+          trimIn: 0,
+          trimOut: 2.5,
+          volume: 1,
+          isEnding: true,
+        },
+      ];
+      newProj.tracks.text = [
+        {
+          id: 'text-outro-' + Date.now(),
+          text: 'FAST★ART',
+          startTime: 0.2,
+          duration: 2.1,
+          style: {
+            fontSize: 34,
+            color: '#00F2FE',
+            fontFamily: 'system-ui',
+            textAlign: 'center',
+            fontWeight: 'bold',
+          },
+        },
+      ];
+    }
+
     saveProject(newProj);
     setProjects((prev) => [newProj, ...prev]);
     setProject(newProj);
@@ -900,6 +1205,15 @@ export default function App() {
     setIsPlaying(false);
     setSelectedClipId(null);
     navigate(`/project/${newProj.id}`);
+
+    addNotification({
+      title: 'Project Created',
+      message: `"${newProj.title}" is ready for editing.`,
+      projectId: newProj.id,
+      projectTitle: newProj.title,
+      actionText: 'Open in Editor',
+      icon: 'film-outline',
+    });
   };
 
   const handleDuplicateProject = (id: string) => {
@@ -913,10 +1227,20 @@ export default function App() {
       };
       saveProject(clone);
       setProjects((prev) => [clone, ...prev]);
+
+      addNotification({
+        title: 'Project Duplicated',
+        message: `Created duplicate "${clone.title}".`,
+        projectId: clone.id,
+        projectTitle: clone.title,
+        actionText: 'Open Project',
+        icon: 'copy-outline',
+      });
     }
   };
 
   const handleDeleteProject = (id: string) => {
+    const target = projects.find((p) => p.id === id);
     const updated = deleteProject(id);
     setProjects(updated);
     if (project?.id === id) {
@@ -928,6 +1252,21 @@ export default function App() {
         navigate('/', { replace: true });
       }
     }
+
+    // Clean up project media from IndexedDB
+    if (target && target.tracks) {
+      const clipIds = [
+        ...(target.tracks.video || []).map((v: any) => v.id),
+        ...(target.tracks.audio || []).map((a: any) => a.id),
+      ];
+      clipIds.forEach((cid) => deleteMedia(cid).catch(() => {}));
+    }
+
+    addNotification({
+      title: 'Project Deleted',
+      message: `"${target?.title || 'Project'}" was removed.`,
+      icon: 'trash-outline',
+    });
   };
 
   const handleRenameProject = (id: string, newTitle: string) => {
@@ -1058,7 +1397,8 @@ export default function App() {
   // Draggable Trim Clip for Video, Audio, and Text
   const handleTrimClip = (
     clipId: string,
-    updates: { startTime?: number; duration?: number; trimIn?: number; trimOut?: number }
+    updates: { startTime?: number; duration?: number; trimIn?: number; trimOut?: number; trackIndex?: number },
+    isFinal: boolean = true
   ) => {
     if (!project) return;
     const tracks = { ...project.tracks };
@@ -1105,7 +1445,12 @@ export default function App() {
       }
     }
 
-    updateProjectWithHistory({ ...project, tracks });
+    const updated = { ...project, tracks };
+    if (isFinal) {
+      updateProjectWithHistory(updated);
+    } else {
+      setProject(updated);
+    }
   };
 
   // Draggable Move Clip along timeline tracks
@@ -1181,7 +1526,8 @@ export default function App() {
           notifications={notifications}
           onMarkAllAsRead={handleMarkAllAsRead}
           onClearAll={handleClearAllNotifications}
-          onActionClick={() => handleCreateNewProject()}
+          onDeleteNotification={handleDeleteNotification}
+          onActionClick={handleNotificationAction}
           onBack={() => {
             navigate('/');
           }}
@@ -1202,28 +1548,32 @@ export default function App() {
       {(route.screen === 'editor' || route.screen === 'export') && project && (
         <View style={styles.editorContainer}>
           {/* Top Header Bar */}
-          <Header
-            project={project}
-            onUpdateProject={(updates) => updateProjectWithHistory({ ...project, ...updates })}
-            onBackToHome={() => {
-              soundEngine.playSfx('click');
-              setIsPlaying(false);
-              navigate('/');
-            }}
-            canUndo={historyStack.length > 0}
-            canRedo={redoStack.length > 0}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            onOpenExport={() => openModal('export')}
-          />
+          {!isFullscreen && (
+            <Header
+              project={project}
+              onUpdateProject={(updates) => updateProjectWithHistory({ ...project, ...updates })}
+              onBackToHome={() => {
+                soundEngine.playSfx('click');
+                setIsPlaying(false);
+                navigate('/');
+              }}
+              canUndo={historyStack.length > 0}
+              canRedo={redoStack.length > 0}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onOpenExport={() => openModal('export')}
+            />
+          )}
 
           {/* Canvas Viewport & Player Controls in Flex-1 Center Stage */}
-          <View style={styles.playerStage}>
+          <View style={[styles.playerStage, isFullscreen && styles.playerStageFullscreen]}>
             <Player
               project={project}
               currentTime={currentTime}
               isPlaying={isPlaying}
               totalDuration={totalDuration}
+              fullscreen={isFullscreen}
+              onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
               onTogglePlay={() => {
                 soundEngine.playSfx('click');
                 if (!isPlaying && (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration)) {
@@ -1263,11 +1613,13 @@ export default function App() {
               }}
               onDeleteClip={handleDeleteClip}
               onDuplicateClip={handleDuplicateClip}
+              onSplitClip={handleSplitClip}
             />
           </View>
 
           {/* Bottom Docked Section: Timeline and Editing Options Toolbar */}
-          <View style={styles.bottomDock}>
+          {!isFullscreen && (
+            <View style={styles.bottomDock}>
             <Timeline
               project={project}
               currentTime={currentTime}
@@ -1306,6 +1658,19 @@ export default function App() {
                   });
                 }
               }}
+              onSplitClip={handleSplitClip}
+              onDuplicateClip={handleDuplicateClip}
+              onDeleteClip={handleDeleteClip}
+              onOpenEditModal={(clipId, clipType) => {
+                setSelectedClipId(clipId);
+                setSelectedClipType(clipType);
+                if (clipType === 'text') openModal('text');
+                else if (clipType === 'sticker' || clipType === 'stickers') openModal('stickers');
+                else if (clipType === 'audio') openModal('volume');
+                else if (clipType === 'effects' || clipType === 'effect') openModal('effects');
+                else openModal('crop');
+              }}
+              settings={settings}
             />
 
             <Toolbar
@@ -1331,8 +1696,11 @@ export default function App() {
               onOpenCamera={() => openModal('camera')}
               onOpenEnhance={() => openModal('enhance')}
               onOpenAutoCut={() => openModal('autocut')}
+              onOpenCutoutModal={() => openModal('cutout')}
+              onOpenMotionTracking={() => openModal('tracking')}
             />
           </View>
+          )}
         </View>
       )}
 
@@ -1341,6 +1709,27 @@ export default function App() {
         visible={activeModal === 'media'}
         onClose={closeModal}
         onAddMedia={handleAddMedia}
+      />
+
+      <CutoutModal
+        visible={activeModal === 'cutout'}
+        onClose={closeModal}
+        currentCutout={selectedClip?.cutout}
+        onApplyCutout={handleApplyCutout}
+      />
+
+      <MotionTrackingModal
+        visible={activeModal === 'tracking'}
+        onClose={closeModal}
+        targetType={
+          selectedClipType === 'text'
+            ? 'text'
+            : selectedClipType === 'stickers' || selectedClipType === 'sticker'
+            ? 'sticker'
+            : 'video'
+        }
+        currentTrack={selectedClip?.motionTrack}
+        onApplyTracking={handleApplyMotionTracking}
       />
 
       <TextModal
@@ -1398,6 +1787,8 @@ export default function App() {
         visible={activeModal === 'speed'}
         onClose={closeModal}
         currentSpeed={selectedClip?.speed || 1.0}
+        currentCurve={selectedClip?.speedCurve}
+        currentSlowMo={selectedClip?.smoothSlowMo}
         onApplySpeed={handleApplySpeed}
       />
 
@@ -1415,6 +1806,7 @@ export default function App() {
         onClose={closeModal}
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
+        onReloadData={handleReloadAllData}
       />
 
       <NotificationsModal
@@ -1423,7 +1815,8 @@ export default function App() {
         notifications={notifications}
         onMarkAllAsRead={handleMarkAllAsRead}
         onClearAll={handleClearAllNotifications}
-        onActionClick={() => handleCreateNewProject()}
+        onDeleteNotification={handleDeleteNotification}
+        onActionClick={handleNotificationAction}
       />
 
       <VolumeModal
@@ -1468,6 +1861,7 @@ export default function App() {
         visible={activeModal === 'tts'}
         onClose={closeModal}
         onAddAudio={handleAddAudio}
+        initialScript={selectedClipType === 'text' && selectedClip ? (selectedClip as TextClip).text : undefined}
       />
 
       {/* Clip Deletion Confirmation Modal */}
@@ -1514,6 +1908,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden' as any,
+  },
+  playerStageFullscreen: {
+    position: 'absolute' as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000000',
   },
   bottomDock: {
     width: '100%',

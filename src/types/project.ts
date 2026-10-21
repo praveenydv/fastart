@@ -17,6 +17,35 @@ export interface MaskConfig {
   rotation?: number; // mask angle
 }
 
+export interface CutoutConfig {
+  enabled: boolean;
+  mode: 'chroma' | 'auto';
+  keyColor: string; // e.g. '#00FF00', '#0000FF'
+  intensity: number; // 0..100 (similarity tolerance)
+  shadow: number; // 0..100 (edge smoothness/feather)
+  strokeColor?: string; // outline color e.g. '#00F2FE'
+  strokeWidth?: number; // outline width 0..10
+}
+
+export interface SpeedCurvePoint {
+  t: number; // normalized time 0.0 to 1.0
+  s: number; // speed multiplier 0.1 to 10.0
+}
+
+export interface CustomLutConfig {
+  id: string;
+  name: string;
+  cssFilter?: string;
+  size?: number;
+  data?: number[]; // RGB matrix if 3D cube
+}
+
+export interface MotionTrackConfig {
+  enabled: boolean;
+  mode: 'follow_center' | 'cinematic_drift' | 'dynamic_zoom' | 'orbit_float' | 'custom';
+  intensity?: number;
+}
+
 export interface CustomCrop {
   x: number; // 0..100%
   y: number; // 0..100%
@@ -34,6 +63,7 @@ export interface ClipTransform {
   opacity?: number;
   mask?: MaskConfig;
   crop?: CustomCrop;
+  cutout?: CutoutConfig;
 }
 
 export interface TransitionConfig {
@@ -57,19 +87,23 @@ export interface VideoClip {
   trimIn?: number;
   trimOut?: number;
   speed?: number;
-  speedCurve?: number[] | null;
+  speedCurve?: number[] | SpeedCurvePoint[] | null;
+  smoothSlowMo?: 'none' | 'blend' | 'optical_flow';
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;
   reverse?: boolean;
   filter?: string;
+  customLut?: CustomLutConfig;
   effect?: string;
   transition?: TransitionConfig;
   transform?: ClipTransform;
   mask?: MaskConfig;
   crop?: CustomCrop;
+  cutout?: CutoutConfig;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
+  isEnding?: boolean;
 }
 
 export interface AudioClip {
@@ -119,6 +153,7 @@ export interface TextClip {
   animation?: 'bounce' | 'typewriter' | 'fade' | 'slideUp' | 'pulse' | string;
   style?: TextStyle;
   trackIndex?: number;
+  motionTrack?: MotionTrackConfig;
 }
 
 export interface StickerClip {
@@ -130,6 +165,7 @@ export interface StickerClip {
   scale?: number;
   rotation?: number;
   trackIndex?: number;
+  motionTrack?: MotionTrackConfig;
 }
 
 export interface EffectClip {
