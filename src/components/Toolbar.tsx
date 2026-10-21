@@ -24,12 +24,12 @@ interface ToolbarProps {
   onOpenStickersModal: () => void;
   onOpenMediaPicker: () => void;
   onOpenTTS?: () => void;
-  onOpenCamera?: () => void;
   onOpenEnhance?: () => void;
   onOpenAutoCut?: () => void;
   onOpenCutoutModal?: () => void;
   onOpenMotionTracking?: () => void;
   onOpenCanvasModal?: () => void;
+  onOpenKeyframeModal?: () => void;
 }
 
 function Toolbar({
@@ -52,12 +52,12 @@ function Toolbar({
   onOpenStickersModal,
   onOpenMediaPicker,
   onOpenTTS,
-  onOpenCamera,
   onOpenEnhance,
   onOpenAutoCut,
   onOpenCutoutModal,
   onOpenMotionTracking,
   onOpenCanvasModal,
+  onOpenKeyframeModal,
 }: ToolbarProps) {
   // If a clip is actively selected, show Contextual Editing Tools based on clip type
   if (selectedClip) {
@@ -220,6 +220,27 @@ function Toolbar({
                 <Text style={styles.toolLabel}>Tracking</Text>
               </TouchableOpacity>
 
+              {/* 5d. Keyframe Animation */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenKeyframeModal) onOpenKeyframeModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.iconCircle,
+                    (selectedClip?.keyframes?.length ?? 0) > 0 &&
+                      styles.activeKeyframeCircle,
+                  ]}
+                >
+                  <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+                </View>
+                <Text style={styles.toolLabel}>Keyframe</Text>
+              </TouchableOpacity>
+
               {/* 6. Filters */}
               <TouchableOpacity
                 style={styles.toolItem}
@@ -373,6 +394,27 @@ function Toolbar({
                   <Text style={styles.toolLabel}>Tracking</Text>
                 </TouchableOpacity>
               )}
+
+              {/* 3. Keyframe Animation for Text */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenKeyframeModal) onOpenKeyframeModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.iconCircle,
+                    (selectedClip?.keyframes?.length ?? 0) > 0 &&
+                      styles.activeKeyframeCircle,
+                  ]}
+                >
+                  <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+                </View>
+                <Text style={styles.toolLabel}>Keyframe</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -410,6 +452,27 @@ function Toolbar({
                   <Text style={styles.toolLabel}>Tracking</Text>
                 </TouchableOpacity>
               )}
+
+              {/* 3. Keyframe Animation for Stickers */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenKeyframeModal) onOpenKeyframeModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.iconCircle,
+                    (selectedClip?.keyframes?.length ?? 0) > 0 &&
+                      styles.activeKeyframeCircle,
+                  ]}
+                >
+                  <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+                </View>
+                <Text style={styles.toolLabel}>Keyframe</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -490,23 +553,6 @@ function Toolbar({
           </View>
           <Text style={styles.toolLabel}>Media</Text>
         </TouchableOpacity>
-
-        {/* 1b. Camera Record */}
-        {onOpenCamera && (
-          <TouchableOpacity
-            style={styles.toolItem}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onOpenCamera();
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconCircle}>
-              <Ionicons name="camera-outline" size={20} color="#FF0050" />
-            </View>
-            <Text style={styles.toolLabel}>Camera</Text>
-          </TouchableOpacity>
-        )}
 
         {/* 2. Audio Library */}
         <TouchableOpacity
@@ -615,6 +661,21 @@ function Toolbar({
           </View>
           <Text style={styles.toolLabel}>AutoCut</Text>
         </TouchableOpacity>
+
+        {/* 8. Keyframe Animation Studio */}
+        <TouchableOpacity
+          style={styles.toolItem}
+          onPress={() => {
+            soundEngine.playSfx('click');
+            if (onOpenKeyframeModal) onOpenKeyframeModal();
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconCircle}>
+            <Ionicons name="diamond-outline" size={20} color="#FFE600" />
+          </View>
+          <Text style={styles.toolLabel}>Keyframe</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -667,6 +728,11 @@ const styles = StyleSheet.create({
   },
   activeCircle: {
     backgroundColor: '#00F2FE',
+  },
+  activeKeyframeCircle: {
+    backgroundColor: 'rgba(255, 230, 0, 0.2)',
+    borderWidth: 1.5,
+    borderColor: '#FFE600',
   },
   deleteCircle: {
     backgroundColor: 'rgba(255, 0, 80, 0.15)',

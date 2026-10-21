@@ -168,9 +168,11 @@ export const saveLastSession = (session: LastEditSession): void => {
 const sanitizeProject = (proj: any): FastArtProject => {
   const tracks = proj.tracks || {};
   return {
+    ...proj,
     id: proj.id || 'proj-' + Date.now(),
     title: proj.title || 'Untitled Project',
     aspectRatio: proj.aspectRatio || '9:16',
+    canvasBackground: proj.canvasBackground || '#000000',
     resolution: proj.resolution || '1080p',
     fps: proj.fps || 30,
     currentTime: typeof proj.currentTime === 'number' ? proj.currentTime : 0,

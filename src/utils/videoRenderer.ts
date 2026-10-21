@@ -382,6 +382,7 @@ export class VideoRenderer {
     isPlaying: boolean = false,
     logicalWidth?: number,
     logicalHeight?: number,
+    transientOverride?: { clipId: string; x: number; y: number; scale: number; rotation: number } | null,
   ) {
     if (!this.canvas || !this.ctx) return;
     const ctx = this.ctx;
@@ -477,12 +478,41 @@ export class VideoRenderer {
     visualItems.sort((a, b) => a.trackIndex - b.trackIndex);
 
     visualItems.forEach((item) => {
+      const isOverridden = transientOverride && transientOverride.clipId === item.clip.id;
       if (item.kind === "video") {
-        this.drawClip(ctx, item.clip, time, w, h, null);
+        const clipToDraw: VideoClip = isOverridden
+          ? {
+              ...item.clip,
+              transform: {
+                ...(item.clip.transform || {}),
+                x: transientOverride!.x,
+                y: transientOverride!.y,
+                scale: transientOverride!.scale,
+                rotation: transientOverride!.rotation,
+              },
+            }
+          : item.clip;
+        this.drawClip(ctx, clipToDraw, time, w, h, null);
       } else if (item.kind === "text") {
-        this.drawTextOverlay(ctx, item.clip, time, w, h);
+        const clipToDraw: TextClip = isOverridden
+          ? {
+              ...item.clip,
+              position: { x: transientOverride!.x, y: transientOverride!.y },
+              scale: transientOverride!.scale,
+              rotation: transientOverride!.rotation,
+            }
+          : item.clip;
+        this.drawTextOverlay(ctx, clipToDraw, time, w, h, isPlaying);
       } else if (item.kind === "sticker") {
-        this.drawSticker(ctx, item.clip, time, w, h);
+        const clipToDraw: StickerClip = isOverridden
+          ? {
+              ...item.clip,
+              position: { x: transientOverride!.x, y: transientOverride!.y },
+              scale: transientOverride!.scale,
+              rotation: transientOverride!.rotation,
+            }
+          : item.clip;
+        this.drawSticker(ctx, clipToDraw, time, w, h);
       } else if (item.kind === "effect") {
         this.applyEffectOverlay(ctx, item.clip, time, w, h);
       }
@@ -1213,6 +1243,7 @@ export class VideoRenderer {
     time: number,
     w: number,
     h: number,
+    isPlaying: boolean = false,
   ) {
     ctx.save();
     const motion = this.applyMotionTracking(time, txt.startTime, txt.duration, txt.motionTrack);
@@ -1227,47 +1258,49 @@ export class VideoRenderer {
 
     const anim = txt.animation || "fade";
 
-    if (anim === "typewriter") {
-      const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
-      displayText = displayText.slice(0, chars);
-    } else if (anim === "bounce") {
-      if (elapsed < 0.45) {
-        const p = elapsed / 0.45;
-        scale = (0.5 + Math.sin(p * Math.PI) * 0.7) * (txt.scale || 1.0);
+    if (isPlaying) {
+      if (anim === "typewriter") {
+        const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
+        displayText = displayText.slice(0, chars);
+      } else if (anim === "bounce") {
+        if (elapsed < 0.45) {
+          const p = elapsed / 0.45;
+          scale = (0.5 + Math.sin(p * Math.PI) * 0.7) * (txt.scale || 1.0);
+        }
+      } else if (anim === "fade") {
+        if (elapsed < 0.4) alpha = elapsed / 0.4;
+      } else if (anim === "slideUp") {
+        if (elapsed < 0.35) {
+          const p = elapsed / 0.35;
+          yOffset = (1 - p) * 45;
+          alpha = p;
+        }
+      } else if (anim === "slideDown") {
+        if (elapsed < 0.35) {
+          const p = elapsed / 0.35;
+          yOffset = -(1 - p) * 45;
+          alpha = p;
+        }
+      } else if (anim === "zoomIn") {
+        if (elapsed < 0.4) {
+          const p = elapsed / 0.4;
+          scale = (p * 1.15) * (txt.scale || 1.0);
+          alpha = p;
+        }
+      } else if (anim === "pulse") {
+        scale = (1.0 + Math.sin(elapsed * 6) * 0.08) * (txt.scale || 1.0);
+      } else if (anim === "glitch") {
+        if (Math.random() > 0.7) {
+          xOffset = (Math.random() - 0.5) * 8;
+          yOffset = (Math.random() - 0.5) * 4;
+        }
+      } else if (anim === "shake") {
+        if (elapsed < 0.8) {
+          xOffset = Math.sin(elapsed * 40) * 4;
+        }
+      } else if (anim === "wave") {
+        yOffset = Math.sin(elapsed * 4) * 8;
       }
-    } else if (anim === "fade") {
-      if (elapsed < 0.4) alpha = elapsed / 0.4;
-    } else if (anim === "slideUp") {
-      if (elapsed < 0.35) {
-        const p = elapsed / 0.35;
-        yOffset = (1 - p) * 45;
-        alpha = p;
-      }
-    } else if (anim === "slideDown") {
-      if (elapsed < 0.35) {
-        const p = elapsed / 0.35;
-        yOffset = -(1 - p) * 45;
-        alpha = p;
-      }
-    } else if (anim === "zoomIn") {
-      if (elapsed < 0.4) {
-        const p = elapsed / 0.4;
-        scale = (p * 1.15) * (txt.scale || 1.0);
-        alpha = p;
-      }
-    } else if (anim === "pulse") {
-      scale = (1.0 + Math.sin(elapsed * 6) * 0.08) * (txt.scale || 1.0);
-    } else if (anim === "glitch") {
-      if (Math.random() > 0.7) {
-        xOffset = (Math.random() - 0.5) * 8;
-        yOffset = (Math.random() - 0.5) * 4;
-      }
-    } else if (anim === "shake") {
-      if (elapsed < 0.8) {
-        xOffset = Math.sin(elapsed * 40) * 4;
-      }
-    } else if (anim === "wave") {
-      yOffset = Math.sin(elapsed * 4) * 8;
     }
 
     ctx.translate(px + xOffset, py + yOffset);

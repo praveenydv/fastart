@@ -115,6 +115,7 @@ function Header({
                   project.aspectRatio === item.id && styles.modalItemActive,
                 ]}
                 onPress={() => {
+                  soundEngine.playSfx("click");
                   onUpdateProject({ aspectRatio: item.id });
                   setRatioModalVisible(false);
                 }}

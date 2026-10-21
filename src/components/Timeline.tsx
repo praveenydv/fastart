@@ -13,6 +13,8 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  PanResponder,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -33,6 +35,13 @@ import {
 export const MAX_TRACKS = 10;
 export const TRACK_ROW_HEIGHT = 48;
 export const MIN_CLIP_DURATION = 0.05; // 50 milliseconds precision
+
+export const formatPlayheadTime = (sec = 0) => {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  const ms = Math.floor((sec - Math.floor(sec)) * 10);
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
+};
 
 export interface UnifiedClipItem {
   id: string;
@@ -192,6 +201,8 @@ function Timeline({
   const scrollRef = useRef<any>(null);
   const rulerRef = useRef<any>(null);
   const isDraggingPlayhead = useRef(false);
+  const latestClientXRef = useRef<number>(0);
+  const dragStartTimeRef = useRef<number>(0);
   const lastTapRef = useRef<{ time: number; clipId: string }>({
     time: 0,
     clipId: "",
@@ -602,51 +613,109 @@ function Timeline({
     );
   };
 
-  // Tap or drag on ruler to seek
-  const updateSeekFromPointer = (e: any) => {
-    let clickX = 0;
-    if (Platform.OS === "web") {
-      const el = rulerRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const { clientX } = getPointerCoords(e);
-        clickX = clientX - rect.left;
+  // Synchronized refs for smooth gesture handling across native & web
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const pxPerSecRef = useRef(pxPerSec);
+  pxPerSecRef.current = pxPerSec;
+  const totalDurationRef = useRef(totalDuration);
+  totalDurationRef.current = totalDuration;
+  const onSeekRef = useRef(onSeek);
+  onSeekRef.current = onSeek;
+  const onTrimClipRef = useRef(onTrimClip);
+  onTrimClipRef.current = onTrimClip;
+  const onMoveClipRef = useRef(onMoveClip);
+  onMoveClipRef.current = onMoveClip;
+  const isSnappingEnabledRef = useRef(isSnappingEnabled);
+  isSnappingEnabledRef.current = isSnappingEnabled;
+  const isHapticEnabledRef = useRef(isHapticEnabled);
+  isHapticEnabledRef.current = isHapticEnabled;
+  const allClipsRef = useRef(allClipsWithTracks);
+  allClipsRef.current = allClipsWithTracks;
+  const selectedClipIdRef = useRef(selectedClipId);
+  selectedClipIdRef.current = selectedClipId;
+  const dragStateRef = useRef(dragState);
+  dragStateRef.current = dragState;
+  const activeTrimDeltaRef = useRef(activeTrimDelta);
+  activeTrimDeltaRef.current = activeTrimDelta;
+  const clipDragStartInfoRef = useRef<any>(null);
+  const trimStartInfoRef = useRef<any>(null);
+
+  // Playhead needle seek handler with magnetic snapping
+  const performSeekWithSnap = useCallback((clickX: number) => {
+    const maxDur = Math.max(1, totalDurationRef.current);
+    const pxVal = pxPerSecRef.current;
+    let newTime = Math.max(0, Math.min(maxDur, clickX / pxVal));
+
+    if (isSnappingEnabledRef.current) {
+      const snapThresholdSec = 10 / pxVal;
+      let closestSnap: number | null = null;
+      let minDiff = snapThresholdSec;
+
+      if (Math.abs(newTime) < minDiff) {
+        closestSnap = 0;
+        minDiff = Math.abs(newTime);
       }
-    } else {
-      clickX = e.nativeEvent?.locationX || 0;
+
+      allClipsRef.current.forEach((c) => {
+        const diffStart = Math.abs(newTime - c.startTime);
+        if (diffStart < minDiff) {
+          closestSnap = c.startTime;
+          minDiff = diffStart;
+        }
+        const diffEnd = Math.abs(newTime - (c.startTime + c.duration));
+        if (diffEnd < minDiff) {
+          closestSnap = c.startTime + c.duration;
+          minDiff = diffEnd;
+        }
+        const kfs = c.rawClip?.keyframes;
+        if (kfs && Array.isArray(kfs)) {
+          kfs.forEach((kf: any) => {
+            const kfTime = c.startTime + (kf.time || 0);
+            const diffKf = Math.abs(newTime - kfTime);
+            if (diffKf < minDiff) {
+              closestSnap = kfTime;
+              minDiff = diffKf;
+            }
+          });
+        }
+      });
+
+      if (closestSnap !== null) {
+        newTime = closestSnap;
+        triggerHaptic("selection", isHapticEnabledRef.current);
+      }
     }
-    const maxDur = Math.max(1, totalDuration);
-    const newTime = Math.max(0, Math.min(maxDur, clickX / pxPerSec));
-    onSeek(Number(newTime.toFixed(3)));
-  };
 
-  const handleRulerPointerDown = (e: any) => {
-    isDraggingPlayhead.current = true;
-    setIsScrubbingRuler(true);
-    soundEngine.playSfx("click");
-    triggerHaptic("selection", isHapticEnabled);
-    updateSeekFromPointer(e);
-  };
+    onSeekRef.current(Number(newTime.toFixed(3)));
+  }, []);
 
-  // Global window listeners for ruler scrubbing (coalesced with RAF for 60fps smooth seeking on 4K files)
-  useEffect(() => {
-    if (Platform.OS !== "web" || typeof window === "undefined") return;
+  // React Native PanResponder for smooth playhead needle & diamond head dragging on mobile
+  const playheadPanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1,
+      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1,
+      onPanResponderGrant: () => {
+        isDraggingPlayhead.current = true;
+        setIsScrubbingRuler(true);
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+        dragStartTimeRef.current = currentTimeRef.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const dx = gestureState.dx;
+        const initialTime = dragStartTimeRef.current;
+        const pxPerSecVal = pxPerSecRef.current;
+        const deltaSec = dx / pxPerSecVal;
+        const maxDur = Math.max(1, totalDurationRef.current);
+        let newTime = Math.max(0, Math.min(maxDur, initialTime + deltaSec));
 
-    let pendingRaf: number | null = null;
-    let latestClientX = 0;
-
-    const performSeek = () => {
-      pendingRaf = null;
-      const el = rulerRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const clickX = latestClientX - rect.left;
-        const maxDur = Math.max(1, totalDuration);
-        let newTime = Math.max(0, Math.min(maxDur, clickX / pxPerSec));
-
-        // Magnetic snapping to clip start and end points
-        if (isSnappingEnabled) {
-          const snapThresholdSec = 10 / pxPerSec;
+        if (isSnappingEnabledRef.current) {
+          const snapThresholdSec = 10 / pxPerSecVal;
           let closestSnap: number | null = null;
           let minDiff = snapThresholdSec;
 
@@ -655,7 +724,7 @@ function Timeline({
             minDiff = Math.abs(newTime);
           }
 
-          allClipsWithTracks.forEach((c) => {
+          allClipsRef.current.forEach((c) => {
             const diffStart = Math.abs(newTime - c.startTime);
             if (diffStart < minDiff) {
               closestSnap = c.startTime;
@@ -666,15 +735,134 @@ function Timeline({
               closestSnap = c.startTime + c.duration;
               minDiff = diffEnd;
             }
+            const kfs = c.rawClip?.keyframes;
+            if (kfs && Array.isArray(kfs)) {
+              kfs.forEach((kf: any) => {
+                const kfTime = c.startTime + (kf.time || 0);
+                const diffKf = Math.abs(newTime - kfTime);
+                if (diffKf < minDiff) {
+                  closestSnap = kfTime;
+                  minDiff = diffKf;
+                }
+              });
+            }
           });
 
           if (closestSnap !== null) {
             newTime = closestSnap;
-            triggerHaptic("selection", isHapticEnabled);
+            triggerHaptic("selection", isHapticEnabledRef.current);
           }
         }
 
-        onSeek(Number(newTime.toFixed(3)));
+        onSeekRef.current(Number(newTime.toFixed(3)));
+      },
+      onPanResponderRelease: () => {
+        isDraggingPlayhead.current = false;
+        setIsScrubbingRuler(false);
+      },
+      onPanResponderTerminate: () => {
+        isDraggingPlayhead.current = false;
+        setIsScrubbingRuler(false);
+      },
+    });
+  }, []);
+
+  // Universal Time Ruler PanResponder (mobile touch + web pointer)
+  const rulerPanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1,
+      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1,
+      onPanResponderGrant: (evt) => {
+        isDraggingPlayhead.current = true;
+        setIsScrubbingRuler(true);
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+
+        let clickX = 0;
+        if (Platform.OS === "web" && rulerRef.current) {
+          const rect = rulerRef.current.getBoundingClientRect();
+          const coords = getPointerCoords(evt);
+          clickX = coords.clientX - rect.left;
+        } else {
+          clickX = evt.nativeEvent?.locationX || 0;
+        }
+        performSeekWithSnap(clickX);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (!isDraggingPlayhead.current) return;
+        let clickX = 0;
+        if (Platform.OS === "web" && rulerRef.current) {
+          const rect = rulerRef.current.getBoundingClientRect();
+          const coords = getPointerCoords(evt);
+          clickX = coords.clientX - rect.left;
+        } else {
+          clickX = evt.nativeEvent?.locationX ?? (currentTimeRef.current * pxPerSecRef.current + gestureState.dx);
+        }
+        performSeekWithSnap(clickX);
+      },
+      onPanResponderRelease: () => {
+        isDraggingPlayhead.current = false;
+        setIsScrubbingRuler(false);
+      },
+      onPanResponderTerminate: () => {
+        isDraggingPlayhead.current = false;
+        setIsScrubbingRuler(false);
+      },
+    });
+  }, [performSeekWithSnap]);
+
+  // Tap or drag on ruler / playhead to seek
+  const updateSeekFromPointer = (e: any) => {
+    let clickX = 0;
+    if (Platform.OS === "web") {
+      const el = rulerRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const { clientX } = getPointerCoords(e);
+        latestClientXRef.current = clientX;
+        clickX = clientX - rect.left;
+      }
+    } else {
+      clickX = e.nativeEvent?.locationX || 0;
+    }
+    performSeekWithSnap(clickX);
+  };
+
+  const handleRulerPointerDown = (e: any) => {
+    isDraggingPlayhead.current = true;
+    setIsScrubbingRuler(true);
+    soundEngine.playSfx("click");
+    triggerHaptic("selection", isHapticEnabled);
+    updateSeekFromPointer(e);
+  };
+
+  const handlePlayheadPointerDown = (e: any) => {
+    if (e?.stopPropagation) e.stopPropagation();
+    if (e?.preventDefault && e.cancelable) e.preventDefault();
+    isDraggingPlayhead.current = true;
+    setIsScrubbingRuler(true);
+    soundEngine.playSfx("click");
+    triggerHaptic("selection", isHapticEnabled);
+    updateSeekFromPointer(e);
+  };
+
+  // Global window listeners for desktop playhead / ruler scrubbing (coalesced with RAF for 60fps smooth seeking)
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+
+    let pendingRaf: number | null = null;
+
+    const performSeek = () => {
+      pendingRaf = null;
+      const el = rulerRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const clickX = latestClientXRef.current - rect.left;
+        performSeekWithSnap(clickX);
       }
     };
 
@@ -684,7 +872,7 @@ function Timeline({
           e.preventDefault();
         }
         const { clientX } = getPointerCoords(e);
-        latestClientX = clientX;
+        latestClientXRef.current = clientX;
         if (pendingRaf === null) {
           pendingRaf = requestAnimationFrame(performSeek);
         }
@@ -704,9 +892,7 @@ function Timeline({
 
     window.addEventListener("mousemove", onPointerMove);
     window.addEventListener("mouseup", onPointerUp);
-    window.addEventListener("touchmove", onPointerMove as any, {
-      passive: false,
-    });
+    window.addEventListener("touchmove", onPointerMove as any, { passive: false });
     window.addEventListener("touchend", onPointerUp);
     window.addEventListener("touchcancel", onPointerUp);
     return () => {
@@ -717,16 +903,67 @@ function Timeline({
       window.removeEventListener("touchend", onPointerUp);
       window.removeEventListener("touchcancel", onPointerUp);
     };
-  }, [
-    totalDuration,
-    pxPerSec,
-    isSnappingEnabled,
-    allClipsWithTracks,
-    isHapticEnabled,
-  ]);
+  }, [performSeekWithSnap]);
 
-  // Dragging & tap handler: disambiguates instant tap/select, double-tap edit, and fluid drag across tracks
-  const handleClipDragStart = (
+  // Unified Clip Press handler (mobile & web)
+  const handleClipPress = useCallback(
+    (
+      clipId: string,
+      trackType: "video" | "audio" | "text" | "sticker" | "effects",
+    ) => {
+      const now = Date.now();
+      if (
+        now - lastTapRef.current.time < 350 &&
+        lastTapRef.current.clipId === clipId
+      ) {
+        // Double tap!
+        lastTapRef.current = { time: 0, clipId: "" };
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+        onSelectClip(clipId, trackType);
+        onOpenEditModal?.(clipId, trackType);
+      } else {
+        // Single tap!
+        lastTapRef.current = { time: now, clipId };
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+        onSelectClip(clipId, trackType);
+      }
+    },
+    [onSelectClip, onOpenEditModal],
+  );
+
+  // Mobile Long-Press handler to pick up and drag any clip
+  const handleClipLongPress = useCallback(
+    (
+      clipId: string,
+      trackType: "video" | "audio" | "text" | "sticker" | "effects",
+      initialStartTime: number,
+      initialTrackIndex: number,
+      duration: number,
+    ) => {
+      soundEngine.playSfx("pop");
+      triggerHaptic("medium", isHapticEnabledRef.current);
+      onSelectClip(clipId, trackType);
+      setIsDraggingClip(true);
+      clipDragStartInfoRef.current = {
+        clipId,
+        trackType,
+        initialStart: initialStartTime,
+        initialTrack: initialTrackIndex,
+        duration,
+      };
+      setDragState({
+        clipId,
+        currentStart: initialStartTime,
+        currentTrack: initialTrackIndex,
+      });
+    },
+    [onSelectClip],
+  );
+
+  // Desktop Mouse Drag handler
+  const handleClipMouseDown = (
     e: any,
     clipId: string,
     trackType: "video" | "audio" | "text" | "sticker" | "effects",
@@ -735,14 +972,8 @@ function Timeline({
     duration: number,
   ) => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
-    if (e.type?.startsWith("mouse") && Date.now() - lastTouchTimeRef.current < 650) {
-      return;
-    }
-    if (e.type?.startsWith("touch")) {
-      lastTouchTimeRef.current = Date.now();
-    }
+    if (e.button !== 0) return;
     if (isTrimmingActiveRef.current) return;
-    if (activeTrimming) return;
     if (
       e.target &&
       e.target.closest &&
@@ -752,63 +983,46 @@ function Timeline({
     ) {
       return;
     }
-    // Only respond to primary mouse button if mouse event
-    if (e.type && e.type.startsWith("mouse") && e.button !== 0) return;
-
-    // Instant selection on touch start / pointer down (0ms latency on mobile)
-    soundEngine.playSfx("click");
-    triggerHaptic("selection", isHapticEnabled);
-    onSelectClip(clipId, trackType);
 
     const { clientX: startClientX, clientY: startClientY } = getPointerCoords(e);
-
     let hasStartedDragging = false;
     let latestStart = initialStartTime;
     let latestTrack = initialTrackIndex;
     let pendingRaf: number | null = null;
 
-    const onMove = (moveEvt: MouseEvent | TouchEvent) => {
+    const onMove = (moveEvt: MouseEvent) => {
       const { clientX, clientY } = getPointerCoords(moveEvt);
       const deltaXPixels = clientX - startClientX;
       const deltaYPixels = clientY - startClientY;
       const moveDistance = Math.hypot(deltaXPixels, deltaYPixels);
 
       if (!hasStartedDragging) {
-        // 5px threshold for mobile responsive dragging
         if (moveDistance >= 5) {
           hasStartedDragging = true;
           setIsDraggingClip(true);
           soundEngine.playSfx("click");
-          triggerHaptic("selection", isHapticEnabled);
-          if (selectedClipId !== clipId) {
-            onSelectClip(clipId, trackType);
-          }
+          triggerHaptic("selection", isHapticEnabledRef.current);
+          onSelectClip(clipId, trackType);
         } else {
           return;
         }
       }
 
-      // Actively dragging clip: prevent page scroll
-      if (moveEvt.cancelable && moveEvt.preventDefault) {
-        moveEvt.preventDefault();
-      }
-
-      const deltaX = deltaXPixels / pxPerSec;
+      const deltaX = deltaXPixels / pxPerSecRef.current;
       const trackShift = Math.round(deltaYPixels / TRACK_ROW_HEIGHT);
       const targetTrack = Math.max(
         0,
         Math.min(activeTrackCount - 1, initialTrackIndex + trackShift),
       );
 
-      const otherClipsOnTarget = allClipsWithTracks.filter(
+      const otherClipsOnTarget = allClipsRef.current.filter(
         (c) => c.id !== clipId && c.effectiveTrackIndex === targetTrack,
       );
 
       let desiredStart = Math.max(0, initialStartTime + deltaX);
 
-      // Magnetic timeline snapping
-      if (isSnappingEnabled) {
-        const snapThresholdSec = 12 / pxPerSec;
+      if (isSnappingEnabledRef.current) {
+        const snapThresholdSec = 12 / pxPerSecRef.current;
         let bestSnap = desiredStart;
         let snapDist = snapThresholdSec;
 
@@ -830,7 +1044,7 @@ function Timeline({
         });
 
         if (bestSnap !== desiredStart) {
-          triggerHaptic("selection", isHapticEnabled);
+          triggerHaptic("selection", isHapticEnabledRef.current);
         }
         desiredStart = bestSnap;
       }
@@ -856,54 +1070,416 @@ function Timeline({
       }
     };
 
-    const onUp = (upEvt?: any) => {
+    const onUp = () => {
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("touchmove", onMove as any);
-      window.removeEventListener("touchend", onUp as any);
-      window.removeEventListener("touchcancel", onUp as any);
-
       setIsDraggingClip(false);
 
       if (hasStartedDragging) {
         setDragState(null);
         soundEngine.playSfx("pop");
-        triggerHaptic("light", isHapticEnabled);
-        if (onMoveClip) {
-          onMoveClip(clipId, trackType, latestStart, latestTrack);
-        }
-      } else {
-        // Quick tap without dragging: select or double-tap edit!
-        setDragState(null);
-        const now = Date.now();
-        if (
-          now - lastTapRef.current.time < 350 &&
-          lastTapRef.current.clipId === clipId
-        ) {
-          // Double tap!
-          lastTapRef.current = { time: 0, clipId: "" };
-          soundEngine.playSfx("click");
-          triggerHaptic("selection", isHapticEnabled);
-          onOpenEditModal?.(clipId, trackType);
-        } else {
-          // Single tap!
-          lastTapRef.current = { time: now, clipId };
-          soundEngine.playSfx("click");
-          triggerHaptic("selection", isHapticEnabled);
-          onSelectClip(clipId, trackType);
+        triggerHaptic("light", isHapticEnabledRef.current);
+        if (onMoveClipRef.current) {
+          onMoveClipRef.current(clipId, trackType, latestStart, latestTrack);
         }
       }
     };
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchmove", onMove as any, { passive: false });
-    window.addEventListener("touchend", onUp as any);
-    window.addEventListener("touchcancel", onUp as any);
   };
 
-  // Left trim with millisecond precision & non-overlapping barrier
+  const handleClipDragStart = handleClipMouseDown;
+
+  // Universal PanResponder for moving selected clips smoothly on mobile & web
+  const clipMovePanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1 || Math.abs(gestureState.dy) > 1,
+      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 1 || Math.abs(gestureState.dy) > 1,
+      onPanResponderGrant: () => {
+        const clip = allClipsRef.current.find(
+          (c) => c.id === selectedClipIdRef.current,
+        );
+        if (!clip) return;
+        setIsDraggingClip(true);
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+        clipDragStartInfoRef.current = {
+          clipId: clip.id,
+          trackType: clip.type,
+          initialStart: clip.startTime,
+          initialTrack: clip.effectiveTrackIndex,
+          duration: clip.duration,
+        };
+        setDragState({
+          clipId: clip.id,
+          currentStart: clip.startTime,
+          currentTrack: clip.effectiveTrackIndex,
+        });
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const info = clipDragStartInfoRef.current;
+        if (!info) return;
+        const deltaX = gestureState.dx / pxPerSecRef.current;
+        const trackShift = Math.round(gestureState.dy / TRACK_ROW_HEIGHT);
+        const targetTrack = Math.max(
+          0,
+          Math.min(activeTrackCount - 1, info.initialTrack + trackShift),
+        );
+
+        const otherClipsOnTarget = allClipsRef.current.filter(
+          (c) => c.id !== info.clipId && c.effectiveTrackIndex === targetTrack,
+        );
+
+        let desiredStart = Math.max(0, info.initialStart + deltaX);
+
+        if (isSnappingEnabledRef.current) {
+          const snapThresholdSec = 12 / pxPerSecRef.current;
+          let bestSnap = desiredStart;
+          let snapDist = snapThresholdSec;
+
+          if (Math.abs(desiredStart) < snapDist) {
+            bestSnap = 0;
+            snapDist = Math.abs(desiredStart);
+          }
+
+          otherClipsOnTarget.forEach((other) => {
+            const otherEnd = other.startTime + other.duration;
+            if (Math.abs(desiredStart - otherEnd) < snapDist) {
+              bestSnap = otherEnd;
+              snapDist = Math.abs(desiredStart - otherEnd);
+            }
+            if (
+              Math.abs(desiredStart + info.duration - other.startTime) < snapDist
+            ) {
+              bestSnap = Math.max(0, other.startTime - info.duration);
+              snapDist = Math.abs(
+                desiredStart + info.duration - other.startTime,
+              );
+            }
+          });
+
+          if (bestSnap !== desiredStart) {
+            triggerHaptic("selection", isHapticEnabledRef.current);
+          }
+          desiredStart = bestSnap;
+        }
+
+        const clampedStart = clampNonOverlapping(
+          desiredStart,
+          info.duration,
+          otherClipsOnTarget,
+        );
+
+        setDragState({
+          clipId: info.clipId,
+          currentStart: clampedStart,
+          currentTrack: targetTrack,
+        });
+      },
+      onPanResponderRelease: () => {
+        const info = clipDragStartInfoRef.current;
+        const currentDrag = dragStateRef.current;
+        setIsDraggingClip(false);
+        setDragState(null);
+        clipDragStartInfoRef.current = null;
+        if (info && currentDrag && onMoveClipRef.current) {
+          soundEngine.playSfx("pop");
+          triggerHaptic("light", isHapticEnabledRef.current);
+          onMoveClipRef.current(
+            info.clipId,
+            info.trackType,
+            currentDrag.currentStart,
+            currentDrag.currentTrack,
+          );
+        }
+      },
+      onPanResponderTerminate: () => {
+        setIsDraggingClip(false);
+        setDragState(null);
+        clipDragStartInfoRef.current = null;
+      },
+    });
+  }, [activeTrackCount]);
+
+  // Universal Left Trim PanResponder (Android, iOS & Web)
+  const leftTrimPanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        const clip = allClipsRef.current.find(
+          (c) => c.id === selectedClipIdRef.current,
+        );
+        if (!clip) return;
+        isTrimmingActiveRef.current = true;
+        setActiveTrimming({ clipId: clip.id, side: "left" });
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+        trimStartInfoRef.current = {
+          clipId: clip.id,
+          side: "left",
+          initialStart: clip.startTime,
+          initialDur: clip.duration,
+          initialTrimIn: clip.rawClip?.trimIn || 0,
+          initialTrimOut: clip.rawClip?.trimOut || clip.duration,
+          trackIndex: clip.effectiveTrackIndex,
+        };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const info = trimStartInfoRef.current;
+        if (!info || !isTrimmingActiveRef.current) return;
+        const targetClip = allClipsRef.current.find(
+          (c) => c.id === info.clipId,
+        );
+        if (!targetClip) return;
+
+        const mediaDur = getMediaDuration(
+          targetClip.rawClip,
+          targetClip.type,
+        );
+        const isMediaClip = mediaDur !== null && mediaDur > 0;
+        const speed = Math.max(
+          0.1,
+          Math.min(16, targetClip?.rawClip?.speed || 1.0),
+        );
+        const deltaX = gestureState.dx / pxPerSecRef.current;
+
+        const clipsBefore = allClipsRef.current
+          .filter(
+            (c) =>
+              c.id !== info.clipId &&
+              c.effectiveTrackIndex === info.trackIndex &&
+              c.startTime + c.duration <= info.initialStart + 0.01,
+          )
+          .sort((a, b) => a.startTime - b.startTime);
+        const minAllowedStart =
+          clipsBefore.length > 0
+            ? clipsBefore[clipsBefore.length - 1].startTime +
+              clipsBefore[clipsBefore.length - 1].duration
+            : 0;
+        const maxDelta = info.initialDur - MIN_CLIP_DURATION;
+        const minTrackDelta = minAllowedStart - info.initialStart;
+        const minMediaDelta = isMediaClip
+          ? -(info.initialTrimIn / speed)
+          : -Infinity;
+        const minDelta = Math.max(minTrackDelta, minMediaDelta);
+
+        const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaX));
+        const newStart = Math.max(
+          minAllowedStart,
+          info.initialStart + clampedDelta,
+        );
+        const newDur = Math.max(
+          MIN_CLIP_DURATION,
+          info.initialDur - clampedDelta,
+        );
+        const newTrimIn = isMediaClip
+          ? Math.max(0, info.initialTrimIn + clampedDelta * speed)
+          : Math.max(0, info.initialTrimIn + clampedDelta);
+
+        const updates = {
+          startTime: Number(newStart.toFixed(3)),
+          duration: Number(newDur.toFixed(3)),
+          trimIn: Number(newTrimIn.toFixed(3)),
+          trackIndex: info.trackIndex,
+        };
+        setActiveTrimDelta({
+          clipId: info.clipId,
+          side: "left",
+          startTime: updates.startTime,
+          duration: updates.duration,
+        });
+        if (onTrimClipRef.current) {
+          onTrimClipRef.current(info.clipId, updates, false);
+        }
+      },
+      onPanResponderRelease: () => {
+        const info = trimStartInfoRef.current;
+        const activeDelta = activeTrimDeltaRef.current;
+        if (info && activeDelta && onTrimClipRef.current) {
+          const targetClip = allClipsRef.current.find(
+            (c) => c.id === info.clipId,
+          );
+          const speed = Math.max(
+            0.1,
+            Math.min(16, targetClip?.rawClip?.speed || 1.0),
+          );
+          const deltaStart = activeDelta.startTime - info.initialStart;
+          const newTrimIn = Math.max(
+            0,
+            info.initialTrimIn + deltaStart * speed,
+          );
+          onTrimClipRef.current(
+            info.clipId,
+            {
+              startTime: activeDelta.startTime,
+              duration: activeDelta.duration,
+              trimIn: Number(newTrimIn.toFixed(3)),
+              trackIndex: info.trackIndex,
+            },
+            true,
+          );
+        }
+        setActiveTrimDelta(null);
+        setActiveTrimming(null);
+        trimStartInfoRef.current = null;
+        soundEngine.playSfx("pop");
+        triggerHaptic("light", isHapticEnabledRef.current);
+        setTimeout(() => {
+          isTrimmingActiveRef.current = false;
+        }, 50);
+      },
+      onPanResponderTerminate: () => {
+        setActiveTrimDelta(null);
+        setActiveTrimming(null);
+        trimStartInfoRef.current = null;
+        isTrimmingActiveRef.current = false;
+      },
+    });
+  }, []);
+
+  // Universal Right Trim PanResponder (Android, iOS & Web)
+  const rightTrimPanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        const clip = allClipsRef.current.find(
+          (c) => c.id === selectedClipIdRef.current,
+        );
+        if (!clip) return;
+        isTrimmingActiveRef.current = true;
+        setActiveTrimming({ clipId: clip.id, side: "right" });
+        soundEngine.playSfx("click");
+        triggerHaptic("selection", isHapticEnabledRef.current);
+        trimStartInfoRef.current = {
+          clipId: clip.id,
+          side: "right",
+          initialStart: clip.startTime,
+          initialDur: clip.duration,
+          initialTrimIn: clip.rawClip?.trimIn || 0,
+          initialTrimOut: clip.rawClip?.trimOut || clip.duration,
+          trackIndex: clip.effectiveTrackIndex,
+        };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const info = trimStartInfoRef.current;
+        if (!info || !isTrimmingActiveRef.current) return;
+        const targetClip = allClipsRef.current.find(
+          (c) => c.id === info.clipId,
+        );
+        if (!targetClip) return;
+
+        const mediaDur = getMediaDuration(
+          targetClip.rawClip,
+          targetClip.type,
+        );
+        const isMediaClip = mediaDur !== null && mediaDur > 0;
+        const speed = Math.max(
+          0.1,
+          Math.min(16, targetClip?.rawClip?.speed || 1.0),
+        );
+        const currentTrimIn = Math.max(0, targetClip?.rawClip?.trimIn || 0);
+        const deltaX = gestureState.dx / pxPerSecRef.current;
+
+        const clipsAfter = allClipsRef.current
+          .filter(
+            (c) =>
+              c.id !== info.clipId &&
+              c.effectiveTrackIndex === info.trackIndex &&
+              c.startTime >= info.initialStart + info.initialDur - 0.01,
+          )
+          .sort((a, b) => a.startTime - b.startTime);
+        const maxTrackDur =
+          clipsAfter.length > 0
+            ? clipsAfter[0].startTime - info.initialStart
+            : Infinity;
+        const maxMediaDur = isMediaClip
+          ? Math.max(MIN_CLIP_DURATION, (mediaDur - currentTrimIn) / speed)
+          : Infinity;
+        const maxAllowedDur = Math.min(maxTrackDur, maxMediaDur);
+
+        const rawDur = info.initialDur + deltaX;
+        const newDur = Math.max(
+          MIN_CLIP_DURATION,
+          Math.min(maxAllowedDur, rawDur),
+        );
+        const newTrimOut = isMediaClip
+          ? Math.min(mediaDur, currentTrimIn + newDur * speed)
+          : Math.max(MIN_CLIP_DURATION, info.initialTrimOut + deltaX);
+
+        const updates = {
+          duration: Number(newDur.toFixed(3)),
+          trimOut: Number(newTrimOut.toFixed(3)),
+          trackIndex: info.trackIndex,
+        };
+        setActiveTrimDelta({
+          clipId: info.clipId,
+          side: "right",
+          startTime: info.initialStart,
+          duration: updates.duration,
+        });
+        if (onTrimClipRef.current) {
+          onTrimClipRef.current(info.clipId, updates, false);
+        }
+      },
+      onPanResponderRelease: () => {
+        const info = trimStartInfoRef.current;
+        const activeDelta = activeTrimDeltaRef.current;
+        if (info && activeDelta && onTrimClipRef.current) {
+          const targetClip = allClipsRef.current.find(
+            (c) => c.id === info.clipId,
+          );
+          const mediaDur = targetClip
+            ? getMediaDuration(targetClip.rawClip, targetClip.type)
+            : null;
+          const speed = Math.max(
+            0.1,
+            Math.min(16, targetClip?.rawClip?.speed || 1.0),
+          );
+          const currentTrimIn = Math.max(0, targetClip?.rawClip?.trimIn || 0);
+          const newTrimOut = mediaDur
+            ? Math.min(mediaDur, currentTrimIn + activeDelta.duration * speed)
+            : activeDelta.duration;
+          onTrimClipRef.current(
+            info.clipId,
+            {
+              duration: activeDelta.duration,
+              trimOut: Number(newTrimOut.toFixed(3)),
+              trackIndex: info.trackIndex,
+            },
+            true,
+          );
+        }
+        setActiveTrimDelta(null);
+        setActiveTrimming(null);
+        trimStartInfoRef.current = null;
+        soundEngine.playSfx("pop");
+        triggerHaptic("light", isHapticEnabledRef.current);
+        setTimeout(() => {
+          isTrimmingActiveRef.current = false;
+        }, 50);
+      },
+      onPanResponderTerminate: () => {
+        setActiveTrimDelta(null);
+        setActiveTrimming(null);
+        trimStartInfoRef.current = null;
+        isTrimmingActiveRef.current = false;
+      },
+    });
+  }, []);
+
+  // Left trim with mouse (desktop web)
   const handleLeftTrimStart = (
     e: any,
     clipId: string,
@@ -917,18 +1493,23 @@ function Timeline({
     e.nativeEvent?.stopPropagation?.();
     if (e.cancelable && e.preventDefault) e.preventDefault();
     soundEngine.playSfx("click");
-    triggerHaptic("selection", isHapticEnabled);
+    triggerHaptic("selection", isHapticEnabledRef.current);
     isTrimmingActiveRef.current = true;
     setActiveTrimming({ clipId, side: "left" });
 
-    const targetClip = allClipsWithTracks.find((c) => c.id === clipId);
-    const mediaDur = targetClip ? getMediaDuration(targetClip.rawClip, targetClip.type) : null;
+    const targetClip = allClipsRef.current.find((c) => c.id === clipId);
+    const mediaDur = targetClip
+      ? getMediaDuration(targetClip.rawClip, targetClip.type)
+      : null;
     const isMediaClip = mediaDur !== null && mediaDur > 0;
-    const speed = Math.max(0.1, Math.min(16, targetClip?.rawClip?.speed || 1.0));
+    const speed = Math.max(
+      0.1,
+      Math.min(16, targetClip?.rawClip?.speed || 1.0),
+    );
 
     const { clientX: startClientX } = getPointerCoords(e);
 
-    const clipsBefore = allClipsWithTracks
+    const clipsBefore = allClipsRef.current
       .filter(
         (c) =>
           c.id !== clipId &&
@@ -952,8 +1533,8 @@ function Timeline({
 
     const performTrimUpdate = (isFinal = false) => {
       pendingRaf = null;
-      if (onTrimClip) {
-        onTrimClip(clipId, latestUpdates, isFinal);
+      if (onTrimClipRef.current) {
+        onTrimClipRef.current(clipId, latestUpdates, isFinal);
       }
     };
 
@@ -962,11 +1543,12 @@ function Timeline({
         moveEvt.preventDefault();
       }
       const { clientX } = getPointerCoords(moveEvt);
-      const deltaX = (clientX - startClientX) / pxPerSec;
+      const deltaX = (clientX - startClientX) / pxPerSecRef.current;
       const maxDelta = initialDur - MIN_CLIP_DURATION;
       const minTrackDelta = minAllowedStart - initialStart;
-      // Head boundary: cannot expand earlier than 0.0s in the media file
-      const minMediaDelta = isMediaClip ? -(initialTrimIn / speed) : -Infinity;
+      const minMediaDelta = isMediaClip
+        ? -(initialTrimIn / speed)
+        : -Infinity;
       const minDelta = Math.max(minTrackDelta, minMediaDelta);
 
       const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaX));
@@ -1004,7 +1586,7 @@ function Timeline({
         isTrimmingActiveRef.current = false;
       }, 50);
       soundEngine.playSfx("pop");
-      triggerHaptic("light", isHapticEnabled);
+      triggerHaptic("light", isHapticEnabledRef.current);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("touchmove", onMove as any);
@@ -1019,7 +1601,7 @@ function Timeline({
     window.addEventListener("touchcancel", onUp);
   };
 
-  // Right trim with millisecond precision & non-overlapping barrier
+  // Right trim with mouse (desktop web)
   const handleRightTrimStart = (
     e: any,
     clipId: string,
@@ -1033,19 +1615,24 @@ function Timeline({
     e.nativeEvent?.stopPropagation?.();
     if (e.cancelable && e.preventDefault) e.preventDefault();
     soundEngine.playSfx("click");
-    triggerHaptic("selection", isHapticEnabled);
+    triggerHaptic("selection", isHapticEnabledRef.current);
     isTrimmingActiveRef.current = true;
     setActiveTrimming({ clipId, side: "right" });
 
-    const targetClip = allClipsWithTracks.find((c) => c.id === clipId);
-    const mediaDur = targetClip ? getMediaDuration(targetClip.rawClip, targetClip.type) : null;
+    const targetClip = allClipsRef.current.find((c) => c.id === clipId);
+    const mediaDur = targetClip
+      ? getMediaDuration(targetClip.rawClip, targetClip.type)
+      : null;
     const isMediaClip = mediaDur !== null && mediaDur > 0;
-    const speed = Math.max(0.1, Math.min(16, targetClip?.rawClip?.speed || 1.0));
+    const speed = Math.max(
+      0.1,
+      Math.min(16, targetClip?.rawClip?.speed || 1.0),
+    );
     const currentTrimIn = Math.max(0, targetClip?.rawClip?.trimIn || 0);
 
     const { clientX: startClientX } = getPointerCoords(e);
 
-    const clipsAfter = allClipsWithTracks
+    const clipsAfter = allClipsRef.current
       .filter(
         (c) =>
           c.id !== clipId &&
@@ -1054,9 +1641,10 @@ function Timeline({
       )
       .sort((a, b) => a.startTime - b.startTime);
     const maxTrackDur =
-      clipsAfter.length > 0 ? clipsAfter[0].startTime - initialStart : Infinity;
+      clipsAfter.length > 0
+        ? clipsAfter[0].startTime - initialStart
+        : Infinity;
 
-    // Tail boundary: cannot expand beyond mediaDur
     const maxMediaDur = isMediaClip
       ? Math.max(MIN_CLIP_DURATION, (mediaDur - currentTrimIn) / speed)
       : Infinity;
@@ -1071,8 +1659,8 @@ function Timeline({
 
     const performTrimUpdate = (isFinal = false) => {
       pendingRaf = null;
-      if (onTrimClip) {
-        onTrimClip(clipId, latestUpdates, isFinal);
+      if (onTrimClipRef.current) {
+        onTrimClipRef.current(clipId, latestUpdates, isFinal);
       }
     };
 
@@ -1081,7 +1669,7 @@ function Timeline({
         moveEvt.preventDefault();
       }
       const { clientX } = getPointerCoords(moveEvt);
-      const deltaX = (clientX - startClientX) / pxPerSec;
+      const deltaX = (clientX - startClientX) / pxPerSecRef.current;
       const rawDur = initialDur + deltaX;
       const newDur = Math.max(
         MIN_CLIP_DURATION,
@@ -1118,7 +1706,7 @@ function Timeline({
         isTrimmingActiveRef.current = false;
       }, 50);
       soundEngine.playSfx("pop");
-      triggerHaptic("light", isHapticEnabled);
+      triggerHaptic("light", isHapticEnabledRef.current);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("touchmove", onMove as any);
@@ -1363,9 +1951,13 @@ function Timeline({
     <View
       ref={containerRef}
       style={[styles.container, { height: timelineHeight }]}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onMoveShouldSetResponder={(e) =>
+        (e.nativeEvent?.touches?.length || 0) === 2
+      }
+      onResponderGrant={handleTouchStart}
+      onResponderMove={handleTouchMove}
+      onResponderRelease={handleTouchEnd}
+      onResponderTerminate={handleTouchEnd}
     >
       {/* Interactive Top Drag-to-Resize Handle */}
       <View
@@ -1459,6 +2051,7 @@ function Timeline({
         ]}
         showsVerticalScrollIndicator={true}
         nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
         scrollEnabled={!isInteractingWithTimeline}
       >
         <View style={styles.timelineBody}>
@@ -1472,7 +2065,6 @@ function Timeline({
             {/* Top ruler corner at time zero */}
             <View style={styles.rulerCornerHeader}>
               <Ionicons name="time-outline" size={11} color="#6B7280" />
-              {/* <Text style={styles.rulerCornerText}>00:00</Text> */}
             </View>
 
             {/* Track 1, Track 2, Track 3 ... with remove option if empty */}
@@ -1498,11 +2090,13 @@ function Timeline({
             ref={scrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
             scrollEnabled={!isInteractingWithTimeline}
             style={[
               styles.timelineScroll,
               {
-                touchAction: isInteractingWithTimeline ? "none" : "pan-x pan-y",
+                touchAction: isInteractingWithTimeline ? "none" : "pan-x",
               } as any,
             ]}
             contentContainerStyle={styles.timelineContent}
@@ -1510,66 +2104,24 @@ function Timeline({
             <View
               style={[styles.tracksContainer, { width: timelineContentWidth }]}
             >
-              {/* Playhead Needle with Diamond Head */}
-              <View
-                style={[
-                  styles.playheadLine,
-                  {
-                    left: 0,
-                    transform: [{ translateX: currentTime * pxPerSec }],
-                    ...(Platform.OS === 'web'
-                      ? {
-                          willChange: 'transform',
-                          transform: `translate3d(${currentTime * pxPerSec}px, 0, 0)`,
-                        }
-                      : {}),
-                  } as any,
-                ]}
-                pointerEvents="none"
-              >
-                <View style={styles.playheadHeadBox}>
-                  <View style={styles.diamondShape} />
-                </View>
-                <View style={styles.playheadNeedle} />
-              </View>
-
               {/* Time Ruler (Interactive Tap & Drag to Seek with ms precision) */}
-              <TouchableOpacity
+              <View
                 ref={rulerRef}
                 style={styles.rulerContainer}
-                activeOpacity={1}
-                onPress={updateSeekFromPointer}
-                onPressIn={handleRulerPointerDown}
+                {...rulerPanResponder.panHandlers}
               >
                 {renderedTicks}
-              </TouchableOpacity>
+              </View>
 
               {/* General Multi-Track Rows */}
               {trackRows.map((rowClips, trackIdx) => {
                 const isEmptyTrack = rowClips.length === 0;
 
                 return (
-                  <View
+                  <Pressable
                     key={trackIdx}
                     style={styles.universalTrackLane}
-                    {...(Platform.OS === "web"
-                      ? {
-                          onClick: (e: any) => {
-                            const isChild =
-                              e.target &&
-                              e.target.closest &&
-                              (e.target.closest('[data-clip-draggable="true"]') ||
-                                e.target.closest('[data-trim-handle="true"]') ||
-                                e.target.closest(".clip-draggable-container") ||
-                                e.target.closest(".trim-handle-box") ||
-                                e.target.closest("button") ||
-                                e.target.closest('[role="button"]'));
-                            if (!isChild && e.target === e.currentTarget) {
-                              onSelectClip("", "video");
-                            }
-                          },
-                        }
-                      : {})}
+                    onPress={() => onSelectClip("", "video")}
                   >
                     {/* Subtle track lane guideline */}
                     <View style={styles.trackLaneGuideline} />
@@ -1616,49 +2168,23 @@ function Timeline({
                       return (
                         <React.Fragment key={clip.id}>
                           {/* Draggable Clip Card across tracks & time */}
-                          <View
-                            {...({
-                              dataSet: { clipDraggable: "true" },
-                            } as any)}
+                          <Pressable
+                            onPress={() => handleClipPress(clip.id, clip.type)}
+                            onLongPress={() =>
+                              handleClipLongPress(
+                                clip.id,
+                                clip.type,
+                                clip.startTime,
+                                trackIdx,
+                                clip.duration,
+                              )
+                            }
+                            delayLongPress={220}
                             {...(Platform.OS === "web"
                               ? {
                                   className: "clip-draggable-container",
-                                  onClick: (e: any) => {
-                                    if (e.stopPropagation) e.stopPropagation();
-                                    soundEngine.playSfx("click");
-                                    triggerHaptic("selection", isHapticEnabled);
-                                    onSelectClip(clip.id, clip.type);
-                                  },
-                                  onMouseDown: (e: any) => {
-                                    handleClipDragStart(
-                                      e,
-                                      clip.id,
-                                      clip.type,
-                                      clip.startTime,
-                                      trackIdx,
-                                      clip.duration,
-                                    );
-                                  },
-                                  onTouchStart: (e: any) => {
-                                    handleClipDragStart(
-                                      e,
-                                      clip.id,
-                                      clip.type,
-                                      clip.startTime,
-                                      trackIdx,
-                                      clip.duration,
-                                    );
-                                  },
-                                  onDoubleClick: (e: any) => {
-                                    if (e.stopPropagation) e.stopPropagation();
-                                    soundEngine.playSfx("click");
-                                    onSelectClip(clip.id, clip.type);
-                                    onOpenEditModal?.(clip.id, clip.type);
-                                  },
-                                }
-                              : {
-                                  onTouchStart: (e: any) =>
-                                    handleClipDragStart(
+                                  onMouseDown: (e: any) =>
+                                    handleClipMouseDown(
                                       e,
                                       clip.id,
                                       clip.type,
@@ -1666,8 +2192,15 @@ function Timeline({
                                       trackIdx,
                                       clip.duration,
                                     ),
-                                })}
-                            style={
+                                  onDoubleClick: (e: any) => {
+                                    if (e.stopPropagation) e.stopPropagation();
+                                    soundEngine.playSfx("click");
+                                    onSelectClip(clip.id, clip.type);
+                                    onOpenEditModal?.(clip.id, clip.type);
+                                  },
+                                }
+                              : {})}
+                            style={({ pressed }) => [
                               {
                                 position: "absolute",
                                 left,
@@ -1682,14 +2215,20 @@ function Timeline({
                                     : 6,
                                 display: "flex",
                                 transform: isBeingDragged
-                                  ? [{ scale: 1.02 }]
+                                  ? [{ scale: 1.03 }]
                                   : undefined,
-                                opacity: isBeingDragged ? 0.95 : 1,
-                                touchAction: "none",
+                                opacity: isBeingDragged
+                                  ? 0.95
+                                  : pressed && !isSelected
+                                    ? 0.88
+                                    : 1,
+                                touchAction: isBeingDragged
+                                  ? "none"
+                                  : ("pan-x pan-y" as any),
                                 userSelect: "none",
                                 WebkitUserSelect: "none",
-                              } as any
-                            }
+                              } as any,
+                            ]}
                           >
                             <View
                               style={[
@@ -1713,31 +2252,13 @@ function Timeline({
                               {/* Left Trim Handle */}
                               {isSelected && (
                                 <View
-                                  {...({ dataSet: { trimHandle: "true", trimSide: "left" } } as any)}
+                                  {...leftTrimPanResponder.panHandlers}
                                   {...(Platform.OS === "web"
                                     ? {
                                         className: "trim-handle-box",
-                                        onClick: (e: any) => {
-                                          e.stopPropagation?.();
-                                          e.nativeEvent?.stopPropagation?.();
-                                        },
                                         onMouseDown: (e: any) => {
                                           e.stopPropagation?.();
                                           e.nativeEvent?.stopPropagation?.();
-                                          if (e.type?.startsWith("mouse") && Date.now() - lastTouchTimeRef.current < 650) return;
-                                          handleLeftTrimStart(
-                                            e,
-                                            clip.id,
-                                            clip.startTime,
-                                            clip.duration,
-                                            clip.rawClip?.trimIn || 0,
-                                            trackIdx,
-                                          );
-                                        },
-                                        onTouchStart: (e: any) => {
-                                          e.stopPropagation?.();
-                                          e.nativeEvent?.stopPropagation?.();
-                                          lastTouchTimeRef.current = Date.now();
                                           handleLeftTrimStart(
                                             e,
                                             clip.id,
@@ -1778,6 +2299,33 @@ function Timeline({
                                         styles.trimGripBar,
                                         { marginLeft: 2 },
                                       ]}
+                                    />
+                                  </View>
+                                </View>
+                              )}
+
+                              {/* Center Move Grip Bar for effortless mobile sliding */}
+                              {isSelected && (
+                                <View
+                                  {...clipMovePanResponder.panHandlers}
+                                  style={styles.clipMoveGripBox}
+                                  hitSlop={{
+                                    top: 12,
+                                    bottom: 12,
+                                    left: 16,
+                                    right: 16,
+                                  }}
+                                >
+                                  <View
+                                    style={[
+                                      styles.clipMoveGripPill,
+                                      { backgroundColor: clip.accentColor },
+                                    ]}
+                                  >
+                                    <Ionicons
+                                      name="reorder-two-outline"
+                                      size={9}
+                                      color="#000000"
                                     />
                                   </View>
                                 </View>
@@ -1871,35 +2419,65 @@ function Timeline({
                                   )}
                               </View>
 
-                              {/* Right Trim Handle */}
+                              {/* Keyframe Diamond Markers */}
+                              {clip.rawClip?.keyframes &&
+                                clip.rawClip.keyframes.length > 0 && (
+                                  <View
+                                    style={StyleSheet.absoluteFill}
+                                    pointerEvents="none"
+                                  >
+                                    {clip.rawClip.keyframes.map(
+                                      (kf: any, kfIdx: number) => {
+                                        const kfPos = kf.time * pxPerSec;
+                                        if (kfPos < 0 || kfPos > width)
+                                          return null;
+                                        const isPlayheadNear =
+                                          Math.abs(
+                                            clip.startTime +
+                                              kf.time -
+                                              currentTime,
+                                          ) < 0.12;
+                                        return (
+                                          <View
+                                            key={`kf-${kfIdx}`}
+                                            style={[
+                                              styles.timelineKfMarker,
+                                              {
+                                                left: Math.max(
+                                                  0,
+                                                  kfPos - 6,
+                                                ),
+                                              },
+                                              isPlayheadNear &&
+                                                styles.timelineKfMarkerActive,
+                                            ]}
+                                          >
+                                            <Ionicons
+                                              name="diamond"
+                                              size={11}
+                                              color={
+                                                isPlayheadNear
+                                                  ? "#FFE600"
+                                                  : "#FFFFFF"
+                                              }
+                                            />
+                                          </View>
+                                        );
+                                      },
+                                    )}
+                                  </View>
+                                )}
+
+                                {/* Right Trim Handle */}
                               {isSelected && (
                                 <View
-                                  {...({ dataSet: { trimHandle: "true", trimSide: "right" } } as any)}
+                                  {...rightTrimPanResponder.panHandlers}
                                   {...(Platform.OS === "web"
                                     ? {
                                         className: "trim-handle-box",
-                                        onClick: (e: any) => {
-                                          e.stopPropagation?.();
-                                          e.nativeEvent?.stopPropagation?.();
-                                        },
                                         onMouseDown: (e: any) => {
                                           e.stopPropagation?.();
                                           e.nativeEvent?.stopPropagation?.();
-                                          if (e.type?.startsWith("mouse") && Date.now() - lastTouchTimeRef.current < 650) return;
-                                          handleRightTrimStart(
-                                            e,
-                                            clip.id,
-                                            clip.startTime,
-                                            clip.duration,
-                                            clip.rawClip?.trimOut ||
-                                              clip.duration,
-                                            trackIdx,
-                                          );
-                                        },
-                                        onTouchStart: (e: any) => {
-                                          e.stopPropagation?.();
-                                          e.nativeEvent?.stopPropagation?.();
-                                          lastTouchTimeRef.current = Date.now();
                                           handleRightTrimStart(
                                             e,
                                             clip.id,
@@ -1946,7 +2524,7 @@ function Timeline({
                                 </View>
                               )}
                             </View>
-                          </View>
+                          </Pressable>
 
                           {/* Transition Cut Button between adjacent video clips on same track */}
                           {clip.type === "video" &&
@@ -1967,7 +2545,7 @@ function Timeline({
                                   },
                                   Boolean(
                                     clip.rawClip?.transition?.type &&
-                                    clip.rawClip?.transition?.type !== "none",
+                                      clip.rawClip?.transition?.type !== "none",
                                   ) && styles.transitionButtonActive,
                                 ]}
                                 onPress={() => onOpenTransitions(clip.id)}
@@ -1994,9 +2572,60 @@ function Timeline({
                         </React.Fragment>
                       );
                     })}
-                  </View>
+                  </Pressable>
                 );
               })}
+
+              {/* Playhead Needle with Diamond Head (Interactive Draggable Scrubber on Top Layer) */}
+              <View
+                style={[
+                  styles.playheadLine,
+                  {
+                    left: 0,
+                    transform: [{ translateX: currentTime * pxPerSec }],
+                    ...(Platform.OS === "web"
+                      ? {
+                          willChange: "transform",
+                          transform: `translate3d(${currentTime * pxPerSec}px, 0, 0)`,
+                        }
+                      : {}),
+                  } as any,
+                ]}
+                pointerEvents="box-none"
+              >
+                {/* Floating real-time timecode badge while dragging */}
+                {isScrubbingRuler && (
+                  <View style={styles.playheadTimePill}>
+                    <Text style={styles.playheadTimeText} numberOfLines={1}>
+                      {formatPlayheadTime(currentTime)}
+                    </Text>
+                  </View>
+                )}
+                <View
+                  style={styles.playheadHeadBox}
+                  pointerEvents="auto"
+                  {...(Platform.OS !== "web"
+                    ? playheadPanResponder.panHandlers
+                    : {
+                        onMouseDown: handlePlayheadPointerDown,
+                        onTouchStart: handlePlayheadPointerDown,
+                      })}
+                >
+                  <View
+                    style={[
+                      styles.diamondShape,
+                      isScrubbingRuler && styles.diamondShapeActive,
+                    ]}
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.playheadNeedle,
+                    isScrubbingRuler && styles.playheadNeedleActive,
+                  ]}
+                  pointerEvents="none"
+                />
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -2293,18 +2922,22 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     bottom: 0,
-    zIndex: 50,
-    pointerEvents: "none",
+    zIndex: 60,
+    elevation: 20,
     alignItems: "center",
-    width: 20,
-    marginLeft: -10,
-  },
+    width: 36,
+    marginLeft: -18,
+    cursor: "col-resize",
+    userSelect: "none",
+    touchAction: "none",
+  } as any,
   playheadHeadBox: {
-    width: 20,
-    height: 20,
+    width: 36,
+    height: 26,
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 52,
+    zIndex: 62,
+    cursor: "col-resize" as any,
   },
   diamondShape: {
     width: 12,
@@ -2319,6 +2952,14 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#FFFFFF",
   },
+  diamondShapeActive: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#00F2FE",
+    transform: [{ rotate: "45deg" }, { scale: 1.25 }],
+    shadowColor: "#00F2FE",
+    shadowRadius: 8,
+    shadowOpacity: 1,
+  },
   playheadNeedle: {
     width: 2,
     flex: 1,
@@ -2328,6 +2969,41 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 4,
   },
+  playheadNeedleActive: {
+    width: 2.5,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#00F2FE",
+    shadowRadius: 6,
+    shadowOpacity: 1,
+  },
+  playheadTimePill: {
+    position: "absolute",
+    top: 28,
+    backgroundColor: "#00F2FE",
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 4,
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 8,
+    zIndex: 65,
+    minWidth: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    whiteSpace: "nowrap",
+  } as any,
+  playheadTimeText: {
+    color: "#0B0F17",
+    fontSize: 10,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    textAlign: "center",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  } as any,
   universalTrackLane: {
     height: TRACK_ROW_HEIGHT,
     width: "100%",
@@ -2489,6 +3165,25 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     opacity: 0.85,
   },
+  clipMoveGripBox: {
+    position: "absolute",
+    top: 0,
+    left: 28,
+    right: 28,
+    height: 14,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    zIndex: 38,
+  },
+  clipMoveGripPill: {
+    width: 28,
+    height: 9,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.9,
+  },
   transitionButton: {
     position: "absolute",
     top: "50%",
@@ -2547,6 +3242,25 @@ const styles = StyleSheet.create({
     color: "#64748B",
     fontSize: 11,
     fontStyle: "italic",
+  },
+  timelineKfMarker: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -8,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  timelineKfMarkerActive: {
+    backgroundColor: "rgba(255, 230, 0, 0.25)",
+    borderColor: "#FFE600",
+    transform: [{ scale: 1.25 }],
   },
 });
 

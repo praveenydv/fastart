@@ -26,10 +26,9 @@ interface MediaPickerModalProps {
   visible: boolean;
   onClose: () => void;
   onAddMedia: (clip: any) => void;
-  onOpenCamera?: () => void;
 }
 
-export default function MediaPickerModal({ visible, onClose, onAddMedia, onOpenCamera }: MediaPickerModalProps) {
+export default function MediaPickerModal({ visible, onClose, onAddMedia }: MediaPickerModalProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'video' | 'photo' | 'uploaded'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaItems, setMediaItems] = useState<OpenMediaItem[]>([]);
@@ -316,31 +315,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, onOpenC
                 <Ionicons name="add" size={20} color="#00F2FE" />
               </View>
             </TouchableOpacity>
-
-            {/* Live Camera Record Card */}
-            {onOpenCamera && (
-              <TouchableOpacity
-                style={[styles.deviceImportCard, { borderColor: 'rgba(255, 0, 80, 0.35)', backgroundColor: 'rgba(255, 0, 80, 0.06)' }]}
-                onPress={() => {
-                  soundEngine.playSfx('click');
-                  onOpenCamera();
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.deviceIconBox, { backgroundColor: 'rgba(255, 0, 80, 0.15)' }]}>
-                  <Ionicons name="camera" size={24} color="#FF0050" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={[styles.deviceCardTitle, { color: '#FFFFFF' }]}>Record with Camera</Text>
-                  <Text style={styles.deviceCardSubtext}>
-                    Capture live video or photo with your phone/webcam
-                  </Text>
-                </View>
-                <View style={[styles.uploadChevronBox, { backgroundColor: 'rgba(255, 0, 80, 0.15)' }]}>
-                  <Ionicons name="videocam" size={16} color="#FF0050" />
-                </View>
-              </TouchableOpacity>
-            )}
 
             {/* TAB: UPLOADED MEDIA */}
             {activeTab === 'uploaded' && (

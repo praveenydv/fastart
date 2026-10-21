@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Sharing from "expo-sharing";
@@ -26,6 +25,7 @@ import {
 } from "../../utils/videoRenderer";
 import { soundEngine } from "../../utils/audioEngine";
 import { addNotification } from "../../utils/storage";
+import DownloadCompleteModal from "./DownloadCompleteModal";
 
 interface ExportModalProps {
   visible: boolean;
@@ -118,6 +118,19 @@ export default function ExportModal({
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showDownloadComplete, setShowDownloadComplete] = useState(false);
+  const [downloadCompleteFilename, setDownloadCompleteFilename] = useState("");
+  const [noticeDialog, setNoticeDialog] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    icon?: keyof typeof Ionicons.glyphMap;
+    iconColor?: string;
+    primaryText?: string;
+    onPrimary?: () => void;
+    secondaryText?: string;
+    onSecondary?: () => void;
+  } | null>(null);
 
   useEffect(() => {
     if (project.resolution) setResolution(project.resolution);
@@ -200,6 +213,9 @@ export default function ExportModal({
             await writable.write(blob);
             await writable.close();
             soundEngine.playSfx("pop");
+            setDownloadCompleteFilename(filename);
+            setIsSaved(true);
+            setShowDownloadComplete(true);
             return;
           } catch (pickerErr: any) {
             if (pickerErr?.name === "AbortError") {
@@ -236,6 +252,9 @@ export default function ExportModal({
         document.body.appendChild(a);
         a.click();
         soundEngine.playSfx("pop");
+        setDownloadCompleteFilename(filename);
+        setIsSaved(true);
+        setShowDownloadComplete(true);
 
         // Keep anchor in DOM for 3s to let browser start download before cleanup
         setTimeout(() => {
@@ -253,7 +272,15 @@ export default function ExportModal({
         setIsSaving(true);
         const fileToSave = activeUrl || exportedUrl;
         if (!fileToSave) {
-          Alert.alert("File Not Ready", "Please wait for export to finish or re-export.");
+          setNoticeDialog({
+            visible: true,
+            title: "File Not Ready",
+            message: "Please wait for export to finish before downloading.",
+            icon: "hourglass-outline",
+            iconColor: "#FFE600",
+            secondaryText: "Dismiss",
+            onSecondary: () => setNoticeDialog(null),
+          });
           setIsSaving(false);
           return;
         }
@@ -347,37 +374,53 @@ export default function ExportModal({
         if (savedSuccess) {
           setIsSaved(true);
           soundEngine.playSfx("pop");
-          Alert.alert(
-            "Download Complete!",
-            `"${filename}" has been saved directly to your device Photos & Gallery!`,
-            [{ text: "OK" }]
-          );
+          setDownloadCompleteFilename(filename);
+          setShowDownloadComplete(true);
         } else if (!hasPermission) {
-          Alert.alert(
-            "Permission Required",
-            "Photos / Media Library access is required to save directly to your device gallery. Please enable permission in device Settings, or tap 'Share via Apps' below to export.",
-            [
-              { text: "Cancel", style: "cancel" },
-              { text: "Share Instead", onPress: () => handleShare() },
-            ]
-          );
+          setNoticeDialog({
+            visible: true,
+            title: "Permission Required",
+            message:
+              "Photos & Media Library access is required to save directly to your device gallery. You can still share the video directly to WhatsApp, Instagram, and other apps.",
+            icon: "lock-closed-outline",
+            iconColor: "#FFE600",
+            primaryText: "Share via Apps",
+            onPrimary: () => {
+              setNoticeDialog(null);
+              handleShare();
+            },
+            secondaryText: "Dismiss",
+            onSecondary: () => setNoticeDialog(null),
+          });
         } else {
-          Alert.alert(
-            "Download Notice",
-            `File exported to: ${fileToSave}\n\nWould you like to share it to another app?`,
-            [
-              { text: "Cancel", style: "cancel" },
-              { text: "Share via Apps", onPress: () => handleShare() },
-            ]
-          );
+          setNoticeDialog({
+            visible: true,
+            title: "Download Notice",
+            message: `File exported successfully to:\n${fileToSave}\n\nWould you like to share it to another app?`,
+            icon: "information-circle-outline",
+            iconColor: "#00F2FE",
+            primaryText: "Share via Apps",
+            onPrimary: () => {
+              setNoticeDialog(null);
+              handleShare();
+            },
+            secondaryText: "Dismiss",
+            onSecondary: () => setNoticeDialog(null),
+          });
         }
       } catch (err: any) {
         setIsSaving(false);
         console.warn("Native download error:", err);
-        Alert.alert(
-          "Download Error",
-          "Could not save file to device: " + (err?.message || "unknown error")
-        );
+        setNoticeDialog({
+          visible: true,
+          title: "Download Issue",
+          message:
+            "Could not save file to device: " + (err?.message || "unknown error"),
+          icon: "alert-circle-outline",
+          iconColor: "#FF0050",
+          secondaryText: "Dismiss",
+          onSecondary: () => setNoticeDialog(null),
+        });
       }
     }
   };
@@ -682,10 +725,15 @@ export default function ExportModal({
   async function handleShare() {
     const fileToShare = exportedUrl || exportedResult?.videoUrl;
     if (!fileToShare) {
-      Alert.alert(
-        "File Not Ready",
-        "Please wait for export to finish or re-export."
-      );
+      setNoticeDialog({
+        visible: true,
+        title: "File Not Ready",
+        message: "Please wait for export to finish or re-export your video first.",
+        icon: "hourglass-outline",
+        iconColor: "#FFE600",
+        secondaryText: "Dismiss",
+        onSecondary: () => setNoticeDialog(null),
+      });
       return;
     }
 
@@ -720,10 +768,15 @@ export default function ExportModal({
 
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert(
-          "Share Unavailable",
-          `Sharing is not supported on this device. File saved at: ${fileToShare}`
-        );
+        setNoticeDialog({
+          visible: true,
+          title: "Share Unavailable",
+          message: `Direct app sharing is not supported in this environment. Your file is saved at: ${fileToShare}`,
+          icon: "share-social-outline",
+          iconColor: "#00F2FE",
+          secondaryText: "Got It",
+          onSecondary: () => setNoticeDialog(null),
+        });
         return;
       }
 
@@ -1166,6 +1219,83 @@ export default function ExportModal({
           </ScrollView>
         </View>
       </View>
+
+      {/* Modern Sleek Download Complete Modal */}
+      <DownloadCompleteModal
+        visible={showDownloadComplete}
+        onClose={() => setShowDownloadComplete(false)}
+        filename={
+          downloadCompleteFilename ||
+          `${(project?.title || "FastArt").replace(/[^a-zA-Z0-9_-]/g, "_")}.${selectedFormatConfig.ext}`
+        }
+        formatLabel={selectedFormatConfig.label}
+        formatExt={selectedFormatConfig.ext}
+        resolution={
+          mediaType !== "png" && mediaType !== "wav" ? resolution : undefined
+        }
+        fps={mediaType !== "png" && mediaType !== "wav" ? fps : undefined}
+        fileSize={calculateEstimatedSize()}
+        duration={totalDuration}
+        isSavedToGallery={true}
+        onShare={handleShare}
+        onDownloadAgain={() => triggerDirectDownload()}
+      />
+
+      {/* Sleek Modern In-App Notice Dialog */}
+      {noticeDialog?.visible && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoticeDialog(null)}
+        >
+          <View style={styles.noticeBackdrop}>
+            <View style={styles.noticeModalCard}>
+              <View
+                style={[
+                  styles.noticeIconCircle,
+                  {
+                    backgroundColor: `${noticeDialog.iconColor || "#00F2FE"}1A`,
+                    borderColor: `${noticeDialog.iconColor || "#00F2FE"}44`,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={noticeDialog.icon || "information-circle-outline"}
+                  size={32}
+                  color={noticeDialog.iconColor || "#00F2FE"}
+                />
+              </View>
+              <Text style={styles.noticeTitle}>{noticeDialog.title}</Text>
+              <Text style={styles.noticeMessage}>{noticeDialog.message}</Text>
+              <View style={styles.noticeActions}>
+                {noticeDialog.primaryText && noticeDialog.onPrimary && (
+                  <TouchableOpacity
+                    style={styles.noticePrimaryBtn}
+                    onPress={noticeDialog.onPrimary}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.noticePrimaryText}>
+                      {noticeDialog.primaryText}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {noticeDialog.secondaryText && noticeDialog.onSecondary && (
+                  <TouchableOpacity
+                    style={styles.noticeSecondaryBtn}
+                    onPress={noticeDialog.onSecondary}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.noticeSecondaryText}>
+                      {noticeDialog.secondaryText}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </Modal>
   );
 }
@@ -1516,6 +1646,84 @@ const styles = StyleSheet.create({
   doneDismissText: {
     color: "#6B7280",
     fontSize: 14,
+    fontWeight: "600",
+  },
+  noticeBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(3, 6, 12, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    zIndex: 99999,
+  },
+  noticeModalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#0D111A",
+    borderRadius: 20,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1.2,
+    borderColor: "#1E2738",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  noticeIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+    borderWidth: 1,
+  },
+  noticeTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  noticeMessage: {
+    color: "#8E95A5",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  noticeActions: {
+    width: "100%",
+    gap: 10,
+  },
+  noticePrimaryBtn: {
+    width: "100%",
+    backgroundColor: "#00F2FE",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noticePrimaryText: {
+    color: "#000000",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  noticeSecondaryBtn: {
+    width: "100%",
+    backgroundColor: "#161D2B",
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#202A3D",
+  },
+  noticeSecondaryText: {
+    color: "#8E95A5",
+    fontSize: 13,
     fontWeight: "600",
   },
 });

@@ -43,7 +43,6 @@ import SettingsModal from "./src/components/Panels/SettingsModal";
 import NotificationsModal from "./src/components/Panels/NotificationsModal";
 import VolumeModal from "./src/components/Panels/VolumeModal";
 import CropTransformModal from "./src/components/Panels/CropTransformModal";
-import CameraModal from "./src/components/Panels/CameraModal";
 import AutoCutModal from "./src/components/Panels/AutoCutModal";
 import CanvasModal from "./src/components/Panels/CanvasModal";
 import AIEnhanceModal from "./src/components/Panels/AIEnhanceModal";
@@ -51,6 +50,7 @@ import TextToSpeechModal from "./src/components/Panels/TextToSpeechModal";
 import CutoutModal from "./src/components/Panels/CutoutModal";
 import MotionTrackingModal from "./src/components/Panels/MotionTrackingModal";
 import ConfirmDeleteModal from "./src/components/ConfirmDeleteModal";
+import KeyframeModal from "./src/components/Panels/KeyframeModal";
 
 import {
   FastArtProject,
@@ -106,6 +106,8 @@ export default function App() {
     loadAllProjects(),
   );
   const [project, setProject] = useState<FastArtProject | null>(null);
+  const projectRef = useRef<FastArtProject | null>(project);
+  projectRef.current = project;
   const [lastSession, setLastSession] = useState<LastEditSession | null>(() =>
     loadLastSession(),
   );
@@ -455,10 +457,6 @@ export default function App() {
     () => openModal("tts"),
     [route.screen, project?.id],
   );
-  const handleOpenCamera = useCallback(
-    () => openModal("camera"),
-    [route.screen, project?.id],
-  );
   const handleOpenEnhance = useCallback(
     () => openModal("enhance"),
     [route.screen, project?.id],
@@ -469,6 +467,10 @@ export default function App() {
   );
   const handleOpenCanvasModal = useCallback(
     () => openModal("canvas"),
+    [route.screen, project?.id],
+  );
+  const handleOpenKeyframeModal = useCallback(
+    () => openModal("keyframe"),
     [route.screen, project?.id],
   );
   const handleOpenCutoutModal = useCallback(
@@ -578,23 +580,35 @@ export default function App() {
   }, [project?.id]);
 
   // Push state to undo stack with memory cap (max 20 snapshots)
-  const updateProjectWithHistory = (updatedProject: any) => {
+  const updateProjectWithHistory = useCallback((updatedProject: any) => {
+    const current = projectRef.current;
+    if (!current) return;
+    const fullProject: FastArtProject = {
+      ...current,
+      ...(updatedProject || {}),
+      tracks: updatedProject?.tracks ? updatedProject.tracks : current.tracks,
+    };
     setHistoryStack((prev) => [
       ...prev.slice(-20),
-      JSON.parse(JSON.stringify(project)),
+      JSON.parse(JSON.stringify(current)),
     ]);
     setRedoStack([]);
-    const saved = saveProject(updatedProject);
+    const saved = saveProject(fullProject);
+    projectRef.current = saved;
     setProject(saved);
     setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
-  };
+  }, []);
 
   const handleUndo = () => {
     if (historyStack.length === 0) return;
+    const current = projectRef.current;
     const prev = historyStack[historyStack.length - 1];
     setHistoryStack((s) => s.slice(0, -1));
-    setRedoStack((r) => [...r.slice(-20), JSON.parse(JSON.stringify(project))]);
+    if (current) {
+      setRedoStack((r) => [...r.slice(-20), JSON.parse(JSON.stringify(current))]);
+    }
     const saved = saveProject(prev);
+    projectRef.current = saved;
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
     soundEngine.playSfx("click");
@@ -602,13 +616,17 @@ export default function App() {
 
   const handleRedo = () => {
     if (redoStack.length === 0) return;
+    const current = projectRef.current;
     const next = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
-    setHistoryStack((s) => [
-      ...s.slice(-20),
-      JSON.parse(JSON.stringify(project)),
-    ]);
+    if (current) {
+      setHistoryStack((s) => [
+        ...s.slice(-20),
+        JSON.parse(JSON.stringify(current)),
+      ]);
+    }
     const saved = saveProject(next);
+    projectRef.current = saved;
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
     soundEngine.playSfx("click");
@@ -1255,11 +1273,12 @@ export default function App() {
       transform: { x: number; y: number; scale: number; rotation: number },
       isFinal: boolean = true,
     ) => {
-      if (!project) return;
+      const current = projectRef.current;
+      if (!current) return;
       const key = (
         clipType === "sticker" || clipType === "stickers" ? "stickers" : clipType
-      ) as keyof typeof project.tracks;
-      const list = [...((project.tracks[key] as any[]) || [])];
+      ) as keyof typeof current.tracks;
+      const list = [...((current.tracks[key] as any[]) || [])];
       const idx = list.findIndex((c) => c.id === clipId);
       if (idx < 0) return;
 
@@ -1284,68 +1303,69 @@ export default function App() {
       }
 
       const updated = {
-        ...project,
-        tracks: { ...project.tracks, [key]: list } as any,
+        ...current,
+        tracks: { ...current.tracks, [key]: list } as any,
       };
 
       if (isFinal) {
         updateProjectWithHistory(updated);
       } else {
+        projectRef.current = updated;
         setProject(updated);
       }
     },
-    [project, updateProjectWithHistory],
+    [updateProjectWithHistory],
   );
 
   // Update text clip from modal
   const handleUpdateText = useCallback(
     (updatedClip: TextClip) => {
-      if (!project) return;
-      const list = [...(project.tracks.text || [])];
+      const current = projectRef.current;
+      if (!current) return;
+      const list = [...(current.tracks.text || [])];
       const idx = list.findIndex((c) => c.id === updatedClip.id);
       if (idx >= 0) {
         list[idx] = updatedClip;
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, text: list },
+          tracks: { ...current.tracks, text: list },
         });
       }
     },
-    [project, updateProjectWithHistory],
+    [updateProjectWithHistory],
   );
 
   // Update sticker clip from modal
   const handleUpdateSticker = useCallback(
     (updatedClip: StickerClip) => {
-      if (!project) return;
-      const list = [...(project.tracks.stickers || [])];
+      const current = projectRef.current;
+      if (!current) return;
+      const list = [...(current.tracks.stickers || [])];
       const idx = list.findIndex((c) => c.id === updatedClip.id);
       if (idx >= 0) {
         list[idx] = updatedClip;
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, stickers: list },
+          tracks: { ...current.tracks, stickers: list },
         });
       }
     },
-    [project, updateProjectWithHistory],
+    [updateProjectWithHistory],
   );
 
   // Update effect clip from modal
   const handleUpdateEffect = useCallback(
     (updatedClip: EffectClip) => {
-      if (!project) return;
-      const list = [...(project.tracks.effects || [])];
+      const current = projectRef.current;
+      if (!current) return;
+      const list = [...(current.tracks.effects || [])];
       const idx = list.findIndex((c) => c.id === updatedClip.id);
       if (idx >= 0) {
         list[idx] = updatedClip;
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, effects: list },
+          tracks: { ...current.tracks, effects: list },
         });
       }
     },
-    [project, updateProjectWithHistory],
+    [updateProjectWithHistory],
   );
 
   // Rotate clip 90 degrees
@@ -1742,45 +1762,134 @@ export default function App() {
     }
   };
 
-  // Add Keyframe to active clip
-  const handleAddKeyframe = () => {
-    if (!selectedClip) {
-      soundEngine.playSfx("click");
-      Alert.alert(
-        "Keyframe Animation",
-        "Please select a clip on the timeline first to add a keyframe.",
+  const isKeyframeAtPlayhead = useMemo(() => {
+    let clip = selectedClip;
+    if (!clip) {
+      const curTime = currentTime;
+      const videoClips = project?.tracks?.video || [];
+      clip = videoClips.find(
+        (c: any) =>
+          curTime >= (c.startTime || 0) - 0.05 &&
+          curTime <= (c.startTime || 0) + (c.duration || 0) + 0.05,
       );
+    }
+    if (!clip?.keyframes || clip.keyframes.length === 0) return false;
+    const localTime = Math.max(0, currentTime - (clip.startTime || 0));
+    return clip.keyframes.some((k: any) => Math.abs(k.time - localTime) < 0.12);
+  }, [selectedClip, project?.tracks?.video, currentTime]);
+
+  // Add Keyframe to active clip (Modern - zero system alerts!)
+  const handleAddKeyframe = (): { action: "added" | "removed"; time: number } | void => {
+    let targetClip = selectedClip;
+    let targetType = selectedClipType;
+    let targetId = selectedClipId;
+
+    // Auto-target: If user hasn't tapped a clip, target the video clip right under playhead!
+    if (!targetClip) {
+      const curTime = currentTimeRef.current;
+      const videoClips = project?.tracks?.video || [];
+      const activeVideo = videoClips.find(
+        (c: any) =>
+          curTime >= (c.startTime || 0) - 0.05 &&
+          curTime <= (c.startTime || 0) + (c.duration || 0) + 0.05,
+      );
+      if (activeVideo) {
+        targetClip = activeVideo;
+        targetType = "video";
+        targetId = activeVideo.id;
+        setSelectedClipId(activeVideo.id);
+        setSelectedClipType("video");
+      }
+    }
+
+    if (!targetClip) {
+      soundEngine.playSfx("click");
+      openModal("keyframe");
       return;
     }
+
     soundEngine.playSfx("pop");
     // Toggle keyframe stamp
-    const keyframes = selectedClip.keyframes || [];
-    const localTime = currentTime - selectedClip.startTime;
+    const keyframes = targetClip.keyframes || [];
+    const localTime = Math.max(0, currentTime - targetClip.startTime);
     const exists = keyframes.some(
-      (k: any) => Math.abs(k.time - localTime) < 0.1,
+      (k: any) => Math.abs(k.time - localTime) < 0.12,
     );
 
     let updatedKf = [];
+    let actionType: "added" | "removed" = "added";
     if (exists) {
+      actionType = "removed";
       updatedKf = keyframes.filter(
-        (k: any) => Math.abs(k.time - localTime) >= 0.1,
+        (k: any) => Math.abs(k.time - localTime) >= 0.12,
       );
     } else {
+      actionType = "added";
       updatedKf = [
         ...keyframes,
         {
           time: localTime,
           transform: {
-            ...(selectedClip.transform || {
+            ...(targetClip.transform || {
               scale: 1,
               rotation: 0,
               x: 0,
               y: 0,
             }),
           },
-          opacity: 1.0,
+          opacity: targetClip.opacity !== undefined ? targetClip.opacity : 1.0,
         },
       ];
+    }
+
+    const key = (
+      targetType === "sticker" || targetType === "stickers"
+        ? "stickers"
+        : targetType === "effect" || targetType === "effects"
+          ? "effects"
+          : targetType === "text" || targetType === "texts"
+            ? "text"
+            : targetType
+    ) as keyof typeof project.tracks;
+
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === targetId);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], keyframes: updatedKf };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, [key]: list } as any,
+      });
+    }
+
+    return { action: actionType, time: currentTime };
+  };
+
+  const handleUpdateKeyframeTransform = (
+    time: number,
+    transform: any,
+    opacity?: number,
+  ) => {
+    if (!selectedClip) return;
+    const keyframes: any[] = selectedClip.keyframes || [];
+    const existingIndex = keyframes.findIndex(
+      (k) => Math.abs(k.time - time) < 0.12,
+    );
+
+    let updatedKf = [...keyframes];
+    if (existingIndex >= 0) {
+      const existing = updatedKf[existingIndex];
+      updatedKf[existingIndex] = {
+        ...existing,
+        transform: { ...(existing.transform || {}), ...transform },
+        opacity: opacity !== undefined ? opacity : (existing.opacity ?? 1.0),
+      };
+    } else {
+      updatedKf.push({
+        time,
+        transform: { ...(selectedClip.transform || {}), ...transform },
+        opacity: opacity !== undefined ? opacity : (selectedClip.opacity ?? 1.0),
+      });
     }
 
     const key = (
@@ -1788,13 +1897,69 @@ export default function App() {
         ? "stickers"
         : selectedClipType === "effect" || selectedClipType === "effects"
           ? "effects"
-          : selectedClipType
+          : selectedClipType === "text" || selectedClipType === "texts"
+            ? "text"
+            : selectedClipType
+    ) as keyof typeof project.tracks;
+
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === selectedClipId);
+    if (idx >= 0) {
+      list[idx] = {
+        ...list[idx],
+        transform: { ...(list[idx].transform || {}), ...transform },
+        opacity: opacity !== undefined ? opacity : (list[idx].opacity ?? 1.0),
+        keyframes: updatedKf,
+      };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, [key]: list } as any,
+      });
+    }
+  };
+
+  const handleDeleteKeyframeAtTime = (time: number) => {
+    if (!selectedClip) return;
+    const keyframes: any[] = selectedClip.keyframes || [];
+    const updatedKf = keyframes.filter((k) => Math.abs(k.time - time) >= 0.12);
+
+    const key = (
+      selectedClipType === "sticker" || selectedClipType === "stickers"
+        ? "stickers"
+        : selectedClipType === "effect" || selectedClipType === "effects"
+          ? "effects"
+          : selectedClipType === "text" || selectedClipType === "texts"
+            ? "text"
+            : selectedClipType
     ) as keyof typeof project.tracks;
 
     const list = [...((project.tracks[key] as any[]) || [])];
     const idx = list.findIndex((c) => c.id === selectedClipId);
     if (idx >= 0) {
       list[idx] = { ...list[idx], keyframes: updatedKf };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, [key]: list } as any,
+      });
+    }
+  };
+
+  const handleClearAllKeyframes = () => {
+    if (!selectedClip) return;
+    const key = (
+      selectedClipType === "sticker" || selectedClipType === "stickers"
+        ? "stickers"
+        : selectedClipType === "effect" || selectedClipType === "effects"
+          ? "effects"
+          : selectedClipType === "text" || selectedClipType === "texts"
+            ? "text"
+            : selectedClipType
+    ) as keyof typeof project.tracks;
+
+    const list = [...((project.tracks[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === selectedClipId);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], keyframes: [] };
       updateProjectWithHistory({
         ...project,
         tracks: { ...project.tracks, [key]: list } as any,
@@ -2038,13 +2203,14 @@ export default function App() {
     newAspectRatio?: AspectRatio,
     newMask?: MaskConfig,
   ) => {
-    if (!project) return;
-    let updated: any = { ...project };
-    if (newAspectRatio && newAspectRatio !== project.aspectRatio) {
+    const current = projectRef.current;
+    if (!current) return;
+    let updated: any = { ...current };
+    if (newAspectRatio && newAspectRatio !== current.aspectRatio) {
       updated.aspectRatio = newAspectRatio;
     }
     if (selectedClip && selectedClipType === "video") {
-      const videoClips = [...(project.tracks.video || [])];
+      const videoClips = [...(current.tracks.video || [])];
       const idx = videoClips.findIndex((c) => c.id === selectedClipId);
       if (idx >= 0) {
         const finalMask =
@@ -2065,7 +2231,7 @@ export default function App() {
           mask: finalMask,
           crop: preservedCrop,
         };
-        updated.tracks = { ...project.tracks, video: videoClips };
+        updated.tracks = { ...current.tracks, video: videoClips };
       }
     }
     updateProjectWithHistory(updated);
@@ -2077,8 +2243,9 @@ export default function App() {
     newCrop: CustomCrop,
     isFinal = true,
   ) => {
-    if (!project) return;
-    const videoClips = [...(project.tracks.video || [])];
+    const current = projectRef.current;
+    if (!current) return;
+    const videoClips = [...(current.tracks.video || [])];
     const idx = videoClips.findIndex((c) => c.id === clipId);
     if (idx >= 0) {
       videoClips[idx] = {
@@ -2090,12 +2257,13 @@ export default function App() {
         },
       };
       const updatedProject = {
-        ...project,
-        tracks: { ...project.tracks, video: videoClips },
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
       };
       if (isFinal) {
         updateProjectWithHistory(updatedProject);
       } else {
+        projectRef.current = updatedProject;
         setProject(updatedProject);
       }
     }
@@ -2143,22 +2311,6 @@ export default function App() {
     setSelectedClipId(null);
     closeModal();
     navigate(`/project/${newProj.id}`);
-  };
-
-  // Live Camera Recording Added
-  const handleAddRecordedClip = (newClip: VideoClip) => {
-    if (!project) {
-      const newProj = createDefaultProject("Camera Recording Project");
-      newClip.startTime = 0;
-      newProj.tracks.video = [newClip];
-      saveProject(newProj);
-      setProjects((prev: any) => [newProj, ...prev]);
-      setProject(newProj);
-      navigate(`/project/${newProj.id}`);
-    } else {
-      handleAddMedia(newClip);
-      navigate(`/project/${project.id}`);
-    }
   };
 
   // Draggable Trim Clip for Video, Audio, and Text
@@ -2375,7 +2527,9 @@ export default function App() {
               {!isFullscreen && (
                 <Header
                   project={project}
-                  onUpdateProject={updateProjectWithHistory}
+                  onUpdateProject={(updates) =>
+                    updateProjectWithHistory(updates)
+                  }
                   onBackToHome={handleBackToHome}
                   canUndo={historyStack.length > 0}
                   canRedo={redoStack.length > 0}
@@ -2412,14 +2566,8 @@ export default function App() {
                   }}
                   onSeek={(t) => setCurrentTime(t)}
                   onAddKeyframe={handleAddKeyframe}
-                  hasKeyframeAtCurrentTime={
-                    selectedClip?.keyframes?.some(
-                      (k: any) =>
-                        Math.abs(
-                          k.time - (currentTime - selectedClip.startTime),
-                        ) < 0.1,
-                    ) || false
-                  }
+                  onOpenKeyframeModal={handleOpenKeyframeModal}
+                  hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
                   onOpenMediaPicker={() => openModal("media")}
                   selectedClipId={selectedClipId}
                   selectedClipType={selectedClipType}
@@ -2495,7 +2643,7 @@ export default function App() {
                     zoom={zoom}
                     onZoomChange={setZoom}
                     onUpdateProject={(updates) =>
-                      updateProjectWithHistory({ ...project, ...updates })
+                      updateProjectWithHistory(updates)
                     }
                     onAdjustDuration={(delta) => {
                       if (!project || !selectedClipId) return;
@@ -2566,12 +2714,12 @@ export default function App() {
                     onOpenStickersModal={handleOpenStickersModal}
                     onOpenMediaPicker={handleOpenMediaPicker}
                     onOpenTTS={handleOpenTTS}
-                    onOpenCamera={handleOpenCamera}
                     onOpenEnhance={handleOpenEnhance}
                     onOpenAutoCut={handleOpenAutoCut}
                     onOpenCanvasModal={handleOpenCanvasModal}
                     onOpenCutoutModal={handleOpenCutoutModal}
                     onOpenMotionTracking={handleOpenMotionTracking}
+                    onOpenKeyframeModal={handleOpenKeyframeModal}
                   />
                 </View>
               )}
@@ -2584,10 +2732,6 @@ export default function App() {
             visible={true}
             onClose={closeModal}
             onAddMedia={handleAddMedia}
-            onOpenCamera={() => {
-              closeModal();
-              handleOpenCamera();
-            }}
           />
         )}
 
@@ -2755,14 +2899,6 @@ export default function App() {
           />
         )}
 
-        {activeModal === "camera" && (
-          <CameraModal
-            visible={true}
-            onClose={closeModal}
-            onAddRecordedClip={handleAddRecordedClip}
-          />
-        )}
-
         {activeModal === "autocut" && (
           <AutoCutModal
             visible={true}
@@ -2778,7 +2914,7 @@ export default function App() {
             onClose={closeModal}
             project={project}
             onUpdateProject={(updates) =>
-              updateProjectWithHistory({ ...project, ...updates })
+              updateProjectWithHistory(updates)
             }
           />
         )}
@@ -2801,6 +2937,23 @@ export default function App() {
                 ? (selectedClip as TextClip).text
                 : undefined
             }
+          />
+        )}
+
+        {/* Modern Sleek Keyframe Animation Studio Modal */}
+        {activeModal === "keyframe" && (
+          <KeyframeModal
+            visible={true}
+            onClose={closeModal}
+            selectedClip={selectedClip}
+            selectedClipType={selectedClipType || "video"}
+            currentTime={currentTime}
+            onSeek={(t) => setCurrentTime(t)}
+            onAddKeyframe={handleAddKeyframe}
+            hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
+            onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
+            onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
+            onClearAllKeyframes={handleClearAllKeyframes}
           />
         )}
 
