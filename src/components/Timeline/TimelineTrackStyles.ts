@@ -149,8 +149,8 @@ export const trackStyles = {
     borderBottomRightRadius: 5,
   },
   universalTrimHandleActive: {
-    transform: [{ scale: 1.08 }],
-    shadowColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
+    shadowColor: "#00F2FE",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 6,
@@ -255,8 +255,8 @@ export const trackStyles = {
     zIndex: 5,
   },
   timelineKfMarkerActive: {
-    backgroundColor: "rgba(255, 230, 0, 0.25)",
+    backgroundColor: "rgba(255, 230, 0, 0.35)",
     borderColor: "#FFE600",
-    transform: [{ scale: 1.25 }],
+    borderWidth: 2,
   },
 };

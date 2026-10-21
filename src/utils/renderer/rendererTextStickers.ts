@@ -246,19 +246,24 @@ export function drawProceduralPlaceholder(
   h: number,
   title: string,
   time: number,
+  canvasBackground?: string,
 ) {
-  ctx.fillStyle = "#10131A";
+  const bg = canvasBackground || "#0B0D13";
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = "#252A36";
+
+  const isLight = bg.toLowerCase() === "#ffffff" || bg.toLowerCase() === "white";
+
+  ctx.strokeStyle = isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.1)";
   ctx.lineWidth = 2;
   ctx.strokeRect(20, 20, w - 40, h - 40);
 
   ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
-  ctx.fillStyle = "#6B7280";
+  ctx.fillStyle = isLight ? "#1E293B" : "#8E95A5";
   ctx.textAlign = "center";
   ctx.fillText(title, w / 2, h / 2 - 10);
 
   ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
-  ctx.fillStyle = "#4B5563";
+  ctx.fillStyle = isLight ? "#64748B" : "#4B5563";
   ctx.fillText("Tap + to add video clips or audio tracks", w / 2, h / 2 + 25);
 }

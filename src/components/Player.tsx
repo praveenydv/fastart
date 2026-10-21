@@ -336,6 +336,7 @@ function Player({
                 height: "100%",
                 display: "block",
                 borderRadius: 8,
+                backgroundColor: project.canvasBackground || "#000000",
               }}
             />
           ) : (

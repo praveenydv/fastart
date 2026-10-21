@@ -103,6 +103,7 @@ export interface VideoClip {
   scale?: number;
   rotation?: number;
   opacity?: number;
+  fit?: 'contain' | 'cover';
   mask?: MaskConfig;
   crop?: CustomCrop;
   cutout?: CutoutConfig;

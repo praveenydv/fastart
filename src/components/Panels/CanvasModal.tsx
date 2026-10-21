@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
-import { FastArtProject, AspectRatio, Resolution, FPS } from '../../types/project';
+import { FastArtProject, AspectRatio } from '../../types/project';
 import { ASPECT_RATIOS } from '../../constants/sampleMedia';
 
 interface CanvasModalProps {
@@ -30,18 +30,6 @@ const CANVAS_COLORS = [
   { id: '#FFFFFF', name: 'White' },
 ];
 
-const RESOLUTIONS: { id: Resolution; label: string; desc: string }[] = [
-  { id: '720p', label: '720p', desc: 'HD Fast' },
-  { id: '1080p', label: '1080p', desc: 'FHD Recommended' },
-  { id: '2K/4K', label: '4K', desc: 'Ultra HD' },
-];
-
-const FRAME_RATES: { id: FPS; label: string; desc: string }[] = [
-  { id: 24, label: '24 FPS', desc: 'Cinema' },
-  { id: 30, label: '30 FPS', desc: 'Standard' },
-  { id: 60, label: '60 FPS', desc: 'Smooth' },
-];
-
 export default function CanvasModal({
   visible,
   onClose,
@@ -52,8 +40,9 @@ export default function CanvasModal({
 
   const currentRatio = project.aspectRatio || '9:16';
   const currentBg = project.canvasBackground || '#000000';
-  const currentRes = project.resolution || '1080p';
-  const currentFps = project.fps || 30;
+  const activeColorObj = CANVAS_COLORS.find(
+    (c) => c.id.toLowerCase() === currentBg.toLowerCase(),
+  );
 
   // Compute preview aspect ratio box dimensions (fit in 100x100)
   const getPreviewBoxStyle = () => {
@@ -81,16 +70,6 @@ export default function CanvasModal({
   const handleSelectColor = (color: string) => {
     soundEngine.playSfx('pop');
     onUpdateProject({ canvasBackground: color });
-  };
-
-  const handleSelectResolution = (res: Resolution) => {
-    soundEngine.playSfx('click');
-    onUpdateProject({ resolution: res });
-  };
-
-  const handleSelectFps = (fps: FPS) => {
-    soundEngine.playSfx('click');
-    onUpdateProject({ fps });
   };
 
   return (
@@ -147,12 +126,19 @@ export default function CanvasModal({
                   <Text style={styles.metaBadgeText}>{currentRatio}</Text>
                 </View>
                 <View style={styles.metaBadge}>
-                  <Ionicons name="videocam-outline" size={13} color="#38BDF8" />
-                  <Text style={styles.metaBadgeText}>{currentRes.toUpperCase()}</Text>
-                </View>
-                <View style={styles.metaBadge}>
-                  <Ionicons name="speedometer-outline" size={13} color="#10B981" />
-                  <Text style={styles.metaBadgeText}>{currentFps} FPS</Text>
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: currentBg,
+                      borderWidth: currentBg.toLowerCase() === '#ffffff' ? 1 : 0,
+                      borderColor: '#4B5563',
+                    }}
+                  />
+                  <Text style={styles.metaBadgeText}>
+                    {activeColorObj?.name || 'Background'}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -239,49 +225,6 @@ export default function CanvasModal({
                   );
                 })}
               </ScrollView>
-            </View>
-
-            {/* 3. Resolution & Frame Rate */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>3. Project Resolution & Quality</Text>
-              <View style={styles.pillRow}>
-                {RESOLUTIONS.map((res) => {
-                  const isSelected = currentRes === res.id;
-                  return (
-                    <TouchableOpacity
-                      key={res.id}
-                      style={[styles.pillBtn, isSelected && styles.pillBtnActive]}
-                      onPress={() => handleSelectResolution(res.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.pillLabel, isSelected && styles.pillLabelActive]}>
-                        {res.label}
-                      </Text>
-                      <Text style={styles.pillDesc}>{res.desc}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={[styles.sectionTitle, { marginTop: 14 }]}>4. Frame Rate</Text>
-              <View style={styles.pillRow}>
-                {FRAME_RATES.map((fps) => {
-                  const isSelected = currentFps === fps.id;
-                  return (
-                    <TouchableOpacity
-                      key={fps.id}
-                      style={[styles.pillBtn, isSelected && styles.pillBtnActive]}
-                      onPress={() => handleSelectFps(fps.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.pillLabel, isSelected && styles.pillLabelActive]}>
-                        {fps.label}
-                      </Text>
-                      <Text style={styles.pillDesc}>{fps.desc}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
             </View>
           </ScrollView>
 
@@ -483,7 +426,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   colorSwatchBtnActive: {
-    transform: [{ scale: 1.05 }],
+    opacity: 1,
   },
   colorCircle: {
     width: 38,
@@ -502,37 +445,6 @@ const styles = StyleSheet.create({
   colorNameActive: {
     color: '#00F2FE',
     fontWeight: '700',
-  },
-  pillRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  pillBtn: {
-    flex: 1,
-    backgroundColor: '#1B202E',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  pillBtnActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
-  },
-  pillLabel: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  pillLabelActive: {
-    color: '#00F2FE',
-  },
-  pillDesc: {
-    color: '#8E95A5',
-    fontSize: 10,
-    marginTop: 2,
   },
   footer: {
     paddingHorizontal: 16,

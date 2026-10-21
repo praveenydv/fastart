@@ -119,7 +119,6 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
             ],
             isDraggingThis && {
               opacity: 0.85,
-              transform: [{ scale: 1.02 }],
             },
           ]}
         >

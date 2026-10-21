@@ -212,8 +212,15 @@ export class VideoRenderer {
     drawTextOverlay(ctx, txt, time, w, h, isPlaying);
   }
 
-  drawProceduralPlaceholder(ctx: CanvasRenderingContext2D, w: number, h: number, title: string, time: number) {
-    drawProceduralPlaceholder(ctx, w, h, title, time);
+  drawProceduralPlaceholder(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    title: string,
+    time: number,
+    canvasBackground?: string,
+  ) {
+    drawProceduralPlaceholder(ctx, w, h, title, time, canvasBackground);
   }
 
   renderFrame(
@@ -237,7 +244,8 @@ export class VideoRenderer {
     ctx.imageSmoothingQuality = isPlaying ? "medium" : "high";
     ctx.scale(canvasW / w, canvasH / h);
 
-    ctx.fillStyle = project.canvasBackground || "#0B0D13";
+    const canvasBg = project.canvasBackground || "#000000";
+    ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, w, h);
 
     const videoClips = project.tracks.video || [];
@@ -261,12 +269,12 @@ export class VideoRenderer {
     );
 
     if (activeVideos.length === 0 && !hasAnyTrackContent) {
-      this.drawProceduralPlaceholder(ctx, w, h, "No Media Added", time);
+      this.drawProceduralPlaceholder(ctx, w, h, "No Media Added", time, canvasBg);
       ctx.restore();
       return;
     }
 
-    ctx.fillStyle = project.canvasBackground || "#0B0E14";
+    ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, w, h);
 
     type VisualItem =

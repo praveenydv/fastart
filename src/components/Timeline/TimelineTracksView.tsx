@@ -204,9 +204,6 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                             ? 20
                             : 6,
                         display: "flex",
-                        transform: isBeingDragged
-                          ? [{ scale: 1.03 }]
-                          : undefined,
                         opacity: isBeingDragged
                           ? 0.95
                           : pressed && !isSelected

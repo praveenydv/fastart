@@ -158,13 +158,16 @@ export function drawClip(
     const aspect = sw / sh;
     let dw = w;
     let dh = w / aspect;
-    if (isPreviewCropping) {
-      if (dh > h) {
+    const fitMode = clip.fit || "contain";
+
+    if (isPreviewCropping || fitMode === "cover") {
+      if (dh < h) {
         dh = h;
         dw = h * aspect;
       }
     } else {
-      if (dh < h) {
+      // Default "contain" mode: keep the full video visible and reveal canvas background
+      if (dh > h) {
         dh = h;
         dw = h * aspect;
       }

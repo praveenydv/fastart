@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
   TextInput,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,12 +15,32 @@ import { AudioClip } from '../../types/project';
 import { openMediaService, OpenAudioItem } from '../../services/openMediaService';
 import { loadUploadedAudio, saveUploadedAudio } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import { styles } from './Audio/AudioModalStyles';
+import { AudioLibraryTab } from './Audio/AudioLibraryTab';
+import { AudioUploadTab } from './Audio/AudioUploadTab';
 
 interface AudioModalProps {
   visible: boolean;
   onClose: () => void;
   onAddAudio: (clip: AudioClip) => void;
 }
+
+const SFX_CATEGORIES = [
+  { id: 'all', label: 'All SFX' },
+  { id: 'whoosh', label: 'Whoosh' },
+  { id: 'impact', label: 'Impact' },
+  { id: 'glitch', label: 'Glitch' },
+  { id: 'game sfx', label: 'Game' },
+  { id: 'camera', label: 'Camera' },
+  { id: 'nature', label: 'Nature' },
+];
+
+const MUSIC_CATEGORIES = [
+  { id: 'all', label: 'All Music' },
+  { id: 'lo-fi', label: 'Lo-Fi' },
+  { id: 'beats', label: 'Beats' },
+  { id: 'cinematic', label: 'Cinematic' },
+];
 
 export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalProps) {
   const [activeTab, setActiveTab] = useState<'sfx' | 'music' | 'upload'>('sfx');
@@ -48,24 +66,6 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
       (t.artist || '').toLowerCase().includes(q)
     );
   });
-
-  // Categories for sound effects & music
-  const sfxCategories = [
-    { id: 'all', label: 'All SFX' },
-    { id: 'whoosh', label: 'Whoosh' },
-    { id: 'impact', label: 'Impact' },
-    { id: 'glitch', label: 'Glitch' },
-    { id: 'game sfx', label: 'Game' },
-    { id: 'camera', label: 'Camera' },
-    { id: 'nature', label: 'Nature' },
-  ];
-
-  const musicCategories = [
-    { id: 'all', label: 'All Music' },
-    { id: 'lo-fi', label: 'Lo-Fi' },
-    { id: 'beats', label: 'Beats' },
-    { id: 'cinematic', label: 'Cinematic' },
-  ];
 
   // Fetch open-source audio based on active tab, category, and search query
   useEffect(() => {
@@ -247,7 +247,7 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
     }
   };
 
-  const activeCategories = activeTab === 'sfx' ? sfxCategories : musicCategories;
+  const activeCategories = activeTab === 'sfx' ? SFX_CATEGORIES : MUSIC_CATEGORIES;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -366,7 +366,6 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
             )}
           </View>
 
-
           <ScrollView style={styles.sheetBody}>
             {/* Quick Upload From Device Card */}
             <TouchableOpacity
@@ -395,136 +394,26 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
 
             {/* TAB: SOUND EFFECTS OR MUSIC (OPEN SOURCE LIBRARY) */}
             {activeTab !== 'upload' && (
-              <>
-                <View style={styles.sourceBannerRow}>
-                  <Text style={styles.sectionTitle}>
-                    {activeTab === 'sfx' ? 'OPEN SOURCE SOUND EFFECTS' : 'OPEN SOURCE SOUNDTRACKS'}
-                  </Text>
-                  <View style={styles.ossBadge}>
-                    <Ionicons name="globe-outline" size={10} color="#00F2FE" />
-                    <Text style={styles.ossBadgeText}>{"Openverse & CC0 Library"}</Text>
-                  </View>
-                </View>
-
-                {isLoading ? (
-                  <View style={styles.loadingBox}>
-                    <ActivityIndicator size="small" color="#00F2FE" />
-                    <Text style={styles.loadingText}>Searching open-source library...</Text>
-                  </View>
-                ) : audioItems.length === 0 ? (
-                  <View style={styles.emptyBox}>
-                    <Ionicons name="search-outline" size={36} color="#374151" />
-                    <Text style={styles.emptyTitle}>No Matching Audio Found</Text>
-                    <Text style={styles.emptySubtext}>
-                      Try searching with different keywords like "whoosh", "impact", "piano", or "glitch"
-                    </Text>
-                  </View>
-                ) : (
-                  audioItems.map((item) => (
-                    <View key={item.id} style={styles.audioRow}>
-                      <TouchableOpacity
-                        style={[
-                          styles.playIconBtn,
-                          playingId === item.id && styles.playIconBtnActive,
-                        ]}
-                        onPress={() => togglePreview(item)}
-                      >
-                        <Ionicons
-                          name={playingId === item.id ? 'pause' : 'play'}
-                          size={18}
-                          color={playingId === item.id ? '#000000' : '#00F2FE'}
-                        />
-                      </TouchableOpacity>
-
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.audioTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <View style={styles.metaRow}>
-                          <Text style={styles.audioMeta}>
-                            {item.artist} • {item.duration}s
-                          </Text>
-                          <View style={styles.licensePill}>
-                            <Text style={styles.licenseText}>{item.license}</Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.usePill}
-                        onPress={() => handleSelectAudio(item)}
-                      >
-                        <Text style={styles.usePillText}>Use</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                )}
-              </>
+              <AudioLibraryTab
+                activeTab={activeTab}
+                audioItems={audioItems}
+                isLoading={isLoading}
+                playingId={playingId}
+                onTogglePreview={togglePreview}
+                onSelectAudio={handleSelectAudio}
+              />
             )}
 
             {/* TAB: UPLOADED AUDIO */}
             {activeTab === 'upload' && (
-              <>
-                <Text style={styles.sectionTitle}>
-                  YOUR UPLOADED AUDIO ({filteredUploadedTracks.length})
-                </Text>
-                {filteredUploadedTracks.length === 0 ? (
-                  <View style={styles.emptyUploadBox}>
-                    <Ionicons name="musical-notes-outline" size={44} color="#374151" />
-                    <Text style={styles.emptyUploadTitle}>
-                      {searchQuery.trim() ? 'No Matching Uploaded Audio' : 'No Custom Audio Yet'}
-                    </Text>
-                    <Text style={styles.emptyUploadSubtext}>
-                      {searchQuery.trim()
-                        ? 'Try clearing your search query.'
-                        : 'Import MP3, WAV, or M4A music files directly from your phone or computer.'}
-                    </Text>
-                    {!searchQuery.trim() && (
-                      <TouchableOpacity
-                        style={styles.emptyUploadCta}
-                        onPress={handleDeviceAudioUpload}
-                      >
-                        <Ionicons name="cloud-upload" size={18} color="#000000" />
-                        <Text style={styles.emptyUploadCtaText}>Choose Audio File</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ) : (
-                  filteredUploadedTracks.map((item) => (
-                    <View key={item.id} style={styles.audioRow}>
-                      <TouchableOpacity
-                        style={[
-                          styles.playIconBtn,
-                          playingId === item.id && styles.playIconBtnActive,
-                        ]}
-                        onPress={() => togglePreview(item)}
-                      >
-                        <Ionicons
-                          name={playingId === item.id ? 'pause' : 'play'}
-                          size={18}
-                          color={playingId === item.id ? '#000000' : '#00F2FE'}
-                        />
-                      </TouchableOpacity>
-
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.audioTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <Text style={styles.audioMeta}>
-                          {item.artist} • {item.duration}s
-                        </Text>
-                      </View>
-
-                      <TouchableOpacity
-                        style={[styles.usePill, { backgroundColor: '#00F2FE' }]}
-                        onPress={() => handleSelectAudio(item)}
-                      >
-                        <Text style={[styles.usePillText, { color: '#000000' }]}>Use</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                )}
-              </>
+              <AudioUploadTab
+                filteredUploadedTracks={filteredUploadedTracks}
+                searchQuery={searchQuery}
+                playingId={playingId}
+                onDeviceUpload={handleDeviceAudioUpload}
+                onTogglePreview={togglePreview}
+                onSelectAudio={handleSelectAudio}
+              />
             )}
           </ScrollView>
         </View>
@@ -532,312 +421,3 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  sheetContainer: {
-    backgroundColor: '#141721',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '82%',
-    borderTopWidth: 1,
-    borderColor: '#252B3B',
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
-  },
-  headerLeft: {
-    flex: 1,
-    marginRight: 10,
-  },
-  tabsRow: {
-    flexDirection: 'row',
-    backgroundColor: '#0B0D13',
-    borderRadius: 8,
-    padding: 3,
-    gap: 4,
-  },
-  tabBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  tabBtnActive: {
-    backgroundColor: '#1E2333',
-  },
-  tabText: {
-    color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-  },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchContainer: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1E29',
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0B0D13',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 36,
-    borderWidth: 1,
-    borderColor: '#252B3B',
-  },
-  searchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 13,
-    marginLeft: 8,
-    paddingVertical: 0,
-  },
-  categoryScroll: {
-    paddingTop: 8,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  categoryPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#10131A',
-    borderWidth: 1,
-    borderColor: '#1E2333',
-  },
-  categoryPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
-    borderColor: '#00F2FE',
-  },
-  categoryPillText: {
-    color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  categoryPillTextActive: {
-    color: '#00F2FE',
-  },
-  sheetBody: {
-    padding: 14,
-  },
-  deviceUploadCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.06)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 242, 254, 0.3)',
-  },
-  deviceIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deviceUploadTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  formatBadge: {
-    backgroundColor: '#00F2FE',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  formatBadgeText: {
-    color: '#000000',
-    fontSize: 8,
-    fontWeight: '900',
-  },
-  deviceUploadSubtext: {
-    color: '#8E95A5',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  uploadBtnCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#00F2FE',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sourceBannerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  ossBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  ossBadgeText: {
-    color: '#00F2FE',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  audioRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10131A',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#1E2333',
-  },
-  playIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1A2130',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playIconBtnActive: {
-    backgroundColor: '#00F2FE',
-  },
-  audioTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 3,
-  },
-  audioMeta: {
-    color: '#8E95A5',
-    fontSize: 11,
-  },
-  licensePill: {
-    backgroundColor: '#1E2333',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  licenseText: {
-    color: '#64748B',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  usePill: {
-    backgroundColor: '#00F2FE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  usePillText: {
-    color: '#000000',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  loadingBox: {
-    paddingVertical: 24,
-    alignItems: 'center',
-    gap: 8,
-  },
-  loadingText: {
-    color: '#8E95A5',
-    fontSize: 12,
-  },
-  emptyBox: {
-    paddingVertical: 32,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  emptySubtext: {
-    color: '#8E95A5',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 4,
-    maxWidth: 260,
-  },
-  emptyUploadBox: {
-    backgroundColor: '#10131A',
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1E2333',
-    marginVertical: 10,
-  },
-  emptyUploadTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: 10,
-  },
-  emptyUploadSubtext: {
-    color: '#8E95A5',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  emptyUploadCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#00F2FE',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 14,
-  },
-  emptyUploadCtaText: {
-    color: '#000000',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-});
