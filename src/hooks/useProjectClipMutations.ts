@@ -63,11 +63,13 @@ export function useProjectClipMutations({
   const handleSplitClip = useCallback(() => {
     if (!project || !selectedClipId) return;
     const key = (
-      selectedClipType === "sticker" || selectedClipType === "stickers"
-        ? "stickers"
-        : selectedClipType === "effect" || selectedClipType === "effects"
-          ? "effects"
-          : selectedClipType
+      selectedClipType === "caption" || selectedClipType === "captions"
+        ? "captions"
+        : selectedClipType === "sticker" || selectedClipType === "stickers"
+          ? "stickers"
+          : selectedClipType === "effect" || selectedClipType === "effects"
+            ? "effects"
+            : selectedClipType
     ) as keyof typeof project.tracks;
 
     const list = [...(((project.tracks as any)[key] as any[]) || [])];
@@ -94,8 +96,11 @@ export function useProjectClipMutations({
     const firstDuration = curTime - clipStart;
     const secondDuration = clipEnd - curTime;
 
+    const baseSourceId = clip.sourceMediaId || clip.id;
+
     const firstClip = {
       ...clip,
+      sourceMediaId: baseSourceId,
       duration: Number(firstDuration.toFixed(3)),
       ...(clip.trimIn !== undefined
         ? { trimOut: Number(((clip.trimIn || 0) + firstDuration).toFixed(3)) }
@@ -105,6 +110,7 @@ export function useProjectClipMutations({
     const secondClip = {
       ...clip,
       id: `clip-${String(key)[0]}-${Date.now()}`,
+      sourceMediaId: baseSourceId,
       startTime: Number(curTime.toFixed(3)),
       duration: Number(secondDuration.toFixed(3)),
       ...(clip.trimIn !== undefined
@@ -142,17 +148,20 @@ export function useProjectClipMutations({
       const trackKeys: Array<keyof typeof project.tracks> = [
         "video",
         "audio",
+        "captions",
         "text",
         "stickers",
         "effects",
       ];
       if (clipType) {
         const preferredKey = (
-          clipType === "sticker" || clipType === "stickers"
-            ? "stickers"
-            : clipType === "effect" || clipType === "effects"
-              ? "effects"
-              : clipType
+          clipType === "caption" || clipType === "captions"
+            ? "captions"
+            : clipType === "sticker" || clipType === "stickers"
+              ? "stickers"
+              : clipType === "effect" || clipType === "effects"
+                ? "effects"
+                : clipType
         ) as keyof typeof project.tracks;
         const list = (project.tracks[preferredKey] as any[]) || [];
         const match = list.find((c) => c.id === clipId);
@@ -170,7 +179,7 @@ export function useProjectClipMutations({
             foundTrackKey = k;
             clip = match;
             clipType =
-              k === "stickers" ? "sticker" : k === "effects" ? "effects" : k;
+              k === "stickers" ? "sticker" : k === "effects" ? "effects" : k === "captions" ? "caption" : k;
             break;
           }
         }
@@ -178,7 +187,7 @@ export function useProjectClipMutations({
 
       let name = `${(clipType || "item").charAt(0).toUpperCase() + (clipType || "item").slice(1)} Clip`;
       if (clip) {
-        if (clipType === "text" && clip.text) {
+        if ((clipType === "text" || clipType === "caption") && clip.text) {
           name = `"${clip.text.length > 25 ? clip.text.slice(0, 25) + "..." : clip.text}"`;
         } else if (clip.name) {
           name = clip.name;
@@ -209,16 +218,19 @@ export function useProjectClipMutations({
     const trackKeys: Array<keyof typeof project.tracks> = [
       "video",
       "audio",
+      "captions",
       "text",
       "stickers",
       "effects",
     ];
     const preferredKey = (
-      clipType === "sticker" || clipType === "stickers"
-        ? "stickers"
-        : clipType === "effect" || clipType === "effects"
-          ? "effects"
-          : clipType
+      clipType === "caption" || clipType === "captions"
+        ? "captions"
+        : clipType === "sticker" || clipType === "stickers"
+          ? "stickers"
+          : clipType === "effect" || clipType === "effects"
+            ? "effects"
+            : clipType
     ) as keyof typeof project.tracks;
 
     let targetKey = preferredKey;
@@ -271,11 +283,13 @@ export function useProjectClipMutations({
       if (!clipId) return;
 
       const key = (
-        clipType === "sticker" || clipType === "stickers"
-          ? "stickers"
-          : clipType === "effect" || clipType === "effects"
-            ? "effects"
-            : clipType
+        clipType === "caption" || clipType === "captions"
+          ? "captions"
+          : clipType === "sticker" || clipType === "stickers"
+            ? "stickers"
+            : clipType === "effect" || clipType === "effects"
+              ? "effects"
+              : clipType
       ) as keyof typeof project.tracks;
       const list = [...(((project.tracks as any)[key] as any[]) || [])];
       const idx = list.findIndex((c) => c.id === clipId);
@@ -286,19 +300,22 @@ export function useProjectClipMutations({
       const origTrack =
         typeof original.trackIndex === "number"
           ? original.trackIndex
-          : clipType === "audio"
+          : clipType === "caption" || clipType === "captions"
             ? 1
-            : clipType === "text"
-              ? 2
-              : clipType === "sticker" || clipType === "stickers"
-                ? 3
-                : clipType === "effects"
-                  ? 4
-                  : 0;
+            : clipType === "audio"
+              ? 1
+              : clipType === "text"
+                ? 2
+                : clipType === "sticker" || clipType === "stickers"
+                  ? 3
+                  : clipType === "effects"
+                    ? 4
+                    : 0;
 
       const clone = {
         ...JSON.parse(JSON.stringify(original)),
         id: `clip-${clipType[0]}-${Date.now()}`,
+        sourceMediaId: original.sourceMediaId || original.id,
         position: original.position
           ? {
               x: Math.min(85, (original.position.x || 50) + 5),

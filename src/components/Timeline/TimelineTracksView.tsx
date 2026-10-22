@@ -29,17 +29,17 @@ interface TimelineTracksViewProps {
   isScrubbingRuler: boolean;
   onSelectClip: (
     id: string,
-    type: "video" | "audio" | "text" | "sticker" | "effects",
+    type: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
   ) => void;
   onOpenTransitions: (clipId: string) => void;
   handleRemoveTrack: (trackIdx: number) => void;
   handleClipPress: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects",
+    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
   ) => void;
   handleClipLongPress: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects",
+    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
     start: number,
     track: number,
     dur: number,
@@ -47,7 +47,7 @@ interface TimelineTracksViewProps {
   handleClipMouseDown: (
     e: any,
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects",
+    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
     start: number,
     track: number,
     dur: number,

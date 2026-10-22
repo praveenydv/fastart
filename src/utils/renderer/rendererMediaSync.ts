@@ -135,7 +135,8 @@ export async function preloadClip(
     });
     vid.addEventListener("error", async () => {
       try {
-        const freshUrl = await getLiveMediaUrl(clip.id);
+        const lookupId = clip.sourceMediaId || clip.id;
+        const freshUrl = await getLiveMediaUrl(lookupId);
         if (freshUrl && freshUrl !== clip.url) {
           ctx.videoElements.delete(clip.url);
           clip.url = freshUrl;
@@ -158,6 +159,12 @@ export async function preloadClip(
     }
     img.onload = () => {
       if (ctx.onFrameNeeded) ctx.onFrameNeeded();
+    };
+    img.onerror = () => {
+      if (img.crossOrigin) {
+        img.removeAttribute("crossorigin");
+        img.src = clip.url;
+      }
     };
     img.src = clip.url;
     ctx.videoElements.set(clip.url, img);
@@ -199,13 +206,9 @@ export function syncPlayback(
 
     const clipLocalTime = Math.max(0, time - activeClip.startTime);
     let effectiveSpeed = Math.max(0.1, Math.min(16, activeClip.speed || 1.0));
-    if (
-      activeClip.speedCurve &&
-      Array.isArray(activeClip.speedCurve) &&
-      activeClip.speedCurve.length > 0
-    ) {
+    if (activeClip.speedCurve) {
       effectiveSpeed = evaluateSpeedCurve(
-        activeClip.speedCurve as any[],
+        activeClip.speedCurve,
         clipLocalTime / Math.max(0.1, activeClip.duration),
       );
     }
@@ -253,16 +256,7 @@ export function syncPlayback(
         vid.pause();
       }
       if (Math.abs(vid.currentTime - mediaTime) > 0.04) {
-        const target = Math.max(0, mediaTime);
-        if (typeof (vid as any).fastSeek === "function") {
-          try {
-            (vid as any).fastSeek(target);
-          } catch (e) {
-            vid.currentTime = target;
-          }
-        } else {
-          vid.currentTime = target;
-        }
+        vid.currentTime = Math.max(0, mediaTime);
       }
     }
     ctx.lastUsedTimestamp.set(activeClip.url, Date.now());

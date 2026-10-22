@@ -190,6 +190,20 @@ export default function TextPreviewStage({
     effectShadowRadius = 6;
     effectShadowOffset = { width: -3, height: 0 };
     webTextShadow = "3px 0 #FF0050, -3px 0 #00F2FE";
+  } else if (selectedTextEffect === "fire") {
+    effectShadowColor = "#FF3300";
+    effectShadowRadius = 20;
+    webTextShadow = "0 -2px 10px #FF3300, 0 -6px 18px #FF8800";
+  } else if (selectedTextEffect === "frost") {
+    effectShadowColor = "#00F2FE";
+    effectShadowRadius = 18;
+    webTextShadow = "0 0 10px #00F2FE, 0 0 20px #0284C7";
+  } else if (selectedTextEffect === "retro_box") {
+    webTextShadow = "none";
+  } else if (selectedTextEffect === "hologram") {
+    effectShadowColor = "rgba(0, 242, 254, 0.7)";
+    effectShadowRadius = 8;
+    webTextShadow = "-2px 0 0 rgba(0, 242, 254, 0.8), 2px 0 0 rgba(255, 0, 128, 0.8)";
   } else if (selectedBorderColor) {
     effectShadowColor = selectedBorderColor;
     effectShadowRadius = 8;

@@ -25,6 +25,7 @@ export interface CutoutConfig {
   shadow: number; // 0..100 (edge smoothness/feather)
   strokeColor?: string; // outline color e.g. '#00F2FE'
   strokeWidth?: number; // outline width 0..10
+  bgColor?: string; // background fill color e.g. '#000000', '#FFFFFF', '#00F2FE' or 'none'
 }
 
 export interface SpeedCurvePoint {
@@ -83,17 +84,19 @@ export interface VideoClip {
   type: 'video' | 'photo';
   url: string;
   thumbnail?: string;
+  sourceMediaId?: string;
   duration: number;
   startTime: number;
   trimIn?: number;
   trimOut?: number;
   mediaDuration?: number;
   speed?: number;
-  speedCurve?: number[] | SpeedCurvePoint[] | null;
+  speedCurve?: number[] | SpeedCurvePoint[] | { id: string; name?: string; points: any } | null;
   smoothSlowMo?: 'none' | 'blend' | 'optical_flow';
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;
+  denoise?: boolean;
   reverse?: boolean;
   filter?: string;
   customLut?: CustomLutConfig;
@@ -122,10 +125,13 @@ export interface AudioClip {
   trimIn?: number;
   trimOut?: number;
   mediaDuration?: number;
+  speed?: number;
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;
+  denoise?: boolean;
   url: string;
+  sourceMediaId?: string;
   trackIndex?: number;
 }
 
@@ -165,6 +171,23 @@ export interface TextClip {
   motionTrack?: MotionTrackConfig;
 }
 
+export interface CaptionClip {
+  id: string;
+  text: string;
+  startTime: number;
+  duration: number;
+  position?: { x: number; y: number };
+  scale?: number;
+  rotation?: number;
+  animation?: 'none' | 'bounce' | 'karaoke' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
+  style?: TextStyle;
+  keyframes?: KeyframePoint[];
+  trackIndex?: number;
+  motionTrack?: MotionTrackConfig;
+  presetId?: string;
+  words?: { word: string; start: number; end: number }[];
+}
+
 export interface StickerClip {
   id: string;
   char: string;
@@ -194,6 +217,7 @@ export interface ProjectTracks {
   video: VideoClip[];
   audio: AudioClip[];
   text: TextClip[];
+  captions?: CaptionClip[];
   stickers: StickerClip[];
   effects: EffectClip[];
   filters?: any[];
@@ -212,6 +236,8 @@ export interface FastArtProject {
   zoom: number;
   thumbnailUrl?: string;
   canvasBackground?: string;
+  beatMarkers?: number[];
+  aiDenoise?: boolean;
   tracks: ProjectTracks;
 }
 
@@ -231,6 +257,7 @@ export const createDefaultProject = (title = 'New Project'): FastArtProject => (
     video: [],
     audio: [],
     text: [],
+    captions: [],
     stickers: [],
     effects: [],
   },

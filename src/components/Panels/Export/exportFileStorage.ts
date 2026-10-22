@@ -16,6 +16,7 @@ export interface DirectDownloadOptions {
   activeUrl?: string | null;
   mediaType: string;
   project: any;
+  customFilename?: string;
   resolution: string;
   selectedFormatConfig: MediaFormatOption;
   onSavedSuccess: (filename: string, destinationPath?: string) => void;
@@ -23,11 +24,57 @@ export interface DirectDownloadOptions {
   setNoticeDialog: (dialog: NoticeDialogState | null) => void;
 }
 
+export function resolveExportFilename(
+  project: any,
+  options: {
+    customFilename?: string;
+    mediaType?: string;
+    ext?: string;
+    resolution?: string;
+  } = {}
+): string {
+  const { customFilename, mediaType = "mp4", ext = "mp4" } = options;
+
+  // 1. Pick base title: custom filename first, then project title or name
+  let rawTitle = (customFilename || "").trim();
+  if (!rawTitle) {
+    rawTitle = (project?.title || project?.name || "").trim();
+  }
+
+  // 2. If title is missing or equals the key (proj-1792... or starts with proj-), NEVER use key!
+  if (!rawTitle || /^proj[_-]\d+/i.test(rawTitle) || rawTitle === project?.id) {
+    if (project?.title && !/^proj[_-]\d+/i.test(project.title) && project.title !== project?.id) {
+      rawTitle = project.title;
+    } else if (project?.name && !/^proj[_-]\d+/i.test(project.name) && project.name !== project?.id) {
+      rawTitle = project.name;
+    } else {
+      rawTitle = "FastArt Video";
+    }
+  }
+
+  // 3. Clean characters invalid in filenames across operating systems while keeping spaces
+  const cleanBase = rawTitle.replace(/[/\\?%*:|"<>]/g, "").trim() || "FastArt Video";
+
+  // 4. Strip redundant extension if already included by the user
+  const cleanWithoutExt = cleanBase.replace(new RegExp(`\\.${ext}$`, "i"), "");
+
+  // 5. Build final filename
+  if (mediaType === "png") {
+    return `${cleanWithoutExt}_Cover.${ext}`;
+  } else if (mediaType === "wav") {
+    return `${cleanWithoutExt}_Soundtrack.${ext}`;
+  } else {
+    // Keep clean file name with project name!
+    return `${cleanWithoutExt}.${ext}`;
+  }
+}
+
 export async function executeDirectDownload({
   activeResult,
   activeUrl,
   mediaType,
   project,
+  customFilename,
   resolution,
   selectedFormatConfig,
   onSavedSuccess,
@@ -38,16 +85,12 @@ export async function executeDirectDownload({
   if (!activeResult && !targetUrl) return;
 
   const ext = activeResult?.extension || selectedFormatConfig.id;
-  const cleanTitle = (project.title || "FastArt_Video").replace(/[^a-zA-Z0-9_-]/g, "_");
-
-  let filename: string;
-  if (mediaType === "png") {
-    filename = `${cleanTitle}_Cover.${ext}`;
-  } else if (mediaType === "wav") {
-    filename = `${cleanTitle}_Soundtrack.${ext}`;
-  } else {
-    filename = `${cleanTitle}_${resolution}.${ext}`;
-  }
+  const filename = resolveExportFilename(project, {
+    customFilename,
+    mediaType,
+    ext,
+    resolution,
+  });
 
   // --- 1. WEB DIRECT DOWNLOAD ---
   if (Platform.OS === "web" && typeof window !== "undefined") {

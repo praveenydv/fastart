@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import {
   FastArtProject,
   TextClip,
+  CaptionClip,
   StickerClip,
   EffectClip,
 } from "../types/project";
@@ -20,6 +21,8 @@ interface UseProjectMediaAddersParams {
   transitionTargetClipId: string | null;
   updateProjectWithHistory: (proj: any) => void;
   setActiveModal: (modal: string | null) => void;
+  setSelectedClipId?: (id: string | null) => void;
+  setSelectedClipType?: (type: string) => void;
 }
 
 export function useProjectMediaAdders({
@@ -32,6 +35,8 @@ export function useProjectMediaAdders({
   transitionTargetClipId,
   updateProjectWithHistory,
   setActiveModal,
+  setSelectedClipId,
+  setSelectedClipType,
 }: UseProjectMediaAddersParams) {
   // Delegate filter, effects, tracking, speed, cutout, volume, transform operations
   const {
@@ -41,8 +46,12 @@ export function useProjectMediaAdders({
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    isProcessing,
+    processingMessage,
+    startProcessing,
   } = useProjectFilterEffects({
     project,
     projectRef,
@@ -65,6 +74,23 @@ export function useProjectMediaAdders({
         list[idx] = updatedClip;
         updateProjectWithHistory({
           tracks: { ...current.tracks, text: list },
+        });
+      }
+    },
+    [projectRef, updateProjectWithHistory],
+  );
+
+  // Update caption clip
+  const handleUpdateCaption = useCallback(
+    (updatedClip: CaptionClip) => {
+      const current = projectRef.current;
+      if (!current) return;
+      const list = [...(current.tracks.captions || [])];
+      const idx = list.findIndex((c) => c.id === updatedClip.id);
+      if (idx >= 0) {
+        list[idx] = updatedClip;
+        updateProjectWithHistory({
+          tracks: { ...current.tracks, captions: list },
         });
       }
     },
@@ -217,7 +243,38 @@ export function useProjectMediaAdders({
         tracks: { ...project.tracks, text: textClips },
       });
     },
-    [project, currentTime, updateProjectWithHistory],
+    [project, currentTime, updateProjectWithHistory, addNotification],
+  );
+
+  // Add multiple synchronized auto-captions
+  const handleAddCaptions = useCallback(
+    (captions: any[]) => {
+      const current = projectRef.current || project;
+      if (!current || !captions || captions.length === 0) return;
+      // Clean up previous auto-captions so re-running replaces them cleanly without overlap
+      const nonAuto = (current.tracks.captions || []).filter(
+        (c: any) => !c.id?.startsWith("cap-"),
+      );
+      const updatedTracks = {
+        ...current.tracks,
+        captions: [...nonAuto, ...captions],
+      };
+      updateProjectWithHistory({
+        tracks: updatedTracks,
+      });
+      if (setSelectedClipId) {
+        setSelectedClipId(captions[0].id);
+      }
+      if (setSelectedClipType) {
+        setSelectedClipType("caption");
+      }
+      addNotification({
+        title: "Auto-Captions Added",
+        message: `Successfully synchronized ${captions.length} captions along the timeline.`,
+        icon: "chatbox-ellipses-outline",
+      });
+    },
+    [project, projectRef, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
   // Add audio clip
@@ -350,6 +407,7 @@ export function useProjectMediaAdders({
 
   return {
     handleUpdateText,
+    handleUpdateCaption,
     handleUpdateSticker,
     handleUpdateEffect,
     handleAddMedia,
@@ -363,7 +421,12 @@ export function useProjectMediaAdders({
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    handleAddCaptions,
+    isProcessing,
+    processingMessage,
+    startProcessing,
   };
 }

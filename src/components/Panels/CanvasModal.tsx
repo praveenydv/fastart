@@ -69,6 +69,23 @@ export const CANVAS_PALETTES: ColorPaletteGroup[] = [
   },
 ];
 
+export const BLUR_PRESETS = [
+  { id: 'blur:10', name: 'Light Blur', px: 10, desc: '10px soft focus' },
+  { id: 'blur:25', name: 'Medium Blur', px: 25, desc: '25px standard' },
+  { id: 'blur:50', name: 'Heavy Blur', px: 50, desc: '50px deep blur' },
+];
+
+export const GRADIENT_PRESETS = [
+  { id: 'gradient:#0F2027,#2C5364', name: 'Deep Sea', c1: '#0F2027', c2: '#2C5364' },
+  { id: 'gradient:#FF416C,#FF4B2B', name: 'Sunset Flare', c1: '#FF416C', c2: '#FF4B2B' },
+  { id: 'gradient:#8A2387,#F27121', name: 'Poly Pink', c1: '#8A2387', c2: '#F27121' },
+  { id: 'gradient:#00F2FE,#4FACFE', name: 'Electric Cyan', c1: '#00F2FE', c2: '#4FACFE' },
+  { id: 'gradient:#11998E,#38EF7D', name: 'Neon Mint', c1: '#11998E', c2: '#38EF7D' },
+  { id: 'gradient:#FC466B,#3F5EFB', name: 'Cyberpunk', c1: '#FC466B', c2: '#3F5EFB' },
+  { id: 'gradient:#1E293B,#0F172A', name: 'Studio Slate', c1: '#1E293B', c2: '#0F172A' },
+  { id: 'gradient:#434343,#000000', name: 'Carbon Onyx', c1: '#434343', c2: '#000000' },
+];
+
 const QUICK_PRESETS = [
   '#000000',
   '#FFFFFF',
@@ -81,7 +98,7 @@ const QUICK_PRESETS = [
 ];
 
 function isLightColor(color: string): boolean {
-  if (!color) return false;
+  if (!color || color.startsWith('blur:') || color.startsWith('gradient:')) return false;
   const hex = color.replace('#', '').trim();
   if (hex.length === 3) {
     const r = parseInt(hex[0] + hex[0], 16);
@@ -137,23 +154,36 @@ export default function CanvasModal({
   if (!project) return null;
 
   const currentRatio = project.aspectRatio || '9:16';
-  const currentBg = (project.canvasBackground || '#000000').toUpperCase();
+  const rawBg = project.canvasBackground || '#000000';
+  const isBlur = rawBg.startsWith('blur:');
+  const isGradient = rawBg.startsWith('gradient:');
+  const currentBg = isBlur || isGradient ? rawBg : rawBg.toUpperCase();
 
-  const [customHexInput, setCustomHexInput] = useState(currentBg);
+  const [customHexInput, setCustomHexInput] = useState(isBlur || isGradient ? '#000000' : currentBg);
 
   useEffect(() => {
-    setCustomHexInput(currentBg);
-  }, [currentBg]);
+    if (!isBlur && !isGradient) {
+      setCustomHexInput(currentBg);
+    }
+  }, [currentBg, isBlur, isGradient]);
 
   // Find label for active color across all groups
   let activeColorName = 'Custom';
-  for (const group of CANVAS_PALETTES) {
-    const found = group.colors.find(
-      (c) => c.id.toUpperCase() === currentBg.toUpperCase(),
-    );
-    if (found) {
-      activeColorName = found.name;
-      break;
+  if (isBlur) {
+    const blurItem = BLUR_PRESETS.find(b => b.id === rawBg);
+    activeColorName = blurItem ? `Video ${blurItem.name}` : 'Video Blur';
+  } else if (isGradient) {
+    const gradItem = GRADIENT_PRESETS.find(g => g.id === rawBg);
+    activeColorName = gradItem ? gradItem.name : 'Gradient';
+  } else {
+    for (const group of CANVAS_PALETTES) {
+      const found = group.colors.find(
+        (c) => c.id.toUpperCase() === currentBg.toUpperCase(),
+      );
+      if (found) {
+        activeColorName = found.name;
+        break;
+      }
     }
   }
 
@@ -411,7 +441,113 @@ export default function CanvasModal({
               </View>
             </View>
 
-            {/* 3. Canvas Background Palettes */}
+            {/* 3. Video Background Blur (CapCut Parity) */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>3. Video Background Blur (Pillarbox Fill)</Text>
+                <Text style={styles.sectionBadge}>CapCut Feature</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                {BLUR_PRESETS.map((blur) => {
+                  const isSelected = rawBg === blur.id;
+                  return (
+                    <TouchableOpacity
+                      key={blur.id}
+                      style={[
+                        {
+                          flex: 1,
+                          backgroundColor: isSelected ? 'rgba(0, 242, 254, 0.15)' : '#141824',
+                          borderWidth: isSelected ? 1.5 : 1,
+                          borderColor: isSelected ? '#00F2FE' : '#22293A',
+                          borderRadius: 12,
+                          padding: 12,
+                          alignItems: 'center',
+                        },
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx('pop');
+                        onUpdateProject({ canvasBackground: blur.id });
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="water-outline"
+                        size={20}
+                        color={isSelected ? '#00F2FE' : '#8E95A5'}
+                      />
+                      <Text
+                        style={{
+                          color: isSelected ? '#FFFFFF' : '#8E95A5',
+                          fontSize: 13,
+                          fontWeight: '700',
+                          marginTop: 6,
+                        }}
+                      >
+                        {blur.name}
+                      </Text>
+                      <Text style={{ color: '#4B5563', fontSize: 11, marginTop: 2 }}>
+                        {blur.desc}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* 4. Gradient Backgrounds */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>4. Gradient Canvas Presets</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.colorRow}
+              >
+                {GRADIENT_PRESETS.map((grad) => {
+                  const isSelected = rawBg === grad.id;
+                  return (
+                    <TouchableOpacity
+                      key={grad.id}
+                      style={[
+                        styles.colorSwatchBtn,
+                        isSelected && styles.colorSwatchBtnActive,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx('pop');
+                        onUpdateProject({ canvasBackground: grad.id });
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.colorCircle,
+                          {
+                            backgroundColor: grad.c1,
+                            borderColor: isSelected ? '#00F2FE' : '#4B5563',
+                            borderWidth: isSelected ? 2.5 : 1,
+                            transform: isSelected ? [{ scale: 1.08 }] : [],
+                          },
+                        ]}
+                      >
+                        {isSelected && (
+                          <Ionicons name="checkmark" size={16} color="#00F2FE" />
+                        )}
+                      </View>
+                      <Text
+                        style={[
+                          styles.colorName,
+                          isSelected && styles.colorNameActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {grad.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* 5. Canvas Background Palettes */}
             {CANVAS_PALETTES.map((group) => (
               <View key={group.category} style={styles.section}>
                 <Text style={styles.sectionTitle}>{group.category}</Text>

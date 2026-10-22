@@ -33,6 +33,15 @@ export function getAllTrackClips(proj: FastArtProject): {
       type: "audio",
     }),
   );
+  (proj.tracks.captions || []).forEach((c) =>
+    clips.push({
+      id: c.id,
+      startTime: c.startTime,
+      duration: c.duration,
+      trackIndex: typeof c.trackIndex === "number" ? c.trackIndex : 2,
+      type: "caption",
+    }),
+  );
   (proj.tracks.text || []).forEach((c) =>
     clips.push({
       id: c.id,

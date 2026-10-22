@@ -177,6 +177,7 @@ export function useClipTransformOperations({
       const tracks = {
         video: project.tracks.video ? [...project.tracks.video] : [],
         audio: project.tracks.audio ? [...project.tracks.audio] : [],
+        captions: project.tracks.captions ? [...project.tracks.captions] : [],
         text: project.tracks.text ? [...project.tracks.text] : [],
         stickers: project.tracks.stickers ? [...project.tracks.stickers] : [],
         effects: project.tracks.effects ? [...project.tracks.effects] : [],
@@ -205,6 +206,13 @@ export function useClipTransformOperations({
             "audio",
           );
           tracks.audio[idx] = { ...tracks.audio[idx], ...clampedUpdates };
+          found = true;
+        }
+      }
+      if (!found && tracks.captions) {
+        const idx = tracks.captions.findIndex((c) => c.id === clipId);
+        if (idx >= 0) {
+          tracks.captions[idx] = { ...tracks.captions[idx], ...updates };
           found = true;
         }
       }
@@ -244,7 +252,7 @@ export function useClipTransformOperations({
   const handleMoveClip = useCallback(
     (
       clipId: string,
-      trackType: "video" | "audio" | "text" | "sticker" | "effects",
+      trackType: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
       newStartTime: number,
       newTrackIndex?: number,
     ) => {
@@ -252,6 +260,7 @@ export function useClipTransformOperations({
       const tracks = {
         video: project.tracks.video ? [...project.tracks.video] : [],
         audio: project.tracks.audio ? [...project.tracks.audio] : [],
+        captions: project.tracks.captions ? [...project.tracks.captions] : [],
         text: project.tracks.text ? [...project.tracks.text] : [],
         stickers: project.tracks.stickers ? [...project.tracks.stickers] : [],
         effects: project.tracks.effects ? [...project.tracks.effects] : [],
@@ -273,6 +282,8 @@ export function useClipTransformOperations({
         tracks.video = tracks.video.map(updateItem);
       } else if (trackType === "audio" && tracks.audio) {
         tracks.audio = tracks.audio.map(updateItem);
+      } else if (trackType === "caption" && tracks.captions) {
+        tracks.captions = tracks.captions.map(updateItem);
       } else if (trackType === "text" && tracks.text) {
         tracks.text = tracks.text.map(updateItem);
       } else if (trackType === "sticker" && tracks.stickers) {

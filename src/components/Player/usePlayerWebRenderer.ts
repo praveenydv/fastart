@@ -79,7 +79,8 @@ export function usePlayerWebRenderer({
       clips.forEach(async (clip) => {
         if (clip.url.startsWith("blob:")) {
           try {
-            const freshUrl = await getLiveMediaUrl(clip.id);
+            const lookupId = clip.sourceMediaId || clip.id;
+            const freshUrl = await getLiveMediaUrl(lookupId);
             if (freshUrl && freshUrl !== clip.url) {
               clip.url = freshUrl;
               if (rendererRef.current && canvasRef.current) {
@@ -97,11 +98,14 @@ export function usePlayerWebRenderer({
         }
       });
     }
-  }, [project.id]);
+  }, [project.id, project.tracks.video]);
 
   // Render frame on timestamp, project, or playback state change
   useEffect(() => {
     if (rendererRef.current && canvasRef.current) {
+      if (rendererRef.current.canvas !== canvasRef.current) {
+        rendererRef.current.setCanvas(canvasRef.current);
+      }
       rendererRef.current.renderFrame(
         project,
         currentTime,

@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useState, useRef } from "react";
 import {
   FastArtProject,
+  AudioClip,
   CutoutConfig,
   MotionTrackConfig,
   CustomLutConfig,
@@ -9,6 +10,7 @@ import {
   MaskConfig,
 } from "../types/project";
 import { getMediaDuration } from "../utils/mediaDuration";
+import { soundEngine } from "../utils/audioEngine";
 
 interface UseProjectFilterEffectsParams {
   project: FastArtProject | null;
@@ -31,9 +33,23 @@ export function useProjectFilterEffects({
   updateProjectWithHistory,
   setActiveModal,
 }: UseProjectFilterEffectsParams) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState("Processing Edit...");
+  const processingTimer = useRef<any>(null);
+
+  const startProcessing = useCallback((msg: string, durationMs: number = 750) => {
+    setProcessingMessage(msg);
+    setIsProcessing(true);
+    if (processingTimer.current) clearTimeout(processingTimer.current);
+    processingTimer.current = setTimeout(() => {
+      setIsProcessing(false);
+    }, durationMs);
+  }, []);
+
   // Apply color filter or custom 3D LUT
   const handleApplyFilter = useCallback(
     (filterId: string, customLut?: CustomLutConfig) => {
+      startProcessing("Applying Color Grade & LUT...");
       if (!project) return;
       if (selectedClip && selectedClipType === "video") {
         const videoClips = [...(project.tracks.video || [])];
@@ -58,9 +74,13 @@ export function useProjectFilterEffects({
   // Apply Cutout
   const handleApplyCutout = useCallback(
     (cutoutConfig: CutoutConfig) => {
+      startProcessing("Applying Cutout & Color...");
       if (!project || !selectedClip) return;
       const videoClips = [...(project.tracks.video || [])];
-      const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+      let idx = videoClips.findIndex((c) => c.id === selectedClipId);
+      if (idx === -1 && selectedClip?.id) {
+        idx = videoClips.findIndex((c) => c.id === selectedClip.id);
+      }
       if (idx >= 0) {
         videoClips[idx] = {
           ...videoClips[idx],
@@ -82,6 +102,7 @@ export function useProjectFilterEffects({
   // Apply AI Motion Tracking
   const handleApplyMotionTracking = useCallback(
     (motionConfig: MotionTrackConfig) => {
+      startProcessing("Tracking Motion Vectors...");
       if (!project || !selectedClip) return;
       if (selectedClipType === "text") {
         const textClips = [...(project.tracks.text || [])];
@@ -138,72 +159,226 @@ export function useProjectFilterEffects({
     [project, transitionTargetClipId, updateProjectWithHistory],
   );
 
-  // Apply speed change
+  // Apply speed change with accurate duration adjustment, track-0 ripple, and audio track support
   const handleApplySpeed = useCallback(
     (
       speedVal: number,
       curve?: any,
       smoothSlowMo?: "none" | "blend" | "optical_flow",
     ) => {
-      if (!project || !selectedClip) return;
-      const videoClips = [...(project.tracks.video || [])];
-      const idx = videoClips.findIndex((c) => c.id === selectedClipId);
-      if (idx >= 0) {
-        const clip = videoClips[idx];
-        const mediaDur = getMediaDuration(clip, clip.type);
-        let newDuration = clip.duration;
-        let newTrimOut = clip.trimOut;
+      startProcessing("Calculating Speed & Duration...");
+      const current = projectRef.current || project;
+      if (!current || !selectedClipId) return;
 
-        if (mediaDur && mediaDur > 0 && clip.type === "video") {
-          const currentTrimIn = Math.max(0, clip.trimIn || 0);
-          const maxTimelineDur = (mediaDur - currentTrimIn) / speedVal;
-          if (newDuration > maxTimelineDur) {
-            newDuration = Number(maxTimelineDur.toFixed(3));
-            newTrimOut = mediaDur;
-          }
+      // Determine effective speed multiplier (from curve points or direct speedVal)
+      let effectiveSpeedVal = Math.max(0.1, Math.min(16, speedVal || 1.0));
+      if (curve) {
+        const points = Array.isArray(curve)
+          ? curve
+          : Array.isArray(curve.points)
+            ? curve.points
+            : [];
+        if (points.length > 0) {
+          const sum = points.reduce((acc: number, pt: any) => {
+            const s =
+              typeof pt === "object" && pt && "s" in pt
+                ? pt.s
+                : typeof pt === "number"
+                  ? pt
+                  : 1;
+            return acc + s;
+          }, 0);
+          effectiveSpeedVal = Math.max(
+            0.1,
+            Math.min(16, Number((sum / points.length).toFixed(2))),
+          );
+        }
+      }
+
+      // Check video tracks
+      const videoClips = [...(current.tracks.video || [])];
+      const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+      if (vIdx >= 0) {
+        const clip = videoClips[vIdx];
+        const mediaDur = getMediaDuration(clip, clip.type);
+        const oldSpeed = Math.max(0.1, clip.speed || 1.0);
+        const trimIn = Math.max(0, clip.trimIn || 0);
+
+        // Calculate source media duration that was selected
+        let sourceDuration = 0;
+        if (typeof clip.trimOut === "number" && clip.trimOut > trimIn) {
+          sourceDuration = clip.trimOut - trimIn;
+        } else if (mediaDur && mediaDur > trimIn) {
+          sourceDuration = mediaDur - trimIn;
+        } else {
+          sourceDuration = Math.max(0.1, clip.duration * oldSpeed);
         }
 
-        videoClips[idx] = {
+        const newDuration = Math.max(
+          0.05,
+          Number((sourceDuration / effectiveSpeedVal).toFixed(3)),
+        );
+        const newTrimOut = Number((trimIn + sourceDuration).toFixed(3));
+
+        videoClips[vIdx] = {
           ...clip,
-          speed: speedVal,
-          speedCurve: curve,
+          speed: effectiveSpeedVal,
+          speedCurve: curve || null,
           smoothSlowMo: smoothSlowMo || "none",
           duration: newDuration,
           trimOut: newTrimOut,
         };
 
+        // If on primary video track (track 0), ripple-align subsequent clips
+        if (!clip.trackIndex || clip.trackIndex === 0) {
+          let t = 0;
+          videoClips.forEach((c) => {
+            if (!c.trackIndex || c.trackIndex === 0) {
+              c.startTime = Number(t.toFixed(3));
+              t += c.duration;
+            }
+          });
+        }
+
+        soundEngine.playSfx("click");
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, video: videoClips },
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
         });
+        return;
+      }
+
+      // Check audio tracks
+      const audioClips = [...(current.tracks.audio || [])];
+      const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
+      if (aIdx >= 0) {
+        const clip = audioClips[aIdx];
+        const mediaDur = getMediaDuration(clip, "audio");
+        const oldSpeed = Math.max(0.1, clip.speed || 1.0);
+        const trimIn = Math.max(0, clip.trimIn || 0);
+
+        let sourceDuration = 0;
+        if (typeof clip.trimOut === "number" && clip.trimOut > trimIn) {
+          sourceDuration = clip.trimOut - trimIn;
+        } else if (mediaDur && mediaDur > trimIn) {
+          sourceDuration = mediaDur - trimIn;
+        } else {
+          sourceDuration = Math.max(0.1, clip.duration * oldSpeed);
+        }
+
+        const newDuration = Math.max(
+          0.05,
+          Number((sourceDuration / effectiveSpeedVal).toFixed(3)),
+        );
+        const newTrimOut = Number((trimIn + sourceDuration).toFixed(3));
+
+        audioClips[aIdx] = {
+          ...clip,
+          speed: effectiveSpeedVal,
+          duration: newDuration,
+          trimOut: newTrimOut,
+        };
+
+        soundEngine.playSfx("click");
+        updateProjectWithHistory({
+          ...current,
+          tracks: { ...current.tracks, audio: audioClips },
+        });
+        return;
       }
     },
-    [project, selectedClip, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, updateProjectWithHistory],
   );
 
-  // Apply Volume & Dynamics
+  // Apply Volume, Fades & AI Denoise to video or audio clips
   const handleApplyVolume = useCallback(
-    (vol: number, fadeIn: number, fadeOut: number) => {
-      if (!project || !selectedClip) return;
-      const list = [
-        ...(((project.tracks as any)[selectedClipType] as any[]) || []),
-      ];
-      const idx = list.findIndex((c: any) => c.id === selectedClipId);
-      if (idx >= 0) {
-        list[idx] = {
-          ...list[idx],
+    (vol: number, fadeIn: number, fadeOut: number, denoise?: boolean) => {
+      startProcessing(denoise ? "Applying AI Denoise DSP..." : "Updating Audio Volume...");
+      const current = projectRef.current || project;
+      if (!current || !selectedClipId) return;
+
+      // Check video tracks
+      const videoClips = [...(current.tracks.video || [])];
+      const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+      if (vIdx >= 0) {
+        videoClips[vIdx] = {
+          ...videoClips[vIdx],
           volume: vol,
           fadeIn,
           fadeOut,
+          ...(denoise !== undefined ? { denoise } : {}),
         };
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, [selectedClipType]: list } as any,
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
         });
+        return;
+      }
+
+      // Check audio tracks
+      const audioClips = [...(current.tracks.audio || [])];
+      const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
+      if (aIdx >= 0) {
+        audioClips[aIdx] = {
+          ...audioClips[aIdx],
+          volume: vol,
+          fadeIn,
+          fadeOut,
+          ...(denoise !== undefined ? { denoise } : {}),
+        };
+        updateProjectWithHistory({
+          ...current,
+          tracks: { ...current.tracks, audio: audioClips },
+        });
+        return;
       }
     },
-    [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, updateProjectWithHistory],
   );
+
+  // Extract Audio from Video Clip to Independent Audio Track
+  const handleExtractAudioFromVideo = useCallback(() => {
+    const current = projectRef.current;
+    if (!current || !selectedClipId) return;
+    const videoClips = current.tracks.video || [];
+    const targetVideo = videoClips.find((v) => v.id === selectedClipId);
+    if (!targetVideo) return;
+
+    const newAudioClip: AudioClip = {
+      id: `clip-a-ext-${Date.now()}`,
+      title: `${targetVideo.title || "Video"} (Audio)`,
+      artist: "Extracted Audio",
+      duration: targetVideo.duration,
+      startTime: targetVideo.startTime,
+      trimIn: targetVideo.trimIn || 0,
+      trimOut: targetVideo.trimOut || targetVideo.duration,
+      mediaDuration: targetVideo.mediaDuration || targetVideo.duration,
+      volume: targetVideo.volume ?? 1.0,
+      fadeIn: targetVideo.fadeIn ?? 0,
+      fadeOut: targetVideo.fadeOut ?? 0,
+      denoise: targetVideo.denoise,
+      url: targetVideo.url,
+      trackIndex: 1,
+    };
+
+    // Mute the video clip
+    const updatedVideos = videoClips.map((v) =>
+      v.id === selectedClipId ? { ...v, volume: 0 } : v
+    );
+
+    const updatedAudio = [...(current.tracks.audio || []), newAudioClip];
+
+    soundEngine.playSfx("split");
+    updateProjectWithHistory({
+      ...current,
+      tracks: {
+        ...current.tracks,
+        video: updatedVideos,
+        audio: updatedAudio,
+      },
+    });
+    setActiveModal(null);
+  }, [projectRef, selectedClipId, updateProjectWithHistory, setActiveModal]);
 
   // Apply Transform, Mask & Canvas Ratio
   const handleApplyTransform = useCallback(
@@ -256,15 +431,21 @@ export function useProjectFilterEffects({
       colorBoost?: number;
       denoise?: boolean;
       filterLut: string;
+      skinSmoothing?: number;
+      faceRadiance?: number;
     }) => {
       const current = projectRef.current;
       if (!current) return;
       const boostVal = (preset.colorBoost ?? 80) / 100;
       const sharpVal = (preset.sharpness ?? 75) / 100;
+      const smoothVal = (preset.skinSmoothing ?? 0) / 100;
+      const radianceVal = (preset.faceRadiance ?? 0) / 100;
+
       const sat = 1.0 + boostVal * 0.55;
       const cont = 1.0 + sharpVal * 0.3 + (preset.hdr ? 0.15 : 0);
-      const bright = preset.hdr ? 1.05 : 1.0;
-      const cssFilter = `contrast(${cont.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})`;
+      const bright = (preset.hdr ? 1.05 : 1.0) + radianceVal * 0.1;
+      const blurDrop = smoothVal > 0.25 ? ` drop-shadow(0px 0px ${(smoothVal * 2.5).toFixed(1)}px rgba(255,255,255,0.18))` : "";
+      const cssFilter = `contrast(${cont.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})${blurDrop}`;
 
       const videoClips = (current.tracks.video || []).map((c) => {
         if (!selectedClipId || c.id === selectedClipId) {
@@ -295,7 +476,11 @@ export function useProjectFilterEffects({
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    isProcessing,
+    processingMessage,
+    startProcessing,
   };
 }

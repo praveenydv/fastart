@@ -35,6 +35,8 @@ export interface PlayerProps {
     crop: CustomCrop,
     isFinal?: boolean,
   ) => void;
+  isProcessing?: boolean;
+  processingMessage?: string;
 }
 
 export interface CropPreset {
@@ -53,7 +55,7 @@ export interface TransientTransformState {
 
 export interface ActiveTransformItem {
   id: string;
-  type: "text" | "sticker" | "video";
+  type: "text" | "sticker" | "video" | "caption";
   label?: string;
   pos: { x: number; y: number };
   scale: number;

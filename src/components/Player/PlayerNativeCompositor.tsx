@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
 import { formatTime } from "./playerUtils";
@@ -9,6 +9,7 @@ import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
+  activeCaptions?: any[];
   activeTexts: any[];
   activeStickers: any[];
   activeEffects: any[];
@@ -20,7 +21,7 @@ interface PlayerNativeCompositorProps {
   onSelectClip?: (id: string | null, type?: string) => void;
   canvasBackground?: string;
   getItemBaseDimensions: (
-    type: "text" | "sticker" | "video",
+    type: "text" | "sticker" | "video" | "caption",
     clip: any,
   ) => { baseW: number; baseH: number };
   getInterpolatedTransform: (
@@ -32,6 +33,7 @@ interface PlayerNativeCompositorProps {
 
 export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
   activeVideos,
+  activeCaptions = [],
   activeTexts,
   activeStickers,
   activeEffects,
@@ -45,15 +47,36 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
   getItemBaseDimensions,
   getInterpolatedTransform,
 }) => {
+  const rawBg = canvasBackground || "#000000";
+  const isBlur = rawBg.startsWith("blur:");
+  const isGradient = rawBg.startsWith("gradient:");
+  const effectiveBgColor = isBlur
+    ? "rgba(11, 13, 19, 0.95)"
+    : isGradient
+    ? rawBg.replace("gradient:", "").split(",")[0] || "#0B0D13"
+    : rawBg;
+
   return (
     <View
       style={[
         StyleSheet.absoluteFill,
         styles.nativeCompositorContainer,
-        { backgroundColor: canvasBackground || "#000000" },
+        { backgroundColor: effectiveBgColor },
       ]}
       pointerEvents="box-none"
     >
+      {/* Background Blur Fill for Pillarbox / Letterbox */}
+      {isBlur && activeVideos.length > 0 && activeVideos[0].thumbnail && (
+        <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} pointerEvents="none">
+          <Image
+            source={{ uri: activeVideos[0].thumbnail }}
+            style={[StyleSheet.absoluteFill, { opacity: 0.5, transform: [{ scale: 1.3 }] }]}
+            blurRadius={20}
+            resizeMode="cover"
+          />
+        </View>
+      )}
+
       {/* Layer 1: Active Video / Image Clips */}
       {activeVideos.map((vid) => {
         const isTrans = activeTransient && activeTransient.clipId === vid.id;
@@ -359,6 +382,78 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               ]}
             >
               {displayText}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+
+      {/* Layer 2b: Active Captions / Subtitles */}
+      {activeCaptions.map((cap) => {
+        const isTrans = activeTransient && activeTransient.clipId === cap.id;
+        const kfT = getInterpolatedTransform(cap, currentTime, "caption");
+        const effX = isTrans ? activeTransient!.x : kfT.x;
+        const effY = isTrans ? activeTransient!.y : kfT.y;
+        const baseS = isTrans ? activeTransient!.scale : kfT.scale;
+        const rot = isTrans ? activeTransient!.rotation : kfT.rotation;
+        const baseOpacity =
+          (kfT.opacity ?? 1) * (cap.opacity !== undefined ? cap.opacity : 1);
+
+        const elapsed = Math.max(0, currentTime - cap.startTime);
+        const duration = Math.max(0.5, cap.duration || 2.0);
+        const anim = (cap.animation || "none").toLowerCase();
+
+        let animScale = 1.0;
+        let animAlpha = 1.0;
+        if (anim === "bounce" && elapsed < 0.35) {
+          const p = elapsed / 0.35;
+          animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
+        } else if (anim === "zoomin" && elapsed < 0.3) {
+          const p = elapsed / 0.3;
+          animScale = 0.4 + p * 0.6;
+        }
+
+        const s = baseS * animScale;
+        const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
+        const cx = (effX / 100) * boxWidth;
+        const cy = (effY / 100) * canvasHeight;
+        const { baseW, baseH } = getItemBaseDimensions("caption", cap);
+        const w = Math.round(baseW * s);
+        const h = Math.round(baseH * s);
+        const fontSize = cap.style?.fontSize || 24;
+
+        return (
+          <TouchableOpacity
+            key={cap.id}
+            activeOpacity={0.9}
+            onPress={() => onSelectClip?.(cap.id, "caption")}
+            style={{
+              position: "absolute",
+              left: cx - w / 2,
+              top: cy - h / 2,
+              width: w,
+              height: h,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity,
+              transform: [{ rotate: `${rot}deg` }],
+            }}
+          >
+            <Text
+              numberOfLines={2}
+              style={[
+                {
+                  color: cap.style?.color || "#FFE600",
+                  fontSize: Math.max(10, fontSize * s),
+                  fontWeight: (cap.style?.fontWeight as any) || "900",
+                  backgroundColor: cap.style?.backgroundColor || "transparent",
+                  textAlign: "center",
+                  paddingHorizontal: 12 * s,
+                  paddingVertical: 5 * s,
+                  borderRadius: 6,
+                },
+              ]}
+            >
+              {cap.text}
             </Text>
           </TouchableOpacity>
         );

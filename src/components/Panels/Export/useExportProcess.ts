@@ -32,12 +32,23 @@ export function useExportProcess(
   const [downloadDestination, setDownloadDestination] = useState("Device Gallery");
   const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState | null>(null);
 
+  const getInitialFilename = () => {
+    let raw = (project?.title || project?.name || "").trim();
+    if (!raw || /^proj[_-]\d+/i.test(raw) || raw === project?.id) {
+      return "FastArt Video";
+    }
+    return raw;
+  };
+
+  const [exportFilename, setExportFilename] = useState(getInitialFilename);
+
   useEffect(() => {
-    if (project.resolution) setResolution(project.resolution);
-    if (project.fps) setFps(project.fps);
+    if (project?.resolution) setResolution(project.resolution);
+    if (project?.fps) setFps(project.fps);
     setIsSaved(false);
     setIsSaving(false);
-  }, [project.resolution, project.fps, visible]);
+    setExportFilename(getInitialFilename());
+  }, [project?.resolution, project?.fps, project?.title, project?.name, visible]);
 
   const selectedFormatConfig =
     MEDIA_FORMATS.find((f) => f.id === mediaType) || MEDIA_FORMATS[0];
@@ -62,6 +73,7 @@ export function useExportProcess(
       activeUrl: targetUrl || exportedUrl,
       mediaType,
       project,
+      customFilename: exportFilename,
       resolution,
       selectedFormatConfig,
       onSavedSuccess: (filename, dest) => {
@@ -235,5 +247,7 @@ export function useExportProcess(
     triggerDirectDownload,
     handleStartExport,
     getProgressStatusMessage,
+    exportFilename,
+    setExportFilename,
   };
 }

@@ -21,6 +21,7 @@ import {
   addNotification,
 } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import { STOCK_PRESET_CLIPS } from './AutoCut/autoCutConstants';
 
 interface MediaPickerModalProps {
   visible: boolean;
@@ -49,8 +50,24 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
       try {
         const typeFilter = activeTab === 'all' ? 'all' : activeTab;
         const results = await openMediaService.searchMedia(searchQuery, typeFilter);
+        const stockPresets: OpenMediaItem[] =
+          activeTab === 'all' || activeTab === 'video'
+            ? STOCK_PRESET_CLIPS.map((s) => ({
+                id: s.id,
+                title: s.title,
+                type: 'video' as const,
+                url: s.url,
+                thumbnailUrl: s.thumbnailUrl,
+                duration: s.duration,
+                width: 1920,
+                height: 1080,
+                license: 'CC0',
+                source: 'Google Sample HD',
+              }))
+            : [];
         if (isMounted) {
-          setMediaItems(results);
+          const merged = [...stockPresets, ...results.filter((r) => !stockPresets.some((s) => s.id === r.id))];
+          setMediaItems(merged);
         }
       } catch (err) {
         console.warn('Error fetching media:', err);
@@ -86,6 +103,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 
               const clip = {
                 id: mediaId,
+                sourceMediaId: mediaId,
                 title,
                 type: isVideo ? 'video' : 'photo',
                 url: saved.url,
@@ -198,6 +216,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
     const clip = {
       ...item,
       id: 'clip-' + Date.now(),
+      sourceMediaId: item.sourceMediaId || item.id,
       startTime: 0,
       trimIn: 0,
       trimOut: item.duration || 5.0,

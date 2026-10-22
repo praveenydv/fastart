@@ -17,7 +17,10 @@ interface VolumeModalProps {
   currentVolume?: number;
   currentFadeIn?: number;
   currentFadeOut?: number;
-  onApplyVolume: (volume: number, fadeIn: number, fadeOut: number) => void;
+  currentDenoise?: boolean;
+  isFromVideo?: boolean;
+  onApplyVolume: (volume: number, fadeIn: number, fadeOut: number, denoise?: boolean) => void;
+  onExtractAudio?: () => void;
 }
 
 const WebDiv: any = Platform.OS === 'web' ? 'div' : View;
@@ -29,11 +32,15 @@ export default function VolumeModal({
   currentVolume = 1.0,
   currentFadeIn = 0,
   currentFadeOut = 0,
+  currentDenoise = false,
+  isFromVideo = false,
   onApplyVolume,
+  onExtractAudio,
 }: VolumeModalProps) {
   const [volume, setVolume] = useState(currentVolume);
   const [fadeIn, setFadeIn] = useState(currentFadeIn);
   const [fadeOut, setFadeOut] = useState(currentFadeOut);
+  const [denoise, setDenoise] = useState(currentDenoise);
 
   // Sync when opened
   React.useEffect(() => {
@@ -41,8 +48,9 @@ export default function VolumeModal({
       setVolume(currentVolume);
       setFadeIn(currentFadeIn);
       setFadeOut(currentFadeOut);
+      setDenoise(currentDenoise);
     }
-  }, [visible, currentVolume, currentFadeIn, currentFadeOut]);
+  }, [visible, currentVolume, currentFadeIn, currentFadeOut, currentDenoise]);
 
   const volumePresets = [
     { label: 'Mute', val: 0.0, icon: 'volume-mute' },
@@ -54,7 +62,7 @@ export default function VolumeModal({
 
   const handleApply = () => {
     soundEngine.playSfx('click');
-    onApplyVolume(volume, fadeIn, fadeOut);
+    onApplyVolume(volume, fadeIn, fadeOut, denoise);
     onClose();
   };
 
@@ -239,6 +247,77 @@ export default function VolumeModal({
                   </View>
                 )}
               </View>
+            </View>
+
+            {/* AI Audio Denoise & Video Audio Tools */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Audio Enhancement</Text>
+
+              {/* AI Denoise Toggle */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#181C28',
+                  padding: 14,
+                  borderRadius: 12,
+                  marginBottom: 10,
+                  borderWidth: 1,
+                  borderColor: denoise ? '#00F2FE' : '#22293A',
+                }}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  const nextDenoise = !denoise;
+                  setDenoise(nextDenoise);
+                  onApplyVolume(volume, fadeIn, fadeOut, nextDenoise);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="volume-mute-outline" size={16} color={denoise ? '#00F2FE' : '#FFFFFF'} />
+                    <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>AI Noise Reduction</Text>
+                  </View>
+                  <Text style={{ color: '#8E95A5', fontSize: 11, marginTop: 4 }}>
+                    Attenuate microphone hiss, wind, and room echo using intelligent spectral gating
+                  </Text>
+                </View>
+                <Ionicons
+                  name={denoise ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={denoise ? '#00F2FE' : '#8E95A5'}
+                />
+              </TouchableOpacity>
+
+              {/* Extract Audio from Video Button */}
+              {isFromVideo && onExtractAudio && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: 'rgba(0, 242, 254, 0.4)',
+                    marginTop: 6,
+                  }}
+                  onPress={() => {
+                    soundEngine.playSfx('pop');
+                    onExtractAudio();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="cut-outline" size={16} color="#00F2FE" />
+                  <Text style={{ color: '#00F2FE', fontSize: 13, fontWeight: '800' }}>
+                    Extract Audio to Separate Track
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
 

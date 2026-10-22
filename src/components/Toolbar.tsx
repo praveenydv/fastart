@@ -30,6 +30,7 @@ interface ToolbarProps {
   onOpenMotionTracking?: () => void;
   onOpenCanvasModal?: () => void;
   onOpenKeyframeModal?: () => void;
+  onOpenAutoCaptions?: () => void;
 }
 
 function Toolbar({
@@ -58,11 +59,13 @@ function Toolbar({
   onOpenMotionTracking,
   onOpenCanvasModal,
   onOpenKeyframeModal,
+  onOpenAutoCaptions,
 }: ToolbarProps) {
   // If a clip is actively selected, show Contextual Editing Tools based on clip type
   if (selectedClip) {
     const isVideo = selectedClipType === 'video';
     const isAudio = selectedClipType === 'audio';
+    const isCaption = selectedClipType === 'caption' || selectedClipType === 'captions';
     const isText = selectedClipType === 'text';
     const isSticker = selectedClipType === 'sticker' || selectedClipType === 'stickers';
     const isEffect = selectedClipType === 'effects' || selectedClipType === 'effect';
@@ -71,6 +74,8 @@ function Toolbar({
       ? 'Video'
       : isAudio
       ? 'Audio'
+      : isCaption
+      ? 'Captions'
       : isText
       ? 'Text'
       : isSticker
@@ -360,6 +365,56 @@ function Toolbar({
             </>
           )}
 
+          {/* ================= CAPTION TOOLS ================= */}
+          {isCaption && (
+            <>
+              {/* 1. Edit Captions / Batch Subtitles */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  if (onOpenAutoCaptions) onOpenAutoCaptions();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="chatbox-ellipses" size={18} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Captions</Text>
+              </TouchableOpacity>
+
+              {/* 2. Caption Styles */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onOpenTextModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="color-palette-outline" size={18} color="#FFE600" />
+                </View>
+                <Text style={styles.toolLabel}>Styles</Text>
+              </TouchableOpacity>
+
+              {/* 3. Split Caption */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx('split');
+                  onSplitClip();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Ionicons name="cut-outline" size={18} color="#00F2FE" />
+                </View>
+                <Text style={styles.toolLabel}>Split</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
           {/* ================= TEXT TOOLS ================= */}
           {isText && (
             <>
@@ -566,6 +621,23 @@ function Toolbar({
           </View>
           <Text style={styles.toolLabel}>Text</Text>
         </TouchableOpacity>
+
+        {/* 3b. AI Auto-Captions */}
+        {onOpenAutoCaptions && (
+          <TouchableOpacity
+            style={styles.toolItem}
+            onPress={() => {
+              soundEngine.playSfx('click');
+              onOpenAutoCaptions();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="chatbox-ellipses-outline" size={18} color="#00F2FE" />
+            </View>
+            <Text style={styles.toolLabel}>Captions</Text>
+          </TouchableOpacity>
+        )}
 
         {/* 4. Stickers & Emojis */}
         <TouchableOpacity

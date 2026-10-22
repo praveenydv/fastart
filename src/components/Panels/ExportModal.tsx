@@ -47,6 +47,8 @@ export default function ExportModal({
     triggerDirectDownload,
     handleStartExport,
     getProgressStatusMessage,
+    exportFilename,
+    setExportFilename,
   } = useExportProcess(project, totalDuration, visible);
 
   return (
@@ -85,6 +87,8 @@ export default function ExportModal({
                 setResolution={setResolution}
                 fps={fps}
                 setFps={setFps}
+                exportFilename={exportFilename}
+                setExportFilename={setExportFilename}
                 selectedFormatConfig={selectedFormatConfig}
                 project={project}
                 totalDuration={totalDuration}

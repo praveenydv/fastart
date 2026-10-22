@@ -7,6 +7,7 @@ interface UseActiveTransformItemProps {
   isCroppingMode: boolean;
   selectedClipId?: string | null;
   selectedClipType?: string;
+  activeCaptions?: any[];
   activeTexts: any[];
   activeStickers: any[];
   activeVideos: any[];
@@ -26,6 +27,7 @@ export function useActiveTransformItem({
   isCroppingMode,
   selectedClipId,
   selectedClipType,
+  activeCaptions,
   activeTexts,
   activeStickers,
   activeVideos,
@@ -39,6 +41,10 @@ export function useActiveTransformItem({
   return useMemo(() => {
     if (isCroppingMode || !selectedClipId) return null;
 
+    const isCaptionType =
+      !selectedClipType ||
+      selectedClipType === "caption" ||
+      selectedClipType === "captions";
     const isTextType =
       !selectedClipType ||
       selectedClipType === "text" ||
@@ -52,6 +58,12 @@ export function useActiveTransformItem({
       selectedClipType === "video" ||
       selectedClipType === "photo" ||
       selectedClipType === "videos";
+
+    const selectedCaption = isCaptionType
+      ? (activeCaptions?.find((c) => c.id === selectedClipId) ||
+        project?.tracks?.captions?.find((c) => c.id === selectedClipId) ||
+        null)
+      : null;
 
     const selectedText = isTextType
       ? activeTexts.find((t) => t.id === selectedClipId) ||
@@ -71,6 +83,10 @@ export function useActiveTransformItem({
         null
       : null;
 
+    const isTransCap =
+      activeTransient &&
+      selectedCaption &&
+      activeTransient.clipId === selectedCaption.id;
     const isTransText =
       activeTransient &&
       selectedText &&
@@ -83,6 +99,42 @@ export function useActiveTransformItem({
       activeTransient &&
       selectedVideo &&
       activeTransient.clipId === selectedVideo.id;
+
+    if (selectedCaption) {
+      const { baseW, baseH } = getItemBaseDimensions(
+        "caption",
+        selectedCaption,
+        boxWidth,
+        canvasHeight,
+      );
+      const kfT = getInterpolatedTransform
+        ? getInterpolatedTransform(selectedCaption, currentTime, "caption")
+        : null;
+      const s = isTransCap
+        ? activeTransient!.scale
+        : (kfT?.scale ?? selectedCaption.scale ?? 1.0);
+      const rot = isTransCap
+        ? activeTransient!.rotation
+        : (kfT?.rotation ?? selectedCaption.rotation ?? 0);
+      const pos = isTransCap
+        ? { x: activeTransient!.x, y: activeTransient!.y }
+        : {
+            x: kfT ? kfT.x : (selectedCaption.position?.x ?? 50),
+            y: kfT ? kfT.y : (selectedCaption.position?.y ?? 80),
+          };
+      return {
+        id: selectedCaption.id,
+        type: "caption",
+        label: selectedCaption.text,
+        pos,
+        scale: s,
+        rotation: rot,
+        baseW,
+        baseH,
+        width: Math.round(baseW * s),
+        height: Math.round(baseH * s),
+      };
+    }
 
     if (selectedText) {
       const { baseW, baseH } = getItemBaseDimensions(

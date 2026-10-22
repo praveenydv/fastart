@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
@@ -32,9 +39,17 @@ function Header({
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
 
+  const displayTitle =
+    project?.title && !/^proj[_-]\d+/i.test(project.title) && project.title !== project?.id
+      ? project.title
+      : "Project";
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(displayTitle);
+
   return (
     <View style={styles.header}>
-      {/* Left: Back button & Ratio */}
+      {/* Left: Back button, Ratio & Project Name */}
       <View style={styles.leftSection}>
         <TouchableOpacity
           style={styles.iconButton}
@@ -43,6 +58,23 @@ function Header({
           accessibilityLabel="Back to Home"
         >
           <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.projectTitlePill}
+          onPress={() => {
+            soundEngine.playSfx("click");
+            setEditedTitle(displayTitle);
+            setIsRenaming(true);
+          }}
+          activeOpacity={0.7}
+          accessibilityLabel="Rename Project"
+        >
+          <Ionicons name="film-outline" size={13} color="#00F2FE" />
+          <Text style={styles.projectTitleText} numberOfLines={1}>
+            {displayTitle}
+          </Text>
+          <Ionicons name="pencil" size={10} color="#64748B" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -102,10 +134,63 @@ function Header({
           activeOpacity={0.8}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={16} color="#000000" />
+          <Ionicons name="arrow-up" size={16} color="#00F2FE" />
           <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Rename Project Modal */}
+      <Modal
+        visible={isRenaming}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsRenaming(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsRenaming(false)}
+        >
+          <View style={styles.renameCard}>
+            <Text style={styles.renameTitle}>Rename Project</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={editedTitle}
+              onChangeText={setEditedTitle}
+              placeholder="Project Name..."
+              placeholderTextColor="#64748B"
+              autoFocus
+              selectTextOnFocus
+              maxLength={40}
+              onSubmitEditing={() => {
+                if (editedTitle.trim()) {
+                  onUpdateProject({ title: editedTitle.trim() });
+                }
+                setIsRenaming(false);
+              }}
+            />
+            <View style={styles.renameActionsRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setIsRenaming(false)}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={() => {
+                  if (editedTitle.trim()) {
+                    onUpdateProject({ title: editedTitle.trim() });
+                  }
+                  setIsRenaming(false);
+                }}
+              >
+                <Text style={styles.saveBtnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -135,6 +220,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#141721",
+  },
+  projectTitlePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#141721",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#252B3B",
+    gap: 4,
+    maxWidth: 160,
+  },
+  projectTitleText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+    maxWidth: 110,
   },
   ratioPill: {
     flexDirection: "row",
@@ -173,7 +276,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -191,6 +293,68 @@ const styles = StyleSheet.create({
   exportText: {
     color: "#000000",
     fontSize: 12,
+    fontWeight: "800",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    zIndex: 99999,
+  },
+  renameCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: "#10141E",
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#252B3B",
+  },
+  renameTitle: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+  renameInput: {
+    backgroundColor: "#0B0D13",
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E2333",
+    marginBottom: 16,
+  },
+  renameActionsRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  cancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#1A1F2C",
+  },
+  cancelBtnText: {
+    color: "#8E95A5",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  saveBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#00F2FE",
+  },
+  saveBtnText: {
+    color: "#000000",
+    fontSize: 13,
     fontWeight: "800",
   },
 });

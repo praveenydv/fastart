@@ -20,6 +20,8 @@ interface AIEnhanceModalProps {
     colorBoost: number;
     denoise: boolean;
     filterLut: string;
+    skinSmoothing?: number;
+    faceRadiance?: number;
   }) => void;
 }
 
@@ -34,6 +36,8 @@ export default function AIEnhanceModal({
   const [hdr, setHdr] = useState(true);
   const [sharpness, setSharpness] = useState(75);
   const [colorBoost, setColorBoost] = useState(80);
+  const [skinSmoothing, setSkinSmoothing] = useState(40);
+  const [faceRadiance, setFaceRadiance] = useState(30);
   const [denoise, setDenoise] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState<'hdr_pro' | 'vibrant' | 'cinema' | 'portrait'>('hdr_pro');
 
@@ -51,6 +55,8 @@ export default function AIEnhanceModal({
       hdr,
       sharpness,
       colorBoost,
+      skinSmoothing,
+      faceRadiance,
       denoise,
       filterLut: chosen.filter,
     });
@@ -190,6 +196,98 @@ export default function AIEnhanceModal({
                     <TouchableOpacity
                       style={styles.stepBtn}
                       onPress={() => setColorBoost((c) => Math.min(100, c + 5))}
+                    >
+                      <Ionicons name="add" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* AI Beauty & Skin Retouch */}
+            <View style={styles.section}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Ionicons name="person-outline" size={16} color="#D946EF" />
+                <Text style={styles.sectionTitle}>BEAUTY & SKIN RETOUCH</Text>
+              </View>
+
+              {/* Skin Smoothing Slider */}
+              <View style={styles.sliderRow}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.sliderLabel}>Skin Smoothing (Blemish Clean)</Text>
+                  <Text style={[styles.badge, { color: '#D946EF' }]}>{skinSmoothing}%</Text>
+                </View>
+                {Platform.OS === 'web' ? (
+                  <WebDiv style={{ margin: '6px 0' }}>
+                    <WebInput
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={skinSmoothing}
+                      onChange={(e: any) => setSkinSmoothing(parseInt(e.target.value))}
+                      style={{
+                        width: '100%',
+                        accentColor: '#D946EF',
+                        height: 4,
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                      }}
+                    />
+                  </WebDiv>
+                ) : (
+                  <View style={styles.stepperRow}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setSkinSmoothing((s) => Math.max(0, s - 5))}
+                    >
+                      <Ionicons name="remove" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperVal}>{skinSmoothing}%</Text>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setSkinSmoothing((s) => Math.min(100, s + 5))}
+                    >
+                      <Ionicons name="add" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              {/* Face Radiance Slider */}
+              <View style={styles.sliderRow}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.sliderLabel}>Face Radiance & Glow</Text>
+                  <Text style={[styles.badge, { color: '#00F2FE' }]}>{faceRadiance}%</Text>
+                </View>
+                {Platform.OS === 'web' ? (
+                  <WebDiv style={{ margin: '6px 0' }}>
+                    <WebInput
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={faceRadiance}
+                      onChange={(e: any) => setFaceRadiance(parseInt(e.target.value))}
+                      style={{
+                        width: '100%',
+                        accentColor: '#00F2FE',
+                        height: 4,
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                      }}
+                    />
+                  </WebDiv>
+                ) : (
+                  <View style={styles.stepperRow}>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setFaceRadiance((r) => Math.max(0, r - 5))}
+                    >
+                      <Ionicons name="remove" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperVal}>{faceRadiance}%</Text>
+                    <TouchableOpacity
+                      style={styles.stepBtn}
+                      onPress={() => setFaceRadiance((r) => Math.min(100, r + 5))}
                     >
                       <Ionicons name="add" size={16} color="#FFFFFF" />
                     </TouchableOpacity>

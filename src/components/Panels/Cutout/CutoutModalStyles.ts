@@ -295,6 +295,40 @@ export const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
+  bgGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  bgChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: '#141721',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A334A',
+  },
+  bgChipSelected: {
+    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+  },
+  bgDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  bgText: {
+    fontSize: 11,
+    color: '#8E95A5',
+  },
+  bgTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

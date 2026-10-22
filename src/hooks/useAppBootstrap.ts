@@ -100,6 +100,9 @@ export function useAppBootstrap({
             );
           }
           if (matched) {
+            if (!matched.title || /^proj[_-]\d+/i.test(matched.title) || matched.title === matched.id) {
+              matched.title = "Project 1";
+            }
             setProject(matched);
             const resumeTime =
               session &&

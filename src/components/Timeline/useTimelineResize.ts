@@ -44,7 +44,9 @@ export function useTimelineResize({
   }, [activeTrackCount, isMobile]);
 
   const timelineHeight =
-    userTimelineHeight !== null ? userTimelineHeight : autoTimelineHeight;
+    userTimelineHeight !== null
+      ? Math.max(userTimelineHeight, Math.min(autoTimelineHeight, isMobile ? 160 : 190))
+      : autoTimelineHeight;
 
   const minTimelineHeight = 74;
   const maxTimelineHeight = Math.min(450, Math.round(screenHeight * 0.55));

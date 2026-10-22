@@ -6,7 +6,7 @@ export const MIN_CLIP_DURATION = 0.05; // 50 milliseconds precision
 
 export interface UnifiedClipItem {
   id: string;
-  type: "video" | "audio" | "text" | "sticker" | "effects";
+  type: "video" | "audio" | "text" | "caption" | "sticker" | "effects";
   startTime: number;
   duration: number;
   trackIndex?: number;
@@ -29,7 +29,7 @@ export interface SnapPoint {
 
 export interface DragSession {
   clipId: string;
-  clipType: "video" | "audio" | "text" | "sticker" | "effects";
+  clipType: "video" | "audio" | "text" | "caption" | "sticker" | "effects";
   originalStartTime: number;
   duration: number;
   originalTrackIndex: number;
@@ -42,7 +42,7 @@ export interface DragSession {
 
 export interface TrimSession {
   clipId: string;
-  clipType: "video" | "audio" | "text" | "sticker" | "effects";
+  clipType: "video" | "audio" | "text" | "caption" | "sticker" | "effects";
   side: "left" | "right";
   originalStartTime: number;
   originalDuration: number;
@@ -65,7 +65,7 @@ export interface TimelineProps {
   selectedClipType?: string;
   onSelectClip: (
     id: string,
-    type: "video" | "audio" | "text" | "sticker" | "effects",
+    type: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
   ) => void;
   onTrimClip?: (
     clipId: string,
@@ -80,7 +80,7 @@ export interface TimelineProps {
   ) => void;
   onMoveClip?: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects",
+    trackType: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
     newStartTime: number,
     newTrackIndex?: number,
   ) => void;

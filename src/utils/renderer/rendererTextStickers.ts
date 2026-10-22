@@ -9,7 +9,12 @@ export function drawSticker(
   h: number,
 ) {
   ctx.save();
-  const motion = applyMotionTracking(time, stk.startTime, stk.duration, stk.motionTrack);
+  const motion = applyMotionTracking(
+    time,
+    stk.startTime,
+    stk.duration,
+    stk.motionTrack,
+  );
   const px = (stk.position?.x ?? 50) * (w / 100) + motion.dx;
   const py = (stk.position?.y ?? 50) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - stk.startTime);
@@ -23,7 +28,7 @@ export function drawSticker(
     const bounce = Math.sin(elapsed * 4) * 0.08;
     scale += bounce;
   } else if (anim === "pulse") {
-    scale *= (1.0 + Math.sin(elapsed * 6) * 0.1);
+    scale *= 1.0 + Math.sin(elapsed * 6) * 0.1;
   } else if (anim === "wave") {
     offsetY = Math.sin(elapsed * 4) * 8;
   } else if (anim === "fade") {
@@ -31,7 +36,7 @@ export function drawSticker(
   } else if (anim === "pop") {
     if (elapsed < 0.3) {
       const p = elapsed / 0.3;
-      scale *= (0.3 + p * 0.85);
+      scale *= 0.3 + p * 0.85;
       alpha = p;
     }
   } // if anim === 'none', static without bounce
@@ -45,7 +50,8 @@ export function drawSticker(
   const isBadge = charText.length > 2;
 
   if (isBadge) {
-    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+    ctx.font =
+      'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
     const metrics = ctx.measureText(charText);
     const badgeW = metrics.width + 24;
     const badgeH = 38;
@@ -89,7 +95,12 @@ export function drawTextOverlay(
   isPlaying: boolean = false,
 ) {
   ctx.save();
-  const motion = applyMotionTracking(time, txt.startTime, txt.duration, txt.motionTrack);
+  const motion = applyMotionTracking(
+    time,
+    txt.startTime,
+    txt.duration,
+    txt.motionTrack,
+  );
   const px = (txt.position?.x ?? 50) * (w / 100) + motion.dx;
   const py = (txt.position?.y ?? 50) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - txt.startTime);
@@ -127,7 +138,7 @@ export function drawTextOverlay(
       yOffset = (1 - easeOut) * 50;
       alpha = p;
     } else if (timeLeft < exitDur) {
-      const p = 1 - (timeLeft / exitDur);
+      const p = 1 - timeLeft / exitDur;
       yOffset = -p * 30;
       alpha = 1 - p;
     }
@@ -138,7 +149,7 @@ export function drawTextOverlay(
       yOffset = -(1 - easeOut) * 50;
       alpha = p;
     } else if (timeLeft < exitDur) {
-      const p = 1 - (timeLeft / exitDur);
+      const p = 1 - timeLeft / exitDur;
       yOffset = p * 30;
       alpha = 1 - p;
     }
@@ -149,7 +160,7 @@ export function drawTextOverlay(
       xOffset = (1 - easeOut) * 70;
       alpha = p;
     } else if (timeLeft < exitDur) {
-      const p = 1 - (timeLeft / exitDur);
+      const p = 1 - timeLeft / exitDur;
       xOffset = -p * 40;
       alpha = 1 - p;
     }
@@ -160,7 +171,7 @@ export function drawTextOverlay(
       xOffset = -(1 - easeOut) * 70;
       alpha = p;
     } else if (timeLeft < exitDur) {
-      const p = 1 - (timeLeft / exitDur);
+      const p = 1 - timeLeft / exitDur;
       xOffset = p * 40;
       alpha = 1 - p;
     }
@@ -171,7 +182,7 @@ export function drawTextOverlay(
       scale = (0.35 + easeOut * 0.75) * (txt.scale || 1.0);
       alpha = p;
     } else if (timeLeft < exitDur) {
-      const p = 1 - (timeLeft / exitDur);
+      const p = 1 - timeLeft / exitDur;
       scale = (1.0 + p * 0.25) * (txt.scale || 1.0);
       alpha = 1 - p;
     }
@@ -188,10 +199,55 @@ export function drawTextOverlay(
     }
   } else if (anim === "wave") {
     yOffset = Math.sin(elapsed * 4) * 8;
+  } else if (anim === "stamp") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      scale = (2.2 - p * 1.2) * (txt.scale || 1.0);
+      alpha = Math.min(1, p * 3);
+    }
+  } else if (anim === "roll") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      scale = (0.2 + p * 0.8) * (txt.scale || 1.0);
+      alpha = p;
+    }
+  } else if (anim === "flip") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      scale = Math.abs(Math.cos(p * Math.PI)) * (txt.scale || 1.0);
+      alpha = p;
+    }
+  } else if (anim === "blurin" || anim === "blur") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      alpha = p * p;
+      scale = (1.15 - p * 0.15) * (txt.scale || 1.0);
+    }
+  } else if (anim === "wiggle") {
+    xOffset = Math.sin(elapsed * 12) * 5;
+  } else if (anim === "flicker") {
+    const flick = Math.sin(elapsed * 25);
+    alpha = flick > 0.3 ? 1.0 : 0.45;
+  } else if (anim === "karaoke") {
+    scale = (1.0 + Math.abs(Math.sin(elapsed * 8)) * 0.14) * (txt.scale || 1.0);
+  }
+
+  // When paused in editor, guarantee full visibility and clean frame alignment
+  if (!isPlaying) {
+    alpha = 1.0;
+    if (elapsed < introDur) {
+      scale = txt.scale || 1.0;
+      xOffset = 0;
+      yOffset = 0;
+    }
   }
 
   ctx.translate(px + xOffset, py + yOffset);
-  const rot = (txt.rotation || 0) + (motion ? motion.dRot : 0);
+  let rot = (txt.rotation || 0) + (motion ? motion.dRot : 0);
+  if (anim === "roll" && elapsed < introDur) {
+    const p = elapsed / introDur;
+    rot += (1 - p) * -180;
+  }
   ctx.rotate((rot * Math.PI) / 180);
   ctx.scale(scale, scale);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
@@ -199,7 +255,8 @@ export function drawTextOverlay(
   const style = txt.style || {};
   const fontSize = style.fontSize || 24;
   const fontWeight = style.fontWeight || "bold";
-  const fontFamily = style.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+  const fontFamily =
+    style.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
   ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -285,6 +342,33 @@ export function drawTextOverlay(
     ctx.fillStyle = "rgba(0, 242, 254, 0.8)";
     ctx.fillText(displayText, -3, 0);
     ctx.restore();
+  } else if (effect === "fire") {
+    ctx.shadowColor = "#FF3300";
+    ctx.shadowBlur = 22;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = -2;
+  } else if (effect === "frost") {
+    ctx.shadowColor = "#00E5FF";
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  } else if (effect === "retro_box") {
+    ctx.save();
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(
+      -textWidth / 2 - 8,
+      -textHeight / 2 - 4,
+      textWidth + 16,
+      textHeight + 8,
+    );
+    ctx.restore();
+  } else if (effect === "hologram") {
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 242, 254, 0.6)";
+    ctx.fillText(displayText, -2, 0);
+    ctx.fillStyle = "rgba(255, 0, 128, 0.6)";
+    ctx.fillText(displayText, 2, 0);
+    ctx.restore();
   } else if (style.textShadowColor) {
     ctx.shadowColor = style.textShadowColor;
     ctx.shadowBlur = style.textShadowRadius || 12;
@@ -320,16 +404,24 @@ export function drawProceduralPlaceholder(
   const cleanHex = bg.replace("#", "").trim();
   let isLight = false;
   if (cleanHex.length === 3 || cleanHex.length === 6) {
-    const full = cleanHex.length === 3
-      ? cleanHex[0] + cleanHex[0] + cleanHex[1] + cleanHex[1] + cleanHex[2] + cleanHex[2]
-      : cleanHex;
+    const full =
+      cleanHex.length === 3
+        ? cleanHex[0] +
+          cleanHex[0] +
+          cleanHex[1] +
+          cleanHex[1] +
+          cleanHex[2] +
+          cleanHex[2]
+        : cleanHex;
     const r = parseInt(full.substring(0, 2), 16);
     const g = parseInt(full.substring(2, 4), 16);
     const b = parseInt(full.substring(4, 6), 16);
     isLight = (r * 299 + g * 587 + b * 114) / 1000 > 155;
   }
 
-  ctx.strokeStyle = isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.1)";
+  ctx.strokeStyle = isLight
+    ? "rgba(0, 0, 0, 0.12)"
+    : "rgba(255, 255, 255, 0.1)";
   ctx.lineWidth = 2;
   ctx.strokeRect(20, 20, w - 40, h - 40);
 

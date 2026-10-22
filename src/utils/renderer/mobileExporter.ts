@@ -33,19 +33,147 @@ function uint8ToBase64(uint8: Uint8Array): string {
   return "";
 }
 
-// Lightweight pure-JS PNG encoder using uncompressed/DEFLATE PNG chunk structure
-export function createPngBuffer(width: number, height: number, rgbaData: Uint8Array): Uint8Array {
-  // Try pngjs first if available in the environment
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PNG } = require("pngjs");
-    const png = new PNG({ width, height });
-    png.data.set(rgbaData);
-    return PNG.sync.write(png);
-  } catch {
-    // Fallback uncompressed BMP/PNG header
-    return createBmpBuffer(width, height, rgbaData);
+// Table for CRC-32 checksum calculation
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < 256; i++) {
+  let c = i;
+  for (let k = 0; k < 8; k++) {
+    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
   }
+  CRC32_TABLE[i] = c >>> 0;
+}
+
+function crc32(buf: Uint8Array, start = 0, length = buf.length - start): number {
+  let c = 0xffffffff;
+  const end = start + length;
+  for (let i = start; i < end; i++) {
+    c = CRC32_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// Adler-32 checksum calculation for zlib
+function adler32(data: Uint8Array): number {
+  let a = 1;
+  let b = 0;
+  const MOD_ADLER = 65521;
+  const len = data.length;
+  let i = 0;
+  while (i < len) {
+    const blockLen = Math.min(5552, len - i);
+    for (let j = 0; j < blockLen; j++) {
+      a += data[i + j];
+      b += a;
+    }
+    a %= MOD_ADLER;
+    b %= MOD_ADLER;
+    i += blockLen;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+// Lightweight pure-JS PNG encoder with zero native or Node dependencies
+export function createPngBuffer(width: number, height: number, rgbaData: Uint8Array): Uint8Array {
+  const rowStride = width * 4;
+  const scanlineLength = 1 + rowStride;
+  const uncompressedLength = scanlineLength * height;
+  const uncompressed = new Uint8Array(uncompressedLength);
+
+  for (let y = 0; y < height; y++) {
+    const dstOffset = y * scanlineLength;
+    uncompressed[dstOffset] = 0; // Filter: None
+    const srcOffset = y * rowStride;
+    uncompressed.set(rgbaData.subarray(srcOffset, srcOffset + rowStride), dstOffset + 1);
+  }
+
+  // Deflate into uncompressed DEFLATE blocks (max 65535 bytes per block)
+  const CHUNK_SIZE = 65535;
+  const numBlocks = Math.ceil(uncompressedLength / CHUNK_SIZE) || 1;
+  const zlibDataLength = 2 + (numBlocks * 5) + uncompressedLength + 4;
+  const zlibData = new Uint8Array(zlibDataLength);
+
+  // zlib header (CMF: 0x78 = Deflate 32k window, FLG: 0x01)
+  zlibData[0] = 0x78;
+  zlibData[1] = 0x01;
+
+  let zPos = 2;
+  let remaining = uncompressedLength;
+  let srcPos = 0;
+
+  for (let b = 0; b < numBlocks; b++) {
+    const isLast = (b === numBlocks - 1);
+    const blockSize = Math.min(CHUNK_SIZE, remaining);
+
+    zlibData[zPos++] = isLast ? 0x01 : 0x00; // BFINAL + BTYPE (00: uncompressed)
+    zlibData[zPos++] = blockSize & 0xff;
+    zlibData[zPos++] = (blockSize >> 8) & 0xff;
+    const nlen = (~blockSize) & 0xffff;
+    zlibData[zPos++] = nlen & 0xff;
+    zlibData[zPos++] = (nlen >> 8) & 0xff;
+
+    zlibData.set(uncompressed.subarray(srcPos, srcPos + blockSize), zPos);
+    zPos += blockSize;
+    srcPos += blockSize;
+    remaining -= blockSize;
+  }
+
+  // Adler-32 checksum (big-endian)
+  const adler = adler32(uncompressed);
+  zlibData[zPos++] = (adler >> 24) & 0xff;
+  zlibData[zPos++] = (adler >> 16) & 0xff;
+  zlibData[zPos++] = (adler >> 8) & 0xff;
+  zlibData[zPos++] = adler & 0xff;
+
+  // Total PNG length: 8 (sig) + 25 (IHDR) + (12 + zlibDataLength) (IDAT) + 12 (IEND)
+  const totalPngLength = 8 + 25 + 12 + zlibDataLength + 12;
+  const png = new Uint8Array(totalPngLength);
+  const view = new DataView(png.buffer);
+
+  // PNG Signature
+  png.set([137, 80, 78, 71, 13, 10, 26, 10], 0);
+
+  let offset = 8;
+
+  // 1. IHDR Chunk
+  view.setUint32(offset, 13, false); // Length = 13
+  offset += 4;
+  const ihdrTypeOffset = offset;
+  png.set([0x49, 0x48, 0x44, 0x52], offset); // "IHDR"
+  offset += 4;
+  view.setUint32(offset, width, false); // Width
+  view.setUint32(offset + 4, height, false); // Height
+  png[offset + 8] = 8; // Bit depth: 8
+  png[offset + 9] = 6; // Color type: 6 (RGBA)
+  png[offset + 10] = 0; // Compression: 0 (deflate)
+  png[offset + 11] = 0; // Filter: 0
+  png[offset + 12] = 0; // Interlace: 0
+  offset += 13;
+  const ihdrCrc = crc32(png, ihdrTypeOffset, 4 + 13);
+  view.setUint32(offset, ihdrCrc, false);
+  offset += 4;
+
+  // 2. IDAT Chunk
+  view.setUint32(offset, zlibDataLength, false);
+  offset += 4;
+  const idatTypeOffset = offset;
+  png.set([0x49, 0x44, 0x41, 0x54], offset); // "IDAT"
+  offset += 4;
+  png.set(zlibData, offset);
+  offset += zlibDataLength;
+  const idatCrc = crc32(png, idatTypeOffset, 4 + zlibDataLength);
+  view.setUint32(offset, idatCrc, false);
+  offset += 4;
+
+  // 3. IEND Chunk
+  view.setUint32(offset, 0, false);
+  offset += 4;
+  const iendTypeOffset = offset;
+  png.set([0x49, 0x45, 0x4e, 0x44], offset); // "IEND"
+  offset += 4;
+  const iendCrc = crc32(png, iendTypeOffset, 4);
+  view.setUint32(offset, iendCrc, false);
+
+  return png;
 }
 
 // 24-bit / 32-bit BMP buffer fallback with zero native dependencies
@@ -152,6 +280,13 @@ const FONT_GLYPHS: Record<string, number[]> = {
 };
 
 function hexToRgba(hex: string, alpha: number = 1.0): [number, number, number, number] {
+  if (hex.startsWith("blur:")) {
+    return [11, 13, 19, 255];
+  }
+  if (hex.startsWith("gradient:")) {
+    const parts = hex.replace("gradient:", "").split(",");
+    return hexToRgba(parts[0] || "#0B0D13", alpha);
+  }
   const clean = hex.replace("#", "").trim();
   let r = 0, g = 0, b = 0;
   if (clean.length === 3) {
@@ -471,9 +606,11 @@ export async function exportMobileProject(
   const targetW = 720;
   const targetH = project.aspectRatio === "16:9" ? 405 : project.aspectRatio === "1:1" ? 720 : 1280;
 
-  const cleanTitle = (project.title || "FastArt_Export")
-    .replace(/[^a-zA-Z0-9_-]/g, "_")
-    .toLowerCase();
+  let rawTitle = (project.title || (project as any).name || "").trim();
+  if (!rawTitle || /^proj[_-]\d+/i.test(rawTitle) || rawTitle === project.id) {
+    rawTitle = "FastArt_Video";
+  }
+  const cleanTitle = rawTitle.replace(/[/\\?%*:|"<>]/g, "").replace(/\s+/g, "_") || "FastArt_Video";
   const targetDir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
 
   // 1. PNG Snapshot / Poster Frame

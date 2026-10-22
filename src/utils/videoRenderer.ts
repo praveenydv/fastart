@@ -3,6 +3,7 @@ import {
   FastArtProject,
   VideoClip,
   TextClip,
+  CaptionClip,
   StickerClip,
   EffectClip,
 } from "../types/project";
@@ -47,10 +48,12 @@ export class VideoRenderer {
   public onFrameNeeded?: () => void;
   public offscreenCanvas: HTMLCanvasElement | null = null;
   public offscreenCtx: CanvasRenderingContext2D | null = null;
+  public effectOffscreenCanvas: HTMLCanvasElement | null = null;
+  public effectOffscreenCtx: CanvasRenderingContext2D | null = null;
   private maxDecoders =
     typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-      ? 4
-      : 6;
+      ? 16
+      : 32;
   public previewCropClipId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
@@ -99,21 +102,23 @@ export class VideoRenderer {
 
   ensureOffscreen(w?: number, h?: number): HTMLCanvasElement | null {
     if (typeof document === "undefined" || !this.canvas) return null;
-    if (!this.offscreenCanvas) {
-      this.offscreenCanvas = document.createElement("canvas");
-      this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
+    if (!this.effectOffscreenCanvas) {
+      this.effectOffscreenCanvas = document.createElement("canvas");
+      this.effectOffscreenCtx = this.effectOffscreenCanvas.getContext("2d", { willReadFrequently: true });
     }
     const targetW = w && w > 0 ? Math.round(w) : this.canvas.width;
     const targetH = h && h > 0 ? Math.round(h) : this.canvas.height;
-    if (this.offscreenCanvas.width !== targetW || this.offscreenCanvas.height !== targetH) {
-      this.offscreenCanvas.width = targetW;
-      this.offscreenCanvas.height = targetH;
+    if (this.effectOffscreenCanvas.width !== targetW || this.effectOffscreenCanvas.height !== targetH) {
+      this.effectOffscreenCanvas.width = targetW;
+      this.effectOffscreenCanvas.height = targetH;
     }
-    if (this.offscreenCtx && this.canvas) {
-      this.offscreenCtx.clearRect(0, 0, targetW, targetH);
-      this.offscreenCtx.drawImage(this.canvas, 0, 0, targetW, targetH);
+    if (this.effectOffscreenCtx && this.canvas) {
+      this.effectOffscreenCtx.imageSmoothingEnabled = true;
+      this.effectOffscreenCtx.imageSmoothingQuality = "high";
+      this.effectOffscreenCtx.clearRect(0, 0, targetW, targetH);
+      this.effectOffscreenCtx.drawImage(this.canvas, 0, 0, targetW, targetH);
     }
-    return this.offscreenCanvas;
+    return this.effectOffscreenCanvas;
   }
 
   private getMediaSyncContext(): MediaSyncContext {
@@ -242,56 +247,79 @@ export class VideoRenderer {
     ctx.clearRect(0, 0, canvasW, canvasH);
 
     ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = isPlaying ? "medium" : "high";
-    ctx.scale(canvasW / w, canvasH / h);
-    ctx.filter = "none";
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1.0;
+    try {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.scale(canvasW / w, canvasH / h);
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1.0;
 
-    const canvasBg = (project.canvasBackground && project.canvasBackground.trim()) || "#000000";
-    if (canvasBg.toLowerCase() !== "transparent") {
-      ctx.fillStyle = canvasBg;
-      ctx.fillRect(0, 0, w, h);
-    }
+      const videoClips = project.tracks.video || [];
+      const captionClips = project.tracks.captions || [];
+      const textClips = project.tracks.text || [];
+      const stickerClips = project.tracks.stickers || [];
+      const effectClips = project.tracks.effects || [];
 
-    const videoClips = project.tracks.video || [];
-    const textClips = project.tracks.text || [];
-    const stickerClips = project.tracks.stickers || [];
-    const effectClips = project.tracks.effects || [];
+      const activeVideos = videoClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
+      const activeCaptions = captionClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
+      const activeTexts = textClips.filter((t) => time >= t.startTime && time <= t.startTime + t.duration);
+      const activeStickers = stickerClips.filter((s) => time >= s.startTime && time <= s.startTime + s.duration);
+      const activeEffects = effectClips.filter((e) => time >= e.startTime && time <= e.startTime + e.duration);
 
-    const activeVideos = videoClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
-    const activeTexts = textClips.filter((t) => time >= t.startTime && time <= t.startTime + t.duration);
-    const activeStickers = stickerClips.filter((s) => time >= s.startTime && time <= s.startTime + s.duration);
-    const activeEffects = effectClips.filter((e) => time >= e.startTime && time <= e.startTime + e.duration);
+      const canvasBg = (project.canvasBackground && project.canvasBackground.trim()) || "#000000";
 
-    this.syncPlayback(activeVideos, time, isPlaying);
+      const drawBackground = () => {
+        if (canvasBg.startsWith("blur:")) {
+          const blurPx = parseInt(canvasBg.split(":")[1]) || 25;
+          if (activeVideos.length > 0) {
+            const primary = activeVideos[0];
+            const media = this.videoElements.get(primary.url) || this.thumbnailElements.get(primary.id);
+            if (media) {
+              ctx.save();
+              ctx.filter = `blur(${blurPx}px) brightness(0.68)`;
+              ctx.drawImage(media as any, -30, -30, w + 60, h + 60);
+              ctx.restore();
+              return;
+            }
+          }
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, w, h);
+        } else if (canvasBg.startsWith("gradient:")) {
+          const parts = canvasBg.replace("gradient:", "").split(",");
+          const c1 = parts[0] || "#1E293B";
+          const c2 = parts[parts.length - 1] || "#0B0D13";
+          const grad = ctx.createLinearGradient(0, 0, 0, h);
+          grad.addColorStop(0, c1);
+          grad.addColorStop(1, c2);
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, w, h);
+        } else if (canvasBg.toLowerCase() !== "transparent") {
+          ctx.fillStyle = canvasBg;
+          ctx.fillRect(0, 0, w, h);
+        }
+      };
 
-    const hasAnyTrackContent = Boolean(
-      videoClips.length > 0 ||
-      textClips.length > 0 ||
-      stickerClips.length > 0 ||
-      effectClips.length > 0 ||
-      (project.tracks.audio && project.tracks.audio.length > 0)
-    );
+      drawBackground();
 
-    if (activeVideos.length === 0 && !hasAnyTrackContent) {
-      if (canvasBg.toLowerCase() !== "transparent") {
-        ctx.fillStyle = canvasBg;
-        ctx.fillRect(0, 0, w, h);
+      this.syncPlayback(activeVideos, time, isPlaying);
+
+      const hasAnyTrackContent = Boolean(
+        videoClips.length > 0 ||
+        captionClips.length > 0 ||
+        textClips.length > 0 ||
+        stickerClips.length > 0 ||
+        effectClips.length > 0 ||
+        (project.tracks.audio && project.tracks.audio.length > 0)
+      );
+
+      if (activeVideos.length === 0 && !hasAnyTrackContent) {
+        return;
       }
-      ctx.filter = "none";
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1.0;
-      ctx.restore();
-      ctx.filter = "none";
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1.0;
-      return;
-    }
 
-    type VisualItem =
-      | { kind: "video"; clip: VideoClip; trackIndex: number }
+      type VisualItem =
+        | { kind: "video"; clip: VideoClip; trackIndex: number }
+        | { kind: "caption"; clip: CaptionClip; trackIndex: number }
       | { kind: "text"; clip: TextClip; trackIndex: number }
       | { kind: "sticker"; clip: StickerClip; trackIndex: number }
       | { kind: "effect"; clip: EffectClip; trackIndex: number };
@@ -301,6 +329,11 @@ export class VideoRenderer {
         kind: "video" as const,
         clip: c,
         trackIndex: typeof c.trackIndex === "number" ? c.trackIndex : 0,
+      })),
+      ...activeCaptions.map((c) => ({
+        kind: "caption" as const,
+        clip: c,
+        trackIndex: typeof c.trackIndex === "number" ? c.trackIndex : 1,
       })),
       ...activeTexts.map((t) => ({
         kind: "text" as const,
@@ -337,6 +370,16 @@ export class VideoRenderer {
             }
           : item.clip;
         this.drawClip(ctx, clipToDraw, time, w, h, null);
+      } else if (item.kind === "caption") {
+        const clipToDraw: CaptionClip = isOverridden
+          ? {
+              ...item.clip,
+              position: { x: transientOverride!.x, y: transientOverride!.y },
+              scale: transientOverride!.scale,
+              rotation: transientOverride!.rotation,
+            }
+          : item.clip;
+        this.drawTextOverlay(ctx, clipToDraw as any, time, w, h, isPlaying);
       } else if (item.kind === "text") {
         const clipToDraw: TextClip = isOverridden
           ? {
@@ -362,13 +405,17 @@ export class VideoRenderer {
       }
     });
 
-    ctx.filter = "none";
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1.0;
-    ctx.restore();
-    ctx.filter = "none";
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1.0;
+    } catch (err) {
+      console.error("[VideoRenderer] renderFrame error:", err);
+    } finally {
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1.0;
+      ctx.restore();
+      ctx.filter = "none";
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1.0;
+    }
   }
 
   drawClip(
@@ -379,6 +426,10 @@ export class VideoRenderer {
     h: number,
     _nextClip: VideoClip | null = null,
   ) {
+    if (!this.offscreenCanvas && typeof document !== "undefined") {
+      this.offscreenCanvas = document.createElement("canvas");
+      this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
+    }
     renderClipItem(ctx, clip, time, w, h, {
       videoElements: this.videoElements,
       thumbnailElements: this.thumbnailElements,

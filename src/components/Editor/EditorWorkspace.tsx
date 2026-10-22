@@ -84,6 +84,9 @@ interface EditorWorkspaceProps {
   handleOpenCanvasModal: () => void;
   handleOpenCutoutModal: () => void;
   handleOpenMotionTracking: () => void;
+  handleOpenAutoCaptions: () => void;
+  isProcessing?: boolean;
+  processingMessage?: string;
 }
 
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
@@ -127,6 +130,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   handleToggleReverse,
   handleOpenTransitionsModal,
   handleDeselectClip,
+  isProcessing,
+  processingMessage,
   handleOpenSpeedModal,
   handleOpenVolumeModal,
   handleOpenCropModal,
@@ -143,6 +148,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   handleOpenCanvasModal,
   handleOpenCutoutModal,
   handleOpenMotionTracking,
+  handleOpenAutoCaptions,
 }) => {
   const handleOpenEditModal = React.useCallback(
     (clipId: string, clipType?: string) => {
@@ -150,7 +156,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       setSelectedClipId(clipId);
       let resolvedType = clipType || selectedClipType;
       if (!resolvedType && project) {
-        if (project.tracks.text?.some((c) => c.id === clipId)) resolvedType = "text";
+        if (project.tracks.captions?.some((c) => c.id === clipId)) resolvedType = "caption";
+        else if (project.tracks.text?.some((c) => c.id === clipId)) resolvedType = "text";
         else if (project.tracks.stickers?.some((c) => c.id === clipId)) resolvedType = "stickers";
         else if (project.tracks.video?.some((c) => c.id === clipId)) resolvedType = "video";
         else if (project.tracks.audio?.some((c) => c.id === clipId)) resolvedType = "audio";
@@ -158,15 +165,20 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       }
 
       const normalizedType =
-        resolvedType === "sticker" || resolvedType === "stickers"
-          ? "stickers"
-          : resolvedType === "effect" || resolvedType === "effects"
-            ? "effects"
-            : resolvedType;
+        resolvedType === "caption" || resolvedType === "captions"
+          ? "caption"
+          : resolvedType === "sticker" || resolvedType === "stickers"
+            ? "stickers"
+            : resolvedType === "effect" || resolvedType === "effects"
+              ? "effects"
+              : resolvedType;
 
       setSelectedClipType(normalizedType);
 
-      if (normalizedType === "text") {
+      if (normalizedType === "caption") {
+        if (handleOpenAutoCaptions) handleOpenAutoCaptions();
+        else openModal("text");
+      } else if (normalizedType === "text") {
         openModal("text");
       } else if (normalizedType === "stickers") {
         openModal("stickers");
@@ -178,7 +190,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         setIsCroppingPreview(true);
       }
     },
-    [project, selectedClipType, setSelectedClipId, setSelectedClipType, openModal, setIsCroppingPreview]
+    [project, selectedClipType, setSelectedClipId, setSelectedClipType, openModal, setIsCroppingPreview, handleOpenAutoCaptions]
   );
 
   return (
@@ -211,6 +223,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           isPlaying={isPlaying}
           totalDuration={totalDuration}
           fullscreen={isFullscreen}
+          isProcessing={isProcessing}
+          processingMessage={processingMessage}
           onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
           onTogglePlay={() => {
             soundEngine.playSfx("click");
@@ -279,10 +293,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             onAdjustDuration={(delta) => {
               if (!selectedClipId) return;
               const key =
-                selectedClipType === "sticker" ||
-                selectedClipType === "stickers"
-                  ? "stickers"
-                  : selectedClipType;
+                selectedClipType === "caption" ||
+                selectedClipType === "captions"
+                  ? "captions"
+                  : selectedClipType === "sticker" ||
+                    selectedClipType === "stickers"
+                    ? "stickers"
+                    : selectedClipType;
               const list = [...((project.tracks as any)[key] || [])];
               const idx = list.findIndex((c: any) => c.id === selectedClipId);
               if (idx >= 0) {
@@ -332,6 +349,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             onOpenCutoutModal={handleOpenCutoutModal}
             onOpenMotionTracking={handleOpenMotionTracking}
             onOpenKeyframeModal={onOpenKeyframeModal}
+            onOpenAutoCaptions={handleOpenAutoCaptions}
           />
         </View>
       )}

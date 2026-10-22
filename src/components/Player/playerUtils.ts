@@ -18,12 +18,12 @@ export function formatTime(secs: number): string {
 }
 
 export function getItemBaseDimensions(
-  type: "text" | "sticker" | "video",
+  type: "text" | "sticker" | "video" | "caption",
   clip: any,
   boxWidth: number,
   canvasHeight: number,
 ): { baseW: number; baseH: number } {
-  if (type === "text") {
+  if (type === "text" || type === "caption") {
     const fontSize = clip.style?.fontSize || 22;
     const str = clip.text || "";
     let textWidth = 0;

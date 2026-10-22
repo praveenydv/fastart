@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../../utils/audioEngine";
 import { ExportFormat } from "../../../utils/videoRenderer";
@@ -18,6 +18,8 @@ interface ExportIdleSettingsProps {
   setResolution: (res: string) => void;
   fps: number;
   setFps: (fps: number) => void;
+  exportFilename: string;
+  setExportFilename: (name: string) => void;
   selectedFormatConfig: MediaFormatOption;
   project: any;
   totalDuration: number;
@@ -32,6 +34,8 @@ export default function ExportIdleSettings({
   setResolution,
   fps,
   setFps,
+  exportFilename,
+  setExportFilename,
   selectedFormatConfig,
   project,
   totalDuration,
@@ -40,7 +44,31 @@ export default function ExportIdleSettings({
 }: ExportIdleSettingsProps) {
   return (
     <>
-      {/* 1. MEDIA FORMAT PILLS */}
+      {/* 1. FILE NAME (Synced with project name, never key) */}
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>FILE NAME</Text>
+        <Text style={styles.sectionHint} numberOfLines={1}>
+          Saved as project name
+        </Text>
+      </View>
+
+      <View style={styles.fileNameInputContainer}>
+        <Ionicons name="document-text-outline" size={16} color="#00F2FE" />
+        <TextInput
+          style={styles.fileNameInput}
+          value={exportFilename}
+          onChangeText={setExportFilename}
+          placeholder="File name..."
+          placeholderTextColor="#64748B"
+          maxLength={60}
+          selectTextOnFocus
+        />
+        <View style={styles.extBadge}>
+          <Text style={styles.extBadgeText}>{selectedFormatConfig.ext}</Text>
+        </View>
+      </View>
+
+      {/* 2. MEDIA FORMAT PILLS */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>FORMAT</Text>
         <Text style={styles.sectionHint} numberOfLines={1}>

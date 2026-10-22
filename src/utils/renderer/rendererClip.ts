@@ -36,32 +36,57 @@ export function drawClip(
   let alpha = 1.0;
   let scaleModifier = 1.0;
   let xOffset = 0;
+  let yOffset = 0;
+  let motionRot = 0;
 
   if (trans && trans.duration > 0 && timeLeft <= trans.duration) {
     const progress = 1 - timeLeft / trans.duration;
     if (trans.type === "dissolve") {
       alpha = 1 - progress;
     } else if (trans.type === "zoom_in") {
-      scaleModifier = 1 + progress * 0.4;
+      scaleModifier = 1 + progress * 0.45;
       alpha = 1 - progress * 0.5;
+    } else if (trans.type === "zoom_out") {
+      scaleModifier = 1 - progress * 0.45;
+      alpha = 1 - progress;
     } else if (trans.type === "slide_left") {
       xOffset = -progress * w;
+    } else if (trans.type === "slide_right") {
+      xOffset = progress * w;
+    } else if (trans.type === "push_up") {
+      yOffset = -progress * h;
+    } else if (trans.type === "push_down") {
+      yOffset = progress * h;
     } else if (trans.type === "flash_white") {
       if (progress > 0.5) alpha = 1 - (progress - 0.5) * 2;
+    } else if (trans.type === "fade_black") {
+      alpha = 1 - progress;
+    } else if (trans.type === "spin_cw") {
+      motionRot += progress * 180;
+      scaleModifier = 1 - progress * 0.4;
+      alpha = 1 - progress * 0.6;
+    } else if (trans.type === "spin_ccw") {
+      motionRot -= progress * 180;
+      scaleModifier = 1 - progress * 0.4;
+      alpha = 1 - progress * 0.6;
+    } else if (trans.type === "light_leak") {
+      alpha = 1 - progress * 0.4;
+      scaleModifier = 1 + progress * 0.2;
+    } else if (trans.type === "glitch_transition") {
+      if (Math.random() > 0.3) xOffset = (Math.random() - 0.5) * 60;
+      alpha = 1 - progress * 0.6;
     }
   }
-  let yOffset = 0;
 
   const t = getInterpolatedTransform(clip, time, "video");
   const keyframeOpacity = t.opacity;
 
-  let motionRot = 0;
   if (clip.motionTrack && clip.motionTrack.enabled) {
     const motion = applyMotionTracking(time, clip.startTime, clip.duration, clip.motionTrack);
     xOffset += motion.dx;
     yOffset += motion.dy;
     scaleModifier *= motion.dScale;
-    motionRot = motion.dRot || 0;
+    motionRot += motion.dRot || 0;
   }
 
   const clipOpacity = (t?.opacity !== undefined ? t.opacity : 1.0) * keyframeOpacity;
@@ -84,13 +109,19 @@ export function drawClip(
   const isImage = mediaEl instanceof HTMLImageElement || (mediaEl && (mediaEl as any).tagName === "IMG");
   const isVideo = mediaEl instanceof HTMLVideoElement || (mediaEl && (mediaEl as any).tagName === "VIDEO");
 
-  const isVideoReady = isVideo && (mediaEl as HTMLVideoElement).readyState >= 1 && (mediaEl as HTMLVideoElement).videoWidth > 0;
-  const isImageReady = isImage && (mediaEl as HTMLImageElement).complete && (mediaEl as HTMLImageElement).naturalWidth > 0;
+  const isVideoReady =
+    isVideo &&
+    ((mediaEl as HTMLVideoElement).readyState >= 1 || (mediaEl as HTMLVideoElement).videoWidth > 0);
+  const isImageReady =
+    isImage &&
+    (mediaEl as HTMLImageElement).complete &&
+    (mediaEl as HTMLImageElement).naturalWidth > 0;
   const isReady = isImageReady || isVideoReady;
 
   let activeMedia: any = isReady ? mediaEl : null;
 
-  if (!activeMedia && clip.thumbnail) {
+  // Only fall back to low-res thumbnail if full media element is completely absent or errored
+  if (!activeMedia && clip.thumbnail && (!mediaEl || (mediaEl as any).error)) {
     let thumbEl = renderCtx.thumbnailElements.get(clip.id);
     if (!thumbEl) {
       thumbEl = new Image();
@@ -144,6 +175,9 @@ export function drawClip(
     if (mask && mask.shape && mask.shape !== "none") {
       applyMaskPath(ctx, mask, dw, dh);
     }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
     const cutout = clip.cutout || clip.transform?.cutout;
     if (cutout && cutout.enabled) {

@@ -58,11 +58,11 @@ export default function StickersModal({
   ];
 
   const categories = [
-    { id: 'All', label: 'All' },
-    { id: 'Reactions', label: 'Reactions' },
-    { id: 'Creator', label: 'Badges' },
-    { id: 'Comic', label: 'Comic' },
-    { id: 'Symbols', label: 'Symbols' },
+    { id: 'All', label: 'All (' + STICKER_LIBRARY.length + ')' },
+    { id: 'Reactions', label: '🔥 Reactions' },
+    { id: 'Creator', label: '🎬 Badges' },
+    { id: 'Comic', label: '💥 Comic & Meme' },
+    { id: 'Symbols', label: '🎯 Pointers' },
   ];
 
   const filteredStickers = STICKER_LIBRARY.filter((item) => {

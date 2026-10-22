@@ -19,6 +19,7 @@ export function useTimelineClips({
   const videoClips = project.tracks.video || [];
   const audioClips = project.tracks.audio || [];
   const textClips = project.tracks.text || [];
+  const captionClips = project.tracks.captions || [];
   const stickerClips = project.tracks.stickers || [];
   const effectClips = project.tracks.effects || [];
 
@@ -60,6 +61,24 @@ export function useTimelineClips({
         borderColor: "#10B981",
         iconName: "musical-notes" as const,
         rawClip: a,
+      })),
+      ...captionClips.map((c) => ({
+        id: c.id,
+        type: "caption" as const,
+        startTime: c.startTime,
+        duration: c.duration,
+        trackIndex: c.trackIndex,
+        effectiveTrackIndex:
+          typeof c.trackIndex === "number"
+            ? Math.min(MAX_TRACKS - 1, Math.max(0, c.trackIndex))
+            : 2,
+        title: c.text || "Caption Subtitle",
+        subtitle: `Caption • ${c.duration.toFixed(2)}s`,
+        accentColor: "#00F2FE",
+        bgColor: "#072B38",
+        borderColor: "#00F2FE",
+        iconName: "chatbox-ellipses" as const,
+        rawClip: c,
       })),
       ...textClips.map((t) => ({
         id: t.id,
@@ -116,7 +135,7 @@ export function useTimelineClips({
         rawClip: e,
       })),
     ];
-  }, [videoClips, audioClips, textClips, stickerClips, effectClips]);
+  }, [videoClips, audioClips, captionClips, textClips, stickerClips, effectClips]);
 
   // Ensure media durations are pre-cached for exact trimming limits
   useEffect(() => {

@@ -1,7 +1,13 @@
 import { VideoClip, EffectClip } from "../../types/project";
 import { LowLevelPixelEngine } from "../lowLevelEngine";
 
-export function evaluateSpeedCurve(curve: any[], progress: number): number {
+export function evaluateSpeedCurve(curveInput: any, progress: number): number {
+  if (!curveInput) return 1.0;
+  const curve = Array.isArray(curveInput)
+    ? curveInput
+    : Array.isArray(curveInput?.points)
+      ? curveInput.points
+      : null;
   if (!curve || curve.length === 0) return 1.0;
   const clampedP = Math.max(0, Math.min(1, progress));
 
@@ -217,19 +223,23 @@ export function drawLoadingPreview(
     ctx.fillRect(left, top + dh - 4, dw, 4);
     ctx.fillStyle = "#00F2FE";
     ctx.fillRect(left, top + dh - 4, dw * pct, 4);
-  } else {
-    const angle = (localTime * 5) % (Math.PI * 2);
+    const nowSec = typeof performance !== "undefined" ? performance.now() / 1000 : Date.now() / 1000;
+    const angle = (nowSec * 4.5) % (Math.PI * 2);
     ctx.strokeStyle = "#00F2FE";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(0, -10, 20, angle, angle + Math.PI * 1.3);
+    ctx.arc(0, -14, 22, angle, angle + Math.PI * 1.35);
     ctx.stroke();
 
-    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
-    ctx.fillStyle = "#8E95A5";
+    ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+    ctx.fillStyle = "#FFFFFF";
     ctx.textAlign = "center";
-    ctx.fillText("Buffering...", 0, 28);
+    ctx.fillText("Processing Video Edit...", 0, 26);
+
+    ctx.font = '500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+    ctx.fillStyle = "#00F2FE";
+    ctx.fillText("Applying changes & syncing frames", 0, 44);
   }
 
   ctx.restore();
@@ -281,6 +291,9 @@ export function applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: strin
   }
 }
 
+let fallbackCutoutCanvas: HTMLCanvasElement | null = null;
+let fallbackCutoutCtx: CanvasRenderingContext2D | null = null;
+
 export function drawClipWithCutout(
   ctx: CanvasRenderingContext2D,
   mediaEl: CanvasImageSource,
@@ -296,12 +309,28 @@ export function drawClipWithCutout(
   offCanvas: HTMLCanvasElement | null,
   offCtx: CanvasRenderingContext2D | null,
 ) {
-  if (typeof document === "undefined" || !offCanvas || !offCtx) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  let activeCanvas = offCanvas;
+  let activeCtx = offCtx;
+
+  if (!activeCanvas || !activeCtx) {
+    if (!fallbackCutoutCanvas) {
+      fallbackCutoutCanvas = document.createElement("canvas");
+      fallbackCutoutCtx = fallbackCutoutCanvas.getContext("2d", { willReadFrequently: true });
+    }
+    activeCanvas = fallbackCutoutCanvas;
+    activeCtx = fallbackCutoutCtx;
+  }
+
+  if (!activeCanvas || !activeCtx) {
     ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
     return;
   }
 
-  LowLevelPixelEngine.processCutout(
+  const success = LowLevelPixelEngine.processCutout(
     ctx,
     mediaEl as any,
     sx,
@@ -313,9 +342,13 @@ export function drawClipWithCutout(
     dw,
     dh,
     cutout,
-    offCanvas,
-    offCtx
+    activeCanvas,
+    activeCtx
   );
+
+  if (!success) {
+    ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
 }
 
 export function applyEffectOverlay(
@@ -419,6 +452,89 @@ export function applyEffectOverlay(
   } else if (eff.type === "rainbow_flow") {
     const hue = Math.floor((time * 120) % 360);
     ctx.fillStyle = `hsla(${hue}, 90%, 50%, 0.15)`;
+    ctx.fillRect(0, 0, w, h);
+  } else if (eff.type === "old_film") {
+    // 1920s Silent Film grain, scratches & flicker
+    ctx.fillStyle = `rgba(255, 240, 200, ${0.12 * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    if (Math.random() > 0.4) {
+      const scratchX = Math.random() * w;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 * intensity})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(scratchX, 0);
+      ctx.lineTo(scratchX + (Math.random() - 0.5) * 4, h);
+      ctx.stroke();
+    }
+  } else if (eff.type === "crt_tv") {
+    // CRT phosphor scanlines
+    ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+    for (let y = 0; y < h; y += 3) {
+      ctx.fillRect(0, y, w, 1.2);
+    }
+  } else if (eff.type === "prism_leak") {
+    // Anamorphic rainbow light leak
+    const leakGrad = ctx.createLinearGradient(0, 0, w, h);
+    leakGrad.addColorStop(0, `rgba(255, 0, 80, ${0.28 * intensity})`);
+    leakGrad.addColorStop(0.5, `rgba(0, 242, 254, ${0.2 * intensity})`);
+    leakGrad.addColorStop(1, `rgba(255, 230, 0, ${0.25 * intensity})`);
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = leakGrad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
+  } else if (eff.type === "sun_flare") {
+    // Solar lens flare halo
+    const flareGrad = ctx.createRadialGradient(w * 0.8, h * 0.2, 10, w * 0.8, h * 0.2, Math.max(w, h) * 0.6);
+    flareGrad.addColorStop(0, `rgba(255, 240, 180, ${0.65 * intensity})`);
+    flareGrad.addColorStop(0.3, `rgba(255, 120, 0, ${0.35 * intensity})`);
+    flareGrad.addColorStop(1, "rgba(255, 120, 0, 0)");
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = flareGrad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
+  } else if (eff.type === "cyberpunk_dual") {
+    ctx.globalCompositeOperation = "color";
+    ctx.fillStyle = `rgba(0, 242, 254, ${0.4 * intensity})`;
+    ctx.fillRect(0, 0, w / 2, h);
+    ctx.fillStyle = `rgba(255, 0, 128, ${0.4 * intensity})`;
+    ctx.fillRect(w / 2, 0, w / 2, h);
+    ctx.globalCompositeOperation = "source-over";
+  } else if (eff.type === "water_ripple") {
+    const waveSliceH = Math.max(8, h * 0.02);
+    for (let y = 0; y < h; y += waveSliceH) {
+      const waveShift = Math.sin((y / h) * 12 + time * 6) * (w * 0.025) * intensity;
+      const sy = (y / h) * ch;
+      const sh = (waveSliceH / h) * ch;
+      ctx.drawImage(sourceCanvas, 0, sy, cw, sh, waveShift, y, w, waveSliceH);
+    }
+  } else if (eff.type === "fisheye") {
+    const scaleFactor = 1.0 + 0.15 * intensity;
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(scaleFactor, scaleFactor);
+    ctx.translate(-w / 2, -h / 2);
+  } else if (eff.type === "thermal") {
+    ctx.globalCompositeOperation = "difference";
+    ctx.fillStyle = `rgba(0, 255, 255, ${0.5 * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
+  } else if (eff.type === "tilt_shift") {
+    ctx.save();
+    ctx.filter = `blur(${Math.max(2, Math.round(intensity * 6))}px)`;
+    ctx.drawImage(sourceCanvas, 0, 0, cw, ch * 0.25, 0, 0, w, h * 0.25);
+    ctx.drawImage(sourceCanvas, 0, ch * 0.75, cw, ch * 0.25, 0, h * 0.75, w, h * 0.25);
+    ctx.restore();
+  } else if (eff.type === "kaleidoscope") {
+    ctx.drawImage(sourceCanvas, 0, 0, cw / 2, ch / 2, w / 2, 0, w / 2, h / 2);
+    ctx.drawImage(sourceCanvas, 0, 0, cw / 2, ch / 2, 0, h / 2, w / 2, h / 2);
+    ctx.drawImage(sourceCanvas, 0, 0, cw / 2, ch / 2, w / 2, h / 2, w / 2, h / 2);
+  } else if (eff.type === "beauty_smooth") {
+    // 2-pass bilateral skin smoothing emulation: soft bloom + contrast preserve
+    ctx.save();
+    ctx.globalCompositeOperation = "soft-light";
+    ctx.filter = `blur(${Math.max(2, Math.round(intensity * 5))}px) brightness(${1.05 + 0.1 * intensity})`;
+    ctx.drawImage(sourceCanvas, 0, 0, cw, ch, 0, 0, w, h);
+    ctx.restore();
+    ctx.fillStyle = `rgba(255, 245, 235, ${0.08 * intensity})`;
     ctx.fillRect(0, 0, w, h);
   }
 

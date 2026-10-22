@@ -8,6 +8,7 @@ import { ActiveTransformItem } from "./playerTypes";
 interface PlayerTransformOverlayProps {
   selectedClipId?: string | null;
   activeVideos: any[];
+  activeCaptions?: any[];
   activeTexts: any[];
   activeStickers: any[];
   activeTransformItem: ActiveTransformItem | null;
@@ -32,7 +33,7 @@ interface PlayerTransformOverlayProps {
   scaleBLResponder: any;
   scaleBRResponder: any;
   getItemBaseDimensions: (
-    type: "text" | "sticker" | "video",
+    type: "text" | "sticker" | "video" | "caption",
     clip: any,
   ) => { baseW: number; baseH: number };
   getInterpolatedTransform: (
@@ -45,6 +46,7 @@ interface PlayerTransformOverlayProps {
 export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
   selectedClipId,
   activeVideos,
+  activeCaptions,
   activeTexts,
   activeStickers,
   activeTransformItem,
@@ -131,6 +133,61 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
                     },
                     onTouchStart: (e: any) => {
                       onSelectClip?.(vid.id, vid.type || "video");
+                      handleStartDrag(e, "move", undefined, itemObj);
+                    },
+                  } as any)
+                : {})}
+            />
+          );
+        })}
+
+        {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Captions */}
+        {(activeCaptions || []).map((cap) => {
+          if (cap.id === selectedClipId) return null;
+          const capTrackZ =
+            (typeof cap.trackIndex === "number" ? cap.trackIndex : 1) * 2 + 28;
+          const kfT = getInterpolatedTransform(cap, currentTime, "caption");
+          const cx = (kfT.x / 100) * boxWidth;
+          const cy = (kfT.y / 100) * canvasHeight;
+          const s = kfT.scale;
+          const rot = kfT.rotation;
+          const { baseW, baseH } = getItemBaseDimensions("caption", cap);
+          const w = Math.round(baseW * s);
+          const h = Math.round(baseH * s);
+          const itemObj = {
+            id: cap.id,
+            type: "caption" as const,
+            label: cap.text,
+            pos: { x: kfT.x, y: kfT.y },
+            scale: s,
+            rotation: rot,
+            width: w,
+            height: h,
+          };
+          return (
+            <TouchableOpacity
+              key={cap.id}
+              activeOpacity={0.85}
+              onPress={() => onSelectClip?.(cap.id, "caption")}
+              style={[
+                styles.unselectedHitBox,
+                {
+                  left: cx - w / 2,
+                  top: cy - h / 2,
+                  width: w,
+                  height: h,
+                  zIndex: capTrackZ,
+                  transform: [{ rotate: `${rot}deg` }],
+                },
+              ]}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => {
+                      onSelectClip?.(cap.id, "caption");
+                      handleStartDrag(e, "move", undefined, itemObj);
+                    },
+                    onTouchStart: (e: any) => {
+                      onSelectClip?.(cap.id, "caption");
                       handleStartDrag(e, "move", undefined, itemObj);
                     },
                   } as any)
@@ -274,6 +331,7 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
                     e.stopPropagation?.();
                     if (
                       activeTransformItem.type === "text" ||
+                      activeTransformItem.type === "caption" ||
                       activeTransformItem.type === "sticker"
                     ) {
                       onOpenEditModal?.(
@@ -353,8 +411,9 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
       {activeTransformItem && (
         <View style={styles.floatingHudContainer} pointerEvents="box-none">
           <View style={styles.floatingHudContentCompact} pointerEvents="auto">
-            {/* Edit Action (for text and stickers only; videos/images use Crop) */}
+            {/* Edit Action (for text, captions and stickers only; videos/images use Crop) */}
             {(activeTransformItem.type === "text" ||
+              activeTransformItem.type === "caption" ||
               activeTransformItem.type === "sticker") && (
               <TouchableOpacity
                 style={styles.floatingActionBtn}

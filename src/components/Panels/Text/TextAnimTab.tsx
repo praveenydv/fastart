@@ -17,16 +17,54 @@ export default function TextAnimTab({
   setSelectedAnim,
   onApplyTemplate,
 }: TextAnimTabProps) {
+  const [animCategory, setAnimCategory] = React.useState<"all" | "in" | "loop">("all");
+
+  const filteredAnims = ANIMATION_OPTIONS.filter((a: any) => {
+    if (animCategory === "all") return true;
+    return a.category === animCategory;
+  });
+
   return (
     <>
-      {/* Animation Presets */}
-      <Text style={styles.sectionTitle}>MOTION ANIMATION</Text>
+      {/* Animation Category Filter */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={styles.sectionTitle}>MOTION ANIMATION ({filteredAnims.length})</Text>
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          {(["all", "in", "loop"] as const).map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              onPress={() => {
+                soundEngine.playSfx("click");
+                setAnimCategory(cat);
+              }}
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 8,
+                backgroundColor: animCategory === cat ? "#00F2FE" : "#1E2333",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: "800",
+                  color: animCategory === cat ? "#000000" : "#8E95A5",
+                  textTransform: "uppercase",
+                }}
+              >
+                {cat === "all" ? "All" : cat === "in" ? "Entrance (In)" : "Continuous (Loop)"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.horizontalRow}
       >
-        {ANIMATION_OPTIONS.map((anim) => {
+        {filteredAnims.map((anim) => {
           const isActive = selectedAnim === anim.id;
           return (
             <TouchableOpacity
@@ -55,6 +93,7 @@ export default function TextAnimTab({
           );
         })}
       </ScrollView>
+
 
       {/* Viral Presets & Hooks */}
       <Text style={styles.sectionTitle}>{"VIRAL HOOKS & PRESETS"}</Text>

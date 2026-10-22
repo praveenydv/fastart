@@ -84,6 +84,11 @@ export default function SpeedModal({
   const handleSelectSlowMo = (val: 'none' | 'blend' | 'optical_flow') => {
     soundEngine.playSfx('click');
     setSmoothSlowMo(val);
+    const curvePayload =
+      activeTab === 'custom'
+        ? { id: 'custom', name: 'Custom Bezier', points: customPoints }
+        : null;
+    onApplySpeed(speedVal, curvePayload, val);
   };
 
   return (
@@ -136,9 +141,21 @@ export default function SpeedModal({
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onClose();
+                }}
+                style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="checkmark" size={18} color="#000000" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+                <Ionicons name="close" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>

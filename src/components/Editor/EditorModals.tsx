@@ -20,6 +20,7 @@ import CutoutModal from "../Panels/CutoutModal";
 import MotionTrackingModal from "../Panels/MotionTrackingModal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import KeyframeModal from "../Panels/KeyframeModal";
+import AutoCaptionModal from "../Panels/AutoCaptionModal";
 import {
   FastArtProject,
   TextClip,
@@ -66,7 +67,8 @@ interface EditorModalsProps {
   handleClearAllNotifications: () => void;
   handleDeleteNotification: (id: string) => void;
   handleNotificationAction: (notif: any) => void;
-  handleApplyVolume: (vol: number, fadeIn: number, fadeOut: number) => void;
+  handleApplyVolume: (vol: number, fadeIn: number, fadeOut: number, denoise?: boolean) => void;
+  handleExtractAudioFromVideo?: () => void;
   handleApplyTransform: (t: any, ratio?: any, mask?: any) => void;
   handleAutoCutGenerated: (proj: any) => void;
   updateProjectWithHistory: (proj: any) => void;
@@ -77,12 +79,16 @@ interface EditorModalsProps {
   handleDeleteKeyframeAtTime: (time?: number) => void;
   handleClearAllKeyframes: () => void;
   handleConfirmDeleteClip: () => void;
+  handleAddCaptions?: (captions: any[]) => void;
+  handleUpdateCaption?: (clip: any) => void;
 }
 
 export const EditorModals: React.FC<EditorModalsProps> = ({
   activeModal,
   closeModal,
   project,
+  handleAddCaptions,
+  handleUpdateCaption,
   route,
   totalDuration,
   currentTime,
@@ -114,6 +120,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleDeleteNotification,
   handleNotificationAction,
   handleApplyVolume,
+  handleExtractAudioFromVideo,
   handleApplyTransform,
   handleAutoCutGenerated,
   updateProjectWithHistory,
@@ -168,9 +175,24 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onClose={closeModal}
           onAddText={handleAddText}
           editingClip={
-            selectedClipType === "text" ? (selectedClip as TextClip) : null
+            selectedClipType === "text" ||
+            selectedClipType === "caption" ||
+            selectedClipType === "captions"
+              ? (selectedClip as any)
+              : null
           }
-          onUpdateText={handleUpdateText}
+          onUpdateText={(clip) => {
+            if (
+              selectedClipType === "caption" ||
+              selectedClipType === "captions"
+            ) {
+              if (handleUpdateCaption) {
+                handleUpdateCaption(clip);
+              }
+            } else if (handleUpdateText) {
+              handleUpdateText(clip);
+            }
+          }}
           currentPlayheadTime={currentTime}
         />
       )}
@@ -284,7 +306,10 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentVolume={selectedClip?.volume ?? 1.0}
           currentFadeIn={selectedClip?.fadeIn ?? 0}
           currentFadeOut={selectedClip?.fadeOut ?? 0}
+          currentDenoise={Boolean(selectedClip?.denoise)}
+          isFromVideo={selectedClipType === "video"}
           onApplyVolume={handleApplyVolume}
+          onExtractAudio={handleExtractAudioFromVideo}
         />
       )}
 
@@ -352,6 +377,23 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
           onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
           onClearAllKeyframes={handleClearAllKeyframes}
+        />
+      )}
+
+      {/* AI Speech Auto-Captions Studio Modal */}
+      {activeModal === "captions" && (
+        <AutoCaptionModal
+          visible={true}
+          onClose={closeModal}
+          project={project}
+          onAddCaptions={(captions) => {
+            if (handleAddCaptions) {
+              handleAddCaptions(captions);
+            }
+            if (captions && captions.length > 0 && setCurrentTime) {
+              setCurrentTime(captions[0].startTime);
+            }
+          }}
         />
       )}
 

@@ -11,10 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
-import { AudioClip } from '../../types/project';
+import { AudioClip, FastArtProject } from '../../types/project';
 import { openMediaService, OpenAudioItem } from '../../services/openMediaService';
 import { loadUploadedAudio, saveUploadedAudio } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import { detectAudioBeats, toggleProjectBeatMarkers } from '../../utils/audioBeatDetector';
 import { styles } from './Audio/AudioModalStyles';
 import { AudioLibraryTab } from './Audio/AudioLibraryTab';
 import { AudioUploadTab } from './Audio/AudioUploadTab';
@@ -23,6 +24,8 @@ interface AudioModalProps {
   visible: boolean;
   onClose: () => void;
   onAddAudio: (clip: AudioClip) => void;
+  project?: FastArtProject | null;
+  onUpdateProject?: (updates: any) => void;
 }
 
 const SFX_CATEGORIES = [
@@ -42,7 +45,13 @@ const MUSIC_CATEGORIES = [
   { id: 'cinematic', label: 'Cinematic' },
 ];
 
-export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalProps) {
+export default function AudioModal({
+  visible,
+  onClose,
+  onAddAudio,
+  project,
+  onUpdateProject,
+}: AudioModalProps) {
   const [activeTab, setActiveTab] = useState<'sfx' | 'music' | 'upload'>('sfx');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -249,6 +258,17 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
 
   const activeCategories = activeTab === 'sfx' ? SFX_CATEGORIES : MUSIC_CATEGORIES;
 
+  const hasBeats = Boolean(project?.beatMarkers && project.beatMarkers.length > 0);
+
+  const handleToggleBeats = async () => {
+    if (!project || !onUpdateProject) return;
+    soundEngine.playSfx('click');
+    const res = await detectAudioBeats(project);
+    const updated = toggleProjectBeatMarkers(project, res.beats);
+    onUpdateProject(updated);
+    soundEngine.playSfx('pop');
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -310,9 +330,73 @@ export default function AudioModal({ visible, onClose, onAddAudio }: AudioModalP
               </View>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {project && onUpdateProject && (
+                <>
+                  <TouchableOpacity
+                    onPress={handleToggleBeats}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      paddingHorizontal: 9,
+                      paddingVertical: 5,
+                      borderRadius: 12,
+                      backgroundColor: hasBeats ? '#FFE600' : 'rgba(255, 230, 0, 0.12)',
+                      borderWidth: 1,
+                      borderColor: '#FFE600',
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="musical-note" size={13} color={hasBeats ? '#000000' : '#FFE600'} />
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: hasBeats ? '#000000' : '#FFE600' }}>
+                      {hasBeats ? 'Beats' : 'Beats'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      soundEngine.playSfx('click');
+                      onUpdateProject({
+                        ...project,
+                        aiDenoise: !project.aiDenoise,
+                      });
+                      soundEngine.playSfx('pop');
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      paddingHorizontal: 9,
+                      paddingVertical: 5,
+                      borderRadius: 12,
+                      backgroundColor: project.aiDenoise ? '#00F2FE' : 'rgba(0, 242, 254, 0.12)',
+                      borderWidth: 1,
+                      borderColor: '#00F2FE',
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="volume-mute-outline"
+                      size={13}
+                      color={project.aiDenoise ? '#000000' : '#00F2FE'}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: project.aiDenoise ? '#000000' : '#00F2FE',
+                      }}
+                    >
+                      {project.aiDenoise ? 'Denoise On' : 'Denoise'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Search Bar */}

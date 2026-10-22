@@ -40,7 +40,24 @@ function getIndexedDB(): Promise<IDBDatabase> {
           store.createIndex('createdAt', 'createdAt', { unique: false });
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_MEDIA)) {
+          db.close();
+          const upgradeReq = indexedDB.open(DB_NAME, (db.version || 1) + 1);
+          upgradeReq.onupgradeneeded = () => {
+            const upDb = upgradeReq.result;
+            if (!upDb.objectStoreNames.contains(STORE_MEDIA)) {
+              const store = upDb.createObjectStore(STORE_MEDIA, { keyPath: 'id' });
+              store.createIndex('createdAt', 'createdAt', { unique: false });
+            }
+          };
+          upgradeReq.onsuccess = () => resolve(upgradeReq.result);
+          upgradeReq.onerror = () => resolve(db);
+          return;
+        }
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
     });
   }
@@ -206,15 +223,17 @@ export function extractVideoMetadata(
       let thumb = '';
       try {
         const thumbCanvas = document.createElement('canvas');
-        const tw = 160;
+        const tw = Math.min(640, vid.videoWidth || 640);
         const aspect = (vid.videoWidth || 16) / (vid.videoHeight || 9);
         const th = Math.round(tw / aspect);
         thumbCanvas.width = tw;
         thumbCanvas.height = th;
         const ctx = thumbCanvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(vid, 0, 0, tw, th);
-          thumb = thumbCanvas.toDataURL('image/jpeg', 0.6);
+          thumb = thumbCanvas.toDataURL('image/jpeg', 0.85);
         }
       } catch (e) {}
 

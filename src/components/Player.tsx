@@ -5,7 +5,7 @@ import React, {
   useState,
   useMemo,
 } from "react";
-import { View, Text, TouchableOpacity, Platform } from "react-native";
+import { View, Text, TouchableOpacity, Platform, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PlayerProps, TransientTransformState } from "./Player/playerTypes";
 import {
@@ -51,6 +51,8 @@ function Player({
   isCroppingPreview: isCroppingPreviewProp,
   onToggleCropPreview,
   onUpdateClipCrop,
+  isProcessing,
+  processingMessage,
 }: PlayerProps) {
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const fullscreen =
@@ -106,6 +108,7 @@ function Player({
 
   const isLightBg = useMemo(() => {
     const bg = (project.canvasBackground || "#000000").toLowerCase();
+    if (bg.startsWith("blur:") || bg.startsWith("gradient:")) return false;
     return (
       bg === "#ffffff" ||
       bg === "white" ||
@@ -113,6 +116,13 @@ function Player({
       bg === "#f1f5f9" ||
       bg === "#e2e8f0"
     );
+  }, [project.canvasBackground]);
+
+  const effectiveCanvasBg = useMemo(() => {
+    const raw = project.canvasBackground || "#000000";
+    if (raw.startsWith("blur:")) return "#000000";
+    if (raw.startsWith("gradient:")) return raw.replace("gradient:", "").split(",")[0] || "#000000";
+    return raw;
   }, [project.canvasBackground]);
 
   // ESC key listener to exit fullscreen mode
@@ -136,6 +146,14 @@ function Player({
     };
   }, [fullscreen]);
 
+  const activeCaptions = useMemo(
+    () =>
+      (project.tracks.captions || []).filter(
+        (c) =>
+          currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
+      ),
+    [project.tracks.captions, currentTime],
+  );
   const activeTexts = useMemo(
     () =>
       (project.tracks.text || []).filter(
@@ -208,6 +226,7 @@ function Player({
     isCroppingMode,
     selectedClipId,
     selectedClipType,
+    activeCaptions,
     activeTexts,
     activeStickers,
     activeVideos,
@@ -326,7 +345,7 @@ function Player({
             {
               width: boxWidth,
               height: canvasHeight,
-              backgroundColor: project.canvasBackground || "#000000",
+              backgroundColor: effectiveCanvasBg,
             },
           ]}
         >
@@ -356,12 +375,13 @@ function Player({
                 height: "100%",
                 display: "block",
                 borderRadius: 8,
-                backgroundColor: project.canvasBackground || "#000000",
+                backgroundColor: effectiveCanvasBg,
               }}
             />
           ) : (
             <PlayerNativeCompositor
               activeVideos={activeVideos}
+              activeCaptions={activeCaptions}
               activeTexts={activeTexts}
               activeStickers={activeStickers}
               activeEffects={activeEffects}
@@ -396,6 +416,7 @@ function Player({
               <PlayerTransformOverlay
                 selectedClipId={selectedClipId}
                 activeVideos={activeVideos}
+                activeCaptions={activeCaptions}
                 activeTexts={activeTexts}
                 activeStickers={activeStickers}
                 activeTransformItem={activeTransformItem}
@@ -419,6 +440,18 @@ function Player({
               />
             )}
           </View>
+
+          {/* Processing HUD Overlay */}
+          {isProcessing && (
+            <View style={styles.processingHUD} pointerEvents="none">
+              <View style={styles.processingPill}>
+                <ActivityIndicator size="small" color="#00F2FE" />
+                <Text style={styles.processingText}>
+                  {processingMessage || "Processing Edit..."}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Safe Zone Grid Overlay */}
           {showSafeZone && (

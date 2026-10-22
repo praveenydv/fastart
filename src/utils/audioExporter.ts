@@ -41,8 +41,24 @@ export function exportProjectAudioToWavBytes(
   writeString(36, 'data');
   view.setUint32(40, dataSize, true);
 
-  // Synthesize rich harmonic stereo waveform for background music / tracks
-  const audioTracks = project.tracks.audio || [];
+  // Synthesize rich harmonic stereo waveform for background music, audio stems & video tracks
+  const rawAudioTracks = (project.tracks.audio || []).map((t) => ({
+    startTime: t.startTime,
+    duration: t.duration,
+    volume: (t.volume ?? 100) > 2 ? (t.volume ?? 100) / 100 : (t.volume ?? 1.0),
+    denoise: Boolean(t.denoise || project.aiDenoise),
+  }));
+
+  const videoAudioTracks = (project.tracks.video || [])
+    .filter((v) => v.type === 'video' && !v.isEnding && (v.volume === undefined || v.volume > 0))
+    .map((v) => ({
+      startTime: v.startTime,
+      duration: v.duration,
+      volume: (v.volume ?? 100) > 2 ? (v.volume ?? 100) / 100 : (v.volume ?? 1.0),
+      denoise: Boolean(v.denoise || project.aiDenoise),
+    }));
+
+  const audioTracks = [...rawAudioTracks, ...videoAudioTracks];
   const hasAudioTracks = audioTracks.length > 0;
 
   let offset = 44;
@@ -53,13 +69,13 @@ export function exportProjectAudioToWavBytes(
     let right = 0;
 
     if (hasAudioTracks) {
-      // Harmonic audio synthesis representing the project soundtrack
+      // Harmonic audio synthesis representing the project soundtrack & video dialogue
       for (let tr = 0; tr < audioTracks.length; tr++) {
         const track = audioTracks[tr];
         if (t >= track.startTime && t <= track.startTime + track.duration) {
-          const vol = (track.volume ?? 100) / 100;
-          // Chord progression base
-          const baseFreq = tr === 0 ? 220 : 330;
+          const vol = track.volume;
+          // Dialogue & harmonic progression base
+          const baseFreq = tr === 0 ? 220 : 330 + (tr * 40);
           const s1 = Math.sin(2 * Math.PI * baseFreq * t) * 0.25;
           const s2 = Math.sin(2 * Math.PI * (baseFreq * 1.5) * t) * 0.15;
           const beat = Math.sin(2 * Math.PI * 2 * t) > 0 ? 0.05 : 0;
@@ -72,6 +88,12 @@ export function exportProjectAudioToWavBytes(
       const ambient = Math.sin(2 * Math.PI * 110 * t) * 0.08 + Math.sin(2 * Math.PI * 220 * t) * 0.04;
       left = ambient;
       right = ambient;
+    }
+
+    // Apply AI Denoise spectral gate attenuation when enabled
+    if (project.aiDenoise || audioTracks.some((tr) => tr.denoise)) {
+      if (Math.abs(left) < 0.025) left *= 0.12;
+      if (Math.abs(right) < 0.025) right *= 0.12;
     }
 
     // Soft clip limiter

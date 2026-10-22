@@ -11,6 +11,7 @@ export interface CutoutOptions {
   mode?: "chroma" | "auto";
   strokeColor?: string;
   strokeWidth?: number;
+  bgColor?: string;
 }
 
 export interface EffectShaderOptions {
@@ -177,7 +178,7 @@ class WebGlGpuPipeline {
           }
 
           float alpha = smoothstep(u_threshold, u_threshold + u_feather, dist);
-          gl_FragColor = vec4(color.rgb * alpha, alpha);
+          gl_FragColor = vec4(color.rgb, alpha);
         }
       }
     `;
@@ -330,8 +331,9 @@ class WebGlGpuPipeline {
     if (!this.available || !this.gl || !this.chromaProgram || !this.canvas) return false;
 
     const gl = this.gl;
-    const w = Math.min(1920, Math.max(16, Math.floor(targetW)));
-    const h = Math.min(1080, Math.max(16, Math.floor(targetH)));
+    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    const w = Math.min(3840, Math.max(16, Math.floor(Math.abs(targetW * dpr))));
+    const h = Math.min(2160, Math.max(16, Math.floor(Math.abs(targetH * dpr))));
 
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
@@ -350,12 +352,12 @@ class WebGlGpuPipeline {
     const v1 = mh > 0 ? Math.max(0, Math.min(1, (sy + sh) / mh)) : 1;
 
     const vertices = new Float32Array([
-      -1.0, -1.0, u0, v1,
-       1.0, -1.0, u1, v1,
-      -1.0,  1.0, u0, v0,
-      -1.0,  1.0, u0, v0,
-       1.0, -1.0, u1, v1,
-       1.0,  1.0, u1, v0,
+      -1.0,  1.0, u0, v1,
+       1.0,  1.0, u1, v1,
+      -1.0, -1.0, u0, v0,
+      -1.0, -1.0, u0, v0,
+       1.0,  1.0, u1, v1,
+       1.0, -1.0, u1, v0,
     ]);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
@@ -475,6 +477,14 @@ export class LowLevelPixelEngine {
     offCanvas: HTMLCanvasElement,
     offCtx: CanvasRenderingContext2D
   ): boolean {
+    // If background replacement color is requested, fill background behind the cutout subject
+    if (options.bgColor && options.bgColor !== "none" && options.bgColor !== "transparent") {
+      ctx.save();
+      ctx.fillStyle = options.bgColor;
+      ctx.fillRect(dx, dy, dw, dh);
+      ctx.restore();
+    }
+
     // 1. For chroma mode, try Hardware GPU WebGL Shader first (<1ms on mobile GPU)
     if (options.mode === "chroma" && this.gpuPipeline.available) {
       const gpuSuccess = this.gpuPipeline.renderChromaCutout(
@@ -510,8 +520,9 @@ export class LowLevelPixelEngine {
     // Operates on packed 32-bit uint words (0xAABBGGRR)
     // Eliminates Math.sqrt with squared Euclidean distance comparison!
     try {
-      const procW = Math.min(640, Math.max(16, Math.floor(Math.abs(dw))));
-      const procH = Math.min(480, Math.max(16, Math.floor(Math.abs(dh))));
+      const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+      const procW = Math.min(1920, Math.max(16, Math.floor(Math.abs(dw * dpr))));
+      const procH = Math.min(1080, Math.max(16, Math.floor(Math.abs(dh * dpr))));
 
       if (offCanvas.width !== procW || offCanvas.height !== procH) {
         offCanvas.width = procW;
@@ -575,7 +586,7 @@ export class LowLevelPixelEngine {
           } else if (distSq < autoOuterSq) {
             const dist = Math.sqrt(distSq);
             const alpha = Math.floor(((dist - autoThresh) * autoInvFeather) * 255);
-            u32[i] = (pixel & 0x00ffffff) | (alpha << 24);
+            u32[i] = (((alpha << 24) >>> 0) | (pixel & 0x00ffffff)) >>> 0;
           }
         }
       } else {
@@ -600,7 +611,7 @@ export class LowLevelPixelEngine {
             if (gKey > rKey && gKey > bKey && g > Math.max(r, b)) {
               g = Math.round(g * 0.45 + Math.max(r, b) * 0.55);
             }
-            u32[i] = (alpha << 24) | (b << 16) | (g << 8) | r;
+            u32[i] = (((alpha << 24) >>> 0) | (b << 16) | (g << 8) | r) >>> 0;
           }
         }
       }

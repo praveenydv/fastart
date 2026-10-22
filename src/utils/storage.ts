@@ -183,7 +183,12 @@ const sanitizeProject = (proj: any): FastArtProject => {
     tracks: {
       video: Array.isArray(tracks.video) ? tracks.video : [],
       audio: Array.isArray(tracks.audio) ? tracks.audio : [],
-      text: Array.isArray(tracks.text) ? tracks.text : [],
+      text: Array.isArray(tracks.text) ? tracks.text.filter((c: any) => !c.id?.startsWith('cap-')) : [],
+      captions: Array.isArray(tracks.captions)
+        ? tracks.captions
+        : Array.isArray(tracks.text)
+          ? tracks.text.filter((c: any) => c.id?.startsWith('cap-'))
+          : [],
       stickers: Array.isArray(tracks.stickers) ? tracks.stickers : [],
       effects: Array.isArray(tracks.effects) ? tracks.effects : [],
       filters: Array.isArray(tracks.filters) ? tracks.filters : [],

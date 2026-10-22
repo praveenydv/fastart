@@ -125,11 +125,13 @@ export default function App() {
   const selectedClip = useMemo(() => {
     if (!selectedClipId || !project) return null;
     const key = (
-      selectedClipType === "sticker" || selectedClipType === "stickers"
-        ? "stickers"
-        : selectedClipType === "effect" || selectedClipType === "effects"
-          ? "effects"
-          : selectedClipType
+      selectedClipType === "caption" || selectedClipType === "captions"
+        ? "captions"
+        : selectedClipType === "sticker" || selectedClipType === "stickers"
+          ? "stickers"
+          : selectedClipType === "effect" || selectedClipType === "effects"
+            ? "effects"
+            : selectedClipType
     ) as keyof typeof project.tracks;
 
     const list = (project.tracks[key] as any[]) || [];
@@ -177,6 +179,7 @@ export default function App() {
   // Media addition & modal apply hook
   const {
     handleUpdateText,
+    handleUpdateCaption,
     handleUpdateSticker,
     handleUpdateEffect,
     handleAddMedia,
@@ -190,8 +193,12 @@ export default function App() {
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    handleAddCaptions,
+    isProcessing,
+    processingMessage,
   } = useProjectMediaAdders({
     project,
     projectRef,
@@ -202,6 +209,8 @@ export default function App() {
     transitionTargetClipId,
     updateProjectWithHistory,
     setActiveModal,
+    setSelectedClipId,
+    setSelectedClipType,
   });
 
   // Keyframes hook
@@ -399,6 +408,9 @@ export default function App() {
             handleOpenCanvasModal={() => openModal("canvas")}
             handleOpenCutoutModal={() => openModal("cutout")}
             handleOpenMotionTracking={() => openModal("tracking")}
+            handleOpenAutoCaptions={() => openModal("captions")}
+            isProcessing={isProcessing}
+            processingMessage={processingMessage}
           />
         )}
 
@@ -438,6 +450,7 @@ export default function App() {
           handleDeleteNotification={handleDeleteNotification}
           handleNotificationAction={handleNotificationAction}
           handleApplyVolume={handleApplyVolume}
+          handleExtractAudioFromVideo={handleExtractAudioFromVideo}
           handleApplyTransform={handleApplyTransform}
           handleAutoCutGenerated={handleAutoCutGenerated}
           updateProjectWithHistory={updateProjectWithHistory}
@@ -448,6 +461,8 @@ export default function App() {
           handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
           handleClearAllKeyframes={handleClearAllKeyframes}
           handleConfirmDeleteClip={handleConfirmDeleteClip}
+          handleAddCaptions={handleAddCaptions}
+          handleUpdateCaption={handleUpdateCaption}
         />
       </View>
 
