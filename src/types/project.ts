@@ -129,6 +129,7 @@ export interface AudioClip {
   trimOut?: number;
   mediaDuration?: number;
   speed?: number;
+  speedCurve?: number[] | SpeedCurvePoint[] | { id: string; name?: string; points: any } | null;
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;

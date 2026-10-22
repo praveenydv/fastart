@@ -7,7 +7,6 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import DownloadCompleteModal from "./DownloadCompleteModal";
 import { ExportModalProps } from "./Export/exportTypes";
 import { styles } from "./Export/ExportModalStyles";
 import { useExportProcess } from "./Export/useExportProcess";
@@ -36,9 +35,6 @@ export default function ExportModal({
     isSaving,
     isSaved,
     setIsSaved,
-    showDownloadComplete,
-    setShowDownloadComplete,
-    downloadCompleteFilename,
     downloadDestination,
     noticeDialog,
     setNoticeDialog,
@@ -154,26 +150,7 @@ export default function ExportModal({
         </View>
       </View>
 
-      {/* Modern Sleek Download Complete Modal */}
-      <DownloadCompleteModal
-        visible={showDownloadComplete}
-        onClose={() => setShowDownloadComplete(false)}
-        filename={
-          downloadCompleteFilename ||
-          `${(project?.title || "FastArt").replace(/[^a-zA-Z0-9_-]/g, "_")}.${selectedFormatConfig.ext}`
-        }
-        formatLabel={selectedFormatConfig.label}
-        formatExt={selectedFormatConfig.ext}
-        destinationPath={downloadDestination}
-        resolution={
-          mediaType !== "png" && mediaType !== "wav" ? resolution : undefined
-        }
-        fps={mediaType !== "png" && mediaType !== "wav" ? fps : undefined}
-        fileSize={calculateEstimatedSize()}
-        duration={totalDuration}
-        isSavedToGallery={true}
-        onDownloadAgain={() => triggerDirectDownload()}
-      />
+
 
       {/* Sleek Modern In-App Notice Dialog */}
       {noticeDialog?.visible && (

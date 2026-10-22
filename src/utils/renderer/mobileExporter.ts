@@ -24,21 +24,52 @@ import { applyMotionTracking } from "./rendererEffects";
 
 declare const Buffer: any;
 
+const B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
 function uint8ToBase64(uint8: Uint8Array): string {
   if (typeof Buffer !== "undefined") {
     return Buffer.from(uint8).toString("base64");
   }
-  let binary = "";
-  const len = uint8.byteLength;
-  const chunkSize = 8192;
-  for (let i = 0; i < len; i += chunkSize) {
-    const chunk = uint8.subarray(i, Math.min(i + chunkSize, len));
-    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  const len = uint8.length;
+  const extraBytes = len % 3;
+  const parts: string[] = [];
+  const CHUNK_SIZE = 0x8000;
+  let chunk = "";
+
+  for (let i = 0; i < len - extraBytes; i += 3) {
+    const b0 = uint8[i];
+    const b1 = uint8[i + 1];
+    const b2 = uint8[i + 2];
+    chunk +=
+      B64_CHARS[(b0 >>> 2) & 0x3f] +
+      B64_CHARS[((b0 << 4) | (b1 >>> 4)) & 0x3f] +
+      B64_CHARS[((b1 << 2) | (b2 >>> 6)) & 0x3f] +
+      B64_CHARS[b2 & 0x3f];
+    if (chunk.length >= CHUNK_SIZE) {
+      parts.push(chunk);
+      chunk = "";
+    }
   }
-  if (typeof btoa === "function") {
-    return btoa(binary);
+
+  if (extraBytes === 1) {
+    const b0 = uint8[len - 1];
+    chunk +=
+      B64_CHARS[(b0 >>> 2) & 0x3f] +
+      B64_CHARS[(b0 << 4) & 0x3f] +
+      "==";
+  } else if (extraBytes === 2) {
+    const b0 = uint8[len - 2];
+    const b1 = uint8[len - 1];
+    chunk +=
+      B64_CHARS[(b0 >>> 2) & 0x3f] +
+      B64_CHARS[((b0 << 4) | (b1 >>> 4)) & 0x3f] +
+      B64_CHARS[(b1 << 2) & 0x3f] +
+      "=";
   }
-  return "";
+  if (chunk.length > 0) {
+    parts.push(chunk);
+  }
+  return parts.join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -321,11 +352,13 @@ export class MobileFrameBuffer {
   public width: number;
   public height: number;
   public data: Uint8Array;
+  public u32: Uint32Array;
 
   constructor(width: number, height: number, backgroundColorHex: string = "#000000") {
     this.width = width;
     this.height = height;
     this.data = new Uint8Array(width * height * 4);
+    this.u32 = new Uint32Array(this.data.buffer);
     this.fill(backgroundColorHex);
   }
 
@@ -340,37 +373,25 @@ export class MobileFrameBuffer {
         const r = Math.round(r1 + (r2 - r1) * t);
         const g = Math.round(g1 + (g2 - g1) * t);
         const b = Math.round(b1 + (b2 - b1) * t);
-        const rowOffset = y * this.width * 4;
-        for (let x = 0; x < this.width; x++) {
-          const idx = rowOffset + x * 4;
-          this.data[idx] = r;
-          this.data[idx + 1] = g;
-          this.data[idx + 2] = b;
-          this.data[idx + 3] = 255;
-        }
+        const pixel32 = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+        const rowStart = y * this.width;
+        this.u32.fill(pixel32, rowStart, rowStart + this.width);
       }
       return;
     }
 
     const [r, g, b, a] = hexToRgba(hexColor);
-    const len = this.data.length;
-    for (let i = 0; i < len; i += 4) {
-      this.data[i] = r;
-      this.data[i + 1] = g;
-      this.data[i + 2] = b;
-      this.data[i + 3] = a;
-    }
+    const pixel32 = ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+    this.u32.fill(pixel32);
   }
 
   public setPixel(x: number, y: number, r: number, g: number, b: number, a: number) {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) return;
-    const idx = (y * this.width + x) * 4;
+    const pIdx = y * this.width + x;
     if (a >= 255) {
-      this.data[idx] = r;
-      this.data[idx + 1] = g;
-      this.data[idx + 2] = b;
-      this.data[idx + 3] = 255;
+      this.u32[pIdx] = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
     } else if (a > 0) {
+      const idx = pIdx * 4;
       const alphaNorm = a / 255;
       const invAlpha = 1 - alphaNorm;
       this.data[idx] = Math.round(r * alphaNorm + this.data[idx] * invAlpha);
@@ -393,10 +414,20 @@ export class MobileFrameBuffer {
     const y0 = Math.max(0, Math.floor(y));
     const x1 = Math.min(this.width, Math.floor(x + w));
     const y1 = Math.min(this.height, Math.floor(y + h));
+    const spanW = x1 - x0;
+    if (spanW <= 0) return;
 
-    for (let py = y0; py < y1; py++) {
-      for (let px = x0; px < x1; px++) {
-        this.setPixel(px, py, r, g, b, a);
+    if (a >= 255) {
+      const pixel32 = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+      for (let py = y0; py < y1; py++) {
+        const rowStart = py * this.width + x0;
+        this.u32.fill(pixel32, rowStart, rowStart + spanW);
+      }
+    } else if (a > 0) {
+      for (let py = y0; py < y1; py++) {
+        for (let px = x0; px < x1; px++) {
+          this.setPixel(px, py, r, g, b, a);
+        }
       }
     }
   }
@@ -944,15 +975,36 @@ export function renderMobileProjectFrame(
 // (Compliant with ISO/IEC 14496-10 / ITU-T H.264)
 // ---------------------------------------------------------------------------
 class BitWriter {
-  public bytes: number[] = [];
+  private buffer: Uint8Array;
+  private pos = 0;
   private currentByte = 0;
   private numBitsInCurrentByte = 0;
+
+  constructor(initialCapacity = 131072) {
+    this.buffer = new Uint8Array(initialCapacity);
+  }
+
+  public ensureCapacity(needed: number) {
+    if (this.pos + needed > this.buffer.length) {
+      const newCap = Math.max(this.buffer.length * 2, this.pos + needed + 4096);
+      const newBuf = new Uint8Array(newCap);
+      newBuf.set(this.buffer);
+      this.buffer = newBuf;
+    }
+  }
+
+  public writeByte(b: number) {
+    if (this.pos >= this.buffer.length) {
+      this.ensureCapacity(1);
+    }
+    this.buffer[this.pos++] = b & 0xff;
+  }
 
   public writeBit(bit: number) {
     this.currentByte = (this.currentByte << 1) | (bit & 1);
     this.numBitsInCurrentByte++;
     if (this.numBitsInCurrentByte === 8) {
-      this.bytes.push(this.currentByte);
+      this.writeByte(this.currentByte);
       this.currentByte = 0;
       this.numBitsInCurrentByte = 0;
     }
@@ -982,7 +1034,7 @@ class BitWriter {
   public alignZero() {
     if (this.numBitsInCurrentByte > 0) {
       this.currentByte <<= 8 - this.numBitsInCurrentByte;
-      this.bytes.push(this.currentByte);
+      this.writeByte(this.currentByte);
       this.currentByte = 0;
       this.numBitsInCurrentByte = 0;
     }
@@ -996,33 +1048,46 @@ class BitWriter {
   }
 
   public toBytes(): Uint8Array {
-    return new Uint8Array(this.bytes);
+    return this.buffer.subarray(0, this.pos);
   }
 }
 
 // H.264 Emulation Prevention: inserts 0x03 after two consecutive 0x00 bytes if followed by <= 0x03
 function rbspToNal(rbsp: Uint8Array): Uint8Array {
-  const out: number[] = [];
+  const len = rbsp.length;
+  let out = new Uint8Array(len + (len >> 4) + 64);
+  let outLen = 0;
   let zeroCount = 0;
-  for (let i = 0; i < rbsp.length; i++) {
+
+  for (let i = 0; i < len; i++) {
     const b = rbsp[i];
     if (zeroCount === 2 && b <= 3) {
-      out.push(3);
+      if (outLen >= out.length) {
+        const next = new Uint8Array(out.length * 2);
+        next.set(out);
+        out = next;
+      }
+      out[outLen++] = 3;
       zeroCount = 0;
     }
-    out.push(b);
+    if (outLen >= out.length) {
+      const next = new Uint8Array(out.length * 2);
+      next.set(out);
+      out = next;
+    }
+    out[outLen++] = b;
     if (b === 0) {
       zeroCount++;
     } else {
       zeroCount = 0;
     }
   }
-  return new Uint8Array(out);
+  return out.subarray(0, outLen);
 }
 
 // Sequence Parameter Set (SPS) NAL unit (type 7)
 function buildH264Sps(mbWidth: number, mbHeight: number): Uint8Array {
-  const bw = new BitWriter();
+  const bw = new BitWriter(256);
   bw.writeBits(66, 8); // Profile IDC: 66 (Baseline)
   bw.writeBits(0xc0, 8); // Constraint flags: constraint_set0..1
   bw.writeBits(31, 8); // Level IDC: 31 (Level 3.1)
@@ -1049,7 +1114,7 @@ function buildH264Sps(mbWidth: number, mbHeight: number): Uint8Array {
 
 // Picture Parameter Set (PPS) NAL unit (type 8)
 function buildH264Pps(): Uint8Array {
-  const bw = new BitWriter();
+  const bw = new BitWriter(256);
   bw.writeUe(0); // pic_parameter_set_id
   bw.writeUe(0); // seq_parameter_set_id
   bw.writeBit(0); // entropy_coding_mode_flag (CAVLC)
@@ -1081,7 +1146,8 @@ function encodeH264IFrame(
   mbWidth: number,
   mbHeight: number
 ): Uint8Array {
-  const bw = new BitWriter();
+  const totalMbs = mbWidth * mbHeight;
+  const bw = new BitWriter(totalMbs * 390 + 256);
 
   // Slice Header
   bw.writeUe(0); // first_mb_in_slice
@@ -1100,53 +1166,54 @@ function encodeH264IFrame(
 
   // Convert and write macroblocks (16x16 luma, 8x8 chroma U, 8x8 chroma V)
   for (let mbY = 0; mbY < mbHeight; mbY++) {
+    const startY = mbY * 16;
     for (let mbX = 0; mbX < mbWidth; mbX++) {
+      const startX = mbX * 16;
       bw.writeUe(25); // mb_type: 25 (I_PCM)
       bw.alignZero();
 
-      // 1. 256 bytes Luma Y
+      // 1. 256 bytes Luma Y (16x16)
       for (let y = 0; y < 16; y++) {
-        const py = Math.min(height - 1, mbY * 16 + y);
-        const rowOffset = py * width * 4;
+        const py = startY + y < height ? startY + y : height - 1;
+        let idx = (py * width + startX) * 4;
         for (let x = 0; x < 16; x++) {
-          const px = Math.min(width - 1, mbX * 16 + x);
-          const idx = rowOffset + px * 4;
           const r = rgba[idx];
           const g = rgba[idx + 1];
           const b = rgba[idx + 2];
-          // BT.601 Studio Range Y
+          idx += 4;
+          // BT.601 Studio Range Y [16..235]
           const yVal = Math.min(235, Math.max(16, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
-          bw.bytes.push(yVal);
+          bw.writeByte(yVal);
         }
       }
 
-      // 2. 64 bytes Chroma Cb (U)
+      // 2. 64 bytes Chroma Cb (U) (8x8, 2x downsampled)
       for (let y = 0; y < 8; y++) {
-        const py = Math.min(height - 1, mbY * 16 + y * 2);
-        const rowOffset = py * width * 4;
+        const py = startY + y * 2 < height ? startY + y * 2 : height - 1;
+        let idx = (py * width + startX) * 4;
         for (let x = 0; x < 8; x++) {
-          const px = Math.min(width - 1, mbX * 16 + x * 2);
-          const idx = rowOffset + px * 4;
           const r = rgba[idx];
           const g = rgba[idx + 1];
           const b = rgba[idx + 2];
+          idx += 8;
+          // BT.601 Studio Range Cb [16..240]
           const uVal = Math.min(240, Math.max(16, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
-          bw.bytes.push(uVal);
+          bw.writeByte(uVal);
         }
       }
 
-      // 3. 64 bytes Chroma Cr (V)
+      // 3. 64 bytes Chroma Cr (V) (8x8, 2x downsampled)
       for (let y = 0; y < 8; y++) {
-        const py = Math.min(height - 1, mbY * 16 + y * 2);
-        const rowOffset = py * width * 4;
+        const py = startY + y * 2 < height ? startY + y * 2 : height - 1;
+        let idx = (py * width + startX) * 4;
         for (let x = 0; x < 8; x++) {
-          const px = Math.min(width - 1, mbX * 16 + x * 2);
-          const idx = rowOffset + px * 4;
           const r = rgba[idx];
           const g = rgba[idx + 1];
           const b = rgba[idx + 2];
+          idx += 8;
+          // BT.601 Studio Range Cr [16..240]
           const vVal = Math.min(240, Math.max(16, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
-          bw.bytes.push(vVal);
+          bw.writeByte(vVal);
         }
       }
     }
@@ -1240,9 +1307,12 @@ function createMp4Container(
     b.writeAscii("avc1");
   });
 
-  const sampleSizes: number[] = [];
-  for (const s of sampleNals) {
-    sampleSizes.push(4 + s.length);
+  const sampleSizes: number[] = new Array(totalFrames);
+  let totalSampleBytes = 0;
+  for (let i = 0; i < totalFrames; i++) {
+    const sLen = 4 + sampleNals[i].length;
+    sampleSizes[i] = sLen;
+    totalSampleBytes += sLen;
   }
 
   const buildMoov = (chunkOffset: number) => {
@@ -1440,17 +1510,40 @@ function createMp4Container(
   const actualOffset = ftypBytes.length + moovBytes.length + 8;
   moovBytes = buildMoov(actualOffset);
 
-  b.writeBytes(moovBytes);
+  // Directly construct final contiguous MP4 container with zero array copies
+  const mdatHeaderSize = 8;
+  const mdatTotalSize = mdatHeaderSize + totalSampleBytes;
+  const totalMp4Size = ftypBytes.length + moovBytes.length + mdatTotalSize;
+  const finalMp4 = new Uint8Array(totalMp4Size);
+  const view = new DataView(finalMp4.buffer);
 
-  // mdat Box
-  b.box("mdat", () => {
-    for (const s of sampleNals) {
-      b.writeU32(s.length);
-      b.writeBytes(s);
-    }
-  });
+  let offset = 0;
+  // 1. ftyp
+  finalMp4.set(ftypBytes, offset);
+  offset += ftypBytes.length;
 
-  return b.toBytes();
+  // 2. moov
+  finalMp4.set(moovBytes, offset);
+  offset += moovBytes.length;
+
+  // 3. mdat header
+  view.setUint32(offset, mdatTotalSize, false);
+  finalMp4[offset + 4] = 0x6d; // 'm'
+  finalMp4[offset + 5] = 0x64; // 'd'
+  finalMp4[offset + 6] = 0x61; // 'a'
+  finalMp4[offset + 7] = 0x74; // 't'
+  offset += 8;
+
+  // 4. Sample NALs
+  for (let i = 0; i < totalFrames; i++) {
+    const s = sampleNals[i];
+    view.setUint32(offset, s.length, false);
+    offset += 4;
+    finalMp4.set(s, offset);
+    offset += s.length;
+  }
+
+  return finalMp4;
 }
 
 // ---------------------------------------------------------------------------
@@ -1461,7 +1554,7 @@ export async function exportMobileProject(
   options: ExportOptions = {},
   onProgress?: (percent: number, currentTime: number, duration: number) => void
 ): Promise<ExportResult> {
-  const { fps = 15, duration = 4.0, format = "mp4", currentTime = 0 } = options;
+  const { fps = 15, duration = 4.0, format = "mp4", currentTime = 0, resolution = "1080p" } = options;
 
   let rawTitle = (project.title || (project as any).name || "").trim();
   if (!rawTitle || /^proj[_-]\d+/i.test(rawTitle) || rawTitle === project.id) {
@@ -1469,7 +1562,17 @@ export async function exportMobileProject(
   }
   const cleanTitle =
     rawTitle.replace(/[/\\?%*:|"<>]/g, "").replace(/\s+/g, "_") || "FastArt_Video";
-  const targetDir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
+  const rawDir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
+  const targetDir = rawDir ? (rawDir.endsWith("/") ? rawDir : `${rawDir}/`) : "";
+
+  const createSafeBlob = (parts: any[] = [], options?: any): Blob => {
+    try {
+      if (typeof Blob !== "undefined") {
+        return new Blob(parts, options);
+      }
+    } catch {}
+    return { size: 0, type: options?.type || "" } as any;
+  };
 
   // 1. PNG Snapshot / Poster Frame
   if (format === "png") {
@@ -1493,7 +1596,7 @@ export async function exportMobileProject(
     if (onProgress) onProgress(100, currentTime, duration);
 
     return {
-      blob: new Blob([]),
+      blob: createSafeBlob([]),
       videoUrl: targetFileUri,
       mimeType: "image/png",
       format: "png",
@@ -1555,7 +1658,7 @@ export async function exportMobileProject(
         onProgress(Math.round(((f + 1) / totalFrames) * 85), frameTime, duration);
       }
 
-      if (f % 3 === 0 && f < totalFrames - 1) {
+      if (f % 4 === 0 && f < totalFrames - 1) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
@@ -1572,7 +1675,7 @@ export async function exportMobileProject(
     if (onProgress) onProgress(100, duration, duration);
 
     return {
-      blob: new Blob([]),
+      blob: createSafeBlob([]),
       videoUrl: targetFileUri,
       mimeType: "image/gif",
       format: "gif",
@@ -1585,18 +1688,45 @@ export async function exportMobileProject(
   // Resolves aspect ratio to exact multiples of 16 for standard H.264 macroblock alignment
   let targetW = 368;
   let targetH = 640;
-  if (project.aspectRatio === "16:9") {
-    targetW = 640;
-    targetH = 368;
-  } else if (project.aspectRatio === "1:1") {
-    targetW = 480;
-    targetH = 480;
-  } else if (project.aspectRatio === "4:5") {
-    targetW = 384;
-    targetH = 480;
-  } else if (project.aspectRatio === "2.35:1") {
-    targetW = 640;
-    targetH = 272;
+  const isHD = resolution === "720p" || resolution === "1080p" || resolution === "2K/4K";
+
+  if (isHD) {
+    if (project.aspectRatio === "16:9") {
+      targetW = 1280;
+      targetH = 720;
+    } else if (project.aspectRatio === "1:1") {
+      targetW = 720;
+      targetH = 720;
+    } else if (project.aspectRatio === "4:5") {
+      targetW = 576;
+      targetH = 720;
+    } else if (project.aspectRatio === "2.35:1") {
+      targetW = 1280;
+      targetH = 544;
+    } else {
+      // 9:16
+      targetW = 720;
+      targetH = 1280;
+    }
+  } else {
+    // 480p / Fast Mobile Baseline
+    if (project.aspectRatio === "16:9") {
+      targetW = 640;
+      targetH = 368;
+    } else if (project.aspectRatio === "1:1") {
+      targetW = 480;
+      targetH = 480;
+    } else if (project.aspectRatio === "4:5") {
+      targetW = 384;
+      targetH = 480;
+    } else if (project.aspectRatio === "2.35:1") {
+      targetW = 640;
+      targetH = 272;
+    } else {
+      // 9:16
+      targetW = 368;
+      targetH = 640;
+    }
   }
 
   const mbW = targetW >> 4;
@@ -1616,8 +1746,8 @@ export async function exportMobileProject(
       onProgress(pct, frameTime, duration);
     }
 
-    // Yield cooperatively to the JS event loop every 3 frames to keep UI responsive
-    if (f % 3 === 0 && f < totalFrames - 1) {
+    // Yield cooperatively to the JS event loop every 4 frames to keep UI responsive with high throughput
+    if (f % 4 === 0 && f < totalFrames - 1) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
@@ -1638,7 +1768,7 @@ export async function exportMobileProject(
   if (onProgress) onProgress(100, duration, duration);
 
   return {
-    blob: new Blob([]),
+    blob: createSafeBlob([]),
     videoUrl: targetFileUri,
     mimeType: "video/mp4",
     format: "mp4",

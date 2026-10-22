@@ -78,6 +78,7 @@ function VideoClipRenderer({
   fallbackThumbnail?: string;
 }) {
   const [hasError, setHasError] = useState(false);
+  const lastSyncTimeRef = React.useRef(0);
 
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
@@ -87,24 +88,62 @@ function VideoClipRenderer({
 
   useEffect(() => {
     if (!player) return;
+    const sub = (player as any).addListener?.("statusChange", (payload: any) => {
+      if (payload?.status === "error" || payload?.error) {
+        setHasError(true);
+      }
+    });
+    return () => {
+      sub?.remove?.();
+    };
+  }, [player]);
+
+  // Sync muted & speed
+  useEffect(() => {
+    if (!player || hasError) return;
     try {
       player.muted = muted;
       player.playbackRate = speed;
+    } catch {}
+  }, [player, muted, speed, hasError]);
+
+  // Play / Pause transition
+  useEffect(() => {
+    if (!player || hasError) return;
+    try {
       if (isPlaying) {
-        if (Math.abs(player.currentTime - clipLocalTime) > 0.35) {
+        if (Math.abs(player.currentTime - clipLocalTime) > 0.25) {
           player.currentTime = clipLocalTime;
         }
         player.play();
       } else {
         player.pause();
-        if (Math.abs(player.currentTime - clipLocalTime) > 0.1) {
+        if (Math.abs(player.currentTime - clipLocalTime) > 0.05) {
           player.currentTime = clipLocalTime;
         }
       }
-    } catch {
-      // Safe fallback
-    }
-  }, [player, isPlaying, clipLocalTime, muted, speed]);
+    } catch {}
+  }, [player, isPlaying, hasError]);
+
+  // Scrubbing/seeking when paused, with throttled drift correction during play
+  useEffect(() => {
+    if (!player || hasError) return;
+    try {
+      if (!isPlaying) {
+        if (Math.abs(player.currentTime - clipLocalTime) > 0.04) {
+          player.currentTime = clipLocalTime;
+        }
+      } else {
+        const now = Date.now();
+        if (now - lastSyncTimeRef.current > 400) {
+          lastSyncTimeRef.current = now;
+          if (Math.abs(player.currentTime - clipLocalTime) > 0.45) {
+            player.currentTime = clipLocalTime;
+          }
+        }
+      }
+    } catch {}
+  }, [player, clipLocalTime, isPlaying, hasError]);
 
   if (hasError) {
     if (fallbackThumbnail) {

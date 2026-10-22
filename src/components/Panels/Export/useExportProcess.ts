@@ -29,7 +29,13 @@ export function useExportProcess(
   const [isSaved, setIsSaved] = useState(false);
   const [showDownloadComplete, setShowDownloadComplete] = useState(false);
   const [downloadCompleteFilename, setDownloadCompleteFilename] = useState("");
-  const [downloadDestination, setDownloadDestination] = useState("Device Gallery");
+  const [downloadDestination, setDownloadDestination] = useState(
+    Platform.OS === "web"
+      ? "Downloads"
+      : Platform.OS === "ios"
+      ? "Photos & Files"
+      : "Gallery / FastArt",
+  );
   const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState | null>(null);
 
   const getInitialFilename = () => {
@@ -80,7 +86,7 @@ export function useExportProcess(
         setDownloadCompleteFilename(filename);
         if (dest) setDownloadDestination(dest);
         setIsSaved(true);
-        setShowDownloadComplete(true);
+        // Do not popup extra modal on download
       },
       setSaving: setIsSaving,
       setNoticeDialog,
@@ -177,6 +183,7 @@ export function useExportProcess(
             duration: renderDuration,
             format: mediaType,
             currentTime: project.currentTime || 0,
+            resolution,
           },
           (pct) => {
             setProgress(pct);

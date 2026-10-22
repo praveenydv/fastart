@@ -186,6 +186,14 @@ function Player({
       ),
     [project.tracks.effects, currentTime],
   );
+  const activeAudios = useMemo(
+    () =>
+      (project.tracks.audio || []).filter(
+        (a) =>
+          currentTime >= a.startTime && currentTime <= a.startTime + a.duration,
+      ),
+    [project.tracks.audio, currentTime],
+  );
 
   // Crop Gestures Hook
   const {
@@ -383,22 +391,25 @@ function Player({
               }}
             />
           ) : (
-            <PlayerNativeCompositor
-              activeVideos={activeVideos}
-              activeCaptions={activeCaptions}
-              activeTexts={activeTexts}
-              activeStickers={activeStickers}
-              activeEffects={activeEffects}
-              activeTransient={activeTransient}
-              currentTime={currentTime}
-              isPlaying={isPlaying}
-              boxWidth={boxWidth}
-              canvasHeight={canvasHeight}
-              canvasBackground={project.canvasBackground}
-              onSelectClip={onSelectClip}
-              getItemBaseDimensions={getItemDimsHelper}
-              getInterpolatedTransform={getInterpolatedTransform}
-            />
+            <>
+              <PlayerNativeCompositor
+                activeVideos={activeVideos}
+                activeAudios={activeAudios}
+                activeCaptions={activeCaptions}
+                activeTexts={activeTexts}
+                activeStickers={activeStickers}
+                activeEffects={activeEffects}
+                activeTransient={activeTransient}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                boxWidth={boxWidth}
+                canvasHeight={canvasHeight}
+                canvasBackground={project.canvasBackground}
+                onSelectClip={onSelectClip}
+                getItemBaseDimensions={getItemDimsHelper}
+                getInterpolatedTransform={getInterpolatedTransform}
+              />
+            </>
           )}
 
           {/* Interactive On-Canvas Layer */}

@@ -4,10 +4,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
 import { TransientTransformState } from "./playerTypes";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
+import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
+  activeAudios?: any[];
   activeCaptions?: any[];
   activeTexts: any[];
   activeStickers: any[];
@@ -32,6 +34,7 @@ interface PlayerNativeCompositorProps {
 
 export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
   activeVideos,
+  activeAudios = [],
   activeCaptions = [],
   activeTexts,
   activeStickers,
@@ -620,6 +623,15 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         return null;
       })}
 
+      {/* Layer 5: Active Dedicated Audio Tracks (BGM, Voiceover, SFX) */}
+      {activeAudios.map((audio) => (
+        <NativeAudioTrackPlayer
+          key={audio.id}
+          clip={audio}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
+        />
+      ))}
     </View>
   );
 };

@@ -80,7 +80,6 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
       return;
     }
     isClosingRef.current = true;
-    callback();
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -96,6 +95,7 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
     ]).start(() => {
       setModalVisible(false);
       isClosingRef.current = false;
+      callback();
     });
   };
 

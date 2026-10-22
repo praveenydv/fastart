@@ -204,7 +204,7 @@ export async function executeDirectDownload({
       }
 
       let savedSuccess = false;
-      let savedPath = "Gallery / FastArt";
+      let savedPath = Platform.OS === "ios" ? "Photos & Files" : "Gallery / FastArt";
       let hasPermission = false;
 
       try {
@@ -229,7 +229,12 @@ export async function executeDirectDownload({
           if (Asset && typeof Asset.create === "function") {
             const asset = await Asset.create(fileToSave);
             savedSuccess = true;
-            savedPath = (asset as any)?.uri ? `Gallery / DCIM / FastArt / ${filename}` : "Gallery / FastArt";
+            savedPath =
+              Platform.OS === "ios"
+                ? `Photos / ${filename}`
+                : (asset as any)?.uri
+                ? `Gallery / DCIM / FastArt / ${filename}`
+                : "Gallery / FastArt";
           }
         } catch (createErr) {
           console.warn("Asset.create failed, trying legacy save:", createErr);
@@ -240,11 +245,18 @@ export async function executeDirectDownload({
             if (MediaLibraryLegacy?.saveToLibraryAsync) {
               await MediaLibraryLegacy.saveToLibraryAsync(fileToSave);
               savedSuccess = true;
-              savedPath = "Gallery / Photos / FastArt";
+              savedPath =
+                Platform.OS === "ios"
+                  ? "Photos / FastArt"
+                  : "Gallery / Photos / FastArt";
             } else if (MediaLibraryLegacy?.createAssetAsync) {
               const asset = await MediaLibraryLegacy.createAssetAsync(fileToSave);
               savedSuccess = true;
-              savedPath = asset?.uri || "Gallery / DCIM / FastArt";
+              savedPath =
+                asset?.uri ||
+                (Platform.OS === "ios"
+                  ? "Photos / FastArt"
+                  : "Gallery / DCIM / FastArt");
             }
           } catch (legacyErr) {
             console.warn("Legacy saveToLibraryAsync error:", legacyErr);
@@ -294,7 +306,7 @@ export async function executeDirectDownload({
       if (savedSuccess) {
         soundEngine.playSfx("pop");
 
-        // Trigger Android status bar notification & in-app notification center
+        // Trigger system / in-app notification
         await triggerDownloadNotification({
           filename,
           destinationPath: savedPath,
@@ -305,11 +317,13 @@ export async function executeDirectDownload({
 
         onSavedSuccess(filename, savedPath);
       } else if (!hasPermission) {
+        const isIOS = Platform.OS === "ios";
         setNoticeDialog({
           visible: true,
           title: "Permission Required",
-          message:
-            "Photos & Media Library permission is required to save directly to your Android device gallery. Please grant permission to download.",
+          message: isIOS
+            ? "Photos & Media Library permission is required to save directly to your Photos. Please grant permission to download."
+            : "Photos & Media Library permission is required to save directly to your device storage. Please grant permission to download.",
           icon: "lock-closed-outline",
           iconColor: "#FFE600",
           primaryText: "Grant Permission",
@@ -321,7 +335,7 @@ export async function executeDirectDownload({
           onSecondary: () => setNoticeDialog(null),
         });
       } else {
-        // Fallback file location
+        // Fallback file location without interrupting with an extra modal
         const fallbackPath = fileToSave.replace("file://", "");
         await triggerDownloadNotification({
           filename,
@@ -331,15 +345,6 @@ export async function executeDirectDownload({
           fileSize: activeResult?.fileSize,
         });
 
-        setNoticeDialog({
-          visible: true,
-          title: "File Saved to Device",
-          message: `Saved successfully to:\n${fallbackPath}\n\nAccessible via device Files app.`,
-          icon: "checkmark-circle-outline",
-          iconColor: "#10B981",
-          secondaryText: "Got it",
-          onSecondary: () => setNoticeDialog(null),
-        });
         onSavedSuccess(filename, fallbackPath);
       }
     } catch (err: any) {

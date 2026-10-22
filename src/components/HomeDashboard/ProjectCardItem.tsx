@@ -10,14 +10,17 @@ interface ProjectCardItemProps {
   onOptionsPress: (proj: any) => void;
 }
 
-export const ProjectCardItem: React.FC<ProjectCardItemProps> = ({
+const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
   project,
   onOpenProject,
   onOptionsPress,
 }) => {
   const videoClips = project.tracks?.video || [];
   const numClips = videoClips.length;
-  const thumbUrl = videoClips[0]?.thumbnail;
+  const thumbUrl =
+    project.thumbnailUrl ||
+    videoClips[0]?.thumbnail ||
+    videoClips[0]?.url;
 
   return (
     <TouchableOpacity
@@ -30,7 +33,15 @@ export const ProjectCardItem: React.FC<ProjectCardItemProps> = ({
     >
       {/* Clean Thumbnail */}
       <View style={styles.projectThumb}>
-        <Ionicons name="film" size={20} color="#00F2FE" />
+        {thumbUrl ? (
+          <Image
+            source={{ uri: thumbUrl }}
+            style={{ width: "100%", height: "100%", borderRadius: 6 }}
+            resizeMode="cover"
+          />
+        ) : (
+          <Ionicons name="film" size={20} color="#00F2FE" />
+        )}
       </View>
 
       {/* Info Column */}
@@ -60,3 +71,6 @@ export const ProjectCardItem: React.FC<ProjectCardItemProps> = ({
     </TouchableOpacity>
   );
 };
+
+export const ProjectCardItem = React.memo(ProjectCardItemComponent);
+export default ProjectCardItem;

@@ -13,7 +13,7 @@ interface PlayerCropBarProps {
   onConfirm: () => void;
 }
 
-export const PlayerCropBar: React.FC<PlayerCropBarProps> = ({
+const PlayerCropBarComponent: React.FC<PlayerCropBarProps> = ({
   cropPreset,
   isMobile,
   onApplyPreset,
@@ -92,4 +92,5 @@ export const PlayerCropBar: React.FC<PlayerCropBarProps> = ({
   );
 };
 
-export default React.memo(PlayerCropBar);
+export const PlayerCropBar = React.memo(PlayerCropBarComponent);
+export default PlayerCropBar;

@@ -178,7 +178,10 @@ const sanitizeProject = (proj: any): FastArtProject => {
     fps: proj.fps || 30,
     currentTime: typeof proj.currentTime === 'number' ? proj.currentTime : 0,
     zoom: typeof proj.zoom === 'number' ? proj.zoom : 60,
-    thumbnailUrl: proj.thumbnailUrl || (tracks.video?.[0]?.thumbnailUrl || tracks.video?.[0]?.url),
+    thumbnailUrl:
+      proj.thumbnailUrl ||
+      tracks.video?.[0]?.thumbnail ||
+      tracks.video?.[0]?.url,
     createdAt: proj.createdAt || Date.now(),
     updatedAt: proj.updatedAt || Date.now(),
     tracks: {

@@ -2,21 +2,20 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
-  TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { AudioClip, FastArtProject } from '../../types/project';
-import { loadUploadedAudio, saveUploadedAudio } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
 import { detectAudioBeats, toggleProjectBeatMarkers } from '../../utils/audioBeatDetector';
-import { styles } from './Audio/AudioModalStyles';
 
 interface AudioModalProps {
   visible: boolean;
@@ -33,79 +32,14 @@ export default function AudioModal({
   project,
   onUpdateProject,
 }: AudioModalProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
-  const [uploadedTracks, setUploadedTracks] = useState<any[]>(loadUploadedAudio());
   const [isLoading, setIsLoading] = useState(false);
 
+  // Directly ask to upload whenever modal becomes visible
   useEffect(() => {
     if (visible) {
-      setUploadedTracks(loadUploadedAudio());
+      handleDeviceAudioUpload();
     }
   }, [visible]);
-
-  // Clean up audio on close or unmount
-  useEffect(() => {
-    if (!visible && audioEl) {
-      audioEl.pause();
-      setPlayingId(null);
-    }
-  }, [visible]);
-
-  const togglePreview = (item: any) => {
-    if (playingId === item.id) {
-      if (audioEl) {
-        audioEl.pause();
-      }
-      setPlayingId(null);
-    } else {
-      if (audioEl) {
-        audioEl.pause();
-      }
-      if (Platform.OS === 'web') {
-        const a = new Audio(item.url);
-        a.play().catch(() => {});
-        a.onended = () => setPlayingId(null);
-        setAudioEl(a);
-      }
-      soundEngine.playSfx('click');
-      setPlayingId(item.id);
-    }
-  };
-
-  const handleSelectAudio = (item: any) => {
-    if (audioEl) audioEl.pause();
-    const audioClip: AudioClip = {
-      id: 'clip-a-' + Date.now(),
-      title: item.title,
-      artist: item.artist || 'Device Audio',
-      duration: item.duration || 10.0,
-      startTime: 0,
-      trimIn: 0,
-      trimOut: item.duration || 10.0,
-      mediaDuration: item.duration || 10.0,
-      volume: 0.9,
-      url: item.url,
-    };
-    soundEngine.playSfx('pop');
-    onAddAudio(audioClip);
-    onClose();
-  };
-
-  const handleDeleteAudio = (id: string, e: any) => {
-    e?.stopPropagation?.();
-    if (playingId === id && audioEl) {
-      audioEl.pause();
-      setPlayingId(null);
-    }
-    soundEngine.playSfx('pop');
-    setUploadedTracks((prev) => {
-      const updated = prev.filter((t) => t.id !== id);
-      saveUploadedAudio(updated);
-      return updated;
-    });
-  };
 
   // Upload custom audio file from device storage (MP3, WAV, M4A, AAC, OGG, FLAC)
   const handleDeviceAudioUpload = async () => {
@@ -138,26 +72,10 @@ export default function AudioModal({
                 duration: validDuration,
               });
 
-              const newTrack = {
-                id: trackId,
-                title: fileName || 'Uploaded Audio Track',
-                artist: 'Device Audio',
-                duration: validDuration,
-                url: saved.url,
-                bpm: 120,
-                icon: 'musical-notes',
-              };
-
-              setUploadedTracks((prev) => {
-                const updated = [newTrack, ...prev.filter((t) => t.id !== newTrack.id)];
-                saveUploadedAudio(updated);
-                return updated;
-              });
-
               const audioClip: AudioClip = {
                 id: 'clip-a-' + Date.now(),
-                title: newTrack.title,
-                artist: newTrack.artist,
+                title: fileName,
+                artist: 'Device Audio',
                 duration: validDuration,
                 startTime: 0,
                 trimIn: 0,
@@ -193,6 +111,15 @@ export default function AudioModal({
           } catch (_) {}
         }, 40);
       } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Permission Required',
+            'FastArt needs media library access to import audio files from your device.'
+          );
+          return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.All,
           allowsEditing: false,
@@ -202,23 +129,11 @@ export default function AudioModal({
           const asset = result.assets[0];
           const dur = asset.duration ? asset.duration / 1000 : 15.0;
           const fileName = asset.fileName || 'Imported Audio';
-          const trackId = 'user-audio-' + Date.now();
-          const newTrack = {
-            id: trackId,
-            title: fileName,
-            artist: 'Device Library',
-            duration: dur,
-            url: asset.uri,
-          };
-          setUploadedTracks((prev) => {
-            const updated = [newTrack, ...prev.filter((t) => t.id !== newTrack.id)];
-            saveUploadedAudio(updated);
-            return updated;
-          });
+
           const audioClip: AudioClip = {
             id: 'clip-a-' + Date.now(),
             title: fileName,
-            artist: 'Device Library',
+            artist: 'Device Audio',
             duration: dur,
             startTime: 0,
             trimIn: 0,
@@ -232,20 +147,15 @@ export default function AudioModal({
           onClose();
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Audio upload failed:', err);
+      Alert.alert(
+        'Upload Failed',
+        err?.message || 'Unable to import the selected audio file. Please try again.'
+      );
       setIsLoading(false);
     }
   };
-
-  const filteredUploadedTracks = uploadedTracks.filter((t) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.trim().toLowerCase();
-    return (
-      (t.title || '').toLowerCase().includes(q) ||
-      (t.artist || '').toLowerCase().includes(q)
-    );
-  });
 
   const hasBeats = Boolean(project?.beatMarkers && project.beatMarkers.length > 0);
 
@@ -278,7 +188,7 @@ export default function AudioModal({
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="musical-notes" size={17} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Music & Audio</Text>
+              <Text style={styles.sheetTitle}>Import Audio</Text>
             </View>
 
             <TouchableOpacity
@@ -291,170 +201,239 @@ export default function AudioModal({
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar & Beats Utility */}
-          <View style={[styles.searchContainer, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-            <View style={[styles.searchBar, { flex: 1, marginBottom: 0 }]}>
-              <Ionicons name="search" size={16} color="#8E95A5" />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search device audio..."
-                placeholderTextColor="#64748B"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setSearchQuery('')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close-circle" size={16} color="#8E95A5" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {project && onUpdateProject && (
-              <TouchableOpacity
-                onPress={handleToggleBeats}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 4,
-                  paddingHorizontal: 10,
-                  height: 32,
-                  borderRadius: 10,
-                  backgroundColor: hasBeats ? '#FFE600' : 'rgba(255, 230, 0, 0.12)',
-                  borderWidth: 1,
-                  borderColor: '#FFE600',
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="musical-note"
-                  size={13}
-                  color={hasBeats ? '#000000' : '#FFE600'}
-                />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: '800',
-                    color: hasBeats ? '#000000' : '#FFE600',
-                  }}
-                >
-                  Beats
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            {/* Quick Upload From Device Card */}
-            <TouchableOpacity
-              style={styles.deviceUploadCard}
-              onPress={handleDeviceAudioUpload}
-              activeOpacity={0.8}
-            >
-              <View style={styles.deviceIconCircle}>
-                <Ionicons name="cloud-upload" size={20} color="#00F2FE" />
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.deviceUploadTitle}>Upload From Device</Text>
-                  <View style={styles.formatBadge}>
-                    <Text style={styles.formatBadgeText}>MP3 / WAV / M4A</Text>
-                  </View>
+            {/* Direct Device Audio Upload Box */}
+            <View style={styles.uploadPromptContainer}>
+              <View style={styles.uploadIconOuterCircle}>
+                <View style={styles.uploadIconInnerCircle}>
+                  <Ionicons name="musical-notes" size={38} color="#10B981" />
                 </View>
-                <Text style={styles.deviceUploadSubtext}>
-                  Add audio files directly from your computer or phone
-                </Text>
               </View>
-              <View style={styles.uploadBtnCircle}>
+
+              <Text style={styles.uploadMainTitle}>Upload Audio From Device</Text>
+              <Text style={styles.uploadSubtitle}>
+                Select MP3, WAV, M4A, AAC, or FLAC audio files from your device to add directly to your project.
+              </Text>
+
+              {/* Supported Format Pills */}
+              <View style={styles.formatPillsRow}>
+                <View style={styles.formatPill}>
+                  <Ionicons name="musical-note" size={12} color="#10B981" />
+                  <Text style={styles.formatPillText}>MP3 / WAV</Text>
+                </View>
+                <View style={styles.formatPill}>
+                  <Ionicons name="musical-note" size={12} color="#34D399" />
+                  <Text style={styles.formatPillText}>M4A / AAC / FLAC</Text>
+                </View>
+              </View>
+
+              {/* Primary Direct Upload Button */}
+              <TouchableOpacity
+                style={styles.primaryUploadButton}
+                onPress={handleDeviceAudioUpload}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
                 {isLoading ? (
                   <ActivityIndicator size="small" color="#000000" />
                 ) : (
-                  <Ionicons name="add" size={18} color="#000000" />
+                  <Ionicons name="cloud-upload" size={19} color="#000000" />
                 )}
-              </View>
-            </TouchableOpacity>
+                <Text style={styles.primaryUploadButtonText}>
+                  {isLoading ? 'Importing Audio...' : 'Choose Audio File'}
+                </Text>
+              </TouchableOpacity>
 
-            {/* List of Device Audio Tracks */}
-            <View style={styles.sourceBannerRow}>
-              <Text style={styles.sectionTitle}>
-                DEVICE AUDIO ({filteredUploadedTracks.length})
-              </Text>
+              {/* Optional AI Beat Detection Utility */}
+              {project && onUpdateProject && (
+                <TouchableOpacity
+                  onPress={handleToggleBeats}
+                  style={[
+                    styles.beatsUtilityBtn,
+                    hasBeats && styles.beatsUtilityBtnActive,
+                  ]}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name="musical-note"
+                    size={15}
+                    color={hasBeats ? '#000000' : '#FFE600'}
+                  />
+                  <Text
+                    style={[
+                      styles.beatsUtilityBtnText,
+                      hasBeats && styles.beatsUtilityBtnTextActive,
+                    ]}
+                  >
+                    {hasBeats ? '✓ AI Beat Markers Active' : 'Detect AI Beat Markers'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
-
-            {filteredUploadedTracks.length === 0 ? (
-              <View style={styles.emptyUploadBox}>
-                <Ionicons name="musical-notes-outline" size={44} color="#374151" />
-                <Text style={styles.emptyUploadTitle}>
-                  {searchQuery.trim() ? 'No Matching Audio Tracks' : 'No Custom Audio Yet'}
-                </Text>
-                <Text style={styles.emptyUploadSubtext}>
-                  {searchQuery.trim()
-                    ? `No audio matching "${searchQuery}". Try a different keyword.`
-                    : 'Import MP3, WAV, or M4A music files directly from your phone or computer.'}
-                </Text>
-                {!searchQuery.trim() && (
-                  <TouchableOpacity
-                    style={styles.emptyUploadCta}
-                    onPress={handleDeviceAudioUpload}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="cloud-upload" size={18} color="#000000" />
-                    <Text style={styles.emptyUploadCtaText}>Choose Audio File</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              filteredUploadedTracks.map((item) => (
-                <View key={item.id} style={styles.audioRow}>
-                  <TouchableOpacity
-                    style={[styles.playIconBtn, playingId === item.id && styles.playIconBtnActive]}
-                    onPress={() => togglePreview(item)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={playingId === item.id ? 'pause' : 'play'}
-                      size={18}
-                      color={playingId === item.id ? '#000000' : '#00F2FE'}
-                    />
-                  </TouchableOpacity>
-
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.audioTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <View style={styles.metaRow}>
-                      <Text style={styles.audioMeta}>
-                        {item.artist || 'Device Audio'} • {item.duration}s
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={(e) => handleDeleteAudio(item.id, e)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="trash-outline" size={14} color="#EF4444" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.usePill}
-                      onPress={() => handleSelectAudio(item)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.usePillText}>Use</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))
-            )}
           </ScrollView>
         </View>
       </View>
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    backgroundColor: '#0F131C',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomWidth: 0,
+    overflow: 'hidden',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  sheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  uploadPromptContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 12,
+  },
+  uploadIconOuterCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  uploadIconInnerCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadMainTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  uploadSubtitle: {
+    color: '#8E95A5',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    maxWidth: 290,
+    marginBottom: 18,
+  },
+  formatPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 24,
+  },
+  formatPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#161B26',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  formatPillText: {
+    color: '#CBD5E1',
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  primaryUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    width: '100%',
+    maxWidth: 320,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  primaryUploadButtonText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  beatsUtilityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 230, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 230, 0, 0.3)',
+  },
+  beatsUtilityBtnActive: {
+    backgroundColor: '#FFE600',
+    borderColor: '#FFE600',
+  },
+  beatsUtilityBtnText: {
+    color: '#FFE600',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  beatsUtilityBtnTextActive: {
+    color: '#000000',
+  },
+});

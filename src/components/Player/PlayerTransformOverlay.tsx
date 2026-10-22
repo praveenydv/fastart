@@ -43,7 +43,7 @@ interface PlayerTransformOverlayProps {
   ) => any;
 }
 
-export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
+const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = ({
   selectedClipId,
   activeVideos,
   activeCaptions,
@@ -529,4 +529,5 @@ export const PlayerTransformOverlay: React.FC<PlayerTransformOverlayProps> = ({
   );
 };
 
-export default React.memo(PlayerTransformOverlay);
+export const PlayerTransformOverlay = React.memo(PlayerTransformOverlayComponent);
+export default PlayerTransformOverlay;

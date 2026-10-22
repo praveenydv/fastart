@@ -409,6 +409,7 @@ export function parseMp4AudioPeaks(
       const blockSize = Math.max(1, Math.floor(sampleSizes.length / points));
       const rawPeaks = new Float32Array(points);
       let maxVal = 1;
+      let minVal = Infinity;
 
       for (let i = 0; i < points; i++) {
         const start = i * blockSize;
@@ -426,11 +427,18 @@ export function parseMp4AudioPeaks(
         const val = maxSample * 0.72 + rms * 0.28;
         rawPeaks[i] = val;
         if (val > maxVal) maxVal = val;
+        if (val < minVal) minVal = val;
       }
 
+      const dynamicSpan = maxVal - minVal;
       const result = new Array<number>(points);
       for (let i = 0; i < points; i++) {
-        result[i] = Math.max(0.04, Math.min(1.0, Math.pow(rawPeaks[i] / maxVal, 0.78)));
+        if (dynamicSpan > 25) {
+          const normalized = Math.max(0, (rawPeaks[i] - minVal) / dynamicSpan);
+          result[i] = Math.max(0.04, Math.min(1.0, Math.pow(normalized, 0.82)));
+        } else {
+          result[i] = Math.max(0.04, Math.min(1.0, Math.pow(rawPeaks[i] / maxVal, 0.78)));
+        }
       }
 
       return { hasAudio: true, peaks: result };
@@ -517,7 +525,94 @@ export async function extractRealMediaAudioPeaks(
         return null;
       }
 
-      // 2. Try fast WAV parser
+      // 2. Try Web Audio API if available (Web browsers - sample-accurate PCM audio)
+      const ctx = getSharedAudioContext();
+      if (ctx) {
+        try {
+          const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
+            try {
+              const res = ctx.decodeAudioData(
+                arrayBuf.slice(0),
+                (buf: AudioBuffer) => resolve(buf),
+                (err: any) => reject(err),
+              );
+              if (res && typeof res.then === "function") {
+                res.then(resolve).catch(reject);
+              }
+            } catch (err) {
+              reject(err);
+            }
+          });
+
+          if (
+            audioBuffer &&
+            audioBuffer.numberOfChannels > 0 &&
+            audioBuffer.length > 0
+          ) {
+            const duration = audioBuffer.duration;
+            const length = audioBuffer.length;
+            const numChannels = audioBuffer.numberOfChannels;
+            const ch0 = audioBuffer.getChannelData(0);
+            const ch1 = numChannels > 1 ? audioBuffer.getChannelData(1) : null;
+
+            const numPoints = Math.min(
+              2400,
+              Math.max(800, Math.floor(duration * 50)),
+            );
+            const blockSize = Math.floor(length / numPoints);
+            const rawPeaks = new Float32Array(numPoints);
+            let maxVal = 0.0001;
+
+            for (let i = 0; i < numPoints; i++) {
+              const start = i * blockSize;
+              const end = Math.min(start + blockSize, length);
+              let peak = 0;
+              let sumSquares = 0;
+              const step = Math.max(1, Math.floor((end - start) / 50));
+              let count = 0;
+
+              for (let j = start; j < end; j += step) {
+                let s = Math.abs(ch0[j]);
+                if (ch1) {
+                  s = (s + Math.abs(ch1[j])) * 0.5;
+                }
+                if (s > peak) peak = s;
+                sumSquares += s * s;
+                count++;
+              }
+
+              const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0;
+              const combined = peak * 0.72 + rms * 0.28;
+              rawPeaks[i] = combined;
+              if (combined > maxVal) {
+                maxVal = combined;
+              }
+            }
+
+            const hasSound = maxVal > 0.003;
+            if (hasSound) {
+              const normalizedPeaks = new Array<number>(numPoints);
+              for (let i = 0; i < numPoints; i++) {
+                const norm = Math.min(1.0, rawPeaks[i] / maxVal);
+                normalizedPeaks[i] = Math.max(0.04, Math.pow(norm, 0.78));
+              }
+              setCachedMediaPeaks(url, normalizedPeaks, duration);
+              if (clipId) setCachedMediaPeaks(clipId, normalizedPeaks, duration);
+              return normalizedPeaks;
+            } else {
+              setMediaHasAudio(url, false);
+              if (clipId) setMediaHasAudio(clipId, false);
+              mediaPeaksCache.set(url, []);
+              notifyAudioChange();
+              return [];
+            }
+          }
+        } catch (_) {
+          // If browser decodeAudioData failed, seamlessly proceed to pure-JS container decoders
+        }
+      }
+
+      // 3. Try fast WAV parser
       const wavParsed = parseWavPeaks(arrayBuf);
       if (wavParsed && wavParsed.peaks.length > 0) {
         setCachedMediaPeaks(url, wavParsed.peaks, wavParsed.duration);
@@ -525,95 +620,12 @@ export async function extractRealMediaAudioPeaks(
         return wavParsed.peaks;
       }
 
-      // 3. Try fast ISO-BMFF MP4 / MOV / M4A audio parser
+      // 4. Try fast ISO-BMFF MP4 / MOV / M4A audio parser
       const mp4Parsed = parseMp4AudioPeaks(arrayBuf);
       if (mp4Parsed && mp4Parsed.hasAudio && mp4Parsed.peaks.length > 0) {
         setCachedMediaPeaks(url, mp4Parsed.peaks);
         if (clipId) setCachedMediaPeaks(clipId, mp4Parsed.peaks);
         return mp4Parsed.peaks;
-      }
-
-      // 4. Try Web Audio API if available (Web browsers)
-      const ctx = getSharedAudioContext();
-      if (ctx) {
-        const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
-          try {
-            const res = ctx.decodeAudioData(
-              arrayBuf.slice(0),
-              (buf: AudioBuffer) => resolve(buf),
-              (err: any) => reject(err),
-            );
-            if (res && typeof res.then === "function") {
-              res.then(resolve).catch(reject);
-            }
-          } catch (err) {
-            reject(err);
-          }
-        });
-
-        if (
-          audioBuffer &&
-          audioBuffer.numberOfChannels > 0 &&
-          audioBuffer.length > 0
-        ) {
-          const duration = audioBuffer.duration;
-          const length = audioBuffer.length;
-          const numChannels = audioBuffer.numberOfChannels;
-          const ch0 = audioBuffer.getChannelData(0);
-          const ch1 = numChannels > 1 ? audioBuffer.getChannelData(1) : null;
-
-          const numPoints = Math.min(
-            2400,
-            Math.max(800, Math.floor(duration * 50)),
-          );
-          const blockSize = Math.floor(length / numPoints);
-          const rawPeaks = new Float32Array(numPoints);
-          let maxVal = 0.0001;
-
-          for (let i = 0; i < numPoints; i++) {
-            const start = i * blockSize;
-            const end = Math.min(start + blockSize, length);
-            let peak = 0;
-            let sumSquares = 0;
-            const step = Math.max(1, Math.floor((end - start) / 50));
-            let count = 0;
-
-            for (let j = start; j < end; j += step) {
-              let s = Math.abs(ch0[j]);
-              if (ch1) {
-                s = (s + Math.abs(ch1[j])) * 0.5;
-              }
-              if (s > peak) peak = s;
-              sumSquares += s * s;
-              count++;
-            }
-
-            const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0;
-            const combined = peak * 0.72 + rms * 0.28;
-            rawPeaks[i] = combined;
-            if (combined > maxVal) {
-              maxVal = combined;
-            }
-          }
-
-          const hasSound = maxVal > 0.003;
-          if (hasSound) {
-            const normalizedPeaks = new Array<number>(numPoints);
-            for (let i = 0; i < numPoints; i++) {
-              const norm = Math.min(1.0, rawPeaks[i] / maxVal);
-              normalizedPeaks[i] = Math.pow(norm, 0.78);
-            }
-            setCachedMediaPeaks(url, normalizedPeaks, duration);
-            if (clipId) setCachedMediaPeaks(clipId, normalizedPeaks, duration);
-            return normalizedPeaks;
-          } else {
-            setMediaHasAudio(url, false);
-            if (clipId) setMediaHasAudio(clipId, false);
-            mediaPeaksCache.set(url, []);
-            notifyAudioChange();
-            return [];
-          }
-        }
       }
 
       // No audio found

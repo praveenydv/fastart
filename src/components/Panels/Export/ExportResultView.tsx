@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ExportFormat } from "../../../utils/videoRenderer";
 import { MediaFormatOption } from "./exportTypes";
@@ -65,7 +65,54 @@ export default function ExportResultView({
   }
 
   if (status === "done") {
-    const finalLocation = downloadDestination || "Device Gallery / DCIM / FastArt";
+    const isWeb = Platform.OS === "web";
+    const isIOS = Platform.OS === "ios";
+    const isAndroid = Platform.OS === "android";
+
+    const defaultLocation = isWeb
+      ? "Downloads Folder"
+      : isIOS
+      ? "Photos & Files"
+      : "Gallery & Files";
+
+    const finalLocation = downloadDestination || defaultLocation;
+
+    const getButtonText = () => {
+      if (isSaving) {
+        return isWeb ? "Downloading file..." : "Saving directly to device...";
+      }
+      if (isSaved) {
+        return isWeb ? "✓ Downloaded (Save Copy)" : "✓ Saved to Device (Save Copy)";
+      }
+      return isWeb
+        ? `Download File (${selectedFormatConfig.shortLabel})`
+        : `Save to Device (${selectedFormatConfig.shortLabel})`;
+    };
+
+    const getHintText = () => {
+      if (isSaved) {
+        if (isWeb) {
+          return "✓ File downloaded successfully. Accessible in your Downloads folder.";
+        }
+        if (isIOS) {
+          return "✓ File saved successfully. Accessible in your Photos & Files app.";
+        }
+        if (isAndroid) {
+          return "✓ File saved to device storage. Accessible in your Gallery & Files.";
+        }
+        return "✓ File saved successfully to your device.";
+      }
+      if (isWeb) {
+        return "Tap the button above to download directly to your computer.";
+      }
+      if (isIOS) {
+        return "Tap the button above to save directly to your Photos & Files.";
+      }
+      if (isAndroid) {
+        return "Tap the button above to save directly to your Gallery & Files.";
+      }
+      return "Tap the button above to save directly to your device.";
+    };
 
     return (
       <View style={styles.doneContainer}>
@@ -104,11 +151,7 @@ export default function ExportResultView({
             />
           )}
           <Text style={styles.downloadBtnText}>
-            {isSaving
-              ? "Saving directly to device..."
-              : isSaved
-              ? "✓ Downloaded to Device Gallery (Save Copy)"
-              : `Download to Device Gallery (${selectedFormatConfig.shortLabel})`}
+            {getButtonText()}
           </Text>
         </TouchableOpacity>
 
@@ -122,9 +165,7 @@ export default function ExportResultView({
             {finalLocation}
           </Text>
           <Text style={styles.downloadLocationHint}>
-            {isSaved
-              ? "✓ File saved to device storage and notified in Android status bar. Accessible in your device Gallery & Files."
-              : "Tap the button above to download directly to your Android device Gallery."}
+            {getHintText()}
           </Text>
         </View>
 

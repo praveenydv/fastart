@@ -269,7 +269,8 @@ export default function TextModal({
 
             <TouchableOpacity
               onPress={handleSave}
-              style={styles.doneBtn}
+              style={[styles.doneBtn, !inputText.trim() && { opacity: 0.4 }]}
+              disabled={!inputText.trim()}
               activeOpacity={0.7}
               accessibilityLabel="Apply text"
             >

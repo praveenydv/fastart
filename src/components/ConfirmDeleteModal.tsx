@@ -97,7 +97,6 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
       return;
     }
     isClosingRef.current = true;
-    callback();
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -113,6 +112,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
     ]).start(() => {
       setModalVisible(false);
       isClosingRef.current = false;
+      callback();
     });
   };
 

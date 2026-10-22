@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './HomeDashboardStyles';
 import { soundEngine } from '../../utils/audioEngine';
@@ -21,6 +21,11 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
   onDuplicateProject,
   onSelectDelete,
 }) => {
+  const thumbUrl =
+    optionsProject?.thumbnailUrl ||
+    optionsProject?.tracks?.video?.[0]?.thumbnail ||
+    optionsProject?.tracks?.video?.[0]?.url;
+
   return (
     <Modal
       visible={!!optionsProject}
@@ -40,7 +45,15 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
           {/* Project Header Info */}
           <View style={styles.sheetHeader}>
             <View style={styles.sheetThumb}>
-              <Ionicons name="film" size={18} color="#00F2FE" />
+              {thumbUrl ? (
+                <Image
+                  source={{ uri: thumbUrl }}
+                  style={{ width: "100%", height: "100%", borderRadius: 6 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="film" size={18} color="#00F2FE" />
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.sheetProjectTitle} numberOfLines={1}>

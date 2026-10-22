@@ -25,9 +25,12 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   const isAudio = clip.type === "audio";
   const isVideo = clip.type === "video";
   const hasAudioTrack = mediaHasAudioTrack(clip);
-  const hasAudio = clipHasAudio(clip) && hasAudioTrack;
 
   const raw = clip.rawClip || {};
+  const isMuted = raw.volume === 0 || raw.muted === true;
+  // Render waveform if the media contains an audio track, even if muted or extracted
+  const shouldRenderWaveform = hasAudioTrack && raw.type !== "photo" && !raw.isEnding;
+
   const duration = clip.duration || 5;
   const trimIn = raw.trimIn || 0;
   const speed = raw.speed || 1.0;
@@ -64,10 +67,12 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   // Compute waveform peaks based on real decoded PCM audio data
   const barWidth = 2.0;
   const barGap = 1.5;
-  const availableWidth = Math.max(10, width - 6);
+  // Identical 4px horizontal insets on both video and audio
+  const horizontalInset = 4;
+  const availableWidth = Math.max(10, width - horizontalInset * 2);
 
   const peaks = useMemo(() => {
-    if (!hasAudio) return [];
+    if (!shouldRenderWaveform) return [];
     return getClipWaveformPeaks(
       clip.id,
       url,
@@ -82,7 +87,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
       clipMediaDuration,
     );
   }, [
-    hasAudio,
+    shouldRenderWaveform,
     clip.id,
     url,
     availableWidth,
@@ -100,7 +105,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
 
   // If peaks are still decoding in the background, show clean processing skeleton
   if (peaks.length === 0) {
-    if ((isDecoding || hasAudio) && hasAudio && raw.type !== "photo" && !raw.isEnding) {
+    if (shouldRenderWaveform && (isDecoding || Boolean(url))) {
       return (
         <View
           style={isAudio ? styles.audioLoadingOverlay : styles.videoLoadingOverlay}
@@ -135,7 +140,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
                   style={[
                     styles.loadingBar,
                     {
-                      height: Math.round(h * (isAudio ? 20 : 13)),
+                      height: Math.round(h * 20),
                       backgroundColor: isDenoised
                         ? "#10B981"
                         : isAudio
@@ -154,12 +159,15 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
     return null;
   }
 
-  const volumeScale = Math.min(1.5, Math.max(0.2, volume));
   const numBars = peaks.length;
   const dynamicGap =
     numBars > 1
       ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1))
       : 0;
+
+  // Maximum bar height is 28px on both media and separate audio so waveforms match proportionally
+  const maxBarHeight = 28;
+  const minBarHeight = 3;
 
   // Audio clip: full-height centered waveform across the whole clip
   if (isAudio) {
@@ -181,16 +189,16 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
           </View>
         )}
 
-        <View style={styles.audioBarsRow}>
+        <View style={styles.barsRow}>
           {peaks.map((peak, idx) => (
             <View
               key={idx}
               style={[
-                styles.audioWaveBar,
+                styles.waveBar,
                 {
                   height: Math.max(
-                    3,
-                    Math.min(34, Math.round(peak * 32 * volumeScale)),
+                    minBarHeight,
+                    Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
                   ),
                   backgroundColor: barColor,
                   marginRight: idx === numBars - 1 ? 0 : dynamicGap,
@@ -207,19 +215,23 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
     );
   }
 
-  // Video clip: genuine audio waveform across the whole clip body
+  // Video clip: genuine audio waveform across the clip body in the same centered way
   if (isVideo) {
     const videoBarColor = isDenoised
       ? isSelected
         ? "#34D399"
         : "#10B981"
-      : isSelected
-        ? "rgba(56, 189, 248, 0.98)"
-        : "rgba(0, 242, 254, 0.75)";
+      : isMuted
+        ? isSelected
+          ? "rgba(56, 189, 248, 0.7)"
+          : "rgba(148, 163, 184, 0.55)"
+        : isSelected
+          ? "rgba(56, 189, 248, 0.98)"
+          : "rgba(0, 242, 254, 0.85)";
 
     return (
       <View style={styles.videoWaveformOverlay} pointerEvents="none">
-        {/* Clean dark backdrop strip for high contrast across video thumbnails/cards */}
+        {/* Clean dark backdrop band for high contrast over video frames */}
         <View style={styles.videoBackdropBand}>
           {isDenoised && availableWidth > 70 && (
             <View style={styles.videoDenoiseTag}>
@@ -228,19 +240,27 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
             </View>
           )}
 
-          <View style={styles.videoBarsRow}>
+          {isMuted && !isDenoised && availableWidth > 65 && (
+            <View style={styles.videoMutedTag}>
+              <Ionicons name="volume-mute" size={8} color="#94A3B8" />
+              <Text style={styles.videoMutedTagText}>Muted</Text>
+            </View>
+          )}
+
+          <View style={styles.barsRow}>
             {peaks.map((peak, idx) => (
               <View
                 key={idx}
                 style={[
-                  styles.videoWaveBar,
+                  styles.waveBar,
                   {
                     height: Math.max(
-                      2,
-                      Math.min(26, Math.round(peak * 24 * volumeScale)),
+                      minBarHeight,
+                      Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
                     ),
                     backgroundColor: videoBarColor,
                     marginRight: idx === numBars - 1 ? 0 : dynamicGap,
+                    opacity: isMuted ? 0.6 : 0.95,
                   },
                 ]}
               />
@@ -257,24 +277,41 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
 const styles = StyleSheet.create({
   audioWaveformOverlay: {
     position: "absolute",
-    left: 3,
-    right: 3,
+    left: 4,
+    right: 4,
     top: 2,
     bottom: 2,
     justifyContent: "center",
     overflow: "hidden",
     zIndex: 1,
   },
-  audioBarsRow: {
+  videoWaveformOverlay: {
+    position: "absolute",
+    left: 4,
+    right: 4,
+    top: 2,
+    bottom: 2,
+    justifyContent: "center",
+    overflow: "hidden",
+    zIndex: 1,
+  },
+  videoBackdropBand: {
+    width: "100%",
+    height: 32,
+    backgroundColor: "rgba(3, 7, 18, 0.55)",
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  barsRow: {
     flexDirection: "row",
     alignItems: "center",
     height: "100%",
     width: "100%",
   },
-  audioWaveBar: {
+  waveBar: {
     width: 2.0,
     borderRadius: 1,
-    opacity: 0.95,
   },
   denoiseBadge: {
     position: "absolute",
@@ -297,24 +334,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
-  videoWaveformOverlay: {
-    position: "absolute",
-    left: 2,
-    right: 2,
-    bottom: 2,
-    height: 30,
-    justifyContent: "flex-end",
-    overflow: "hidden",
-    zIndex: 1,
-  },
-  videoBackdropBand: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(3, 7, 18, 0.6)",
-    borderRadius: 4,
-    paddingHorizontal: 2,
-    justifyContent: "flex-end",
-  },
   videoDenoiseTag: {
     position: "absolute",
     top: 2,
@@ -326,21 +345,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     paddingVertical: 1,
     borderRadius: 2,
+    zIndex: 4,
   },
   videoDenoiseTagText: {
     color: "#10B981",
     fontSize: 7,
     fontWeight: "800",
   },
-  videoBarsRow: {
+  videoMutedTag: {
+    position: "absolute",
+    top: 2,
+    right: 4,
     flexDirection: "row",
-    alignItems: "flex-end",
-    height: 26,
-    width: "100%",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    zIndex: 4,
   },
-  videoWaveBar: {
-    width: 2.0,
-    borderRadius: 1,
+  videoMutedTagText: {
+    color: "#94A3B8",
+    fontSize: 7,
+    fontWeight: "700",
   },
   audioLoadingOverlay: {
     position: "absolute",
@@ -357,8 +385,8 @@ const styles = StyleSheet.create({
     left: 4,
     right: 4,
     top: 4,
-    bottom: 2,
-    justifyContent: "flex-end",
+    bottom: 4,
+    justifyContent: "center",
     overflow: "hidden",
     zIndex: 1,
   },
@@ -376,7 +404,7 @@ const styles = StyleSheet.create({
   },
   shimmerBarsRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 1.5,
     marginLeft: 2,
   },

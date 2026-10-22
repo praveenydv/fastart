@@ -7,18 +7,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  TextInput,
-  Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
-import {
-  loadUploadedMedia,
-  saveUploadedMedia,
-  addNotification,
-} from '../../utils/storage';
+import { addNotification } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
 
 interface MediaPickerModalProps {
@@ -28,14 +23,12 @@ interface MediaPickerModalProps {
 }
 
 export default function MediaPickerModal({ visible, onClose, onAddMedia }: MediaPickerModalProps) {
-  const [activeTab, setActiveTab] = useState<'all' | 'video' | 'photo'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [uploadedMedia, setUploadedMedia] = useState<any[]>(loadUploadedMedia());
   const [isLoading, setIsLoading] = useState(false);
 
+  // Directly ask to upload whenever modal becomes visible
   useEffect(() => {
     if (visible) {
-      setUploadedMedia(loadUploadedMedia());
+      handleDeviceUpload();
     }
   }, [visible]);
 
@@ -76,12 +69,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 transform: { scale: 1, rotation: 0, x: 0, y: 0 },
               };
 
-              setUploadedMedia((prev) => {
-                const updated = [clip, ...prev.filter((m) => m.id !== clip.id)];
-                saveUploadedMedia(updated);
-                return updated;
-              });
-
               addNotification({
                 title: 'Media Added',
                 message: `Added "${clip.title}" to project timeline.`,
@@ -102,6 +89,15 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
           } catch (_) {}
         }, 40);
       } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Permission Required',
+            'FastArt needs media library access to import photos and videos into your project.'
+          );
+          return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.All,
           allowsEditing: false,
@@ -129,12 +125,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
             transform: { scale: 1, rotation: 0, x: 0, y: 0 },
           };
 
-          setUploadedMedia((prev) => {
-            const updated = [clip, ...prev.filter((m) => m.id !== clip.id)];
-            saveUploadedMedia(updated);
-            return updated;
-          });
-
           addNotification({
             title: 'Media Added',
             message: `Added "${clip.title}" to project timeline.`,
@@ -146,46 +136,15 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
           onClose();
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Error picking media from device:', err);
+      Alert.alert(
+        'Import Failed',
+        err?.message || 'Unable to import selected media from your device. Please try again.'
+      );
       setIsLoading(false);
     }
   };
-
-  const handleSelectUploadedMedia = (item: any) => {
-    const clip = {
-      ...item,
-      id: 'clip-' + Date.now(),
-      sourceMediaId: item.sourceMediaId || item.id,
-      startTime: 0,
-      trimIn: 0,
-      trimOut: item.duration || 5.0,
-      mediaDuration: item.mediaDuration || item.duration || 5.0,
-    };
-    soundEngine.playSfx('pop');
-    onAddMedia(clip);
-    onClose();
-  };
-
-  const handleDeleteMedia = (id: string, e: any) => {
-    e?.stopPropagation?.();
-    soundEngine.playSfx('pop');
-    setUploadedMedia((prev) => {
-      const updated = prev.filter((m) => m.id !== id);
-      saveUploadedMedia(updated);
-      return updated;
-    });
-  };
-
-  const filteredMedia = uploadedMedia.filter((m) => {
-    if (activeTab === 'video' && m.type !== 'video') return false;
-    if (activeTab === 'photo' && m.type !== 'photo') return false;
-    if (!searchQuery.trim()) return true;
-    return (m.title || '').toLowerCase().includes(searchQuery.trim().toLowerCase());
-  });
-
-  const videoCount = uploadedMedia.filter((m) => m.type === 'video').length;
-  const photoCount = uploadedMedia.filter((m) => m.type === 'photo').length;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -207,7 +166,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="images-outline" size={17} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Device Media</Text>
+              <Text style={styles.sheetTitle}>Import Media</Text>
             </View>
 
             <TouchableOpacity
@@ -220,164 +179,49 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar & Type Filter */}
-          <View style={styles.filterSection}>
-            <View style={styles.searchBar}>
-              <Ionicons name="search" size={16} color="#8E95A5" />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search device media..."
-                placeholderTextColor="#64748B"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setSearchQuery('')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close-circle" size={16} color="#8E95A5" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Filter Tabs (All / Videos / Photos) */}
-            <View style={styles.typeFilterRow}>
-              <TouchableOpacity
-                style={[styles.typePill, activeTab === 'all' && styles.typePillActive]}
-                onPress={() => setActiveTab('all')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.typePillText, activeTab === 'all' && styles.typePillTextActive]}>
-                  All ({uploadedMedia.length})
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typePill, activeTab === 'video' && styles.typePillActive]}
-                onPress={() => setActiveTab('video')}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="videocam-outline"
-                  size={13}
-                  color={activeTab === 'video' ? '#00F2FE' : '#8E95A5'}
-                />
-                <Text style={[styles.typePillText, activeTab === 'video' && styles.typePillTextActive]}>
-                  Videos ({videoCount})
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typePill, activeTab === 'photo' && styles.typePillActive]}
-                onPress={() => setActiveTab('photo')}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="image-outline"
-                  size={13}
-                  color={activeTab === 'photo' ? '#00F2FE' : '#8E95A5'}
-                />
-                <Text style={[styles.typePillText, activeTab === 'photo' && styles.typePillTextActive]}>
-                  Photos ({photoCount})
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            {/* Quick Device Import Card */}
-            <TouchableOpacity
-              style={styles.deviceImportCard}
-              onPress={handleDeviceUpload}
-              activeOpacity={0.8}
-            >
-              <View style={styles.deviceIconBox}>
-                <Ionicons name="cloud-upload" size={24} color="#000000" />
+            {/* Direct Device Upload Box */}
+            <View style={styles.uploadPromptContainer}>
+              <View style={styles.uploadIconOuterCircle}>
+                <View style={styles.uploadIconInnerCircle}>
+                  <Ionicons name="cloud-upload" size={40} color="#00F2FE" />
+                </View>
               </View>
-              <View style={{ flex: 1, marginLeft: 14 }}>
-                <Text style={styles.deviceCardTitle}>Upload From Device</Text>
-                <Text style={styles.deviceCardSubtext}>
-                  Select video (MP4, MOV) or photo from your library
-                </Text>
-              </View>
-              <View style={styles.uploadChevronBox}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#00F2FE" />
-                ) : (
-                  <Ionicons name="add" size={20} color="#00F2FE" />
-                )}
-              </View>
-            </TouchableOpacity>
 
-            {/* List of Device Uploads */}
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionHeader}>
-                DEVICE MEDIA ({filteredMedia.length})
+              <Text style={styles.uploadMainTitle}>Upload From Device</Text>
+              <Text style={styles.uploadSubtitle}>
+                Select video or photo from your device library to add directly to your project timeline.
               </Text>
-            </View>
 
-            {filteredMedia.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons name="folder-open-outline" size={40} color="#374151" />
-                <Text style={styles.emptyTitle}>
-                  {searchQuery.trim() ? 'No Matching Media Found' : 'No Device Media Yet'}
-                </Text>
-                <Text style={styles.emptySubtext}>
-                  {searchQuery.trim()
-                    ? `No media matching "${searchQuery}". Try a different keyword.`
-                    : 'Tap "Upload From Device" above to add videos or photos from your library.'}
-                </Text>
+              {/* Supported Format Pills */}
+              <View style={styles.formatPillsRow}>
+                <View style={styles.formatPill}>
+                  <Ionicons name="videocam-outline" size={12} color="#00F2FE" />
+                  <Text style={styles.formatPillText}>MP4 / MOV / WebM</Text>
+                </View>
+                <View style={styles.formatPill}>
+                  <Ionicons name="image-outline" size={12} color="#10B981" />
+                  <Text style={styles.formatPillText}>JPG / PNG / WebP</Text>
+                </View>
               </View>
-            ) : (
-              filteredMedia.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.sampleMediaCard}
-                  onPress={() => handleSelectUploadedMedia(item)}
-                  activeOpacity={0.75}
-                >
-                  <View style={styles.thumbBox}>
-                    {item.type === 'photo' ? (
-                      <Image
-                        source={{ uri: item.url }}
-                        style={styles.thumbImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.videoPlaceholder}>
-                        <Ionicons name="videocam" size={22} color="#00F2FE" />
-                      </View>
-                    )}
-                    <View style={styles.durationPill}>
-                      <Text style={styles.durationText}>{item.duration}s</Text>
-                    </View>
-                  </View>
 
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.sampleTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.sampleSubtext}>
-                      {item.type.toUpperCase()} • Device File
-                    </Text>
-                  </View>
-
-                  <View style={styles.actionButtonsRow}>
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={(e) => handleDeleteMedia(item.id, e)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="trash-outline" size={14} color="#EF4444" />
-                    </TouchableOpacity>
-
-                    <View style={styles.addPill}>
-                      <Ionicons name="add" size={14} color="#000000" />
-                      <Text style={styles.addPillText}>Add</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
+              {/* Primary Direct Upload Button */}
+              <TouchableOpacity
+                style={styles.primaryUploadButton}
+                onPress={handleDeviceUpload}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <Ionicons name="add-circle" size={20} color="#000000" />
+                )}
+                <Text style={styles.primaryUploadButtonText}>
+                  {isLoading ? 'Importing Media...' : 'Choose File From Device'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -388,21 +232,23 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
+    backgroundColor: '#0F131C',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: Platform.OS === 'web' ? '76%' : '84%',
-    borderTopWidth: 1,
-    borderColor: '#1E2638',
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomWidth: 0,
+    overflow: 'hidden',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -412,231 +258,109 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  sheetSubtitle: {
-    color: '#8E95A5',
-    fontSize: 11,
-    marginTop: 1,
+    letterSpacing: 0.2,
   },
   closeBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#1E2638',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  filterSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
-    gap: 8,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0A0D14',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#1E2638',
-    gap: 6,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 12.5,
-    padding: 0,
-  },
-  typeFilterRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  typePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: '#141A28',
-    borderWidth: 1,
-    borderColor: '#20283A',
-  },
-  typePillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
-  },
-  typePillText: {
-    color: '#8E95A5',
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  typePillTextActive: {
-    color: '#00F2FE',
   },
   sheetBody: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 20,
   },
-  deviceImportCard: {
-    flexDirection: 'row',
+  uploadPromptContainer: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.07)',
-    borderRadius: 12,
-    padding: 10,
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 12,
+  },
+  uploadIconOuterCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.28)',
-    marginBottom: 10,
+    borderColor: 'rgba(0, 242, 254, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  deviceIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#00F2FE',
+  uploadIconInnerCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0, 242, 254, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deviceCardTitle: {
+  uploadMainTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 18,
     fontWeight: '800',
-  },
-  deviceCardSubtext: {
-    color: '#8E95A5',
-    fontSize: 10.5,
-    marginTop: 1,
-  },
-  uploadChevronBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionHeaderRow: {
     marginBottom: 6,
-  },
-  sectionHeader: {
-    color: '#64748B',
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  sampleMediaCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#141926',
-    borderRadius: 10,
-    padding: 7,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#1E2638',
-  },
-  thumbBox: {
-    width: 52,
-    height: 40,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: '#0A0D14',
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbImage: {
-    width: '100%',
-    height: '100%',
-  },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#161E2E',
-  },
-  durationPill: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  durationText: {
-    color: '#FFFFFF',
-    fontSize: 8.5,
-    fontWeight: '700',
-  },
-  sampleTitle: {
-    color: '#FFFFFF',
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-  sampleSubtext: {
-    color: '#8E95A5',
-    fontSize: 10,
-    marginTop: 1,
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  deleteBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-  },
-  addPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#00F2FE',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  addPillText: {
-    color: '#000000',
-    fontSize: 10.5,
-    fontWeight: '800',
-  },
-  emptyBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 26,
-    paddingHorizontal: 20,
-  },
-  emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  emptySubtext: {
-    color: '#8E95A5',
-    fontSize: 11,
     textAlign: 'center',
-    marginTop: 3,
-    lineHeight: 15,
+  },
+  uploadSubtitle: {
+    color: '#8E95A5',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    maxWidth: 290,
+    marginBottom: 18,
+  },
+  formatPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 24,
+  },
+  formatPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#161B26',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  formatPillText: {
+    color: '#CBD5E1',
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  primaryUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#00F2FE',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    width: '100%',
+    maxWidth: 320,
+    shadowColor: '#00F2FE',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  primaryUploadButtonText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

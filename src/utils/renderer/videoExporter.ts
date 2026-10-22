@@ -13,6 +13,7 @@ export interface ExportOptions {
   logicalWidth?: number;
   logicalHeight?: number;
   videoBitsPerSecond?: number;
+  resolution?: string;
 }
 
 export interface ExportResult {

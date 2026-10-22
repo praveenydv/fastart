@@ -60,6 +60,7 @@ export interface TimelineProps {
   project: FastArtProject;
   currentTime: number;
   totalDuration: number;
+  isPlaying?: boolean;
   onSeek: (time: number) => void;
   selectedClipId: string | null;
   selectedClipType?: string;

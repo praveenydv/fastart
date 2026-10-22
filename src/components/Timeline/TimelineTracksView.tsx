@@ -506,6 +506,7 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                                 const kfPos = kf.time * pxPerSec;
                                 if (kfPos < 0 || kfPos > width) return null;
                                 const isPlayheadNear =
+                                  isSelected &&
                                   Math.abs(
                                     clip.startTime + kf.time - currentTime,
                                   ) < 0.12;

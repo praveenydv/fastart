@@ -283,6 +283,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             project={project}
             currentTime={currentTime}
             totalDuration={totalDuration}
+            isPlaying={isPlaying}
             onSeek={(t) => setCurrentTime(t)}
             selectedClipId={selectedClipId}
             selectedClipType={selectedClipType}

@@ -20,7 +20,7 @@ interface PlayerControlsBarProps {
   isMobile: boolean;
 }
 
-export const PlayerControlsBar: React.FC<PlayerControlsBarProps> = ({
+const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
   currentTime,
   totalDuration,
   isPlaying,
@@ -199,4 +199,5 @@ export const PlayerControlsBar: React.FC<PlayerControlsBarProps> = ({
   );
 };
 
-export default React.memo(PlayerControlsBar);
+export const PlayerControlsBar = React.memo(PlayerControlsBarComponent);
+export default PlayerControlsBar;

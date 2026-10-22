@@ -13,7 +13,13 @@ import {
 import { getMediaDuration } from "../utils/mediaDuration";
 import { soundEngine } from "../utils/audioEngine";
 
-import { extractRealMediaAudioPeaks, mediaHasAudioTrack } from "../utils/mediaAudioDetector";
+import {
+  extractRealMediaAudioPeaks,
+  mediaHasAudioTrack,
+  setCachedMediaPeaks,
+  getMediaAudioDuration,
+} from "../utils/mediaAudioDetector";
+import { allocateClipPlacement } from "../utils/trackPlacement";
 
 interface UseProjectFilterEffectsParams {
   project: FastArtProject | null;
@@ -428,23 +434,54 @@ export function useProjectFilterEffects({
     }
 
     await withProcessing("Extracting Audio Track...", async () => {
+      const speed = Math.max(0.1, targetVideo.speed || 1.0);
+      const trimIn = Math.max(0, targetVideo.trimIn || 0);
+      const trimOut =
+        typeof targetVideo.trimOut === "number" && targetVideo.trimOut > trimIn
+          ? targetVideo.trimOut
+          : Number((trimIn + targetVideo.duration * speed).toFixed(3));
+      const mediaDuration =
+        getMediaDuration(targetVideo, targetVideo.type) ||
+        targetVideo.mediaDuration ||
+        (targetVideo.url ? getMediaAudioDuration(targetVideo.url) : null) ||
+        Math.max(0.1, trimIn + targetVideo.duration * speed);
+
+      // Intelligent placement on audio track lane (preferred 1, or next non-overlapping track)
+      const placement = allocateClipPlacement(
+        current,
+        targetVideo.startTime,
+        targetVideo.duration,
+        1,
+      );
+
+      const existingPeaks = targetVideo.peaks;
+      const newAudioClipId = `clip-a-ext-${Date.now()}`;
       const newAudioClip: AudioClip = {
-        id: `clip-a-ext-${Date.now()}`,
+        id: newAudioClipId,
         title: `${targetVideo.title || "Video"} (Audio)`,
         artist: "Extracted Audio",
         duration: targetVideo.duration,
         startTime: targetVideo.startTime,
-        trimIn: targetVideo.trimIn || 0,
-        trimOut: targetVideo.trimOut || targetVideo.duration,
-        mediaDuration: targetVideo.mediaDuration || targetVideo.duration,
-        volume: targetVideo.volume ?? 1.0,
+        trimIn,
+        trimOut,
+        mediaDuration,
+        speed,
+        speedCurve: targetVideo.speedCurve,
+        volume:
+          targetVideo.volume !== undefined && targetVideo.volume > 0
+            ? targetVideo.volume
+            : 1.0,
         fadeIn: targetVideo.fadeIn ?? 0,
         fadeOut: targetVideo.fadeOut ?? 0,
         denoise: targetVideo.denoise,
         url: targetVideo.url,
-        trackIndex: 1,
-        peaks: targetVideo.peaks,
+        trackIndex: placement ? placement.trackIndex : 1,
+        peaks: existingPeaks ? [...existingPeaks] : undefined,
       };
+
+      if (existingPeaks && existingPeaks.length > 0) {
+        setCachedMediaPeaks(newAudioClipId, existingPeaks, mediaDuration);
+      }
 
       // Mute the video clip
       const updatedVideos = videoClips.map((v) =>

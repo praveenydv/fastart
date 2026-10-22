@@ -36,6 +36,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   project,
   currentTime,
   totalDuration,
+  isPlaying,
   onSeek,
   selectedClipId,
   onSelectClip,
@@ -141,7 +142,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Auto-scroll when playing (only scroll when playhead approaches screen edge to avoid 60fps stutter)
   useEffect(() => {
-    if (!project?.isPlaying) return;
+    if (!isPlaying && !project?.isPlaying) return;
     const playheadX = currentTime * pxPerSec;
     const el = scrollRef.current;
     if (Platform.OS === "web") {
