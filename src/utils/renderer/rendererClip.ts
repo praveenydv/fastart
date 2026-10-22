@@ -232,7 +232,7 @@ export function drawClip(
         name: clip.effect,
         startTime: clip.startTime,
         duration: clip.duration,
-        intensity: 0.8,
+        intensity: (clip as any).effectIntensity !== undefined ? (clip as any).effectIntensity : 0.8,
       },
       time,
       w,

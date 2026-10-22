@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  ScrollView,
-} from "react-native";
+import { View, Text, Modal, TouchableOpacity, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ExportModalProps } from "./Export/exportTypes";
 import { styles } from "./Export/ExportModalStyles";
@@ -42,6 +36,7 @@ export default function ExportModal({
     calculateEstimatedSize,
     triggerDirectDownload,
     handleStartExport,
+    handleCancelExport,
     getProgressStatusMessage,
     exportFilename,
     setExportFilename,
@@ -56,18 +51,28 @@ export default function ExportModal({
 
           {/* Standardized Header */}
           <View style={styles.sheetHeader}>
-            {status !== "rendering" ? (
-              <TouchableOpacity
-                onPress={onClose}
-                style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: 28 }} />
-            )}
+            <TouchableOpacity
+              onPress={() => {
+                if (status === "rendering") {
+                  handleCancelExport();
+                }
+                onClose();
+              }}
+              style={[
+                styles.closeBtn,
+                {
+                  backgroundColor: "rgba(239, 68, 68, 0.15)",
+                  borderWidth: 1,
+                  borderColor: "rgba(239, 68, 68, 0.3)",
+                },
+              ]}
+              activeOpacity={0.7}
+              accessibilityLabel={
+                status === "rendering" ? "Cancel Export and Close" : "Cancel"
+              }
+            >
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
 
             <View style={styles.headerTitleRow}>
               <Ionicons
@@ -81,7 +86,7 @@ export default function ExportModal({
             {status === "idle" ? (
               <TouchableOpacity
                 onPress={handleStartExport}
-                style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+                style={[styles.closeBtn, { backgroundColor: "#00F2FE" }]}
                 activeOpacity={0.7}
                 accessibilityLabel="Start Export"
               >
@@ -90,7 +95,7 @@ export default function ExportModal({
             ) : status === "done" ? (
               <TouchableOpacity
                 onPress={onClose}
-                style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+                style={[styles.closeBtn, { backgroundColor: "#00F2FE" }]}
                 activeOpacity={0.7}
                 accessibilityLabel="Done"
               >
@@ -134,7 +139,9 @@ export default function ExportModal({
                 isSaving={isSaving}
                 errorMessage={errorMessage}
                 downloadDestination={downloadDestination}
-                onDownload={() => triggerDirectDownload(exportedResult, exportedUrl)}
+                onDownload={() =>
+                  triggerDirectDownload(exportedResult, exportedUrl)
+                }
                 onReExport={() => {
                   setStatus("idle");
                   setIsSaved(false);
@@ -144,13 +151,12 @@ export default function ExportModal({
                   setIsSaved(false);
                   onClose();
                 }}
+                onCancelExport={handleCancelExport}
               />
             )}
           </ScrollView>
         </View>
       </View>
-
-
 
       {/* Sleek Modern In-App Notice Dialog */}
       {noticeDialog?.visible && (

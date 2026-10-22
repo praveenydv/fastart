@@ -298,34 +298,31 @@ export async function exportProjectAudioToWavBytes(
     const srcRate = decoded.sampleRate;
     const srcLen = srcLeft.length;
 
-    for (let i = startSample; i < endSample; i++) {
-      const timelineTime = i / sampleRate;
-      const relTime = timelineTime - clipStart;
-      const sourceTime = trimIn + relTime * speed;
-      const srcFrame = sourceTime * srcRate;
+    const step = (speed * srcRate) / sampleRate;
+    let srcFrame = (trimIn + (startSample / sampleRate - clipStart) * speed) * srcRate;
+    const invSampleRate = 1.0 / sampleRate;
 
+    for (let i = startSample; i < endSample; i++, srcFrame += step) {
       if (srcFrame >= 0 && srcFrame < srcLen - 1) {
-        const idx0 = Math.floor(srcFrame);
-        const idx1 = idx0 + 1;
+        const idx0 = srcFrame | 0;
         const frac = srcFrame - idx0;
 
-        let leftSamp = srcLeft[idx0] * (1 - frac) + srcLeft[idx1] * frac;
-        let rightSamp = srcRight[idx0] * (1 - frac) + srcRight[idx1] * frac;
+        let leftSamp = srcLeft[idx0] + (srcLeft[idx0 + 1] - srcLeft[idx0]) * frac;
+        let rightSamp = srcRight[idx0] + (srcRight[idx0 + 1] - srcRight[idx0]) * frac;
 
-        // Apply Fade In envelope
         let env = 1.0;
+        const relTime = i * invSampleRate - clipStart;
         if (fadeIn > 0 && relTime < fadeIn) {
-          env *= Math.max(0, relTime / fadeIn);
+          env *= relTime > 0 ? relTime / fadeIn : 0;
         }
-        // Apply Fade Out envelope
         if (fadeOut > 0 && relTime > clipDuration - fadeOut) {
-          env *= Math.max(0, (clipDuration - relTime) / fadeOut);
+          const rem = clipDuration - relTime;
+          env *= rem > 0 ? rem / fadeOut : 0;
         }
 
-        // Apply AI Denoise gate
         if (denoise) {
-          if (Math.abs(leftSamp) < 0.02) leftSamp *= 0.1;
-          if (Math.abs(rightSamp) < 0.02) rightSamp *= 0.1;
+          if (leftSamp > -0.02 && leftSamp < 0.02) leftSamp *= 0.1;
+          if (rightSamp > -0.02 && rightSamp < 0.02) rightSamp *= 0.1;
         }
 
         const effVol = volume * env;
@@ -335,26 +332,56 @@ export async function exportProjectAudioToWavBytes(
     }
   }
 
-  // Master soft-knee limiter & 16-bit PCM conversion
-  let offset = 44;
-  for (let i = 0; i < totalSamples; i++) {
-    let l = masterLeft[i];
-    let r = masterRight[i];
+  // Master soft-knee limiter & hardware-accelerated 16-bit PCM assembly
+  const isLittleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+  if (isLittleEndian) {
+    const pcm16 = new Int16Array(buffer, 44, totalSamples * 2);
+    let pcmIdx = 0;
+    for (let i = 0; i < totalSamples; i++) {
+      let l = masterLeft[i];
+      let r = masterRight[i];
 
-    // Clean soft-limiting curve to prevent harsh digital clipping
-    if (l > 1.0) l = 1.0 - Math.exp(1.0 - l);
-    else if (l < -1.0) l = -1.0 + Math.exp(1.0 + l);
+      if (l > 1.0) l = 1.0 - Math.exp(1.0 - l);
+      else if (l < -1.0) l = -1.0 + Math.exp(1.0 + l);
 
-    if (r > 1.0) r = 1.0 - Math.exp(1.0 - r);
-    else if (r < -1.0) r = -1.0 + Math.exp(1.0 + r);
+      if (r > 1.0) r = 1.0 - Math.exp(1.0 - r);
+      else if (r < -1.0) r = -1.0 + Math.exp(1.0 + r);
 
-    // Convert to 16-bit signed integer [-32768, 32767]
-    const pcmLeft = Math.round(l < 0 ? l * 0x8000 : l * 0x7fff);
-    const pcmRight = Math.round(r < 0 ? r * 0x8000 : r * 0x7fff);
+      let pcmL = (l * (l < 0 ? 32768 : 32767)) | 0;
+      if (pcmL > 32767) pcmL = 32767;
+      else if (pcmL < -32768) pcmL = -32768;
 
-    view.setInt16(offset, Math.max(-32768, Math.min(32767, pcmLeft)), true);
-    view.setInt16(offset + 2, Math.max(-32768, Math.min(32767, pcmRight)), true);
-    offset += 4;
+      let pcmR = (r * (r < 0 ? 32768 : 32767)) | 0;
+      if (pcmR > 32767) pcmR = 32767;
+      else if (pcmR < -32768) pcmR = -32768;
+
+      pcm16[pcmIdx++] = pcmL;
+      pcm16[pcmIdx++] = pcmR;
+    }
+  } else {
+    let offset = 44;
+    for (let i = 0; i < totalSamples; i++) {
+      let l = masterLeft[i];
+      let r = masterRight[i];
+
+      if (l > 1.0) l = 1.0 - Math.exp(1.0 - l);
+      else if (l < -1.0) l = -1.0 + Math.exp(1.0 + l);
+
+      if (r > 1.0) r = 1.0 - Math.exp(1.0 - r);
+      else if (r < -1.0) r = -1.0 + Math.exp(1.0 + r);
+
+      let pcmL = (l * (l < 0 ? 32768 : 32767)) | 0;
+      if (pcmL > 32767) pcmL = 32767;
+      else if (pcmL < -32768) pcmL = -32768;
+
+      let pcmR = (r * (r < 0 ? 32768 : 32767)) | 0;
+      if (pcmR > 32767) pcmR = 32767;
+      else if (pcmR < -32768) pcmR = -32768;
+
+      view.setInt16(offset, pcmL, true);
+      view.setInt16(offset + 2, pcmR, true);
+      offset += 4;
+    }
   }
 
   return new Uint8Array(buffer);

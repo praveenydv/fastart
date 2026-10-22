@@ -37,6 +37,46 @@ export function useProjectHistory({
     setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
   }, [projectRef, setProject, setProjects]);
 
+  // Transient live preview update: updates in-memory state without polluting undo history or saving to disk
+  const updateProjectPreview = useCallback((updatedProject: any) => {
+    const current = projectRef.current;
+    if (!current) return;
+    const fullProject: FastArtProject = {
+      ...current,
+      ...(updatedProject || {}),
+      tracks: updatedProject?.tracks ? updatedProject.tracks : current.tracks,
+    };
+    projectRef.current = fullProject;
+    setProject(fullProject);
+  }, [projectRef, setProject]);
+
+  // Commit changes made during a modal preview session:
+  // Pushes the pre-modal snapshot to undo stack once, saves the current project, and clears redo stack.
+  const commitPreview = useCallback((snapshot: FastArtProject) => {
+    const current = projectRef.current;
+    if (!current) return;
+    if (JSON.stringify(current) !== JSON.stringify(snapshot)) {
+      setHistoryStack((prev) => [
+        ...prev.slice(-20),
+        JSON.parse(JSON.stringify(snapshot)),
+      ]);
+      setRedoStack([]);
+      const saved = saveProject(current);
+      projectRef.current = saved;
+      setProject(saved);
+      setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+    }
+  }, [projectRef, setProject, setProjects]);
+
+  // Discard preview changes: restores project to pre-modal snapshot without touching history stack
+  const discardPreview = useCallback((snapshot: FastArtProject) => {
+    const rollback = JSON.parse(JSON.stringify(snapshot));
+    projectRef.current = rollback;
+    setProject(rollback);
+    saveProject(rollback);
+    setProjects((prev) => prev.map((p) => (p.id === rollback.id ? rollback : p)));
+  }, [projectRef, setProject, setProjects]);
+
   const handleUndo = useCallback(() => {
     if (historyStack.length === 0) return;
     const current = projectRef.current;
@@ -76,6 +116,9 @@ export function useProjectHistory({
     setHistoryStack,
     setRedoStack,
     updateProjectWithHistory,
+    updateProjectPreview,
+    commitPreview,
+    discardPreview,
     handleUndo,
     handleRedo,
   };

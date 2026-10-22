@@ -14,6 +14,7 @@ export interface ExportOptions {
   logicalHeight?: number;
   videoBitsPerSecond?: number;
   resolution?: string;
+  isCancelled?: () => boolean;
 }
 
 export interface ExportResult {
@@ -131,6 +132,10 @@ export async function exportVideo(
     const gifFrames: GifFrame[] = [];
 
     for (let frame = 0; frame < gifFramesCount; frame++) {
+      if (options.isCancelled?.()) {
+        exportRenderer.cleanup();
+        throw new Error("Export cancelled");
+      }
       const frameTime = frame / gifFps;
       exportRenderer.renderFrame(project, frameTime, false, exportLogicalW, exportLogicalH);
 
@@ -351,6 +356,23 @@ export async function exportVideo(
 
     const renderTick = () => {
       if (completed) return;
+      if (options.isCancelled?.()) {
+        completed = true;
+        try {
+          if (typeof mediaRecorder.stop === "function" && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+          }
+        } catch {}
+        if (audioSourceNode) {
+          try { audioSourceNode.stop(); } catch {}
+        }
+        if (audioCtx) {
+          try { audioCtx.close(); } catch {}
+        }
+        exportRenderer.cleanup();
+        reject(new Error("Export cancelled"));
+        return;
+      }
       const now = performance.now();
       const elapsed = (now - recStartTime) / 1000;
       const curTime = Math.min(elapsed, duration);

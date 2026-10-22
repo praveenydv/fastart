@@ -313,36 +313,49 @@ const FONT_GLYPHS: Record<string, number[]> = {
   "⚡": [0x00,0x0c,0x18,0x30,0x7f,0x0c,0x18,0x30,0x60,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
 };
 
+const COLOR_CACHE = new Map<string, [number, number, number, number]>();
+
 function hexToRgba(hex: string, alpha: number = 1.0): [number, number, number, number] {
   if (!hex) return [255, 255, 255, Math.round(alpha * 255)];
+  const cacheKey = `${hex}_${alpha}`;
+  const cached = COLOR_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  let result: [number, number, number, number];
   if (hex.startsWith("blur:")) {
-    return [15, 23, 42, Math.round(alpha * 255)];
-  }
-  if (hex.startsWith("gradient:")) {
+    result = [15, 23, 42, Math.round(alpha * 255)];
+  } else if (hex.startsWith("gradient:")) {
     const parts = hex.replace("gradient:", "").split(",");
-    return hexToRgba(parts[0] || "#0B0D13", alpha);
-  }
-  if (hex.startsWith("rgba")) {
+    result = hexToRgba(parts[0] || "#0B0D13", alpha);
+  } else if (hex.startsWith("rgba")) {
     const m = hex.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)/i);
     if (m) {
       const a = m[4] !== undefined ? parseFloat(m[4]) * alpha : alpha;
-      return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), Math.round(a * 255)];
+      result = [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), Math.round(a * 255)];
+    } else {
+      result = [255, 255, 255, Math.round(alpha * 255)];
     }
+  } else {
+    const clean = hex.replace("#", "").trim();
+    let r = 0,
+      g = 0,
+      b = 0;
+    if (clean.length === 3) {
+      r = parseInt(clean[0] + clean[0], 16);
+      g = parseInt(clean[1] + clean[1], 16);
+      b = parseInt(clean[2] + clean[2], 16);
+    } else if (clean.length >= 6) {
+      r = parseInt(clean.substring(0, 2), 16);
+      g = parseInt(clean.substring(2, 4), 16);
+      b = parseInt(clean.substring(4, 6), 16);
+    }
+    result = [r || 0, g || 0, b || 0, Math.round(alpha * 255)];
   }
-  const clean = hex.replace("#", "").trim();
-  let r = 0,
-    g = 0,
-    b = 0;
-  if (clean.length === 3) {
-    r = parseInt(clean[0] + clean[0], 16);
-    g = parseInt(clean[1] + clean[1], 16);
-    b = parseInt(clean[2] + clean[2], 16);
-  } else if (clean.length >= 6) {
-    r = parseInt(clean.substring(0, 2), 16);
-    g = parseInt(clean.substring(2, 4), 16);
-    b = parseInt(clean.substring(4, 6), 16);
+
+  if (COLOR_CACHE.size < 512) {
+    COLOR_CACHE.set(cacheKey, result);
   }
-  return [r || 0, g || 0, b || 0, Math.round(alpha * 255)];
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -800,10 +813,17 @@ export function renderMobileProjectFrame(
   project: FastArtProject,
   time: number,
   canvasW: number,
-  canvasH: number
+  canvasH: number,
+  targetBuffer?: MobileFrameBuffer
 ): MobileFrameBuffer {
   const canvasBg = project.canvasBackground || "#000000";
-  const buffer = new MobileFrameBuffer(canvasW, canvasH, canvasBg);
+  let buffer: MobileFrameBuffer;
+  if (targetBuffer && targetBuffer.width === canvasW && targetBuffer.height === canvasH) {
+    targetBuffer.fill(canvasBg);
+    buffer = targetBuffer;
+  } else {
+    buffer = new MobileFrameBuffer(canvasW, canvasH, canvasBg);
+  }
 
   const videoClips = project.tracks.video || [];
   const textClips = project.tracks.text || [];
@@ -1047,33 +1067,67 @@ class BitWriter {
     }
   }
 
+  public getBuffer(): Uint8Array {
+    return this.buffer;
+  }
+
+  public getPos(): number {
+    return this.pos;
+  }
+
+  public setPos(newPos: number) {
+    this.pos = newPos;
+  }
+
   public toBytes(): Uint8Array {
     return this.buffer.subarray(0, this.pos);
   }
 }
 
+// Precomputed BT.601 integer lookup tables (Studio Range [16..235] and [16..240])
+const LUT_Y_R = new Int32Array(256);
+const LUT_Y_G = new Int32Array(256);
+const LUT_Y_B = new Int32Array(256);
+
+const LUT_U_R = new Int32Array(256);
+const LUT_U_G = new Int32Array(256);
+const LUT_U_B = new Int32Array(256);
+
+const LUT_V_R = new Int32Array(256);
+const LUT_V_G = new Int32Array(256);
+const LUT_V_B = new Int32Array(256);
+
+for (let i = 0; i < 256; i++) {
+  LUT_Y_R[i] = 66 * i;
+  LUT_Y_G[i] = 129 * i;
+  LUT_Y_B[i] = 25 * i;
+
+  LUT_U_R[i] = -38 * i;
+  LUT_U_G[i] = -74 * i;
+  LUT_U_B[i] = 112 * i;
+
+  LUT_V_R[i] = 112 * i;
+  LUT_V_G[i] = -94 * i;
+  LUT_V_B[i] = -18 * i;
+}
+
 // H.264 Emulation Prevention: inserts 0x03 after two consecutive 0x00 bytes if followed by <= 0x03
 function rbspToNal(rbsp: Uint8Array): Uint8Array {
   const len = rbsp.length;
-  let out = new Uint8Array(len + (len >> 4) + 64);
+  let out = new Uint8Array(len + (len >> 5) + 256);
   let outLen = 0;
   let zeroCount = 0;
 
   for (let i = 0; i < len; i++) {
-    const b = rbsp[i];
-    if (zeroCount === 2 && b <= 3) {
-      if (outLen >= out.length) {
-        const next = new Uint8Array(out.length * 2);
-        next.set(out);
-        out = next;
-      }
-      out[outLen++] = 3;
-      zeroCount = 0;
-    }
-    if (outLen >= out.length) {
-      const next = new Uint8Array(out.length * 2);
+    if (outLen + 2 >= out.length) {
+      const next = new Uint8Array(Math.max(out.length * 2, outLen + 1024));
       next.set(out);
       out = next;
+    }
+    const b = rbsp[i];
+    if (zeroCount === 2 && b <= 3) {
+      out[outLen++] = 3;
+      zeroCount = 0;
     }
     out[outLen++] = b;
     if (b === 0) {
@@ -1140,6 +1194,7 @@ function buildH264Pps(): Uint8Array {
 }
 
 // Encode a MobileFrameBuffer into a genuine H.264 IDR I_PCM slice NAL unit (type 5)
+// Utilizes 32-bit register unpacking, precomputed BT.601 integer tables, and direct memcpy streaming
 function encodeH264IFrame(
   buffer: MobileFrameBuffer,
   frameIndex: number,
@@ -1147,7 +1202,7 @@ function encodeH264IFrame(
   mbHeight: number
 ): Uint8Array {
   const totalMbs = mbWidth * mbHeight;
-  const bw = new BitWriter(totalMbs * 390 + 256);
+  const bw = new BitWriter(totalMbs * 390 + 512);
 
   // Slice Header
   bw.writeUe(0); // first_mb_in_slice
@@ -1162,63 +1217,75 @@ function encodeH264IFrame(
 
   const width = buffer.width;
   const height = buffer.height;
-  const rgba = buffer.data;
+  const u32 = buffer.u32;
+
+  // Align to byte boundary before MB 0
+  bw.writeUe(25); // mb_type: 25 (I_PCM)
+  bw.alignZero();
+
+  const raw = bw.getBuffer();
+  let pos = bw.getPos();
 
   // Convert and write macroblocks (16x16 luma, 8x8 chroma U, 8x8 chroma V)
   for (let mbY = 0; mbY < mbHeight; mbY++) {
     const startY = mbY * 16;
     for (let mbX = 0; mbX < mbWidth; mbX++) {
       const startX = mbX * 16;
-      bw.writeUe(25); // mb_type: 25 (I_PCM)
-      bw.alignZero();
+
+      // MB 0 is already written (ue(25) + alignZero). From MB 1 onward, write 0x0D, 0x00 directly!
+      if (mbY !== 0 || mbX !== 0) {
+        raw[pos++] = 0x0d;
+        raw[pos++] = 0x00;
+      }
 
       // 1. 256 bytes Luma Y (16x16)
       for (let y = 0; y < 16; y++) {
         const py = startY + y < height ? startY + y : height - 1;
-        let idx = (py * width + startX) * 4;
+        const rowStart = py * width;
         for (let x = 0; x < 16; x++) {
-          const r = rgba[idx];
-          const g = rgba[idx + 1];
-          const b = rgba[idx + 2];
-          idx += 4;
+          const px = startX + x < width ? startX + x : width - 1;
+          const p = u32[rowStart + px];
+          const r = p & 0xff;
+          const g = (p >>> 8) & 0xff;
+          const b = (p >>> 16) & 0xff;
           // BT.601 Studio Range Y [16..235]
-          const yVal = Math.min(235, Math.max(16, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
-          bw.writeByte(yVal);
+          raw[pos++] = ((LUT_Y_R[r] + LUT_Y_G[g] + LUT_Y_B[b] + 128) >> 8) + 16;
         }
       }
 
       // 2. 64 bytes Chroma Cb (U) (8x8, 2x downsampled)
       for (let y = 0; y < 8; y++) {
         const py = startY + y * 2 < height ? startY + y * 2 : height - 1;
-        let idx = (py * width + startX) * 4;
+        const rowStart = py * width;
         for (let x = 0; x < 8; x++) {
-          const r = rgba[idx];
-          const g = rgba[idx + 1];
-          const b = rgba[idx + 2];
-          idx += 8;
+          const px = startX + x * 2 < width ? startX + x * 2 : width - 1;
+          const p = u32[rowStart + px];
+          const r = p & 0xff;
+          const g = (p >>> 8) & 0xff;
+          const b = (p >>> 16) & 0xff;
           // BT.601 Studio Range Cb [16..240]
-          const uVal = Math.min(240, Math.max(16, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
-          bw.writeByte(uVal);
+          raw[pos++] = ((LUT_U_R[r] + LUT_U_G[g] + LUT_U_B[b] + 128) >> 8) + 128;
         }
       }
 
       // 3. 64 bytes Chroma Cr (V) (8x8, 2x downsampled)
       for (let y = 0; y < 8; y++) {
         const py = startY + y * 2 < height ? startY + y * 2 : height - 1;
-        let idx = (py * width + startX) * 4;
+        const rowStart = py * width;
         for (let x = 0; x < 8; x++) {
-          const r = rgba[idx];
-          const g = rgba[idx + 1];
-          const b = rgba[idx + 2];
-          idx += 8;
+          const px = startX + x * 2 < width ? startX + x * 2 : width - 1;
+          const p = u32[rowStart + px];
+          const r = p & 0xff;
+          const g = (p >>> 8) & 0xff;
+          const b = (p >>> 16) & 0xff;
           // BT.601 Studio Range Cr [16..240]
-          const vVal = Math.min(240, Math.max(16, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
-          bw.writeByte(vVal);
+          raw[pos++] = ((LUT_V_R[r] + LUT_V_G[g] + LUT_V_B[b] + 128) >> 8) + 128;
         }
       }
     }
   }
 
+  bw.setPos(pos);
   bw.writeRbspTrailingBits();
   const nalBody = rbspToNal(bw.toBytes());
   const nal = new Uint8Array(1 + nalBody.length);
@@ -1229,45 +1296,66 @@ function encodeH264IFrame(
 
 // ---------------------------------------------------------------------------
 // ISO Base Media File Format (MP4) Container Builder
+// High-performance typed Uint8Array stream with direct memory set
 // (Compliant with ISO/IEC 14496-12 / 14496-15)
 // ---------------------------------------------------------------------------
 class Mp4BoxBuilder {
-  public buffer: number[] = [];
+  private buffer: Uint8Array;
+  private pos: number = 0;
+
+  constructor(initialCapacity = 65536) {
+    this.buffer = new Uint8Array(initialCapacity);
+  }
+
+  private ensureCapacity(needed: number) {
+    if (this.pos + needed > this.buffer.length) {
+      const newCap = Math.max(this.buffer.length * 2, this.pos + needed + 16384);
+      const newBuf = new Uint8Array(newCap);
+      newBuf.set(this.buffer);
+      this.buffer = newBuf;
+    }
+  }
 
   public writeU8(val: number) {
-    this.buffer.push(val & 0xff);
+    if (this.pos >= this.buffer.length) this.ensureCapacity(1);
+    this.buffer[this.pos++] = val & 0xff;
   }
 
   public writeU16(val: number) {
-    this.buffer.push((val >>> 8) & 0xff);
-    this.buffer.push(val & 0xff);
+    if (this.pos + 2 > this.buffer.length) this.ensureCapacity(2);
+    this.buffer[this.pos++] = (val >>> 8) & 0xff;
+    this.buffer[this.pos++] = val & 0xff;
   }
 
   public writeU32(val: number) {
-    this.buffer.push((val >>> 24) & 0xff);
-    this.buffer.push((val >>> 16) & 0xff);
-    this.buffer.push((val >>> 8) & 0xff);
-    this.buffer.push(val & 0xff);
+    if (this.pos + 4 > this.buffer.length) this.ensureCapacity(4);
+    this.buffer[this.pos++] = (val >>> 24) & 0xff;
+    this.buffer[this.pos++] = (val >>> 16) & 0xff;
+    this.buffer[this.pos++] = (val >>> 8) & 0xff;
+    this.buffer[this.pos++] = val & 0xff;
   }
 
   public writeAscii(str: string) {
-    for (let i = 0; i < str.length; i++) {
-      this.buffer.push(str.charCodeAt(i));
+    const len = str.length;
+    if (this.pos + len > this.buffer.length) this.ensureCapacity(len);
+    for (let i = 0; i < len; i++) {
+      this.buffer[this.pos++] = str.charCodeAt(i);
     }
   }
 
   public writeBytes(bytes: Uint8Array) {
-    for (let i = 0; i < bytes.length; i++) {
-      this.buffer.push(bytes[i]);
-    }
+    const len = bytes.length;
+    if (this.pos + len > this.buffer.length) this.ensureCapacity(len);
+    this.buffer.set(bytes, this.pos);
+    this.pos += len;
   }
 
   public box(type: string, payloadFn: () => void) {
-    const startPos = this.buffer.length;
+    const startPos = this.pos;
     this.writeU32(0); // placeholder size
     this.writeAscii(type);
     payloadFn();
-    const endPos = this.buffer.length;
+    const endPos = this.pos;
     const size = endPos - startPos;
     this.buffer[startPos] = (size >>> 24) & 0xff;
     this.buffer[startPos + 1] = (size >>> 16) & 0xff;
@@ -1276,7 +1364,7 @@ class Mp4BoxBuilder {
   }
 
   public toBytes(): Uint8Array {
-    return new Uint8Array(this.buffer);
+    return this.buffer.subarray(0, this.pos);
   }
 }
 
@@ -1714,6 +1802,7 @@ export async function exportMobileProject(
 
   // 1. PNG Snapshot / Poster Frame
   if (format === "png") {
+    if (options.isCancelled?.()) throw new Error("Export cancelled");
     const pngW = 720;
     const pngH =
       project.aspectRatio === "16:9" ? 405 : project.aspectRatio === "1:1" ? 720 : 1280;
@@ -1745,6 +1834,7 @@ export async function exportMobileProject(
 
   // 2. Studio Audio Track (WAV)
   if (format === "wav") {
+    if (options.isCancelled?.()) throw new Error("Export cancelled");
     if (onProgress) onProgress(40, 0, duration);
     const uint8 = await exportProjectAudioToWavBytes(project, duration, 44100);
     const audioBlob = await exportProjectAudioToWav(project, duration, 44100);
@@ -1780,6 +1870,7 @@ export async function exportMobileProject(
     const gifFrames: GifFrame[] = [];
 
     for (let f = 0; f < totalFrames; f++) {
+      if (options.isCancelled?.()) throw new Error("Export cancelled");
       const frameTime = f / gifFps;
       const frameBuf = renderMobileProjectFrame(project, frameTime, gifW, gifH);
 
@@ -1872,10 +1963,12 @@ export async function exportMobileProject(
   const renderFps = Math.min(Math.max(fps || 15, 10), 24);
   const totalFrames = Math.max(1, Math.ceil(duration * renderFps));
   const frameNals: Uint8Array[] = [];
+  const reusableFrame = new MobileFrameBuffer(targetW, targetH, project.canvasBackground || "#000000");
 
   for (let f = 0; f < totalFrames; f++) {
+    if (options.isCancelled?.()) throw new Error("Export cancelled");
     const frameTime = f / renderFps;
-    const frameBuf = renderMobileProjectFrame(project, frameTime, targetW, targetH);
+    const frameBuf = renderMobileProjectFrame(project, frameTime, targetW, targetH, reusableFrame);
     const nal = encodeH264IFrame(frameBuf, f, mbW, mbH);
     frameNals.push(nal);
 
@@ -1890,12 +1983,16 @@ export async function exportMobileProject(
     }
   }
 
+  if (options.isCancelled?.()) throw new Error("Export cancelled");
+
   if (onProgress) onProgress(92, duration, duration);
 
   // Mux into standard ISO Base Media MP4 container with synchronized audio track
   if (onProgress) onProgress(94, duration, duration);
   const audioBytes = await exportProjectAudioToWavBytes(project, duration, 44100);
+  if (options.isCancelled?.()) throw new Error("Export cancelled");
   const mp4Bytes = createMp4Container(targetW, targetH, renderFps, frameNals, audioBytes);
+  if (options.isCancelled?.()) throw new Error("Export cancelled");
 
   const filename = `${cleanTitle}_${Date.now()}.mp4`;
   const targetFileUri = `${targetDir}${filename}`;

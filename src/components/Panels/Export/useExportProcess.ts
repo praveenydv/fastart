@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import {
@@ -37,6 +37,7 @@ export function useExportProcess(
       : "Gallery / FastArt",
   );
   const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState | null>(null);
+  const isCancelledRef = useRef(false);
 
   const getInitialFilename = () => {
     let raw = (project?.title || project?.name || "").trim();
@@ -47,6 +48,19 @@ export function useExportProcess(
   };
 
   const [exportFilename, setExportFilename] = useState(getInitialFilename);
+
+  const handleCancelExport = () => {
+    isCancelledRef.current = true;
+    setStatus("idle");
+    setProgress(0);
+    setErrorMessage(null);
+  };
+
+  useEffect(() => {
+    if (!visible) {
+      isCancelledRef.current = true;
+    }
+  }, [visible]);
 
   useEffect(() => {
     if (project?.resolution) setResolution(project.resolution);
@@ -94,6 +108,7 @@ export function useExportProcess(
   };
 
   const handleStartExport = async () => {
+    isCancelledRef.current = false;
     setStatus("rendering");
     setErrorMessage(null);
     setProgress(0);
@@ -155,11 +170,14 @@ export function useExportProcess(
             currentTime: 0,
             logicalWidth: baseW,
             logicalHeight: baseH,
+            isCancelled: () => isCancelledRef.current,
           },
           (pct) => {
             setProgress(pct);
           },
         );
+
+        if (isCancelledRef.current) return;
 
         setExportedResult(result);
         setExportedUrl(result.videoUrl);
@@ -184,11 +202,14 @@ export function useExportProcess(
             format: mediaType,
             currentTime: project.currentTime || 0,
             resolution,
+            isCancelled: () => isCancelledRef.current,
           },
           (pct) => {
             setProgress(pct);
           }
         );
+
+        if (isCancelledRef.current) return;
 
         setExportedResult(result);
         setExportedUrl(result.videoUrl);
@@ -204,6 +225,11 @@ export function useExportProcess(
         });
       }
     } catch (err: any) {
+      if (err?.message === "Export cancelled" || isCancelledRef.current) {
+        setStatus("idle");
+        setProgress(0);
+        return;
+      }
       console.warn("Export error:", err);
       setStatus("error");
       setErrorMessage("Export could not be completed. Please try another format.");
@@ -253,6 +279,7 @@ export function useExportProcess(
     calculateEstimatedSize,
     triggerDirectDownload,
     handleStartExport,
+    handleCancelExport,
     getProgressStatusMessage,
     exportFilename,
     setExportFilename,

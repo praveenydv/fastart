@@ -103,6 +103,7 @@ export interface VideoClip {
   filter?: string;
   customLut?: CustomLutConfig;
   effect?: string;
+  effectIntensity?: number;
   transition?: TransitionConfig;
   transform?: ClipTransform;
   scale?: number;

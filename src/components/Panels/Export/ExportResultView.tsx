@@ -21,6 +21,7 @@ interface ExportResultViewProps {
   onDownload: () => void;
   onReExport: () => void;
   onClose: () => void;
+  onCancelExport?: () => void;
 }
 
 export default function ExportResultView({
@@ -39,6 +40,7 @@ export default function ExportResultView({
   onDownload,
   onReExport,
   onClose,
+  onCancelExport,
 }: ExportResultViewProps) {
   if (status === "rendering") {
     return (
@@ -60,6 +62,18 @@ export default function ExportResultView({
         <Text style={styles.formatProgressNotice}>
           Generating {selectedFormatConfig.label} ({selectedFormatConfig.ext}) with all edits
         </Text>
+
+        {onCancelExport && (
+          <TouchableOpacity
+            style={styles.cancelExportBtn}
+            onPress={onCancelExport}
+            activeOpacity={0.7}
+            accessibilityLabel="Cancel Export"
+          >
+            <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+            <Text style={styles.cancelExportBtnText}>Cancel Export</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

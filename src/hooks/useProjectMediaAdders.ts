@@ -413,64 +413,66 @@ export function useProjectMediaAdders({
     [project, currentTime, updateProjectWithHistory],
   );
 
-  // Add effect
+  // Add or preview effect
   const handleAddEffect = useCallback(
     (preset: any) => {
-      if (!project) return;
-      startProcessing("Applying Video Effect...", 350);
-      if (selectedClip && selectedClipType === "video") {
-        const videoClips = [...(project.tracks.video || [])];
-        const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+      const current = projectRef.current || project;
+      if (!current) return;
+
+      const targetId =
+        (selectedClip && selectedClipType === "video" ? selectedClipId : null) ||
+        current.tracks.video?.find(
+          (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
+        )?.id ||
+        current.tracks.video?.[0]?.id;
+
+      if (targetId) {
+        const videoClips = [...(current.tracks.video || [])];
+        const idx = videoClips.findIndex((c) => c.id === targetId);
         if (idx >= 0) {
           videoClips[idx] = {
             ...videoClips[idx],
             effect: preset.id === "none" ? undefined : (preset.type || preset.id),
+            effectIntensity: preset.intensity !== undefined ? preset.intensity : 0.8,
           };
           updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, video: videoClips },
+            ...current,
+            tracks: { ...current.tracks, video: videoClips },
           });
-        }
-      } else {
-        if (preset.id === "none") return;
-        const dur = 3.0;
-        const desiredStart = currentTime;
-        const placement = allocateClipPlacement(project, desiredStart, dur, 4);
-
-        if (!placement) {
-          Alert.alert(
-            "Not Enough Space",
-            "All tracks are occupied at this playhead position. Please move existing clips or free up a track.",
-          );
           return;
         }
-
-        const newEff = {
-          id: "eff-" + Date.now(),
-          type: preset.type || preset.id,
-          name: preset.name,
-          startTime: placement.startTime,
-          duration: dur,
-          intensity: preset.intensity || 0.8,
-          trackIndex: placement.trackIndex,
-        };
-        const effectClips = [...(project.tracks.effects || []), newEff];
-
-        if (placement.trackIndex !== 4) {
-          addNotification({
-            title: "Effect Added",
-            message: `Placed on Track ${placement.trackIndex + 1} to prevent overlapping.`,
-            icon: "sparkles-outline",
-          });
-        }
-
-        updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, effects: effectClips },
-        });
       }
+
+      if (preset.id === "none") return;
+      const dur = 3.0;
+      const desiredStart = currentTime;
+      const placement = allocateClipPlacement(current, desiredStart, dur, 4);
+
+      if (!placement) {
+        Alert.alert(
+          "Not Enough Space",
+          "All tracks are occupied at this playhead position. Please move existing clips or free up a track.",
+        );
+        return;
+      }
+
+      const newEff = {
+        id: "eff-" + Date.now(),
+        type: preset.type || preset.id,
+        name: preset.name,
+        startTime: placement.startTime,
+        duration: dur,
+        intensity: preset.intensity || 0.8,
+        trackIndex: placement.trackIndex,
+      };
+      const effectClips = [...(current.tracks.effects || []), newEff];
+
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, effects: effectClips },
+      });
     },
-    [project, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory, addNotification],
+    [project, projectRef, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory],
   );
 
   return {

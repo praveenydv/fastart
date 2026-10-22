@@ -127,6 +127,9 @@ export default function App() {
     setHistoryStack,
     setRedoStack,
     updateProjectWithHistory,
+    updateProjectPreview,
+    commitPreview,
+    discardPreview,
     handleUndo,
     handleRedo,
   } = useProjectHistory({
@@ -136,42 +139,39 @@ export default function App() {
   });
   historyStackRef.current = historyStack;
 
+  // Staged Preview Dispatcher:
+  // When inside any modal (modalInitialSnapshotRef.current != null):
+  // Updates are live, transient previews (zero history pollution, 60fps in-memory preview, no disk I/O).
+  // Outside modals (timeline split/trim/delete/move/add): records normal undo history and saves to storage.
+  const updateProjectDispatcher = useCallback(
+    (updatedProject: any) => {
+      if (modalInitialSnapshotRef.current) {
+        updateProjectPreview(updatedProject);
+      } else {
+        updateProjectWithHistory(updatedProject);
+      }
+    },
+    [updateProjectPreview, updateProjectWithHistory],
+  );
+
   // Discard all unapplied preview changes and restore pristine state before modal was opened
   const handleCancelModal = useCallback(() => {
     if (modalInitialSnapshotRef.current) {
-      const rollback = modalInitialSnapshotRef.current;
-      projectRef.current = rollback;
-      setProject(rollback);
-      saveProject(rollback);
-      setProjects((prev) => prev.map((p) => (p.id === rollback.id ? rollback : p)));
+      discardPreview(modalInitialSnapshotRef.current);
       setHistoryStack((prev) => prev.slice(0, initialHistoryLengthRef.current));
       modalInitialSnapshotRef.current = null;
     }
     closeModal();
-  }, [closeModal, setProject, setProjects, setHistoryStack]);
+  }, [closeModal, discardPreview, setHistoryStack]);
 
   // Commit preview changes with a single atomic undo entry
   const handleApplyModal = useCallback(() => {
     if (modalInitialSnapshotRef.current) {
-      const snapshot = modalInitialSnapshotRef.current;
-      const current = projectRef.current;
-      if (current && JSON.stringify(current) !== JSON.stringify(snapshot)) {
-        setHistoryStack((prev) => [
-          ...prev.slice(0, initialHistoryLengthRef.current).slice(-19),
-          snapshot,
-        ]);
-        setRedoStack([]);
-        const saved = saveProject(current);
-        projectRef.current = saved;
-        setProject(saved);
-        setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
-      } else {
-        setHistoryStack((prev) => prev.slice(0, initialHistoryLengthRef.current));
-      }
+      commitPreview(modalInitialSnapshotRef.current);
       modalInitialSnapshotRef.current = null;
     }
     closeModal();
-  }, [closeModal, setProject, setProjects, setHistoryStack, setRedoStack]);
+  }, [closeModal, commitPreview]);
 
   // Selected clip object
   const selectedClip = useMemo(() => {
@@ -198,6 +198,23 @@ export default function App() {
     }
     return null;
   }, [selectedClipId, selectedClipType, project]);
+
+  // Auto-target active video clip at playhead if none is explicitly selected
+  const ensureSelectedVideoClip = useCallback(() => {
+    if (!selectedClipId && projectRef.current) {
+      const curTime = currentTimeRef.current || 0;
+      const target =
+        projectRef.current.tracks?.video?.find(
+          (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
+        ) || projectRef.current.tracks?.video?.[0];
+      if (target) {
+        setSelectedClipId(target.id);
+        setSelectedClipType("video");
+        return target;
+      }
+    }
+    return selectedClip;
+  }, [selectedClipId, selectedClip]);
 
   // Media addition & modal apply hook
   const {
@@ -232,7 +249,7 @@ export default function App() {
     selectedClipType,
     currentTime,
     transitionTargetClipId,
-    updateProjectWithHistory,
+    updateProjectWithHistory: updateProjectDispatcher,
     setActiveModal,
     setSelectedClipId,
     setSelectedClipType,
@@ -263,7 +280,7 @@ export default function App() {
     settings,
     clipToDelete,
     setClipToDelete,
-    updateProjectWithHistory,
+    updateProjectWithHistory: updateProjectDispatcher,
     setIsCroppingPreview,
     startProcessing,
   });
@@ -284,7 +301,7 @@ export default function App() {
     setSelectedClipType,
     currentTime,
     currentTimeRef,
-    updateProjectWithHistory,
+    updateProjectWithHistory: updateProjectDispatcher,
     openModal,
   });
 
@@ -547,7 +564,7 @@ export default function App() {
             }}
             isKeyframeAtPlayhead={isKeyframeAtPlayhead}
             openModal={openModal}
-            updateProjectWithHistory={updateProjectWithHistory}
+            updateProjectWithHistory={updateProjectDispatcher}
             handleUpdateClipTransform={handleUpdateClipTransform}
             handleUpdateClipCrop={handleUpdateClipCrop}
             handleSplitClip={handleSplitClip}
@@ -559,9 +576,13 @@ export default function App() {
             handleToggleReverse={handleToggleReverse}
             handleOpenTransitionsModal={handleOpenTransitionsModal}
             handleDeselectClip={() => setSelectedClipId(null)}
-            handleOpenSpeedModal={() => openModal("speed")}
+            handleOpenSpeedModal={() => {
+              ensureSelectedVideoClip();
+              openModal("speed");
+            }}
             handleOpenVolumeModal={() => {
-              if (selectedClip && selectedClipType === "video" && !mediaHasAudioTrack(selectedClip)) {
+              const clip = ensureSelectedVideoClip();
+              if (clip && selectedClipType === "video" && !mediaHasAudioTrack(clip)) {
                 return;
               }
               openModal("volume");
@@ -570,19 +591,37 @@ export default function App() {
               soundEngine.playSfx("click");
               setIsCroppingPreview(true);
             }}
-            handleOpenMaskModal={() => openModal("mask")}
+            handleOpenMaskModal={() => {
+              ensureSelectedVideoClip();
+              openModal("mask");
+            }}
             handleOpenAudioModal={() => openModal("audio")}
             handleOpenTextModal={() => openModal("text")}
-            handleOpenFiltersModal={() => openModal("filters")}
-            handleOpenEffectsModal={() => openModal("effects")}
+            handleOpenFiltersModal={() => {
+              ensureSelectedVideoClip();
+              openModal("filters");
+            }}
+            handleOpenEffectsModal={() => {
+              ensureSelectedVideoClip();
+              openModal("effects");
+            }}
             handleOpenStickersModal={() => openModal("stickers")}
             handleOpenMediaPicker={() => openModal("media")}
             handleOpenTTS={() => openModal("tts")}
-            handleOpenEnhance={() => openModal("enhance")}
+            handleOpenEnhance={() => {
+              ensureSelectedVideoClip();
+              openModal("enhance");
+            }}
             handleOpenAutoCut={() => openModal("autocut")}
             handleOpenCanvasModal={() => openModal("canvas")}
-            handleOpenCutoutModal={() => openModal("cutout")}
-            handleOpenMotionTracking={() => openModal("tracking")}
+            handleOpenCutoutModal={() => {
+              ensureSelectedVideoClip();
+              openModal("cutout");
+            }}
+            handleOpenMotionTracking={() => {
+              ensureSelectedVideoClip();
+              openModal("tracking");
+            }}
             handleOpenAutoCaptions={() => openModal("captions")}
             handleToggleDenoise={handleToggleDenoise}
             handleExtractAudio={handleExtractAudioFromVideo}
@@ -594,7 +633,7 @@ export default function App() {
         {/* LAZY LOADED MODALS */}
         <EditorModals
           activeModal={activeModal}
-          closeModal={closeModal}
+          closeModal={handleCancelModal}
           onCancelModal={handleCancelModal}
           onApplyModal={handleApplyModal}
           project={project}
@@ -633,7 +672,7 @@ export default function App() {
           handleExtractAudioFromVideo={handleExtractAudioFromVideo}
           handleApplyTransform={handleApplyTransform}
           handleAutoCutGenerated={handleAutoCutGenerated}
-          updateProjectWithHistory={updateProjectWithHistory}
+          updateProjectWithHistory={updateProjectDispatcher}
           handleApplyEnhance={handleApplyEnhance}
           handleAddKeyframe={handleAddKeyframe}
           isKeyframeAtPlayhead={isKeyframeAtPlayhead}

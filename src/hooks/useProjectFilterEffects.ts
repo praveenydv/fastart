@@ -79,9 +79,17 @@ export function useProjectFilterEffects({
     (filterId: string, customLut?: CustomLutConfig) => {
       const current = projectRef.current || project;
       if (!current) return;
-      if (selectedClip && selectedClipType === "video") {
+      const curTime = current.currentTime || 0;
+      const targetId =
+        (selectedClip && selectedClipType === "video" ? selectedClipId : null) ||
+        current.tracks.video?.find(
+          (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
+        )?.id ||
+        current.tracks.video?.[0]?.id;
+
+      if (targetId) {
         const videoClips = [...(current.tracks.video || [])];
-        const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+        const idx = videoClips.findIndex((c) => c.id === targetId);
         if (idx >= 0) {
           videoClips[idx] = {
             ...videoClips[idx],
@@ -95,13 +103,12 @@ export function useProjectFilterEffects({
         }
       }
     },
-    [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
   );
 
   // Apply Cutout
   const handleApplyCutout = useCallback(
     (cutoutConfig: CutoutConfig) => {
-      startProcessing("Applying Cutout & Color...");
       if (!project || !selectedClip) return;
       const videoClips = [...(project.tracks.video || [])];
       let idx = videoClips.findIndex((c) => c.id === selectedClipId);
@@ -129,7 +136,6 @@ export function useProjectFilterEffects({
   // Apply AI Motion Tracking
   const handleApplyMotionTracking = useCallback(
     (motionConfig: MotionTrackConfig) => {
-      startProcessing("Tracking Motion Vectors...");
       if (!project || !selectedClip) return;
       if (selectedClipType === "text") {
         const textClips = [...(project.tracks.text || [])];
@@ -193,7 +199,6 @@ export function useProjectFilterEffects({
       curve?: any,
       smoothSlowMo?: "none" | "blend" | "optical_flow",
     ) => {
-      startProcessing("Calculating Speed & Duration...");
       const current = projectRef.current || project;
       if (!current || !selectedClipId) return;
 
