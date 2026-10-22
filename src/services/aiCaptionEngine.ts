@@ -324,8 +324,8 @@ let cachedTransformersLib: any = null;
 let loadTransformersPromise: Promise<any> | null = null;
 
 /**
- * Loads the standalone Transformers.js library in browser using native ES module imports
- * Supports dynamic import with fallback to esm.sh, unpkg, and inline module scripts.
+ * Loads the standalone Transformers.js library in browser using native ES module imports.
+ * Uses native browser dynamic import with fallback to esm.sh and module script injection.
  */
 async function loadTransformers(
   onProgress?: (pct: number, status: string) => void,
@@ -344,43 +344,80 @@ async function loadTransformers(
       return (window as any).transformers;
     }
 
-    if (typeof document !== "undefined") {
-      const scriptUrls = [
-        "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js",
-        "https://unpkg.com/@xenova/transformers@2.17.2/dist/transformers.min.js",
-      ];
+    const moduleUrls = [
+      "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2",
+      "https://esm.sh/@xenova/transformers@2.17.2",
+      "https://unpkg.com/@xenova/transformers@2.17.2",
+    ];
 
-      for (const url of scriptUrls) {
+    // Method 1: Native browser dynamic import via Function to avoid bundler transform
+    try {
+      const dynamicImport = new Function("u", "return import(u);");
+      for (const url of moduleUrls) {
         try {
           if (onProgress) onProgress(30, "Connecting to speech recognition engine...");
-          const loaded = await new Promise<boolean>((resolve) => {
-            const existing = document.querySelector(`script[src="${url}"]`);
-            if (existing && (window as any).transformers?.pipeline) {
-              return resolve(true);
-            }
-            const script = document.createElement("script");
-            script.src = url;
-            script.async = true;
-            script.crossOrigin = "anonymous";
-            const timer = setTimeout(() => resolve(false), 12000);
-            script.onload = () => {
-              clearTimeout(timer);
-              resolve(Boolean((window as any).transformers?.pipeline));
-            };
-            script.onerror = () => {
-              clearTimeout(timer);
-              resolve(false);
-            };
-            document.head.appendChild(script);
-          });
+          const mod = await Promise.race([
+            dynamicImport(url),
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error("Timeout loading module")), 15000),
+            ),
+          ]);
 
-          if (loaded && (window as any).transformers?.pipeline) {
-            cachedTransformersLib = (window as any).transformers;
-            return cachedTransformersLib;
+          if (mod && (mod.pipeline || mod.default?.pipeline)) {
+            const resolved = mod.pipeline ? mod : mod.default;
+            cachedTransformersLib = resolved;
+            (window as any).transformers = resolved;
+            return resolved;
           }
-        } catch (scriptErr) {
-          console.warn("FastArt: Transformers script load error for", url, scriptErr);
+        } catch (err) {
+          console.warn(`FastArt: Dynamic import failed for ${url}:`, err);
         }
+      }
+    } catch (importErr) {
+      console.warn("FastArt: Native dynamic import unavailable:", importErr);
+    }
+
+    // Method 2: Inline <script type="module"> injection for strict browser environments
+    if (typeof document !== "undefined") {
+      try {
+        if (onProgress) onProgress(32, "Initializing AI neural speech module...");
+        const loaded = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => resolve(false), 20000);
+          const onLoaded = () => {
+            clearTimeout(timer);
+            window.removeEventListener("transformers-ready", onLoaded);
+            resolve(Boolean((window as any).transformers?.pipeline));
+          };
+          window.addEventListener("transformers-ready", onLoaded);
+
+          const script = document.createElement("script");
+          script.type = "module";
+          script.textContent = `
+            try {
+              import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2")
+                .then((mod) => {
+                  window.transformers = mod.pipeline ? mod : mod.default;
+                  window.dispatchEvent(new Event("transformers-ready"));
+                })
+                .catch(() => {
+                  import("https://esm.sh/@xenova/transformers@2.17.2")
+                    .then((mod) => {
+                      window.transformers = mod.pipeline ? mod : mod.default;
+                      window.dispatchEvent(new Event("transformers-ready"));
+                    })
+                    .catch(() => {});
+                });
+            } catch (_) {}
+          `;
+          document.head.appendChild(script);
+        });
+
+        if (loaded && (window as any).transformers?.pipeline) {
+          cachedTransformersLib = (window as any).transformers;
+          return cachedTransformersLib;
+        }
+      } catch (scriptErr) {
+        console.warn("FastArt: Module script injection failed:", scriptErr);
       }
     }
 
@@ -419,8 +456,13 @@ async function transcribeWithWhisper(
     if (transformers.env) {
       transformers.env.allowLocalModels = false;
       transformers.env.useBrowserCache = true;
-      if (transformers.env.backends?.onnx?.wasm) {
-        transformers.env.backends.onnx.wasm.numThreads = 1;
+      if (transformers.env.backends?.onnx) {
+        try {
+          transformers.env.backends.onnx.logLevel = "error";
+        } catch (_) {}
+        if (transformers.env.backends.onnx.wasm) {
+          transformers.env.backends.onnx.wasm.numThreads = 1;
+        }
       }
     }
 

@@ -103,7 +103,10 @@ const BG_BOX_PRESETS = [
 
 const FONT_FAMILY_OPTIONS = [
   { label: "Impact", value: "Impact, Arial Black, sans-serif" },
-  { label: "Modern Sans", value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
+  {
+    label: "Modern Sans",
+    value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
   { label: "Montserrat", value: "'Montserrat', 'Arial Black', sans-serif" },
   { label: "Bebas", value: "'Bebas Neue', 'Oswald', sans-serif" },
   { label: "Georgia", value: "Georgia, 'Times New Roman', serif" },
@@ -170,27 +173,51 @@ export default function AutoCaptionModal({
   const initialSettings: CaptionSettings =
     currentProject?.captionSettings || defaultCaptionSettings;
 
-  const [selectedPresetId, setSelectedPresetId] = useState(initialSettings.presetId);
-  const [enableHighlight, setEnableHighlight] = useState(initialSettings.enableHighlight);
-  const [highlightColor, setHighlightColor] = useState(initialSettings.highlightColor);
+  const [selectedPresetId, setSelectedPresetId] = useState(
+    initialSettings.presetId,
+  );
+  const [enableHighlight, setEnableHighlight] = useState(
+    initialSettings.enableHighlight,
+  );
+  const [highlightColor, setHighlightColor] = useState(
+    initialSettings.highlightColor,
+  );
   const [highlightStyle, setHighlightStyle] = useState<
     "color" | "box" | "scale" | "glow" | "underline"
   >(initialSettings.highlightStyle || "color");
   const [fontSize, setFontSize] = useState<number>(initialSettings.fontSize);
-  const [fontFamily, setFontFamily] = useState<string>(initialSettings.fontFamily);
-  const [fontWeight, setFontWeight] = useState<string>(initialSettings.fontWeight);
-  const [textColor, setTextColor] = useState<string>(initialSettings.textColor);
-  const [strokeColor, setStrokeColor] = useState<string>(initialSettings.strokeColor);
-  const [strokeWidth, setStrokeWidth] = useState<number>(initialSettings.strokeWidth);
-  const [backgroundColor, setBackgroundColor] = useState<string>(initialSettings.backgroundColor);
-  const [textEffect, setTextEffect] = useState<string>(initialSettings.textEffect);
-  const [animation, setAnimation] = useState<string>(initialSettings.animation);
-  const [captionPositionY, setCaptionPositionY] = useState<number>(initialSettings.positionY);
-  const [textAlign, setTextAlign] = useState<"center" | "left" | "right">(initialSettings.textAlign);
-  const [uppercase, setUppercase] = useState<boolean>(initialSettings.uppercase);
-  const [chunkMode, setChunkMode] = useState<"punchy" | "balanced" | "sentence">(
-    initialSettings.chunkMode || "punchy",
+  const [fontFamily, setFontFamily] = useState<string>(
+    initialSettings.fontFamily,
   );
+  const [fontWeight, setFontWeight] = useState<string>(
+    initialSettings.fontWeight,
+  );
+  const [textColor, setTextColor] = useState<string>(initialSettings.textColor);
+  const [strokeColor, setStrokeColor] = useState<string>(
+    initialSettings.strokeColor,
+  );
+  const [strokeWidth, setStrokeWidth] = useState<number>(
+    initialSettings.strokeWidth,
+  );
+  const [backgroundColor, setBackgroundColor] = useState<string>(
+    initialSettings.backgroundColor,
+  );
+  const [textEffect, setTextEffect] = useState<string>(
+    initialSettings.textEffect,
+  );
+  const [animation, setAnimation] = useState<string>(initialSettings.animation);
+  const [captionPositionY, setCaptionPositionY] = useState<number>(
+    initialSettings.positionY,
+  );
+  const [textAlign, setTextAlign] = useState<"center" | "left" | "right">(
+    initialSettings.textAlign,
+  );
+  const [uppercase, setUppercase] = useState<boolean>(
+    initialSettings.uppercase,
+  );
+  const [chunkMode, setChunkMode] = useState<
+    "punchy" | "balanced" | "sentence"
+  >(initialSettings.chunkMode || "punchy");
   const [maxWordsPerCue, setMaxWordsPerCue] = useState<number>(
     initialSettings.maxWordsPerCue || 3,
   );
@@ -205,23 +232,37 @@ export default function AutoCaptionModal({
 
     if (targetClip) {
       if (targetClip.presetId) setSelectedPresetId(targetClip.presetId);
-      if (targetClip.enableWordHighlight !== undefined) setEnableHighlight(targetClip.enableWordHighlight);
-      if (targetClip.highlightColor) setHighlightColor(targetClip.highlightColor);
-      if (targetClip.highlightStyle) setHighlightStyle(targetClip.highlightStyle);
-      else if (targetClip.style?.highlightStyle) setHighlightStyle(targetClip.style.highlightStyle);
+      if (targetClip.enableWordHighlight !== undefined)
+        setEnableHighlight(targetClip.enableWordHighlight);
+      if (targetClip.highlightColor)
+        setHighlightColor(targetClip.highlightColor);
+      if (targetClip.highlightStyle)
+        setHighlightStyle(targetClip.highlightStyle);
+      else if (targetClip.style?.highlightStyle)
+        setHighlightStyle(targetClip.style.highlightStyle);
       if (targetClip.style?.fontSize) setFontSize(targetClip.style.fontSize);
-      if (targetClip.style?.fontFamily) setFontFamily(targetClip.style.fontFamily);
-      if (targetClip.style?.fontWeight) setFontWeight(targetClip.style.fontWeight);
+      if (targetClip.style?.fontFamily)
+        setFontFamily(targetClip.style.fontFamily);
+      if (targetClip.style?.fontWeight)
+        setFontWeight(targetClip.style.fontWeight);
       if (targetClip.style?.color) setTextColor(targetClip.style.color);
-      if (targetClip.style?.strokeColor) setStrokeColor(targetClip.style.strokeColor);
-      if (targetClip.style?.strokeWidth !== undefined) setStrokeWidth(targetClip.style.strokeWidth);
-      if (targetClip.style?.backgroundColor) setBackgroundColor(targetClip.style.backgroundColor);
-      if (targetClip.style?.textEffect) setTextEffect(targetClip.style.textEffect);
+      if (targetClip.style?.strokeColor)
+        setStrokeColor(targetClip.style.strokeColor);
+      if (targetClip.style?.strokeWidth !== undefined)
+        setStrokeWidth(targetClip.style.strokeWidth);
+      if (targetClip.style?.backgroundColor)
+        setBackgroundColor(targetClip.style.backgroundColor);
+      if (targetClip.style?.textEffect)
+        setTextEffect(targetClip.style.textEffect);
       if (targetClip.animation) setAnimation(targetClip.animation);
-      if (targetClip.position?.y !== undefined) setCaptionPositionY(targetClip.position.y);
-      if (targetClip.style?.textAlign) setTextAlign(targetClip.style.textAlign as any);
-      if (targetClip.uppercase !== undefined) setUppercase(targetClip.uppercase);
-      else if (targetClip.style?.uppercase !== undefined) setUppercase(targetClip.style.uppercase);
+      if (targetClip.position?.y !== undefined)
+        setCaptionPositionY(targetClip.position.y);
+      if (targetClip.style?.textAlign)
+        setTextAlign(targetClip.style.textAlign as any);
+      if (targetClip.uppercase !== undefined)
+        setUppercase(targetClip.uppercase);
+      else if (targetClip.style?.uppercase !== undefined)
+        setUppercase(targetClip.style.uppercase);
     } else {
       const saved = currentProject?.captionSettings || defaultCaptionSettings;
       setSelectedPresetId(saved.presetId);
@@ -274,7 +315,9 @@ export default function AutoCaptionModal({
     }
   };
 
-  const getActiveStyleOverrides = (): Partial<CaptionClip> & { maxWordsPerCue?: number } => ({
+  const getActiveStyleOverrides = (): Partial<CaptionClip> & {
+    maxWordsPerCue?: number;
+  } => ({
     presetId: selectedPresetId,
     position: { x: 50, y: captionPositionY },
     enableWordHighlight: enableHighlight,
@@ -387,7 +430,10 @@ export default function AutoCaptionModal({
       return;
     }
     soundEngine.playSfx("click");
-    downloadSrtFile(existingCaptions, `${currentProject?.title || "fastart"}_captions.srt`);
+    downloadSrtFile(
+      existingCaptions,
+      `${currentProject?.title || "fastart"}_captions.srt`,
+    );
   };
 
   // =================== SUBTITLE CUE EDITING ===================
@@ -490,9 +536,14 @@ export default function AutoCaptionModal({
   };
 
   const handleRechunkTimelineCaptions = () => {
-    if (!currentProject || !onUpdateProject || existingCaptions.length === 0) return;
+    if (!currentProject || !onUpdateProject || existingCaptions.length === 0)
+      return;
     soundEngine.playSfx("pop");
-    const rechunked = rechunkCaptionClips(existingCaptions, maxWordsPerCue, 1.8);
+    const rechunked = rechunkCaptionClips(
+      existingCaptions,
+      maxWordsPerCue,
+      1.8,
+    );
     onUpdateProject({
       tracks: { ...currentProject.tracks, captions: rechunked },
     });
@@ -502,7 +553,8 @@ export default function AutoCaptionModal({
   };
 
   const handleApplyStyleToAll = () => {
-    if (!currentProject || !onUpdateProject || existingCaptions.length === 0) return;
+    if (!currentProject || !onUpdateProject || existingCaptions.length === 0)
+      return;
     soundEngine.playSfx("pop");
 
     const updatedSettings: CaptionSettings = {
@@ -647,14 +699,14 @@ export default function AutoCaptionModal({
 
       if (!generated || generated.length === 0) {
         throw new Error(
-          "Could not detect clear spoken English in this video's audio."
+          "Could not detect clear spoken English in this video's audio.",
         );
       }
 
       soundEngine.playSfx("pop");
       onAddCaptions(generated);
       setStatusText(
-        `Generated ${generated.length} English subtitle cues! Tap any cue below to edit dialogue.`
+        `Generated ${generated.length} English subtitle cues! Tap any cue below to edit dialogue.`,
       );
     } catch (err: any) {
       console.error("FastArt: AutoCaption error", err);
@@ -694,7 +746,11 @@ export default function AutoCaptionModal({
                 onPress={handleImportSrtFile}
                 activeOpacity={0.7}
               >
-                <Ionicons name="cloud-upload-outline" size={14} color="#00F2FE" />
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={14}
+                  color="#00F2FE"
+                />
                 <Text style={styles.headerActionText}>Import SRT</Text>
               </TouchableOpacity>
 
@@ -825,10 +881,13 @@ export default function AutoCaptionModal({
 
                     <View style={styles.englishNoticeRow}>
                       <View style={styles.englishBadge}>
-                        <Text style={styles.englishBadgeText}>ENGLISH ONLY</Text>
+                        <Text style={styles.englishBadgeText}>
+                          ENGLISH ONLY
+                        </Text>
                       </View>
                       <Text style={styles.englishNoticeText}>
-                        Speech is automatically transcribed & translated to English subtitles
+                        Speech is automatically transcribed & translated to
+                        English subtitles
                       </Text>
                     </View>
                   </>
@@ -838,10 +897,21 @@ export default function AutoCaptionModal({
               {/* Caption Section Length / Chunking Box */}
               <View style={styles.chunkSectionBox}>
                 <View style={styles.chunkSectionHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.chunkSectionTitle}>CAPTION SECTION LENGTH</Text>
-                    <Text style={styles.chunkSectionDesc}>
-                      Controls how many words appear on screen per frame (prevents text overflow)
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons
+                      name="options-outline"
+                      size={13}
+                      color="#00F2FE"
+                    />
+                    <Text style={styles.chunkSectionTitle}>
+                      PHRASE LENGTH PER FRAME
                     </Text>
                   </View>
                   {existingCaptions.length > 0 && (
@@ -850,8 +920,10 @@ export default function AutoCaptionModal({
                       onPress={handleRechunkTimelineCaptions}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="cut-outline" size={13} color="#00F2FE" />
-                      <Text style={styles.rechunkBtnText}>Shorten Phrases</Text>
+                      <Ionicons name="cut-outline" size={12} color="#00F2FE" />
+                      <Text style={styles.rechunkBtnText}>
+                        Re-chunk Phrases
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -920,7 +992,8 @@ export default function AutoCaptionModal({
                     No subtitles on this timeline
                   </Text>
                   <Text style={styles.emptyCuesSubtitle}>
-                    Tap "Auto Transcribe to English" above to generate synchronized captions, or use Import SRT at the top.
+                    Tap "Auto Transcribe to English" above to generate
+                    synchronized captions, or use Import SRT at the top.
                   </Text>
                 </View>
               ) : (
@@ -941,7 +1014,8 @@ export default function AutoCaptionModal({
                         <View style={styles.cueMetaRow}>
                           <View style={styles.cueTimePill}>
                             <Text style={styles.cueTimeText}>
-                              #{idx + 1} • {startStr}s ➔ {endStr}s ({cap.duration.toFixed(1)}s)
+                              #{idx + 1} • {startStr}s ➔ {endStr}s (
+                              {cap.duration.toFixed(1)}s)
                             </Text>
                           </View>
 
@@ -977,7 +1051,9 @@ export default function AutoCaptionModal({
                         <TextInput
                           style={styles.cueTextInput}
                           value={cap.text}
-                          onChangeText={(txt) => handleUpdateCueText(cap.id, txt)}
+                          onChangeText={(txt) =>
+                            handleUpdateCueText(cap.id, txt)
+                          }
                           multiline
                           placeholder="Subtitle text..."
                           placeholderTextColor="#64748B"
@@ -992,210 +1068,232 @@ export default function AutoCaptionModal({
 
           {/* ================= TAB 2: STYLE & LIVE WORD HIGHLIGHT ================= */}
           {activeTab === "style" && (
-            <ScrollView
-              style={styles.bodyScroll}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Live Speaking Word Highlight Section */}
-              <View style={styles.highlightSection}>
-                <View style={styles.highlightHeaderRow}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={styles.highlightTitle}>
-                      SPEAKING WORD HIGHLIGHT (KARAOKE)
-                    </Text>
-                    <Text style={styles.highlightSubtitle}>
-                      Dynamically highlights each spoken word in sync with speech
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <TouchableOpacity
-                      onPress={handleResetToDefaults}
-                      style={styles.resetLinkBtn}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="refresh-outline" size={13} color="#8E95A5" />
-                      <Text style={styles.resetLinkText}>Reset</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.toggleSwitch,
-                        enableHighlight && styles.toggleSwitchActive,
-                      ]}
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        const next = !enableHighlight;
-                        setEnableHighlight(next);
-                        persistSettings({ enableHighlight: next });
+            <View style={{ flex: 1 }}>
+              <ScrollView
+                style={styles.bodyScroll}
+                contentContainerStyle={{ paddingBottom: 90 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* 1. HERO CARD: LIVE SPEAKING WORD HIGHLIGHT & PREVIEW */}
+                <View style={styles.cardSection}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={styles.cardHeaderTitleGroup}>
+                      <Ionicons name="sparkles" size={14} color="#FFE600" />
+                      <Text style={styles.cardHeaderTitle}>
+                        KARAOKE WORD HIGHLIGHT
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
                       }}
+                    >
+                      <TouchableOpacity
+                        onPress={handleResetToDefaults}
+                        style={styles.resetLinkBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="refresh-outline"
+                          size={12}
+                          color="#8E95A5"
+                        />
+                        <Text style={styles.resetLinkText}>Reset</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleSwitch,
+                          enableHighlight && styles.toggleSwitchActive,
+                        ]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          const next = !enableHighlight;
+                          setEnableHighlight(next);
+                          persistSettings({ enableHighlight: next });
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.toggleKnob,
+                            enableHighlight && styles.toggleKnobActive,
+                          ]}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Highlight Styles & Swatches */}
+                  {enableHighlight && (
+                    <View style={{ marginTop: 10, gap: 10 }}>
+                      <View style={styles.highlightStyleRow}>
+                        {HIGHLIGHT_STYLE_OPTIONS.map((opt) => {
+                          const isSelected = highlightStyle === opt.value;
+                          return (
+                            <TouchableOpacity
+                              key={opt.value}
+                              style={[
+                                styles.highlightStylePill,
+                                isSelected && styles.highlightStylePillActive,
+                              ]}
+                              onPress={() => {
+                                soundEngine.playSfx("click");
+                                setHighlightStyle(opt.value);
+                                persistSettings({ highlightStyle: opt.value });
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons
+                                name={opt.icon as any}
+                                size={13}
+                                color={isSelected ? "#000000" : "#8E95A5"}
+                              />
+                              <Text
+                                style={[
+                                  styles.highlightStylePillText,
+                                  isSelected &&
+                                    styles.highlightStylePillTextActive,
+                                ]}
+                              >
+                                {opt.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 8 }}
+                      >
+                        {HIGHLIGHT_COLOR_SWATCHES.map((swatch) => {
+                          const isSelected = highlightColor === swatch.value;
+                          return (
+                            <TouchableOpacity
+                              key={swatch.value}
+                              style={[
+                                styles.colorCircle,
+                                { backgroundColor: swatch.value },
+                                isSelected && styles.colorCircleSelected,
+                              ]}
+                              onPress={() => {
+                                soundEngine.playSfx("click");
+                                setHighlightColor(swatch.value);
+                                persistSettings({
+                                  highlightColor: swatch.value,
+                                });
+                              }}
+                            >
+                              {isSelected && (
+                                <Ionicons
+                                  name="checkmark"
+                                  size={13}
+                                  color={
+                                    swatch.value === "#FFFFFF" ||
+                                    swatch.value === "#FFE600" ||
+                                    swatch.value === "#00F2FE"
+                                      ? "#000000"
+                                      : "#FFFFFF"
+                                  }
+                                />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Live Preview Display Box */}
+                  <View style={styles.livePreviewBox}>
+                    <Text style={styles.livePreviewHeader}>
+                      LIVE PLAYBACK PREVIEW
+                    </Text>
+                    <View
+                      style={[
+                        styles.karaokeWordsContainer,
+                        backgroundColor &&
+                          backgroundColor !== "transparent" && {
+                            backgroundColor,
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                            borderRadius: 12,
+                          },
+                      ]}
                     >
                       <View
                         style={[
-                          styles.toggleKnob,
-                          enableHighlight && styles.toggleKnobActive,
+                          styles.karaokeWordsRow,
+                          {
+                            justifyContent:
+                              textAlign === "left"
+                                ? "flex-start"
+                                : textAlign === "right"
+                                  ? "flex-end"
+                                  : "center",
+                          },
                         ]}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                      >
+                        {["SPEAK", "EVERY", "SINGLE", "WORD"].map((w, wIdx) => {
+                          const displayedWord = uppercase ? w.toUpperCase() : w;
+                          const isActiveWord =
+                            enableHighlight && previewTick % 4 === wIdx;
+                          const isBox =
+                            isActiveWord && highlightStyle === "box";
+                          const isGlow =
+                            isActiveWord && highlightStyle === "glow";
+                          const isScale =
+                            isActiveWord && highlightStyle === "scale";
+                          const isUnderline =
+                            isActiveWord && highlightStyle === "underline";
 
-                {/* Highlight Effect Style & Color Swatches */}
-                {enableHighlight && (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={styles.subSectionTitle}>HIGHLIGHT STYLE</Text>
-                    <View style={styles.highlightStyleRow}>
-                      {HIGHLIGHT_STYLE_OPTIONS.map((opt) => {
-                        const isSelected = highlightStyle === opt.value;
-                        return (
-                          <TouchableOpacity
-                            key={opt.value}
-                            style={[
-                              styles.highlightStylePill,
-                              isSelected && styles.highlightStylePillActive,
-                            ]}
-                            onPress={() => {
-                              soundEngine.playSfx("click");
-                              setHighlightStyle(opt.value);
-                              persistSettings({ highlightStyle: opt.value });
-                            }}
-                            activeOpacity={0.7}
-                          >
-                            <Ionicons
-                              name={opt.icon as any}
-                              size={13}
-                              color={isSelected ? "#000000" : "#8E95A5"}
-                            />
-                            <Text
+                          let wordColor = textColor;
+                          if (isActiveWord) {
+                            if (isBox) {
+                              wordColor =
+                                highlightColor === "#000000"
+                                  ? "#FFFFFF"
+                                  : "#000000";
+                            } else {
+                              wordColor = highlightColor;
+                            }
+                          }
+
+                          return (
+                            <View
+                              key={wIdx}
                               style={[
-                                styles.highlightStylePillText,
-                                isSelected && styles.highlightStylePillTextActive,
+                                styles.karaokeWordPill,
+                                isBox && {
+                                  backgroundColor: highlightColor,
+                                  borderRadius: 6,
+                                  paddingHorizontal: 7,
+                                  paddingVertical: 2,
+                                },
+                                isScale && { transform: [{ scale: 1.18 }] },
                               ]}
                             >
-                              {opt.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    <Text style={styles.subSectionTitle}>HIGHLIGHT COLOR</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.horizontalRow}
-                    >
-                      {HIGHLIGHT_COLOR_SWATCHES.map((swatch) => {
-                        const isSelected = highlightColor === swatch.value;
-                        return (
-                          <TouchableOpacity
-                            key={swatch.value}
-                            style={[
-                              styles.colorCircle,
-                              { backgroundColor: swatch.value },
-                              isSelected && styles.colorCircleSelected,
-                            ]}
-                            onPress={() => {
-                              soundEngine.playSfx("click");
-                              setHighlightColor(swatch.value);
-                              persistSettings({ highlightColor: swatch.value });
-                            }}
-                          >
-                            {isSelected && (
-                              <Ionicons
-                                name="checkmark"
-                                size={14}
-                                color={
-                                  swatch.value === "#FFFFFF" ||
-                                  swatch.value === "#FFE600" ||
-                                  swatch.value === "#00F2FE"
-                                    ? "#000000"
-                                    : "#FFFFFF"
-                                }
-                              />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {/* Live Preview Display with Simulated Spoken Word Tick */}
-                <View style={styles.livePreviewBox}>
-                  <Text style={styles.livePreviewHeader}>LIVE PLAYBACK PREVIEW</Text>
-                  <View
-                    style={[
-                      styles.karaokeWordsContainer,
-                      backgroundColor && backgroundColor !== "transparent" && {
-                        backgroundColor,
-                        paddingHorizontal: 16,
-                        paddingVertical: 10,
-                        borderRadius: 12,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.karaokeWordsRow,
-                        {
-                          justifyContent:
-                            textAlign === "left"
-                              ? "flex-start"
-                              : textAlign === "right"
-                                ? "flex-end"
-                                : "center",
-                        },
-                      ]}
-                    >
-                      {["SPEAK", "EVERY", "SINGLE", "WORD"].map((w, wIdx) => {
-                        const displayedWord = uppercase ? w.toUpperCase() : w;
-                        const isActiveWord = enableHighlight && previewTick % 4 === wIdx;
-                        const isBox = isActiveWord && highlightStyle === "box";
-                        const isGlow = isActiveWord && highlightStyle === "glow";
-                        const isScale = isActiveWord && highlightStyle === "scale";
-                        const isUnderline = isActiveWord && highlightStyle === "underline";
-
-                        let wordColor = textColor;
-                        if (isActiveWord) {
-                          if (isBox) {
-                            wordColor =
-                              highlightColor === "#000000" ? "#FFFFFF" : "#000000";
-                          } else {
-                            wordColor = highlightColor;
-                          }
-                        }
-
-                        return (
-                          <View
-                            key={wIdx}
-                            style={[
-                              styles.karaokeWordPill,
-                              isBox && {
-                                backgroundColor: highlightColor,
-                                borderRadius: 6,
-                                paddingHorizontal: 7,
-                                paddingVertical: 2,
-                              },
-                              isScale && { transform: [{ scale: 1.18 }] },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.karaokeWordText,
-                                {
-                                  color: wordColor,
-                                  fontFamily,
-                                  fontSize: Math.min(26, fontSize),
-                                  fontWeight: fontWeight as any,
-                                  textShadowColor:
-                                    isGlow
+                              <Text
+                                style={[
+                                  styles.karaokeWordText,
+                                  {
+                                    color: wordColor,
+                                    fontFamily,
+                                    fontSize: Math.min(24, fontSize),
+                                    fontWeight: fontWeight as any,
+                                    textShadowColor: isGlow
                                       ? highlightColor
                                       : textEffect === "neon"
                                         ? wordColor
-                                        : textEffect === "3d" || textEffect === "shadow"
-                                          ? strokeColor !== "transparent" ? strokeColor : "#000000"
+                                        : textEffect === "3d" ||
+                                            textEffect === "shadow"
+                                          ? strokeColor !== "transparent"
+                                            ? strokeColor
+                                            : "#000000"
                                           : "transparent",
-                                  textShadowRadius:
-                                    isGlow
+                                    textShadowRadius: isGlow
                                       ? 18
                                       : textEffect === "neon"
                                         ? 16
@@ -1204,354 +1302,291 @@ export default function AutoCaptionModal({
                                           : textEffect === "3d"
                                             ? 3
                                             : 0,
-                                  textShadowOffset:
-                                    textEffect === "3d" && !isGlow
-                                      ? { width: 2, height: 2 }
-                                      : { width: 0, height: 0 },
-                                },
+                                    textShadowOffset:
+                                      textEffect === "3d" && !isGlow
+                                        ? { width: 2, height: 2 }
+                                        : { width: 0, height: 0 },
+                                  },
+                                ]}
+                              >
+                                {displayedWord}
+                              </Text>
+                              {isUnderline && (
+                                <View
+                                  style={{
+                                    height: 3,
+                                    backgroundColor: highlightColor,
+                                    borderRadius: 2,
+                                    marginTop: 2,
+                                    width: "100%",
+                                  }}
+                                />
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                {/* 2. TYPOGRAPHY STUDIO */}
+                <View style={styles.cardSection}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={styles.cardHeaderTitleGroup}>
+                      <Ionicons name="text-outline" size={14} color="#00F2FE" />
+                      <Text style={styles.cardHeaderTitle}>TYPOGRAPHY</Text>
+                    </View>
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          const next = Math.max(10, fontSize - 2);
+                          setFontSize(next);
+                          persistSettings({ fontSize: next });
+                        }}
+                      >
+                        <Ionicons name="remove" size={13} color="#CBD5E1" />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperValueText}>{fontSize}px</Text>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          const next = Math.min(52, fontSize + 2);
+                          setFontSize(next);
+                          persistSettings({ fontSize: next });
+                        }}
+                      >
+                        <Ionicons name="add" size={13} color="#CBD5E1" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Font Family Pills */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 6, marginVertical: 6 }}
+                  >
+                    {FONT_FAMILY_OPTIONS.map((font) => {
+                      const isSelected = fontFamily === font.value;
+                      return (
+                        <TouchableOpacity
+                          key={font.value}
+                          style={[
+                            styles.fontFamilyPill,
+                            isSelected && styles.fontFamilyPillActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setFontFamily(font.value);
+                            persistSettings({ fontFamily: font.value });
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.fontFamilyPillText,
+                              { fontFamily: font.value },
+                              isSelected && styles.fontFamilyPillTextActive,
+                            ]}
+                          >
+                            {font.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Weights + Formatting + Align Bar */}
+                  <View style={styles.compactControlsRow}>
+                    <View style={styles.weightPillsGroup}>
+                      {FONT_WEIGHT_OPTIONS.map((fw) => {
+                        const isSelected = fontWeight === fw.value;
+                        const shortLabel =
+                          fw.value === "900"
+                            ? "Heavy"
+                            : fw.value === "800"
+                              ? "Extra"
+                              : fw.value === "700"
+                                ? "Bold"
+                                : "Semi";
+                        return (
+                          <TouchableOpacity
+                            key={fw.value}
+                            style={[
+                              styles.miniWeightPill,
+                              isSelected && styles.miniWeightPillActive,
+                            ]}
+                            onPress={() => {
+                              soundEngine.playSfx("click");
+                              setFontWeight(fw.value);
+                              persistSettings({ fontWeight: fw.value });
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.miniWeightPillText,
+                                isSelected && styles.miniWeightPillTextActive,
                               ]}
                             >
-                              {displayedWord}
+                              {shortLabel}
                             </Text>
-                            {isUnderline && (
-                              <View
-                                style={{
-                                  height: 3,
-                                  backgroundColor: highlightColor,
-                                  borderRadius: 2,
-                                  marginTop: 2,
-                                  width: "100%",
-                                }}
-                              />
-                            )}
-                          </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* All Caps Toggle */}
+                    <TouchableOpacity
+                      style={[
+                        styles.miniFormatPill,
+                        uppercase && styles.miniFormatPillActive,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        const next = !uppercase;
+                        setUppercase(next);
+                        persistSettings({ uppercase: next });
+                      }}
+                    >
+                      <Ionicons
+                        name="text"
+                        size={12}
+                        color={uppercase ? "#000000" : "#8E95A5"}
+                      />
+                      <Text
+                        style={[
+                          styles.miniFormatPillText,
+                          uppercase && styles.miniFormatPillTextActive,
+                        ]}
+                      >
+                        CAPS
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Alignment */}
+                    <View style={styles.alignGroup}>
+                      {ALIGNMENT_OPTIONS.map((al) => {
+                        const isSelected = textAlign === al.value;
+                        return (
+                          <TouchableOpacity
+                            key={al.value}
+                            style={[
+                              styles.alignBtn,
+                              isSelected && styles.alignBtnActive,
+                            ]}
+                            onPress={() => {
+                              soundEngine.playSfx("click");
+                              setTextAlign(al.value as any);
+                              persistSettings({ textAlign: al.value as any });
+                            }}
+                          >
+                            <Ionicons
+                              name={al.icon as any}
+                              size={14}
+                              color={isSelected ? "#000000" : "#8E95A5"}
+                            />
+                          </TouchableOpacity>
                         );
                       })}
                     </View>
                   </View>
                 </View>
-              </View>
 
-              {/* Text Case & Alignment */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>TEXT FORMATTING & ALIGNMENT</Text>
-                <View style={styles.formatRow}>
-                  {/* Uppercase toggle */}
-                  <TouchableOpacity
-                    style={[
-                      styles.formatPill,
-                      uppercase && styles.formatPillActive,
-                    ]}
-                    onPress={() => {
-                      soundEngine.playSfx("click");
-                      const next = !uppercase;
-                      setUppercase(next);
-                      persistSettings({ uppercase: next });
-                    }}
-                    activeOpacity={0.7}
+                {/* 3. COLOR & OUTLINE STUDIO */}
+                <View style={styles.cardSection}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={styles.cardHeaderTitleGroup}>
+                      <Ionicons
+                        name="color-palette-outline"
+                        size={14}
+                        color="#00F2FE"
+                      />
+                      <Text style={styles.cardHeaderTitle}>
+                        COLOR & OUTLINE
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.subSectionTitle}>TEXT COLOR</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8, marginBottom: 10 }}
                   >
-                    <Ionicons
-                      name="text"
-                      size={15}
-                      color={uppercase ? "#000000" : "#8E95A5"}
-                    />
-                    <Text
-                      style={[
-                        styles.formatPillText,
-                        uppercase && styles.formatPillTextActive,
-                      ]}
-                    >
-                      ALL CAPS
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Alignment buttons */}
-                  <View style={styles.alignGroup}>
-                    {ALIGNMENT_OPTIONS.map((al) => {
-                      const isSelected = textAlign === al.value;
+                    {TEXT_COLOR_SWATCHES.map((swatch) => {
+                      const isSelected = textColor === swatch.value;
                       return (
                         <TouchableOpacity
-                          key={al.value}
+                          key={swatch.value}
                           style={[
-                            styles.alignBtn,
-                            isSelected && styles.alignBtnActive,
+                            styles.colorCircle,
+                            { backgroundColor: swatch.value },
+                            isSelected && styles.colorCircleSelected,
                           ]}
                           onPress={() => {
                             soundEngine.playSfx("click");
-                            setTextAlign(al.value as any);
-                            persistSettings({ textAlign: al.value as any });
+                            setTextColor(swatch.value);
+                            persistSettings({ textColor: swatch.value });
                           }}
                         >
-                          <Ionicons
-                            name={al.icon as any}
-                            size={16}
-                            color={isSelected ? "#000000" : "#8E95A5"}
-                          />
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark"
+                              size={13}
+                              color={
+                                swatch.value === "#FFFFFF" ||
+                                swatch.value === "#FFE600" ||
+                                swatch.value === "#00F2FE"
+                                  ? "#000000"
+                                  : "#FFFFFF"
+                              }
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Text style={styles.subSectionTitle}>
+                    OUTLINE WIDTH & COLOR
+                  </Text>
+                  <View style={styles.pillsRow}>
+                    {STROKE_WIDTH_OPTIONS.map((sw) => {
+                      const isSelected = strokeWidth === sw.value;
+                      return (
+                        <TouchableOpacity
+                          key={sw.value}
+                          style={[
+                            styles.strokeWidthPill,
+                            isSelected && styles.strokeWidthPillActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setStrokeWidth(sw.value);
+                            persistSettings({ strokeWidth: sw.value });
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.strokeWidthPillText,
+                              isSelected && styles.strokeWidthPillTextActive,
+                            ]}
+                          >
+                            {sw.label}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
                   </View>
-                </View>
-              </View>
 
-              {/* Caption Section Length (Words on screen) */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>SECTION LENGTH (WORDS PER FRAME)</Text>
-                  {existingCaptions.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.rechunkBtn}
-                      onPress={handleRechunkTimelineCaptions}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="cut-outline" size={12} color="#00F2FE" />
-                      <Text style={styles.rechunkBtnText}>Shorten Phrases</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <View style={styles.chunkModeRow}>
-                  {CHUNK_MODE_OPTIONS.map((opt) => {
-                    const isSelected = chunkMode === opt.value;
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[
-                          styles.chunkModePill,
-                          isSelected && styles.chunkModePillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setChunkMode(opt.value as any);
-                          setMaxWordsPerCue(opt.maxWords);
-                          persistSettings({
-                            chunkMode: opt.value as any,
-                            maxWordsPerCue: opt.maxWords,
-                          });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.chunkModePillText,
-                            isSelected && styles.chunkModePillTextActive,
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Font Family */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>FONT FAMILY</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalRow}
-                >
-                  {FONT_FAMILY_OPTIONS.map((font) => {
-                    const isSelected = fontFamily === font.value;
-                    return (
-                      <TouchableOpacity
-                        key={font.value}
-                        style={[
-                          styles.fontFamilyPill,
-                          isSelected && styles.fontFamilyPillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setFontFamily(font.value);
-                          persistSettings({ fontFamily: font.value });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.fontFamilyPillText,
-                            { fontFamily: font.value },
-                            isSelected && styles.fontFamilyPillTextActive,
-                          ]}
-                        >
-                          {font.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Font Size Selector with Stepper */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>FONT SIZE ({fontSize}px)</Text>
-                  <View style={styles.stepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        const next = Math.max(14, fontSize - 2);
-                        setFontSize(next);
-                        persistSettings({ fontSize: next });
-                      }}
-                    >
-                      <Ionicons name="remove" size={14} color="#CBD5E1" />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperValueText}>{fontSize}px</Text>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        const next = Math.min(52, fontSize + 2);
-                        setFontSize(next);
-                        persistSettings({ fontSize: next });
-                      }}
-                    >
-                      <Ionicons name="add" size={14} color="#CBD5E1" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.fontSizesRow}>
-                  {[18, 22, 26, 30, 36, 42].map((sz) => {
-                    const isSelected = fontSize === sz;
-                    return (
-                      <TouchableOpacity
-                        key={sz}
-                        style={[
-                          styles.sizeBtn,
-                          isSelected && styles.sizeBtnActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setFontSize(sz);
-                          persistSettings({ fontSize: sz });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.sizeBtnText,
-                            isSelected && styles.sizeBtnTextActive,
-                          ]}
-                        >
-                          {sz}px
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Font Weight */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>FONT WEIGHT</Text>
-                <View style={styles.pillsRow}>
-                  {FONT_WEIGHT_OPTIONS.map((fw) => {
-                    const isSelected = fontWeight === fw.value;
-                    return (
-                      <TouchableOpacity
-                        key={fw.value}
-                        style={[
-                          styles.weightPill,
-                          isSelected && styles.weightPillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setFontWeight(fw.value);
-                          persistSettings({ fontWeight: fw.value });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.weightPillText,
-                            isSelected && styles.weightPillTextActive,
-                          ]}
-                        >
-                          {fw.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Text Color Swatches */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>TEXT COLOR</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalRow}
-                >
-                  {TEXT_COLOR_SWATCHES.map((swatch) => {
-                    const isSelected = textColor === swatch.value;
-                    return (
-                      <TouchableOpacity
-                        key={swatch.value}
-                        style={[
-                          styles.colorCircle,
-                          { backgroundColor: swatch.value },
-                          isSelected && styles.colorCircleSelected,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setTextColor(swatch.value);
-                          persistSettings({ textColor: swatch.value });
-                        }}
-                      >
-                        {isSelected && (
-                          <Ionicons
-                            name="checkmark"
-                            size={14}
-                            color={swatch.value === "#FFFFFF" || swatch.value === "#FFE600" || swatch.value === "#00F2FE" ? "#000000" : "#FFFFFF"}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Outline / Stroke Width & Color */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>OUTLINE / STROKE WIDTH</Text>
-                <View style={styles.pillsRow}>
-                  {STROKE_WIDTH_OPTIONS.map((sw) => {
-                    const isSelected = strokeWidth === sw.value;
-                    return (
-                      <TouchableOpacity
-                        key={sw.value}
-                        style={[
-                          styles.strokeWidthPill,
-                          isSelected && styles.strokeWidthPillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setStrokeWidth(sw.value);
-                          persistSettings({ strokeWidth: sw.value });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.strokeWidthPillText,
-                            isSelected && styles.strokeWidthPillTextActive,
-                          ]}
-                        >
-                          {sw.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {strokeWidth > 0 && (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={styles.subSectionTitle}>OUTLINE COLOR</Text>
+                  {strokeWidth > 0 && (
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
-                      style={styles.horizontalRow}
+                      contentContainerStyle={{ gap: 8, marginTop: 8 }}
                     >
                       {STROKE_COLOR_SWATCHES.map((swatch) => {
                         const isSelected = strokeColor === swatch.value;
@@ -1560,7 +1595,12 @@ export default function AutoCaptionModal({
                             key={swatch.value}
                             style={[
                               styles.colorCircle,
-                              { backgroundColor: swatch.value === "transparent" ? "#1E2638" : swatch.value },
+                              {
+                                backgroundColor:
+                                  swatch.value === "transparent"
+                                    ? "#1E2638"
+                                    : swatch.value,
+                              },
                               isSelected && styles.colorCircleSelected,
                             ]}
                             onPress={() => {
@@ -1572,236 +1612,264 @@ export default function AutoCaptionModal({
                             {isSelected && (
                               <Ionicons
                                 name="checkmark"
-                                size={14}
-                                color={swatch.value === "#FFFFFF" ? "#000000" : "#FFFFFF"}
+                                size={13}
+                                color={
+                                  swatch.value === "#FFFFFF"
+                                    ? "#000000"
+                                    : "#FFFFFF"
+                                }
                               />
                             )}
                           </TouchableOpacity>
                         );
                       })}
                     </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              {/* Background Box / Backdrop */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>BACKGROUND BOX</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalRow}
-                >
-                  {BG_BOX_PRESETS.map((box) => {
-                    const isSelected = backgroundColor === box.value;
-                    return (
-                      <TouchableOpacity
-                        key={box.value}
-                        style={[
-                          styles.bgBoxPill,
-                          isSelected && styles.bgBoxPillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setBackgroundColor(box.value);
-                          persistSettings({ backgroundColor: box.value });
-                        }}
-                      >
-                        <View
-                          style={[
-                            styles.bgBoxIndicator,
-                            { backgroundColor: box.value === "transparent" ? "transparent" : box.value },
-                          ]}
-                        />
-                        <Text
-                          style={[
-                            styles.bgBoxPillText,
-                            isSelected && styles.bgBoxPillTextActive,
-                          ]}
-                        >
-                          {box.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Text Effect / Shadow */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>TEXT EFFECT</Text>
-                <View style={styles.pillsRow}>
-                  {TEXT_EFFECT_OPTIONS.map((eff) => {
-                    const isSelected = textEffect === eff.value;
-                    return (
-                      <TouchableOpacity
-                        key={eff.value}
-                        style={[
-                          styles.effectPill,
-                          isSelected && styles.effectPillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setTextEffect(eff.value);
-                          persistSettings({ textEffect: eff.value });
-                        }}
-                      >
-                        <Ionicons
-                          name={eff.icon as any}
-                          size={14}
-                          color={isSelected ? "#000000" : "#8E95A5"}
-                        />
-                        <Text
-                          style={[
-                            styles.effectPillText,
-                            isSelected && styles.effectPillTextActive,
-                          ]}
-                        >
-                          {eff.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                  )}
                 </View>
-              </View>
 
-              {/* Caption Position Placement */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>SUBTITLE PLACEMENT ({captionPositionY}%)</Text>
-                  <View style={styles.stepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        const next = Math.max(10, captionPositionY - 2);
-                        setCaptionPositionY(next);
-                        persistSettings({ positionY: next });
-                      }}
-                    >
-                      <Ionicons name="arrow-up" size={13} color="#CBD5E1" />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperValueText}>{captionPositionY}%</Text>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        const next = Math.min(95, captionPositionY + 2);
-                        setCaptionPositionY(next);
-                        persistSettings({ positionY: next });
-                      }}
-                    >
-                      <Ionicons name="arrow-down" size={13} color="#CBD5E1" />
-                    </TouchableOpacity>
+                {/* 4. BACKDROP & EFFECTS */}
+                <View style={styles.cardSection}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={styles.cardHeaderTitleGroup}>
+                      <Ionicons
+                        name="layers-outline"
+                        size={14}
+                        color="#00F2FE"
+                      />
+                      <Text style={styles.cardHeaderTitle}>
+                        BACKDROP & VISUAL EFFECTS
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.subSectionTitle}>BACKGROUND BOX</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 6, marginBottom: 10 }}
+                  >
+                    {BG_BOX_PRESETS.map((box) => {
+                      const isSelected = backgroundColor === box.value;
+                      return (
+                        <TouchableOpacity
+                          key={box.value}
+                          style={[
+                            styles.bgBoxPill,
+                            isSelected && styles.bgBoxPillActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setBackgroundColor(box.value);
+                            persistSettings({ backgroundColor: box.value });
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.bgBoxIndicator,
+                              {
+                                backgroundColor:
+                                  box.value === "transparent"
+                                    ? "transparent"
+                                    : box.value,
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.bgBoxPillText,
+                              isSelected && styles.bgBoxPillTextActive,
+                            ]}
+                          >
+                            {box.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Text style={styles.subSectionTitle}>TEXT EFFECT</Text>
+                  <View style={styles.pillsRow}>
+                    {TEXT_EFFECT_OPTIONS.map((eff) => {
+                      const isSelected = textEffect === eff.value;
+                      return (
+                        <TouchableOpacity
+                          key={eff.value}
+                          style={[
+                            styles.effectPill,
+                            isSelected && styles.effectPillActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setTextEffect(eff.value);
+                            persistSettings({ textEffect: eff.value });
+                          }}
+                        >
+                          <Ionicons
+                            name={eff.icon as any}
+                            size={13}
+                            color={isSelected ? "#000000" : "#8E95A5"}
+                          />
+                          <Text
+                            style={[
+                              styles.effectPillText,
+                              isSelected && styles.effectPillTextActive,
+                            ]}
+                          >
+                            {eff.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 </View>
 
-                <View style={styles.positionButtonsRow}>
-                  {POSITION_PRESETS.map((pos) => {
-                    const isSelected = captionPositionY === pos.value;
-                    return (
+                {/* 5. POSITION & ANIMATION */}
+                <View style={styles.cardSection}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={styles.cardHeaderTitleGroup}>
+                      <Ionicons name="move-outline" size={14} color="#00F2FE" />
+                      <Text style={styles.cardHeaderTitle}>
+                        PLACEMENT & MOTION
+                      </Text>
+                    </View>
+                    <View style={styles.stepperRow}>
                       <TouchableOpacity
-                        key={pos.value}
-                        style={[
-                          styles.posBtn,
-                          isSelected && styles.posBtnActive,
-                        ]}
+                        style={styles.stepperBtn}
                         onPress={() => {
                           soundEngine.playSfx("click");
-                          setCaptionPositionY(pos.value);
-                          persistSettings({ positionY: pos.value });
+                          const next = Math.max(10, captionPositionY - 2);
+                          setCaptionPositionY(next);
+                          persistSettings({ positionY: next });
                         }}
                       >
-                        <Ionicons
-                          name={pos.icon as any}
-                          size={14}
-                          color={isSelected ? "#000000" : "#8E95A5"}
-                        />
-                        <Text
-                          style={[
-                            styles.posBtnText,
-                            isSelected && styles.posBtnTextActive,
-                          ]}
-                        >
-                          {pos.label}
-                        </Text>
+                        <Ionicons name="arrow-up" size={12} color="#CBD5E1" />
                       </TouchableOpacity>
-                    );
-                  })}
+                      <Text style={styles.stepperValueText}>
+                        {captionPositionY}%
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          const next = Math.min(95, captionPositionY + 2);
+                          setCaptionPositionY(next);
+                          persistSettings({ positionY: next });
+                        }}
+                      >
+                        <Ionicons name="arrow-down" size={12} color="#CBD5E1" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View
+                    style={[styles.positionButtonsRow, { marginBottom: 10 }]}
+                  >
+                    {POSITION_PRESETS.map((pos) => {
+                      const isSelected = captionPositionY === pos.value;
+                      return (
+                        <TouchableOpacity
+                          key={pos.value}
+                          style={[
+                            styles.posBtn,
+                            isSelected && styles.posBtnActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setCaptionPositionY(pos.value);
+                            persistSettings({ positionY: pos.value });
+                          }}
+                        >
+                          <Ionicons
+                            name={pos.icon as any}
+                            size={13}
+                            color={isSelected ? "#000000" : "#8E95A5"}
+                          />
+                          <Text
+                            style={[
+                              styles.posBtnText,
+                              isSelected && styles.posBtnTextActive,
+                            ]}
+                          >
+                            {pos.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.subSectionTitle}>MOTION ANIMATION</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 6 }}
+                  >
+                    {ANIMATION_OPTIONS.map((an) => {
+                      const isSelected = animation === an.value;
+                      return (
+                        <TouchableOpacity
+                          key={an.value}
+                          style={[
+                            styles.animPill,
+                            isSelected && styles.animPillActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setAnimation(an.value);
+                            persistSettings({ animation: an.value });
+                          }}
+                        >
+                          <Ionicons
+                            name={an.icon as any}
+                            size={13}
+                            color={isSelected ? "#000000" : "#8E95A5"}
+                          />
+                          <Text
+                            style={[
+                              styles.animPillText,
+                              isSelected && styles.animPillTextActive,
+                            ]}
+                          >
+                            {an.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
-              </View>
+              </ScrollView>
 
-              {/* Animation Motion */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>ANIMATION MOTION</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.horizontalRow}
-                >
-                  {ANIMATION_OPTIONS.map((an) => {
-                    const isSelected = animation === an.value;
-                    return (
-                      <TouchableOpacity
-                        key={an.value}
-                        style={[
-                          styles.animPill,
-                          isSelected && styles.animPillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setAnimation(an.value);
-                          persistSettings({ animation: an.value });
-                        }}
-                      >
-                        <Ionicons
-                          name={an.icon as any}
-                          size={14}
-                          color={isSelected ? "#000000" : "#8E95A5"}
-                        />
-                        <Text
-                          style={[
-                            styles.animPillText,
-                            isSelected && styles.animPillTextActive,
-                          ]}
-                        >
-                          {an.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* Action Buttons: Apply to Selected / Apply to All */}
-              <View style={{ marginVertical: 18, gap: 10 }}>
+              {/* STICKY BOTTOM ACTION BAR FOR TAB 2 */}
+              <View style={styles.stickyFooterBar}>
                 {selectedClipId && (
                   <TouchableOpacity
-                    style={styles.applySelectedBtn}
+                    style={styles.footerSecondaryBtn}
                     onPress={handleApplyStyleToSelected}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="checkmark-done" size={16} color="#00F2FE" />
-                    <Text style={styles.applySelectedBtnText}>
-                      Apply Style to Selected Subtitle
+                    <Ionicons name="checkmark-done" size={15} color="#00F2FE" />
+                    <Text style={styles.footerSecondaryBtnText}>
+                      Selected Cue
                     </Text>
                   </TouchableOpacity>
                 )}
 
                 {existingCaptions.length > 0 && (
                   <TouchableOpacity
-                    style={styles.applyAllBtn}
+                    style={[
+                      styles.footerPrimaryBtn,
+                      !selectedClipId && { flex: 1 },
+                    ]}
                     onPress={handleApplyStyleToAll}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="color-wand" size={16} color="#000000" />
-                    <Text style={styles.applyAllBtnText}>
-                      Apply Style to All ({existingCaptions.length}) Subtitles
+                    <Ionicons name="color-wand" size={15} color="#000000" />
+                    <Text style={styles.footerPrimaryBtnText}>
+                      Apply to All ({existingCaptions.length})
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
-            </ScrollView>
+            </View>
           )}
 
           {/* Manual Paste SRT Dialog */}
@@ -1855,11 +1923,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F131D",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "86%",
+    maxHeight: "88%",
     minHeight: "68%",
     borderTopWidth: 1,
     borderColor: "#1E2638",
-    paddingBottom: Platform.OS === "ios" ? 24 : 12,
+    overflow: "hidden",
+    paddingBottom: Platform.OS === "ios" ? 18 : 6,
   },
   sheetHandle: {
     width: 36,
@@ -2092,6 +2161,31 @@ const styles = StyleSheet.create({
     minHeight: 38,
     lineHeight: 18,
   },
+  cardSection: {
+    backgroundColor: "#131826",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#1E273C",
+    marginBottom: 12,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  cardHeaderTitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  cardHeaderTitle: {
+    color: "#CBD5E1",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
   highlightSection: {
     backgroundColor: "#141A28",
     borderRadius: 12,
@@ -2297,6 +2391,110 @@ const styles = StyleSheet.create({
   applySelectedBtnText: {
     color: "#00F2FE",
     fontSize: 13,
+    fontWeight: "800",
+  },
+  compactControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 6,
+  },
+  weightPillsGroup: {
+    flexDirection: "row",
+    gap: 4,
+    flex: 1,
+  },
+  miniWeightPill: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 7,
+    backgroundColor: "#161D2E",
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "#232D42",
+  },
+  miniWeightPillActive: {
+    backgroundColor: "#00F2FE",
+    borderColor: "#00F2FE",
+  },
+  miniWeightPillText: {
+    color: "#8E95A5",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  miniWeightPillTextActive: {
+    color: "#000000",
+    fontWeight: "800",
+  },
+  miniFormatPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    backgroundColor: "#161D2E",
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "#232D42",
+  },
+  miniFormatPillActive: {
+    backgroundColor: "#00F2FE",
+    borderColor: "#00F2FE",
+  },
+  miniFormatPillText: {
+    color: "#8E95A5",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  miniFormatPillTextActive: {
+    color: "#000000",
+    fontWeight: "800",
+  },
+  stickyFooterBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "rgba(15, 19, 29, 0.95)",
+    borderTopWidth: 1,
+    borderTopColor: "#1E273C",
+  },
+  footerPrimaryBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#00F2FE",
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  footerPrimaryBtnText: {
+    color: "#000000",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  footerSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: "#161D2E",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#00F2FE",
+  },
+  footerSecondaryBtnText: {
+    color: "#00F2FE",
+    fontSize: 12,
     fontWeight: "800",
   },
   chunkSectionBox: {
