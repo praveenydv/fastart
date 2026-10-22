@@ -265,95 +265,35 @@ export default function AudioModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>Audio</Text>
-              <Text style={styles.sheetSubtitle}>Upload & search device music & audio</Text>
-            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Cancel changes"
+            >
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {project && onUpdateProject && (
-                <>
-                  <TouchableOpacity
-                    onPress={handleToggleBeats}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      paddingHorizontal: 9,
-                      paddingVertical: 5,
-                      borderRadius: 12,
-                      backgroundColor: hasBeats ? '#FFE600' : 'rgba(255, 230, 0, 0.12)',
-                      borderWidth: 1,
-                      borderColor: '#FFE600',
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="musical-note"
-                      size={13}
-                      color={hasBeats ? '#000000' : '#FFE600'}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: '800',
-                        color: hasBeats ? '#000000' : '#FFE600',
-                      }}
-                    >
-                      Beats
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      onUpdateProject({
-                        ...project,
-                        aiDenoise: !project.aiDenoise,
-                      });
-                      soundEngine.playSfx('pop');
-                    }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      paddingHorizontal: 9,
-                      paddingVertical: 5,
-                      borderRadius: 12,
-                      backgroundColor: project.aiDenoise ? '#00F2FE' : 'rgba(0, 242, 254, 0.12)',
-                      borderWidth: 1,
-                      borderColor: '#00F2FE',
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="volume-mute-outline"
-                      size={13}
-                      color={project.aiDenoise ? '#000000' : '#00F2FE'}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: '800',
-                        color: project.aiDenoise ? '#000000' : '#00F2FE',
-                      }}
-                    >
-                      {project.aiDenoise ? 'Denoise On' : 'Denoise'}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-                <Ionicons name="close" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
+              <Ionicons name="musical-notes" size={17} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>Music & Audio</Text>
             </View>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Done"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
           </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
+          {/* Search Bar & Beats Utility */}
+          <View style={[styles.searchContainer, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <View style={[styles.searchBar, { flex: 1, marginBottom: 0 }]}>
               <Ionicons name="search" size={16} color="#8E95A5" />
               <TextInput
                 style={styles.searchInput}
@@ -371,6 +311,39 @@ export default function AudioModal({
                 </TouchableOpacity>
               )}
             </View>
+
+            {project && onUpdateProject && (
+              <TouchableOpacity
+                onPress={handleToggleBeats}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingHorizontal: 10,
+                  height: 32,
+                  borderRadius: 10,
+                  backgroundColor: hasBeats ? '#FFE600' : 'rgba(255, 230, 0, 0.12)',
+                  borderWidth: 1,
+                  borderColor: '#FFE600',
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="musical-note"
+                  size={13}
+                  color={hasBeats ? '#000000' : '#FFE600'}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '800',
+                    color: hasBeats ? '#000000' : '#FFE600',
+                  }}
+                >
+                  Beats
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>

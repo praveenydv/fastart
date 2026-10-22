@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { STICKER_LIBRARY } from '../../constants/sampleMedia';
@@ -116,33 +117,32 @@ export default function StickersModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
-            <View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Cancel changes"
+            >
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="happy-outline" size={17} color="#00F2FE" />
               <Text style={styles.sheetTitle}>
-                {editingClip ? 'Edit Sticker' : 'Stickers'}
+                {editingClip ? 'Edit Sticker' : 'Stickers & Badges'}
               </Text>
-              {editingClip && (
-                <Text style={styles.sheetSubtitle}>
-                  Current: {editingClip.char} • {(editingClip.duration || 3.0).toFixed(1)}s
-                </Text>
-              )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {editingClip && (
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.doneBtn}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={15} color="#10B981" />
-                  <Text style={styles.doneBtnText}>Done</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply sticker"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
           </View>
 
           {/* Search Bar */}
@@ -252,22 +252,22 @@ export default function StickersModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: '50%',
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Platform.OS === 'web' ? '74%' : '82%',
     borderTopWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2638',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -276,52 +276,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A2234',
   },
   sheetTitle: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   sheetSubtitle: {
     color: '#8E95A5',
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#1E2638',
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchSection: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1E29',
+    borderBottomColor: '#1A2234',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0B0D13',
-    borderRadius: 8,
+    backgroundColor: '#0A0D14',
+    borderRadius: 10,
     paddingHorizontal: 10,
-    height: 36,
+    height: 32,
     borderWidth: 1,
-    borderColor: '#252B3B',
-    marginBottom: 8,
+    borderColor: '#1E2638',
+    marginBottom: 6,
   },
   searchInput: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 13,
-    marginLeft: 8,
+    fontSize: 12.5,
+    marginLeft: 6,
     paddingVertical: 0,
   },
   categoryScroll: {
@@ -329,12 +330,12 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   categoryPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: '#10131A',
+    backgroundColor: '#141A28',
     borderWidth: 1,
-    borderColor: '#1E2333',
+    borderColor: '#1E2638',
   },
   categoryPillActive: {
     backgroundColor: 'rgba(0, 242, 254, 0.15)',
@@ -349,7 +350,7 @@ const styles = StyleSheet.create({
     color: '#00F2FE',
   },
   sheetBody: {
-    padding: 16,
+    padding: 12,
   },
   grid: {
     flexDirection: 'row',

@@ -466,6 +466,23 @@ async function transcribeWithWhisper(
       }
     }
 
+    // Suppress internal ONNX runtime graph compiler noise in browser and terminal
+    if (typeof console !== "undefined" && !(console as any).__onnx_warn_filtered) {
+      (console as any).__onnx_warn_filtered = true;
+      const origWarn = console.warn;
+      console.warn = (...args: any[]) => {
+        if (
+          typeof args[0] === "string" &&
+          (args[0].includes("[W:onnxruntime:") ||
+            args[0].includes("CleanUnusedInitializersAndNodeArgs") ||
+            args[0].includes("Unable to determine content-length"))
+        ) {
+          return;
+        }
+        origWarn.apply(console, args);
+      };
+    }
+
     // English-only Whisper Tiny model (fastest, smallest, highest English accuracy)
     const modelName = "Xenova/whisper-tiny.en";
 
@@ -476,6 +493,9 @@ async function transcribeWithWhisper(
       "automatic-speech-recognition",
       modelName,
       {
+        session_options: {
+          logSeverityLevel: 3,
+        },
         progress_callback: (p: any) => {
           if (p.status === "progress" && onProgress) {
             const pct = Math.round(45 + (p.progress || 0) * 0.25);

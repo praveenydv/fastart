@@ -47,8 +47,7 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
                 {optionsProject?.title}
               </Text>
               <Text style={styles.sheetProjectMeta}>
-                {optionsProject?.aspectRatio} •{' '}
-                {optionsProject?.resolution || '1080p'} •{' '}
+                {optionsProject?.aspectRatio || '9:16'} •{' '}
                 {optionsProject?.tracks?.video?.length || 0} clips
               </Text>
             </View>

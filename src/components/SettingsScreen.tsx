@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
 import { triggerHaptic } from "../utils/haptics";
+import { clearAppCache } from "../utils/storage";
 
 interface SettingsScreenProps {
   settings: any;
@@ -26,10 +27,17 @@ export default function SettingsScreen({
   onBack,
 }: SettingsScreenProps) {
   const [localSettings, setLocalSettings] = useState(settings || {});
+  const [cachedSize, setCachedSize] = useState(
+    typeof settings?.cachedSizeMb === "number" ? settings.cachedSizeMb : 142.8
+  );
+  const [cacheCleared, setCacheCleared] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
+      if (typeof settings.cachedSizeMb === "number") {
+        setCachedSize(settings.cachedSizeMb);
+      }
     }
   }, [settings]);
 
@@ -55,6 +63,17 @@ export default function SettingsScreen({
     onUpdateSettings(updated);
   };
 
+  const handleClearCache = () => {
+    soundEngine.playSfx("pop");
+    triggerHaptic("medium", localSettings.hapticFeedback !== false);
+    const newSize = clearAppCache();
+    setCachedSize(newSize);
+    setCacheCleared(true);
+    const updated = { ...localSettings, cachedSizeMb: newSize };
+    setLocalSettings(updated);
+    onUpdateSettings(updated);
+  };
+
   const resolutions = ["720p", "1080p", "2K/4K"];
   const frameRates = [24, 30, 60];
   const aspectRatios = ["9:16", "16:9", "1:1"];
@@ -71,8 +90,9 @@ export default function SettingsScreen({
             onBack();
           }}
           activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         <Text style={styles.navTitle}>Settings</Text>
@@ -83,171 +103,306 @@ export default function SettingsScreen({
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.innerWrapper}>
-          {/* App Profile Card */}
-          <View style={styles.profileCard}>
-            <FastArtLogo size={52} />
-            <View style={{ flex: 1, marginLeft: 16 }}>
-              <Text style={styles.profileTitle}>FastArt</Text>
+          {/* Compact Profile Banner */}
+          <View style={styles.profileBanner}>
+            <FastArtLogo size={34} />
+            <View style={styles.profileInfo}>
+              <View style={styles.profileNameRow}>
+                <Text style={styles.profileTitle}>FastArt</Text>
+                <View style={styles.versionBadge}>
+                  <Text style={styles.versionText}>v1.0</Text>
+                </View>
+              </View>
               <Text style={styles.profileSubtitle}>
-                v1.0.0 • Hardware Acceleration Enabled
+                Mobile Video Editor Studio
               </Text>
+            </View>
+            <View style={styles.accelBadge}>
+              <View style={styles.pulseDot} />
+              <Text style={styles.accelText}>GPU Accel</Text>
             </View>
           </View>
 
-          {/* DEFAULT EXPORT SETTINGS */}
-          <Text style={styles.sectionHeader}>DEFAULT EXPORT SETTINGS</Text>
+          {/* SECTION 1: EXPORT & CANVAS DEFAULTS */}
+          <Text style={styles.sectionHeader}>DEFAULTS & CANVAS</Text>
+          <View style={styles.cardGroup}>
+            {/* 1. Default Resolution */}
+            <View style={styles.selectorItem}>
+              <View style={styles.selectorHeader}>
+                <View style={styles.itemTitleRow}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="videocam-outline" size={13} color="#00F2FE" />
+                  </View>
+                  <Text style={styles.itemTitle}>Default Resolution</Text>
+                </View>
+                <Text style={styles.activeValueText}>
+                  {localSettings.defaultResolution || "1080p"}
+                </Text>
+              </View>
+              <View style={styles.segmentedTrack}>
+                {resolutions.map((res) => {
+                  const isSelected =
+                    (localSettings.defaultResolution || "1080p") === res;
+                  return (
+                    <TouchableOpacity
+                      key={res}
+                      style={[
+                        styles.segmentBtn,
+                        isSelected && styles.segmentBtnActive,
+                      ]}
+                      onPress={() => setOption("defaultResolution", res)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          isSelected && styles.segmentTextActive,
+                        ]}
+                      >
+                        {res}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
-          <View style={styles.settingCard}>
-            <Text style={styles.settingLabel}>Default Resolution</Text>
-            <View style={styles.pillGroup}>
-              {resolutions.map((res) => (
-                <TouchableOpacity
-                  key={res}
-                  style={[
-                    styles.choicePill,
-                    localSettings.defaultResolution === res &&
-                      styles.choicePillActive,
-                  ]}
-                  onPress={() => setOption("defaultResolution", res)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.choiceText,
-                      localSettings.defaultResolution === res &&
-                        styles.choiceTextActive,
-                    ]}
-                  >
-                    {res}
+            <View style={styles.divider} />
+
+            {/* 2. Default Frame Rate */}
+            <View style={styles.selectorItem}>
+              <View style={styles.selectorHeader}>
+                <View style={styles.itemTitleRow}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name="speedometer-outline"
+                      size={13}
+                      color="#00F2FE"
+                    />
+                  </View>
+                  <Text style={styles.itemTitle}>Default Frame Rate</Text>
+                </View>
+                <Text style={styles.activeValueText}>
+                  {localSettings.defaultFps || 30} FPS
+                </Text>
+              </View>
+              <View style={styles.segmentedTrack}>
+                {frameRates.map((fps) => {
+                  const isSelected =
+                    (localSettings.defaultFps || 30) === fps;
+                  return (
+                    <TouchableOpacity
+                      key={fps}
+                      style={[
+                        styles.segmentBtn,
+                        isSelected && styles.segmentBtnActive,
+                      ]}
+                      onPress={() => setOption("defaultFps", fps)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          isSelected && styles.segmentTextActive,
+                        ]}
+                      >
+                        {fps} FPS
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* 3. Canvas Aspect Ratio */}
+            <View style={styles.selectorItem}>
+              <View style={styles.selectorHeader}>
+                <View style={styles.itemTitleRow}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="crop-outline" size={13} color="#00F2FE" />
+                  </View>
+                  <Text style={styles.itemTitle}>Default Aspect Ratio</Text>
+                </View>
+                <Text style={styles.activeValueText}>
+                  {localSettings.defaultAspectRatio || "9:16"}
+                </Text>
+              </View>
+              <View style={styles.segmentedTrack}>
+                {aspectRatios.map((ratio) => {
+                  const isSelected =
+                    (localSettings.defaultAspectRatio || "9:16") === ratio;
+                  return (
+                    <TouchableOpacity
+                      key={ratio}
+                      style={[
+                        styles.segmentBtn,
+                        isSelected && styles.segmentBtnActive,
+                      ]}
+                      onPress={() => setOption("defaultAspectRatio", ratio)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          isSelected && styles.segmentTextActive,
+                        ]}
+                      >
+                        {ratio}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* SECTION 2: EDITING & TIMELINE PREFERENCES */}
+          <Text style={styles.sectionHeader}>EDITING & TIMELINE</Text>
+          <View style={styles.cardGroup}>
+            {/* Magnetic Snapping */}
+            <View style={styles.toggleItem}>
+              <View style={styles.toggleLeft}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="magnet-outline" size={13} color="#00F2FE" />
+                </View>
+                <View style={styles.toggleTextGroup}>
+                  <Text style={styles.toggleTitle}>Timeline Snapping</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    Snap playhead to cuts, beats & keyframes
                   </Text>
-                </TouchableOpacity>
-              ))}
+                </View>
+              </View>
+              <Switch
+                value={localSettings.magneticSnapping !== false}
+                onValueChange={() => toggleSwitch("magneticSnapping")}
+                trackColor={{ false: "#1E2538", true: "#00F2FE" }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-          </View>
 
-          <View style={styles.settingCard}>
-            <Text style={styles.settingLabel}>Default Frame Rate</Text>
-            <View style={styles.pillGroup}>
-              {frameRates.map((fps) => (
-                <TouchableOpacity
-                  key={fps}
-                  style={[
-                    styles.choicePill,
-                    localSettings.defaultFps === fps && styles.choicePillActive,
-                  ]}
-                  onPress={() => setOption("defaultFps", fps)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.choiceText,
-                      localSettings.defaultFps === fps &&
-                        styles.choiceTextActive,
-                    ]}
-                  >
-                    {fps} FPS
+            <View style={styles.divider} />
+
+            {/* Haptic Feedback */}
+            <View style={styles.toggleItem}>
+              <View style={styles.toggleLeft}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="finger-print-outline" size={13} color="#00F2FE" />
+                </View>
+                <View style={styles.toggleTextGroup}>
+                  <Text style={styles.toggleTitle}>Haptic Feedback</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    Vibrate lightly when cutting & snapping
                   </Text>
-                </TouchableOpacity>
-              ))}
+                </View>
+              </View>
+              <Switch
+                value={localSettings.hapticFeedback !== false}
+                onValueChange={() => toggleSwitch("hapticFeedback")}
+                trackColor={{ false: "#1E2538", true: "#00F2FE" }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-          </View>
 
-          <View style={styles.settingCard}>
-            <Text style={styles.settingLabel}>Default Aspect Ratio</Text>
-            <View style={styles.pillGroup}>
-              {aspectRatios.map((ratio) => (
-                <TouchableOpacity
-                  key={ratio}
-                  style={[
-                    styles.choicePill,
-                    localSettings.defaultAspectRatio === ratio &&
-                      styles.choicePillActive,
-                  ]}
-                  onPress={() => setOption("defaultAspectRatio", ratio)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.choiceText,
-                      localSettings.defaultAspectRatio === ratio &&
-                        styles.choiceTextActive,
-                    ]}
-                  >
-                    {ratio}
+            <View style={styles.divider} />
+
+            {/* Sound Effects */}
+            <View style={styles.toggleItem}>
+              <View style={styles.toggleLeft}>
+                <View style={styles.iconCircle}>
+                  <Ionicons
+                    name="volume-medium-outline"
+                    size={13}
+                    color="#00F2FE"
+                  />
+                </View>
+                <View style={styles.toggleTextGroup}>
+                  <Text style={styles.toggleTitle}>Sound Effects (SFX)</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    Acoustic feedback on button taps
                   </Text>
-                </TouchableOpacity>
-              ))}
+                </View>
+              </View>
+              <Switch
+                value={localSettings.soundEffects === true}
+                onValueChange={() => toggleSwitch("soundEffects")}
+                trackColor={{ false: "#1E2538", true: "#00F2FE" }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Auto Add Default Ending */}
+            <View style={styles.toggleItem}>
+              <View style={styles.toggleLeft}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="film-outline" size={13} color="#00F2FE" />
+                </View>
+                <View style={styles.toggleTextGroup}>
+                  <Text style={styles.toggleTitle}>Auto Add Outro</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    Attach FastArt logo outro to new projects
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={localSettings.autoAddEnding === true}
+                onValueChange={() => toggleSwitch("autoAddEnding")}
+                trackColor={{ false: "#1E2538", true: "#00F2FE" }}
+                thumbColor="#FFFFFF"
+              />
             </View>
           </View>
 
-          {/* EDITING & TIMELINE PREFERENCES */}
-          <Text style={styles.sectionHeader}>
-            EDITING & TIMELINE PREFERENCES
-          </Text>
-
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={styles.toggleTitle}>Magnetic Timeline Snapping</Text>
-              <Text style={styles.toggleSubtitle}>
-                Snap playhead to clip cuts, audio beats, and text keyframes
-              </Text>
+          {/* SECTION 3: STORAGE & CACHE */}
+          <Text style={styles.sectionHeader}>STORAGE & CACHE</Text>
+          <View style={styles.cardGroup}>
+            <View style={styles.toggleItem}>
+              <View style={styles.toggleLeft}>
+                <View
+                  style={[
+                    styles.iconCircle,
+                    { backgroundColor: "rgba(244, 63, 94, 0.12)" },
+                  ]}
+                >
+                  <Ionicons name="trash-outline" size={13} color="#FB7185" />
+                </View>
+                <View style={styles.toggleTextGroup}>
+                  <Text style={styles.toggleTitle}>Temporary Cache</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    {cacheCleared
+                      ? "Cache cleared (0.0 MB)"
+                      : `${cachedSize.toFixed(1)} MB cached assets`}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.clearBtn,
+                  cacheCleared && styles.clearBtnDisabled,
+                ]}
+                onPress={handleClearCache}
+                disabled={cacheCleared}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.clearBtnText,
+                    cacheCleared && { color: "#64748B" },
+                  ]}
+                >
+                  {cacheCleared ? "Cleared" : "Clear"}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <Switch
-              value={localSettings.magneticSnapping !== false}
-              onValueChange={() => toggleSwitch("magneticSnapping")}
-              trackColor={{ false: "#334155", true: "#00F2FE" }}
-              thumbColor="#FFFFFF"
-            />
           </View>
 
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={styles.toggleTitle}>Haptic Feedback on Cuts</Text>
-              <Text style={styles.toggleSubtitle}>
-                Vibrate when splitting or snapping clips
-              </Text>
-            </View>
-            <Switch
-              value={localSettings.hapticFeedback !== false}
-              onValueChange={() => toggleSwitch("hapticFeedback")}
-              trackColor={{ false: "#334155", true: "#00F2FE" }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={styles.toggleTitle}>
-                Interface Sound Effects (SFX)
-              </Text>
-              <Text style={styles.toggleSubtitle}>
-                Play smooth, warm acoustic taps and pops
-              </Text>
-            </View>
-            <Switch
-              value={localSettings.soundEffects === true}
-              onValueChange={() => toggleSwitch("soundEffects")}
-              trackColor={{ false: "#334155", true: "#00F2FE" }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={[styles.toggleRow, { marginBottom: 36 }]}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={styles.toggleTitle}>Auto Add Default Ending</Text>
-              <Text style={styles.toggleSubtitle}>
-                Attach FastArt logo outro to new projects
-              </Text>
-            </View>
-            <Switch
-              value={localSettings.autoAddEnding === true}
-              onValueChange={() => toggleSwitch("autoAddEnding")}
-              trackColor={{ false: "#334155", true: "#00F2FE" }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
+          <Text style={styles.footerText}>FastArt Video Editor • Build 2026.10</Text>
         </View>
       </ScrollView>
     </View>
@@ -260,135 +415,252 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B0D13",
   },
   navBar: {
-    height: 56,
+    height: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A1E29",
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
     backgroundColor: "#0E1118",
   },
   backButton: {
-    flexDirection: "row",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 6,
-    paddingRight: 12,
-  },
-  backButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "600",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
   navTitle: {
     color: "#FFFFFF",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   navRight: {
-    width: 60,
-    alignItems: "flex-end",
+    width: 36,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     alignItems: "center",
-    padding: 16,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 32,
   },
   innerWrapper: {
     width: "100%",
-    maxWidth: 720,
+    maxWidth: 640,
   },
-  profileCard: {
+  // Compact Profile Banner
+  profileBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#141721",
-    padding: 18,
-    borderRadius: 14,
-    marginBottom: 24,
+    backgroundColor: "#131722",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#1E2333",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+  },
+  profileInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  profileNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   profileTitle: {
     color: "#FFFFFF",
-    fontSize: 17,
+    fontSize: 14.5,
+    fontWeight: "800",
+  },
+  versionBadge: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  versionText: {
+    color: "#00F2FE",
+    fontSize: 9.5,
     fontWeight: "800",
   },
   profileSubtitle: {
-    color: "#8E95A5",
-    fontSize: 12,
-    marginTop: 3,
-  },
-  sectionHeader: {
-    color: "#8E95A5",
+    color: "#64748B",
     fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginTop: 18,
-    marginBottom: 10,
+    marginTop: 1,
   },
-  settingCard: {
-    backgroundColor: "#141721",
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#1E2333",
-  },
-  settingLabel: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 10,
-  },
-  pillGroup: {
+  accelBadge: {
     flexDirection: "row",
-    gap: 8,
-  },
-  choicePill: {
-    flex: 1,
-    backgroundColor: "#10131A",
-    paddingVertical: 10,
-    borderRadius: 8,
     alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E2333",
+    borderColor: "rgba(16, 185, 129, 0.2)",
   },
-  choicePillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
+  pulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10B981",
   },
-  choiceText: {
-    color: "#8E95A5",
-    fontSize: 13,
+  accelText: {
+    color: "#10B981",
+    fontSize: 10,
     fontWeight: "700",
   },
-  choiceTextActive: {
-    color: "#000000",
+  // Section Headers
+  sectionHeader: {
+    color: "#64748B",
+    fontSize: 10.5,
     fontWeight: "800",
+    letterSpacing: 0.8,
+    marginBottom: 6,
+    marginLeft: 4,
+    textTransform: "uppercase",
   },
-  toggleRow: {
+  // Unified Grouped Card
+  cardGroup: {
+    backgroundColor: "#131722",
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    overflow: "hidden",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    marginLeft: 46,
+  },
+  // Icon Badge Circle
+  iconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Selector Items (Resolution, FPS, Aspect Ratio)
+  selectorItem: {
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+  },
+  selectorHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#141721",
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 7,
+  },
+  itemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  itemTitle: {
+    color: "#F1F5F9",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  activeValueText: {
+    color: "#00F2FE",
+    fontSize: 11.5,
+    fontWeight: "700",
+  },
+  segmentedTrack: {
+    flexDirection: "row",
+    backgroundColor: "#0B0E15",
+    borderRadius: 7,
+    padding: 2.5,
+    gap: 3,
     borderWidth: 1,
-    borderColor: "#1E2333",
+    borderColor: "rgba(255, 255, 255, 0.04)",
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 5.5,
+    borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentBtnActive: {
+    backgroundColor: "#00F2FE",
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentText: {
+    color: "#64748B",
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+  segmentTextActive: {
+    color: "#000000",
+    fontWeight: "800",
+  },
+  // Toggle Items (Switches)
+  toggleItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  toggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 10,
+    gap: 10,
+  },
+  toggleTextGroup: {
+    flex: 1,
   },
   toggleTitle: {
-    color: "#FFFFFF",
-    fontSize: 14,
+    color: "#F1F5F9",
+    fontSize: 13,
     fontWeight: "600",
   },
   toggleSubtitle: {
-    color: "#8E95A5",
-    fontSize: 11,
-    marginTop: 3,
+    color: "#64748B",
+    fontSize: 10.5,
+    marginTop: 1.5,
+  },
+  // Clear Cache Button
+  clearBtn: {
+    backgroundColor: "rgba(244, 63, 94, 0.12)",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(244, 63, 94, 0.25)",
+  },
+  clearBtnDisabled: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+  },
+  clearBtnText: {
+    color: "#FB7185",
+    fontSize: 11.5,
+    fontWeight: "700",
+  },
+  footerText: {
+    color: "#475569",
+    fontSize: 10.5,
+    textAlign: "center",
+    marginTop: 6,
+    marginBottom: 12,
   },
 });

@@ -103,24 +103,16 @@ export default function VolumeModal({
           {/* Top Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
-              <View style={styles.titleIconBox}>
-                <Ionicons name="volume-high" size={17} color="#00F2FE" />
-              </View>
-              <Text style={styles.headerTitle}>Volume & Fade</Text>
-            </View>
-
-            <View style={styles.headerActions}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
                 onPress={handleCancel}
-                style={[styles.resetBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                style={[styles.doneBtnCircle, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
                 activeOpacity={0.7}
                 accessibilityLabel="Cancel changes"
               >
-                <Ionicons name="close" size={14} color="#EF4444" />
-                <Text style={[styles.resetBtnText, { color: '#EF4444' }]}>Cancel</Text>
+                <Ionicons name="close" size={17} color="#EF4444" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -128,20 +120,25 @@ export default function VolumeModal({
                 style={styles.resetBtn}
                 activeOpacity={0.7}
               >
-                <Ionicons name="refresh" size={14} color="#8E95A5" />
                 <Text style={styles.resetBtnText}>Reset</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleDone}
-                style={styles.doneBtn}
-                activeOpacity={0.7}
-                accessibilityLabel="Apply volume"
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-                <Text style={styles.doneBtnText}>Done</Text>
-              </TouchableOpacity>
             </View>
+
+            <View style={styles.headerTitleRow}>
+              <View style={styles.titleIconBox}>
+                <Ionicons name="volume-high" size={15} color="#00F2FE" />
+              </View>
+              <Text style={styles.headerTitle}>Volume & Fade</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleDone}
+              style={styles.doneBtnCircle}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply volume"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
@@ -342,26 +339,22 @@ export default function VolumeModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: '48%',
-    paddingBottom: 20,
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Platform.OS === 'web' ? '72%' : '80%',
+    paddingBottom: 16,
     borderWidth: 1,
-    borderColor: '#1E2333',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
+    borderColor: '#1E2638',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -371,9 +364,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2030',
+    borderBottomColor: '#1A2234',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -381,8 +374,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   titleIconBox: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 8,
     backgroundColor: 'rgba(0, 242, 254, 0.12)',
     alignItems: 'center',
@@ -391,50 +384,63 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   resetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#1A2030',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: '#141A28',
+    borderWidth: 1,
+    borderColor: '#1E2638',
   },
   resetBtnText: {
     color: '#8E95A5',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   doneBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 7,
     backgroundColor: '#00F2FE',
+  },
+  doneBtnCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   doneBtnText: {
     color: '#000000',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '800',
   },
   contentScroll: {
     paddingHorizontal: 14,
-    paddingTop: 10,
+    paddingTop: 8,
   },
   compactSection: {
-    backgroundColor: '#161B26',
+    backgroundColor: '#141926',
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#1E2638',
   },
   sectionHeader: {
     flexDirection: 'row',

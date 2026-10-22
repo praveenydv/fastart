@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
@@ -40,7 +41,9 @@ function Header({
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
 
   const displayTitle =
-    project?.title && !/^proj[_-]\d+/i.test(project.title) && project.title !== project?.id
+    project?.title &&
+    !/^proj[_-]\d+/i.test(project.title) &&
+    project.title !== project?.id
       ? project.title
       : "Project";
 
@@ -70,13 +73,12 @@ function Header({
           activeOpacity={0.7}
           accessibilityLabel="Rename Project"
         >
-          <Ionicons name="film-outline" size={13} color="#00F2FE" />
+          <Ionicons name="film-outline" size={12} color="#00F2FE" />
           <Text style={styles.projectTitleText} numberOfLines={1}>
             {displayTitle}
           </Text>
-          <Ionicons name="pencil" size={10} color="#64748B" />
+          <Ionicons name="pencil" size={9} color="#64748B" />
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.ratioPill}
           onPress={() => {
@@ -134,7 +136,7 @@ function Header({
           activeOpacity={0.8}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={16} color="#00F2FE" />
+          <Ionicons name="arrow-up" size={16} color="#000000ff" />
           <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
@@ -152,7 +154,13 @@ function Header({
           onPress={() => setIsRenaming(false)}
         >
           <View style={styles.renameCard}>
-            <Text style={styles.renameTitle}>Rename Project</Text>
+            <View style={styles.renameHeaderRow}>
+              <View style={styles.renameHeaderIcon}>
+                <Ionicons name="film-outline" size={16} color="#00F2FE" />
+              </View>
+              <Text style={styles.renameTitle}>Rename Project</Text>
+            </View>
+
             <TextInput
               style={styles.renameInput}
               value={editedTitle}
@@ -164,26 +172,38 @@ function Header({
               maxLength={40}
               onSubmitEditing={() => {
                 if (editedTitle.trim()) {
+                  soundEngine.playSfx("whoosh");
                   onUpdateProject({ title: editedTitle.trim() });
                 }
                 setIsRenaming(false);
               }}
             />
+
             <View style={styles.renameActionsRow}>
               <TouchableOpacity
                 style={styles.cancelBtn}
-                onPress={() => setIsRenaming(false)}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  setIsRenaming(false);
+                }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.saveBtn}
+                style={[
+                  styles.saveBtn,
+                  !editedTitle.trim() && styles.saveBtnDisabled,
+                ]}
+                disabled={!editedTitle.trim()}
                 onPress={() => {
                   if (editedTitle.trim()) {
+                    soundEngine.playSfx("whoosh");
                     onUpdateProject({ title: editedTitle.trim() });
                   }
                   setIsRenaming(false);
                 }}
+                activeOpacity={0.8}
               >
                 <Text style={styles.saveBtnText}>Save</Text>
               </TouchableOpacity>
@@ -231,13 +251,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#252B3B",
     gap: 4,
-    maxWidth: 160,
+    maxWidth: Platform.OS === "web" ? 160 : 96,
   },
   projectTitleText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "700",
-    maxWidth: 110,
+    maxWidth: Platform.OS === "web" ? 110 : 66,
   },
   ratioPill: {
     flexDirection: "row",
@@ -312,11 +332,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#252B3B",
   },
+  renameHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  renameHeaderIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   renameTitle: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
-    marginBottom: 12,
   },
   renameInput: {
     backgroundColor: "#0B0D13",
@@ -325,9 +358,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#1E2333",
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#00F2FE",
     marginBottom: 16,
   },
   renameActionsRow: {
@@ -351,6 +384,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: "#00F2FE",
+  },
+  saveBtnDisabled: {
+    opacity: 0.4,
   },
   saveBtnText: {
     color: "#000000",

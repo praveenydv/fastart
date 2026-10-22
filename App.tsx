@@ -5,11 +5,12 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { StyleSheet, View, StatusBar, Platform } from "react-native";
+import { StyleSheet, View, StatusBar, Platform, BackHandler } from "react-native";
 import HomeDashboard from "./src/components/HomeDashboard";
 import SettingsScreen from "./src/components/SettingsScreen";
 import NotificationsScreen from "./src/components/NotificationsScreen";
 import SplashScreen from "./src/components/SplashScreen";
+import ConfirmExitModal from "./src/components/ConfirmExitModal";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { useAppRouter } from "./src/utils/router";
 import { EditorWorkspace } from "./src/components/Editor/EditorWorkspace";
@@ -53,6 +54,7 @@ export default function App() {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [transitionTargetClipId, setTransitionTargetClipId] = useState<string | null>(null);
   const [isCroppingPreview, setIsCroppingPreview] = useState(false);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
 
   // Modal helpers synced with URL
   const openModal = useCallback((modalName: string) => {
@@ -270,6 +272,14 @@ export default function App() {
     setCurrentTime,
   });
 
+  // Clamp currentTime to 0 and stop playback whenever timeline is empty or duration is 0
+  useEffect(() => {
+    if (totalDuration <= 0) {
+      if (isPlaying) setIsPlaying(false);
+      if (currentTime !== 0) setCurrentTime(0);
+    }
+  }, [totalDuration, isPlaying, currentTime, setIsPlaying, setCurrentTime]);
+
   // Persist last active editing session
   useEffect(() => {
     if (project && route.screen === "editor" && !isPlaying) {
@@ -289,6 +299,97 @@ export default function App() {
     setTransitionTargetClipId(clipId);
     openModal("transitions");
   }, [openModal]);
+
+  // Confirm project exit handler
+  const handleConfirmExitProject = useCallback(() => {
+    setShowExitConfirmModal(false);
+    setIsPlaying(false);
+    soundEngine.playSfx("click");
+    navigate("/");
+  }, [navigate]);
+
+  // Synchronized state refs for Hardware Back Handler
+  const activeModalRef = useRef(activeModal);
+  activeModalRef.current = activeModal;
+
+  const clipToDeleteRef = useRef(clipToDelete);
+  clipToDeleteRef.current = clipToDelete;
+
+  const isCroppingPreviewRef = useRef(isCroppingPreview);
+  isCroppingPreviewRef.current = isCroppingPreview;
+
+  const selectedClipIdRef = useRef(selectedClipId);
+  selectedClipIdRef.current = selectedClipId;
+
+  const showExitConfirmModalRef = useRef(showExitConfirmModal);
+  showExitConfirmModalRef.current = showExitConfirmModal;
+
+  const routeRef = useRef(route);
+  routeRef.current = route;
+
+  // Intercept Phone Hardware/Gesture Back Button on Android
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      // 1. If Exit Confirmation Modal is visible, cancel/close it
+      if (showExitConfirmModalRef.current) {
+        setShowExitConfirmModal(false);
+        return true;
+      }
+
+      // 2. If Delete Confirmation Modal is visible, cancel delete
+      if (clipToDeleteRef.current) {
+        setClipToDelete(null);
+        return true;
+      }
+
+      // 3. If any Editing/Tool Modal is active, dismiss the modal
+      if (activeModalRef.current) {
+        closeModal();
+        return true;
+      }
+
+      // 4. If Cropping preview is active, close cropping preview
+      if (isCroppingPreviewRef.current) {
+        setIsCroppingPreview(false);
+        return true;
+      }
+
+      // 5. If on Editor screen:
+      if (routeRef.current.screen === "editor") {
+        // If a clip is selected on timeline, deselect it first
+        if (selectedClipIdRef.current) {
+          setSelectedClipId(null);
+          return true;
+        }
+
+        // Prompt user to confirm exit to home (preventing OS app exit)
+        soundEngine.playSfx("pop");
+        setShowExitConfirmModal(true);
+        return true;
+      }
+
+      // 6. If on Settings or Notifications, move back to Homepage
+      if (
+        routeRef.current.screen === "settings" ||
+        routeRef.current.screen === "notifications"
+      ) {
+        soundEngine.playSfx("click");
+        navigate("/");
+        return true;
+      }
+
+      // 7. On Home screen: allow normal Android OS back behavior (exit app)
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener(
+      "hardwareBackPress",
+      handleHardwareBack,
+    );
+    return () => {
+      sub.remove();
+    };
+  }, [closeModal, navigate]);
 
   return (
     <View style={styles.rootWrapper}>
@@ -373,12 +474,25 @@ export default function App() {
             onRedo={handleRedo}
             onOpenExport={() => openModal("export")}
             onBackToHome={() => {
-              soundEngine.playSfx("click");
-              setIsPlaying(false);
-              navigate("/");
+              soundEngine.playSfx("pop");
+              setShowExitConfirmModal(true);
             }}
             onAddKeyframe={handleAddKeyframe}
-            onOpenKeyframeModal={() => openModal("keyframe")}
+            onOpenKeyframeModal={() => {
+              if (!selectedClipId && project) {
+                const videoAtTime =
+                  project.tracks.video?.find(
+                    (c) =>
+                      currentTime >= c.startTime &&
+                      currentTime <= c.startTime + c.duration,
+                  ) || project.tracks.video?.[0];
+                if (videoAtTime) {
+                  setSelectedClipId(videoAtTime.id);
+                  setSelectedClipType("video");
+                }
+              }
+              openModal("keyframe");
+            }}
             isKeyframeAtPlayhead={isKeyframeAtPlayhead}
             openModal={openModal}
             updateProjectWithHistory={updateProjectWithHistory}
@@ -475,6 +589,15 @@ export default function App() {
           handleConfirmDeleteClip={handleConfirmDeleteClip}
           handleAddCaptions={handleAddCaptions}
           handleUpdateCaption={handleUpdateCaption}
+        />
+
+        {/* Confirmation Modal to Exit Project to Home */}
+        <ConfirmExitModal
+          visible={showExitConfirmModal}
+          project={project}
+          totalDuration={totalDuration}
+          onConfirmExit={handleConfirmExitProject}
+          onCancel={() => setShowExitConfirmModal(false)}
         />
       </View>
 

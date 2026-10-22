@@ -11,9 +11,14 @@ export const CROP_PRESETS: CropPreset[] = [
 ];
 
 export function formatTime(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  const ms = Math.floor((secs % 1) * 30);
+  const totalSecs = Math.max(0, secs || 0);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = Math.floor(totalSecs % 60);
+  const ms = Math.floor((totalSecs % 1) * 30);
+  if (h > 0) {
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
+  }
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
 }
 

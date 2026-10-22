@@ -63,6 +63,12 @@ export function useKeyboardShortcuts({
       // 1. Play / Pause with Space
       if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
+        if (totalDuration <= 0) {
+          soundEngine.playSfx("click");
+          setIsPlaying(false);
+          setCurrentTime(0);
+          return;
+        }
         soundEngine.playSfx("click");
         if (
           !isPlaying &&

@@ -1,23 +1,23 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 
 export const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderWidth: 1,
-    borderColor: '#1F2637',
-    maxHeight: '48%',
+    borderColor: '#1E2638',
+    maxHeight: Platform.OS === 'web' ? '72%' : '80%',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -27,9 +27,9 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2030',
+    borderBottomColor: '#1A2234',
   },
   titleRow: {
     flexDirection: 'row',
@@ -38,7 +38,7 @@ export const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
@@ -46,12 +46,14 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#1A1F2C',
+    backgroundColor: '#141A28',
+    borderWidth: 1,
+    borderColor: '#1E2638',
   },
   resetText: {
     color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   doneBtn: {
     width: 28,
@@ -64,21 +66,21 @@ export const styles = StyleSheet.create({
   closeBtn: {
     padding: 6,
     borderRadius: 20,
-    backgroundColor: '#1E2333',
+    backgroundColor: '#1E2638',
   },
   sheetBody: {
-    padding: 18,
+    padding: 12,
   },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#191E2C',
-    padding: 14,
+    backgroundColor: '#141A28',
+    padding: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#252C3F',
-    marginBottom: 16,
+    borderColor: '#1E2638',
+    marginBottom: 10,
   },
   toggleTitle: {
     fontSize: 14,

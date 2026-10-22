@@ -194,14 +194,29 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
-            <View>
-              <Text style={styles.sheetTitle}>Media</Text>
-              <Text style={styles.sheetSubtitle}>Upload & select from your device</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Cancel"
+            >
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="images-outline" size={17} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>Device Media</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Done"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -373,22 +388,22 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: '62%',
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Platform.OS === 'web' ? '76%' : '84%',
     borderTopWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2638',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -397,145 +412,146 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A2234',
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   sheetSubtitle: {
     color: '#8E95A5',
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 1,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#1E2638',
     alignItems: 'center',
     justifyContent: 'center',
   },
   filterSection: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
-    gap: 10,
+    borderBottomColor: '#1A2234',
+    gap: 8,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0D0F15',
+    backgroundColor: '#0A0D14',
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#1E2333',
-    gap: 8,
+    borderColor: '#1E2638',
+    gap: 6,
   },
   searchInput: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12.5,
     padding: 0,
   },
   typeFilterRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   typePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#1A1E2B',
+    gap: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#141A28',
     borderWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#20283A',
   },
   typePillActive: {
-    backgroundColor: 'rgba(0,242,254,0.12)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderColor: '#00F2FE',
   },
   typePillText: {
     color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   typePillTextActive: {
     color: '#00F2FE',
   },
   sheetBody: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   deviceImportCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    backgroundColor: 'rgba(0, 242, 254, 0.07)',
     borderRadius: 12,
-    padding: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.25)',
-    marginBottom: 14,
+    borderColor: 'rgba(0, 242, 254, 0.28)',
+    marginBottom: 10,
   },
   deviceIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deviceCardTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
   },
   deviceCardSubtext: {
     color: '#8E95A5',
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 10.5,
+    marginTop: 1,
   },
   uploadChevronBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: 'rgba(0, 242, 254, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionHeaderRow: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   sectionHeader: {
     color: '#64748B',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '800',
     letterSpacing: 0.8,
   },
   sampleMediaCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161B26',
+    backgroundColor: '#141926',
     borderRadius: 10,
-    padding: 8,
-    marginBottom: 8,
+    padding: 7,
+    marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#1E2333',
+    borderColor: '#1E2638',
   },
   thumbBox: {
-    width: 58,
-    height: 44,
+    width: 52,
+    height: 40,
     borderRadius: 6,
     overflow: 'hidden',
-    backgroundColor: '#0D0F15',
+    backgroundColor: '#0A0D14',
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -549,41 +565,41 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1A2030',
+    backgroundColor: '#161E2E',
   },
   durationPill: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
   },
   durationText: {
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 8.5,
+    fontWeight: '700',
   },
   sampleTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   sampleSubtext: {
     color: '#8E95A5',
-    fontSize: 10.5,
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 1,
   },
   actionButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   deleteBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -595,32 +611,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: '#00F2FE',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 6,
   },
   addPillText: {
     color: '#000000',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '800',
   },
   emptyBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 24,
+    paddingVertical: 26,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    marginTop: 10,
+    marginTop: 8,
   },
   emptySubtext: {
     color: '#8E95A5',
-    fontSize: 11.5,
+    fontSize: 11,
     textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 16,
+    marginTop: 3,
+    lineHeight: 15,
   },
 });

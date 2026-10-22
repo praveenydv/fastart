@@ -73,15 +73,15 @@ export default function KeyframeModal({
   );
 
   const activeTransform: ClipTransform = currentKeyframe?.transform || {
-    scale: interpolatedT.scale,
-    rotation: interpolatedT.rotation,
-    x: interpolatedT.x,
-    y: interpolatedT.y,
+    scale: interpolatedT?.scale ?? 1.0,
+    rotation: interpolatedT?.rotation ?? 0,
+    x: interpolatedT?.x ?? 0,
+    y: interpolatedT?.y ?? 0,
   };
-  const activeScale = activeTransform.scale ?? 1.0;
-  const activeRotation = activeTransform.rotation ?? 0;
-  const activeX = Math.round(activeTransform.x ?? 0);
-  const activeY = Math.round(activeTransform.y ?? 0);
+  const activeScale = activeTransform?.scale ?? 1.0;
+  const activeRotation = activeTransform?.rotation ?? 0;
+  const activeX = Math.round(activeTransform?.x ?? 0);
+  const activeY = Math.round(activeTransform?.y ?? 0);
   const activeOpacity =
     currentKeyframe?.opacity !== undefined
       ? currentKeyframe.opacity
@@ -117,31 +117,37 @@ export default function KeyframeModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header Bar */}
+          {/* Standardized Header */}
           <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.diamondBadge}>
-                <Ionicons name="diamond" size={16} color="#FFE600" />
-              </View>
-              <View>
-                <Text style={styles.headerTitle}>Keyframe Animation</Text>
-                <Text style={styles.headerSubtitle}>
-                  {selectedClip
-                    ? `${selectedClip.title || selectedClipType.toUpperCase()} • ${keyframes.length} Keyframe${keyframes.length === 1 ? "" : "s"}`
-                    : "Transform & Opacity Motion"}
-                </Text>
-              </View>
-            </View>
-
             <TouchableOpacity
-              style={styles.closeBtn}
+              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
               onPress={() => {
                 soundEngine.playSfx("click");
                 onClose();
               }}
               activeOpacity={0.7}
+              accessibilityLabel="Cancel changes"
             >
-              <Ionicons name="close" size={20} color="#8E95A5" />
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={styles.diamondBadge}>
+                <Ionicons name="diamond" size={14} color="#FFE600" />
+              </View>
+              <Text style={styles.headerTitle}>Keyframe Animation</Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              onPress={() => {
+                soundEngine.playSfx("whoosh");
+                onClose();
+              }}
+              activeOpacity={0.7}
+              accessibilityLabel="Done"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -291,22 +297,6 @@ export default function KeyframeModal({
               </View>
             )}
           </ScrollView>
-
-          {/* Footer Bar - only shown when editing an active clip */}
-          {selectedClip && (
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.doneBtn}
-                onPress={() => {
-                  soundEngine.playSfx("pop");
-                  onClose();
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.doneBtnText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </View>
     </Modal>

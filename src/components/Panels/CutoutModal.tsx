@@ -113,7 +113,7 @@ export default function CutoutModal({
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    syncConfig();
+    syncConfig({ enabled: true });
     onClose();
   };
 
@@ -159,7 +159,7 @@ export default function CutoutModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
@@ -173,8 +173,7 @@ export default function CutoutModal({
 
               <TouchableOpacity
                 onPress={handleReset}
-                style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
-                disabled={!enabled}
+                style={styles.resetBtn}
                 activeOpacity={0.7}
               >
                 <Text style={styles.resetText}>Reset</Text>
@@ -197,26 +196,6 @@ export default function CutoutModal({
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            {/* Enable Toggle Banner */}
-            <View style={styles.toggleRow}>
-              <View>
-                <Text style={styles.toggleTitle}>Enable Cutout</Text>
-                <Text style={styles.toggleSub}>Real-time background keying & extraction</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.switchTrack, enabled && styles.switchTrackActive]}
-                onPress={() => {
-                  soundEngine.playSfx('pop');
-                  const nextVal = !enabled;
-                  setEnabled(nextVal);
-                  syncConfig({ enabled: nextVal });
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.switchThumb, enabled && styles.switchThumbActive]} />
-              </TouchableOpacity>
-            </View>
-
             {/* Mode Selector */}
             <View style={styles.tabBar}>
               <TouchableOpacity

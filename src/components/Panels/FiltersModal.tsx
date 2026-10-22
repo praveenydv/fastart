@@ -358,22 +358,22 @@ export default function FiltersModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: '52%',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Platform.OS === 'web' ? '72%' : '80%',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     borderTopWidth: 1,
-    borderColor: '#1E2333',
+    borderColor: '#1E2638',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -383,9 +383,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1F2C',
+    borderBottomColor: '#1A2234',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -395,19 +395,21 @@ const styles = StyleSheet.create({
   sheetTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.3,
   },
   resetBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#1A1F2C',
+    backgroundColor: '#141A28',
+    borderWidth: 1,
+    borderColor: '#1E2638',
   },
   resetText: {
     color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   doneBtn: {
     width: 28,
@@ -419,9 +421,9 @@ const styles = StyleSheet.create({
   },
   categoryRow: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#161B26',
+    borderBottomColor: '#1A2234',
   },
   categoryScroll: {
     gap: 6,
@@ -444,12 +446,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   categoryPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: '#161B26',
+    backgroundColor: '#141A28',
     borderWidth: 1,
-    borderColor: '#1E2536',
+    borderColor: '#1E2638',
   },
   categoryPillActive: {
     backgroundColor: '#00F2FE',
@@ -457,12 +459,12 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   categoryPillTextActive: {
     color: '#000000',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   sheetBody: {
     paddingHorizontal: 12,

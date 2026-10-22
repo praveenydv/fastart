@@ -108,6 +108,7 @@ export default function MotionTrackingModal({
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
+    triggerUpdate({ enabled: true, mode, intensity });
     onClose();
   };
 
@@ -118,7 +119,7 @@ export default function MotionTrackingModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Space-Optimized Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
@@ -132,11 +133,10 @@ export default function MotionTrackingModal({
 
               <TouchableOpacity
                 onPress={handleReset}
-                style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
-                disabled={!enabled}
+                style={styles.resetBtn}
                 activeOpacity={0.7}
               >
-                <Text style={styles.resetText}>Disable</Text>
+                <Text style={styles.resetText}>Reset</Text>
               </TouchableOpacity>
             </View>
 
@@ -156,26 +156,6 @@ export default function MotionTrackingModal({
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            {/* Toggle Enable */}
-            <View style={styles.toggleRow}>
-              <View>
-                <Text style={styles.toggleTitle}>Enable Tracking</Text>
-                <Text style={styles.toggleSub}>Lock {targetType} to camera motion</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.switchTrack, enabled && styles.switchTrackActive]}
-                onPress={() => {
-                  soundEngine.playSfx('pop');
-                  const nextVal = !enabled;
-                  setEnabled(nextVal);
-                  triggerUpdate({ enabled: nextVal });
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.switchThumb, enabled && styles.switchThumbActive]} />
-              </TouchableOpacity>
-            </View>
-
             {/* Mode Cards */}
             <Text style={styles.sectionHeader}>TRACKING MODES</Text>
             <View style={styles.modesContainer}>
@@ -277,22 +257,22 @@ export default function MotionTrackingModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderWidth: 1,
-    borderColor: '#1F2637',
-    maxHeight: '48%',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    borderColor: '#1E2638',
+    maxHeight: Platform.OS === 'web' ? '72%' : '80%',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -302,9 +282,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2030',
+    borderBottomColor: '#1A2234',
   },
   titleRow: {
     flexDirection: 'row',
@@ -313,7 +293,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
@@ -321,12 +301,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#1A1F2C',
+    backgroundColor: '#141A28',
+    borderWidth: 1,
+    borderColor: '#1E2638',
   },
   resetText: {
     color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   doneBtn: {
     width: 28,

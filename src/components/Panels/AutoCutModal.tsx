@@ -227,26 +227,35 @@ export default function AutoCutModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
-              <View style={styles.headerIconCircle}>
-                <Ionicons name="flash" size={18} color="#00F2FE" />
-              </View>
-              <View>
-                <Text style={styles.headerTitle}>AutoCut Reel Generator</Text>
-                <Text style={styles.headerSubtitle}>Beat-synced AI reel from your clips</Text>
-              </View>
-            </View>
             <TouchableOpacity
               onPress={() => {
                 soundEngine.playSfx('click');
                 onClose();
               }}
-              style={styles.closeBtn}
+              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
               activeOpacity={0.7}
+              accessibilityLabel="Cancel changes"
             >
-              <Ionicons name="close" size={20} color="#8E95A5" />
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={styles.headerIconCircle}>
+                <Ionicons name="flash" size={15} color="#00F2FE" />
+              </View>
+              <Text style={styles.headerTitle}>AutoCut Reel</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleGenerate}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }, selectedClips.length === 0 && { opacity: 0.4 }]}
+              disabled={selectedClips.length === 0}
+              activeOpacity={0.7}
+              accessibilityLabel="Generate Reel"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 

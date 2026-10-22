@@ -17,7 +17,6 @@ import { FastArtProject, CaptionClip } from "../../types/project";
 import { generateAutoCaptions } from "../../services/aiCaptionEngine";
 import {
   parseSrtOrVttContent,
-  downloadSrtFile,
   generateWordTimings,
   rechunkCaptionClips,
 } from "../../utils/srtParser";
@@ -78,9 +77,12 @@ const TEXT_COLOR_SWATCHES = [
 
 const STROKE_COLOR_SWATCHES = [
   { label: "Pure Black", value: "#000000" },
-  { label: "Dark Navy", value: "#0F172A" },
   { label: "Crisp White", value: "#FFFFFF" },
-  { label: "Deep Purple", value: "#3B0764" },
+  { label: "Slate Gray", value: "#64748B" },
+  { label: "Neon Cyan", value: "#00F2FE" },
+  { label: "Viral Yellow", value: "#FFE600" },
+  { label: "Deep Crimson", value: "#DC2626" },
+  { label: "Deep Purple", value: "#7E22CE" },
   { label: "None", value: "transparent" },
 ];
 
@@ -222,9 +224,19 @@ export default function AutoCaptionModal({
     initialSettings.maxWordsPerCue || 3,
   );
 
+  const initialCaptionsRef = useRef<CaptionClip[]>([]);
+  const initialSettingsRef = useRef<CaptionSettings | undefined>(undefined);
+
   // Synchronize state when opening modal or selecting clip
   useEffect(() => {
     if (!visible) return;
+
+    initialCaptionsRef.current = currentProject?.tracks?.captions
+      ? JSON.parse(JSON.stringify(currentProject.tracks.captions))
+      : [];
+    initialSettingsRef.current = currentProject?.captionSettings
+      ? JSON.parse(JSON.stringify(currentProject.captionSettings))
+      : undefined;
 
     const targetClip = selectedClipId
       ? existingCaptions.find((c) => c.id === selectedClipId)
@@ -422,18 +434,6 @@ export default function AutoCaptionModal({
         "Invalid subtitle format. Paste standard SRT (e.g. 00:00:01,000 --> 00:00:04,000).",
       );
     }
-  };
-
-  const handleExportSrt = () => {
-    if (existingCaptions.length === 0) {
-      setErrorMessage("No captions exist to export.");
-      return;
-    }
-    soundEngine.playSfx("click");
-    downloadSrtFile(
-      existingCaptions,
-      `${currentProject?.title || "fastart"}_captions.srt`,
-    );
   };
 
   // =================== SUBTITLE CUE EDITING ===================
@@ -672,6 +672,29 @@ export default function AutoCaptionModal({
     onClose();
   };
 
+  const handleCancel = () => {
+    soundEngine.playSfx("pop");
+    if (onUpdateProject && currentProject) {
+      onUpdateProject({
+        tracks: {
+          ...currentProject.tracks,
+          captions: initialCaptionsRef.current,
+        },
+        captionSettings: initialSettingsRef.current,
+      });
+    }
+    onClose();
+  };
+
+  const handleApply = () => {
+    soundEngine.playSfx("whoosh");
+    if (selectedClipId) {
+      handleApplyStyleToSelected();
+    } else {
+      handleApplyStyleToAll();
+    }
+  };
+
   // =================== AI TRANSCRIPTION (ENGLISH ONLY) ===================
   const handleGenerate = async () => {
     if (!currentProject) {
@@ -724,108 +747,126 @@ export default function AutoCaptionModal({
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}
+      onRequestClose={handleCancel}
     >
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.titleIconBadge}>
-                <Ionicons name="chatbox-ellipses" size={16} color="#000000" />
-              </View>
-              <Text style={styles.headerTitle}>Captions & Subtitles</Text>
+          {/* Standardized Header: Cancel (Left) | Title (Center) | Apply (Right) */}
+          <View style={styles.sheetHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[
+                  styles.doneBtn,
+                  {
+                    backgroundColor: "rgba(239, 68, 68, 0.15)",
+                    borderWidth: 1,
+                    borderColor: "rgba(239, 68, 68, 0.3)",
+                  },
+                ]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleResetToDefaults}
+                style={styles.resetBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.headerActions}>
+            <View style={styles.titleRow}>
+              <View style={styles.titleIconBadge}>
+                <Ionicons name="chatbox-ellipses" size={13} color="#000000" />
+              </View>
+              <Text style={styles.sheetTitle}>Captions</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleApply}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply captions"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Top Category Tabs & SRT Actions */}
+          <View style={styles.topControlRow}>
+            <View style={styles.tabsRow}>
               <TouchableOpacity
-                style={styles.headerActionBtn}
+                style={[
+                  styles.tabButton,
+                  activeTab === "captions" && styles.tabButtonActive,
+                ]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  setActiveTab("captions");
+                }}
+              >
+                <Ionicons
+                  name="chatbox-ellipses-outline"
+                  size={13}
+                  color={activeTab === "captions" ? "#00F2FE" : "#8E95A5"}
+                />
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    activeTab === "captions" && styles.tabButtonTextActive,
+                  ]}
+                >
+                  Captions ({existingCaptions.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.tabButton,
+                  activeTab === "style" && styles.tabButtonActive,
+                ]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  setActiveTab("style");
+                }}
+              >
+                <Ionicons
+                  name="sparkles-outline"
+                  size={13}
+                  color={activeTab === "style" ? "#00F2FE" : "#8E95A5"}
+                />
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    activeTab === "style" && styles.tabButtonTextActive,
+                  ]}
+                >
+                  Style & Highlight
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.srtActionGroup}>
+              <TouchableOpacity
+                style={styles.srtBtn}
                 onPress={handleImportSrtFile}
                 activeOpacity={0.7}
               >
                 <Ionicons
                   name="cloud-upload-outline"
-                  size={14}
+                  size={13}
                   color="#00F2FE"
                 />
-                <Text style={styles.headerActionText}>Import SRT</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.headerActionBtn}
-                onPress={handleExportSrt}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="download-outline" size={14} color="#FFE600" />
-                <Text style={[styles.headerActionText, { color: "#FFE600" }]}>
-                  Export SRT
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.closeBtn}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close" size={20} color="#8E95A5" />
+                <Text style={styles.srtBtnText}>Import</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* 2 Top Category Tabs: Captions & Style */}
-          <View style={styles.tabsRow}>
-            <TouchableOpacity
-              style={[
-                styles.tabButton,
-                activeTab === "captions" && styles.tabButtonActive,
-              ]}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                setActiveTab("captions");
-              }}
-            >
-              <Ionicons
-                name="chatbox-ellipses-outline"
-                size={14}
-                color={activeTab === "captions" ? "#00F2FE" : "#8E95A5"}
-              />
-              <Text
-                style={[
-                  styles.tabButtonText,
-                  activeTab === "captions" && styles.tabButtonTextActive,
-                ]}
-              >
-                Captions ({existingCaptions.length})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.tabButton,
-                activeTab === "style" && styles.tabButtonActive,
-              ]}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                setActiveTab("style");
-              }}
-            >
-              <Ionicons
-                name="sparkles-outline"
-                size={14}
-                color={activeTab === "style" ? "#00F2FE" : "#8E95A5"}
-              />
-              <Text
-                style={[
-                  styles.tabButtonText,
-                  activeTab === "style" && styles.tabButtonTextActive,
-                ]}
-              >
-                Style & Highlight
-              </Text>
-            </TouchableOpacity>
           </View>
 
           {/* Error Banner */}
@@ -962,10 +1003,10 @@ export default function AutoCaptionModal({
                 </View>
               </View>
 
-              {/* Subtitles Cues Track Header */}
+              {/* Captions Cues Track Header */}
               <View style={styles.cuesHeaderRow}>
                 <Text style={styles.cuesSectionTitle}>
-                  SUBTITLE TRACK ({existingCaptions.length} CUES)
+                  CAPTIONS TRACK ({existingCaptions.length} CUES)
                 </Text>
                 {existingCaptions.length > 0 && (
                   <TouchableOpacity
@@ -989,7 +1030,7 @@ export default function AutoCaptionModal({
                     color="#2D3748"
                   />
                   <Text style={styles.emptyCuesTitle}>
-                    No subtitles on this timeline
+                    No captions on this timeline
                   </Text>
                   <Text style={styles.emptyCuesSubtitle}>
                     Tap "Auto Transcribe to English" above to generate
@@ -1083,50 +1124,30 @@ export default function AutoCaptionModal({
                         KARAOKE WORD HIGHLIGHT
                       </Text>
                     </View>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 10,
+                    <TouchableOpacity
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        setHighlightColor("#FFE600");
+                        setHighlightStyle("color");
+                        persistSettings({
+                          highlightColor: "#FFE600",
+                          highlightStyle: "color",
+                        });
                       }}
+                      style={styles.resetLinkBtn}
+                      activeOpacity={0.7}
                     >
-                      <TouchableOpacity
-                        onPress={handleResetToDefaults}
-                        style={styles.resetLinkBtn}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name="refresh-outline"
-                          size={12}
-                          color="#8E95A5"
-                        />
-                        <Text style={styles.resetLinkText}>Reset</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.toggleSwitch,
-                          enableHighlight && styles.toggleSwitchActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          const next = !enableHighlight;
-                          setEnableHighlight(next);
-                          persistSettings({ enableHighlight: next });
-                        }}
-                      >
-                        <View
-                          style={[
-                            styles.toggleKnob,
-                            enableHighlight && styles.toggleKnobActive,
-                          ]}
-                        />
-                      </TouchableOpacity>
-                    </View>
+                      <Ionicons
+                        name="refresh-outline"
+                        size={12}
+                        color="#8E95A5"
+                      />
+                      <Text style={styles.resetLinkText}>Reset</Text>
+                    </TouchableOpacity>
                   </View>
 
-                  {/* Highlight Styles & Swatches */}
-                  {enableHighlight && (
-                    <View style={{ marginTop: 10, gap: 10 }}>
+                  {/* Highlight Styles & Swatches - Directly configurable */}
+                  <View style={{ marginTop: 10, gap: 10 }}>
                       <View style={styles.highlightStyleRow}>
                         {HIGHLIGHT_STYLE_OPTIONS.map((opt) => {
                           const isSelected = highlightStyle === opt.value;
@@ -1204,7 +1225,6 @@ export default function AutoCaptionModal({
                         })}
                       </ScrollView>
                     </View>
-                  )}
 
                   {/* Live Preview Display Box */}
                   <View style={styles.livePreviewBox}>
@@ -1688,7 +1708,11 @@ export default function AutoCaptionModal({
                   </ScrollView>
 
                   <Text style={styles.subSectionTitle}>TEXT EFFECT</Text>
-                  <View style={styles.pillsRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 6, paddingRight: 8 }}
+                  >
                     {TEXT_EFFECT_OPTIONS.map((eff) => {
                       const isSelected = textEffect === eff.value;
                       return (
@@ -1716,120 +1740,6 @@ export default function AutoCaptionModal({
                             ]}
                           >
                             {eff.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* 5. POSITION & ANIMATION */}
-                <View style={styles.cardSection}>
-                  <View style={styles.cardHeaderRow}>
-                    <View style={styles.cardHeaderTitleGroup}>
-                      <Ionicons name="move-outline" size={14} color="#00F2FE" />
-                      <Text style={styles.cardHeaderTitle}>
-                        PLACEMENT & MOTION
-                      </Text>
-                    </View>
-                    <View style={styles.stepperRow}>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          const next = Math.max(10, captionPositionY - 2);
-                          setCaptionPositionY(next);
-                          persistSettings({ positionY: next });
-                        }}
-                      >
-                        <Ionicons name="arrow-up" size={12} color="#CBD5E1" />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperValueText}>
-                        {captionPositionY}%
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          const next = Math.min(95, captionPositionY + 2);
-                          setCaptionPositionY(next);
-                          persistSettings({ positionY: next });
-                        }}
-                      >
-                        <Ionicons name="arrow-down" size={12} color="#CBD5E1" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <View
-                    style={[styles.positionButtonsRow, { marginBottom: 10 }]}
-                  >
-                    {POSITION_PRESETS.map((pos) => {
-                      const isSelected = captionPositionY === pos.value;
-                      return (
-                        <TouchableOpacity
-                          key={pos.value}
-                          style={[
-                            styles.posBtn,
-                            isSelected && styles.posBtnActive,
-                          ]}
-                          onPress={() => {
-                            soundEngine.playSfx("click");
-                            setCaptionPositionY(pos.value);
-                            persistSettings({ positionY: pos.value });
-                          }}
-                        >
-                          <Ionicons
-                            name={pos.icon as any}
-                            size={13}
-                            color={isSelected ? "#000000" : "#8E95A5"}
-                          />
-                          <Text
-                            style={[
-                              styles.posBtnText,
-                              isSelected && styles.posBtnTextActive,
-                            ]}
-                          >
-                            {pos.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <Text style={styles.subSectionTitle}>MOTION ANIMATION</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 6 }}
-                  >
-                    {ANIMATION_OPTIONS.map((an) => {
-                      const isSelected = animation === an.value;
-                      return (
-                        <TouchableOpacity
-                          key={an.value}
-                          style={[
-                            styles.animPill,
-                            isSelected && styles.animPillActive,
-                          ]}
-                          onPress={() => {
-                            soundEngine.playSfx("click");
-                            setAnimation(an.value);
-                            persistSettings({ animation: an.value });
-                          }}
-                        >
-                          <Ionicons
-                            name={an.icon as any}
-                            size={13}
-                            color={isSelected ? "#000000" : "#8E95A5"}
-                          />
-                          <Text
-                            style={[
-                              styles.animPillText,
-                              isSelected && styles.animPillTextActive,
-                            ]}
-                          >
-                            {an.label}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -1923,8 +1833,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F131D",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "88%",
-    minHeight: "68%",
+    maxHeight: Platform.OS === "web" ? "78%" : "85%",
+    minHeight: "60%",
     borderTopWidth: 1,
     borderColor: "#1E2638",
     overflow: "hidden",
@@ -1933,17 +1843,87 @@ const styles = StyleSheet.create({
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
     borderRadius: 2,
     alignSelf: "center",
     marginTop: 8,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1A2234",
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sheetTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#141A28",
+    borderWidth: 1,
+    borderColor: "#1E2638",
+  },
+  resetText: {
+    color: "#8E95A5",
+    fontSize: 11.5,
+    fontWeight: "700",
+  },
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#00F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topControlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    marginTop: 6,
+    gap: 8,
+  },
+  srtActionGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  srtBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: "#141A28",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#1E2638",
+  },
+  srtBtnText: {
+    color: "#00F2FE",
+    fontSize: 11,
+    fontWeight: "700",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#1A2234",
   },
@@ -1953,68 +1933,73 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   titleIconBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
+    letterSpacing: 0.2,
   },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   headerActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    backgroundColor: "#161D2B",
-    borderRadius: 8,
+    paddingVertical: 4,
+    backgroundColor: "#141A28",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#253147",
+    borderColor: "#1E2638",
   },
   headerActionText: {
     color: "#00F2FE",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   closeBtn: {
-    padding: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#1E2638",
+    alignItems: "center",
+    justifyContent: "center",
     marginLeft: 4,
   },
   tabsRow: {
+    flex: 1,
     flexDirection: "row",
-    backgroundColor: "#141A28",
-    padding: 3,
-    marginHorizontal: 16,
-    marginTop: 10,
-    borderRadius: 10,
+    backgroundColor: "#080B12",
+    padding: 2,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#222C40",
+    borderColor: "#1A2234",
   },
   tabButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
+    gap: 5,
+    paddingVertical: 6,
     borderRadius: 8,
   },
   tabButtonActive: {
-    backgroundColor: "#1E273C",
+    backgroundColor: "#1E2638",
   },
   tabButtonText: {
     color: "#8E95A5",
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "700",
   },
   tabButtonTextActive: {
@@ -2022,18 +2007,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   bodyScroll: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingTop: 8,
   },
   cuesHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   cuesSectionTitle: {
     color: "#8E95A5",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
@@ -2041,87 +2026,87 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: "#161D2B",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: "#141A28",
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#00F2FE",
   },
   cueActionText: {
     color: "#00F2FE",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   emptyCuesContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 36,
-    paddingHorizontal: 20,
-    backgroundColor: "#131824",
-    borderRadius: 14,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: "#141A28",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#20283A",
-    marginVertical: 10,
+    borderColor: "#1E2638",
+    marginVertical: 8,
   },
   emptyCuesTitle: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    marginTop: 10,
+    marginTop: 8,
   },
   emptyCuesSubtitle: {
     color: "#8E95A5",
-    fontSize: 12,
+    fontSize: 11.5,
     textAlign: "center",
-    marginTop: 6,
-    lineHeight: 18,
+    marginTop: 4,
+    lineHeight: 16,
   },
   emptyCuesButtonsRow: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 18,
+    gap: 8,
+    marginTop: 12,
   },
   emptyPrimaryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     backgroundColor: "#00F2FE",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 7,
   },
   emptyPrimaryBtnText: {
     color: "#000000",
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "800",
   },
   emptySecondaryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "#1E273C",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    gap: 5,
+    backgroundColor: "#1E2638",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: "#00F2FE",
   },
   emptySecondaryBtnText: {
     color: "#00F2FE",
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "700",
   },
   cuesList: {
-    gap: 10,
-    paddingBottom: 24,
+    gap: 6,
+    paddingBottom: 20,
   },
   cueCard: {
-    backgroundColor: "#141A28",
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: "#141926",
+    borderRadius: 8,
+    padding: 8,
     borderWidth: 1,
-    borderColor: "#20283A",
+    borderColor: "#1E2638",
   },
   cueCardSelected: {
     borderColor: "#00F2FE",
@@ -2131,68 +2116,68 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   cueTimePill: {
-    backgroundColor: "#0F1420",
-    paddingHorizontal: 8,
+    backgroundColor: "#0A0D14",
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   cueTimeText: {
     color: "#00F2FE",
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "700",
     letterSpacing: 0.3,
   },
   cueButtonsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   cueMiniBtn: {
-    padding: 4,
+    padding: 3,
   },
   cueTextInput: {
     color: "#FFFFFF",
-    fontSize: 13,
-    backgroundColor: "#0F131D",
-    padding: 8,
+    fontSize: 12.5,
+    backgroundColor: "#0A0D14",
+    padding: 6,
     borderRadius: 6,
-    minHeight: 38,
-    lineHeight: 18,
+    minHeight: 32,
+    lineHeight: 16,
   },
   cardSection: {
-    backgroundColor: "#131826",
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: "#141926",
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: "#1E273C",
-    marginBottom: 12,
+    borderColor: "#1E2638",
+    marginBottom: 8,
   },
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   cardHeaderTitleGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   cardHeaderTitle: {
     color: "#CBD5E1",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
   highlightSection: {
-    backgroundColor: "#141A28",
+    backgroundColor: "#141926",
     borderRadius: 12,
-    padding: 14,
+    padding: 10,
     borderWidth: 1,
-    borderColor: "#222C40",
-    marginBottom: 16,
+    borderColor: "#1E2638",
+    marginBottom: 10,
   },
   highlightHeaderRow: {
     flexDirection: "row",
@@ -2201,19 +2186,19 @@ const styles = StyleSheet.create({
   },
   highlightTitle: {
     color: "#FFE600",
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
   highlightSubtitle: {
     color: "#8E95A5",
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 10.5,
+    marginTop: 1,
   },
   toggleSwitch: {
-    width: 44,
-    height: 24,
-    borderRadius: 12,
+    width: 40,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#20283A",
     padding: 2,
     justifyContent: "center",
@@ -2222,9 +2207,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFE600",
   },
   toggleKnob: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: "#8E95A5",
   },
   toggleKnobActive: {
@@ -2233,27 +2218,27 @@ const styles = StyleSheet.create({
   },
   subSectionTitle: {
     color: "#8E95A5",
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "800",
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   highlightStyleRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 8,
   },
   highlightStylePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     backgroundColor: "#141A28",
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: "#20283A",
+    borderColor: "#1E2638",
   },
   highlightStylePillActive: {
     backgroundColor: "#00F2FE",
@@ -2261,7 +2246,7 @@ const styles = StyleSheet.create({
   },
   highlightStylePillText: {
     color: "#8E95A5",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   highlightStylePillTextActive: {
@@ -2269,60 +2254,60 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   livePreviewBox: {
-    backgroundColor: "#090C13",
+    backgroundColor: "#07080C",
     borderRadius: 10,
-    padding: 14,
-    marginTop: 14,
+    padding: 10,
+    marginTop: 8,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#1E273C",
+    borderColor: "#1E2638",
   },
   livePreviewHeader: {
     color: "#64748B",
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: "800",
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   karaokeWordsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   karaokeWordPill: {
     paddingHorizontal: 4,
     paddingVertical: 2,
   },
   karaokeWordText: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
   },
   section: {
-    marginBottom: 16,
+    marginBottom: 10,
   },
   sectionTitle: {
     color: "#8E95A5",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "800",
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   positionButtonsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   posBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
+    gap: 4,
+    paddingVertical: 7,
     backgroundColor: "#141A28",
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: "#20283A",
+    borderColor: "#1E2638",
   },
   posBtnActive: {
     backgroundColor: "#00F2FE",
@@ -2330,7 +2315,7 @@ const styles = StyleSheet.create({
   },
   posBtnText: {
     color: "#8E95A5",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
   },
   posBtnTextActive: {
@@ -2339,16 +2324,16 @@ const styles = StyleSheet.create({
   },
   fontSizesRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   sizeBtn: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 6,
     alignItems: "center",
     backgroundColor: "#141A28",
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: "#20283A",
+    borderColor: "#1E2638",
   },
   sizeBtnActive: {
     backgroundColor: "#00F2FE",
@@ -2849,6 +2834,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
+    borderWidth: 1.5,
+    borderColor: "#20283A",
   },
   colorCircleSelected: {
     borderWidth: 2,

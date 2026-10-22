@@ -22,9 +22,28 @@ export function usePlaybackLoop({
   const lastTimeRef = useRef<any>(null);
 
   useEffect(() => {
+    // If timeline has no clips or 0 duration, immediately cancel playback and freeze at 0
+    if (totalDuration <= 0) {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+      if (isPlaying) {
+        setIsPlaying(false);
+      }
+      setCurrentTime(0);
+      return;
+    }
+
     if (isPlaying) {
       lastTimeRef.current = getNow();
       const loop = (now: number) => {
+        if (totalDuration <= 0) {
+          setIsPlaying(false);
+          setCurrentTime(0);
+          return;
+        }
+
         const currentTimeStamp =
           typeof now === "number" ? now : getNow();
         const delta = Math.min(
@@ -36,10 +55,9 @@ export function usePlaybackLoop({
         );
         lastTimeRef.current = currentTimeStamp;
 
-        const effectiveTotal = Math.max(totalDuration, 1.0);
         setCurrentTime((prev) => {
           const next = prev + delta;
-          if (next >= effectiveTotal) {
+          if (next >= totalDuration) {
             setIsPlaying(false);
             return 0;
           }

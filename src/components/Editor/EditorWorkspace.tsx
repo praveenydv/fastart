@@ -231,6 +231,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           processingMessage={processingMessage}
           onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
           onTogglePlay={() => {
+            if (totalDuration <= 0) {
+              soundEngine.playSfx("click");
+              setIsPlaying(false);
+              setCurrentTime(0);
+              return;
+            }
             soundEngine.playSfx("click");
             if (
               !isPlaying &&

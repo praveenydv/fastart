@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
-import { formatTime } from "./playerUtils";
 import { TransientTransformState } from "./playerTypes";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
@@ -621,22 +620,6 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         return null;
       })}
 
-      {/* Empty State when no clips at playhead */}
-      {activeVideos.length === 0 &&
-        activeTexts.length === 0 &&
-        activeStickers.length === 0 && (
-          <View
-            style={[
-              styles.nativeEmptyScrub,
-              { backgroundColor: "transparent" },
-            ]}
-          >
-            <Ionicons name="film-outline" size={32} color="#6B7280" />
-            <Text style={styles.nativeEmptyScrubText}>
-              No clip at {formatTime(currentTime)}
-            </Text>
-          </View>
-        )}
     </View>
   );
 };

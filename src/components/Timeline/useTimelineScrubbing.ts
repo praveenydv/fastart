@@ -48,8 +48,12 @@ export function useTimelineScrubbing({
   onSeekRef.current = onSeek;
 
   const performSeekWithSnap = useCallback((clickX: number) => {
+    if (totalDurationRef.current <= 0) {
+      onSeekRef.current(0);
+      return;
+    }
     const pxVal = pxPerSecRef.current;
-    const maxDur = Math.max(1, totalDurationRef.current);
+    const maxDur = totalDurationRef.current;
     let newTime = Math.max(0, Math.min(maxDur, clickX / pxVal));
 
     if (isSnappingEnabledRef.current) {
@@ -112,11 +116,15 @@ export function useTimelineScrubbing({
         dragStartTimeRef.current = currentTimeRef.current;
       },
       onPanResponderMove: (_, gestureState) => {
+        if (totalDurationRef.current <= 0) {
+          onSeekRef.current(0);
+          return;
+        }
         const dx = gestureState.dx;
         const initialTime = dragStartTimeRef.current;
         const pxPerSecVal = pxPerSecRef.current;
         const deltaSec = dx / pxPerSecVal;
-        const maxDur = Math.max(1, totalDurationRef.current);
+        const maxDur = totalDurationRef.current;
         let newTime = Math.max(0, Math.min(maxDur, initialTime + deltaSec));
 
         if (isSnappingEnabledRef.current) {

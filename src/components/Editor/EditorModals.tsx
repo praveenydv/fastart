@@ -269,6 +269,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         <SpeedModal
           visible={true}
           onClose={closeModal}
+          clipType={selectedClipType || selectedClip?.type}
+          clipDuration={selectedClip?.duration}
           currentSpeed={selectedClip?.speed || 1.0}
           currentCurve={selectedClip?.speedCurve}
           currentSlowMo={selectedClip?.smoothSlowMo}
@@ -374,23 +376,37 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       )}
 
       {/* Modern Sleek Keyframe Animation Studio Modal */}
-      {activeModal === "keyframe" && (
-        <KeyframeModal
-          visible={true}
-          onClose={closeModal}
-          selectedClip={selectedClip}
-          selectedClipType={selectedClipType || "video"}
-          currentTime={currentTime}
-          onSeek={(t) => setCurrentTime(t)}
-          onAddKeyframe={handleAddKeyframe}
-          hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
-          onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
-          onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
-          onClearAllKeyframes={handleClearAllKeyframes}
-        />
-      )}
+      {activeModal === "keyframe" && (() => {
+        let effectiveClip = selectedClip;
+        let effectiveType = selectedClipType || "video";
+        if (!effectiveClip && project) {
+          const videoAtTime = project.tracks.video?.find(
+            (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
+          ) || project.tracks.video?.[0];
+          if (videoAtTime) {
+            effectiveClip = videoAtTime;
+            effectiveType = "video";
+          }
+        }
 
-      {/* AI Speech Auto-Captions & Subtitle Studio Modal */}
+        return (
+          <KeyframeModal
+            visible={true}
+            onClose={closeModal}
+            selectedClip={effectiveClip}
+            selectedClipType={effectiveType}
+            currentTime={currentTime}
+            onSeek={(t) => setCurrentTime(t)}
+            onAddKeyframe={handleAddKeyframe}
+            hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
+            onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
+            onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
+            onClearAllKeyframes={handleClearAllKeyframes}
+          />
+        );
+      })()}
+
+      {/* AI Speech Auto-Captions Studio Modal */}
       {activeModal === "captions" && (
         <AutoCaptionModal
           visible={true}

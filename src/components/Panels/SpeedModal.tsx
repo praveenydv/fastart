@@ -14,10 +14,13 @@ import { SpeedNormalTab } from './Speed/SpeedNormalTab';
 import { SpeedPresetCurvesTab } from './Speed/SpeedPresetCurvesTab';
 import { SpeedCustomCurveTab } from './Speed/SpeedCustomCurveTab';
 import { SpeedSlowMoSection } from './Speed/SpeedSlowMoSection';
+import { SpeedAudioView } from './Speed/SpeedAudioView';
 
 interface SpeedModalProps {
   visible: boolean;
   onClose: () => void;
+  clipType?: string;
+  clipDuration?: number;
   currentSpeed?: number;
   currentCurve?: any;
   currentSlowMo?: 'none' | 'blend' | 'optical_flow';
@@ -31,15 +34,19 @@ interface SpeedModalProps {
 export default function SpeedModal({
   visible,
   onClose,
+  clipType,
+  clipDuration,
   currentSpeed = 1.0,
   currentCurve,
   currentSlowMo = 'none',
   onApplySpeed,
 }: SpeedModalProps) {
+  const isAudio = clipType === 'audio';
   const [activeTab, setActiveTab] = useState<'normal' | 'curve' | 'custom'>('normal');
   const [speedVal, setSpeedVal] = useState<number>(currentSpeed);
   const [activeCurveId, setActiveCurveId] = useState<string>('montage');
   const [smoothSlowMo, setSmoothSlowMo] = useState<'none' | 'blend' | 'optical_flow'>(currentSlowMo || 'none');
+  const [keepPitch, setKeepPitch] = useState<boolean>(true);
 
   // Custom Bezier Curve Control Points
   const [customPoints, setCustomPoints] = useState<SpeedCurvePoint[]>([
@@ -66,7 +73,7 @@ export default function SpeedModal({
   const handleSelectNormal = (val: number) => {
     setSpeedVal(val);
     soundEngine.playSfx('click');
-    onApplySpeed(val, null, smoothSlowMo);
+    onApplySpeed(val, null, isAudio ? 'none' : smoothSlowMo);
   };
 
   const handleSelectPresetCurve = (curve: any) => {
@@ -99,7 +106,7 @@ export default function SpeedModal({
     onApplySpeed(1.0, null, 'none');
   };
 
-  const isDefaultSpeed = speedVal === 1.0 && activeTab === 'normal' && smoothSlowMo === 'none';
+  const isDefaultSpeed = speedVal === 1.0 && (isAudio || (activeTab === 'normal' && smoothSlowMo === 'none'));
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
@@ -119,7 +126,7 @@ export default function SpeedModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Space-Optimized Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
@@ -141,6 +148,29 @@ export default function SpeedModal({
               </TouchableOpacity>
             </View>
 
+            <View style={styles.titleRow}>
+              <Ionicons
+                name={isAudio ? "musical-notes-outline" : "speedometer-outline"}
+                size={16}
+                color="#00F2FE"
+              />
+              <Text style={styles.sheetTitle}>
+                {isAudio ? "Audio Speed" : "Speed & Curve"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleApply}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply speed changes"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Sub-Tabs: Normal / Curves / Custom (Only for Video clips) */}
+          {!isAudio && (
             <View style={styles.tabsRow}>
               <TouchableOpacity
                 style={[styles.tabBtn, activeTab === 'normal' && styles.tabBtnActive]}
@@ -181,45 +211,50 @@ export default function SpeedModal({
                 </Text>
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              onPress={handleApply}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply speed changes"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
-          </View>
+          )}
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            {/* 1. NORMAL SPEED TAB */}
-            {activeTab === 'normal' && (
-              <SpeedNormalTab speedVal={speedVal} onSelectSpeed={handleSelectNormal} />
-            )}
-
-            {/* 2. CURVE PRESETS TAB */}
-            {activeTab === 'curve' && (
-              <SpeedPresetCurvesTab
-                activeCurveId={activeCurveId}
-                onSelectCurve={handleSelectPresetCurve}
+            {isAudio ? (
+              /* DEDICATED STREAMLINED AUDIO SPEED VIEW */
+              <SpeedAudioView
+                speedVal={speedVal}
+                onSelectSpeed={handleSelectNormal}
+                clipDuration={clipDuration}
+                keepPitch={keepPitch}
+                onToggleKeepPitch={() => setKeepPitch((prev) => !prev)}
               />
-            )}
+            ) : (
+              /* VIDEO SPEED VIEWS */
+              <>
+                {/* 1. NORMAL SPEED TAB */}
+                {activeTab === 'normal' && (
+                  <SpeedNormalTab speedVal={speedVal} onSelectSpeed={handleSelectNormal} />
+                )}
 
-            {/* 3. CUSTOM BEZIER CURVE EDITOR */}
-            {activeTab === 'custom' && (
-              <SpeedCustomCurveTab
-                customPoints={customPoints}
-                setCustomPoints={setCustomPoints}
-                onApplyCustomCurve={handleApplyCustomCurve}
-              />
-            )}
+                {/* 2. CURVE PRESETS TAB */}
+                {activeTab === 'curve' && (
+                  <SpeedPresetCurvesTab
+                    activeCurveId={activeCurveId}
+                    onSelectCurve={handleSelectPresetCurve}
+                  />
+                )}
 
-            {/* 4. OPTICAL FLOW / FRAME BLENDING SMOOTH SLOW-MO */}
-            <SpeedSlowMoSection
-              smoothSlowMo={smoothSlowMo}
-              onSelectSlowMo={handleSelectSlowMo}
-            />
+                {/* 3. CUSTOM BEZIER CURVE EDITOR */}
+                {activeTab === 'custom' && (
+                  <SpeedCustomCurveTab
+                    customPoints={customPoints}
+                    setCustomPoints={setCustomPoints}
+                    onApplyCustomCurve={handleApplyCustomCurve}
+                  />
+                )}
+
+                {/* 4. OPTICAL FLOW / FRAME BLENDING SMOOTH SLOW-MO */}
+                <SpeedSlowMoSection
+                  smoothSlowMo={smoothSlowMo}
+                  onSelectSlowMo={handleSelectSlowMo}
+                />
+              </>
+            )}
           </ScrollView>
         </View>
       </View>

@@ -1,8 +1,13 @@
-export const formatPlayheadTime = (sec = 0) => {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  const ms = Math.floor((sec - Math.floor(sec)) * 10);
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
+export const formatPlayheadTime = (sec = 0): string => {
+  const totalSecs = Math.max(0, Math.floor(Number(sec) || 0));
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+
+  if (h > 0) {
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  }
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 };
 
 // Strict non-overlapping clamp: another item starts ONLY when the one before it ends

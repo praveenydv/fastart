@@ -109,13 +109,29 @@ export default function TextToSpeechModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="mic" size={20} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>AI Voice</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Cancel changes"
+            >
+              <Ionicons name="close" size={17} color="#EF4444" />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="mic" size={17} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>AI Voice Generator</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
+
+            <TouchableOpacity
+              onPress={handleUseVoiceover}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Add Voice"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -207,22 +223,22 @@ export default function TextToSpeechModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121620',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: '52%',
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     borderTopWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2638',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -231,44 +247,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A2234',
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#1E2638',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetBody: {
-    padding: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   sectionTitle: {
     color: '#8E95A5',
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   scriptInput: {
-    backgroundColor: '#10131A',
+    backgroundColor: '#0A0D14',
     borderRadius: 10,
-    padding: 14,
+    padding: 10,
     color: '#FFFFFF',
-    fontSize: 14,
-    minHeight: 90,
+    fontSize: 13,
+    minHeight: 70,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: '#1E2333',
-    marginBottom: 16,
+    borderColor: '#1E2638',
+    marginBottom: 10,
   },
   voicePill: {
     flexDirection: 'row',

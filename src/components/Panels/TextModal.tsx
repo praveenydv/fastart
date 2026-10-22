@@ -38,18 +38,29 @@ export default function TextModal({
   const [selectedColor, setSelectedColor] = useState("#FFFFFF");
   const [selectedBg, setSelectedBg] = useState("#FF0050");
   const [selectedAnim, setSelectedAnim] = useState("bounce");
-  const [selectedFont, setSelectedFont] = useState("Impact, Arial Black, sans-serif");
+  const [selectedFont, setSelectedFont] = useState(
+    "Impact, Arial Black, sans-serif",
+  );
   const [selectedFontSize, setSelectedFontSize] = useState(26);
-  const [selectedBorderColor, setSelectedBorderColor] = useState<string | undefined>(undefined);
+  const [selectedBorderColor, setSelectedBorderColor] = useState<
+    string | undefined
+  >(undefined);
   const [selectedTextEffect, setSelectedTextEffect] = useState<string>("none");
-  const [selectedStrokeColor, setSelectedStrokeColor] = useState<string | undefined>(undefined);
+  const [selectedStrokeColor, setSelectedStrokeColor] = useState<
+    string | undefined
+  >(undefined);
   const [selectedStrokeWidth, setSelectedStrokeWidth] = useState<number>(2);
   const [selectedScale, setSelectedScale] = useState<number>(1.0);
   const [selectedRotation, setSelectedRotation] = useState<number>(0);
-  const [selectedPosition, setSelectedPosition] = useState<{ x: number; y: number }>({ x: 50, y: 35 });
+  const [selectedPosition, setSelectedPosition] = useState<{
+    x: number;
+    y: number;
+  }>({ x: 50, y: 35 });
   const [duration, setDuration] = useState(3.0);
   const [animTick, setAnimTick] = useState(0);
-  const [activeTab, setActiveTab] = useState<"style" | "effects" | "anim">("style");
+  const [activeTab, setActiveTab] = useState<"style" | "effects" | "anim">(
+    "style",
+  );
 
   const lastLoadedClipIdRef = useRef<string | null>(null);
   const wasVisibleRef = useRef<boolean>(false);
@@ -68,8 +79,10 @@ export default function TextModal({
           setSelectedColor(editingClip.style?.color || "#FFFFFF");
           setSelectedBg(editingClip.style?.backgroundColor || "transparent");
           setSelectedAnim(editingClip.animation || "bounce");
-          if (editingClip.style?.fontFamily) setSelectedFont(editingClip.style.fontFamily);
-          if (editingClip.style?.fontSize) setSelectedFontSize(editingClip.style.fontSize);
+          if (editingClip.style?.fontFamily)
+            setSelectedFont(editingClip.style.fontFamily);
+          if (editingClip.style?.fontSize)
+            setSelectedFontSize(editingClip.style.fontSize);
           setSelectedBorderColor(editingClip.style?.borderColor);
           setSelectedTextEffect(editingClip.style?.textEffect || "none");
           setSelectedStrokeColor(editingClip.style?.strokeColor);
@@ -236,18 +249,31 @@ export default function TextModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
-            <TouchableOpacity onPress={onClose} style={styles.navBtn}>
-              <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Cancel changes"
+            >
+              <Ionicons name="close" size={17} color="#EF4444" />
             </TouchableOpacity>
-            <Text style={styles.sheetTitle}>
-              {editingClip ? "Edit Text" : "Text"}
-            </Text>
-            <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-              <Text style={styles.saveBtnText}>
-                {editingClip ? "Update" : "Add"}
+
+            <View style={styles.headerTitleRow}>
+              <Ionicons name="text" size={16} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>
+                {editingClip ? "Edit Text" : "Add Text"}
               </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSave}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply text"
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -286,14 +312,6 @@ export default function TextModal({
                   <Ionicons name="close-circle" size={18} color="#8E95A5" />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                onPress={handleSave}
-                style={styles.inlineApplyBtn}
-                activeOpacity={0.7}
-                accessibilityLabel="Apply Text"
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-              </TouchableOpacity>
             </View>
 
             {/* Live Text Canvas Preview Stage */}
@@ -315,7 +333,10 @@ export default function TextModal({
             {/* Category Tab Bar for Compact Mobile Ergonomics */}
             <View style={styles.tabBar}>
               <TouchableOpacity
-                style={[styles.tabBtn, activeTab === "style" && styles.tabBtnActive]}
+                style={[
+                  styles.tabBtn,
+                  activeTab === "style" && styles.tabBtnActive,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   setActiveTab("style");
@@ -327,13 +348,21 @@ export default function TextModal({
                   size={14}
                   color={activeTab === "style" ? "#000000" : "#8E95A5"}
                 />
-                <Text style={[styles.tabBtnText, activeTab === "style" && styles.tabBtnTextActive]}>
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    activeTab === "style" && styles.tabBtnTextActive,
+                  ]}
+                >
                   Style & Font
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.tabBtn, activeTab === "effects" && styles.tabBtnActive]}
+                style={[
+                  styles.tabBtn,
+                  activeTab === "effects" && styles.tabBtnActive,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   setActiveTab("effects");
@@ -345,13 +374,21 @@ export default function TextModal({
                   size={14}
                   color={activeTab === "effects" ? "#000000" : "#8E95A5"}
                 />
-                <Text style={[styles.tabBtnText, activeTab === "effects" && styles.tabBtnTextActive]}>
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    activeTab === "effects" && styles.tabBtnTextActive,
+                  ]}
+                >
                   Effects & Glow
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.tabBtn, activeTab === "anim" && styles.tabBtnActive]}
+                style={[
+                  styles.tabBtn,
+                  activeTab === "anim" && styles.tabBtnActive,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   setActiveTab("anim");
@@ -363,7 +400,12 @@ export default function TextModal({
                   size={14}
                   color={activeTab === "anim" ? "#000000" : "#8E95A5"}
                 />
-                <Text style={[styles.tabBtnText, activeTab === "anim" && styles.tabBtnTextActive]}>
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    activeTab === "anim" && styles.tabBtnTextActive,
+                  ]}
+                >
                   Motion & Hooks
                 </Text>
               </TouchableOpacity>

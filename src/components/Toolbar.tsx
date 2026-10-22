@@ -184,38 +184,26 @@ function Toolbar({
                 </TouchableOpacity>
               )}
 
-              {/* 4. 1-Tap AI Noise Reduction (Only visible if video has audio) */}
-              {hasAudioTrack && (
-                <TouchableOpacity
-                  style={styles.toolItem}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    if (onToggleDenoise) onToggleDenoise();
-                  }}
-                  activeOpacity={0.7}
+              {/* 4. Keyframe Animation */}
+              <TouchableOpacity
+                style={styles.toolItem}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  if (onOpenKeyframeModal) onOpenKeyframeModal();
+                }}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.iconCircle,
+                    (selectedClip?.keyframes?.length ?? 0) > 0 &&
+                      styles.activeKeyframeCircle,
+                  ]}
                 >
-                  <View
-                    style={[
-                      styles.iconCircle,
-                      selectedClip.denoise && styles.activeCircle,
-                    ]}
-                  >
-                    <Ionicons
-                      name="ear-outline"
-                      size={17}
-                      color={selectedClip.denoise ? "#000000" : "#10B981"}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.toolLabel,
-                      selectedClip.denoise && { color: "#00F2FE" },
-                    ]}
-                  >
-                    {selectedClip.denoise ? "Denoise On" : "Denoise"}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                  <Ionicons name="diamond-outline" size={17} color="#FFE600" />
+                </View>
+                <Text style={styles.toolLabel}>Keyframe</Text>
+              </TouchableOpacity>
 
               {/* 5. Delete (Fast Access) */}
               <TouchableOpacity
@@ -462,28 +450,7 @@ function Toolbar({
                 </TouchableOpacity>
               )}
 
-              {/* 2. Denoise Audio (Only if audio media has sound stream) */}
-              {hasAudioTrack && (
-                <TouchableOpacity
-                  style={styles.toolItem}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    if (onToggleDenoise) onToggleDenoise();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.iconCircle, selectedClip.denoise && styles.activeCircle]}>
-                    <Ionicons
-                      name="ear-outline"
-                      size={17}
-                      color={selectedClip.denoise ? "#000000" : "#10B981"}
-                    />
-                  </View>
-                  <Text style={[styles.toolLabel, selectedClip.denoise && { color: "#00F2FE" }]}>
-                    {selectedClip.denoise ? "Denoise On" : "Denoise"}
-                  </Text>
-                </TouchableOpacity>
-              )}
+
 
               {/* 3. Split Audio */}
               <TouchableOpacity
@@ -944,6 +911,23 @@ function Toolbar({
           <Text style={styles.toolLabel}>Stickers</Text>
         </TouchableOpacity>
 
+        {/* 9. Keyframe Studio */}
+        {onOpenKeyframeModal && (
+          <TouchableOpacity
+            style={styles.toolItem}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              onOpenKeyframeModal();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconCircle}>
+              <Ionicons name="diamond-outline" size={17} color="#FFE600" />
+            </View>
+            <Text style={styles.toolLabel}>Keyframe</Text>
+          </TouchableOpacity>
+        )}
+
         {/* 9. Canvas Aspect Ratio & Format */}
         <TouchableOpacity
           style={styles.toolItem}
@@ -981,72 +965,75 @@ function Toolbar({
 
 const styles = StyleSheet.create({
   toolbarContainer: {
-    height: 58,
-    backgroundColor: "#0B0D13",
+    height: 60,
+    backgroundColor: "#0B0E17",
     borderTopWidth: 1,
-    borderTopColor: "#1A1E29",
+    borderTopColor: "rgba(255, 255, 255, 0.08)",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     flexShrink: 0,
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 5,
-    paddingHorizontal: 8,
-    backgroundColor: "#161B26",
-    borderRadius: 8,
-    marginRight: 6,
+    paddingHorizontal: 9,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderRadius: 20,
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: "#1E2536",
+    borderColor: "rgba(0, 242, 254, 0.25)",
   },
   backButtonText: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontSize: 11,
-    fontWeight: "700",
-    marginLeft: 2,
+    fontWeight: "800",
+    marginLeft: 3,
+    letterSpacing: 0.3,
   },
   toolsScroll: {
     alignItems: "center",
-    paddingRight: 16,
-    gap: 4,
+    paddingRight: 20,
+    gap: 6,
   },
   toolItem: {
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 50,
+    minWidth: 48,
     paddingHorizontal: 2,
   },
   iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#161B26",
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#141926",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 3,
     borderWidth: 1,
-    borderColor: "#1E2536",
+    borderColor: "#1E2638",
   },
   activeCircle: {
     backgroundColor: "#00F2FE",
     borderColor: "#00F2FE",
   },
   activeKeyframeCircle: {
-    backgroundColor: "rgba(255, 230, 0, 0.2)",
+    backgroundColor: "rgba(255, 230, 0, 0.15)",
     borderWidth: 1.5,
     borderColor: "#FFE600",
   },
   deleteCircle: {
     backgroundColor: "rgba(255, 0, 80, 0.12)",
-    borderColor: "rgba(255, 0, 80, 0.3)",
+    borderColor: "rgba(255, 0, 80, 0.35)",
   },
   toolLabel: {
-    color: "#8E95A5",
+    color: "#94A3B8",
     fontSize: 10,
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
 });
 
 export default React.memo(Toolbar);
+

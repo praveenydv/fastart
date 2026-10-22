@@ -292,6 +292,10 @@ function Player({
   }, [onAddKeyframe, currentTime]);
 
   const stepFrame = (frames: number) => {
+    if (totalDuration <= 0) {
+      onSeek(0);
+      return;
+    }
     const fps = 30;
     const nextTime = Math.max(
       0,

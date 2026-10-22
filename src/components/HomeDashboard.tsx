@@ -1,10 +1,5 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-} from "react-native";
+import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
@@ -13,6 +8,7 @@ import { styles } from "./HomeDashboard/HomeDashboardStyles";
 import { ProjectCardItem } from "./HomeDashboard/ProjectCardItem";
 import { ProjectOptionsMenu } from "./HomeDashboard/ProjectOptionsMenu";
 import { RenameProjectModal } from "./HomeDashboard/RenameProjectModal";
+import { formatPlayheadTime } from "./Timeline/timelineUtils";
 
 interface HomeDashboardProps {
   projects: any[];
@@ -27,17 +23,8 @@ interface HomeDashboardProps {
   lastSession?: any;
 }
 
-function formatPlayheadTime(sec = 0) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  const ms = Math.floor((sec % 1) * 10);
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
-}
-
 function formatDuration(sec = 0) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  return formatPlayheadTime(sec);
 }
 
 function HomeDashboard({
@@ -143,9 +130,6 @@ function HomeDashboard({
                 <Text style={styles.resumeProjectName}>
                   {lastProject.title}
                 </Text>
-              </Text>
-              <Text style={styles.resumeTimestamp}>
-                at {formatPlayheadTime(lastSession?.currentTime || 0)}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color="#00F2FE" />

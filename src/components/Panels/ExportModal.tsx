@@ -58,20 +58,50 @@ export default function ExportModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Standardized Header */}
           <View style={styles.sheetHeader}>
+            {status !== "rendering" ? (
+              <TouchableOpacity
+                onPress={onClose}
+                style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 28 }} />
+            )}
+
             <View style={styles.headerTitleRow}>
               <Ionicons
                 name="cloud-download-outline"
-                size={18}
+                size={17}
                 color="#00F2FE"
               />
               <Text style={styles.sheetTitle}>Export Video</Text>
             </View>
-            {status !== "rendering" && (
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={18} color="#FFFFFF" />
+
+            {status === "idle" ? (
+              <TouchableOpacity
+                onPress={handleStartExport}
+                style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Start Export"
+              >
+                <Ionicons name="checkmark" size={18} color="#000000" />
               </TouchableOpacity>
+            ) : status === "done" ? (
+              <TouchableOpacity
+                onPress={onClose}
+                style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Done"
+              >
+                <Ionicons name="checkmark" size={18} color="#000000" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 28 }} />
             )}
           </View>
 
