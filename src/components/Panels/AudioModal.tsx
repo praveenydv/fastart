@@ -7,18 +7,16 @@ import {
   ScrollView,
   Platform,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { AudioClip, FastArtProject } from '../../types/project';
-import { openMediaService, OpenAudioItem } from '../../services/openMediaService';
 import { loadUploadedAudio, saveUploadedAudio } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
 import { detectAudioBeats, toggleProjectBeatMarkers } from '../../utils/audioBeatDetector';
 import { styles } from './Audio/AudioModalStyles';
-import { AudioLibraryTab } from './Audio/AudioLibraryTab';
-import { AudioUploadTab } from './Audio/AudioUploadTab';
 
 interface AudioModalProps {
   visible: boolean;
@@ -28,23 +26,6 @@ interface AudioModalProps {
   onUpdateProject?: (updates: any) => void;
 }
 
-const SFX_CATEGORIES = [
-  { id: 'all', label: 'All SFX' },
-  { id: 'whoosh', label: 'Whoosh' },
-  { id: 'impact', label: 'Impact' },
-  { id: 'glitch', label: 'Glitch' },
-  { id: 'game sfx', label: 'Game' },
-  { id: 'camera', label: 'Camera' },
-  { id: 'nature', label: 'Nature' },
-];
-
-const MUSIC_CATEGORIES = [
-  { id: 'all', label: 'All Music' },
-  { id: 'lo-fi', label: 'Lo-Fi' },
-  { id: 'beats', label: 'Beats' },
-  { id: 'cinematic', label: 'Cinematic' },
-];
-
 export default function AudioModal({
   visible,
   onClose,
@@ -52,55 +33,17 @@ export default function AudioModal({
   project,
   onUpdateProject,
 }: AudioModalProps) {
-  const [activeTab, setActiveTab] = useState<'sfx' | 'music' | 'upload'>('sfx');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [audioItems, setAudioItems] = useState<OpenAudioItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
   const [uploadedTracks, setUploadedTracks] = useState<any[]>(loadUploadedAudio());
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setUploadedTracks(loadUploadedAudio());
     }
   }, [visible]);
-
-  const filteredUploadedTracks = uploadedTracks.filter((t) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.trim().toLowerCase();
-    return (
-      (t.title || '').toLowerCase().includes(q) ||
-      (t.artist || '').toLowerCase().includes(q)
-    );
-  });
-
-  // Fetch open-source audio based on active tab, category, and search query
-  useEffect(() => {
-    let isMounted = true;
-    const fetchAudios = async () => {
-      if (activeTab === 'upload') return;
-      setIsLoading(true);
-      try {
-        const cat = selectedCategory !== 'all' ? selectedCategory : activeTab === 'sfx' ? 'sfx' : 'music';
-        const results = await openMediaService.searchAudio(searchQuery, cat);
-        if (isMounted) {
-          setAudioItems(results);
-        }
-      } catch (err) {
-        console.warn('Failed to load open-source audio:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
-    const debounceTimer = setTimeout(fetchAudios, 250);
-    return () => {
-      isMounted = false;
-      clearTimeout(debounceTimer);
-    };
-  }, [activeTab, searchQuery, selectedCategory]);
 
   // Clean up audio on close or unmount
   useEffect(() => {
@@ -126,7 +69,7 @@ export default function AudioModal({
         a.onended = () => setPlayingId(null);
         setAudioEl(a);
       }
-      soundEngine.playSfx(item.icon === 'flash' ? 'whoosh' : item.icon === 'cut' ? 'split' : 'click');
+      soundEngine.playSfx('click');
       setPlayingId(item.id);
     }
   };
@@ -136,7 +79,7 @@ export default function AudioModal({
     const audioClip: AudioClip = {
       id: 'clip-a-' + Date.now(),
       title: item.title,
-      artist: item.artist || 'Open Audio',
+      artist: item.artist || 'Device Audio',
       duration: item.duration || 10.0,
       startTime: 0,
       trimIn: 0,
@@ -150,7 +93,21 @@ export default function AudioModal({
     onClose();
   };
 
-  // Upload custom audio file from device storage (MP3, WAV, M4A, AAC, OGG)
+  const handleDeleteAudio = (id: string, e: any) => {
+    e?.stopPropagation?.();
+    if (playingId === id && audioEl) {
+      audioEl.pause();
+      setPlayingId(null);
+    }
+    soundEngine.playSfx('pop');
+    setUploadedTracks((prev) => {
+      const updated = prev.filter((t) => t.id !== id);
+      saveUploadedAudio(updated);
+      return updated;
+    });
+  };
+
+  // Upload custom audio file from device storage (MP3, WAV, M4A, AAC, OGG, FLAC)
   const handleDeviceAudioUpload = async () => {
     try {
       if (Platform.OS === 'web') {
@@ -161,6 +118,7 @@ export default function AudioModal({
           const file = e.target.files?.[0];
           if (!file) return;
 
+          setIsLoading(true);
           const fileName = file.name.replace(/\.[^/.]+$/, '');
           const trackId = 'user-audio-' + Date.now();
 
@@ -170,46 +128,51 @@ export default function AudioModal({
           const commitAudio = async (dur: number) => {
             if (handled) return;
             handled = true;
-            const validDuration = dur && !isNaN(dur) && isFinite(dur) && dur > 0
-              ? Math.round(dur * 10) / 10
-              : 15.0;
+            try {
+              const validDuration =
+                dur && !isNaN(dur) && isFinite(dur) && dur > 0
+                  ? Math.round(dur * 10) / 10
+                  : 15.0;
 
-            const saved = await persistLargeMedia(file, trackId, fileName, 'audio', { duration: validDuration });
+              const saved = await persistLargeMedia(file, trackId, fileName, 'audio', {
+                duration: validDuration,
+              });
 
-            const newTrack = {
-              id: trackId,
-              title: fileName || 'Uploaded Audio Track',
-              artist: 'Local Device Audio',
-              duration: validDuration,
-              url: saved.url,
-              bpm: 120,
-              icon: 'musical-notes',
-              license: 'Personal Upload',
-              source: 'Device Storage',
-            };
+              const newTrack = {
+                id: trackId,
+                title: fileName || 'Uploaded Audio Track',
+                artist: 'Device Audio',
+                duration: validDuration,
+                url: saved.url,
+                bpm: 120,
+                icon: 'musical-notes',
+              };
 
-            setUploadedTracks((prev) => {
-              const updated = [newTrack, ...prev];
-              saveUploadedAudio(updated);
-              return updated;
-            });
+              setUploadedTracks((prev) => {
+                const updated = [newTrack, ...prev.filter((t) => t.id !== newTrack.id)];
+                saveUploadedAudio(updated);
+                return updated;
+              });
 
-            const audioClip: AudioClip = {
-              id: 'clip-a-' + Date.now(),
-              title: newTrack.title,
-              artist: newTrack.artist,
-              duration: validDuration,
-              startTime: 0,
-              trimIn: 0,
-              trimOut: validDuration,
-              mediaDuration: validDuration,
-              volume: 1.0,
-              url: saved.url,
-            };
+              const audioClip: AudioClip = {
+                id: 'clip-a-' + Date.now(),
+                title: newTrack.title,
+                artist: newTrack.artist,
+                duration: validDuration,
+                startTime: 0,
+                trimIn: 0,
+                trimOut: validDuration,
+                mediaDuration: validDuration,
+                volume: 1.0,
+                url: saved.url,
+              };
 
-            soundEngine.playSfx('pop');
-            onAddAudio(audioClip);
-            onClose();
+              soundEngine.playSfx('pop');
+              onAddAudio(audioClip);
+              onClose();
+            } finally {
+              setIsLoading(false);
+            }
           };
 
           probe.onloadedmetadata = () => {
@@ -224,7 +187,11 @@ export default function AudioModal({
             commitAudio(probe.duration || 15.0);
           }, 1000);
         };
-        input.click();
+        setTimeout(() => {
+          try {
+            input.click();
+          } catch (_) {}
+        }, 40);
       } else {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -234,9 +201,23 @@ export default function AudioModal({
         if (!result.canceled && result.assets?.[0]) {
           const asset = result.assets[0];
           const dur = asset.duration ? asset.duration / 1000 : 15.0;
+          const fileName = asset.fileName || 'Imported Audio';
+          const trackId = 'user-audio-' + Date.now();
+          const newTrack = {
+            id: trackId,
+            title: fileName,
+            artist: 'Device Library',
+            duration: dur,
+            url: asset.uri,
+          };
+          setUploadedTracks((prev) => {
+            const updated = [newTrack, ...prev.filter((t) => t.id !== newTrack.id)];
+            saveUploadedAudio(updated);
+            return updated;
+          });
           const audioClip: AudioClip = {
             id: 'clip-a-' + Date.now(),
-            title: asset.fileName || 'Uploaded Audio',
+            title: fileName,
             artist: 'Device Library',
             duration: dur,
             startTime: 0,
@@ -253,10 +234,18 @@ export default function AudioModal({
       }
     } catch (err) {
       console.warn('Audio upload failed:', err);
+      setIsLoading(false);
     }
   };
 
-  const activeCategories = activeTab === 'sfx' ? SFX_CATEGORIES : MUSIC_CATEGORIES;
+  const filteredUploadedTracks = uploadedTracks.filter((t) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.artist || '').toLowerCase().includes(q)
+    );
+  });
 
   const hasBeats = Boolean(project?.beatMarkers && project.beatMarkers.length > 0);
 
@@ -278,56 +267,9 @@ export default function AudioModal({
 
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <View style={styles.headerLeft}>
-              <View style={styles.tabsRow}>
-                <TouchableOpacity
-                  style={[styles.tabBtn, activeTab === 'sfx' && styles.tabBtnActive]}
-                  onPress={() => {
-                    setActiveTab('sfx');
-                    setSelectedCategory('all');
-                  }}
-                >
-                  <Ionicons
-                    name="sparkles-outline"
-                    size={14}
-                    color={activeTab === 'sfx' ? '#00F2FE' : '#8E95A5'}
-                  />
-                  <Text style={[styles.tabText, activeTab === 'sfx' && styles.tabTextActive]}>
-                    SFX
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.tabBtn, activeTab === 'music' && styles.tabBtnActive]}
-                  onPress={() => {
-                    setActiveTab('music');
-                    setSelectedCategory('all');
-                  }}
-                >
-                  <Ionicons
-                    name="musical-notes-outline"
-                    size={14}
-                    color={activeTab === 'music' ? '#00F2FE' : '#8E95A5'}
-                  />
-                  <Text style={[styles.tabText, activeTab === 'music' && styles.tabTextActive]}>
-                    Music
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.tabBtn, activeTab === 'upload' && styles.tabBtnActive]}
-                  onPress={() => setActiveTab('upload')}
-                >
-                  <Ionicons
-                    name="cloud-upload-outline"
-                    size={14}
-                    color={activeTab === 'upload' ? '#00F2FE' : '#8E95A5'}
-                  />
-                  <Text style={[styles.tabText, activeTab === 'upload' && styles.tabTextActive]}>
-                    Uploads{uploadedTracks.length > 0 ? ` (${uploadedTracks.length})` : ''}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            <View>
+              <Text style={styles.sheetTitle}>Audio</Text>
+              <Text style={styles.sheetSubtitle}>Upload & search device music & audio</Text>
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -348,9 +290,19 @@ export default function AudioModal({
                     }}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="musical-note" size={13} color={hasBeats ? '#000000' : '#FFE600'} />
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: hasBeats ? '#000000' : '#FFE600' }}>
-                      {hasBeats ? 'Beats' : 'Beats'}
+                    <Ionicons
+                      name="musical-note"
+                      size={13}
+                      color={hasBeats ? '#000000' : '#FFE600'}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '800',
+                        color: hasBeats ? '#000000' : '#FFE600',
+                      }}
+                    >
+                      Beats
                     </Text>
                   </TouchableOpacity>
 
@@ -393,7 +345,7 @@ export default function AudioModal({
                   </TouchableOpacity>
                 </>
               )}
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
                 <Ionicons name="close" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
@@ -407,53 +359,21 @@ export default function AudioModal({
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder={
-                  activeTab === 'upload'
-                    ? 'Search your uploaded audio...'
-                    : activeTab === 'sfx'
-                    ? 'Search open-source sound effects (whoosh, hit, glitch)...'
-                    : 'Search open-source music tracks (lofi, beats, ambient)...'
-                }
+                placeholder="Search device audio..."
                 placeholderTextColor="#64748B"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <Ionicons name="close-circle" size={16} color="#8E95A5" />
                 </TouchableOpacity>
               )}
             </View>
-
-            {/* Category Filter Pills (for SFX and Music) */}
-            {activeTab !== 'upload' && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoryScroll}
-              >
-                {activeCategories.map((cat) => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[
-                      styles.categoryPill,
-                      selectedCategory === cat.id && styles.categoryPillActive,
-                    ]}
-                    onPress={() => setSelectedCategory(cat.id)}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        selectedCategory === cat.id && styles.categoryPillTextActive,
-                      ]}
-                    >
-                      {cat.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
           </View>
 
-          <ScrollView style={styles.sheetBody}>
+          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             {/* Quick Upload From Device Card */}
             <TouchableOpacity
               style={styles.deviceUploadCard}
@@ -465,42 +385,99 @@ export default function AudioModal({
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.deviceUploadTitle}>Upload Custom Audio</Text>
+                  <Text style={styles.deviceUploadTitle}>Upload From Device</Text>
                   <View style={styles.formatBadge}>
                     <Text style={styles.formatBadgeText}>MP3 / WAV / M4A</Text>
                   </View>
                 </View>
                 <Text style={styles.deviceUploadSubtext}>
-                  Add audio directly from your device storage
+                  Add audio files directly from your computer or phone
                 </Text>
               </View>
               <View style={styles.uploadBtnCircle}>
-                <Ionicons name="add" size={18} color="#000000" />
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <Ionicons name="add" size={18} color="#000000" />
+                )}
               </View>
             </TouchableOpacity>
 
-            {/* TAB: SOUND EFFECTS OR MUSIC (OPEN SOURCE LIBRARY) */}
-            {activeTab !== 'upload' && (
-              <AudioLibraryTab
-                activeTab={activeTab}
-                audioItems={audioItems}
-                isLoading={isLoading}
-                playingId={playingId}
-                onTogglePreview={togglePreview}
-                onSelectAudio={handleSelectAudio}
-              />
-            )}
+            {/* List of Device Audio Tracks */}
+            <View style={styles.sourceBannerRow}>
+              <Text style={styles.sectionTitle}>
+                DEVICE AUDIO ({filteredUploadedTracks.length})
+              </Text>
+            </View>
 
-            {/* TAB: UPLOADED AUDIO */}
-            {activeTab === 'upload' && (
-              <AudioUploadTab
-                filteredUploadedTracks={filteredUploadedTracks}
-                searchQuery={searchQuery}
-                playingId={playingId}
-                onDeviceUpload={handleDeviceAudioUpload}
-                onTogglePreview={togglePreview}
-                onSelectAudio={handleSelectAudio}
-              />
+            {filteredUploadedTracks.length === 0 ? (
+              <View style={styles.emptyUploadBox}>
+                <Ionicons name="musical-notes-outline" size={44} color="#374151" />
+                <Text style={styles.emptyUploadTitle}>
+                  {searchQuery.trim() ? 'No Matching Audio Tracks' : 'No Custom Audio Yet'}
+                </Text>
+                <Text style={styles.emptyUploadSubtext}>
+                  {searchQuery.trim()
+                    ? `No audio matching "${searchQuery}". Try a different keyword.`
+                    : 'Import MP3, WAV, or M4A music files directly from your phone or computer.'}
+                </Text>
+                {!searchQuery.trim() && (
+                  <TouchableOpacity
+                    style={styles.emptyUploadCta}
+                    onPress={handleDeviceAudioUpload}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="cloud-upload" size={18} color="#000000" />
+                    <Text style={styles.emptyUploadCtaText}>Choose Audio File</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              filteredUploadedTracks.map((item) => (
+                <View key={item.id} style={styles.audioRow}>
+                  <TouchableOpacity
+                    style={[styles.playIconBtn, playingId === item.id && styles.playIconBtnActive]}
+                    onPress={() => togglePreview(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={playingId === item.id ? 'pause' : 'play'}
+                      size={18}
+                      color={playingId === item.id ? '#000000' : '#00F2FE'}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.audioTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <View style={styles.metaRow}>
+                      <Text style={styles.audioMeta}>
+                        {item.artist || 'Device Audio'} • {item.duration}s
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={(e) => handleDeleteAudio(item.id, e)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={14} color="#EF4444" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.usePill}
+                      onPress={() => handleSelectAudio(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.usePillText}>Use</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
             )}
           </ScrollView>
         </View>

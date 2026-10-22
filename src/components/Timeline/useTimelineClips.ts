@@ -9,12 +9,14 @@ interface UseTimelineClipsProps {
   project: FastArtProject;
   dragState: { clipId: string; currentStart: number; currentTrack: number } | null;
   selectedClipId: string | null;
+  onUpdateProject?: (updates: Partial<FastArtProject>) => void;
 }
 
 export function useTimelineClips({
   project,
   dragState,
   selectedClipId,
+  onUpdateProject,
 }: UseTimelineClipsProps) {
   const videoClips = project.tracks.video || [];
   const audioClips = project.tracks.audio || [];
@@ -167,6 +169,44 @@ export function useTimelineClips({
 
   const handleRemoveTrack = (trackIdx: number) => {
     soundEngine.playSfx("click");
+
+    // Shift all clips located on tracks after trackIdx down by 1 track
+    const shiftClip = <T extends { trackIndex?: number }>(
+      clip: T,
+      defaultTrack: number,
+    ): T => {
+      const curTrack =
+        typeof clip.trackIndex === "number" ? clip.trackIndex : defaultTrack;
+      if (curTrack > trackIdx) {
+        return {
+          ...clip,
+          trackIndex: Math.max(0, curTrack - 1),
+        };
+      }
+      return clip;
+    };
+
+    if (onUpdateProject) {
+      const updatedVideo = videoClips.map((c) => shiftClip(c, 0));
+      const updatedAudio = audioClips.map((c) => shiftClip(c, 1));
+      const updatedCaptions = captionClips.map((c) => shiftClip(c, 2));
+      const updatedText = textClips.map((c) => shiftClip(c, 2));
+      const updatedStickers = stickerClips.map((c) => shiftClip(c, 3));
+      const updatedEffects = effectClips.map((c) => shiftClip(c, 4));
+
+      onUpdateProject({
+        tracks: {
+          ...project.tracks,
+          video: updatedVideo,
+          audio: updatedAudio,
+          captions: updatedCaptions,
+          text: updatedText,
+          stickers: updatedStickers,
+          effects: updatedEffects,
+        },
+      });
+    }
+
     setUserTrackCount((prev) => Math.max(1, prev - 1));
   };
 

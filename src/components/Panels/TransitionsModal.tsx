@@ -55,8 +55,22 @@ export default function TransitionsModal({
 
   const isNone = !selectedType || selectedType === 'none';
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onApplyTransition({
+      type: activeTransition?.type || 'none',
+      duration: activeTransition?.duration ?? 0.5,
+    });
+    onClose();
+  };
+
+  const handleApply = () => {
+    soundEngine.playSfx('whoosh');
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
@@ -64,21 +78,37 @@ export default function TransitionsModal({
 
           {/* Space-Optimized Header */}
           <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={handleClear}
-              style={[styles.resetBtn, isNone && { opacity: 0.4 }]}
-              disabled={isNone}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetText}>None</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleClear}
+                style={[styles.resetBtn, isNone && { opacity: 0.4 }]}
+                disabled={isNone}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>None</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.headerTitleRow}>
               <Ionicons name="flash-outline" size={16} color="#00F2FE" />
               <Text style={styles.sheetTitle}>Transitions</Text>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleApply}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply transition"
+            >
               <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>

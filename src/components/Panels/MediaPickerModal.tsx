@@ -14,14 +14,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
-import { openMediaService, OpenMediaItem } from '../../services/openMediaService';
 import {
   loadUploadedMedia,
   saveUploadedMedia,
   addNotification,
 } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
-import { STOCK_PRESET_CLIPS } from './AutoCut/autoCutConstants';
 
 interface MediaPickerModalProps {
   visible: boolean;
@@ -30,9 +28,8 @@ interface MediaPickerModalProps {
 }
 
 export default function MediaPickerModal({ visible, onClose, onAddMedia }: MediaPickerModalProps) {
-  const [activeTab, setActiveTab] = useState<'all' | 'video' | 'photo' | 'uploaded'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'video' | 'photo'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [mediaItems, setMediaItems] = useState<OpenMediaItem[]>([]);
   const [uploadedMedia, setUploadedMedia] = useState<any[]>(loadUploadedMedia());
   const [isLoading, setIsLoading] = useState(false);
 
@@ -42,48 +39,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
     }
   }, [visible]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchMedia = async () => {
-      if (activeTab === 'uploaded') return;
-      setIsLoading(true);
-      try {
-        const typeFilter = activeTab === 'all' ? 'all' : activeTab;
-        const results = await openMediaService.searchMedia(searchQuery, typeFilter);
-        const stockPresets: OpenMediaItem[] =
-          activeTab === 'all' || activeTab === 'video'
-            ? STOCK_PRESET_CLIPS.map((s) => ({
-                id: s.id,
-                title: s.title,
-                type: 'video' as const,
-                url: s.url,
-                thumbnailUrl: s.thumbnailUrl,
-                duration: s.duration,
-                width: 1920,
-                height: 1080,
-                license: 'CC0',
-                source: 'Google Sample HD',
-              }))
-            : [];
-        if (isMounted) {
-          const merged = [...stockPresets, ...results.filter((r) => !stockPresets.some((s) => s.id === r.id))];
-          setMediaItems(merged);
-        }
-      } catch (err) {
-        console.warn('Error fetching media:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
-    const timer = setTimeout(fetchMedia, 250);
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [searchQuery, activeTab]);
-
-  // Handle local device file upload
+  // Handle local device file upload (video / photo)
   const handleDeviceUpload = async () => {
     try {
       if (Platform.OS === 'web') {
@@ -121,7 +77,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
               };
 
               setUploadedMedia((prev) => {
-                const updated = [clip, ...prev];
+                const updated = [clip, ...prev.filter((m) => m.id !== clip.id)];
                 saveUploadedMedia(updated);
                 return updated;
               });
@@ -140,7 +96,11 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
             }
           }
         };
-        input.click();
+        setTimeout(() => {
+          try {
+            input.click();
+          } catch (_) {}
+        }, 40);
       } else {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -149,11 +109,13 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
         });
         if (!result.canceled && result.assets?.[0]) {
           const asset = result.assets[0];
-          const dur = asset.duration ? asset.duration / 1000 : asset.type === 'video' ? 6.0 : 4.0;
+          const isVideo = asset.type === 'video';
+          const dur = asset.duration ? asset.duration / 1000 : isVideo ? 6.0 : 4.0;
           const clip = {
             id: 'clip-' + Date.now(),
-            title: asset.fileName || 'Imported Clip',
-            type: asset.type === 'video' ? 'video' : 'photo',
+            sourceMediaId: 'clip-' + Date.now(),
+            title: asset.fileName || (isVideo ? 'Imported Video' : 'Imported Photo'),
+            type: isVideo ? 'video' : 'photo',
             url: asset.uri,
             duration: dur,
             startTime: 0,
@@ -168,7 +130,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
           };
 
           setUploadedMedia((prev) => {
-            const updated = [clip, ...prev];
+            const updated = [clip, ...prev.filter((m) => m.id !== clip.id)];
             saveUploadedMedia(updated);
             return updated;
           });
@@ -185,31 +147,9 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
         }
       }
     } catch (err) {
-      console.warn('Error picking media:', err);
+      console.warn('Error picking media from device:', err);
       setIsLoading(false);
     }
-  };
-
-  const handleSelectOpenMedia = (item: OpenMediaItem) => {
-    const clip = {
-      id: 'clip-' + Date.now(),
-      title: item.title,
-      type: item.type,
-      url: item.url,
-      duration: item.duration,
-      startTime: 0,
-      trimIn: 0,
-      trimOut: item.duration,
-      mediaDuration: item.duration,
-      speed: 1.0,
-      volume: 1.0,
-      filter: 'normal',
-      effect: 'none',
-      transform: { scale: 1, rotation: 0, x: 0, y: 0 },
-    };
-    soundEngine.playSfx('pop');
-    onAddMedia(clip);
-    onClose();
   };
 
   const handleSelectUploadedMedia = (item: any) => {
@@ -227,10 +167,25 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
     onClose();
   };
 
-  const filteredUploaded = uploadedMedia.filter((m) => {
+  const handleDeleteMedia = (id: string, e: any) => {
+    e?.stopPropagation?.();
+    soundEngine.playSfx('pop');
+    setUploadedMedia((prev) => {
+      const updated = prev.filter((m) => m.id !== id);
+      saveUploadedMedia(updated);
+      return updated;
+    });
+  };
+
+  const filteredMedia = uploadedMedia.filter((m) => {
+    if (activeTab === 'video' && m.type !== 'video') return false;
+    if (activeTab === 'photo' && m.type !== 'photo') return false;
     if (!searchQuery.trim()) return true;
     return (m.title || '').toLowerCase().includes(searchQuery.trim().toLowerCase());
   });
+
+  const videoCount = uploadedMedia.filter((m) => m.type === 'video').length;
+  const photoCount = uploadedMedia.filter((m) => m.type === 'photo').length;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -241,13 +196,16 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Media</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={22} color="#FFFFFF" />
+            <View>
+              <Text style={styles.sheetTitle}>Media</Text>
+              <Text style={styles.sheetSubtitle}>Upload & select from your device</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+              <Ionicons name="close" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar */}
+          {/* Search Bar & Type Filter */}
           <View style={styles.filterSection}>
             <View style={styles.searchBar}>
               <Ionicons name="search" size={16} color="#8E95A5" />
@@ -255,233 +213,155 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder={
-                  activeTab === 'uploaded'
-                    ? 'Search uploads...'
-                    : 'Search stock media...'
-                }
+                placeholder="Search device media..."
                 placeholderTextColor="#64748B"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <Ionicons name="close-circle" size={16} color="#8E95A5" />
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Filter Tabs */}
+            {/* Filter Tabs (All / Videos / Photos) */}
             <View style={styles.typeFilterRow}>
               <TouchableOpacity
                 style={[styles.typePill, activeTab === 'all' && styles.typePillActive]}
                 onPress={() => setActiveTab('all')}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.typePillText, activeTab === 'all' && styles.typePillTextActive]}>
-                  All
+                  All ({uploadedMedia.length})
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.typePill, activeTab === 'video' && styles.typePillActive]}
                 onPress={() => setActiveTab('video')}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name="videocam-outline"
-                  size={12}
+                  size={13}
                   color={activeTab === 'video' ? '#00F2FE' : '#8E95A5'}
                 />
                 <Text style={[styles.typePillText, activeTab === 'video' && styles.typePillTextActive]}>
-                  Videos
+                  Videos ({videoCount})
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.typePill, activeTab === 'photo' && styles.typePillActive]}
                 onPress={() => setActiveTab('photo')}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name="image-outline"
-                  size={12}
+                  size={13}
                   color={activeTab === 'photo' ? '#00F2FE' : '#8E95A5'}
                 />
                 <Text style={[styles.typePillText, activeTab === 'photo' && styles.typePillTextActive]}>
-                  Photos
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typePill, activeTab === 'uploaded' && styles.typePillActive]}
-                onPress={() => setActiveTab('uploaded')}
-              >
-                <Ionicons
-                  name="cloud-done-outline"
-                  size={12}
-                  color={activeTab === 'uploaded' ? '#00F2FE' : '#8E95A5'}
-                />
-                <Text style={[styles.typePillText, activeTab === 'uploaded' && styles.typePillTextActive]}>
-                  Uploads{uploadedMedia.length > 0 ? ` (${uploadedMedia.length})` : ''}
+                  Photos ({photoCount})
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          <ScrollView style={styles.sheetBody}>
+          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             {/* Quick Device Import Card */}
-            <TouchableOpacity style={styles.deviceImportCard} onPress={handleDeviceUpload} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.deviceImportCard}
+              onPress={handleDeviceUpload}
+              activeOpacity={0.8}
+            >
               <View style={styles.deviceIconBox}>
-                <Ionicons name="cloud-upload" size={26} color="#00F2FE" />
+                <Ionicons name="cloud-upload" size={24} color="#000000" />
               </View>
               <View style={{ flex: 1, marginLeft: 14 }}>
                 <Text style={styles.deviceCardTitle}>Upload From Device</Text>
                 <Text style={styles.deviceCardSubtext}>
-                  Select video (MP4, MOV) or photo from your computer/device
+                  Select video (MP4, MOV) or photo from your library
                 </Text>
               </View>
               <View style={styles.uploadChevronBox}>
-                <Ionicons name="add" size={20} color="#00F2FE" />
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#00F2FE" />
+                ) : (
+                  <Ionicons name="add" size={20} color="#00F2FE" />
+                )}
               </View>
             </TouchableOpacity>
 
-            {/* TAB: UPLOADED MEDIA */}
-            {activeTab === 'uploaded' && (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionHeader}>YOUR UPLOADED MEDIA ({filteredUploaded.length})</Text>
-                </View>
+            {/* List of Device Uploads */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeader}>
+                DEVICE MEDIA ({filteredMedia.length})
+              </Text>
+            </View>
 
-                {filteredUploaded.length === 0 ? (
-                  <View style={styles.emptyBox}>
-                    <Ionicons name="folder-open-outline" size={36} color="#374151" />
-                    <Text style={styles.emptyTitle}>No Uploaded Media</Text>
-                    <Text style={styles.emptySubtext}>
-                      Click "Upload From Device" above to add videos or photos from your local library.
-                    </Text>
-                  </View>
-                ) : (
-                  filteredUploaded.map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={styles.sampleMediaCard}
-                      onPress={() => handleSelectUploadedMedia(item)}
-                      activeOpacity={0.75}
-                    >
-                      <View style={styles.thumbBox}>
-                        {item.type === 'photo' ? (
-                          <Image source={{ uri: item.url }} style={styles.thumbImage} resizeMode="cover" />
-                        ) : (
-                          <View style={styles.videoPlaceholder}>
-                            <Ionicons name="videocam" size={22} color="#00F2FE" />
-                          </View>
-                        )}
-                        <View style={styles.durationPill}>
-                          <Text style={styles.durationText}>{item.duration}s</Text>
-                        </View>
+            {filteredMedia.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="folder-open-outline" size={40} color="#374151" />
+                <Text style={styles.emptyTitle}>
+                  {searchQuery.trim() ? 'No Matching Media Found' : 'No Device Media Yet'}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {searchQuery.trim()
+                    ? `No media matching "${searchQuery}". Try a different keyword.`
+                    : 'Tap "Upload From Device" above to add videos or photos from your library.'}
+                </Text>
+              </View>
+            ) : (
+              filteredMedia.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.sampleMediaCard}
+                  onPress={() => handleSelectUploadedMedia(item)}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.thumbBox}>
+                    {item.type === 'photo' ? (
+                      <Image
+                        source={{ uri: item.url }}
+                        style={styles.thumbImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.videoPlaceholder}>
+                        <Ionicons name="videocam" size={22} color="#00F2FE" />
                       </View>
-
-                      <View style={{ flex: 1, marginLeft: 14 }}>
-                        <Text style={styles.sampleTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <Text style={styles.sampleSubtext}>
-                          {item.type.toUpperCase()} • Local Upload
-                        </Text>
-                        <View style={styles.licenseRow}>
-                          <View style={[styles.licensePill, { backgroundColor: 'rgba(0,242,254,0.15)' }]}>
-                            <Text style={[styles.licenseText, { color: '#00F2FE' }]}>Uploaded</Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={styles.addPill}>
-                        <Ionicons name="add" size={14} color="#000000" />
-                        <Text style={styles.addPillText}>Add</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </>
-            )}
-
-            {/* TAB: OPEN SOURCE MEDIA LIBRARY */}
-            {activeTab !== 'uploaded' && (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.sectionHeader}>
-                      {activeTab === 'video'
-                        ? 'OPEN SOURCE VIDEOS (WIKIMEDIA COMMONS)'
-                        : activeTab === 'photo'
-                        ? 'OPEN SOURCE PHOTOS (OPENVERSE CC)'
-                        : 'OPEN SOURCE MEDIA LIBRARY'}
-                    </Text>
-                    <View style={styles.ossBadge}>
-                      <Ionicons name="globe-outline" size={10} color="#00F2FE" />
-                      <Text style={styles.ossBadgeText}>{"CC0 & Creative Commons"}</Text>
+                    )}
+                    <View style={styles.durationPill}>
+                      <Text style={styles.durationText}>{item.duration}s</Text>
                     </View>
                   </View>
-                </View>
 
-                {isLoading ? (
-                  <View style={styles.loadingBox}>
-                    <ActivityIndicator size="small" color="#00F2FE" />
-                    <Text style={styles.loadingText}>Searching open-source media library...</Text>
-                  </View>
-                ) : mediaItems.length === 0 ? (
-                  <View style={styles.emptyBox}>
-                    <Ionicons name="search-outline" size={36} color="#374151" />
-                    <Text style={styles.emptyTitle}>No Media Found</Text>
-                    <Text style={styles.emptySubtext}>
-                      Try searching with other keywords like "nature", "sky", "city", or "timelapse".
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.sampleTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.sampleSubtext}>
+                      {item.type.toUpperCase()} • Device File
                     </Text>
                   </View>
-                ) : (
-                  mediaItems.map((item) => (
+
+                  <View style={styles.actionButtonsRow}>
                     <TouchableOpacity
-                      key={item.id}
-                      style={styles.sampleMediaCard}
-                      onPress={() => handleSelectOpenMedia(item)}
-                      activeOpacity={0.75}
+                      style={styles.deleteBtn}
+                      onPress={(e) => handleDeleteMedia(item.id, e)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <View style={styles.thumbBox}>
-                        {item.type === 'photo' ? (
-                          <Image
-                            source={{ uri: item.thumbnailUrl || item.url }}
-                            style={styles.thumbImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={styles.videoPlaceholder}>
-                            <Ionicons name="videocam" size={22} color="#00F2FE" />
-                          </View>
-                        )}
-                        <View style={styles.durationPill}>
-                          <Text style={styles.durationText}>{item.duration}s</Text>
-                        </View>
-                      </View>
-
-                      <View style={{ flex: 1, marginLeft: 14 }}>
-                        <Text style={styles.sampleTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        <Text style={styles.sampleSubtext}>
-                          {item.width}x{item.height} • {item.source}
-                        </Text>
-                        <View style={styles.licenseRow}>
-                          <View style={styles.licensePill}>
-                            <Text style={styles.licenseText}>{item.license}</Text>
-                          </View>
-                          {item.author && (
-                            <Text style={styles.authorText} numberOfLines={1}>
-                              by {item.author}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-
-                      <View style={styles.addPill}>
-                        <Ionicons name="add" size={14} color="#000000" />
-                        <Text style={styles.addPillText}>Add</Text>
-                      </View>
+                      <Ionicons name="trash-outline" size={14} color="#EF4444" />
                     </TouchableOpacity>
-                  ))
-                )}
-              </>
+
+                    <View style={styles.addPill}>
+                      <Ionicons name="add" size={14} color="#000000" />
+                      <Text style={styles.addPillText}>Add</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))
             )}
           </ScrollView>
         </View>
@@ -493,14 +373,14 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#121620',
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    maxHeight: '60%',
+    maxHeight: '62%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
   },
@@ -530,20 +410,20 @@ const styles = StyleSheet.create({
   },
   sheetSubtitle: {
     color: '#8E95A5',
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#1E2333',
     alignItems: 'center',
     justifyContent: 'center',
   },
   filterSection: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1E2333',
     gap: 10,
@@ -598,18 +478,18 @@ const styles = StyleSheet.create({
   deviceImportCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.06)',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 242, 254, 0.3)',
-    marginBottom: 16,
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.25)',
+    marginBottom: 14,
   },
   deviceIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -624,82 +504,38 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   uploadChevronBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,242,254,0.1)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 242, 254, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionHeaderRow: {
-    marginBottom: 12,
-    marginTop: 4,
+    marginBottom: 8,
   },
   sectionHeader: {
-    color: '#8E95A5',
+    color: '#64748B',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
-  ossBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0,242,254,0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,242,254,0.25)',
-  },
-  ossBadgeText: {
-    color: '#00F2FE',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  loadingBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 10,
-  },
-  loadingText: {
-    color: '#8E95A5',
-    fontSize: 12,
-  },
-  emptyBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 8,
-  },
-  emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    color: '#64748B',
-    fontSize: 12,
-    textAlign: 'center',
-    maxWidth: 280,
-  },
   sampleMediaCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1E2B',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2333',
   },
   thumbBox: {
-    width: 68,
-    height: 52,
-    borderRadius: 8,
-    backgroundColor: '#0D0F15',
+    width: 58,
+    height: 44,
+    borderRadius: 6,
     overflow: 'hidden',
+    backgroundColor: '#0D0F15',
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -713,21 +549,21 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E2333',
+    backgroundColor: '#1A2030',
   },
   durationPill: {
     position: 'absolute',
-    bottom: 3,
-    right: 3,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 4,
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     paddingHorizontal: 4,
     paddingVertical: 1,
+    borderRadius: 3,
   },
   durationText: {
     color: '#FFFFFF',
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   sampleTitle: {
     color: '#FFFFFF',
@@ -736,43 +572,55 @@ const styles = StyleSheet.create({
   },
   sampleSubtext: {
     color: '#8E95A5',
-    fontSize: 11,
+    fontSize: 10.5,
     marginTop: 2,
   },
-  licenseRow: {
+  actionButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    gap: 8,
   },
-  licensePill: {
-    backgroundColor: '#252B3B',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  licenseText: {
-    color: '#00F2FE',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  authorText: {
-    color: '#64748B',
-    fontSize: 10,
-    maxWidth: 120,
+  deleteBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
   },
   addPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: '#00F2FE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   addPillText: {
     color: '#000000',
     fontSize: 11,
     fontWeight: '700',
+  },
+  emptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  emptySubtext: {
+    color: '#8E95A5',
+    fontSize: 11.5,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 16,
   },
 });

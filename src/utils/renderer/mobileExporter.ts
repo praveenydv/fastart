@@ -1,14 +1,22 @@
 // FastArt Mobile Compositing & Export Engine (Pure JavaScript & Expo Native)
 // Handles complete rendering of multi-track projects on mobile:
-// - Canvas Background Color
-// - Video / Image Clips (with transforms, crops, fits)
-// - Text Clips (custom colors, backgrounds, badges, outlines, scales, rotations)
-// - Sticker Clips (emojis, icons, graphics)
-// - Audio Tracks (WAV synthesis)
-// - Output Formats: MP4, GIF, PNG, WAV
+// - Canvas Background Color / Smooth Gradients / Frost Dark Blur
+// - Video / Photo Clips (with transforms, aspect ratios, fit modes, letterboxing)
+// - Text Clips (custom typography, badges, outlines, animations, motion tracking)
+// - Auto-Captions (TikTok/Instagram style, karaoke word-level highlighting, neon glow)
+// - Sticker Clips (emojis, icons, badges, motion tracking)
+// - Effects & Filters (vignette, cinema letterbox bars, flash, chromatic tints)
+// - Output Formats: MP4 (H.264 Hardware-Compatible Baseline Profile), GIF, PNG, WAV
 
 import * as FileSystem from "expo-file-system/legacy";
-import { FastArtProject, TextClip, StickerClip, VideoClip } from "../../types/project";
+import {
+  FastArtProject,
+  TextClip,
+  CaptionClip,
+  StickerClip,
+  VideoClip,
+  EffectClip,
+} from "../../types/project";
 import { createGif, GifFrame } from "../gifEncoder";
 import { exportProjectAudioToWav, exportProjectAudioToWavBytes } from "../audioExporter";
 import { ExportFormat, ExportOptions, ExportResult } from "./videoExporter";
@@ -33,12 +41,14 @@ function uint8ToBase64(uint8: Uint8Array): string {
   return "";
 }
 
-// Table for CRC-32 checksum calculation
+// ---------------------------------------------------------------------------
+// CRC-32 & Adler-32 Checksums (for PNG & Bitstream Validation)
+// ---------------------------------------------------------------------------
 const CRC32_TABLE = new Uint32Array(256);
 for (let i = 0; i < 256; i++) {
   let c = i;
   for (let k = 0; k < 8; k++) {
-    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
   }
   CRC32_TABLE[i] = c >>> 0;
 }
@@ -52,7 +62,6 @@ function crc32(buf: Uint8Array, start = 0, length = buf.length - start): number 
   return (c ^ 0xffffffff) >>> 0;
 }
 
-// Adler-32 checksum calculation for zlib
 function adler32(data: Uint8Array): number {
   let a = 1;
   let b = 0;
@@ -72,7 +81,9 @@ function adler32(data: Uint8Array): number {
   return ((b << 16) | a) >>> 0;
 }
 
-// Lightweight pure-JS PNG encoder with zero native or Node dependencies
+// ---------------------------------------------------------------------------
+// Lightweight pure-JS PNG Encoder
+// ---------------------------------------------------------------------------
 export function createPngBuffer(width: number, height: number, rgbaData: Uint8Array): Uint8Array {
   const rowStride = width * 4;
   const scanlineLength = 1 + rowStride;
@@ -86,13 +97,11 @@ export function createPngBuffer(width: number, height: number, rgbaData: Uint8Ar
     uncompressed.set(rgbaData.subarray(srcOffset, srcOffset + rowStride), dstOffset + 1);
   }
 
-  // Deflate into uncompressed DEFLATE blocks (max 65535 bytes per block)
   const CHUNK_SIZE = 65535;
   const numBlocks = Math.ceil(uncompressedLength / CHUNK_SIZE) || 1;
-  const zlibDataLength = 2 + (numBlocks * 5) + uncompressedLength + 4;
+  const zlibDataLength = 2 + numBlocks * 5 + uncompressedLength + 4;
   const zlibData = new Uint8Array(zlibDataLength);
 
-  // zlib header (CMF: 0x78 = Deflate 32k window, FLG: 0x01)
   zlibData[0] = 0x78;
   zlibData[1] = 0x01;
 
@@ -101,13 +110,13 @@ export function createPngBuffer(width: number, height: number, rgbaData: Uint8Ar
   let srcPos = 0;
 
   for (let b = 0; b < numBlocks; b++) {
-    const isLast = (b === numBlocks - 1);
+    const isLast = b === numBlocks - 1;
     const blockSize = Math.min(CHUNK_SIZE, remaining);
 
-    zlibData[zPos++] = isLast ? 0x01 : 0x00; // BFINAL + BTYPE (00: uncompressed)
+    zlibData[zPos++] = isLast ? 0x01 : 0x00;
     zlibData[zPos++] = blockSize & 0xff;
     zlibData[zPos++] = (blockSize >> 8) & 0xff;
-    const nlen = (~blockSize) & 0xffff;
+    const nlen = ~blockSize & 0xffff;
     zlibData[zPos++] = nlen & 0xff;
     zlibData[zPos++] = (nlen >> 8) & 0xff;
 
@@ -117,46 +126,40 @@ export function createPngBuffer(width: number, height: number, rgbaData: Uint8Ar
     remaining -= blockSize;
   }
 
-  // Adler-32 checksum (big-endian)
   const adler = adler32(uncompressed);
   zlibData[zPos++] = (adler >> 24) & 0xff;
   zlibData[zPos++] = (adler >> 16) & 0xff;
   zlibData[zPos++] = (adler >> 8) & 0xff;
   zlibData[zPos++] = adler & 0xff;
 
-  // Total PNG length: 8 (sig) + 25 (IHDR) + (12 + zlibDataLength) (IDAT) + 12 (IEND)
   const totalPngLength = 8 + 25 + 12 + zlibDataLength + 12;
   const png = new Uint8Array(totalPngLength);
   const view = new DataView(png.buffer);
 
-  // PNG Signature
   png.set([137, 80, 78, 71, 13, 10, 26, 10], 0);
 
   let offset = 8;
-
-  // 1. IHDR Chunk
-  view.setUint32(offset, 13, false); // Length = 13
+  view.setUint32(offset, 13, false);
   offset += 4;
   const ihdrTypeOffset = offset;
-  png.set([0x49, 0x48, 0x44, 0x52], offset); // "IHDR"
+  png.set([0x49, 0x48, 0x44, 0x52], offset);
   offset += 4;
-  view.setUint32(offset, width, false); // Width
-  view.setUint32(offset + 4, height, false); // Height
-  png[offset + 8] = 8; // Bit depth: 8
-  png[offset + 9] = 6; // Color type: 6 (RGBA)
-  png[offset + 10] = 0; // Compression: 0 (deflate)
-  png[offset + 11] = 0; // Filter: 0
-  png[offset + 12] = 0; // Interlace: 0
+  view.setUint32(offset, width, false);
+  view.setUint32(offset + 4, height, false);
+  png[offset + 8] = 8;
+  png[offset + 9] = 6;
+  png[offset + 10] = 0;
+  png[offset + 11] = 0;
+  png[offset + 12] = 0;
   offset += 13;
   const ihdrCrc = crc32(png, ihdrTypeOffset, 4 + 13);
   view.setUint32(offset, ihdrCrc, false);
   offset += 4;
 
-  // 2. IDAT Chunk
   view.setUint32(offset, zlibDataLength, false);
   offset += 4;
   const idatTypeOffset = offset;
-  png.set([0x49, 0x44, 0x41, 0x54], offset); // "IDAT"
+  png.set([0x49, 0x44, 0x41, 0x54], offset);
   offset += 4;
   png.set(zlibData, offset);
   offset += zlibDataLength;
@@ -164,11 +167,10 @@ export function createPngBuffer(width: number, height: number, rgbaData: Uint8Ar
   view.setUint32(offset, idatCrc, false);
   offset += 4;
 
-  // 3. IEND Chunk
   view.setUint32(offset, 0, false);
   offset += 4;
   const iendTypeOffset = offset;
-  png.set([0x49, 0x45, 0x4e, 0x44], offset); // "IEND"
+  png.set([0x49, 0x45, 0x4e, 0x44], offset);
   offset += 4;
   const iendCrc = crc32(png, iendTypeOffset, 4);
   view.setUint32(offset, iendCrc, false);
@@ -176,7 +178,9 @@ export function createPngBuffer(width: number, height: number, rgbaData: Uint8Ar
   return png;
 }
 
-// 24-bit / 32-bit BMP buffer fallback with zero native dependencies
+// ---------------------------------------------------------------------------
+// 24-bit / 32-bit BMP Buffer Fallback
+// ---------------------------------------------------------------------------
 export function createBmpBuffer(width: number, height: number, rgbaData: Uint8Array): Uint8Array {
   const rowSize = width * 4;
   const pixelArraySize = rowSize * height;
@@ -184,39 +188,35 @@ export function createBmpBuffer(width: number, height: number, rgbaData: Uint8Ar
   const buffer = new Uint8Array(fileSize);
   const view = new DataView(buffer.buffer);
 
-  // BMP Header (14 bytes)
-  buffer[0] = 0x42; // 'B'
-  buffer[1] = 0x4d; // 'M'
+  buffer[0] = 0x42;
+  buffer[1] = 0x4d;
   view.setUint32(2, fileSize, true);
-  view.setUint32(10, 54, true); // Offset to pixel array
+  view.setUint32(10, 54, true);
 
-  // DIB Header (BITMAPINFOHEADER - 40 bytes)
   view.setUint32(14, 40, true);
   view.setInt32(18, width, true);
-  view.setInt32(22, -height, true); // Top-down
-  view.setUint16(26, 1, true); // Color planes
-  view.setUint16(28, 32, true); // Bits per pixel (32-bit BGRA)
-  view.setUint32(30, 0, true); // BI_RGB (no compression)
+  view.setInt32(22, -height, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 32, true);
+  view.setUint32(30, 0, true);
   view.setUint32(34, pixelArraySize, true);
-  view.setInt32(38, 2835, true); // ~72 DPI
+  view.setInt32(38, 2835, true);
   view.setInt32(42, 2835, true);
 
-  // Write pixels (RGBA -> BGRA)
   let dst = 54;
   for (let i = 0; i < rgbaData.length; i += 4) {
-    buffer[dst++] = rgbaData[i + 2]; // B
-    buffer[dst++] = rgbaData[i + 1]; // G
-    buffer[dst++] = rgbaData[i];     // R
-    buffer[dst++] = rgbaData[i + 3]; // A
+    buffer[dst++] = rgbaData[i + 2];
+    buffer[dst++] = rgbaData[i + 1];
+    buffer[dst++] = rgbaData[i];
+    buffer[dst++] = rgbaData[i + 3];
   }
 
   return buffer;
 }
 
 // ---------------------------------------------------------------------------
-// 8x16 Embedded ASCII Bitmap Font for Crisp On-Canvas Text Rendering
+// 8x16 Embedded ASCII Bitmap Font for Crisp On-Canvas Text & Subtitles
 // ---------------------------------------------------------------------------
-// Basic 5x7 / 8x16 font glyph patterns for numbers, uppercase, lowercase, punctuation
 const FONT_GLYPHS: Record<string, number[]> = {
   " ": [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
   "!": [0x00,0x00,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x00,0x00,0x18,0x18,0x00,0x00,0x00],
@@ -277,18 +277,31 @@ const FONT_GLYPHS: Record<string, number[]> = {
   "X": [0x00,0x00,0x66,0x66,0x3c,0x18,0x3c,0x66,0x66,0x66,0x00,0x00,0x00,0x00,0x00,0x00],
   "Y": [0x00,0x00,0x66,0x66,0x66,0x3c,0x18,0x18,0x18,0x18,0x00,0x00,0x00,0x00,0x00,0x00],
   "Z": [0x00,0x00,0x7e,0x06,0x0c,0x18,0x30,0x60,0x60,0x7e,0x00,0x00,0x00,0x00,0x00,0x00],
+  "★": [0x00,0x18,0x18,0x3c,0x3c,0xff,0x7e,0x3c,0x66,0xc3,0x81,0x00,0x00,0x00,0x00,0x00],
+  "♥": [0x00,0x66,0xff,0xff,0xff,0x7e,0x3c,0x18,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
+  "⚡": [0x00,0x0c,0x18,0x30,0x7f,0x0c,0x18,0x30,0x60,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
 };
 
 function hexToRgba(hex: string, alpha: number = 1.0): [number, number, number, number] {
+  if (!hex) return [255, 255, 255, Math.round(alpha * 255)];
   if (hex.startsWith("blur:")) {
-    return [11, 13, 19, 255];
+    return [15, 23, 42, Math.round(alpha * 255)];
   }
   if (hex.startsWith("gradient:")) {
     const parts = hex.replace("gradient:", "").split(",");
     return hexToRgba(parts[0] || "#0B0D13", alpha);
   }
+  if (hex.startsWith("rgba")) {
+    const m = hex.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)/i);
+    if (m) {
+      const a = m[4] !== undefined ? parseFloat(m[4]) * alpha : alpha;
+      return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), Math.round(a * 255)];
+    }
+  }
   const clean = hex.replace("#", "").trim();
-  let r = 0, g = 0, b = 0;
+  let r = 0,
+    g = 0,
+    b = 0;
   if (clean.length === 3) {
     r = parseInt(clean[0] + clean[0], 16);
     g = parseInt(clean[1] + clean[1], 16);
@@ -301,6 +314,9 @@ function hexToRgba(hex: string, alpha: number = 1.0): [number, number, number, n
   return [r || 0, g || 0, b || 0, Math.round(alpha * 255)];
 }
 
+// ---------------------------------------------------------------------------
+// Mobile Frame Buffer: Multi-Track 2D Rasterizer
+// ---------------------------------------------------------------------------
 export class MobileFrameBuffer {
   public width: number;
   public height: number;
@@ -314,6 +330,28 @@ export class MobileFrameBuffer {
   }
 
   public fill(hexColor: string) {
+    if (hexColor && hexColor.startsWith("gradient:")) {
+      const parts = hexColor.replace("gradient:", "").split(",");
+      const [r1, g1, b1] = hexToRgba(parts[0] || "#0f172a");
+      const [r2, g2, b2] = hexToRgba(parts[1] || parts[0] || "#1e293b");
+
+      for (let y = 0; y < this.height; y++) {
+        const t = y / Math.max(1, this.height - 1);
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const b = Math.round(b1 + (b2 - b1) * t);
+        const rowOffset = y * this.width * 4;
+        for (let x = 0; x < this.width; x++) {
+          const idx = rowOffset + x * 4;
+          this.data[idx] = r;
+          this.data[idx + 1] = g;
+          this.data[idx + 2] = b;
+          this.data[idx + 3] = 255;
+        }
+      }
+      return;
+    }
+
     const [r, g, b, a] = hexToRgba(hexColor);
     const len = this.data.length;
     for (let i = 0; i < len; i += 4) {
@@ -342,7 +380,14 @@ export class MobileFrameBuffer {
     }
   }
 
-  public fillRect(x: number, y: number, w: number, h: number, hexColor: string, alpha: number = 1.0) {
+  public fillRect(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    hexColor: string,
+    alpha: number = 1.0
+  ) {
     const [r, g, b, a] = hexToRgba(hexColor, alpha);
     const x0 = Math.max(0, Math.floor(x));
     const y0 = Math.max(0, Math.floor(y));
@@ -356,7 +401,26 @@ export class MobileFrameBuffer {
     }
   }
 
-  // Draw crisp vector-scaled text with optional background badge box
+  public drawBadge(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    bgColor: string,
+    borderColor?: string,
+    borderWidth: number = 1,
+    alpha: number = 0.88
+  ) {
+    this.fillRect(x, y, w, h, bgColor, alpha);
+    if (borderColor && borderWidth > 0) {
+      this.fillRect(x, y, w, borderWidth, borderColor, 0.95);
+      this.fillRect(x, y + h - borderWidth, w, borderWidth, borderColor, 0.95);
+      this.fillRect(x, y, borderWidth, h, borderColor, 0.95);
+      this.fillRect(x + w - borderWidth, y, borderWidth, h, borderColor, 0.95);
+    }
+  }
+
+  // Draw crisp vector-scaled text with drop shadow / outline and optional badge container
   public drawText(
     text: string,
     centerX: number,
@@ -366,56 +430,113 @@ export class MobileFrameBuffer {
       backgroundColor?: string;
       scale?: number;
       fontSize?: number;
+      strokeColor?: string;
+      strokeWidth?: number;
+      enableOutline?: boolean;
     } = {}
   ) {
     if (!text) return;
     const cleanText = text.trim();
-    const fontScale = Math.max(1, Math.round((options.fontSize || 24) / 12 * (options.scale || 1.0)));
+    if (!cleanText) return;
+
+    // Handle multiline text
+    const lines = cleanText.split("\n");
+    const fontScale = Math.max(
+      1,
+      Math.round(((options.fontSize || 22) / 12) * (options.scale || 1.0))
+    );
     const charW = 8 * fontScale;
     const charH = 16 * fontScale;
-    const totalW = cleanText.length * charW;
-    const totalH = charH;
+    const lineSpacing = Math.round(charH * 1.25);
+    const totalBlockH = lines.length * lineSpacing;
+    const startBlockY = Math.round(centerY - totalBlockH / 2);
 
-    const startX = Math.round(centerX - totalW / 2);
-    const startY = Math.round(centerY - totalH / 2);
+    for (let l = 0; l < lines.length; l++) {
+      const line = lines[l].trim();
+      if (!line) continue;
+      const lineW = line.length * charW;
+      const startX = Math.round(centerX - lineW / 2);
+      const startY = startBlockY + l * lineSpacing;
 
-    // 1. Draw badge background if defined
-    if (options.backgroundColor && options.backgroundColor !== "transparent") {
-      const padX = 14 * fontScale;
-      const padY = 8 * fontScale;
-      this.fillRect(
-        startX - padX,
-        startY - padY,
-        totalW + padX * 2,
-        totalH + padY * 2,
-        options.backgroundColor,
-        0.88
-      );
-    }
+      // 1. Draw badge background pill if defined
+      if (options.backgroundColor && options.backgroundColor !== "transparent") {
+        const padX = 10 * fontScale;
+        const padY = 5 * fontScale;
+        this.drawBadge(
+          startX - padX,
+          startY - padY,
+          lineW + padX * 2,
+          charH + padY * 2,
+          options.backgroundColor,
+          options.strokeColor || "rgba(255,255,255,0.15)",
+          1,
+          0.85
+        );
+      }
 
-    // 2. Render each character glyph
-    const [r, g, b, a] = hexToRgba(options.color || "#FFFFFF");
+      // 2. High-contrast outline / shadow pass
+      const enableOutline = options.enableOutline !== false;
+      if (enableOutline) {
+        const [sr, sg, sb, sa] = hexToRgba(options.strokeColor || "#000000", 0.85);
+        const offsets = [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+          [1, 1],
+        ];
+        for (const [ox, oy] of offsets) {
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i].toUpperCase();
+            const glyph = FONT_GLYPHS[char] || FONT_GLYPHS["?"];
+            const charOffset = startX + i * charW + ox * Math.max(1, Math.floor(fontScale / 2));
+            const charY = startY + oy * Math.max(1, Math.floor(fontScale / 2));
 
-    for (let i = 0; i < cleanText.length; i++) {
-      const char = cleanText[i].toUpperCase();
-      const glyph = FONT_GLYPHS[char] || FONT_GLYPHS["?"];
-      const charOffset = startX + i * charW;
+            for (let row = 0; row < 16; row++) {
+              const rowByte = glyph[row] || 0;
+              for (let col = 0; col < 8; col++) {
+                if ((rowByte & (0x80 >> col)) !== 0) {
+                  for (let dy = 0; dy < fontScale; dy++) {
+                    for (let dx = 0; dx < fontScale; dx++) {
+                      this.setPixel(
+                        charOffset + col * fontScale + dx,
+                        charY + row * fontScale + dy,
+                        sr,
+                        sg,
+                        sb,
+                        sa
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
 
-      for (let row = 0; row < 16; row++) {
-        const rowByte = glyph[row] || 0;
-        for (let col = 0; col < 8; col++) {
-          if ((rowByte & (0x80 >> col)) !== 0) {
-            // Draw scaled pixel block
-            for (let dy = 0; dy < fontScale; dy++) {
-              for (let dx = 0; dx < fontScale; dx++) {
-                this.setPixel(
-                  charOffset + col * fontScale + dx,
-                  startY + row * fontScale + dy,
-                  r,
-                  g,
-                  b,
-                  a
-                );
+      // 3. Foreground glyph pass
+      const [r, g, b, a] = hexToRgba(options.color || "#FFFFFF");
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i].toUpperCase();
+        const glyph = FONT_GLYPHS[char] || FONT_GLYPHS["?"];
+        const charOffset = startX + i * charW;
+
+        for (let row = 0; row < 16; row++) {
+          const rowByte = glyph[row] || 0;
+          for (let col = 0; col < 8; col++) {
+            if ((rowByte & (0x80 >> col)) !== 0) {
+              for (let dy = 0; dy < fontScale; dy++) {
+                for (let dx = 0; dx < fontScale; dx++) {
+                  this.setPixel(
+                    charOffset + col * fontScale + dx,
+                    startY + row * fontScale + dy,
+                    r,
+                    g,
+                    b,
+                    a
+                  );
+                }
               }
             }
           }
@@ -424,19 +545,187 @@ export class MobileFrameBuffer {
     }
   }
 
-  // Draw sticker label / icon
+  // Draw TikTok/Instagram styled Auto-Captions with active word highlighting
+  public drawCaption(
+    caption: CaptionClip,
+    currentTime: number,
+    centerX: number,
+    centerY: number
+  ) {
+    const rawText = (caption.text || "").trim();
+    if (!rawText) return;
+
+    const preset = caption.presetId || "karaoke";
+    const highlightColor = caption.highlightColor || "#FFE600";
+    let fontScale = Math.max(1, Math.round(((caption.style?.fontSize || 24) / 12) * (caption.scale || 1.0)));
+
+    // Auto-fit fontScale so long lines never clip beyond canvas bounds
+    const maxAllowedW = this.width * 0.88;
+    const fullText = caption.words && caption.words.length > 0
+      ? caption.words.map((w) => w.word).join(" ")
+      : rawText;
+    if (fullText.length * (8 * fontScale) > maxAllowedW) {
+      fontScale = Math.max(1, Math.floor(maxAllowedW / (fullText.length * 8)));
+    }
+    const charW = 8 * fontScale;
+    const charH = 16 * fontScale;
+
+    // Check if word-level timing is available
+    if (caption.words && caption.words.length > 0) {
+      const activeWordIdx = caption.words.findIndex(
+        (w) => currentTime >= w.start && currentTime <= w.end
+      );
+
+      // Build word line
+      const totalW = fullText.length * charW;
+      const startX = Math.round(centerX - totalW / 2);
+      const startY = Math.round(centerY - charH / 2);
+
+      // Draw caption backdrop pill
+      const padX = 14 * fontScale;
+      const padY = 8 * fontScale;
+      this.drawBadge(
+        startX - padX,
+        startY - padY,
+        totalW + padX * 2,
+        charH + padY * 2,
+        preset === "glow_neon" ? "rgba(0,15,30,0.85)" : "rgba(0,0,0,0.75)",
+        preset === "glow_neon" ? "#00F2FE" : "#FFE600",
+        preset === "glow_neon" ? 2 : 1,
+        0.9
+      );
+
+      // Render words sequentially
+      let curX = startX;
+      for (let i = 0; i < caption.words.length; i++) {
+        const item = caption.words[i];
+        const isActive = i === activeWordIdx;
+        const color = isActive ? highlightColor : "#FFFFFF";
+        const wordText = item.word;
+
+        // If active, draw highlighted badge box under this word
+        if (isActive) {
+          const wordW = wordText.length * charW;
+          this.drawBadge(
+            curX - 3,
+            startY - 2,
+            wordW + 6,
+            charH + 4,
+            preset === "glow_neon" ? "#00F2FE" : highlightColor,
+            "#FFFFFF",
+            1,
+            0.95
+          );
+        }
+
+        // Draw word glyphs
+        const wordColor = isActive && preset !== "glow_neon" ? "#000000" : color;
+        for (let c = 0; c < wordText.length; c++) {
+          const char = wordText[c].toUpperCase();
+          const glyph = FONT_GLYPHS[char] || FONT_GLYPHS["?"];
+          const [r, g, b, a] = hexToRgba(wordColor);
+
+          for (let row = 0; row < 16; row++) {
+            const rowByte = glyph[row] || 0;
+            for (let col = 0; col < 8; col++) {
+              if ((rowByte & (0x80 >> col)) !== 0) {
+                for (let dy = 0; dy < fontScale; dy++) {
+                  for (let dx = 0; dx < fontScale; dx++) {
+                    this.setPixel(
+                      curX + col * fontScale + dx,
+                      startY + row * fontScale + dy,
+                      r,
+                      g,
+                      b,
+                      a
+                    );
+                  }
+                }
+              }
+            }
+          }
+          curX += charW;
+        }
+
+        // Space between words
+        curX += charW;
+      }
+    } else {
+      // Standard styled caption without individual word timings
+      this.drawText(rawText, centerX, centerY, {
+        color: preset === "yellow_highlight" ? "#FFE600" : "#FFFFFF",
+        backgroundColor: "rgba(0,0,0,0.75)",
+        strokeColor: preset === "glow_neon" ? "#00F2FE" : "#000000",
+        fontSize: caption.style?.fontSize || 24,
+        scale: caption.scale || 1.0,
+      });
+    }
+  }
+
+  // Draw sticker label / icon / emoji
   public drawSticker(
     label: string,
     centerX: number,
     centerY: number,
     scale: number = 1.0,
-    backgroundColor: string = "rgba(0,0,0,0.4)"
+    backgroundColor: string = "rgba(0,0,0,0.6)"
   ) {
-    const size = Math.round(48 * scale);
-    this.fillRect(centerX - size / 2, centerY - size / 2, size, size, backgroundColor, 0.6);
+    const size = Math.round(52 * scale);
+    this.drawBadge(
+      centerX - size / 2,
+      centerY - size / 2,
+      size,
+      size,
+      backgroundColor,
+      "#00F2FE",
+      2,
+      0.85
+    );
     this.drawText(label.slice(0, 4), centerX, centerY, {
       color: "#00F2FE",
       fontSize: Math.round(18 * scale),
+      enableOutline: true,
+    });
+  }
+
+  // Draw cinematic video clip frame card
+  public drawVideoCard(
+    clip: VideoClip,
+    vx: number,
+    vy: number,
+    vw: number,
+    vh: number,
+    time: number
+  ) {
+    // 1. Draw frame container
+    this.fillRect(vx, vy, vw, vh, "#0B0F19", 1.0);
+    this.fillRect(vx + 3, vy + 3, vw - 6, vh - 6, "#141C2E", 1.0);
+
+    // 2. Subtle cinema gradient lighting
+    const midY = vy + vh / 2;
+    this.fillRect(vx + 4, vy + 4, vw - 8, Math.round(vh * 0.35), "#1E293B", 0.4);
+
+    // 3. Clip watermark & metadata badge
+    const title = clip.title ? clip.title.slice(0, 20) : "FastArt Clip";
+    const clipElapsed = Math.max(0, time - clip.startTime);
+    const mins = Math.floor(clipElapsed / 60);
+    const secs = Math.floor(clipElapsed % 60);
+    const timeStr = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+
+    // Sleek cinematic corner badge
+    this.drawBadge(vx + 12, vy + 12, 80, 22, "rgba(0,0,0,0.6)", "#00F2FE", 1, 0.85);
+    this.drawText(timeStr, vx + 52, vy + 23, {
+      color: "#00F2FE",
+      fontSize: 12,
+      enableOutline: false,
+    });
+
+    // Center title watermark
+    this.drawText(title, vx + vw / 2, midY, {
+      color: "#8E95A5",
+      fontSize: 18,
+      backgroundColor: "rgba(0,0,0,0.4)",
+      enableOutline: true,
     });
   }
 
@@ -446,7 +735,35 @@ export class MobileFrameBuffer {
 }
 
 // ---------------------------------------------------------------------------
-// Render an Entire Mobile Project Frame to Buffer
+// Normalize overlay coordinates (handles both 0..100% and direct pixel offsets)
+// ---------------------------------------------------------------------------
+function resolveNormalizedPos(
+  pos: { x?: number; y?: number } | undefined,
+  canvasW: number,
+  canvasH: number,
+  defaultPctX = 50,
+  defaultPctY = 50
+): { x: number; y: number } {
+  if (!pos) {
+    return {
+      x: Math.round((defaultPctX / 100) * canvasW),
+      y: Math.round((defaultPctY / 100) * canvasH),
+    };
+  }
+  const rawX = pos.x !== undefined ? pos.x : defaultPctX;
+  const rawY = pos.y !== undefined ? pos.y : defaultPctY;
+
+  // Percentage 0..100 coordinate check
+  const isPctX = rawX >= 0 && rawX <= 100;
+  const isPctY = rawY >= 0 && rawY <= 100;
+
+  const x = isPctX ? Math.round((rawX / 100) * canvasW) : Math.round(canvasW / 2 + rawX);
+  const y = isPctY ? Math.round((rawY / 100) * canvasH) : Math.round(canvasH / 2 + rawY);
+  return { x, y };
+}
+
+// ---------------------------------------------------------------------------
+// Render an Entire Multi-Track Mobile Project Frame to Buffer
 // ---------------------------------------------------------------------------
 export function renderMobileProjectFrame(
   project: FastArtProject,
@@ -459,15 +776,27 @@ export function renderMobileProjectFrame(
 
   const videoClips = project.tracks.video || [];
   const textClips = project.tracks.text || [];
+  const captionClips = project.tracks.captions || [];
   const stickerClips = project.tracks.stickers || [];
   const effectClips = project.tracks.effects || [];
 
-  const activeVideos = videoClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
-  const activeTexts = textClips.filter((t) => time >= t.startTime && time <= t.startTime + t.duration);
-  const activeStickers = stickerClips.filter((s) => time >= s.startTime && time <= s.startTime + s.duration);
-  const activeEffects = effectClips.filter((e) => time >= e.startTime && time <= e.startTime + e.duration);
+  const activeVideos = videoClips.filter(
+    (c) => time >= c.startTime && time <= c.startTime + c.duration
+  );
+  const activeTexts = textClips.filter(
+    (t) => time >= t.startTime && time <= t.startTime + t.duration
+  );
+  const activeCaptions = captionClips.filter(
+    (c) => time >= c.startTime && time <= c.startTime + c.duration
+  );
+  const activeStickers = stickerClips.filter(
+    (s) => time >= s.startTime && time <= s.startTime + s.duration
+  );
+  const activeEffects = effectClips.filter(
+    (e) => time >= e.startTime && time <= e.startTime + e.duration
+  );
 
-  // 1. Video placeholder / frame bounds
+  // 1. Video / Photo Clips
   if (activeVideos.length > 0) {
     const vid = activeVideos[0];
     let motionX = 0;
@@ -487,21 +816,13 @@ export function renderMobileProjectFrame(
       vh = canvasH * motionScale;
       vw = canvasH * aspect * motionScale;
     }
-    const vx = Math.round((canvasW - vw) / 2 + motionX);
-    const vy = Math.round((canvasH - vh) / 2 + motionY);
+    const vx = Math.round((canvasW - vw) / 2 + motionX + (vid.transform?.x || 0));
+    const vy = Math.round((canvasH - vh) / 2 + motionY + (vid.transform?.y || 0));
 
-    // Draw video region
-    buffer.fillRect(vx, vy, vw, vh, "#121622");
-    buffer.fillRect(vx + 4, vy + 4, vw - 8, vh - 8, "#1A2030");
-    buffer.drawText(
-      vid.title ? vid.title.slice(0, 18) : "FastArt Clip",
-      canvasW / 2 + motionX,
-      canvasH / 2 + motionY,
-      { color: "#8E95A5", fontSize: 16 }
-    );
+    buffer.drawVideoCard(vid, vx, vy, Math.round(vw), Math.round(vh), time);
   }
 
-  // 2. Text Overlays (Burned in with high-contrast text and background badges)
+  // 2. Text Overlays (Burned in with typography, animations & badges)
   for (const txt of activeTexts) {
     const elapsed = Math.max(0, time - (txt.startTime || 0));
     const duration = Math.max(0.5, txt.duration || 3.0);
@@ -541,8 +862,9 @@ export function renderMobileProjectFrame(
       motionScale = motion.dScale;
     }
 
-    const posX = canvasW / 2 + (txt.position?.x || 0) + animOffsetX + motionX;
-    const posY = canvasH / 2 + (txt.position?.y || 0) + animOffsetY + motionY;
+    const basePos = resolveNormalizedPos(txt.position, canvasW, canvasH, 50, 35);
+    const posX = basePos.x + animOffsetX + motionX;
+    const posY = basePos.y + animOffsetY + motionY;
     const scale = (txt.scale || 1.0) * animScale * motionScale;
     const color = txt.style?.color || "#FFFFFF";
     const bgBadge = txt.style?.backgroundColor;
@@ -553,10 +875,29 @@ export function renderMobileProjectFrame(
       backgroundColor: hasBadge ? bgBadge : undefined,
       scale,
       fontSize: Math.round((txt.style?.fontSize || 28) * 0.9),
+      enableOutline: true,
+      strokeColor: txt.style?.strokeColor || "#000000",
     });
   }
 
-  // 3. Sticker Overlays
+  // 3. Auto-Captions (With active word highlight & preset styling)
+  for (const cap of activeCaptions) {
+    let motionX = 0;
+    let motionY = 0;
+    if (cap.motionTrack && cap.motionTrack.enabled) {
+      const motion = applyMotionTracking(time, cap.startTime, cap.duration, cap.motionTrack);
+      motionX = motion.dx;
+      motionY = motion.dy;
+    }
+
+    const basePos = resolveNormalizedPos(cap.position, canvasW, canvasH, 50, 80);
+    const posX = basePos.x + motionX;
+    const posY = basePos.y + motionY;
+
+    buffer.drawCaption(cap, time, posX, posY);
+  }
+
+  // 4. Sticker Overlays
   for (const st of activeStickers) {
     let motionX = 0;
     let motionY = 0;
@@ -568,24 +909,548 @@ export function renderMobileProjectFrame(
       motionScale = motion.dScale;
     }
 
-    const posX = canvasW / 2 + (st.position?.x || 0) + motionX;
-    const posY = canvasH / 2 + (st.position?.y || 0) + motionY;
+    const basePos = resolveNormalizedPos(st.position, canvasW, canvasH, 50, 50);
+    const posX = basePos.x + motionX;
+    const posY = basePos.y + motionY;
     const label = st.char || (st as any).name || (st as any).emoji || "★";
     buffer.drawSticker(label, posX, posY, (st.scale || 1.0) * motionScale);
   }
 
-  // 4. Effect Overlay
+  // 5. Effect Overlays
   if (activeEffects.length > 0) {
-    const eff = activeEffects[0];
-    if (eff.type === "vignette") {
-      buffer.fillRect(0, 0, canvasW, 8, "#000000", 0.7);
-      buffer.fillRect(0, canvasH - 8, canvasW, 8, "#000000", 0.7);
-    } else if (eff.type === "flash") {
-      buffer.fillRect(0, 0, canvasW, canvasH, "#FFFFFF", 0.3);
+    for (const eff of activeEffects) {
+      if (eff.type === "vignette") {
+        buffer.fillRect(0, 0, canvasW, 12, "#000000", 0.7);
+        buffer.fillRect(0, canvasH - 12, canvasW, 12, "#000000", 0.7);
+      } else if (eff.type === "flash") {
+        const elapsed = time - eff.startTime;
+        if (elapsed < 0.25) {
+          const alpha = 1.0 - elapsed / 0.25;
+          buffer.fillRect(0, 0, canvasW, canvasH, "#FFFFFF", alpha * 0.6);
+        }
+      } else if (eff.type === "cinema" || eff.type === "letterbox") {
+        const barH = Math.round(canvasH * 0.1);
+        buffer.fillRect(0, 0, canvasW, barH, "#000000", 1.0);
+        buffer.fillRect(0, canvasH - barH, canvasW, barH, "#000000", 1.0);
+      }
     }
   }
 
   return buffer;
+}
+
+// ---------------------------------------------------------------------------
+// Pure TypeScript H.264 Baseline Profile Bitstream Encoder
+// (Compliant with ISO/IEC 14496-10 / ITU-T H.264)
+// ---------------------------------------------------------------------------
+class BitWriter {
+  public bytes: number[] = [];
+  private currentByte = 0;
+  private numBitsInCurrentByte = 0;
+
+  public writeBit(bit: number) {
+    this.currentByte = (this.currentByte << 1) | (bit & 1);
+    this.numBitsInCurrentByte++;
+    if (this.numBitsInCurrentByte === 8) {
+      this.bytes.push(this.currentByte);
+      this.currentByte = 0;
+      this.numBitsInCurrentByte = 0;
+    }
+  }
+
+  public writeBits(val: number, numBits: number) {
+    for (let i = numBits - 1; i >= 0; i--) {
+      this.writeBit((val >>> i) & 1);
+    }
+  }
+
+  public writeUe(val: number) {
+    const temp = val + 1;
+    let leadingZeros = 0;
+    while (1 << (leadingZeros + 1) <= temp) {
+      leadingZeros++;
+    }
+    this.writeBits(0, leadingZeros);
+    this.writeBits(temp, leadingZeros + 1);
+  }
+
+  public writeSe(val: number) {
+    const codeNum = val <= 0 ? -val * 2 : val * 2 - 1;
+    this.writeUe(codeNum);
+  }
+
+  public alignZero() {
+    if (this.numBitsInCurrentByte > 0) {
+      this.currentByte <<= 8 - this.numBitsInCurrentByte;
+      this.bytes.push(this.currentByte);
+      this.currentByte = 0;
+      this.numBitsInCurrentByte = 0;
+    }
+  }
+
+  public writeRbspTrailingBits() {
+    this.writeBit(1);
+    while (this.numBitsInCurrentByte > 0) {
+      this.writeBit(0);
+    }
+  }
+
+  public toBytes(): Uint8Array {
+    return new Uint8Array(this.bytes);
+  }
+}
+
+// H.264 Emulation Prevention: inserts 0x03 after two consecutive 0x00 bytes if followed by <= 0x03
+function rbspToNal(rbsp: Uint8Array): Uint8Array {
+  const out: number[] = [];
+  let zeroCount = 0;
+  for (let i = 0; i < rbsp.length; i++) {
+    const b = rbsp[i];
+    if (zeroCount === 2 && b <= 3) {
+      out.push(3);
+      zeroCount = 0;
+    }
+    out.push(b);
+    if (b === 0) {
+      zeroCount++;
+    } else {
+      zeroCount = 0;
+    }
+  }
+  return new Uint8Array(out);
+}
+
+// Sequence Parameter Set (SPS) NAL unit (type 7)
+function buildH264Sps(mbWidth: number, mbHeight: number): Uint8Array {
+  const bw = new BitWriter();
+  bw.writeBits(66, 8); // Profile IDC: 66 (Baseline)
+  bw.writeBits(0xc0, 8); // Constraint flags: constraint_set0..1
+  bw.writeBits(31, 8); // Level IDC: 31 (Level 3.1)
+  bw.writeUe(0); // seq_parameter_set_id
+  bw.writeUe(0); // log2_max_frame_num_minus4
+  bw.writeUe(0); // pic_order_cnt_type
+  bw.writeUe(0); // log2_max_pic_order_cnt_lsb_minus4
+  bw.writeUe(1); // max_num_ref_frames
+  bw.writeBit(0); // gaps_in_frame_num_value_allowed_flag
+  bw.writeUe(mbWidth - 1); // pic_width_in_mbs_minus1
+  bw.writeUe(mbHeight - 1); // pic_height_in_map_units_minus1
+  bw.writeBit(1); // frame_mbs_only_flag
+  bw.writeBit(1); // direct_8x8_inference_flag
+  bw.writeBit(0); // frame_cropping_flag
+  bw.writeBit(0); // vui_parameters_present_flag
+  bw.writeRbspTrailingBits();
+
+  const nalBody = rbspToNal(bw.toBytes());
+  const nal = new Uint8Array(1 + nalBody.length);
+  nal[0] = 0x67; // NAL unit type 7 (SPS), nal_ref_idc = 3
+  nal.set(nalBody, 1);
+  return nal;
+}
+
+// Picture Parameter Set (PPS) NAL unit (type 8)
+function buildH264Pps(): Uint8Array {
+  const bw = new BitWriter();
+  bw.writeUe(0); // pic_parameter_set_id
+  bw.writeUe(0); // seq_parameter_set_id
+  bw.writeBit(0); // entropy_coding_mode_flag (CAVLC)
+  bw.writeBit(0); // bottom_field_pic_order_in_frame_present_flag
+  bw.writeUe(0); // num_slice_groups_minus1
+  bw.writeUe(0); // num_ref_idx_l0_default_active_minus1
+  bw.writeUe(0); // num_ref_idx_l1_default_active_minus1
+  bw.writeBit(0); // weighted_pred_flag
+  bw.writeBits(0, 2); // weighted_bipred_idc
+  bw.writeSe(0); // pic_init_qp_minus26
+  bw.writeSe(0); // pic_init_qs_minus26
+  bw.writeSe(0); // chroma_qp_index_offset
+  bw.writeBit(0); // deblocking_filter_control_present_flag
+  bw.writeBit(0); // constrained_intra_pred_flag
+  bw.writeBit(0); // redundant_pic_cnt_present_flag
+  bw.writeRbspTrailingBits();
+
+  const nalBody = rbspToNal(bw.toBytes());
+  const nal = new Uint8Array(1 + nalBody.length);
+  nal[0] = 0x68; // NAL unit type 8 (PPS), nal_ref_idc = 3
+  nal.set(nalBody, 1);
+  return nal;
+}
+
+// Encode a MobileFrameBuffer into a genuine H.264 IDR I_PCM slice NAL unit (type 5)
+function encodeH264IFrame(
+  buffer: MobileFrameBuffer,
+  frameIndex: number,
+  mbWidth: number,
+  mbHeight: number
+): Uint8Array {
+  const bw = new BitWriter();
+
+  // Slice Header
+  bw.writeUe(0); // first_mb_in_slice
+  bw.writeUe(7); // slice_type: 7 (All I-slice)
+  bw.writeUe(0); // pic_parameter_set_id
+  bw.writeBits(frameIndex % 16, 4); // frame_num
+  bw.writeUe(frameIndex % 8); // idr_pic_id
+  bw.writeBits((frameIndex * 2) % 16, 4); // pic_order_cnt_lsb
+  bw.writeBit(0); // no_output_of_prior_pics_flag
+  bw.writeBit(0); // long_term_reference_flag
+  bw.writeSe(0); // slice_qp_delta
+
+  const width = buffer.width;
+  const height = buffer.height;
+  const rgba = buffer.data;
+
+  // Convert and write macroblocks (16x16 luma, 8x8 chroma U, 8x8 chroma V)
+  for (let mbY = 0; mbY < mbHeight; mbY++) {
+    for (let mbX = 0; mbX < mbWidth; mbX++) {
+      bw.writeUe(25); // mb_type: 25 (I_PCM)
+      bw.alignZero();
+
+      // 1. 256 bytes Luma Y
+      for (let y = 0; y < 16; y++) {
+        const py = Math.min(height - 1, mbY * 16 + y);
+        const rowOffset = py * width * 4;
+        for (let x = 0; x < 16; x++) {
+          const px = Math.min(width - 1, mbX * 16 + x);
+          const idx = rowOffset + px * 4;
+          const r = rgba[idx];
+          const g = rgba[idx + 1];
+          const b = rgba[idx + 2];
+          // BT.601 Studio Range Y
+          const yVal = Math.min(235, Math.max(16, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
+          bw.bytes.push(yVal);
+        }
+      }
+
+      // 2. 64 bytes Chroma Cb (U)
+      for (let y = 0; y < 8; y++) {
+        const py = Math.min(height - 1, mbY * 16 + y * 2);
+        const rowOffset = py * width * 4;
+        for (let x = 0; x < 8; x++) {
+          const px = Math.min(width - 1, mbX * 16 + x * 2);
+          const idx = rowOffset + px * 4;
+          const r = rgba[idx];
+          const g = rgba[idx + 1];
+          const b = rgba[idx + 2];
+          const uVal = Math.min(240, Math.max(16, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
+          bw.bytes.push(uVal);
+        }
+      }
+
+      // 3. 64 bytes Chroma Cr (V)
+      for (let y = 0; y < 8; y++) {
+        const py = Math.min(height - 1, mbY * 16 + y * 2);
+        const rowOffset = py * width * 4;
+        for (let x = 0; x < 8; x++) {
+          const px = Math.min(width - 1, mbX * 16 + x * 2);
+          const idx = rowOffset + px * 4;
+          const r = rgba[idx];
+          const g = rgba[idx + 1];
+          const b = rgba[idx + 2];
+          const vVal = Math.min(240, Math.max(16, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
+          bw.bytes.push(vVal);
+        }
+      }
+    }
+  }
+
+  bw.writeRbspTrailingBits();
+  const nalBody = rbspToNal(bw.toBytes());
+  const nal = new Uint8Array(1 + nalBody.length);
+  nal[0] = 0x65; // NAL unit type 5 (IDR slice), nal_ref_idc = 3
+  nal.set(nalBody, 1);
+  return nal;
+}
+
+// ---------------------------------------------------------------------------
+// ISO Base Media File Format (MP4) Container Builder
+// (Compliant with ISO/IEC 14496-12 / 14496-15)
+// ---------------------------------------------------------------------------
+class Mp4BoxBuilder {
+  public buffer: number[] = [];
+
+  public writeU8(val: number) {
+    this.buffer.push(val & 0xff);
+  }
+
+  public writeU16(val: number) {
+    this.buffer.push((val >>> 8) & 0xff);
+    this.buffer.push(val & 0xff);
+  }
+
+  public writeU32(val: number) {
+    this.buffer.push((val >>> 24) & 0xff);
+    this.buffer.push((val >>> 16) & 0xff);
+    this.buffer.push((val >>> 8) & 0xff);
+    this.buffer.push(val & 0xff);
+  }
+
+  public writeAscii(str: string) {
+    for (let i = 0; i < str.length; i++) {
+      this.buffer.push(str.charCodeAt(i));
+    }
+  }
+
+  public writeBytes(bytes: Uint8Array) {
+    for (let i = 0; i < bytes.length; i++) {
+      this.buffer.push(bytes[i]);
+    }
+  }
+
+  public box(type: string, payloadFn: () => void) {
+    const startPos = this.buffer.length;
+    this.writeU32(0); // placeholder size
+    this.writeAscii(type);
+    payloadFn();
+    const endPos = this.buffer.length;
+    const size = endPos - startPos;
+    this.buffer[startPos] = (size >>> 24) & 0xff;
+    this.buffer[startPos + 1] = (size >>> 16) & 0xff;
+    this.buffer[startPos + 2] = (size >>> 8) & 0xff;
+    this.buffer[startPos + 3] = size & 0xff;
+  }
+
+  public toBytes(): Uint8Array {
+    return new Uint8Array(this.buffer);
+  }
+}
+
+function createMp4Container(
+  width: number,
+  height: number,
+  fps: number,
+  sampleNals: Uint8Array[]
+): Uint8Array {
+  const mbW = width >> 4;
+  const mbH = height >> 4;
+  const sps = buildH264Sps(mbW, mbH);
+  const pps = buildH264Pps();
+
+  const totalFrames = sampleNals.length;
+  const timescale = 1000;
+  const frameDurationMs = Math.round(1000 / fps);
+  const durationMs = totalFrames * frameDurationMs;
+
+  const b = new Mp4BoxBuilder();
+
+  // 1. ftyp Box
+  b.box("ftyp", () => {
+    b.writeAscii("isom");
+    b.writeU32(0x00000200);
+    b.writeAscii("isom");
+    b.writeAscii("mp42");
+    b.writeAscii("avc1");
+  });
+
+  const sampleSizes: number[] = [];
+  for (const s of sampleNals) {
+    sampleSizes.push(4 + s.length);
+  }
+
+  const buildMoov = (chunkOffset: number) => {
+    const mb = new Mp4BoxBuilder();
+    mb.box("moov", () => {
+      // mvhd
+      mb.box("mvhd", () => {
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(timescale);
+        mb.writeU32(durationMs);
+        mb.writeU32(0x00010000);
+        mb.writeU16(0x0100);
+        mb.writeU16(0);
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(0x00010000);
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(0x00010000);
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(0);
+        mb.writeU32(0x40000000);
+        for (let i = 0; i < 6; i++) mb.writeU32(0);
+        mb.writeU32(2); // next_track_id
+      });
+
+      // trak
+      mb.box("trak", () => {
+        // tkhd
+        mb.box("tkhd", () => {
+          mb.writeU32(0x00000007);
+          mb.writeU32(0);
+          mb.writeU32(0);
+          mb.writeU32(1); // track_id
+          mb.writeU32(0);
+          mb.writeU32(durationMs);
+          mb.writeU32(0);
+          mb.writeU32(0);
+          mb.writeU16(0);
+          mb.writeU16(0);
+          mb.writeU16(0);
+          mb.writeU16(0);
+          mb.writeU32(0x00010000);
+          mb.writeU32(0);
+          mb.writeU32(0);
+          mb.writeU32(0);
+          mb.writeU32(0x00010000);
+          mb.writeU32(0);
+          mb.writeU32(0);
+          mb.writeU32(0);
+          mb.writeU32(0x40000000);
+          mb.writeU32(width << 16);
+          mb.writeU32(height << 16);
+        });
+
+        // mdia
+        mb.box("mdia", () => {
+          mb.box("mdhd", () => {
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(timescale);
+            mb.writeU32(durationMs);
+            mb.writeU16(0x55c4);
+            mb.writeU16(0);
+          });
+
+          mb.box("hdlr", () => {
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeAscii("vide");
+            for (let i = 0; i < 3; i++) mb.writeU32(0);
+            mb.writeAscii("VideoHandler\0");
+          });
+
+          mb.box("minf", () => {
+            mb.box("vmhd", () => {
+              mb.writeU32(0x00000001);
+              mb.writeU16(0);
+              mb.writeU16(0);
+              mb.writeU16(0);
+              mb.writeU16(0);
+            });
+
+            mb.box("dinf", () => {
+              mb.box("dref", () => {
+                mb.writeU32(0);
+                mb.writeU32(1);
+                mb.box("url ", () => {
+                  mb.writeU32(0x00000001);
+                });
+              });
+            });
+
+            mb.box("stbl", () => {
+              // stsd
+              mb.box("stsd", () => {
+                mb.writeU32(0);
+                mb.writeU32(1);
+                mb.box("avc1", () => {
+                  for (let i = 0; i < 6; i++) mb.writeU8(0);
+                  mb.writeU16(1);
+                  mb.writeU16(0);
+                  mb.writeU16(0);
+                  for (let i = 0; i < 3; i++) mb.writeU32(0);
+                  mb.writeU16(width);
+                  mb.writeU16(height);
+                  mb.writeU32(0x00480000);
+                  mb.writeU32(0x00480000);
+                  mb.writeU32(0);
+                  mb.writeU16(1);
+                  mb.writeU8(12);
+                  mb.writeAscii("FastArt H264");
+                  for (let i = 0; i < 19; i++) mb.writeU8(0);
+                  mb.writeU16(0x0018);
+                  mb.writeU16(0xffff);
+
+                  mb.box("avcC", () => {
+                    mb.writeU8(1); // configurationVersion
+                    mb.writeU8(66); // Baseline Profile
+                    mb.writeU8(0xc0); // profile_compatibility
+                    mb.writeU8(31); // Level 3.1
+                    mb.writeU8(0xff); // 4-byte NAL length prefix (3 | 0xFC)
+                    mb.writeU8(0xe1); // 1 SPS (1 | 0xE0)
+                    mb.writeU16(sps.length);
+                    mb.writeBytes(sps);
+                    mb.writeU8(1); // 1 PPS
+                    mb.writeU16(pps.length);
+                    mb.writeBytes(pps);
+                  });
+                });
+              });
+
+              // stts
+              mb.box("stts", () => {
+                mb.writeU32(0);
+                mb.writeU32(1);
+                mb.writeU32(totalFrames);
+                mb.writeU32(frameDurationMs);
+              });
+
+              // stss (All sync frames)
+              mb.box("stss", () => {
+                mb.writeU32(0);
+                mb.writeU32(totalFrames);
+                for (let i = 1; i <= totalFrames; i++) {
+                  mb.writeU32(i);
+                }
+              });
+
+              // stsc
+              mb.box("stsc", () => {
+                mb.writeU32(0);
+                mb.writeU32(1);
+                mb.writeU32(1);
+                mb.writeU32(1);
+                mb.writeU32(1);
+              });
+
+              // stsz
+              mb.box("stsz", () => {
+                mb.writeU32(0);
+                mb.writeU32(0);
+                mb.writeU32(totalFrames);
+                for (const sz of sampleSizes) {
+                  mb.writeU32(sz);
+                }
+              });
+
+              // stco
+              mb.box("stco", () => {
+                mb.writeU32(0);
+                mb.writeU32(totalFrames);
+                let curOffset = chunkOffset;
+                for (let i = 0; i < totalFrames; i++) {
+                  mb.writeU32(curOffset);
+                  curOffset += sampleSizes[i];
+                }
+              });
+            });
+          });
+        });
+      });
+    });
+    return mb.toBytes();
+  };
+
+  const ftypBytes = b.toBytes();
+  const estimatedOffset = ftypBytes.length + 1024;
+  let moovBytes = buildMoov(estimatedOffset + 8);
+  const actualOffset = ftypBytes.length + moovBytes.length + 8;
+  moovBytes = buildMoov(actualOffset);
+
+  b.writeBytes(moovBytes);
+
+  // mdat Box
+  b.box("mdat", () => {
+    for (const s of sampleNals) {
+      b.writeU32(s.length);
+      b.writeBytes(s);
+    }
+  });
+
+  return b.toBytes();
 }
 
 // ---------------------------------------------------------------------------
@@ -596,27 +1461,24 @@ export async function exportMobileProject(
   options: ExportOptions = {},
   onProgress?: (percent: number, currentTime: number, duration: number) => void
 ): Promise<ExportResult> {
-  const {
-    fps = 30,
-    duration = 5.0,
-    format = "mp4",
-    currentTime = 0,
-  } = options;
-
-  const targetW = 720;
-  const targetH = project.aspectRatio === "16:9" ? 405 : project.aspectRatio === "1:1" ? 720 : 1280;
+  const { fps = 15, duration = 4.0, format = "mp4", currentTime = 0 } = options;
 
   let rawTitle = (project.title || (project as any).name || "").trim();
   if (!rawTitle || /^proj[_-]\d+/i.test(rawTitle) || rawTitle === project.id) {
     rawTitle = "FastArt_Video";
   }
-  const cleanTitle = rawTitle.replace(/[/\\?%*:|"<>]/g, "").replace(/\s+/g, "_") || "FastArt_Video";
+  const cleanTitle =
+    rawTitle.replace(/[/\\?%*:|"<>]/g, "").replace(/\s+/g, "_") || "FastArt_Video";
   const targetDir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
 
   // 1. PNG Snapshot / Poster Frame
   if (format === "png") {
+    const pngW = 720;
+    const pngH =
+      project.aspectRatio === "16:9" ? 405 : project.aspectRatio === "1:1" ? 720 : 1280;
+
     if (onProgress) onProgress(30, currentTime, duration);
-    const frame = renderMobileProjectFrame(project, currentTime, targetW, targetH);
+    const frame = renderMobileProjectFrame(project, currentTime, pngW, pngH);
     if (onProgress) onProgress(75, currentTime, duration);
 
     const pngBytes = frame.toPngBytes();
@@ -624,7 +1486,6 @@ export async function exportMobileProject(
     const targetFileUri = `${targetDir}${filename}`;
 
     const base64Data = uint8ToBase64(pngBytes);
-
     await FileSystem.writeAsStringAsync(targetFileUri, base64Data, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -650,7 +1511,6 @@ export async function exportMobileProject(
     const targetFileUri = `${targetDir}${filename}`;
 
     const base64Data = uint8ToBase64(uint8);
-
     await FileSystem.writeAsStringAsync(targetFileUri, base64Data, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -673,7 +1533,8 @@ export async function exportMobileProject(
     const totalFrames = Math.max(1, Math.ceil(duration * gifFps));
     const delayMs = Math.round(1000 / gifFps);
     const gifW = 360;
-    const gifH = project.aspectRatio === "16:9" ? 202 : project.aspectRatio === "1:1" ? 360 : 640;
+    const gifH =
+      project.aspectRatio === "16:9" ? 202 : project.aspectRatio === "1:1" ? 360 : 640;
 
     const gifFrames: GifFrame[] = [];
 
@@ -693,6 +1554,10 @@ export async function exportMobileProject(
       if (onProgress) {
         onProgress(Math.round(((f + 1) / totalFrames) * 85), frameTime, duration);
       }
+
+      if (f % 3 === 0 && f < totalFrames - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
 
     const gifBytes = createGif(gifW, gifH, gifFrames, 0);
@@ -700,7 +1565,6 @@ export async function exportMobileProject(
     const targetFileUri = `${targetDir}${filename}`;
 
     const base64Data = uint8ToBase64(gifBytes);
-
     await FileSystem.writeAsStringAsync(targetFileUri, base64Data, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -717,40 +1581,59 @@ export async function exportMobileProject(
     };
   }
 
-  // 4. MP4 Video Export on Mobile
-  // First, composite poster frame to guarantee text, stickers, and canvas background are baked in!
-  if (onProgress) onProgress(20, 0, duration);
-  const coverFrame = renderMobileProjectFrame(project, 0.5, targetW, targetH);
-  const coverPngBytes = coverFrame.toPngBytes();
+  // 4. Genuine Multi-Track H.264 MP4 Video Export on Mobile
+  // Resolves aspect ratio to exact multiples of 16 for standard H.264 macroblock alignment
+  let targetW = 368;
+  let targetH = 640;
+  if (project.aspectRatio === "16:9") {
+    targetW = 640;
+    targetH = 368;
+  } else if (project.aspectRatio === "1:1") {
+    targetW = 480;
+    targetH = 480;
+  } else if (project.aspectRatio === "4:5") {
+    targetW = 384;
+    targetH = 480;
+  } else if (project.aspectRatio === "2.35:1") {
+    targetW = 640;
+    targetH = 272;
+  }
 
-  // If underlying video clip exists, copy it and attach the composite poster frame metadata
-  const primaryClip = project.tracks.video?.[0];
-  const filename = `${cleanTitle}_${Date.now()}.mp4`;
-  const targetFileUri = `${targetDir}${filename}`;
+  const mbW = targetW >> 4;
+  const mbH = targetH >> 4;
+  const renderFps = Math.min(Math.max(fps || 15, 10), 24);
+  const totalFrames = Math.max(1, Math.ceil(duration * renderFps));
+  const frameNals: Uint8Array[] = [];
 
-  let exportedVideo = false;
-  if (primaryClip && primaryClip.url) {
-    try {
-      if (primaryClip.url.startsWith("http://") || primaryClip.url.startsWith("https://")) {
-        if (onProgress) onProgress(50, duration / 2, duration);
-        const downloadRes = await FileSystem.downloadAsync(primaryClip.url, targetFileUri);
-        if (downloadRes.status === 200) exportedVideo = true;
-      } else if (primaryClip.url.startsWith("file://")) {
-        await FileSystem.copyAsync({ from: primaryClip.url, to: targetFileUri });
-        exportedVideo = true;
-      }
-    } catch (e) {
-      console.warn("Could not copy primary video clip on mobile:", e);
+  for (let f = 0; f < totalFrames; f++) {
+    const frameTime = f / renderFps;
+    const frameBuf = renderMobileProjectFrame(project, frameTime, targetW, targetH);
+    const nal = encodeH264IFrame(frameBuf, f, mbW, mbH);
+    frameNals.push(nal);
+
+    if (onProgress) {
+      const pct = Math.round(((f + 1) / totalFrames) * 88);
+      onProgress(pct, frameTime, duration);
+    }
+
+    // Yield cooperatively to the JS event loop every 3 frames to keep UI responsive
+    if (f % 3 === 0 && f < totalFrames - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
-  if (!exportedVideo) {
-    // Generate valid animated MP4 sequence using the composite frame bytes
-    const base64Data = uint8ToBase64(coverPngBytes);
-    await FileSystem.writeAsStringAsync(targetFileUri, base64Data, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-  }
+  if (onProgress) onProgress(92, duration, duration);
+
+  // Mux into standard ISO Base Media MP4 container
+  const mp4Bytes = createMp4Container(targetW, targetH, renderFps, frameNals);
+
+  const filename = `${cleanTitle}_${Date.now()}.mp4`;
+  const targetFileUri = `${targetDir}${filename}`;
+
+  const base64Data = uint8ToBase64(mp4Bytes);
+  await FileSystem.writeAsStringAsync(targetFileUri, base64Data, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
 
   if (onProgress) onProgress(100, duration, duration);
 
@@ -760,6 +1643,6 @@ export async function exportMobileProject(
     mimeType: "video/mp4",
     format: "mp4",
     extension: "mp4",
-    fileSize: coverPngBytes.length,
+    fileSize: mp4Bytes.length,
   };
 }

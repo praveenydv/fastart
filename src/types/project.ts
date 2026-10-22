@@ -116,6 +116,7 @@ export interface VideoClip {
   motionTrack?: MotionTrackConfig;
   trackIndex?: number;
   isEnding?: boolean;
+  peaks?: number[];
 }
 
 export interface AudioClip {
@@ -135,6 +136,7 @@ export interface AudioClip {
   url: string;
   sourceMediaId?: string;
   trackIndex?: number;
+  peaks?: number[];
 }
 
 export interface TextStyle {
@@ -156,6 +158,10 @@ export interface TextStyle {
   textEffect?: string;
   strokeColor?: string;
   strokeWidth?: number;
+  highlightColor?: string;
+  highlightStyle?: 'color' | 'box' | 'scale' | 'glow' | 'underline';
+  enableWordHighlight?: boolean;
+  uppercase?: boolean;
 }
 
 export interface TextClip {
@@ -188,6 +194,10 @@ export interface CaptionClip {
   motionTrack?: MotionTrackConfig;
   presetId?: string;
   words?: { word: string; start: number; end: number }[];
+  highlightColor?: string;
+  highlightStyle?: 'color' | 'box' | 'scale' | 'glow' | 'underline';
+  enableWordHighlight?: boolean;
+  uppercase?: boolean;
 }
 
 export interface StickerClip {
@@ -240,6 +250,7 @@ export interface FastArtProject {
   canvasBackground?: string;
   beatMarkers?: number[];
   aiDenoise?: boolean;
+  captionSettings?: any;
   tracks: ProjectTracks;
 }
 

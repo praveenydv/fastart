@@ -369,6 +369,19 @@ export function useTimelineClipDrag({
               currentDrag.currentStart,
               currentDrag.currentTrack,
             );
+            if (onSeekRef.current) {
+              const prevOffset = currentTimeRef.current - state.initialStart;
+              if (prevOffset >= 0 && prevOffset <= state.duration) {
+                onSeekRef.current(
+                  Math.max(0, currentDrag.currentStart + prevOffset),
+                );
+              } else if (
+                currentTimeRef.current < currentDrag.currentStart ||
+                currentTimeRef.current > currentDrag.currentStart + state.duration
+              ) {
+                onSeekRef.current(currentDrag.currentStart);
+              }
+            }
           }
         }
         touchStateRef.current = null;
@@ -636,6 +649,19 @@ export function useTimelineClipDrag({
               currentDrag.currentStart,
               currentDrag.currentTrack,
             );
+            if (onSeekRef.current) {
+              const prevOffset = currentTimeRef.current - info.initialStart;
+              if (prevOffset >= 0 && prevOffset <= info.duration) {
+                onSeekRef.current(
+                  Math.max(0, currentDrag.currentStart + prevOffset),
+                );
+              } else if (
+                currentTimeRef.current < currentDrag.currentStart ||
+                currentTimeRef.current > currentDrag.currentStart + info.duration
+              ) {
+                onSeekRef.current(currentDrag.currentStart);
+              }
+            }
           }
         }
       },

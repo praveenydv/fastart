@@ -72,12 +72,17 @@ export function usePlayerWebRenderer({
     }
   }, [project.tracks.video]);
 
-  // Rehydrate live media URLs from IndexedDB for blob URLs
+  // Rehydrate live media URLs from IndexedDB for blob URLs on initial project load only
   useEffect(() => {
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const clips = project.tracks.video || [];
       clips.forEach(async (clip) => {
         if (clip.url.startsWith("blob:")) {
+          // Keep existing video element if already loaded and working without error
+          const existingEl = rendererRef.current?.videoElements.get(clip.url);
+          if (existingEl && !(existingEl as any).error) {
+            return;
+          }
           try {
             const lookupId = clip.sourceMediaId || clip.id;
             const freshUrl = await getLiveMediaUrl(lookupId);
@@ -86,11 +91,11 @@ export function usePlayerWebRenderer({
               if (rendererRef.current && canvasRef.current) {
                 rendererRef.current.preloadClip(clip);
                 rendererRef.current.renderFrame(
-                  project,
-                  currentTime,
+                  projectRef.current,
+                  currentTimeRef.current,
                   isPlaying,
-                  boxWidth,
-                  canvasHeight,
+                  boxWidthRef.current,
+                  canvasHeightRef.current,
                 );
               }
             }
@@ -98,7 +103,7 @@ export function usePlayerWebRenderer({
         }
       });
     }
-  }, [project.id, project.tracks.video]);
+  }, [project.id]);
 
   // Render frame on timestamp, project, or playback state change
   useEffect(() => {

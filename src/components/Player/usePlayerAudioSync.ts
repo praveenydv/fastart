@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { FastArtProject } from "../../types/project";
 import { setCachedMediaDuration } from "../../utils/mediaDuration";
-import { setMediaHasAudio } from "../../utils/mediaAudioDetector";
+import { setMediaHasAudio, mediaHasAudioTrack, subscribeMediaAudioChange } from "../../utils/mediaAudioDetector";
 
 interface UsePlayerAudioSyncProps {
   project: FastArtProject;
@@ -15,6 +15,14 @@ export function usePlayerAudioSync({
   currentTime,
   isPlaying,
 }: UsePlayerAudioSyncProps) {
+  const [audioPresenceTick, setAudioPresenceTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeMediaAudioChange(() => {
+      setAudioPresenceTick((t) => t + 1);
+    });
+  }, []);
+
   const audioElementsRef = useRef<{ [id: string]: HTMLAudioElement }>({});
   const audioCtxRef = useRef<any>(null);
   const audioNodesRef = useRef<{
@@ -30,7 +38,7 @@ export function usePlayerAudioSync({
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
 
-    // 1. Gather all active sound sources: dedicated audio tracks + video clips with audio
+    // 1. Gather all active sound sources: dedicated audio tracks + video clips with verified audio
     const rawAudioClips = (project.tracks.audio || []).map((a) => ({
       id: a.id,
       sourceClipId: a.id,
@@ -47,7 +55,7 @@ export function usePlayerAudioSync({
     }));
 
     const videoAudioClips = (project.tracks.video || [])
-      .filter((v) => v.type === "video" && !v.isEnding && Boolean(v.url))
+      .filter((v) => v.type === "video" && !v.isEnding && Boolean(v.url) && mediaHasAudioTrack(v))
       .map((v) => ({
         id: `vid-audio-${v.id}`,
         sourceClipId: v.id,
@@ -121,8 +129,11 @@ export function usePlayerAudioSync({
           ) {
             setCachedMediaDuration(clip.url, el.duration);
             if (clip.sourceClipId) setCachedMediaDuration(clip.sourceClipId, el.duration);
-            setMediaHasAudio(clip.url, true);
-            if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, true);
+            // Only confirm hasAudio for actual audio tracks; videos require container track confirmation
+            if (!clip.isFromVideo) {
+              setMediaHasAudio(clip.url, true);
+              if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, true);
+            }
           }
         });
         el.addEventListener("error", () => {
@@ -263,7 +274,7 @@ export function usePlayerAudioSync({
         });
       }
     };
-  }, [isPlaying, project.tracks.audio, project.tracks.video, currentTime, project.aiDenoise]);
+  }, [isPlaying, project.tracks.audio, project.tracks.video, currentTime, project.aiDenoise, audioPresenceTick]);
 
   return { audioElementsRef };
 }

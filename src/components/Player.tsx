@@ -441,13 +441,32 @@ function Player({
             )}
           </View>
 
-          {/* Processing HUD Overlay */}
+          {/* Processing / Status HUD Overlay */}
           {isProcessing && (
             <View style={styles.processingHUD} pointerEvents="none">
-              <View style={styles.processingPill}>
-                <ActivityIndicator size="small" color="#00F2FE" />
-                <Text style={styles.processingText}>
-                  {processingMessage || "Processing Edit..."}
+              <View
+                style={[
+                  styles.processingPill,
+                  processingMessage?.includes("Noise Reduction On") &&
+                    styles.processingPillDenoiseOn,
+                ]}
+              >
+                {processingMessage?.includes("Noise Reduction On") ? (
+                  <Ionicons name="shield-checkmark" size={13} color="#10B981" />
+                ) : processingMessage?.includes("Noise Reduction Off") ? (
+                  <Ionicons name="volume-medium" size={13} color="#94A3B8" />
+                ) : (
+                  <ActivityIndicator size="small" color="#00F2FE" />
+                )}
+                <Text
+                  style={[
+                    styles.processingText,
+                    processingMessage?.includes("Noise Reduction On") && {
+                      color: "#10B981",
+                    },
+                  ]}
+                >
+                  {processingMessage || "Processing..."}
                 </Text>
               </View>
             </View>

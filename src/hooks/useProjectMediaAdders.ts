@@ -245,6 +245,10 @@ export function useProjectMediaAdders({
         ...project,
         tracks: { ...project.tracks, video: videoClips },
       });
+
+      if (newClip.url && newClip.type !== "photo") {
+        extractRealMediaAudioPeaks(newClip.url, newClip.id);
+      }
     },
     [project, currentTime, updateProjectWithHistory],
   );

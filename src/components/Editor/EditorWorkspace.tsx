@@ -179,7 +179,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
       setSelectedClipType(normalizedType);
 
-      if (normalizedType === "caption" || normalizedType === "captions" || normalizedType === "text") {
+      if (normalizedType === "caption" || normalizedType === "captions") {
+        openModal("captions");
+      } else if (normalizedType === "text") {
         openModal("text");
       } else if (normalizedType === "stickers") {
         openModal("stickers");
@@ -211,17 +213,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         />
       )}
 
-      {/* Global Processing HUD Banner */}
-      {isProcessing && (
-        <View style={styles.globalProcessingBanner} pointerEvents="none">
-          <View style={styles.globalProcessingPill}>
-            <ActivityIndicator size="small" color="#00F2FE" />
-            <Text style={styles.globalProcessingText}>
-              {processingMessage || "Processing..."}
-            </Text>
-          </View>
-        </View>
-      )}
 
       {/* Canvas Viewport & Player Controls in Flex-1 Center Stage */}
       <View
@@ -330,6 +321,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 });
               }
             }}
+            onUpdateProject={updateProjectWithHistory}
             onSplitClip={handleSplitClip}
             onDuplicateClip={handleDuplicateClip}
             onDeleteClip={handleDeleteClip}
@@ -402,35 +394,5 @@ const styles = StyleSheet.create({
     width: "100%",
     flexShrink: 0,
     backgroundColor: "#0E1118",
-  },
-  globalProcessingBanner: {
-    position: "absolute" as any,
-    top: 56,
-    left: 0,
-    right: 0,
-    alignItems: "center" as const,
-    zIndex: 999999,
-  },
-  globalProcessingPill: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    backgroundColor: "rgba(11, 14, 21, 0.94)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.5)",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 12,
-  },
-  globalProcessingText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700" as const,
-    letterSpacing: 0.3,
   },
 });

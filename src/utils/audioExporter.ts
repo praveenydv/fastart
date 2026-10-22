@@ -1,5 +1,5 @@
-// FastArt PCM 16-bit WAV Audio Exporter (TypeScript)
 import { FastArtProject } from '../types/project';
+import { mediaHasAudioTrack, isMediaAudioDetected } from './mediaAudioDetector';
 
 export function exportProjectAudioToWavBytes(
   project: FastArtProject,
@@ -50,7 +50,14 @@ export function exportProjectAudioToWavBytes(
   }));
 
   const videoAudioTracks = (project.tracks.video || [])
-    .filter((v) => v.type === 'video' && !v.isEnding && (v.volume === undefined || v.volume > 0))
+    .filter(
+      (v) =>
+        v.type === 'video' &&
+        !v.isEnding &&
+        v.hasAudio !== false &&
+        (v.volume === undefined || v.volume > 0) &&
+        (mediaHasAudioTrack(v) || isMediaAudioDetected(v.id || v.url) !== false)
+    )
     .map((v) => ({
       startTime: v.startTime,
       duration: v.duration,

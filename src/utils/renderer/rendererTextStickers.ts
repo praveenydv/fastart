@@ -1,5 +1,6 @@
-import { StickerClip, TextClip } from "../../types/project";
+import { StickerClip, TextClip, CaptionClip } from "../../types/project";
 import { applyMotionTracking } from "./rendererEffects";
+import { generateWordTimings } from "../srtParser";
 
 export function drawSticker(
   ctx: CanvasRenderingContext2D,
@@ -432,6 +433,297 @@ export function drawTextOverlay(
 
   ctx.restore();
 }
+
+/**
+ * Dedicated Subtitle & Caption renderer with live speaking word highlighting (Karaoke mode),
+ * custom subtitle presets, outline strokes, shadow glow, and multi-line word wrapping.
+ */
+export function drawCaptionOverlay(
+  ctx: CanvasRenderingContext2D,
+  cap: CaptionClip,
+  time: number,
+  w: number,
+  h: number,
+  isPlaying: boolean = false,
+) {
+  ctx.save();
+  const motion = applyMotionTracking(
+    time,
+    cap.startTime,
+    cap.duration,
+    cap.motionTrack,
+  );
+
+  // Default subtitle position is bottom center (y=82) if not specified
+  const px = (cap.position?.x ?? 50) * (w / 100) + motion.dx;
+  const py = (cap.position?.y ?? 82) * (h / 100) + motion.dy;
+  const elapsed = Math.max(0, time - cap.startTime);
+  const duration = Math.max(0.5, cap.duration || 3.0);
+  const timeLeft = Math.max(0, duration - elapsed);
+
+  let scale = (cap.scale || 1.0) * motion.dScale;
+  let alpha = 1.0;
+  let xOffset = 0;
+  let yOffset = 0;
+
+  const anim = (cap.animation || "karaoke").toLowerCase().replace(/[-_]/g, "");
+  const introDur = Math.min(0.3, duration * 0.25);
+  const exitDur = Math.min(0.2, duration * 0.15);
+
+  if (anim === "bounce") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      scale = (0.65 + Math.sin(p * Math.PI) * 0.5) * (cap.scale || 1.0);
+      alpha = Math.min(1, p * 2);
+    }
+  } else if (anim === "fade" || anim === "fadein") {
+    if (elapsed < introDur) {
+      alpha = elapsed / introDur;
+    } else if (timeLeft < exitDur) {
+      alpha = timeLeft / exitDur;
+    }
+  } else if (anim === "zoomin" || anim === "zoom") {
+    if (elapsed < introDur) {
+      const p = elapsed / introDur;
+      scale = (0.5 + p * 0.5) * (cap.scale || 1.0);
+      alpha = p;
+    }
+  }
+
+  ctx.translate(px + xOffset, py + yOffset);
+  const rot = (cap.rotation || 0) + motion.dRot;
+  ctx.rotate((rot * Math.PI) / 180);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+  const style = cap.style || {};
+  const fontSize = style.fontSize || 26;
+  const fontWeight = style.fontWeight || "900";
+  const fontFamily =
+    style.fontFamily || 'Impact, Arial Black, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+
+  const isUppercase = Boolean((style as any)?.uppercase ?? (cap as any)?.uppercase);
+  const rawText = isUppercase ? (cap.text || "").toUpperCase() : cap.text || "";
+  const rawWords =
+    cap.words && cap.words.length > 0
+      ? cap.words
+      : generateWordTimings(rawText, cap.startTime, cap.duration);
+  const wordsList = isUppercase
+    ? rawWords.map((item) => ({ ...item, word: item.word.toUpperCase() }))
+    : rawWords;
+
+  const enableWordHighlight =
+    cap.enableWordHighlight !== false &&
+    (cap.animation === "karaoke" ||
+      cap.highlightColor !== undefined ||
+      cap.style?.highlightColor !== undefined ||
+      cap.presetId === "mrbeast" ||
+      cap.presetId === "hormozi" ||
+      cap.presetId === "karaoke");
+
+  const highlightColor =
+    cap.highlightColor || cap.style?.highlightColor || "#FFE600";
+  const baseTextColor = style.color || "#FFFFFF";
+  const strokeColor = style.strokeColor || "#000000";
+  const strokeWidth = style.strokeWidth ?? 3.5;
+
+  // Measure word widths and lay them out into wrapped lines
+  const spaceWidth = ctx.measureText(" ").width;
+  const maxAllowedW = Math.max(160, (w * 0.9) / Math.max(0.1, scale));
+
+  interface MeasuredWord {
+    word: string;
+    width: number;
+    isActive: boolean;
+  }
+
+  interface SubtitleLine {
+    words: MeasuredWord[];
+    lineWidth: number;
+  }
+
+  const lines: SubtitleLine[] = [];
+  let currentLineWords: MeasuredWord[] = [];
+  let currentLineWidth = 0;
+
+  for (let i = 0; i < wordsList.length; i++) {
+    const item = wordsList[i];
+    const wWidth = ctx.measureText(item.word).width;
+    const isWordActive = time >= item.start && time < item.end;
+
+    // Check if adding this word exceeds line width
+    const additional = currentLineWords.length > 0 ? spaceWidth + wWidth : wWidth;
+
+    if (currentLineWidth + additional > maxAllowedW && currentLineWords.length > 0) {
+      lines.push({
+        words: currentLineWords,
+        lineWidth: currentLineWidth,
+      });
+      currentLineWords = [{ word: item.word, width: wWidth, isActive: isWordActive }];
+      currentLineWidth = wWidth;
+    } else {
+      currentLineWords.push({
+        word: item.word,
+        width: wWidth,
+        isActive: isWordActive,
+      });
+      currentLineWidth += additional;
+    }
+  }
+
+  if (currentLineWords.length > 0) {
+    lines.push({
+      words: currentLineWords,
+      lineWidth: currentLineWidth,
+    });
+  }
+
+  const effectiveLines = lines.length > 0 ? lines : [{
+    words: [{ word: rawText, width: ctx.measureText(rawText).width, isActive: true }],
+    lineWidth: ctx.measureText(rawText).width,
+  }];
+
+  const lineHeight = fontSize * 1.35;
+  const totalTextHeight = effectiveLines.length * lineHeight;
+  let maxLineWidth = 0;
+  for (const l of effectiveLines) {
+    if (l.lineWidth > maxLineWidth) maxLineWidth = l.lineWidth;
+  }
+
+  // Draw Background Box / Pill if configured (e.g. Minimal subtitle box)
+  if (style.backgroundColor && style.backgroundColor !== "transparent") {
+    ctx.fillStyle = style.backgroundColor;
+    const padX = style.paddingHorizontal || 16;
+    const padY = style.paddingVertical || 8;
+    const radius = style.borderRadius || 10;
+
+    ctx.beginPath();
+    if ((ctx as any).roundRect) {
+      (ctx as any).roundRect(
+        -maxLineWidth / 2 - padX,
+        -totalTextHeight / 2 - padY,
+        maxLineWidth + padX * 2,
+        totalTextHeight + padY * 2,
+        radius,
+      );
+    } else {
+      ctx.rect(
+        -maxLineWidth / 2 - padX,
+        -totalTextHeight / 2 - padY,
+        maxLineWidth + padX * 2,
+        totalTextHeight + padY * 2,
+      );
+    }
+    ctx.fill();
+
+    if (style.borderColor && (style.borderWidth || 1)) {
+      ctx.strokeStyle = style.borderColor;
+      ctx.lineWidth = style.borderWidth || 2;
+      ctx.stroke();
+    }
+  }
+
+  // Text Shadow / Glow Setup
+  const effect = style.textEffect || "none";
+  if (effect === "neon") {
+    ctx.shadowColor = highlightColor || "#00F2FE";
+    ctx.shadowBlur = 18;
+  } else if (effect === "3d") {
+    ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+  } else if (effect === "shadow") {
+    ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 4;
+  }
+
+  // Draw lines & words with live speaking word highlight
+  const startY = -(effectiveLines.length - 1) * (lineHeight / 2);
+
+  effectiveLines.forEach((lineObj, lineIdx) => {
+    const lineY = startY + lineIdx * lineHeight;
+    const align = style.textAlign || "center";
+    let curX =
+      align === "left"
+        ? -maxLineWidth / 2
+        : align === "right"
+          ? maxLineWidth / 2 - lineObj.lineWidth
+          : -lineObj.lineWidth / 2;
+
+    for (let wIdx = 0; wIdx < lineObj.words.length; wIdx++) {
+      const mw = lineObj.words[wIdx];
+      const isHighlighted = mw.isActive && enableWordHighlight;
+      const hlStyle = (cap as any).highlightStyle || (style as any).highlightStyle || "color";
+
+      ctx.save();
+
+      // If active speaking word, apply specific highlight style
+      if (isHighlighted) {
+        if (hlStyle === "scale") {
+          ctx.translate(curX + mw.width / 2, lineY);
+          ctx.scale(1.18, 1.18);
+          ctx.translate(-(curX + mw.width / 2), -lineY);
+        } else if (hlStyle === "glow") {
+          ctx.shadowColor = highlightColor;
+          ctx.shadowBlur = 24;
+        } else if (hlStyle === "box") {
+          // Rounded background badge behind active word
+          ctx.save();
+          ctx.fillStyle = highlightColor;
+          const hp = 6;
+          const vp = 3;
+          const bw = mw.width + hp * 2;
+          const bh = fontSize * 1.3 + vp * 2;
+          const bx = curX - hp;
+          const by = lineY - fontSize * 0.65 - vp;
+          ctx.beginPath();
+          if ((ctx as any).roundRect) {
+            (ctx as any).roundRect(bx, by, bw, bh, 6);
+          } else {
+            ctx.rect(bx, by, bw, bh);
+          }
+          ctx.fill();
+          ctx.restore();
+        } else if (hlStyle === "underline") {
+          // Underline bar beneath the active word
+          ctx.save();
+          ctx.fillStyle = highlightColor;
+          ctx.fillRect(curX, lineY + fontSize * 0.55, mw.width, 4);
+          ctx.restore();
+        }
+      }
+
+      // 1. Draw outline stroke
+      if (strokeWidth > 0 && !(isHighlighted && hlStyle === "box")) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = isHighlighted ? strokeWidth + 1 : strokeWidth;
+        ctx.lineJoin = "round";
+        ctx.strokeText(mw.word, curX, lineY);
+      }
+
+      // 2. Draw fill text
+      if (isHighlighted && hlStyle === "box") {
+        ctx.fillStyle = "#000000";
+      } else {
+        ctx.fillStyle = isHighlighted ? highlightColor : baseTextColor;
+      }
+      ctx.fillText(mw.word, curX, lineY);
+
+      ctx.restore();
+
+      curX += mw.width + spaceWidth;
+    }
+  });
+
+  ctx.restore();
+}
+
 
 export function drawProceduralPlaceholder(
   ctx: CanvasRenderingContext2D,

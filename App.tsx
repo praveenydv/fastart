@@ -25,6 +25,7 @@ import { usePlaybackLoop } from "./src/hooks/usePlaybackLoop";
 import { computeTotalDuration } from "./src/types/project";
 import { soundEngine } from "./src/utils/audioEngine";
 import { saveLastSession, LastEditSession } from "./src/utils/storage";
+import { mediaHasAudioTrack } from "./src/utils/mediaAudioDetector";
 
 // Keep native splash screen visible while app hydrates
 ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
@@ -393,7 +394,12 @@ export default function App() {
             handleOpenTransitionsModal={handleOpenTransitionsModal}
             handleDeselectClip={() => setSelectedClipId(null)}
             handleOpenSpeedModal={() => openModal("speed")}
-            handleOpenVolumeModal={() => openModal("volume")}
+            handleOpenVolumeModal={() => {
+              if (selectedClip && selectedClipType === "video" && !mediaHasAudioTrack(selectedClip)) {
+                return;
+              }
+              openModal("volume");
+            }}
             handleOpenCropModal={() => {
               soundEngine.playSfx("click");
               setIsCroppingPreview(true);

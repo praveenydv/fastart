@@ -1,4 +1,5 @@
 import { useCallback, useState, useRef } from "react";
+import { Alert } from "react-native";
 import {
   FastArtProject,
   AudioClip,
@@ -12,7 +13,7 @@ import {
 import { getMediaDuration } from "../utils/mediaDuration";
 import { soundEngine } from "../utils/audioEngine";
 
-import { extractRealMediaAudioPeaks } from "../utils/mediaAudioDetector";
+import { extractRealMediaAudioPeaks, mediaHasAudioTrack } from "../utils/mediaAudioDetector";
 
 interface UseProjectFilterEffectsParams {
   project: FastArtProject | null;
@@ -365,6 +366,10 @@ export function useProjectFilterEffects({
     const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
     if (aIdx >= 0) {
       const nextDenoise = !audioClips[aIdx].denoise;
+      startProcessing(
+        nextDenoise ? "Noise Reduction On" : "Noise Reduction Off",
+        800,
+      );
       audioClips[aIdx] = {
         ...audioClips[aIdx],
         denoise: nextDenoise,
@@ -381,12 +386,17 @@ export function useProjectFilterEffects({
     const videoClips = [...(current.tracks.video || [])];
     const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
     if (vIdx >= 0) {
+      if (!mediaHasAudioTrack(videoClips[vIdx])) {
+        Alert.alert(
+          "No Audio Track",
+          "Cannot apply AI Noise Reduction to a video without an audio track."
+        );
+        return false;
+      }
       const nextDenoise = !videoClips[vIdx].denoise;
       startProcessing(
-        nextDenoise
-          ? "Activating AI Noise Reduction..."
-          : "Deactivating Noise Reduction...",
-        450,
+        nextDenoise ? "Noise Reduction On" : "Noise Reduction Off",
+        800,
       );
       videoClips[vIdx] = {
         ...videoClips[vIdx],
@@ -403,13 +413,21 @@ export function useProjectFilterEffects({
 
   // Extract Audio from Video Clip to Independent Audio Track
   const handleExtractAudioFromVideo = useCallback(async () => {
-    await withProcessing("Extracting Audio Track...", async () => {
-      const current = projectRef.current;
-      if (!current || !selectedClipId) return;
-      const videoClips = current.tracks.video || [];
-      const targetVideo = videoClips.find((v) => v.id === selectedClipId);
-      if (!targetVideo) return;
+    const current = projectRef.current;
+    if (!current || !selectedClipId) return;
+    const videoClips = current.tracks.video || [];
+    const targetVideo = videoClips.find((v) => v.id === selectedClipId);
+    if (!targetVideo) return;
 
+    if (!mediaHasAudioTrack(targetVideo)) {
+      Alert.alert(
+        "No Audio Track",
+        "Cannot extract audio from a silent video or photo."
+      );
+      return;
+    }
+
+    await withProcessing("Extracting Audio Track...", async () => {
       const newAudioClip: AudioClip = {
         id: `clip-a-ext-${Date.now()}`,
         title: `${targetVideo.title || "Video"} (Audio)`,
@@ -425,6 +443,7 @@ export function useProjectFilterEffects({
         denoise: targetVideo.denoise,
         url: targetVideo.url,
         trackIndex: 1,
+        peaks: targetVideo.peaks,
       };
 
       // Mute the video clip

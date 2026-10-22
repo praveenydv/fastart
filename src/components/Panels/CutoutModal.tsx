@@ -138,8 +138,22 @@ export default function CutoutModal({
     });
   };
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onApplyCutout(
+      currentCutout || {
+        enabled: false,
+        mode: 'chroma',
+        keyColor: '#00FF00',
+        intensity: 45,
+        shadow: 25,
+      }
+    );
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
@@ -147,21 +161,37 @@ export default function CutoutModal({
 
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
-              disabled={!enabled}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetText}>Reset</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleReset}
+                style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
+                disabled={!enabled}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.titleRow}>
               <Ionicons name="person-remove-outline" size={17} color="#00F2FE" />
               <Text style={styles.sheetTitle}>Cutout & Chroma</Text>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleApply}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply cutout"
+            >
               <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>

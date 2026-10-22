@@ -4,7 +4,13 @@ import {
   CaptionClip,
   computeTotalDuration,
 } from "../types/project";
-import { exportProjectAudioToWavBytes } from "../utils/audioExporter";
+import { getMediaBinaryBuffer } from "../utils/largeMediaStorage";
+import {
+  mediaHasAudioTrack,
+  isMediaAudioDetected,
+  setMediaHasAudio,
+} from "../utils/mediaAudioDetector";
+import { splitCaptionIntoPunchySections } from "../utils/srtParser";
 
 export interface CaptionStylePreset {
   id: string;
@@ -126,104 +132,6 @@ export const CAPTION_LANGUAGES = [
   { id: "id-ID", label: "Indonesian" },
 ];
 
-export const DIALOGUE_BY_LANGUAGE: Record<string, string[]> = {
-  "en-US": [
-    "Welcome back to another video!",
-    "Today we are revealing the secret.",
-    "Make sure you watch until the very end!",
-    "You won't believe what happened next.",
-    "Hit that follow button right now!",
-    "Drop a comment with your thoughts.",
-    "Let's jump right into the action!",
-    "This changes everything you know.",
-    "Share this with someone who needs it!",
-    "Thanks for watching, see you next time!",
-  ],
-  "en-GB": [
-    "Welcome back to today's video!",
-    "Now this is quite remarkable.",
-    "Do stick around until the very end!",
-    "Brilliant things are coming up next.",
-    "Make sure to follow and subscribe!",
-    "Let us know your thoughts below.",
-    "Right, let's get straight into it!",
-    "This is genuinely game changing.",
-  ],
-  "es-ES": [
-    "¡Bienvenidos a un nuevo video!",
-    "Hoy les revelamos el gran secreto.",
-    "¡No te pierdas el final!",
-    "¡Suscríbete y dale like ahora!",
-    "Déjanos tus comentarios aquí.",
-    "¡Vamos a comenzar ya!",
-    "Esto lo cambia absolutamente todo.",
-    "¡Gracias por ver el video!",
-  ],
-  "hi-IN": [
-    "नमस्ते दोस्तों, स्वागत है आपका!",
-    "आज हम एक कमाल का सीक्रेट देखेंगे।",
-    "वीडियो को अंत तक ज़रूर देखना!",
-    "चैनल को सब्सक्राइब करना मत भूलना।",
-    "कमेंट में अपनी राय ज़रूर बताएं!",
-    "चलिए शुरू करते हैं!",
-    "यह देखकर आप हैरान रह जाएंगे।",
-    "मिलते हैं अगले वीडियो में!",
-  ],
-  "fr-FR": [
-    "Bienvenue dans cette nouvelle vidéo !",
-    "Aujourd'hui nous découvrons le secret.",
-    "Regardez bien jusqu'à la fin !",
-    "N'oubliez pas de vous abonner !",
-    "Dites-moi tout en commentaire !",
-    "C'est parti, on commence !",
-    "Ce que vous allez voir est incroyable.",
-    "Merci à tous et à bientôt !",
-  ],
-  "de-DE": [
-    "Willkommen zu einem neuen Video!",
-    "Heute lüften wir das große Geheimnis.",
-    "Schau dir das bis zum Ende an!",
-    "Abonniere den Kanal jetzt!",
-    "Schreib deine Meinung in die Kommentare!",
-    "Los geht's direkt mit dem Thema!",
-    "Das wird dich absolut überraschen.",
-  ],
-  "ja-JP": [
-    "動画をご視聴いただきありがとうございます！",
-    "今日は特別な秘密を公開します。",
-    "最後までぜひご覧ください！",
-    "チャンネル登録をお願いします！",
-    "コメントもお待ちしています。",
-    "さあ、始めましょう！",
-    "次回もお楽しみに！",
-  ],
-  "pt-BR": [
-    "Bem-vindos a mais um vídeo!",
-    "Hoje vamos revelar um grande segredo.",
-    "Assista até o final!",
-    "Já deixa o seu like e se inscreve!",
-    "Comente o que você achou aqui embaixo.",
-    "Vamos começar agora!",
-    "Isso vai mudar seu jeito de pensar.",
-  ],
-  "ar-SA": [
-    "أهلاً بكم في هذا الفيديو الجديد!",
-    "اليوم سنكشف لكم السر الحقيقي.",
-    "تابعوا الفيديو حتى النهاية!",
-    "لا تنسوا الاشتراك وتفعيل الجرس!",
-    "شاركونا آراءكم في التعليقات.",
-    "دعونا نبدأ الآن!",
-  ],
-  "id-ID": [
-    "Selamat datang di video terbaru kami!",
-    "Hari ini kita akan membongkar rahasianya.",
-    "Tonton sampai habis ya!",
-    "Jangan lupa subscribe dan like sekarang!",
-    "Tulis pendapat kamu di kolom komentar.",
-    "Yuk kita mulai sekarang!",
-  ],
-};
-
 export interface CaptionSegment {
   text: string;
   startTime: number;
@@ -294,9 +202,10 @@ export async function extractCompositeTimelineAudio(
   const videoAudioClips = (project.tracks.video || [])
     .filter(
       (v) =>
-        v.url &&
+        Boolean(v.url) &&
         v.type !== "photo" &&
         !v.isEnding &&
+        v.hasAudio !== false &&
         (v.volume === undefined || v.volume > 0),
     )
     .map((v) => ({
@@ -347,17 +256,11 @@ export async function extractCompositeTimelineAudio(
       let resampledClipAudio = decodedCache.get(clip.url);
 
       if (!resampledClipAudio) {
-        let arrayBuf: ArrayBuffer | null = null;
-        try {
-          const resp = await fetch(clip.url);
-          arrayBuf = await resp.arrayBuffer();
-        } catch (fetchErr) {
-          console.warn("FastArt: Fetch media failed for", clip.url, fetchErr);
-        }
+        const arrayBuf = await getMediaBinaryBuffer(clip.url, clip.id);
 
         if (arrayBuf && arrayBuf.byteLength > 0) {
           try {
-            const decodedBuf = await sharedCtx.decodeAudioData(arrayBuf);
+            const decodedBuf = await sharedCtx.decodeAudioData(arrayBuf.slice(0));
             if (
               decodedBuf &&
               decodedBuf.numberOfChannels > 0 &&
@@ -365,6 +268,8 @@ export async function extractCompositeTimelineAudio(
             ) {
               resampledClipAudio = resampleAudioBufferTo16k(decodedBuf);
               decodedCache.set(clip.url, resampledClipAudio);
+              setMediaHasAudio(clip.url, true);
+              if (clip.id) setMediaHasAudio(clip.id, true);
             }
           } catch (decErr) {
             console.warn("FastArt: decodeAudioData failed for", clip.url, decErr);
@@ -416,78 +321,78 @@ export async function extractCompositeTimelineAudio(
 export const extractRealAudioChannelData = extractCompositeTimelineAudio;
 
 let cachedTransformersLib: any = null;
+let loadTransformersPromise: Promise<any> | null = null;
 
 /**
- * Loads the standalone Transformers.js library in browser with multi-CDN fallback and strict timeout
+ * Loads the standalone Transformers.js library in browser using native ES module imports
+ * Supports dynamic import with fallback to esm.sh, unpkg, and inline module scripts.
  */
-async function loadTransformers(): Promise<any> {
+async function loadTransformers(
+  onProgress?: (pct: number, status: string) => void,
+): Promise<any> {
   if (typeof window === "undefined") return null;
-  if (cachedTransformersLib) return cachedTransformersLib;
-  if ((window as any).transformers) {
+  if (cachedTransformersLib?.pipeline) return cachedTransformersLib;
+  if ((window as any).transformers?.pipeline) {
     cachedTransformersLib = (window as any).transformers;
     return cachedTransformersLib;
   }
 
-  // 1. Script tag injection with bundled UMD build and 3.5s timeout
-  const fromScriptTag = await Promise.race([
-    new Promise<any>((resolve) => {
-      try {
-        const existing = document.querySelector(
-          'script[data-id="xenova-transformers"]',
-        );
-        if (existing) {
-          if ((window as any).transformers)
-            return resolve((window as any).transformers);
-          existing.addEventListener("load", () =>
-            resolve((window as any).transformers || null),
-          );
-          existing.addEventListener("error", () => resolve(null));
-          return;
+  if (loadTransformersPromise) return loadTransformersPromise;
+
+  loadTransformersPromise = (async () => {
+    if ((window as any).transformers?.pipeline) {
+      return (window as any).transformers;
+    }
+
+    if (typeof document !== "undefined") {
+      const scriptUrls = [
+        "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js",
+        "https://unpkg.com/@xenova/transformers@2.17.2/dist/transformers.min.js",
+      ];
+
+      for (const url of scriptUrls) {
+        try {
+          if (onProgress) onProgress(30, "Connecting to speech recognition engine...");
+          const loaded = await new Promise<boolean>((resolve) => {
+            const existing = document.querySelector(`script[src="${url}"]`);
+            if (existing && (window as any).transformers?.pipeline) {
+              return resolve(true);
+            }
+            const script = document.createElement("script");
+            script.src = url;
+            script.async = true;
+            script.crossOrigin = "anonymous";
+            const timer = setTimeout(() => resolve(false), 12000);
+            script.onload = () => {
+              clearTimeout(timer);
+              resolve(Boolean((window as any).transformers?.pipeline));
+            };
+            script.onerror = () => {
+              clearTimeout(timer);
+              resolve(false);
+            };
+            document.head.appendChild(script);
+          });
+
+          if (loaded && (window as any).transformers?.pipeline) {
+            cachedTransformersLib = (window as any).transformers;
+            return cachedTransformersLib;
+          }
+        } catch (scriptErr) {
+          console.warn("FastArt: Transformers script load error for", url, scriptErr);
         }
-        const script = document.createElement("script");
-        script.setAttribute("data-id", "xenova-transformers");
-        script.src =
-          "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js";
-        script.async = true;
-        script.onload = () => {
-          cachedTransformersLib = (window as any).transformers;
-          resolve(cachedTransformersLib);
-        };
-        script.onerror = () => resolve(null);
-        document.head.appendChild(script);
-      } catch {
-        resolve(null);
       }
-    }),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
-  ]);
+    }
 
-  if (fromScriptTag) return fromScriptTag;
+    return null;
+  })();
 
-  // 2. ESM dynamic import as fallback with 2.5s timeout
   try {
-    const esmPromise = (async () => {
-      const dynamicImport = new Function("u", "return import(u)");
-      const esmMod = await dynamicImport(
-        "https://esm.sh/@xenova/transformers@2.17.2",
-      );
-      if (esmMod && esmMod.pipeline) {
-        cachedTransformersLib = esmMod;
-        return esmMod;
-      }
-      return null;
-    })();
-
-    const esmResult = await Promise.race([
-      esmPromise,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-    ]);
-    if (esmResult) return esmResult;
-  } catch (e) {
-    console.warn("FastArt: Transformers ESM import failed", e);
+    const res = await loadTransformersPromise;
+    return res;
+  } finally {
+    loadTransformersPromise = null;
   }
-
-  return null;
 }
 
 /**
@@ -495,35 +400,36 @@ async function loadTransformers(): Promise<any> {
  */
 async function transcribeWithWhisper(
   audioData: Float32Array,
-  language: string,
+  language: string = "en",
   onProgress?: (pct: number, status: string) => void,
 ): Promise<CaptionSegment[] | null> {
   if (typeof window === "undefined") return null;
 
   try {
-    if (onProgress) onProgress(30, "Initializing AI Speech Recognition...");
-    const transformers = await loadTransformers();
+    if (onProgress) onProgress(30, "Initializing English AI Speech Model...");
+    const transformers = await loadTransformers(onProgress);
 
     if (!transformers || !transformers.pipeline) {
       console.warn("FastArt: Transformers.js pipeline unavailable or timed out");
-      return null;
+      throw new Error(
+        "Could not load AI speech recognition engine. Please check your internet connection and try again, or import an .SRT subtitle file."
+      );
     }
 
     if (transformers.env) {
       transformers.env.allowLocalModels = false;
       transformers.env.useBrowserCache = true;
+      if (transformers.env.backends?.onnx?.wasm) {
+        transformers.env.backends.onnx.wasm.numThreads = 1;
+      }
     }
 
-    const isEnglishOnly =
-      language === "en-US" || language === "en-GB" || language === "en";
-    const modelName = isEnglishOnly
-      ? "Xenova/whisper-tiny.en"
-      : "Xenova/whisper-tiny";
+    // English-only Whisper Tiny model (fastest, smallest, highest English accuracy)
+    const modelName = "Xenova/whisper-tiny.en";
 
     if (onProgress)
-      onProgress(45, `Loading neural speech model (${modelName})...`);
+      onProgress(45, "Loading neural speech model (whisper-tiny.en)...");
 
-    // Add 6.5s timeout on model pipeline creation so non-English large downloads don't hang indefinitely
     const pipelinePromise = transformers.pipeline(
       "automatic-speech-recognition",
       modelName,
@@ -542,24 +448,22 @@ async function transcribeWithWhisper(
 
     const transcriber = await Promise.race([
       pipelinePromise,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6500)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 120000)),
     ]);
 
     if (!transcriber) {
-      console.warn("FastArt: Speech model load timed out, falling back to speech cadence alignment");
-      return null;
+      console.warn("FastArt: Speech model load timed out");
+      throw new Error(
+        "AI speech model initialization timed out. Please check your internet connection and try again, or import an .SRT subtitle file."
+      );
     }
 
     if (onProgress) onProgress(70, "Transcribing dialogue audio waveform...");
 
-    const langCode = language === "auto" ? undefined : language.split("-")[0];
     const isLongAudio = audioData.length / 16000 > 30;
     const transcriberOptions: any = {
       return_timestamps: true,
     };
-    if (!isEnglishOnly && langCode) {
-      transcriberOptions.language = langCode;
-    }
     if (isLongAudio) {
       transcriberOptions.chunk_length_s = 30;
       transcriberOptions.stride_length_s = 5;
@@ -568,12 +472,14 @@ async function transcribeWithWhisper(
     const transcribePromise = transcriber(audioData, transcriberOptions);
     const result = await Promise.race([
       transcribePromise,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 7500)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 90000)),
     ]);
 
     if (!result) {
-      console.warn("FastArt: Transcription timed out, falling back to speech alignment");
-      return null;
+      console.warn("FastArt: Transcription timed out");
+      throw new Error(
+        "Speech transcription timed out. Please try with shorter video clips or import an .SRT subtitle file."
+      );
     }
 
     if (result && Array.isArray(result.chunks) && result.chunks.length > 0) {
@@ -628,8 +534,9 @@ async function transcribeWithWhisper(
         }));
       }
     }
-  } catch (err) {
-    console.warn("FastArt: In-browser Whisper transcription skipped:", err);
+  } catch (err: any) {
+    console.warn("FastArt: In-browser Whisper transcription failed:", err);
+    throw err;
   }
 
   return null;
@@ -645,8 +552,8 @@ export function analyzeVoiceActivity(
   realChannelData?: Float32Array | null,
 ): { start: number; duration: number }[] {
   const intervals: { start: number; duration: number }[] = [];
-  const minPhraseDur = 1.6;
-  const maxPhraseDur = 2.8;
+  const minPhraseDur = 0.9;
+  const maxPhraseDur = 1.7;
 
   // 1. If we have real Float32Array channel data from AudioContext
   if (realChannelData && realChannelData.length > 3200) {
@@ -898,6 +805,7 @@ export function startLiveSpeechRecognition(
   }
 }
 
+
 /**
  * Generates subtitle CaptionClips from audio transcription, voice activity & speech AI
  */
@@ -907,6 +815,7 @@ export async function generateAutoCaptions(
   presetId: string = "mrbeast",
   customPhrases?: string[],
   onProgress?: (pct: number, status: string) => void,
+  styleOverrides?: Partial<CaptionClip>,
 ): Promise<CaptionClip[]> {
   const computedDur = computeTotalDuration(project.tracks);
   const totalDuration = computedDur > 0 ? computedDur : 5.0;
@@ -921,19 +830,17 @@ export async function generateAutoCaptions(
     console.warn("FastArt: Real audio channel data extraction skipped", err);
   }
 
-  // 2. Synthesize WAV PCM as baseline if real audio not decoded
-  let wavBytes: Uint8Array | null = null;
-  try {
-    wavBytes = exportProjectAudioToWavBytes(project, totalDuration, 16000);
-  } catch (err) {
-    console.warn("FastArt: Audio stem extraction skipped", err);
-  }
-
   const hasCustom = customPhrases && customPhrases.length > 0;
   let finalSegments: { text: string; start: number; duration: number }[] = [];
 
-  // 3. If no custom script was provided, attempt real Whisper AI speech transcription
-  if (!hasCustom && realAudio && realAudio.length > 16000) {
+  // 2. Transcribe speech using Whisper AI (strictly no canned fallback)
+  if (!hasCustom) {
+    if (!realAudio || realAudio.length < 8000) {
+      throw new Error(
+        "No audio detected in this video. Please ensure the video has an audible sound track or import an .SRT subtitle file."
+      );
+    }
+
     try {
       const whisperSegments = await transcribeWithWhisper(
         realAudio,
@@ -947,106 +854,51 @@ export async function generateAutoCaptions(
           duration: ws.duration,
         }));
       }
-    } catch (err) {
-      console.warn("FastArt: In-browser Whisper transcription skipped:", err);
+    } catch (err: any) {
+      console.warn("FastArt: In-browser Whisper transcription failed:", err);
+      throw err;
     }
-  }
-
-  // 4. If Whisper did not produce segments (or custom script was provided or offline)
-  if (finalSegments.length === 0) {
+  } else {
+    // Custom dialogue script provided: align to voice activity intervals
     if (onProgress)
-      onProgress(50, "Analyzing voice activity & dialogue cadence...");
+      onProgress(55, "Detecting vocal cadences and spoken dialogue bursts...");
 
-    const intervals = analyzeVoiceActivity(
-      wavBytes || new Uint8Array(0),
+    let intervals = analyzeVoiceActivity(
+      new Uint8Array(0),
       totalDuration,
       realAudio,
     );
 
-    if (onProgress)
-      onProgress(75, "Synchronizing subtitles across timeline...");
-
-    // Pick language-appropriate dialogue phrases
-    const langKey = language === "auto" ? "en-US" : language;
-    const defaultDialogue =
-      DIALOGUE_BY_LANGUAGE[langKey] || DIALOGUE_BY_LANGUAGE["en-US"];
-    const phrasesToUse = hasCustom ? customPhrases! : defaultDialogue;
-
-    // Map phrases to detected speech bursts or cadence intervals
-    const phraseCount = phrasesToUse.length;
-    let targetIntervals: { start: number; duration: number }[] = [];
-
-    if (intervals.length > 0) {
-      if (intervals.length === phraseCount) {
-        targetIntervals = [...intervals];
-      } else if (intervals.length > phraseCount) {
-        targetIntervals = intervals.slice(0, phraseCount);
-      } else {
-        targetIntervals = [...intervals];
-        while (targetIntervals.length < phraseCount) {
-          let maxIdx = 0;
-          for (let i = 1; i < targetIntervals.length; i++) {
-            if (
-              targetIntervals[i].duration > targetIntervals[maxIdx].duration
-            ) {
-              maxIdx = i;
-            }
-          }
-          const longest = targetIntervals[maxIdx];
-          const halfDur = Number((longest.duration / 2).toFixed(2));
-          const firstPart = { start: longest.start, duration: halfDur };
-          const secondPart = {
-            start: Number((longest.start + halfDur).toFixed(2)),
-            duration: Number((longest.duration - halfDur).toFixed(2)),
-          };
-          targetIntervals.splice(maxIdx, 1, firstPart, secondPart);
-        }
-      }
-    } else {
-      // If no discrete speech peaks were isolated, generate natural conversational intervals across video duration
+    if (intervals.length === 0 && totalDuration > 0.8) {
       let curT = 0.5;
-      while (curT < totalDuration - 0.5 && targetIntervals.length < phraseCount) {
-        const phraseDur = Math.min(2.5, Number((totalDuration - curT).toFixed(2)));
-        targetIntervals.push({
+      while (curT < totalDuration - 0.4) {
+        const segDur = Math.min(1.6, Number((totalDuration - curT).toFixed(2)));
+        intervals.push({
           start: Number(curT.toFixed(2)),
-          duration: phraseDur,
+          duration: segDur,
         });
-        curT += phraseDur + 0.5;
+        curT += segDur + 0.35;
       }
     }
 
-    targetIntervals.sort((a, b) => a.start - b.start);
-    const count = Math.min(phraseCount, targetIntervals.length);
-
+    if (onProgress)
+      onProgress(70, "Aligning script to dialogue cadence...");
+    const phrasesToUse = customPhrases!;
+    const count = Math.min(phrasesToUse.length, intervals.length);
     for (let i = 0; i < count; i++) {
-      const interval = targetIntervals[i];
       finalSegments.push({
         text: phrasesToUse[i],
-        start: Number(interval.start.toFixed(2)),
-        duration: Number(interval.duration.toFixed(2)),
+        start: intervals[i].start,
+        duration: intervals[i].duration,
       });
     }
   }
 
+  // 3. Strict error if speech recognition could not detect any dialogue
   if (finalSegments.length === 0) {
-    const langKey = language === "auto" ? "en-US" : language;
-    const fallbackPhrases =
-      DIALOGUE_BY_LANGUAGE[langKey] || DIALOGUE_BY_LANGUAGE["en-US"];
-    const phraseCount = Math.min(
-      fallbackPhrases.length,
-      Math.max(1, Math.floor(totalDuration / 2.2)),
+    throw new Error(
+      "No spoken English dialogue detected in this video's audio. Please ensure the video has clear speech and try again, or import an .SRT subtitle file."
     );
-    const segDur = Math.max(1.5, Number((totalDuration / phraseCount).toFixed(2)));
-
-    for (let i = 0; i < phraseCount; i++) {
-      finalSegments.push({
-        text: fallbackPhrases[i % fallbackPhrases.length],
-        start: Number((i * segDur).toFixed(2)),
-        duration: Number(
-          Math.min(segDur, Math.max(1.2, totalDuration - i * segDur)).toFixed(2),
-        ),
-      });
-    }
   }
 
   if (onProgress)
@@ -1058,44 +910,34 @@ export async function generateAutoCaptions(
 
   const generatedClips: CaptionClip[] = [];
 
-/**
- * Automatically splits long caption phrases into balanced, centered multi-line text
- * so subtitles never extend outside the mobile/desktop video frame.
- */
-function balanceCaptionLines(text: string, maxLineLength = 28): string {
-  if (!text || text.length <= maxLineLength || text.includes("\n")) {
-    return text;
-  }
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length <= 4) return text;
+  // Split all segments into punchy, short subtitle phrases (2 to 4 words max)
+  const maxWords = (styleOverrides as any)?.maxWordsPerCue ?? 3;
+  const punchySegments: { text: string; start: number; duration: number }[] = [];
 
-  const midPoint = Math.floor(text.length / 2);
-  let bestIdx = 1;
-  let bestDist = Infinity;
-  let runningLen = 0;
+  finalSegments.forEach((segment) => {
+    const pieces = splitCaptionIntoPunchySections(
+      segment.text,
+      segment.start,
+      segment.duration,
+      maxWords,
+      1.8,
+    );
+    pieces.forEach((p) => {
+      punchySegments.push({
+        text: p.text,
+        start: p.startTime,
+        duration: p.duration,
+      });
+    });
+  });
 
-  for (let i = 0; i < words.length - 1; i++) {
-    runningLen += words[i].length + 1;
-    const dist = Math.abs(runningLen - midPoint);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestIdx = i + 1;
-    }
-  }
-
-  const line1 = words.slice(0, bestIdx).join(" ");
-  const line2 = words.slice(bestIdx).join(" ");
-  return `${line1}\n${line2}`;
-}
-
-  finalSegments.forEach((segment, idx) => {
+  punchySegments.forEach((segment, idx) => {
     const clipId = `cap-${Date.now()}-${idx}`;
     const rawText = segment.text;
-    const balancedText = balanceCaptionLines(rawText);
     const formattedText =
       preset.id === "mrbeast" || preset.id === "hormozi"
-        ? balancedText.toUpperCase()
-        : balancedText;
+        ? rawText.toUpperCase()
+        : rawText;
 
     // Generate word timestamps for karaoke and kinetic typography
     const wordsList = formattedText.split(/\s+/).filter(Boolean);
@@ -1108,16 +950,29 @@ function balanceCaptionLines(text: string, maxLineLength = 28): string {
 
     const captionClip: CaptionClip = {
       id: clipId,
-      text: formattedText,
+      text: styleOverrides?.uppercase ? formattedText.toUpperCase() : formattedText,
       startTime: segment.start,
       duration: segment.duration,
-      position: { x: 50, y: 78 }, // Safe social lower-third position
-      scale: 1.0,
-      rotation: 0,
-      animation: preset.animation,
+      position: styleOverrides?.position || { x: 50, y: 78 }, // Safe social lower-third position
+      scale: styleOverrides?.scale || 1.0,
+      rotation: styleOverrides?.rotation || 0,
+      animation: styleOverrides?.animation || preset.animation,
       trackIndex: 2, // Dedicated subtitle lane (above Video=0, Audio=1)
-      presetId: preset.id,
-      words,
+      presetId: styleOverrides?.presetId || preset.id,
+      enableWordHighlight: styleOverrides?.enableWordHighlight !== false,
+      highlightColor:
+        styleOverrides?.highlightColor ||
+        (preset.id === "hormozi"
+          ? "#22C55E"
+          : preset.id === "karaoke"
+            ? "#00F2FE"
+            : preset.id === "cyber_violet"
+              ? "#E879F9"
+              : "#FFE600"),
+      uppercase: styleOverrides?.uppercase,
+      words: styleOverrides?.uppercase
+        ? words.map((w) => ({ ...w, word: w.word.toUpperCase() }))
+        : words,
       style: {
         color: preset.color,
         backgroundColor: preset.bgColor,
@@ -1131,6 +986,7 @@ function balanceCaptionLines(text: string, maxLineLength = 28): string {
         paddingVertical: 6,
         borderRadius: 8,
         textAlign: "center",
+        ...(styleOverrides?.style || {}),
       },
     };
 

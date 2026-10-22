@@ -19,6 +19,7 @@ interface VolumeModalProps {
   currentFadeOut?: number;
   currentDenoise?: boolean;
   isFromVideo?: boolean;
+  hasAudio?: boolean;
   onApplyVolume: (volume: number, fadeIn: number, fadeOut: number, denoise?: boolean) => void;
   onExtractAudio?: () => void;
 }
@@ -33,6 +34,8 @@ export default function VolumeModal({
   currentFadeIn = 0,
   currentFadeOut = 0,
   currentDenoise = false,
+  isFromVideo = false,
+  hasAudio = true,
   onApplyVolume,
 }: VolumeModalProps) {
   const [volume, setVolume] = useState(currentVolume);
@@ -82,13 +85,19 @@ export default function VolumeModal({
     onApplyVolume(1.0, 0, 0, currentDenoise);
   };
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onApplyVolume(currentVolume, currentFadeIn, currentFadeOut, currentDenoise);
+    onClose();
+  };
+
   const handleDone = () => {
-    soundEngine.playSfx('click');
+    soundEngine.playSfx('whoosh');
     onClose();
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
           {/* Top Handle */}
@@ -105,6 +114,16 @@ export default function VolumeModal({
 
             <View style={styles.headerActions}>
               <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.resetBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={14} color="#EF4444" />
+                <Text style={[styles.resetBtnText, { color: '#EF4444' }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 onPress={handleReset}
                 style={styles.resetBtn}
                 activeOpacity={0.7}
@@ -117,6 +136,7 @@ export default function VolumeModal({
                 onPress={handleDone}
                 style={styles.doneBtn}
                 activeOpacity={0.7}
+                accessibilityLabel="Apply volume"
               >
                 <Ionicons name="checkmark" size={16} color="#000000" />
                 <Text style={styles.doneBtnText}>Done</Text>
@@ -125,10 +145,31 @@ export default function VolumeModal({
           </View>
 
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
+            {isFromVideo && !hasAudio && (
+              <View style={styles.noAudioBanner}>
+                <View style={styles.noAudioIconBox}>
+                  <Ionicons name="volume-mute" size={18} color="#F59E0B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.noAudioTitle}>No Audio Track Detected</Text>
+                  <Text style={styles.noAudioSubtitle}>
+                    This video contains no audio stream or was recorded without sound. Adjusting volume or fades will not produce audible playback.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Main Volume Level */}
             <View style={styles.compactSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Volume Level</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.sectionTitle}>Volume Level</Text>
+                  {isFromVideo && !hasAudio && (
+                    <View style={styles.silentBadge}>
+                      <Text style={styles.silentBadgeText}>Silent Video</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.valueBadge}>{Math.round(volume * 100)}%</Text>
               </View>
 
@@ -503,5 +544,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  noAudioBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.28)',
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  noAudioIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noAudioTitle: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  noAudioSubtitle: {
+    color: '#D1D5DB',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '400',
+  },
+  silentBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  silentBadgeText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

@@ -26,6 +26,7 @@ import {
 import {
   drawSticker,
   drawTextOverlay,
+  drawCaptionOverlay,
   drawProceduralPlaceholder,
 } from "./renderer/rendererTextStickers";
 import {
@@ -217,6 +218,17 @@ export class VideoRenderer {
     drawTextOverlay(ctx, txt, time, w, h, isPlaying);
   }
 
+  drawCaptionOverlay(
+    ctx: CanvasRenderingContext2D,
+    cap: CaptionClip,
+    time: number,
+    w: number,
+    h: number,
+    isPlaying: boolean = false,
+  ) {
+    drawCaptionOverlay(ctx, cap, time, w, h, isPlaying);
+  }
+
   drawProceduralPlaceholder(
     ctx: CanvasRenderingContext2D,
     w: number,
@@ -261,7 +273,9 @@ export class VideoRenderer {
       const stickerClips = project.tracks.stickers || [];
       const effectClips = project.tracks.effects || [];
 
-      const activeVideos = videoClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
+      const activeVideos = videoClips.filter(
+        (c) => time >= c.startTime - 0.02 && time <= c.startTime + c.duration + 0.02,
+      );
       const activeCaptions = captionClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
       const activeTexts = textClips.filter((t) => time >= t.startTime && time <= t.startTime + t.duration);
       const activeStickers = stickerClips.filter((s) => time >= s.startTime && time <= s.startTime + s.duration);
@@ -379,7 +393,7 @@ export class VideoRenderer {
               rotation: transientOverride!.rotation,
             }
           : item.clip;
-        this.drawTextOverlay(ctx, clipToDraw as any, time, w, h, isPlaying);
+        this.drawCaptionOverlay(ctx, clipToDraw, time, w, h, isPlaying);
       } else if (item.kind === "text") {
         const clipToDraw: TextClip = isOverridden
           ? {

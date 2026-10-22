@@ -120,8 +120,8 @@ export function drawClip(
 
   let activeMedia: any = isReady ? mediaEl : null;
 
-  // Only fall back to low-res thumbnail if full media element is completely absent or errored
-  if (!activeMedia && clip.thumbnail && (!mediaEl || (mediaEl as any).error)) {
+  // Fall back to clip thumbnail whenever video element is not ready, seeking, or buffering
+  if (!activeMedia && clip.thumbnail) {
     let thumbEl = renderCtx.thumbnailElements.get(clip.id);
     if (!thumbEl) {
       thumbEl = new Image();

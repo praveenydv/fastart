@@ -45,10 +45,11 @@ export const Timeline: React.FC<TimelineProps> = ({
   zoom,
   onZoomChange,
   onOpenEditModal,
+  onUpdateProject,
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
-  const pxPerSec = Math.max(5, Math.min(1000, zoom));
+  const pxPerSec = Math.max(20, Math.min(1000, zoom));
 
   const scrollRef = useRef<any>(null);
   const containerRef = useRef<any>(null);
@@ -65,6 +66,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     project,
     dragState: null,
     selectedClipId,
+    onUpdateProject,
   });
 
   // User timeline height & resize logic
@@ -135,7 +137,9 @@ export const Timeline: React.FC<TimelineProps> = ({
     onTrimClip,
   });
 
-  // Auto-scroll when playing
+  const currentScrollXRef = useRef(0);
+
+  // Auto-scroll when playing (only scroll when playhead approaches screen edge to avoid 60fps stutter)
   useEffect(() => {
     if (!project?.isPlaying) return;
     const playheadX = currentTime * pxPerSec;
@@ -150,9 +154,13 @@ export const Timeline: React.FC<TimelineProps> = ({
         }
       }
     } else if (el && typeof el.scrollTo === "function") {
-      el.scrollTo({ x: Math.max(0, playheadX - 60), animated: true });
+      const sLeft = currentScrollXRef.current;
+      const viewW = screenWidth - (isMobile ? 55 : 80);
+      if (playheadX > sLeft + viewW - 100 || playheadX < sLeft) {
+        el.scrollTo({ x: Math.max(0, playheadX - 60), animated: false });
+      }
     }
-  }, [project?.isPlaying, currentTime, pxPerSec, screenWidth]);
+  }, [project?.isPlaying, currentTime, pxPerSec, screenWidth, isMobile]);
 
   // Touch pinch-to-zoom
   const [isPinching, setIsPinching] = useState(false);
@@ -386,6 +394,10 @@ export const Timeline: React.FC<TimelineProps> = ({
             nestedScrollEnabled={true}
             keyboardShouldPersistTaps="handled"
             scrollEnabled={!isInteractingWithTimeline}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              currentScrollXRef.current = e.nativeEvent.contentOffset.x;
+            }}
             style={[
               styles.timelineScroll,
               {

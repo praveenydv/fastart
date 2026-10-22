@@ -315,4 +315,26 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  sheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  sheetSubtitle: {
+    color: '#8E95A5',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  deleteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    marginRight: 6,
+  },
 });

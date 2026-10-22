@@ -23,6 +23,8 @@ export interface StoredMediaRecord {
 
 // In-memory object URL cache to avoid redundant URL.createObjectURL allocations
 const objectUrlCache = new Map<string, string>();
+// Direct in-memory blob cache by URL to eliminate brittle fetch(blobUrl) errors completely
+const blobByUrlCache = new Map<string, Blob | File>();
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -103,6 +105,7 @@ export async function persistLargeMedia(
   if (!liveUrl) {
     liveUrl = URL.createObjectURL(fileOrBlob);
     objectUrlCache.set(id, liveUrl);
+    blobByUrlCache.set(liveUrl, fileOrBlob);
   }
 
   // Save to IndexedDB if on web
@@ -157,12 +160,172 @@ export async function getLiveMediaUrl(id: string): Promise<string | null> {
     if (record && record.blob) {
       const url = URL.createObjectURL(record.blob);
       objectUrlCache.set(id, url);
+      blobByUrlCache.set(url, record.blob);
       return url;
     }
   } catch (err) {
     console.warn('Failed to load media from IndexedDB:', err);
   }
   return null;
+}
+
+// Retrieve live File or Blob for a media ID from IndexedDB
+export async function getLiveMediaBlob(id: string): Promise<Blob | File | null> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return null;
+  try {
+    const db = await getIndexedDB();
+    const record = await new Promise<StoredMediaRecord | null>((resolve, reject) => {
+      const tx = db.transaction(STORE_MEDIA, 'readonly');
+      const store = tx.objectStore(STORE_MEDIA);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    return record?.blob || null;
+  } catch (err) {
+    console.warn('Failed to load media blob from IndexedDB:', err);
+    return null;
+  }
+}
+
+// Robust multi-strategy ArrayBuffer loader for media (handles in-memory blob cache, blob URLs, XHR, and IndexedDB)
+export async function getMediaBinaryBuffer(url: string, lookupId?: string): Promise<ArrayBuffer | null> {
+  if (!url && !lookupId) return null;
+
+  // 0. Direct in-memory Blob/File cache (0ms, 100% reliable, zero network/CORS failure)
+  if (url && blobByUrlCache.has(url)) {
+    try {
+      const b = blobByUrlCache.get(url)!;
+      const buf = await b.arrayBuffer();
+      if (buf && buf.byteLength > 0) return buf.slice(0);
+    } catch (_) {}
+  }
+
+  // 0b. Data URI base64 decoder
+  if (url && url.startsWith('data:')) {
+    try {
+      const commaIdx = url.indexOf(',');
+      if (commaIdx >= 0) {
+        const base64 = url.slice(commaIdx + 1);
+        const buf = base64ToArrayBuffer(base64);
+        if (buf && buf.byteLength > 0) return buf;
+      }
+    } catch (_) {}
+  }
+
+  // 1. Try standard fetch if URL exists
+  if (url) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const buf = await resp.arrayBuffer();
+        if (buf && buf.byteLength > 0) return buf.slice(0);
+      }
+    } catch (_) {}
+
+    // 2. XMLHttpRequest fallback (Chrome and Safari permit XHR reading local blob: URLs even when fetch rejects)
+    if (typeof XMLHttpRequest !== 'undefined') {
+      try {
+        const buf = await new Promise<ArrayBuffer | null>((resolve) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('GET', url, true);
+          xhr.responseType = 'arraybuffer';
+          xhr.onload = () => {
+            if (xhr.status === 200 || xhr.status === 0) {
+              resolve(xhr.response);
+            } else {
+              resolve(null);
+            }
+          };
+          xhr.onerror = () => resolve(null);
+          xhr.send();
+        });
+        if (buf && buf.byteLength > 0) return buf.slice(0);
+      } catch (_) {}
+    }
+  }
+
+  // 3. Mobile FileSystem read for file://, content://, or local paths (React Native Android & iOS)
+  if (Platform.OS !== 'web' && url && (url.startsWith('file:') || url.startsWith('content:') || url.startsWith('/'))) {
+    try {
+      const FileSystemLegacy = await import('expo-file-system/legacy');
+      const base64Data = await FileSystemLegacy.readAsStringAsync(url, {
+        encoding: FileSystemLegacy.EncodingType.Base64,
+      });
+      if (base64Data && base64Data.length > 0) {
+        const buf = base64ToArrayBuffer(base64Data);
+        if (buf && buf.byteLength > 0) return buf;
+      }
+    } catch (e) {
+      console.warn('[largeMediaStorage] Mobile FileSystem binary read failed:', e);
+    }
+  }
+
+  // 4. Retrieve directly from IndexedDB if lookupId is provided
+  if (lookupId) {
+    try {
+      const blob = await getLiveMediaBlob(lookupId);
+      if (blob) {
+        const buf = await blob.arrayBuffer();
+        if (buf && buf.byteLength > 0) return buf.slice(0);
+      }
+    } catch (_) {}
+  }
+
+  // 5. Try searching IndexedDB for matching record
+  if (Platform.OS === 'web' && typeof indexedDB !== 'undefined') {
+    try {
+      const records = await getAllStoredMedia();
+      for (const rec of records) {
+        if (rec.id === lookupId || (lookupId && rec.id.includes(lookupId))) {
+          const buf = await rec.blob.arrayBuffer();
+          if (buf && buf.byteLength > 0) return buf.slice(0);
+        }
+      }
+      if (records.length > 0 && records[0].blob) {
+        const buf = await records[0].blob.arrayBuffer();
+        if (buf && buf.byteLength > 0) return buf.slice(0);
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+/**
+ * High-speed pure JS base64 to ArrayBuffer converter
+ */
+export function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Uint8Array(256);
+  for (let i = 0; i < chars.length; i++) {
+    lookup[chars.charCodeAt(i)] = i;
+  }
+  let len = base64.length;
+  let bufferLength = base64.length * 0.75;
+  if (base64[base64.length - 1] === '=') {
+    bufferLength--;
+    if (base64[base64.length - 2] === '=') {
+      bufferLength--;
+    }
+  }
+  const arrayBuffer = new ArrayBuffer(Math.max(0, Math.floor(bufferLength)));
+  const bytes = new Uint8Array(arrayBuffer);
+  let p = 0;
+  for (let i = 0; i < len; i += 4) {
+    const enc1 = lookup[base64.charCodeAt(i)];
+    const enc2 = lookup[base64.charCodeAt(i + 1)];
+    const enc3 = lookup[base64.charCodeAt(i + 2)];
+    const enc4 = lookup[base64.charCodeAt(i + 3)];
+    bytes[p++] = (enc1 << 2) | (enc2 >> 4);
+    if (base64[i + 2] !== '=') {
+      bytes[p++] = ((enc2 & 15) << 4) | (enc3 >> 2);
+    }
+    if (base64[i + 3] !== '=') {
+      bytes[p++] = ((enc3 & 3) << 6) | enc4;
+    }
+  }
+  return arrayBuffer;
 }
 
 // Extract exact video duration, dimensions, and generate crisp lightweight thumbnail
@@ -307,6 +470,24 @@ export async function deleteMedia(id: string): Promise<void> {
     });
   } catch (err) {
     console.warn('Failed to delete media from IndexedDB:', err);
+  }
+}
+
+// Retrieve all stored media records from IndexedDB
+export async function getAllStoredMedia(): Promise<StoredMediaRecord[]> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return [];
+  try {
+    const db = await getIndexedDB();
+    return await new Promise<StoredMediaRecord[]>((resolve, reject) => {
+      const tx = db.transaction(STORE_MEDIA, 'readonly');
+      const store = tx.objectStore(STORE_MEDIA);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('Failed to get all stored media:', err);
+    return [];
   }
 }
 

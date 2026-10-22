@@ -95,8 +95,24 @@ export default function MotionTrackingModal({
     });
   };
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onApplyTracking(
+      currentTrack || {
+        enabled: false,
+        mode: 'follow_center',
+      }
+    );
+    onClose();
+  };
+
+  const handleApply = () => {
+    soundEngine.playSfx('whoosh');
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
@@ -104,21 +120,37 @@ export default function MotionTrackingModal({
 
           {/* Space-Optimized Header */}
           <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
-              disabled={!enabled}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetText}>Disable</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleReset}
+                style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
+                disabled={!enabled}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>Disable</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.titleRow}>
               <Ionicons name="scan" size={17} color="#00F2FE" />
               <Text style={styles.sheetTitle}>Motion Tracking</Text>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleApply}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply tracking"
+            >
               <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>

@@ -101,8 +101,19 @@ export default function SpeedModal({
 
   const isDefaultSpeed = speedVal === 1.0 && activeTab === 'normal' && smoothSlowMo === 'none';
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onApplySpeed(currentSpeed, currentCurve, currentSlowMo);
+    onClose();
+  };
+
+  const handleApply = () => {
+    soundEngine.playSfx('whoosh');
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
@@ -110,14 +121,25 @@ export default function SpeedModal({
 
           {/* Space-Optimized Header */}
           <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={handleResetSpeed}
-              style={[styles.resetBtn, isDefaultSpeed && { opacity: 0.4 }]}
-              disabled={isDefaultSpeed}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetText}>1.0x</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleResetSpeed}
+                style={[styles.resetBtn, isDefaultSpeed && { opacity: 0.4 }]}
+                disabled={isDefaultSpeed}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>1.0x</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.tabsRow}>
               <TouchableOpacity
@@ -161,9 +183,10 @@ export default function SpeedModal({
             </View>
 
             <TouchableOpacity
-              onPress={onClose}
+              onPress={handleApply}
               style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
               activeOpacity={0.7}
+              accessibilityLabel="Apply speed changes"
             >
               <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>

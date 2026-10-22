@@ -27,6 +27,7 @@ import {
   StickerClip,
   EffectClip,
 } from "../../types/project";
+import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface EditorModalsProps {
   activeModal: string | null;
@@ -176,15 +177,15 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         if (
           selectedClip &&
           (selectedClipType === "text" ||
-            selectedClipType === "caption" ||
-            selectedClipType === "captions" ||
-            typeof (selectedClip as any).text === "string")
+            (selectedClipType !== "caption" &&
+              selectedClipType !== "captions" &&
+              typeof (selectedClip as any).text === "string" &&
+              !(selectedClip as any).words))
         ) {
           editingTarget = selectedClip;
         } else if (selectedClipId && project) {
           editingTarget =
             project.tracks?.text?.find((c) => c.id === selectedClipId) ||
-            project.tracks?.captions?.find((c) => c.id === selectedClipId) ||
             null;
         }
 
@@ -197,9 +198,6 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
             onUpdateText={(clip) => {
               if (handleUpdateText) {
                 handleUpdateText(clip);
-              }
-              if (handleUpdateCaption) {
-                handleUpdateCaption(clip as any);
               }
             }}
             currentPlayheadTime={currentTime}
@@ -309,7 +307,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "volume" && (
+      {activeModal === "volume" && mediaHasAudioTrack(selectedClip) && (
         <VolumeModal
           visible={true}
           onClose={closeModal}
@@ -318,6 +316,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentFadeOut={selectedClip?.fadeOut ?? 0}
           currentDenoise={Boolean(selectedClip?.denoise)}
           isFromVideo={selectedClipType === "video"}
+          hasAudio={mediaHasAudioTrack(selectedClip)}
           onApplyVolume={handleApplyVolume}
           onExtractAudio={handleExtractAudioFromVideo}
         />
@@ -391,7 +390,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {/* AI Speech Auto-Captions Studio Modal */}
+      {/* AI Speech Auto-Captions & Subtitle Studio Modal */}
       {activeModal === "captions" && (
         <AutoCaptionModal
           visible={true}
@@ -405,6 +404,10 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
               setCurrentTime(captions[0].startTime);
             }
           }}
+          onUpdateProject={updateProjectWithHistory}
+          currentTime={currentTime}
+          onSeek={(t) => setCurrentTime && setCurrentTime(t)}
+          selectedClipId={selectedClipId}
         />
       )}
 

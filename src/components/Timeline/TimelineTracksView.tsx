@@ -13,7 +13,7 @@ import { UnifiedClipItem, TRACK_ROW_HEIGHT } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
 import { TimelinePlayhead } from "./TimelinePlayhead";
 import { TimelineClipWaveform } from "./TimelineClipWaveform";
-import { clipHasAudio } from "../../utils/mediaAudioDetector";
+import { clipHasAudio, mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface TimelineTracksViewProps {
   trackRows: UnifiedClipItem[][];
@@ -84,6 +84,7 @@ interface TimelineTracksViewProps {
 
 export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
   trackRows,
+  activeTrackCount,
   timelineContentWidth,
   rulerRef,
   rulerPanResponder,
@@ -192,7 +193,7 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
             )}
 
             {/* Empty track lane helper with quick delete option */}
-            {isEmptyTrack && (
+            {isEmptyTrack && activeTrackCount > 1 && (
               <View style={styles.emptyTrackLaneContainer}>
                 <Text style={styles.emptyTrackLanePrompt}>
                   Track {trackIdx + 1} is empty
@@ -207,6 +208,14 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                     Remove Track
                   </Text>
                 </TouchableOpacity>
+              </View>
+            )}
+
+            {isEmptyTrack && activeTrackCount <= 1 && (
+              <View style={styles.emptyTrackLaneContainer} pointerEvents="none">
+                <Text style={styles.emptyTrackLanePrompt}>
+                  Track 1 is empty • Add media below
+                </Text>
               </View>
             )}
 
@@ -446,21 +455,22 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                             <Text style={styles.clipTitleText} numberOfLines={1}>
                               {clip.title}
                             </Text>
-                            {clip.type === "video" && clipHasAudio(clip) && (
-                              <Ionicons
-                                name="volume-medium-outline"
-                                size={10}
-                                color="#00F2FE"
-                                style={{ marginLeft: 3 }}
-                              />
-                            )}
-                            {clip.type === "video" && clip.rawClip?.volume === 0 && (
-                              <Ionicons
-                                name="volume-mute-outline"
-                                size={10}
-                                color="#64748B"
-                                style={{ marginLeft: 3 }}
-                              />
+                            {clip.type === "video" && mediaHasAudioTrack(clip) && (
+                              clip.rawClip?.volume === 0 || clip.rawClip?.muted ? (
+                                <Ionicons
+                                  name="volume-mute-outline"
+                                  size={10}
+                                  color="#F87171"
+                                  style={{ marginLeft: 3 }}
+                                />
+                              ) : (
+                                <Ionicons
+                                  name="volume-medium-outline"
+                                  size={10}
+                                  color="#00F2FE"
+                                  style={{ marginLeft: 3 }}
+                                />
+                              )
                             )}
                           </View>
                           <Text

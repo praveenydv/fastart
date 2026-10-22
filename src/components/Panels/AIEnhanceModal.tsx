@@ -101,8 +101,25 @@ export default function AIEnhanceModal({
 
   const isModified = skinSmoothing > 0 || faceRadiance > 0 || hdr || sharpness > 0 || colorBoost > 0;
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onApplyEnhance({
+      hdr: initialValues?.hdr ?? false,
+      sharpness: initialValues?.sharpness ?? 0,
+      colorBoost: initialValues?.colorBoost ?? 0,
+      skinSmoothing: initialValues?.skinSmoothing ?? 0,
+      faceRadiance: initialValues?.faceRadiance ?? 0,
+    });
+    onClose();
+  };
+
+  const handleApply = () => {
+    soundEngine.playSfx('whoosh');
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
@@ -110,21 +127,37 @@ export default function AIEnhanceModal({
 
           {/* Compact Space-Optimized Header */}
           <View style={styles.header}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, !isModified && { opacity: 0.4 }]}
-              disabled={!isModified}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetText}>Reset</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleReset}
+                style={[styles.resetBtn, !isModified && { opacity: 0.4 }]}
+                disabled={!isModified}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.headerTitleRow}>
               <Ionicons name="sparkles" size={17} color="#D946EF" />
               <Text style={styles.headerTitle}>AI Enhance</Text>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleApply}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply enhance"
+            >
               <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>

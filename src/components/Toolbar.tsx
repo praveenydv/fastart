@@ -1,7 +1,12 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
+import {
+  mediaHasAudioTrack,
+  subscribeMediaAudioChange,
+  extractRealMediaAudioPeaks,
+} from "../utils/mediaAudioDetector";
 
 interface ToolbarProps {
   selectedClip: any | null;
@@ -64,9 +69,26 @@ function Toolbar({
   onToggleDenoise,
   onExtractAudio,
 }: ToolbarProps) {
+  // Subscribe to real-time audio presence changes so Toolbar dynamically reflects audio status
+  const [, setAudioPresenceTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeMediaAudioChange(() => {
+      setAudioPresenceTick((t) => t + 1);
+    });
+  }, []);
+
+  // Proactively verify audio presence when selected clip changes
+  useEffect(() => {
+    if (selectedClip?.url && selectedClipType !== "photo") {
+      extractRealMediaAudioPeaks(selectedClip.url, selectedClip.id);
+    }
+  }, [selectedClip?.id, selectedClip?.url, selectedClipType]);
+
   // If a clip is actively selected, show Contextual Editing Tools based on clip type
   if (selectedClip) {
     const isVideo = selectedClipType === "video";
+    const hasAudioTrack = mediaHasAudioTrack(selectedClip);
     const isAudio = selectedClipType === "audio";
     const isCaption =
       selectedClipType === "caption" || selectedClipType === "captions";
@@ -141,41 +163,59 @@ function Toolbar({
                 <Text style={styles.toolLabel}>Speed</Text>
               </TouchableOpacity>
 
-              {/* 3. Volume */}
-              <TouchableOpacity
-                style={styles.toolItem}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  if (onOpenVolumeModal) onOpenVolumeModal();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.iconCircle}>
-                  <Ionicons name="volume-high-outline" size={17} color="#10B981" />
-                </View>
-                <Text style={styles.toolLabel}>Volume</Text>
-              </TouchableOpacity>
+              {/* 3. Volume (Only visible if video has audio) */}
+              {hasAudioTrack && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (onOpenVolumeModal) onOpenVolumeModal();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name="volume-high-outline"
+                      size={17}
+                      color="#10B981"
+                    />
+                  </View>
+                  <Text style={styles.toolLabel}>Volume</Text>
+                </TouchableOpacity>
+              )}
 
-              {/* 4. 1-Tap AI Noise Reduction */}
-              <TouchableOpacity
-                style={styles.toolItem}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  if (onToggleDenoise) onToggleDenoise();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.iconCircle, selectedClip.denoise && styles.activeCircle]}>
-                  <Ionicons
-                    name="ear-outline"
-                    size={17}
-                    color={selectedClip.denoise ? "#000000" : "#10B981"}
-                  />
-                </View>
-                <Text style={[styles.toolLabel, selectedClip.denoise && { color: "#00F2FE" }]}>
-                  {selectedClip.denoise ? "Denoise On" : "Denoise"}
-                </Text>
-              </TouchableOpacity>
+              {/* 4. 1-Tap AI Noise Reduction (Only visible if video has audio) */}
+              {hasAudioTrack && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (onToggleDenoise) onToggleDenoise();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      selectedClip.denoise && styles.activeCircle,
+                    ]}
+                  >
+                    <Ionicons
+                      name="ear-outline"
+                      size={17}
+                      color={selectedClip.denoise ? "#000000" : "#10B981"}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.toolLabel,
+                      selectedClip.denoise && { color: "#00F2FE" },
+                    ]}
+                  >
+                    {selectedClip.denoise ? "Denoise On" : "Denoise"}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* 5. Delete (Fast Access) */}
               <TouchableOpacity
@@ -348,20 +388,26 @@ function Toolbar({
                 <Text style={styles.toolLabel}>Keyframe</Text>
               </TouchableOpacity>
 
-              {/* 16. Extract Audio */}
-              <TouchableOpacity
-                style={styles.toolItem}
-                onPress={() => {
-                  soundEngine.playSfx("pop");
-                  if (onExtractAudio) onExtractAudio();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.iconCircle}>
-                  <Ionicons name="musical-notes-outline" size={17} color="#A78BFA" />
-                </View>
-                <Text style={styles.toolLabel}>Extract Audio</Text>
-              </TouchableOpacity>
+              {/* 16. Extract Audio (Only visible if video has audio) */}
+              {hasAudioTrack && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx("pop");
+                    if (onExtractAudio) onExtractAudio();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name="musical-notes-outline"
+                      size={17}
+                      color="#A78BFA"
+                    />
+                  </View>
+                  <Text style={styles.toolLabel}>Extract Audio</Text>
+                </TouchableOpacity>
+              )}
 
               {/* 17. Reverse */}
               <TouchableOpacity
@@ -399,41 +445,45 @@ function Toolbar({
           {/* ================= AUDIO TOOLS ================= */}
           {isAudio && (
             <>
-              {/* 1. Volume & Dynamics */}
-              <TouchableOpacity
-                style={styles.toolItem}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  if (onOpenVolumeModal) onOpenVolumeModal();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.iconCircle}>
-                  <Ionicons name="volume-high-outline" size={17} color="#10B981" />
-                </View>
-                <Text style={styles.toolLabel}>Volume</Text>
-              </TouchableOpacity>
+              {/* 1. Volume & Dynamics (Only if audio media has sound stream) */}
+              {hasAudioTrack && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (onOpenVolumeModal) onOpenVolumeModal();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="volume-high-outline" size={17} color="#10B981" />
+                  </View>
+                  <Text style={styles.toolLabel}>Volume</Text>
+                </TouchableOpacity>
+              )}
 
-              {/* 2. Denoise Audio */}
-              <TouchableOpacity
-                style={styles.toolItem}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  if (onToggleDenoise) onToggleDenoise();
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.iconCircle, selectedClip.denoise && styles.activeCircle]}>
-                  <Ionicons
-                    name="ear-outline"
-                    size={17}
-                    color={selectedClip.denoise ? "#000000" : "#10B981"}
-                  />
-                </View>
-                <Text style={[styles.toolLabel, selectedClip.denoise && { color: "#00F2FE" }]}>
-                  {selectedClip.denoise ? "Denoise On" : "Denoise"}
-                </Text>
-              </TouchableOpacity>
+              {/* 2. Denoise Audio (Only if audio media has sound stream) */}
+              {hasAudioTrack && (
+                <TouchableOpacity
+                  style={styles.toolItem}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (onToggleDenoise) onToggleDenoise();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.iconCircle, selectedClip.denoise && styles.activeCircle]}>
+                    <Ionicons
+                      name="ear-outline"
+                      size={17}
+                      color={selectedClip.denoise ? "#000000" : "#10B981"}
+                    />
+                  </View>
+                  <Text style={[styles.toolLabel, selectedClip.denoise && { color: "#00F2FE" }]}>
+                    {selectedClip.denoise ? "Denoise On" : "Denoise"}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* 3. Split Audio */}
               <TouchableOpacity
@@ -505,32 +555,15 @@ function Toolbar({
                 style={styles.toolItem}
                 onPress={() => {
                   soundEngine.playSfx("click");
-                  onOpenTextModal();
+                  if (onOpenAutoCaptions) onOpenAutoCaptions();
                 }}
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
-                  <Ionicons name="pencil" size={17} color="#00F2FE" />
+                  <Ionicons name="chatbox-ellipses" size={17} color="#00F2FE" />
                 </View>
-                <Text style={styles.toolLabel}>Edit</Text>
+                <Text style={styles.toolLabel}>Captions</Text>
               </TouchableOpacity>
-
-              {/* 2. Re-generate / Batch Captions */}
-              {onOpenAutoCaptions && (
-                <TouchableOpacity
-                  style={styles.toolItem}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    onOpenAutoCaptions();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="chatbox-ellipses" size={17} color="#A855F7" />
-                  </View>
-                  <Text style={styles.toolLabel}>AI Captions</Text>
-                </TouchableOpacity>
-              )}
 
               {/* 3. Split Caption */}
               <TouchableOpacity

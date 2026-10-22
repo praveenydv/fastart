@@ -7,6 +7,11 @@ interface UsePlaybackLoopParams {
   setCurrentTime: React.Dispatch<React.SetStateAction<number>>;
 }
 
+const getNow = () =>
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+
 export function usePlaybackLoop({
   isPlaying,
   setIsPlaying,
@@ -18,10 +23,10 @@ export function usePlaybackLoop({
 
   useEffect(() => {
     if (isPlaying) {
-      lastTimeRef.current = performance.now();
+      lastTimeRef.current = getNow();
       const loop = (now: number) => {
         const currentTimeStamp =
-          typeof now === "number" ? now : performance.now();
+          typeof now === "number" ? now : getNow();
         const delta = Math.min(
           0.1,
           Math.max(

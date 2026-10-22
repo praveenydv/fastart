@@ -109,8 +109,22 @@ export default function CanvasModal({
 
   const isDefault = currentRatio === '9:16' && currentBg === '#000000';
 
+  const handleCancel = () => {
+    soundEngine.playSfx('pop');
+    onUpdateProject({
+      aspectRatio: currentRatio,
+      canvasBackground: currentBg,
+    });
+    onClose();
+  };
+
+  const handleApply = () => {
+    soundEngine.playSfx('whoosh');
+    onClose();
+  };
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}
@@ -118,21 +132,37 @@ export default function CanvasModal({
 
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, isDefault && { opacity: 0.4 }]}
-              disabled={isDefault}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetText}>Reset</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
+                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                activeOpacity={0.7}
+                accessibilityLabel="Cancel changes"
+              >
+                <Ionicons name="close" size={17} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleReset}
+                style={[styles.resetBtn, isDefault && { opacity: 0.4 }]}
+                disabled={isDefault}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.headerTitleRow}>
               <Ionicons name="scan-outline" size={16} color="#00F2FE" />
               <Text style={styles.headerTitle}>Canvas & Ratio</Text>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleApply}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Apply canvas changes"
+            >
               <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>

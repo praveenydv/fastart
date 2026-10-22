@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { UnifiedClipItem } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
 import { TimelineClipWaveform } from "./TimelineClipWaveform";
-import { clipHasAudio } from "../../utils/mediaAudioDetector";
+import { clipHasAudio, mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface TimelineClipItemProps {
   clip: UnifiedClipItem;
@@ -238,21 +238,22 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                 <Text style={styles.clipTitleText} numberOfLines={1}>
                   {clip.title}
                 </Text>
-                {clip.type === "video" && clipHasAudio(clip) && (
-                  <Ionicons
-                    name="volume-medium-outline"
-                    size={10}
-                    color="#00F2FE"
-                    style={{ marginLeft: 3 }}
-                  />
-                )}
-                {clip.type === "video" && clip.rawClip?.volume === 0 && (
-                  <Ionicons
-                    name="volume-mute-outline"
-                    size={10}
-                    color="#64748B"
-                    style={{ marginLeft: 3 }}
-                  />
+                {clip.type === "video" && mediaHasAudioTrack(clip) && (
+                  clip.rawClip?.volume === 0 || clip.rawClip?.muted ? (
+                    <Ionicons
+                      name="volume-mute-outline"
+                      size={10}
+                      color="#F87171"
+                      style={{ marginLeft: 3 }}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="volume-medium-outline"
+                      size={10}
+                      color="#00F2FE"
+                      style={{ marginLeft: 3 }}
+                    />
+                  )
                 )}
               </View>
               <Text style={styles.clipDurationSubtext} numberOfLines={1}>

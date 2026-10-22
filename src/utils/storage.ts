@@ -19,6 +19,7 @@ export const NOTIFICATIONS_STORAGE_KEY = '@fastart_notifications_v1';
 export const LAST_SESSION_STORAGE_KEY = '@fastart_last_session_v2';
 export const UPLOADED_MEDIA_KEY = '@fastart_uploaded_media_v2';
 export const UPLOADED_AUDIO_KEY = '@fastart_uploaded_audio_v2';
+export const CAPTION_SETTINGS_KEY = '@fastart_caption_settings_v1';
 
 // In-memory cache for synchronous instant lookups
 let memoryStore: Record<string, string> = {};
@@ -398,6 +399,73 @@ export const clearAppCache = (): number => {
     saveSettings({ cachedSizeMb: 0.0 });
   } catch (e) {}
   return 0.0;
+};
+
+// --- Caption Style Settings Persistence ---
+export interface CaptionSettings {
+  presetId?: string;
+  enableHighlight: boolean;
+  highlightColor: string;
+  highlightStyle: 'color' | 'box' | 'scale' | 'glow' | 'underline';
+  fontSize: number;
+  fontFamily: string;
+  fontWeight: string;
+  textColor: string;
+  strokeColor: string;
+  strokeWidth: number;
+  backgroundColor: string;
+  textEffect: string;
+  animation: string;
+  positionY: number;
+  textAlign: 'center' | 'left' | 'right';
+  uppercase: boolean;
+  maxWordsPerCue: number;
+  chunkMode: 'punchy' | 'balanced' | 'sentence';
+}
+
+export const defaultCaptionSettings: CaptionSettings = {
+  presetId: 'custom',
+  enableHighlight: true,
+  highlightColor: '#FFE600',
+  highlightStyle: 'color',
+  fontSize: 26,
+  fontFamily: 'Impact, Arial Black, sans-serif',
+  fontWeight: '900',
+  textColor: '#FFE600',
+  strokeColor: '#000000',
+  strokeWidth: 4,
+  backgroundColor: 'transparent',
+  textEffect: '3d',
+  animation: 'bounce',
+  positionY: 82,
+  textAlign: 'center',
+  uppercase: true,
+  maxWordsPerCue: 3,
+  chunkMode: 'punchy',
+};
+
+export const loadCaptionSettings = (): CaptionSettings => {
+  try {
+    const raw = getStorageItem(CAPTION_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return { ...defaultCaptionSettings, ...parsed };
+      }
+    }
+  } catch (e) {}
+  return defaultCaptionSettings;
+};
+
+export const saveCaptionSettings = (settings: Partial<CaptionSettings>): CaptionSettings => {
+  try {
+    const current = loadCaptionSettings();
+    const updated = { ...current, ...settings };
+    setStorageItem(CAPTION_SETTINGS_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    return defaultCaptionSettings;
+  }
 };
 
 // --- Notifications ---
