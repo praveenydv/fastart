@@ -10,7 +10,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#141721',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    maxHeight: '80%',
+    maxHeight: '52%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
   },
@@ -52,6 +52,19 @@ export const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#00F2FE',
+  },
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#1E2333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetText: {
+    color: '#8E95A5',
+    fontSize: 12,
+    fontWeight: '700',
   },
   closeBtn: {
     width: 30,

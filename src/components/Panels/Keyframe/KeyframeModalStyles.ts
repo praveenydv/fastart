@@ -3,16 +3,16 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(4, 7, 14, 0.75)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     justifyContent: "flex-end",
   },
   modalCard: {
-    backgroundColor: "#0D111A",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: "#121620",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderWidth: 1,
     borderColor: "#1E2738",
-    maxHeight: "82%",
+    maxHeight: "48%",
     overflow: "hidden",
   },
   sheetHandle: {

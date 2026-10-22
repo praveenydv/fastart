@@ -261,9 +261,43 @@ export function drawTextOverlay(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const textMetrics = ctx.measureText(displayText);
-  const textWidth = textMetrics.width;
-  const textHeight = fontSize * 1.25;
+  // Automatic multi-line word wrapping so long text never spills outside canvas
+  const maxAllowedW = Math.max(140, (w * 0.88) / Math.max(0.1, scale));
+  const rawParagraphs = displayText.split("\n");
+  const lines: string[] = [];
+
+  for (const para of rawParagraphs) {
+    const words = para.split(" ");
+    let curLine = "";
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const testLine = curLine ? `${curLine} ${word}` : word;
+      const testMetrics = ctx.measureText(testLine);
+
+      if (testMetrics.width > maxAllowedW && curLine) {
+        lines.push(curLine);
+        curLine = word;
+      } else {
+        curLine = testLine;
+      }
+    }
+    if (curLine) {
+      lines.push(curLine);
+    }
+  }
+
+  const effectiveLines = lines.length > 0 ? lines : [displayText];
+  const lineHeight = fontSize * 1.35;
+  const totalTextHeight = effectiveLines.length * lineHeight;
+
+  let maxLineWidth = 0;
+  for (const line of effectiveLines) {
+    const lw = ctx.measureText(line).width;
+    if (lw > maxLineWidth) maxLineWidth = lw;
+  }
+  const textWidth = maxLineWidth;
+  const textHeight = totalTextHeight;
 
   // Draw Background Pill or Box if present
   if (style.backgroundColor && style.backgroundColor !== "transparent") {
@@ -298,7 +332,7 @@ export function drawTextOverlay(
     }
   }
 
-  // Text Effects & Shadows
+  // Text Effects & Shadows Setup
   const effect = style.textEffect || "none";
 
   if (effect === "neon") {
@@ -308,12 +342,6 @@ export function drawTextOverlay(
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
   } else if (effect === "3d") {
-    ctx.save();
-    ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-    for (let offset = 4; offset >= 1; offset--) {
-      ctx.fillText(displayText, offset, offset);
-    }
-    ctx.restore();
     ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
     ctx.shadowBlur = 4;
     ctx.shadowOffsetX = 4;
@@ -323,25 +351,11 @@ export function drawTextOverlay(
     ctx.shadowBlur = 12;
     ctx.shadowOffsetX = 3;
     ctx.shadowOffsetY = 5;
-  } else if (effect === "cyber") {
-    ctx.save();
-    ctx.fillStyle = "rgba(255, 0, 80, 0.85)";
-    ctx.fillText(displayText, 3, 2);
-    ctx.fillStyle = "rgba(0, 242, 254, 0.85)";
-    ctx.fillText(displayText, -2, -2);
-    ctx.restore();
   } else if (effect === "gold") {
     ctx.shadowColor = "#FFE600";
     ctx.shadowBlur = 18;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-  } else if (effect === "glitch") {
-    ctx.save();
-    ctx.fillStyle = "rgba(255, 0, 80, 0.8)";
-    ctx.fillText(displayText, 3, 0);
-    ctx.fillStyle = "rgba(0, 242, 254, 0.8)";
-    ctx.fillText(displayText, -3, 0);
-    ctx.restore();
   } else if (effect === "fire") {
     ctx.shadowColor = "#FF3300";
     ctx.shadowBlur = 22;
@@ -362,13 +376,6 @@ export function drawTextOverlay(
       textHeight + 8,
     );
     ctx.restore();
-  } else if (effect === "hologram") {
-    ctx.save();
-    ctx.fillStyle = "rgba(0, 242, 254, 0.6)";
-    ctx.fillText(displayText, -2, 0);
-    ctx.fillStyle = "rgba(255, 0, 128, 0.6)";
-    ctx.fillText(displayText, 2, 0);
-    ctx.restore();
   } else if (style.textShadowColor) {
     ctx.shadowColor = style.textShadowColor;
     ctx.shadowBlur = style.textShadowRadius || 12;
@@ -376,15 +383,52 @@ export function drawTextOverlay(
     ctx.shadowOffsetY = style.textShadowOffset?.height || 0;
   }
 
-  // Optional Stroke / Outline
-  if (effect === "stroke" || (style.strokeColor && (style.strokeWidth || 2))) {
-    ctx.strokeStyle = style.strokeColor || style.borderColor || "#000000";
-    ctx.lineWidth = style.strokeWidth || 3;
-    ctx.strokeText(displayText, 0, 0);
-  }
+  // Render each wrapped line centered vertically and horizontally
+  const startY = -(effectiveLines.length - 1) * (lineHeight / 2);
 
-  ctx.fillStyle = style.color || "#FFFFFF";
-  ctx.fillText(displayText, 0, 0);
+  effectiveLines.forEach((line, idx) => {
+    const lineY = startY + idx * lineHeight;
+
+    if (effect === "3d") {
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+      for (let offset = 4; offset >= 1; offset--) {
+        ctx.fillText(line, offset, lineY + offset);
+      }
+      ctx.restore();
+    } else if (effect === "cyber") {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 0, 80, 0.85)";
+      ctx.fillText(line, 3, lineY + 2);
+      ctx.fillStyle = "rgba(0, 242, 254, 0.85)";
+      ctx.fillText(line, -2, lineY - 2);
+      ctx.restore();
+    } else if (effect === "glitch") {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 0, 80, 0.8)";
+      ctx.fillText(line, 3, lineY);
+      ctx.fillStyle = "rgba(0, 242, 254, 0.8)";
+      ctx.fillText(line, -3, lineY);
+      ctx.restore();
+    } else if (effect === "hologram") {
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 242, 254, 0.6)";
+      ctx.fillText(line, -2, lineY);
+      ctx.fillStyle = "rgba(255, 0, 128, 0.6)";
+      ctx.fillText(line, 2, lineY);
+      ctx.restore();
+    }
+
+    // Optional Stroke / Outline
+    if (effect === "stroke" || (style.strokeColor && (style.strokeWidth || 2))) {
+      ctx.strokeStyle = style.strokeColor || style.borderColor || "#000000";
+      ctx.lineWidth = style.strokeWidth || 3;
+      ctx.strokeText(line, 0, lineY);
+    }
+
+    ctx.fillStyle = style.color || "#FFFFFF";
+    ctx.fillText(line, 0, lineY);
+  });
 
   ctx.restore();
 }

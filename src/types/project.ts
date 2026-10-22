@@ -94,6 +94,8 @@ export interface VideoClip {
   speedCurve?: number[] | SpeedCurvePoint[] | { id: string; name?: string; points: any } | null;
   smoothSlowMo?: 'none' | 'blend' | 'optical_flow';
   volume?: number;
+  hasAudio?: boolean;
+  muted?: boolean;
   fadeIn?: number;
   fadeOut?: number;
   denoise?: boolean;

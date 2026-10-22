@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -46,7 +46,9 @@ export default function CropTransformModal({
   initialTab = 'mask',
   onApplyTransform,
 }: CropTransformModalProps) {
-  const [activeTab, setActiveTab] = useState<'mask' | 'adjust'>(initialTab === 'adjust' ? 'adjust' : 'mask');
+  const [activeTab, setActiveTab] = useState<'mask' | 'adjust'>(
+    initialTab === 'adjust' ? 'adjust' : 'mask'
+  );
   const [flipX, setFlipX] = useState(currentTransform?.flipX || false);
   const [flipY, setFlipY] = useState(currentTransform?.flipY || false);
   const [opacity, setOpacity] = useState(currentTransform?.opacity ?? 1.0);
@@ -58,7 +60,7 @@ export default function CropTransformModal({
   const [maskRoundness, setMaskRoundness] = useState<number>(currentMask?.roundness || 16);
   const [maskInverted, setMaskInverted] = useState<boolean>(currentMask?.inverted || false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible) {
       setFlipX(currentTransform?.flipX || false);
       setFlipY(currentTransform?.flipY || false);
@@ -75,14 +77,31 @@ export default function CropTransformModal({
     }
   }, [visible, currentTransform, currentMask, initialTab]);
 
-  const handleApply = () => {
-    soundEngine.playSfx('click');
+  const triggerUpdate = (overrides?: {
+    shape?: MaskShape;
+    size?: number;
+    feather?: number;
+    roundness?: number;
+    inverted?: boolean;
+    flipX?: boolean;
+    flipY?: boolean;
+    opacity?: number;
+  }) => {
+    const nextShape = overrides?.shape !== undefined ? overrides.shape : maskShape;
+    const nextSize = overrides?.size !== undefined ? overrides.size : maskSize;
+    const nextFeather = overrides?.feather !== undefined ? overrides.feather : maskFeather;
+    const nextRoundness = overrides?.roundness !== undefined ? overrides.roundness : maskRoundness;
+    const nextInverted = overrides?.inverted !== undefined ? overrides.inverted : maskInverted;
+    const nextFlipX = overrides?.flipX !== undefined ? overrides.flipX : flipX;
+    const nextFlipY = overrides?.flipY !== undefined ? overrides.flipY : flipY;
+    const nextOpacity = overrides?.opacity !== undefined ? overrides.opacity : opacity;
+
     const newMask: MaskConfig = {
-      shape: maskShape,
-      size: maskSize,
-      feather: maskFeather,
-      roundness: maskRoundness,
-      inverted: maskInverted,
+      shape: nextShape,
+      size: nextSize,
+      feather: nextFeather,
+      roundness: nextRoundness,
+      inverted: nextInverted,
       x: 0,
       y: 0,
       rotation: 0,
@@ -94,15 +113,14 @@ export default function CropTransformModal({
         rotation: currentTransform?.rotation ?? 0,
         x: currentTransform?.x ?? 0,
         y: currentTransform?.y ?? 0,
-        flipX,
-        flipY,
-        opacity,
+        flipX: nextFlipX,
+        flipY: nextFlipY,
+        opacity: nextOpacity,
         mask: newMask,
       },
       undefined,
       newMask
     );
-    onClose();
   };
 
   const handleReset = () => {
@@ -115,7 +133,24 @@ export default function CropTransformModal({
     setMaskFeather(0);
     setMaskRoundness(16);
     setMaskInverted(false);
+
+    triggerUpdate({
+      shape: 'none',
+      size: 60,
+      feather: 0,
+      roundness: 16,
+      inverted: false,
+      flipX: false,
+      flipY: false,
+      opacity: 1.0,
+    });
   };
+
+  const isModified =
+    maskShape !== 'none' ||
+    flipX ||
+    flipY ||
+    opacity < 0.99;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -124,14 +159,24 @@ export default function CropTransformModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Space-Optimized Header */}
           <View style={styles.header}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, !isModified && { opacity: 0.4 }]}
+              disabled={!isModified}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>Reset</Text>
+            </TouchableOpacity>
+
             <View style={styles.headerTitleRow}>
-              <Ionicons name="shapes-outline" size={18} color="#00F2FE" />
+              <Ionicons name="shapes-outline" size={16} color="#00F2FE" />
               <Text style={styles.headerTitle}>Mask & Transform</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={18} color="#8E95A5" />
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -146,12 +191,12 @@ export default function CropTransformModal({
               activeOpacity={0.7}
             >
               <Ionicons
-                name="color-filter"
+                name="color-filter-outline"
                 size={14}
                 color={activeTab === 'mask' ? '#00F2FE' : '#8E95A5'}
               />
               <Text style={[styles.tabBtnText, activeTab === 'mask' && styles.tabBtnTextActive]}>
-                Mask
+                Mask ({maskShape})
               </Text>
             </TouchableOpacity>
 
@@ -168,7 +213,9 @@ export default function CropTransformModal({
                 size={14}
                 color={activeTab === 'adjust' ? '#00F2FE' : '#8E95A5'}
               />
-              <Text style={[styles.tabBtnText, activeTab === 'adjust' && styles.tabBtnTextActive]}>
+              <Text
+                style={[styles.tabBtnText, activeTab === 'adjust' && styles.tabBtnTextActive]}
+              >
                 Transform
               </Text>
             </TouchableOpacity>
@@ -177,8 +224,8 @@ export default function CropTransformModal({
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
             {/* TAB 1: VIDEO MASKING */}
             {activeTab === 'mask' && (
-              <View>
-                <Text style={styles.sectionTitle}>MASK SHAPES</Text>
+              <View style={styles.groupContainer}>
+                {/* Mask Shapes Grid */}
                 <View style={styles.maskGrid}>
                   {MASK_SHAPES.map((m) => {
                     const isSelected = maskShape === m.id;
@@ -189,169 +236,174 @@ export default function CropTransformModal({
                         onPress={() => {
                           soundEngine.playSfx('click');
                           setMaskShape(m.id);
+                          triggerUpdate({ shape: m.id });
                         }}
                         activeOpacity={0.7}
                       >
                         <Ionicons
                           name={m.icon as any}
-                          size={20}
+                          size={18}
                           color={isSelected ? '#00F2FE' : '#8E95A5'}
                         />
-                        <Text style={[styles.maskCardTitle, isSelected && styles.maskCardTitleActive]}>
+                        <Text
+                          style={[
+                            styles.maskCardTitle,
+                            isSelected && styles.maskCardTitleActive,
+                          ]}
+                          numberOfLines={1}
+                        >
                           {m.label}
                         </Text>
-                        <Text style={styles.maskCardDesc}>{m.desc}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
                 {maskShape !== 'none' && (
-                  <View style={styles.section}>
-                    {/* Aperture Size */}
-                    <View style={styles.labelValueRow}>
-                      <Text style={styles.sectionSubTitle}>Aperture Size</Text>
-                      <Text style={styles.badge}>{maskSize}%</Text>
-                    </View>
-                    {Platform.OS === 'web' ? (
-                      <WebDiv style={{ margin: '6px 0' }}>
-                        <WebInput
-                          type="range"
-                          min="15"
-                          max="100"
-                          step="1"
-                          value={maskSize}
-                          onChange={(e: any) => setMaskSize(parseFloat(e.target.value))}
-                          style={{ width: '100%', accentColor: '#00F2FE', height: 4, cursor: 'pointer' }}
-                        />
-                      </WebDiv>
-                    ) : (
-                      <View style={styles.stepperRow}>
-                        <TouchableOpacity
-                          style={styles.stepBtn}
-                          onPress={() => setMaskSize((s) => Math.max(15, s - 5))}
-                        >
-                          <Ionicons name="remove" size={16} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <Text style={styles.stepperVal}>{maskSize}%</Text>
-                        <TouchableOpacity
-                          style={styles.stepBtn}
-                          onPress={() => setMaskSize((s) => Math.min(100, s + 5))}
-                        >
-                          <Ionicons name="add" size={16} color="#FFFFFF" />
-                        </TouchableOpacity>
+                  <View style={styles.controlsCard}>
+                    {/* Size Slider */}
+                    <View style={styles.sliderRow}>
+                      <View style={styles.labelValueRow}>
+                        <Text style={styles.sliderLabel}>Aperture Size</Text>
+                        <Text style={styles.badge}>{maskSize}%</Text>
                       </View>
-                    )}
-
-                    {/* Corner Roundness */}
-                    {maskShape === 'rectangle' && (
-                      <>
-                        <View style={styles.labelValueRow}>
-                          <Text style={styles.sectionSubTitle}>Corner Roundness</Text>
-                          <Text style={styles.badge}>{maskRoundness}px</Text>
+                      {Platform.OS === 'web' ? (
+                        <WebDiv style={{ margin: '6px 0' }}>
+                          <WebInput
+                            type="range"
+                            min="15"
+                            max="100"
+                            value={maskSize}
+                            onChange={(e: any) => {
+                              const val = parseInt(e.target.value) || 60;
+                              setMaskSize(val);
+                              triggerUpdate({ size: val });
+                            }}
+                            style={{
+                              width: '100%',
+                              accentColor: '#00F2FE',
+                              height: 4,
+                              cursor: 'pointer',
+                            }}
+                          />
+                        </WebDiv>
+                      ) : (
+                        <View style={styles.stepperRow}>
+                          <TouchableOpacity
+                            style={styles.stepBtn}
+                            onPress={() => {
+                              const val = Math.max(15, maskSize - 5);
+                              setMaskSize(val);
+                              triggerUpdate({ size: val });
+                            }}
+                          >
+                            <Ionicons name="remove" size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
+                          <Text style={styles.stepperVal}>{maskSize}%</Text>
+                          <TouchableOpacity
+                            style={styles.stepBtn}
+                            onPress={() => {
+                              const val = Math.min(100, maskSize + 5);
+                              setMaskSize(val);
+                              triggerUpdate({ size: val });
+                            }}
+                          >
+                            <Ionicons name="add" size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
                         </View>
-                        {Platform.OS === 'web' ? (
-                          <WebDiv style={{ margin: '6px 0' }}>
-                            <WebInput
-                              type="range"
-                              min="0"
-                              max="60"
-                              step="2"
-                              value={maskRoundness}
-                              onChange={(e: any) => setMaskRoundness(parseFloat(e.target.value))}
-                              style={{ width: '100%', accentColor: '#00F2FE', height: 4, cursor: 'pointer' }}
-                            />
-                          </WebDiv>
-                        ) : (
-                          <View style={styles.stepperRow}>
-                            <TouchableOpacity
-                              style={styles.stepBtn}
-                              onPress={() => setMaskRoundness((r) => Math.max(0, r - 4))}
-                            >
-                              <Ionicons name="remove" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <Text style={styles.stepperVal}>{maskRoundness}px</Text>
-                            <TouchableOpacity
-                              style={styles.stepBtn}
-                              onPress={() => setMaskRoundness((r) => Math.min(60, r + 4))}
-                            >
-                              <Ionicons name="add" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </>
-                    )}
+                      )}
+                    </View>
 
                     {/* Edge Feather */}
-                    <View style={styles.labelValueRow}>
-                      <Text style={styles.sectionSubTitle}>Edge Feather Blur</Text>
-                      <Text style={styles.badge}>{maskFeather}px</Text>
-                    </View>
-                    {Platform.OS === 'web' ? (
-                      <WebDiv style={{ margin: '6px 0' }}>
-                        <WebInput
-                          type="range"
-                          min="0"
-                          max="40"
-                          step="2"
-                          value={maskFeather}
-                          onChange={(e: any) => setMaskFeather(parseFloat(e.target.value))}
-                          style={{ width: '100%', accentColor: '#00F2FE', height: 4, cursor: 'pointer' }}
-                        />
-                      </WebDiv>
-                    ) : (
-                      <View style={styles.stepperRow}>
-                        <TouchableOpacity
-                          style={styles.stepBtn}
-                          onPress={() => setMaskFeather((f) => Math.max(0, f - 2))}
-                        >
-                          <Ionicons name="remove" size={16} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <Text style={styles.stepperVal}>{maskFeather}px</Text>
-                        <TouchableOpacity
-                          style={styles.stepBtn}
-                          onPress={() => setMaskFeather((f) => Math.min(40, f + 2))}
-                        >
-                          <Ionicons name="add" size={16} color="#FFFFFF" />
-                        </TouchableOpacity>
+                    <View style={styles.sliderRow}>
+                      <View style={styles.labelValueRow}>
+                        <Text style={styles.sliderLabel}>Edge Softness (Feather)</Text>
+                        <Text style={styles.badge}>{maskFeather}%</Text>
                       </View>
-                    )}
+                      {Platform.OS === 'web' ? (
+                        <WebDiv style={{ margin: '6px 0' }}>
+                          <WebInput
+                            type="range"
+                            min="0"
+                            max="80"
+                            value={maskFeather}
+                            onChange={(e: any) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setMaskFeather(val);
+                              triggerUpdate({ feather: val });
+                            }}
+                            style={{
+                              width: '100%',
+                              accentColor: '#00F2FE',
+                              height: 4,
+                              cursor: 'pointer',
+                            }}
+                          />
+                        </WebDiv>
+                      ) : (
+                        <View style={styles.stepperRow}>
+                          <TouchableOpacity
+                            style={styles.stepBtn}
+                            onPress={() => {
+                              const val = Math.max(0, maskFeather - 5);
+                              setMaskFeather(val);
+                              triggerUpdate({ feather: val });
+                            }}
+                          >
+                            <Ionicons name="remove" size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
+                          <Text style={styles.stepperVal}>{maskFeather}%</Text>
+                          <TouchableOpacity
+                            style={styles.stepBtn}
+                            onPress={() => {
+                              const val = Math.min(80, maskFeather + 5);
+                              setMaskFeather(val);
+                              triggerUpdate({ feather: val });
+                            }}
+                          >
+                            <Ionicons name="add" size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
 
-                    {/* Invert Button */}
+                    {/* Invert Mask Toggle */}
                     <TouchableOpacity
-                      style={[styles.invertBtn, maskInverted && styles.invertBtnActive]}
+                      style={styles.toggleRow}
                       onPress={() => {
-                        soundEngine.playSfx('pop');
-                        setMaskInverted(!maskInverted);
+                        soundEngine.playSfx('click');
+                        const next = !maskInverted;
+                        setMaskInverted(next);
+                        triggerUpdate({ inverted: next });
                       }}
                       activeOpacity={0.7}
                     >
+                      <Text style={styles.sliderLabel}>Invert Mask (Outside Area)</Text>
                       <Ionicons
-                        name="invert-mode-outline"
-                        size={16}
-                        color={maskInverted ? '#000000' : '#FFFFFF'}
+                        name={maskInverted ? 'checkbox' : 'square-outline'}
+                        size={20}
+                        color={maskInverted ? '#00F2FE' : '#8E95A5'}
                       />
-                      <Text style={[styles.invertBtnText, maskInverted && styles.invertBtnTextActive]}>
-                        Invert Mask (Keep Outside)
-                      </Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
             )}
 
-            {/* TAB 2: ADJUSTMENTS & FLIPS */}
+            {/* TAB 2: FLIP & OPACITY */}
             {activeTab === 'adjust' && (
-              <View>
-                {/* Orientation & Flips */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>ORIENTATION & FLIPS</Text>
-                  <View style={styles.toolsRow}>
+              <View style={styles.groupContainer}>
+                {/* Flip Controls */}
+                <View style={styles.controlsCard}>
+                  <Text style={styles.sliderLabel}>Orientation & Mirroring</Text>
+                  <View style={styles.flipBtnRow}>
                     <TouchableOpacity
-                      style={[styles.toolBtn, flipX && styles.toolBtnActive]}
+                      style={[styles.flipBtn, flipX && styles.flipBtnActive]}
                       onPress={() => {
-                        soundEngine.playSfx('pop');
-                        setFlipX(!flipX);
+                        soundEngine.playSfx('click');
+                        const next = !flipX;
+                        setFlipX(next);
+                        triggerUpdate({ flipX: next });
                       }}
                       activeOpacity={0.7}
                     >
@@ -360,16 +412,18 @@ export default function CropTransformModal({
                         size={18}
                         color={flipX ? '#000000' : '#FFFFFF'}
                       />
-                      <Text style={[styles.toolBtnText, flipX && styles.toolBtnTextActive]}>
-                        Flip Horiz
+                      <Text style={[styles.flipBtnText, flipX && styles.flipBtnTextActive]}>
+                        Flip Horizontal
                       </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.toolBtn, flipY && styles.toolBtnActive]}
+                      style={[styles.flipBtn, flipY && styles.flipBtnActive]}
                       onPress={() => {
-                        soundEngine.playSfx('pop');
-                        setFlipY(!flipY);
+                        soundEngine.playSfx('click');
+                        const next = !flipY;
+                        setFlipY(next);
+                        triggerUpdate({ flipY: next });
                       }}
                       activeOpacity={0.7}
                     >
@@ -378,33 +432,35 @@ export default function CropTransformModal({
                         size={18}
                         color={flipY ? '#000000' : '#FFFFFF'}
                       />
-                      <Text style={[styles.toolBtnText, flipY && styles.toolBtnTextActive]}>
-                        Flip Vert
+                      <Text style={[styles.flipBtnText, flipY && styles.flipBtnTextActive]}>
+                        Flip Vertical
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
-                {/* Opacity */}
-                <View style={styles.section}>
+                {/* Opacity Slider */}
+                <View style={styles.controlsCard}>
                   <View style={styles.labelValueRow}>
-                    <Text style={styles.sectionSubTitle}>Opacity</Text>
+                    <Text style={styles.sliderLabel}>Track Opacity</Text>
                     <Text style={styles.badge}>{Math.round(opacity * 100)}%</Text>
                   </View>
                   {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '8px 0' }}>
+                    <WebDiv style={{ margin: '6px 0' }}>
                       <WebInput
                         type="range"
                         min="0"
-                        max="1"
-                        step="0.05"
-                        value={opacity}
-                        onChange={(e: any) => setOpacity(parseFloat(e.target.value))}
+                        max="100"
+                        value={Math.round(opacity * 100)}
+                        onChange={(e: any) => {
+                          const val = (parseInt(e.target.value) || 0) / 100;
+                          setOpacity(val);
+                          triggerUpdate({ opacity: val });
+                        }}
                         style={{
                           width: '100%',
                           accentColor: '#00F2FE',
                           height: 4,
-                          borderRadius: 2,
                           cursor: 'pointer',
                         }}
                       />
@@ -413,14 +469,22 @@ export default function CropTransformModal({
                     <View style={styles.stepperRow}>
                       <TouchableOpacity
                         style={styles.stepBtn}
-                        onPress={() => setOpacity((o) => Math.max(0, parseFloat((o - 0.1).toFixed(2))))}
+                        onPress={() => {
+                          const val = Math.max(0, parseFloat((opacity - 0.1).toFixed(2)));
+                          setOpacity(val);
+                          triggerUpdate({ opacity: val });
+                        }}
                       >
                         <Ionicons name="remove" size={16} color="#FFFFFF" />
                       </TouchableOpacity>
                       <Text style={styles.stepperVal}>{Math.round(opacity * 100)}%</Text>
                       <TouchableOpacity
                         style={styles.stepBtn}
-                        onPress={() => setOpacity((o) => Math.min(1.0, parseFloat((o + 0.1).toFixed(2))))}
+                        onPress={() => {
+                          const val = Math.min(1.0, parseFloat((opacity + 0.1).toFixed(2)));
+                          setOpacity(val);
+                          triggerUpdate({ opacity: val });
+                        }}
                       >
                         <Ionicons name="add" size={16} color="#FFFFFF" />
                       </TouchableOpacity>
@@ -430,19 +494,6 @@ export default function CropTransformModal({
               </View>
             )}
           </ScrollView>
-
-          {/* Footer Actions */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} activeOpacity={0.7}>
-              <Ionicons name="reload" size={14} color="#8E95A5" />
-              <Text style={styles.resetBtnText}>Reset</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.8}>
-              <Ionicons name="checkmark" size={16} color="#000000" />
-              <Text style={styles.applyBtnText}>Apply</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Modal>
@@ -452,23 +503,23 @@ export default function CropTransformModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#121620',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '80%',
-    paddingBottom: 16,
-    borderWidth: 1,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '48%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    borderTopWidth: 1,
     borderColor: '#1E2333',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -479,28 +530,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A1F2C',
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  closeBtn: {
-    padding: 4,
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1A1F2C',
+  },
+  resetText: {
+    color: '#8E95A5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A202E',
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 3,
   },
   tabBtn: {
     flex: 1,
@@ -508,108 +577,130 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 6,
-    borderRadius: 7,
-    backgroundColor: '#161A26',
-    borderWidth: 1,
-    borderColor: '#242C3F',
+    paddingVertical: 7,
+    borderRadius: 8,
   },
   tabBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
-    borderColor: '#00F2FE',
+    backgroundColor: '#202636',
   },
   tabBtnText: {
     color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
   },
   tabBtnTextActive: {
     color: '#00F2FE',
-    fontWeight: '800',
+    fontWeight: '700',
   },
   contentScroll: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingTop: 6,
   },
-  section: {
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    color: '#8E95A5',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  sectionSubTitle: {
-    color: '#CBD5E1',
-    fontSize: 11.5,
-    fontWeight: '600',
-  },
-  labelValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  badge: {
-    color: '#00F2FE',
-    fontSize: 11,
-    fontWeight: '800',
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
-    paddingHorizontal: 7,
-    paddingVertical: 1.5,
-    borderRadius: 5,
+  groupContainer: {
+    gap: 8,
+    paddingBottom: 20,
   },
   maskGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 12,
   },
   maskCard: {
-    width: '31.5%',
-    backgroundColor: '#161A26',
+    width: '23.5%',
+    backgroundColor: '#161B26',
     borderRadius: 8,
     paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#242C3F',
+    borderColor: '#1E2536',
   },
   maskCardActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
     borderColor: '#00F2FE',
+    backgroundColor: '#1A2234',
   },
   maskCardTitle: {
-    color: '#FFFFFF',
+    color: '#8E95A5',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '600',
     marginTop: 4,
     textAlign: 'center',
   },
   maskCardTitleActive: {
     color: '#00F2FE',
+    fontWeight: '700',
   },
-  maskCardDesc: {
-    color: '#64748B',
-    fontSize: 8.5,
-    textAlign: 'center',
-    marginTop: 1,
+  controlsCard: {
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#1E2536',
+    gap: 8,
+  },
+  sliderRow: {
+    gap: 4,
+  },
+  labelValueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sliderLabel: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  badge: {
+    color: '#00F2FE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  flipBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  flipBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#1E2536',
+  },
+  flipBtnActive: {
+    backgroundColor: '#00F2FE',
+  },
+  flipBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  flipBtnTextActive: {
+    color: '#000000',
+    fontWeight: '700',
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    marginVertical: 4,
+    marginTop: 4,
   },
   stepBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1E2333',
+    backgroundColor: '#262D3D',
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -617,93 +708,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
-    minWidth: 48,
+    minWidth: 42,
     textAlign: 'center',
-  },
-  invertBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#161A26',
-    paddingVertical: 8,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: '#242C3F',
-    gap: 6,
-    marginTop: 8,
-  },
-  invertBtnActive: {
-    backgroundColor: '#00F2FE',
-    borderColor: '#00F2FE',
-  },
-  invertBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  invertBtnTextActive: {
-    color: '#000000',
-    fontWeight: '900',
-  },
-  toolsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  toolBtn: {
-    flex: 1,
-    backgroundColor: '#1E2333',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  toolBtnActive: {
-    backgroundColor: '#00F2FE',
-  },
-  toolBtnText: {
-    color: '#FFFFFF',
-    fontSize: 10.5,
-    fontWeight: '700',
-  },
-  toolBtnTextActive: {
-    color: '#000000',
-    fontWeight: '800',
-  },
-  footer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 10,
-    marginTop: 8,
-  },
-  resetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#1E2333',
-    gap: 5,
-  },
-  resetBtnText: {
-    color: '#8E95A5',
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  applyBtn: {
-    flex: 1,
-    backgroundColor: '#00F2FE',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  applyBtnText: {
-    color: '#000000',
-    fontSize: 12,
-    fontWeight: '800',
   },
 });

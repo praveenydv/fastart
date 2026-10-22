@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -51,38 +51,51 @@ export default function TextModal({
   const [animTick, setAnimTick] = useState(0);
   const [activeTab, setActiveTab] = useState<"style" | "effects" | "anim">("style");
 
+  const lastLoadedClipIdRef = useRef<string | null>(null);
+  const wasVisibleRef = useRef<boolean>(false);
+
   useEffect(() => {
     if (visible) {
-      if (editingClip) {
-        setInputText(editingClip.text || "");
-        setDuration(editingClip.duration || 3.0);
-        setSelectedColor(editingClip.style?.color || "#FFFFFF");
-        setSelectedBg(editingClip.style?.backgroundColor || "transparent");
-        setSelectedAnim(editingClip.animation || "bounce");
-        if (editingClip.style?.fontFamily) setSelectedFont(editingClip.style.fontFamily);
-        if (editingClip.style?.fontSize) setSelectedFontSize(editingClip.style.fontSize);
-        setSelectedBorderColor(editingClip.style?.borderColor);
-        setSelectedTextEffect(editingClip.style?.textEffect || "none");
-        setSelectedStrokeColor(editingClip.style?.strokeColor);
-        setSelectedStrokeWidth(editingClip.style?.strokeWidth || 2);
-        setSelectedScale(editingClip.scale ?? 1.0);
-        setSelectedRotation(editingClip.rotation ?? 0);
-        if (editingClip.position) setSelectedPosition(editingClip.position);
-      } else {
-        setInputText("VIRAL HOOK");
-        setDuration(3.0);
-        setSelectedColor("#FFFFFF");
-        setSelectedBg("#FF0050");
-        setSelectedAnim("bounce");
-        setSelectedBorderColor(undefined);
-        setSelectedTextEffect("none");
-        setSelectedStrokeColor(undefined);
-        setSelectedStrokeWidth(2);
-        setSelectedScale(1.0);
-        setSelectedRotation(0);
-        setSelectedPosition({ x: 50, y: 35 });
+      const isNewlyOpened = !wasVisibleRef.current;
+      const currentClipId = editingClip ? editingClip.id : null;
+      const isClipChanged = currentClipId !== lastLoadedClipIdRef.current;
+
+      if (isNewlyOpened || isClipChanged) {
+        lastLoadedClipIdRef.current = currentClipId;
+        if (editingClip) {
+          setInputText(editingClip.text || "");
+          setDuration(editingClip.duration || 3.0);
+          setSelectedColor(editingClip.style?.color || "#FFFFFF");
+          setSelectedBg(editingClip.style?.backgroundColor || "transparent");
+          setSelectedAnim(editingClip.animation || "bounce");
+          if (editingClip.style?.fontFamily) setSelectedFont(editingClip.style.fontFamily);
+          if (editingClip.style?.fontSize) setSelectedFontSize(editingClip.style.fontSize);
+          setSelectedBorderColor(editingClip.style?.borderColor);
+          setSelectedTextEffect(editingClip.style?.textEffect || "none");
+          setSelectedStrokeColor(editingClip.style?.strokeColor);
+          setSelectedStrokeWidth(editingClip.style?.strokeWidth || 2);
+          setSelectedScale(editingClip.scale ?? 1.0);
+          setSelectedRotation(editingClip.rotation ?? 0);
+          if (editingClip.position) setSelectedPosition(editingClip.position);
+        } else {
+          setInputText("VIRAL HOOK");
+          setDuration(3.0);
+          setSelectedColor("#FFFFFF");
+          setSelectedBg("#FF0050");
+          setSelectedAnim("bounce");
+          setSelectedBorderColor(undefined);
+          setSelectedTextEffect("none");
+          setSelectedStrokeColor(undefined);
+          setSelectedStrokeWidth(2);
+          setSelectedScale(1.0);
+          setSelectedRotation(0);
+          setSelectedPosition({ x: 50, y: 35 });
+        }
       }
+    } else {
+      lastLoadedClipIdRef.current = null;
     }
+    wasVisibleRef.current = visible;
   }, [visible, editingClip]);
 
   useEffect(() => {
@@ -161,14 +174,28 @@ export default function TextModal({
     };
 
     if (editingClip && onUpdateText) {
+      let updatedWords = (editingClip as any).words;
+      if (updatedWords && inputText.trim()) {
+        const newWordStrings = inputText.trim().split(/\s+/).filter(Boolean);
+        const clipStart = editingClip.startTime || 0;
+        const clipDur = duration || editingClip.duration || 3.0;
+        const wDur = clipDur / Math.max(1, newWordStrings.length);
+        updatedWords = newWordStrings.map((w: string, wIdx: number) => ({
+          word: w,
+          start: Number((clipStart + wIdx * wDur).toFixed(2)),
+          end: Number((clipStart + (wIdx + 1) * wDur).toFixed(2)),
+        }));
+      }
+
       const updatedClip: TextClip = {
         ...editingClip,
         text: inputText,
-        duration: editingClip.duration || duration,
+        duration: duration || editingClip.duration || 3.0,
         animation: selectedAnim as any,
         scale: editingClip.scale ?? selectedScale,
         rotation: editingClip.rotation ?? selectedRotation,
         position: editingClip.position ?? selectedPosition,
+        ...(updatedWords ? { words: updatedWords } : {}),
         style: {
           ...editingClip.style,
           ...baseStyle,

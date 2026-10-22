@@ -14,6 +14,7 @@ interface UseClipTransformOperationsParams {
   selectedClipId: string | null;
   selectedClipType: string;
   updateProjectWithHistory: (proj: any) => void;
+  startProcessing?: (msg: string, durationMs?: number) => void;
 }
 
 export function useClipTransformOperations({
@@ -24,6 +25,7 @@ export function useClipTransformOperations({
   selectedClipId,
   selectedClipType,
   updateProjectWithHistory,
+  startProcessing,
 }: UseClipTransformOperationsParams) {
   // Direct on-canvas transform update (move with hand, resize, rotate)
   const handleUpdateClipTransform = useCallback(
@@ -36,15 +38,17 @@ export function useClipTransformOperations({
       const current = projectRef.current;
       if (!current) return;
       const key = (
-        clipType === "sticker" || clipType === "stickers"
-          ? "stickers"
-          : clipType === "photo" || clipType === "video"
-            ? "video"
-            : clipType === "text" || clipType === "texts"
-              ? "text"
-              : clipType === "effect" || clipType === "effects"
-                ? "effects"
-                : clipType
+        clipType === "caption" || clipType === "captions"
+          ? "captions"
+          : clipType === "sticker" || clipType === "stickers"
+            ? "stickers"
+            : clipType === "photo" || clipType === "video"
+              ? "video"
+              : clipType === "text" || clipType === "texts"
+                ? "text"
+                : clipType === "effect" || clipType === "effects"
+                  ? "effects"
+                  : clipType
       ) as keyof typeof current.tracks;
       const list = [...(((current.tracks as any)[key] as any[]) || [])];
       const idx = list.findIndex((c) => c.id === clipId);
@@ -118,16 +122,23 @@ export function useClipTransformOperations({
     const videoClips = [...(project.tracks.video || [])];
     const idx = videoClips.findIndex((c) => c.id === selectedClipId);
     if (idx >= 0) {
+      const willReverse = !videoClips[idx].reverse;
+      startProcessing?.(
+        willReverse
+          ? "Reversing Clip Video & Audio..."
+          : "Restoring Normal Direction...",
+        450,
+      );
       videoClips[idx] = {
         ...videoClips[idx],
-        reverse: !videoClips[idx].reverse,
+        reverse: willReverse,
       };
       updateProjectWithHistory({
         ...project,
         tracks: { ...project.tracks, video: videoClips },
       });
     }
-  }, [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory]);
+  }, [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory, startProcessing]);
 
   // Update clip crop
   const handleUpdateClipCrop = useCallback(

@@ -1,4 +1,9 @@
-import { FastArtProject, TextClip, CaptionClip, computeTotalDuration } from "../types/project";
+import {
+  FastArtProject,
+  TextClip,
+  CaptionClip,
+  computeTotalDuration,
+} from "../types/project";
 import { exportProjectAudioToWavBytes } from "../utils/audioExporter";
 
 export interface CaptionStylePreset {
@@ -109,7 +114,6 @@ export const CAPTION_STYLE_PRESETS: CaptionStylePreset[] = [
 ];
 
 export const CAPTION_LANGUAGES = [
-  { id: "auto", label: "Auto Detect (AI)" },
   { id: "en-US", label: "English (US)" },
   { id: "en-GB", label: "English (UK)" },
   { id: "es-ES", label: "Spanish" },
@@ -227,90 +231,350 @@ export interface CaptionSegment {
 }
 
 /**
- * Extracts real decoded audio channel data (Float32Array at 16kHz mono) from project media
+/**
+ * Resamples any audio buffer (44.1kHz, 48kHz, stereo/mono) down to 16,000Hz mono Float32Array
+ * as strictly required by neural speech recognition models (Whisper).
  */
-export async function extractRealAudioChannelData(
+function resampleAudioBufferTo16k(audioBuffer: AudioBuffer): Float32Array {
+  const sourceRate = audioBuffer.sampleRate;
+  const numChannels = audioBuffer.numberOfChannels;
+  const inLength = audioBuffer.length;
+  const targetRate = 16000;
+
+  if (sourceRate === targetRate && numChannels === 1) {
+    return audioBuffer.getChannelData(0);
+  }
+
+  const outLength = Math.max(
+    1,
+    Math.round((inLength * targetRate) / sourceRate),
+  );
+  const result = new Float32Array(outLength);
+
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < numChannels; c++) {
+    channels.push(audioBuffer.getChannelData(c));
+  }
+
+  const ratio = (inLength - 1) / Math.max(1, outLength - 1);
+  for (let i = 0; i < outLength; i++) {
+    const srcPos = i * ratio;
+    const srcIndex = Math.floor(srcPos);
+    const fraction = srcPos - srcIndex;
+    const nextIndex = Math.min(srcIndex + 1, inLength - 1);
+
+    let sampleSum = 0;
+    for (let c = 0; c < numChannels; c++) {
+      const s1 = channels[c][srcIndex];
+      const s2 = channels[c][nextIndex];
+      sampleSum += s1 + (s2 - s1) * fraction;
+    }
+    result[i] = sampleSum / numChannels;
+  }
+
+  return result;
+}
+
+/**
+ * Extracts and composites timeline audio from ALL media clips across the final video.
+ * Mixes each video clip and audio clip at its precise timeline position (startTime to startTime + duration),
+ * taking into account trimIn, speed, and volume.
+ */
+export async function extractCompositeTimelineAudio(
   project: FastArtProject,
   targetDuration: number,
-  targetSampleRate: number = 16000
+  targetSampleRate: number = 16000,
 ): Promise<Float32Array | null> {
   if (typeof window === "undefined") return null;
-  const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+  const AudioCtxClass =
+    (window as any).AudioContext || (window as any).webkitAudioContext;
   if (!AudioCtxClass) return null;
 
-  const allMedia = [
-    ...(project.tracks.video || []).filter(
-      (v) => v.url && v.type !== "photo" && !v.isEnding
-    ),
-    ...(project.tracks.audio || []).filter((a) => a.url),
-  ];
+  // Gather ALL sound sources across the final video timeline
+  const videoAudioClips = (project.tracks.video || [])
+    .filter(
+      (v) =>
+        v.url &&
+        v.type !== "photo" &&
+        !v.isEnding &&
+        (v.volume === undefined || v.volume > 0),
+    )
+    .map((v) => ({
+      id: v.id,
+      url: v.url,
+      startTime: Math.max(0, v.startTime || 0),
+      duration: Math.max(0.1, v.duration || 5),
+      trimIn: Math.max(0, v.trimIn || 0),
+      speed: Math.max(0.1, v.speed || 1.0),
+      volume:
+        (v.volume ?? 100) > 2 ? (v.volume ?? 100) / 100 : (v.volume ?? 1.0),
+    }));
 
-  if (allMedia.length === 0) return null;
+  const rawAudioClips = (project.tracks.audio || [])
+    .filter((a) => a.url && (a.volume === undefined || a.volume > 0))
+    .map((a) => ({
+      id: a.id,
+      url: a.url,
+      startTime: Math.max(0, a.startTime || 0),
+      duration: Math.max(0.1, a.duration || 5),
+      trimIn: Math.max(0, a.trimIn || 0),
+      speed: Math.max(0.1, a.speed || 1.0),
+      volume:
+        (a.volume ?? 100) > 2 ? (a.volume ?? 100) / 100 : (a.volume ?? 1.0),
+    }));
 
-  for (const media of allMedia) {
+  const allSoundClips = [...videoAudioClips, ...rawAudioClips];
+  if (allSoundClips.length === 0) return null;
+
+  const totalSamples = Math.ceil(targetDuration * targetSampleRate);
+  if (totalSamples <= 0) return null;
+  const masterBuffer = new Float32Array(totalSamples);
+
+  let sharedCtx: any = null;
+  try {
+    sharedCtx = new AudioCtxClass();
+  } catch (e) {
+    console.warn("FastArt: Could not create AudioContext for timeline audio:", e);
+    return null;
+  }
+
+  // Cache decoded buffers per URL so clips from the same media are decoded only once
+  const decodedCache = new Map<string, Float32Array>();
+  let hasRealAudio = false;
+
+  for (const clip of allSoundClips) {
     try {
-      const resp = await fetch(media.url);
-      const arrayBuf = await resp.arrayBuffer();
-      const ctx = new AudioCtxClass({ sampleRate: targetSampleRate });
-      const audioBuffer = await ctx.decodeAudioData(arrayBuf);
-      if (audioBuffer && audioBuffer.numberOfChannels > 0) {
-        return audioBuffer.getChannelData(0);
+      let resampledClipAudio = decodedCache.get(clip.url);
+
+      if (!resampledClipAudio) {
+        let arrayBuf: ArrayBuffer | null = null;
+        try {
+          const resp = await fetch(clip.url);
+          arrayBuf = await resp.arrayBuffer();
+        } catch (fetchErr) {
+          console.warn("FastArt: Fetch media failed for", clip.url, fetchErr);
+        }
+
+        if (arrayBuf && arrayBuf.byteLength > 0) {
+          try {
+            const decodedBuf = await sharedCtx.decodeAudioData(arrayBuf);
+            if (
+              decodedBuf &&
+              decodedBuf.numberOfChannels > 0 &&
+              decodedBuf.length > 0
+            ) {
+              resampledClipAudio = resampleAudioBufferTo16k(decodedBuf);
+              decodedCache.set(clip.url, resampledClipAudio);
+            }
+          } catch (decErr) {
+            console.warn("FastArt: decodeAudioData failed for", clip.url, decErr);
+          }
+        }
       }
-    } catch (e) {
-      console.warn("FastArt: AudioContext media decoding skipped for", media.url, e);
+
+      if (resampledClipAudio && resampledClipAudio.length > 0) {
+        hasRealAudio = true;
+        const clipStartSample = Math.floor(clip.startTime * targetSampleRate);
+        const clipNumSamples = Math.floor(clip.duration * targetSampleRate);
+        const trimInSamples = Math.floor(clip.trimIn * targetSampleRate);
+
+        for (let i = 0; i < clipNumSamples; i++) {
+          const masterIdx = clipStartSample + i;
+          if (masterIdx >= totalSamples) break;
+
+          const srcIdx = trimInSamples + Math.floor(i * clip.speed);
+          if (srcIdx < resampledClipAudio.length) {
+            masterBuffer[masterIdx] += resampledClipAudio[srcIdx] * clip.volume;
+          }
+        }
+      }
+    } catch (clipErr) {
+      console.warn(
+        "FastArt: Timeline clip audio extraction skipped:",
+        clip.id,
+        clipErr,
+      );
     }
   }
+
+  try {
+    sharedCtx.close();
+  } catch {}
+
+  if (!hasRealAudio) return null;
+
+  // Soft clamp to [-1.0, 1.0] to prevent audio clipping distortion
+  for (let i = 0; i < masterBuffer.length; i++) {
+    const val = masterBuffer[i];
+    if (val > 1.0) masterBuffer[i] = 1.0;
+    else if (val < -1.0) masterBuffer[i] = -1.0;
+  }
+
+  return masterBuffer;
+}
+
+export const extractRealAudioChannelData = extractCompositeTimelineAudio;
+
+let cachedTransformersLib: any = null;
+
+/**
+ * Loads the standalone Transformers.js library in browser with multi-CDN fallback and strict timeout
+ */
+async function loadTransformers(): Promise<any> {
+  if (typeof window === "undefined") return null;
+  if (cachedTransformersLib) return cachedTransformersLib;
+  if ((window as any).transformers) {
+    cachedTransformersLib = (window as any).transformers;
+    return cachedTransformersLib;
+  }
+
+  // 1. Script tag injection with bundled UMD build and 3.5s timeout
+  const fromScriptTag = await Promise.race([
+    new Promise<any>((resolve) => {
+      try {
+        const existing = document.querySelector(
+          'script[data-id="xenova-transformers"]',
+        );
+        if (existing) {
+          if ((window as any).transformers)
+            return resolve((window as any).transformers);
+          existing.addEventListener("load", () =>
+            resolve((window as any).transformers || null),
+          );
+          existing.addEventListener("error", () => resolve(null));
+          return;
+        }
+        const script = document.createElement("script");
+        script.setAttribute("data-id", "xenova-transformers");
+        script.src =
+          "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js";
+        script.async = true;
+        script.onload = () => {
+          cachedTransformersLib = (window as any).transformers;
+          resolve(cachedTransformersLib);
+        };
+        script.onerror = () => resolve(null);
+        document.head.appendChild(script);
+      } catch {
+        resolve(null);
+      }
+    }),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+  ]);
+
+  if (fromScriptTag) return fromScriptTag;
+
+  // 2. ESM dynamic import as fallback with 2.5s timeout
+  try {
+    const esmPromise = (async () => {
+      const dynamicImport = new Function("u", "return import(u)");
+      const esmMod = await dynamicImport(
+        "https://esm.sh/@xenova/transformers@2.17.2",
+      );
+      if (esmMod && esmMod.pipeline) {
+        cachedTransformersLib = esmMod;
+        return esmMod;
+      }
+      return null;
+    })();
+
+    const esmResult = await Promise.race([
+      esmPromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+    ]);
+    if (esmResult) return esmResult;
+  } catch (e) {
+    console.warn("FastArt: Transformers ESM import failed", e);
+  }
+
   return null;
 }
 
 /**
- * Attempts real speech transcription using Transformers.js Whisper in browser
+ * Attempts real speech transcription using Transformers.js Whisper in browser with strict timeouts
  */
 async function transcribeWithWhisper(
   audioData: Float32Array,
   language: string,
-  onProgress?: (pct: number, status: string) => void
+  onProgress?: (pct: number, status: string) => void,
 ): Promise<CaptionSegment[] | null> {
   if (typeof window === "undefined") return null;
 
   try {
-    if (onProgress) onProgress(35, "Initializing AI Speech Recognition (Whisper)...");
-    const dynamicImport = new Function("u", "return import(u)");
-    const mod = await dynamicImport("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3");
+    if (onProgress) onProgress(30, "Initializing AI Speech Recognition...");
+    const transformers = await loadTransformers();
 
-    if (!mod || !mod.pipeline) return null;
-
-    if (mod.env) {
-      mod.env.allowLocalModels = false;
-      mod.env.useBrowserCache = true;
+    if (!transformers || !transformers.pipeline) {
+      console.warn("FastArt: Transformers.js pipeline unavailable or timed out");
+      return null;
     }
 
-    if (onProgress) onProgress(45, "Loading neural speech model...");
+    if (transformers.env) {
+      transformers.env.allowLocalModels = false;
+      transformers.env.useBrowserCache = true;
+    }
 
-    const transcriber = await mod.pipeline(
+    const isEnglishOnly =
+      language === "en-US" || language === "en-GB" || language === "en";
+    const modelName = isEnglishOnly
+      ? "Xenova/whisper-tiny.en"
+      : "Xenova/whisper-tiny";
+
+    if (onProgress)
+      onProgress(45, `Loading neural speech model (${modelName})...`);
+
+    // Add 6.5s timeout on model pipeline creation so non-English large downloads don't hang indefinitely
+    const pipelinePromise = transformers.pipeline(
       "automatic-speech-recognition",
-      "Xenova/whisper-tiny.en",
+      modelName,
       {
         progress_callback: (p: any) => {
           if (p.status === "progress" && onProgress) {
             const pct = Math.round(45 + (p.progress || 0) * 0.25);
-            onProgress(pct, `Loading AI speech model (${Math.round(p.progress || 0)}%)...`);
+            onProgress(
+              pct,
+              `Loading AI speech model (${Math.round(p.progress || 0)}%)...`,
+            );
           }
         },
-      }
+      },
     );
 
-    if (!transcriber) return null;
+    const transcriber = await Promise.race([
+      pipelinePromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6500)),
+    ]);
+
+    if (!transcriber) {
+      console.warn("FastArt: Speech model load timed out, falling back to speech cadence alignment");
+      return null;
+    }
 
     if (onProgress) onProgress(70, "Transcribing dialogue audio waveform...");
 
     const langCode = language === "auto" ? undefined : language.split("-")[0];
-    const result = await transcriber(audioData, {
+    const isLongAudio = audioData.length / 16000 > 30;
+    const transcriberOptions: any = {
       return_timestamps: true,
-      chunk_length_s: 30,
-      stride_length_s: 5,
-      language: langCode,
-    });
+    };
+    if (!isEnglishOnly && langCode) {
+      transcriberOptions.language = langCode;
+    }
+    if (isLongAudio) {
+      transcriberOptions.chunk_length_s = 30;
+      transcriberOptions.stride_length_s = 5;
+    }
+
+    const transcribePromise = transcriber(audioData, transcriberOptions);
+    const result = await Promise.race([
+      transcribePromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 7500)),
+    ]);
+
+    if (!result) {
+      console.warn("FastArt: Transcription timed out, falling back to speech alignment");
+      return null;
+    }
 
     if (result && Array.isArray(result.chunks) && result.chunks.length > 0) {
       const segments: CaptionSegment[] = [];
@@ -318,36 +582,54 @@ async function transcribeWithWhisper(
         const text = (chunk.text || "").trim();
         if (!text) return;
         const start = Number((chunk.timestamp?.[0] ?? 0).toFixed(2));
-        const rawEnd = chunk.timestamp?.[1] ?? (start + 2.0);
+        const rawEnd = chunk.timestamp?.[1] ?? start + 2.0;
         const duration = Number(Math.max(0.8, rawEnd - start).toFixed(2));
         segments.push({ text, startTime: start, duration });
       });
       if (segments.length > 0) return segments;
     }
 
-    if (result && typeof result.text === "string" && result.text.trim().length > 0) {
+    if (
+      result &&
+      typeof result.text === "string" &&
+      result.text.trim().length > 0
+    ) {
       // Split full transcribed text into natural speech sentences
       const sentences = result.text
         .split(/(?<=[.?!])\s+/)
         .map((s: string) => s.trim())
         .filter((s: string) => s.length > 0);
       if (sentences.length > 0) {
+        const speechIntervals = analyzeVoiceActivity(
+          new Uint8Array(0),
+          audioData.length / 16000,
+          audioData,
+        );
+        if (speechIntervals.length > 0) {
+          return sentences.map((sent, idx) => {
+            const intv =
+              speechIntervals[Math.min(idx, speechIntervals.length - 1)];
+            return {
+              text: sent,
+              startTime: intv.start,
+              duration: intv.duration,
+            };
+          });
+        }
+
         const totalDur = audioData.length / 16000;
-        const avgDur = Math.max(1.2, Math.min(3.5, totalDur / sentences.length));
-        let cur = 0;
-        return sentences.map((sent: string) => {
-          const seg: CaptionSegment = {
-            text: sent,
-            startTime: Number(cur.toFixed(2)),
-            duration: Number(Math.min(avgDur, Math.max(0.8, totalDur - cur)).toFixed(2)),
-          };
-          cur += avgDur;
-          return seg;
-        });
+        const segDur = Math.max(1.2, totalDur / sentences.length);
+        return sentences.map((sent, idx) => ({
+          text: sent,
+          startTime: Number((idx * segDur).toFixed(2)),
+          duration: Number(
+            Math.min(segDur, Math.max(1.0, totalDur - idx * segDur)).toFixed(2),
+          ),
+        }));
       }
     }
   } catch (err) {
-    console.warn("FastArt: Whisper in-browser transcription bypassed:", err);
+    console.warn("FastArt: In-browser Whisper transcription skipped:", err);
   }
 
   return null;
@@ -360,7 +642,7 @@ async function transcribeWithWhisper(
 export function analyzeVoiceActivity(
   wavBytes: Uint8Array,
   duration: number,
-  realChannelData?: Float32Array | null
+  realChannelData?: Float32Array | null,
 ): { start: number; duration: number }[] {
   const intervals: { start: number; duration: number }[] = [];
   const minPhraseDur = 1.6;
@@ -372,23 +654,44 @@ export function analyzeVoiceActivity(
     const windowFrames = Math.floor(sampleRate / 10); // 100ms
     const numWindows = Math.floor(realChannelData.length / windowFrames);
 
-    let inSpeech = false;
-    let speechStartSec = 0;
-    let silenceWindows = 0;
+    // Dynamic energy analysis: calculate RMS distribution
+    let maxRms = 0;
+    let sumRms = 0;
+    const windowRmsList: number[] = new Array(numWindows);
 
     for (let w = 0; w < numWindows; w++) {
       let sumSquares = 0;
+      let count = 0;
       for (let s = 0; s < windowFrames; s += 4) {
         const idx = w * windowFrames + s;
         if (idx < realChannelData.length) {
           const v = realChannelData[idx];
           sumSquares += v * v;
+          count++;
         }
       }
-      const rms = Math.sqrt(sumSquares / (windowFrames / 4));
+      const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0;
+      windowRmsList[w] = rms;
+      sumRms += rms;
+      if (rms > maxRms) maxRms = rms;
+    }
+
+    const avgRms = numWindows > 0 ? sumRms / numWindows : 0;
+    // Adaptive speech threshold: sensitive enough for quiet phone mic speech, but avoids quiet silence
+    const speechThreshold = Math.max(
+      0.003,
+      Math.min(0.02, avgRms * 1.35, maxRms * 0.22),
+    );
+
+    let inSpeech = false;
+    let speechStartSec = 0;
+    let silenceWindows = 0;
+
+    for (let w = 0; w < numWindows; w++) {
+      const rms = windowRmsList[w];
       const timeSec = (w * windowFrames) / sampleRate;
 
-      if (rms > 0.018) {
+      if (rms > speechThreshold) {
         if (!inSpeech) {
           inSpeech = true;
           speechStartSec = timeSec;
@@ -409,7 +712,10 @@ export function analyzeVoiceActivity(
         if (inSpeech) {
           silenceWindows++;
           if (silenceWindows >= 2 || timeSec - speechStartSec >= minPhraseDur) {
-            const segDur = Math.max(0.8, Number((timeSec - speechStartSec).toFixed(2)));
+            const segDur = Math.max(
+              0.8,
+              Number((timeSec - speechStartSec).toFixed(2)),
+            );
             intervals.push({
               start: Number(speechStartSec.toFixed(2)),
               duration: segDur,
@@ -432,18 +738,25 @@ export function analyzeVoiceActivity(
   // 2. If we have raw 16-bit WAV bytes
   if (intervals.length === 0 && wavBytes && wavBytes.byteLength > 44 + 3200) {
     const headerSize = 44;
-    const view = new DataView(wavBytes.buffer, wavBytes.byteOffset, wavBytes.byteLength);
+    const view = new DataView(
+      wavBytes.buffer,
+      wavBytes.byteOffset,
+      wavBytes.byteLength,
+    );
     const numChannels = view.getUint16(22, true) || 2;
     const sampleRate = view.getUint32(24, true) || 16000;
     const blockAlign = view.getUint16(32, true) || numChannels * 2;
-    const totalFrames = Math.floor((wavBytes.byteLength - headerSize) / blockAlign);
+    const totalFrames = Math.floor(
+      (wavBytes.byteLength - headerSize) / blockAlign,
+    );
 
     const windowFrames = Math.floor(sampleRate / 10);
     const numWindows = Math.floor(totalFrames / windowFrames);
 
-    let inSpeech = false;
-    let speechStartSec = 0;
-    let silenceWindows = 0;
+    // Dynamic energy analysis: calculate RMS distribution
+    let maxRms = 0;
+    let sumRms = 0;
+    const windowRmsList: number[] = new Array(numWindows);
 
     for (let w = 0; w < numWindows; w++) {
       let sumSquares = 0;
@@ -457,10 +770,28 @@ export function analyzeVoiceActivity(
           samplesChecked++;
         }
       }
-      const rms = samplesChecked > 0 ? Math.sqrt(sumSquares / samplesChecked) : 0;
+      const rms =
+        samplesChecked > 0 ? Math.sqrt(sumSquares / samplesChecked) : 0;
+      windowRmsList[w] = rms;
+      sumRms += rms;
+      if (rms > maxRms) maxRms = rms;
+    }
+
+    const avgRms = numWindows > 0 ? sumRms / numWindows : 0;
+    const speechThreshold = Math.max(
+      0.003,
+      Math.min(0.02, avgRms * 1.35, maxRms * 0.22),
+    );
+
+    let inSpeech = false;
+    let speechStartSec = 0;
+    let silenceWindows = 0;
+
+    for (let w = 0; w < numWindows; w++) {
+      const rms = windowRmsList[w];
       const timeSec = (w * windowFrames) / sampleRate;
 
-      if (rms > 0.02) {
+      if (rms > speechThreshold) {
         if (!inSpeech) {
           inSpeech = true;
           speechStartSec = timeSec;
@@ -469,7 +800,10 @@ export function analyzeVoiceActivity(
           silenceWindows = 0;
           // Break continuous speech into natural subtitle chunks (1.6s - 2.8s)
           if (timeSec - speechStartSec >= maxPhraseDur) {
-            const segDur = Math.max(0.8, Number((timeSec - speechStartSec).toFixed(2)));
+            const segDur = Math.max(
+              0.8,
+              Number((timeSec - speechStartSec).toFixed(2)),
+            );
             intervals.push({
               start: Number(speechStartSec.toFixed(2)),
               duration: segDur,
@@ -481,7 +815,10 @@ export function analyzeVoiceActivity(
         if (inSpeech) {
           silenceWindows++;
           if (silenceWindows >= 2 || timeSec - speechStartSec >= minPhraseDur) {
-            const segDur = Math.max(0.8, Number((timeSec - speechStartSec).toFixed(2)));
+            const segDur = Math.max(
+              0.8,
+              Number((timeSec - speechStartSec).toFixed(2)),
+            );
             intervals.push({
               start: Number(speechStartSec.toFixed(2)),
               duration: segDur,
@@ -501,33 +838,8 @@ export function analyzeVoiceActivity(
     }
   }
 
-  // 3. Guaranteed continuous subtitle intervals across the whole duration
-  if (intervals.length === 0) {
-    let curTime = 0.0;
-    while (curTime < duration - 0.4) {
-      const remaining = Number((duration - curTime).toFixed(2));
-      const targetDur = Math.min(
-        remaining,
-        Number((minPhraseDur + ((curTime * 13) % (maxPhraseDur - minPhraseDur))).toFixed(2))
-      );
-      const segDur = Math.max(1.0, targetDur);
-      intervals.push({
-        start: Number(curTime.toFixed(2)),
-        duration: segDur,
-      });
-      curTime = Number((curTime + segDur).toFixed(2));
-    }
-  }
-
-  if (intervals.length === 0) {
-    intervals.push({
-      start: 0.0,
-      duration: Math.max(1.2, duration),
-    });
-  } else if (intervals[0].start <= 0.4) {
-    intervals[0].start = 0.0;
-  }
-
+  // Return strictly detected audible speech intervals.
+  // Silent gaps or pauses between speech bursts will NOT have caption intervals.
   return intervals;
 }
 
@@ -536,7 +848,10 @@ export function analyzeVoiceActivity(
  */
 export function isLiveSpeechRecognitionSupported(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  return Boolean(
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition,
+  );
 }
 
 /**
@@ -545,10 +860,12 @@ export function isLiveSpeechRecognitionSupported(): boolean {
 export function startLiveSpeechRecognition(
   language: string,
   onResult: (transcript: string) => void,
-  onError?: (err: any) => void
+  onError?: (err: any) => void,
 ): { stop: () => void } | null {
   if (!isLiveSpeechRecognitionSupported()) return null;
-  const SpeechClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  const SpeechClass =
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition;
   const recognition = new SpeechClass();
   recognition.continuous = true;
   recognition.interimResults = true;
@@ -589,7 +906,7 @@ export async function generateAutoCaptions(
   language: string = "auto",
   presetId: string = "mrbeast",
   customPhrases?: string[],
-  onProgress?: (pct: number, status: string) => void
+  onProgress?: (pct: number, status: string) => void,
 ): Promise<CaptionClip[]> {
   const computedDur = computeTotalDuration(project.tracks);
   const totalDuration = computedDur > 0 ? computedDur : 5.0;
@@ -618,7 +935,11 @@ export async function generateAutoCaptions(
   // 3. If no custom script was provided, attempt real Whisper AI speech transcription
   if (!hasCustom && realAudio && realAudio.length > 16000) {
     try {
-      const whisperSegments = await transcribeWithWhisper(realAudio, language, onProgress);
+      const whisperSegments = await transcribeWithWhisper(
+        realAudio,
+        language,
+        onProgress,
+      );
       if (whisperSegments && whisperSegments.length > 0) {
         finalSegments = whisperSegments.map((ws) => ({
           text: ws.text,
@@ -633,78 +954,148 @@ export async function generateAutoCaptions(
 
   // 4. If Whisper did not produce segments (or custom script was provided or offline)
   if (finalSegments.length === 0) {
-    if (onProgress) onProgress(50, "Analyzing voice activity & dialogue cadence...");
+    if (onProgress)
+      onProgress(50, "Analyzing voice activity & dialogue cadence...");
 
     const intervals = analyzeVoiceActivity(
       wavBytes || new Uint8Array(0),
       totalDuration,
-      realAudio
+      realAudio,
     );
 
-    if (onProgress) onProgress(75, "Synchronizing subtitles across timeline...");
+    if (onProgress)
+      onProgress(75, "Synchronizing subtitles across timeline...");
 
     // Pick language-appropriate dialogue phrases
     const langKey = language === "auto" ? "en-US" : language;
-    const defaultDialogue = DIALOGUE_BY_LANGUAGE[langKey] || DIALOGUE_BY_LANGUAGE["en-US"];
+    const defaultDialogue =
+      DIALOGUE_BY_LANGUAGE[langKey] || DIALOGUE_BY_LANGUAGE["en-US"];
     const phrasesToUse = hasCustom ? customPhrases! : defaultDialogue;
 
-    if (hasCustom) {
-      // Allocate intervals to match ALL custom phrases
-      const count = phrasesToUse.length;
-      let curTime = 0.0;
-      const avgDuration = Math.max(1.2, Math.min(3.5, totalDuration / count));
+    // Map phrases to detected speech bursts or cadence intervals
+    const phraseCount = phrasesToUse.length;
+    let targetIntervals: { start: number; duration: number }[] = [];
 
-      for (let i = 0; i < count; i++) {
-        const phrase = phrasesToUse[i];
-        const wordsCount = phrase.split(/\s+/).filter(Boolean).length;
-        const phraseDuration = Math.max(
-          0.8,
-          Math.min(4.0, Math.max(avgDuration * 0.8, (wordsCount / 3.0) * 1.5))
-        );
-        const remainingTime = Math.max(0.5, totalDuration - curTime);
-        const actualDuration =
-          i === count - 1
-            ? Math.max(0.8, remainingTime)
-            : Math.min(phraseDuration, remainingTime);
-
-        finalSegments.push({
-          text: phrase,
-          start: Number(curTime.toFixed(2)),
-          duration: Number(actualDuration.toFixed(2)),
-        });
-
-        curTime += actualDuration;
-        if (curTime >= totalDuration && i < count - 1) {
-          curTime = totalDuration;
+    if (intervals.length > 0) {
+      if (intervals.length === phraseCount) {
+        targetIntervals = [...intervals];
+      } else if (intervals.length > phraseCount) {
+        targetIntervals = intervals.slice(0, phraseCount);
+      } else {
+        targetIntervals = [...intervals];
+        while (targetIntervals.length < phraseCount) {
+          let maxIdx = 0;
+          for (let i = 1; i < targetIntervals.length; i++) {
+            if (
+              targetIntervals[i].duration > targetIntervals[maxIdx].duration
+            ) {
+              maxIdx = i;
+            }
+          }
+          const longest = targetIntervals[maxIdx];
+          const halfDur = Number((longest.duration / 2).toFixed(2));
+          const firstPart = { start: longest.start, duration: halfDur };
+          const secondPart = {
+            start: Number((longest.start + halfDur).toFixed(2)),
+            duration: Number((longest.duration - halfDur).toFixed(2)),
+          };
+          targetIntervals.splice(maxIdx, 1, firstPart, secondPart);
         }
       }
     } else {
-      // Map curated dialogue sequentially across detected voice activity intervals
-      intervals.forEach((interval, idx) => {
-        const text = phrasesToUse[idx % phrasesToUse.length];
-        finalSegments.push({
-          text,
-          start: interval.start,
-          duration: interval.duration,
+      // If no discrete speech peaks were isolated, generate natural conversational intervals across video duration
+      let curT = 0.5;
+      while (curT < totalDuration - 0.5 && targetIntervals.length < phraseCount) {
+        const phraseDur = Math.min(2.5, Number((totalDuration - curT).toFixed(2)));
+        targetIntervals.push({
+          start: Number(curT.toFixed(2)),
+          duration: phraseDur,
         });
+        curT += phraseDur + 0.5;
+      }
+    }
+
+    targetIntervals.sort((a, b) => a.start - b.start);
+    const count = Math.min(phraseCount, targetIntervals.length);
+
+    for (let i = 0; i < count; i++) {
+      const interval = targetIntervals[i];
+      finalSegments.push({
+        text: phrasesToUse[i],
+        start: Number(interval.start.toFixed(2)),
+        duration: Number(interval.duration.toFixed(2)),
       });
     }
   }
 
-  if (onProgress) onProgress(90, "Applying viral styles and word animations...");
+  if (finalSegments.length === 0) {
+    const langKey = language === "auto" ? "en-US" : language;
+    const fallbackPhrases =
+      DIALOGUE_BY_LANGUAGE[langKey] || DIALOGUE_BY_LANGUAGE["en-US"];
+    const phraseCount = Math.min(
+      fallbackPhrases.length,
+      Math.max(1, Math.floor(totalDuration / 2.2)),
+    );
+    const segDur = Math.max(1.5, Number((totalDuration / phraseCount).toFixed(2)));
+
+    for (let i = 0; i < phraseCount; i++) {
+      finalSegments.push({
+        text: fallbackPhrases[i % fallbackPhrases.length],
+        start: Number((i * segDur).toFixed(2)),
+        duration: Number(
+          Math.min(segDur, Math.max(1.2, totalDuration - i * segDur)).toFixed(2),
+        ),
+      });
+    }
+  }
+
+  if (onProgress)
+    onProgress(90, "Applying viral styles and word animations...");
 
   const preset =
-    CAPTION_STYLE_PRESETS.find((p) => p.id === presetId) || CAPTION_STYLE_PRESETS[0];
+    CAPTION_STYLE_PRESETS.find((p) => p.id === presetId) ||
+    CAPTION_STYLE_PRESETS[0];
 
   const generatedClips: CaptionClip[] = [];
+
+/**
+ * Automatically splits long caption phrases into balanced, centered multi-line text
+ * so subtitles never extend outside the mobile/desktop video frame.
+ */
+function balanceCaptionLines(text: string, maxLineLength = 28): string {
+  if (!text || text.length <= maxLineLength || text.includes("\n")) {
+    return text;
+  }
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= 4) return text;
+
+  const midPoint = Math.floor(text.length / 2);
+  let bestIdx = 1;
+  let bestDist = Infinity;
+  let runningLen = 0;
+
+  for (let i = 0; i < words.length - 1; i++) {
+    runningLen += words[i].length + 1;
+    const dist = Math.abs(runningLen - midPoint);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i + 1;
+    }
+  }
+
+  const line1 = words.slice(0, bestIdx).join(" ");
+  const line2 = words.slice(bestIdx).join(" ");
+  return `${line1}\n${line2}`;
+}
 
   finalSegments.forEach((segment, idx) => {
     const clipId = `cap-${Date.now()}-${idx}`;
     const rawText = segment.text;
+    const balancedText = balanceCaptionLines(rawText);
     const formattedText =
       preset.id === "mrbeast" || preset.id === "hormozi"
-        ? rawText.toUpperCase()
-        : rawText;
+        ? balancedText.toUpperCase()
+        : balancedText;
 
     // Generate word timestamps for karaoke and kinetic typography
     const wordsList = formattedText.split(/\s+/).filter(Boolean);
@@ -746,7 +1137,11 @@ export async function generateAutoCaptions(
     generatedClips.push(captionClip);
   });
 
-  if (onProgress) onProgress(100, `Generated ${generatedClips.length} synchronized captions!`);
+  if (onProgress)
+    onProgress(
+      100,
+      `Generated ${generatedClips.length} synchronized captions!`,
+    );
 
   return generatedClips;
 }

@@ -359,7 +359,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               left: cx - w / 2,
               top: cy - h / 2,
               width: w,
-              height: h,
+              minHeight: h,
+              maxWidth: boxWidth * 0.9,
               alignItems: "center",
               justifyContent: "center",
               opacity,
@@ -367,7 +368,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             }}
           >
             <Text
-              numberOfLines={1}
+              numberOfLines={6}
               style={[
                 {
                   color: txt.style?.color || "#FFFFFF",
@@ -375,9 +376,11 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                   fontWeight: (txt.style?.fontWeight as any) || "700",
                   backgroundColor: txt.style?.backgroundColor || "transparent",
                   textAlign: "center",
+                  flexWrap: "wrap",
                   paddingHorizontal: 8 * s,
                   paddingVertical: 4 * s,
                   borderRadius: 4,
+                  maxWidth: "100%",
                 },
               ]}
             >
@@ -431,7 +434,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               left: cx - w / 2,
               top: cy - h / 2,
               width: w,
-              height: h,
+              minHeight: h,
+              maxWidth: boxWidth * 0.9,
               alignItems: "center",
               justifyContent: "center",
               opacity,
@@ -439,7 +443,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             }}
           >
             <Text
-              numberOfLines={2}
+              numberOfLines={6}
               style={[
                 {
                   color: cap.style?.color || "#FFE600",
@@ -447,9 +451,11 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                   fontWeight: (cap.style?.fontWeight as any) || "900",
                   backgroundColor: cap.style?.backgroundColor || "transparent",
                   textAlign: "center",
+                  flexWrap: "wrap",
                   paddingHorizontal: 12 * s,
                   paddingVertical: 5 * s,
                   borderRadius: 6,
+                  maxWidth: "100%",
                 },
               ]}
             >

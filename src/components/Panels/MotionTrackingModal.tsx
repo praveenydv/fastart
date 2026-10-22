@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,30 @@ export default function MotionTrackingModal({
   );
   const [intensity, setIntensity] = useState<number>(currentTrack?.intensity ?? 60);
 
+  useEffect(() => {
+    if (visible) {
+      setEnabled(currentTrack?.enabled || false);
+      setMode(currentTrack?.mode || 'follow_center');
+      setIntensity(currentTrack?.intensity ?? 60);
+    }
+  }, [visible, currentTrack]);
+
+  const triggerUpdate = (overrides?: {
+    enabled?: boolean;
+    mode?: MotionTrackConfig['mode'];
+    intensity?: number;
+  }) => {
+    const nextEnabled = overrides?.enabled !== undefined ? overrides.enabled : enabled;
+    const nextMode = overrides?.mode !== undefined ? overrides.mode : mode;
+    const nextIntensity = overrides?.intensity !== undefined ? overrides.intensity : intensity;
+
+    onApplyTracking({
+      enabled: nextEnabled,
+      mode: nextMode,
+      intensity: nextIntensity,
+    });
+  };
+
   const trackingModes: {
     id: MotionTrackConfig['mode'];
     title: string;
@@ -59,33 +83,16 @@ export default function MotionTrackingModal({
       description: 'Scales and shifts dynamically with camera motion',
       icon: 'scan-outline',
     },
-    {
-      id: 'orbit_float',
-      title: 'Orbit / Ambient Float',
-      description: 'Continuous smooth rhythmic micro-movement',
-      icon: 'radio-outline',
-    },
   ];
-
-  const handleApply = () => {
-    soundEngine.playSfx('whoosh');
-    onApplyTracking({
-      enabled,
-      mode,
-      intensity,
-    });
-    onClose();
-  };
 
   const handleReset = () => {
     soundEngine.playSfx('click');
     setEnabled(false);
-    onApplyTracking({
+    triggerUpdate({
       enabled: false,
       mode: 'follow_center',
       intensity: 60,
     });
-    onClose();
   };
 
   return (
@@ -95,26 +102,41 @@ export default function MotionTrackingModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Space-Optimized Header */}
           <View style={styles.sheetHeader}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
+              disabled={!enabled}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>Disable</Text>
+            </TouchableOpacity>
+
             <View style={styles.titleRow}>
-              <Ionicons name="scan" size={20} color="#00F2FE" />
+              <Ionicons name="scan" size={17} color="#00F2FE" />
               <Text style={styles.sheetTitle}>Motion Tracking</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             {/* Toggle Enable */}
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleTitle}>Enable Tracking</Text>
+              <View>
+                <Text style={styles.toggleTitle}>Enable Tracking</Text>
+                <Text style={styles.toggleSub}>Lock {targetType} to camera motion</Text>
+              </View>
               <TouchableOpacity
                 style={[styles.switchTrack, enabled && styles.switchTrackActive]}
                 onPress={() => {
                   soundEngine.playSfx('pop');
-                  setEnabled(!enabled);
+                  const nextVal = !enabled;
+                  setEnabled(nextVal);
+                  triggerUpdate({ enabled: nextVal });
                 }}
                 activeOpacity={0.8}
               >
@@ -135,80 +157,85 @@ export default function MotionTrackingModal({
                       soundEngine.playSfx('click');
                       setMode(m.id);
                       setEnabled(true);
+                      triggerUpdate({ mode: m.id, enabled: true });
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.modeIconBox}>
+                    <View style={[styles.iconBox, isSelected && styles.iconBoxActive]}>
                       <Ionicons
                         name={m.icon as any}
-                        size={22}
+                        size={18}
                         color={isSelected ? '#00F2FE' : '#8E95A5'}
                       />
                     </View>
-                    <View style={styles.modeMeta}>
+                    <View style={{ flex: 1 }}>
                       <Text style={[styles.modeTitle, isSelected && styles.modeTitleActive]}>
                         {m.title}
                       </Text>
                       <Text style={styles.modeDesc}>{m.description}</Text>
                     </View>
                     {isSelected && (
-                      <Ionicons name="checkmark-circle" size={20} color="#00F2FE" />
+                      <Ionicons name="checkmark-circle" size={18} color="#00F2FE" />
                     )}
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            {/* Tracking Intensity / Sensitivity */}
-            <View style={styles.sliderBox}>
+            {/* Intensity Slider */}
+            <View style={styles.sliderSection}>
               <View style={styles.sliderHeader}>
-                <Text style={styles.sliderLabel}>Tracking Damping / Sensitivity</Text>
+                <Text style={styles.sliderLabel}>Smoothing Intensity</Text>
                 <Text style={styles.sliderVal}>{intensity}%</Text>
               </View>
-              <View style={styles.sliderContainer}>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => setIntensity(Math.max(10, intensity - 10))}
-                >
-                  <Ionicons name="remove" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-                {Platform.OS === 'web' ? (
+
+              {Platform.OS === 'web' ? (
+                <View style={{ marginVertical: 6 }}>
                   <WebInput
                     type="range"
                     min="10"
                     max="100"
-                    step="5"
                     value={intensity}
-                    onChange={(e: any) => setIntensity(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: '#00F2FE' }}
+                    onChange={(e: any) => {
+                      const val = parseInt(e.target.value) || 60;
+                      setIntensity(val);
+                      triggerUpdate({ intensity: val });
+                    }}
+                    style={{
+                      width: '100%',
+                      accentColor: '#00F2FE',
+                      height: 4,
+                      cursor: 'pointer',
+                    }}
                   />
-                ) : (
-                  <View style={styles.trackFallback}>
-                    <View style={[styles.fillFallback, { width: `${intensity}%` }]} />
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => setIntensity(Math.min(100, intensity + 10))}
-                >
-                  <Ionicons name="add" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+                </View>
+              ) : (
+                <View style={styles.stepperRow}>
+                  <TouchableOpacity
+                    style={styles.stepBtn}
+                    onPress={() => {
+                      const val = Math.max(10, intensity - 10);
+                      setIntensity(val);
+                      triggerUpdate({ intensity: val });
+                    }}
+                  >
+                    <Ionicons name="remove" size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  <Text style={styles.stepperVal}>{intensity}%</Text>
+                  <TouchableOpacity
+                    style={styles.stepBtn}
+                    onPress={() => {
+                      const val = Math.min(100, intensity + 10);
+                      setIntensity(val);
+                      triggerUpdate({ intensity: val });
+                    }}
+                  >
+                    <Ionicons name="add" size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </ScrollView>
-
-          {/* Action Footer */}
-          <View style={styles.footerRow}>
-            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} activeOpacity={0.7}>
-              <Ionicons name="refresh-outline" size={18} color="#8E95A5" />
-              <Text style={styles.resetBtnText}>Disable</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.8}>
-              <Ionicons name="checkmark" size={18} color="#000000" />
-              <Text style={styles.applyBtnText}>Apply Tracking</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Modal>
@@ -218,22 +245,23 @@ export default function MotionTrackingModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#141721',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#121620',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderWidth: 1,
     borderColor: '#1F2637',
-    maxHeight: '80%',
+    maxHeight: '48%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -242,47 +270,57 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1A2030',
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   sheetTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
-  sheetSubtitle: {
-    fontSize: 12,
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1A1F2C',
+  },
+  resetText: {
     color: '#8E95A5',
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  closeBtn: {
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: '#1E2333',
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheetBody: {
-    padding: 18,
+    paddingHorizontal: 14,
+    paddingTop: 8,
   },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#191E2C',
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: '#161B26',
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#252C3F',
-    marginBottom: 16,
+    borderColor: '#1E2536',
+    marginBottom: 10,
   },
   toggleTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -292,12 +330,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   switchTrack: {
-    width: 48,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#2A334A',
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#262D3D',
+    padding: 2,
     justifyContent: 'center',
-    padding: 3,
   },
   switchTrackActive: {
     backgroundColor: '#00F2FE',
@@ -312,136 +350,99 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   sectionHeader: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#8E95A5',
-    letterSpacing: 1,
-    marginBottom: 12,
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   modesContainer: {
-    gap: 10,
-    marginBottom: 16,
+    gap: 6,
+    marginBottom: 10,
   },
   modeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#191E2C',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#252C3F',
+    gap: 10,
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   modeCardActive: {
     borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    backgroundColor: '#1A2234',
   },
-  modeIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#141721',
+  iconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E2433',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  modeMeta: {
-    flex: 1,
+  iconBoxActive: {
+    backgroundColor: '#00F2FE22',
   },
   modeTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#CBD5E1',
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: '600',
   },
   modeTitleActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   modeDesc: {
-    fontSize: 11,
     color: '#8E95A5',
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 1,
   },
-  sliderBox: {
-    backgroundColor: '#191E2C',
-    borderRadius: 12,
-    padding: 14,
+  sliderSection: {
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#252C3F',
+    borderColor: '#1E2536',
     marginBottom: 16,
   },
   sliderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 4,
   },
   sliderLabel: {
+    color: '#E2E8F0',
     fontSize: 12,
-    color: '#CBD5E1',
     fontWeight: '600',
   },
   sliderVal: {
-    fontSize: 12,
     color: '#00F2FE',
+    fontSize: 12,
     fontWeight: '700',
   },
-  sliderContainer: {
+  stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 4,
   },
   stepBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#2A334A',
+    backgroundColor: '#262D3D',
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  trackFallback: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#2A334A',
-    borderRadius: 3,
-  },
-  fillFallback: {
-    height: 6,
-    backgroundColor: '#00F2FE',
-    borderRadius: 3,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#1A2030',
-    gap: 12,
-  },
-  resetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#1E2333',
-  },
-  resetBtnText: {
+  stepperVal: {
+    color: '#FFFFFF',
     fontSize: 13,
-    color: '#8E95A5',
-    fontWeight: '600',
-  },
-  applyBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#00F2FE',
-  },
-  applyBtnText: {
-    fontSize: 14,
-    color: '#000000',
     fontWeight: '700',
+    minWidth: 42,
+    textAlign: 'center',
   },
 });

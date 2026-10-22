@@ -24,7 +24,13 @@ import { TimelineHeaderBar } from "./Timeline/TimelineHeaderBar";
 import { TimelineTracksView } from "./Timeline/TimelineTracksView";
 
 // Re-export constants and helpers for backwards-compatibility
-export { MAX_TRACKS, TRACK_ROW_HEIGHT, MIN_CLIP_DURATION, formatPlayheadTime, getPointerCoords };
+export {
+  MAX_TRACKS,
+  TRACK_ROW_HEIGHT,
+  MIN_CLIP_DURATION,
+  formatPlayheadTime,
+  getPointerCoords,
+};
 
 export const Timeline: React.FC<TimelineProps> = ({
   project,
@@ -42,7 +48,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
-  const pxPerSec = Math.max(20, Math.min(1000, zoom));
+  const pxPerSec = Math.max(5, Math.min(1000, zoom));
 
   const scrollRef = useRef<any>(null);
   const containerRef = useRef<any>(null);
@@ -261,28 +267,32 @@ export const Timeline: React.FC<TimelineProps> = ({
             style={[styles.tickWrapper, { left: tk.time * pxPerSec }]}
           >
             <View
-              style={[styles.tickLine, tk.isMajor ? styles.tickLineMajor : null]}
+              style={[
+                styles.tickLine,
+                tk.isMajor ? styles.tickLineMajor : null,
+              ]}
             />
             <Text style={[styles.tickText, tk.isMajor && styles.tickTextMajor]}>
               {tk.label}
             </Text>
           </View>
         ))}
-        {project?.beatMarkers && project.beatMarkers.map((beatTime, idx) => (
-          <View
-            key={`beat-${idx}`}
-            style={{
-              position: "absolute",
-              left: beatTime * pxPerSec - 3,
-              top: 3,
-              width: 6,
-              height: 6,
-              borderRadius: 3,
-              backgroundColor: "#FFE600",
-              zIndex: 10,
-            }}
-          />
-        ))}
+        {project?.beatMarkers &&
+          project.beatMarkers.map((beatTime, idx) => (
+            <View
+              key={`beat-${idx}`}
+              style={{
+                position: "absolute",
+                left: beatTime * pxPerSec - 3,
+                top: 3,
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: "#FFE600",
+                zIndex: 10,
+              }}
+            />
+          ))}
       </>
     );
   }, [ticks, pxPerSec, project?.beatMarkers]);

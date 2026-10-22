@@ -10,6 +10,7 @@ import {
 import { addNotification } from "../utils/storage";
 import { allocateClipPlacement, doesClipOverlap } from "../utils/trackPlacement";
 import { useProjectFilterEffects } from "./useProjectFilterEffects";
+import { extractRealMediaAudioPeaks } from "../utils/mediaAudioDetector";
 
 interface UseProjectMediaAddersParams {
   project: FastArtProject | null;
@@ -46,12 +47,14 @@ export function useProjectMediaAdders({
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleToggleDenoise,
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
     isProcessing,
     processingMessage,
     startProcessing,
+    withProcessing,
   } = useProjectFilterEffects({
     project,
     projectRef,
@@ -65,36 +68,68 @@ export function useProjectMediaAdders({
 
   // Update text clip from modal
   const handleUpdateText = useCallback(
-    (updatedClip: TextClip) => {
-      const current = projectRef.current;
-      if (!current) return;
-      const list = [...(current.tracks.text || [])];
-      const idx = list.findIndex((c) => c.id === updatedClip.id);
-      if (idx >= 0) {
-        list[idx] = updatedClip;
+    (updatedClip: any) => {
+      const current = projectRef.current || project;
+      if (!current || !updatedClip?.id) return;
+
+      const textList = [...(current.tracks.text || [])];
+      const textIdx = textList.findIndex((c) => c.id === updatedClip.id);
+      if (textIdx >= 0) {
+        textList[textIdx] = { ...textList[textIdx], ...updatedClip };
         updateProjectWithHistory({
-          tracks: { ...current.tracks, text: list },
+          tracks: { ...current.tracks, text: textList },
         });
+        if (setSelectedClipId) setSelectedClipId(updatedClip.id);
+        if (setSelectedClipType) setSelectedClipType("text");
+        return;
+      }
+
+      const capList = [...(current.tracks.captions || [])];
+      const capIdx = capList.findIndex((c) => c.id === updatedClip.id);
+      if (capIdx >= 0) {
+        capList[capIdx] = { ...capList[capIdx], ...updatedClip };
+        updateProjectWithHistory({
+          tracks: { ...current.tracks, captions: capList },
+        });
+        if (setSelectedClipId) setSelectedClipId(updatedClip.id);
+        if (setSelectedClipType) setSelectedClipType("caption");
+        return;
       }
     },
-    [projectRef, updateProjectWithHistory],
+    [project, projectRef, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
   );
 
   // Update caption clip
   const handleUpdateCaption = useCallback(
-    (updatedClip: CaptionClip) => {
-      const current = projectRef.current;
-      if (!current) return;
-      const list = [...(current.tracks.captions || [])];
-      const idx = list.findIndex((c) => c.id === updatedClip.id);
-      if (idx >= 0) {
-        list[idx] = updatedClip;
+    (updatedClip: any) => {
+      const current = projectRef.current || project;
+      if (!current || !updatedClip?.id) return;
+
+      const capList = [...(current.tracks.captions || [])];
+      const capIdx = capList.findIndex((c) => c.id === updatedClip.id);
+      if (capIdx >= 0) {
+        capList[capIdx] = { ...capList[capIdx], ...updatedClip };
         updateProjectWithHistory({
-          tracks: { ...current.tracks, captions: list },
+          tracks: { ...current.tracks, captions: capList },
         });
+        if (setSelectedClipId) setSelectedClipId(updatedClip.id);
+        if (setSelectedClipType) setSelectedClipType("caption");
+        return;
+      }
+
+      const textList = [...(current.tracks.text || [])];
+      const textIdx = textList.findIndex((c) => c.id === updatedClip.id);
+      if (textIdx >= 0) {
+        textList[textIdx] = { ...textList[textIdx], ...updatedClip };
+        updateProjectWithHistory({
+          tracks: { ...current.tracks, text: textList },
+        });
+        if (setSelectedClipId) setSelectedClipId(updatedClip.id);
+        if (setSelectedClipType) setSelectedClipType("text");
+        return;
       }
     },
-    [projectRef, updateProjectWithHistory],
+    [project, projectRef, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
   );
 
   // Update sticker clip from modal
@@ -135,6 +170,10 @@ export function useProjectMediaAdders({
   const handleAddMedia = useCallback(
     (newClip: any) => {
       if (!project) return;
+      startProcessing(
+        `Importing ${newClip.title || (newClip.type === "photo" ? "Photo" : "Video")}...`,
+        450,
+      );
       const videoClips = [...(project.tracks.video || [])];
       const endingIdx = videoClips.findIndex((c) => (c as any).isEnding);
       const endingClip =
@@ -214,6 +253,7 @@ export function useProjectMediaAdders({
   const handleAddText = useCallback(
     (newTextClip: any) => {
       if (!project) return;
+      startProcessing("Adding Text Overlay...", 350);
       const dur = newTextClip.duration || 3.0;
       const desiredStart = currentTime;
       const placement = allocateClipPlacement(project, desiredStart, dur, 2);
@@ -242,8 +282,15 @@ export function useProjectMediaAdders({
         ...project,
         tracks: { ...project.tracks, text: textClips },
       });
+
+      if (setSelectedClipId) {
+        setSelectedClipId(newTextClip.id);
+      }
+      if (setSelectedClipType) {
+        setSelectedClipType("text");
+      }
     },
-    [project, currentTime, updateProjectWithHistory, addNotification],
+    [project, currentTime, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
   // Add multiple synchronized auto-captions
@@ -251,6 +298,10 @@ export function useProjectMediaAdders({
     (captions: any[]) => {
       const current = projectRef.current || project;
       if (!current || !captions || captions.length === 0) return;
+      startProcessing(
+        `Synchronizing ${captions.length} Auto Captions...`,
+        500,
+      );
       // Clean up previous auto-captions so re-running replaces them cleanly without overlap
       const nonAuto = (current.tracks.captions || []).filter(
         (c: any) => !c.id?.startsWith("cap-"),
@@ -281,6 +332,10 @@ export function useProjectMediaAdders({
   const handleAddAudio = useCallback(
     (newAudioClip: any) => {
       if (!project) return;
+      startProcessing(
+        `Adding Audio "${newAudioClip.title || "Sound Track"}"...`,
+        450,
+      );
       const dur = newAudioClip.duration || 5.0;
       const desiredStart = currentTime;
       const placement = allocateClipPlacement(project, desiredStart, dur, 1);
@@ -309,14 +364,19 @@ export function useProjectMediaAdders({
         ...project,
         tracks: { ...project.tracks, audio: audioClips },
       });
+
+      if (newAudioClip.url) {
+        extractRealMediaAudioPeaks(newAudioClip.url, newAudioClip.id);
+      }
     },
-    [project, currentTime, updateProjectWithHistory],
+    [project, currentTime, updateProjectWithHistory, startProcessing],
   );
 
   // Add sticker overlay
   const handleAddSticker = useCallback(
     (newStickerClip: any) => {
       if (!project) return;
+      startProcessing("Adding Sticker Overlay...", 350);
       const dur = newStickerClip.duration || 3.0;
       const desiredStart = currentTime;
       const placement = allocateClipPlacement(project, desiredStart, dur, 3);
@@ -353,17 +413,22 @@ export function useProjectMediaAdders({
   const handleAddEffect = useCallback(
     (preset: any) => {
       if (!project) return;
+      startProcessing("Applying Video Effect...", 350);
       if (selectedClip && selectedClipType === "video") {
         const videoClips = [...(project.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
-          videoClips[idx] = { ...videoClips[idx], effect: preset.id };
+          videoClips[idx] = {
+            ...videoClips[idx],
+            effect: preset.id === "none" ? undefined : (preset.type || preset.id),
+          };
           updateProjectWithHistory({
             ...project,
             tracks: { ...project.tracks, video: videoClips },
           });
         }
       } else {
+        if (preset.id === "none") return;
         const dur = 3.0;
         const desiredStart = currentTime;
         const placement = allocateClipPlacement(project, desiredStart, dur, 4);
@@ -378,7 +443,7 @@ export function useProjectMediaAdders({
 
         const newEff = {
           id: "eff-" + Date.now(),
-          type: preset.type,
+          type: preset.type || preset.id,
           name: preset.name,
           startTime: placement.startTime,
           duration: dur,
@@ -400,9 +465,8 @@ export function useProjectMediaAdders({
           tracks: { ...project.tracks, effects: effectClips },
         });
       }
-      setActiveModal(null);
     },
-    [project, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory, setActiveModal],
+    [project, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory, addNotification],
   );
 
   return {
@@ -421,6 +485,7 @@ export function useProjectMediaAdders({
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleToggleDenoise,
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
@@ -428,5 +493,6 @@ export function useProjectMediaAdders({
     isProcessing,
     processingMessage,
     startProcessing,
+    withProcessing,
   };
 }

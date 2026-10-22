@@ -147,6 +147,45 @@ export default function App() {
     return null;
   }, [selectedClipId, selectedClipType, project]);
 
+  // Media addition & modal apply hook
+  const {
+    handleUpdateText,
+    handleUpdateCaption,
+    handleUpdateSticker,
+    handleUpdateEffect,
+    handleAddMedia,
+    handleAddText,
+    handleAddAudio,
+    handleAddSticker,
+    handleAddEffect,
+    handleApplyFilter,
+    handleApplyCutout,
+    handleApplyMotionTracking,
+    handleApplyTransition,
+    handleApplySpeed,
+    handleApplyVolume,
+    handleToggleDenoise,
+    handleExtractAudioFromVideo,
+    handleApplyTransform,
+    handleApplyEnhance,
+    handleAddCaptions,
+    isProcessing,
+    processingMessage,
+    startProcessing,
+  } = useProjectMediaAdders({
+    project,
+    projectRef,
+    selectedClip,
+    selectedClipId,
+    selectedClipType,
+    currentTime,
+    transitionTargetClipId,
+    updateProjectWithHistory,
+    setActiveModal,
+    setSelectedClipId,
+    setSelectedClipType,
+  });
+
   // Clip mutations hook
   const {
     handleSplitClip,
@@ -174,43 +213,7 @@ export default function App() {
     setClipToDelete,
     updateProjectWithHistory,
     setIsCroppingPreview,
-  });
-
-  // Media addition & modal apply hook
-  const {
-    handleUpdateText,
-    handleUpdateCaption,
-    handleUpdateSticker,
-    handleUpdateEffect,
-    handleAddMedia,
-    handleAddText,
-    handleAddAudio,
-    handleAddSticker,
-    handleAddEffect,
-    handleApplyFilter,
-    handleApplyCutout,
-    handleApplyMotionTracking,
-    handleApplyTransition,
-    handleApplySpeed,
-    handleApplyVolume,
-    handleExtractAudioFromVideo,
-    handleApplyTransform,
-    handleApplyEnhance,
-    handleAddCaptions,
-    isProcessing,
-    processingMessage,
-  } = useProjectMediaAdders({
-    project,
-    projectRef,
-    selectedClip,
-    selectedClipId,
-    selectedClipType,
-    currentTime,
-    transitionTargetClipId,
-    updateProjectWithHistory,
-    setActiveModal,
-    setSelectedClipId,
-    setSelectedClipType,
+    startProcessing,
   });
 
   // Keyframes hook
@@ -409,6 +412,8 @@ export default function App() {
             handleOpenCutoutModal={() => openModal("cutout")}
             handleOpenMotionTracking={() => openModal("tracking")}
             handleOpenAutoCaptions={() => openModal("captions")}
+            handleToggleDenoise={handleToggleDenoise}
+            handleExtractAudio={handleExtractAudioFromVideo}
             isProcessing={isProcessing}
             processingMessage={processingMessage}
           />
@@ -423,6 +428,7 @@ export default function App() {
           totalDuration={totalDuration}
           currentTime={currentTime}
           setCurrentTime={setCurrentTime}
+          selectedClipId={selectedClipId}
           selectedClip={selectedClip}
           selectedClipType={selectedClipType}
           settings={settings}

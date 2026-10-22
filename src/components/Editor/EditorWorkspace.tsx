@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Text, ActivityIndicator } from "react-native";
 import Header from "../Header";
 import Player from "../Player";
 import Timeline from "../Timeline";
@@ -85,6 +85,8 @@ interface EditorWorkspaceProps {
   handleOpenCutoutModal: () => void;
   handleOpenMotionTracking: () => void;
   handleOpenAutoCaptions: () => void;
+  handleToggleDenoise?: () => void;
+  handleExtractAudio?: () => void;
   isProcessing?: boolean;
   processingMessage?: string;
 }
@@ -149,6 +151,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   handleOpenCutoutModal,
   handleOpenMotionTracking,
   handleOpenAutoCaptions,
+  handleToggleDenoise,
+  handleExtractAudio,
 }) => {
   const handleOpenEditModal = React.useCallback(
     (clipId: string, clipType?: string) => {
@@ -175,10 +179,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
       setSelectedClipType(normalizedType);
 
-      if (normalizedType === "caption") {
-        if (handleOpenAutoCaptions) handleOpenAutoCaptions();
-        else openModal("text");
-      } else if (normalizedType === "text") {
+      if (normalizedType === "caption" || normalizedType === "captions" || normalizedType === "text") {
         openModal("text");
       } else if (normalizedType === "stickers") {
         openModal("stickers");
@@ -208,6 +209,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           onOpenExport={onOpenExport}
           onOpenCanvasModal={handleOpenCanvasModal}
         />
+      )}
+
+      {/* Global Processing HUD Banner */}
+      {isProcessing && (
+        <View style={styles.globalProcessingBanner} pointerEvents="none">
+          <View style={styles.globalProcessingPill}>
+            <ActivityIndicator size="small" color="#00F2FE" />
+            <Text style={styles.globalProcessingText}>
+              {processingMessage || "Processing..."}
+            </Text>
+          </View>
+        </View>
       )}
 
       {/* Canvas Viewport & Player Controls in Flex-1 Center Stage */}
@@ -350,6 +363,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             onOpenMotionTracking={handleOpenMotionTracking}
             onOpenKeyframeModal={onOpenKeyframeModal}
             onOpenAutoCaptions={handleOpenAutoCaptions}
+            onToggleDenoise={handleToggleDenoise}
+            onExtractAudio={handleExtractAudio}
           />
         </View>
       )}
@@ -387,5 +402,35 @@ const styles = StyleSheet.create({
     width: "100%",
     flexShrink: 0,
     backgroundColor: "#0E1118",
+  },
+  globalProcessingBanner: {
+    position: "absolute" as any,
+    top: 56,
+    left: 0,
+    right: 0,
+    alignItems: "center" as const,
+    zIndex: 999999,
+  },
+  globalProcessingPill: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    backgroundColor: "rgba(11, 14, 21, 0.94)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.5)",
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  globalProcessingText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700" as const,
+    letterSpacing: 0.3,
   },
 });

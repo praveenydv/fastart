@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,14 +14,20 @@ import { soundEngine } from '../../utils/audioEngine';
 interface AIEnhanceModalProps {
   visible: boolean;
   onClose: () => void;
-  onApplyEnhance: (preset: {
-    hdr: boolean;
-    sharpness: number;
-    colorBoost: number;
-    denoise: boolean;
-    filterLut: string;
+  initialValues?: {
+    hdr?: boolean;
+    sharpness?: number;
+    colorBoost?: number;
     skinSmoothing?: number;
     faceRadiance?: number;
+  };
+  onApplyEnhance: (preset: {
+    hdr?: boolean;
+    sharpness?: number;
+    colorBoost?: number;
+    skinSmoothing?: number;
+    faceRadiance?: number;
+    filterLut?: string;
   }) => void;
 }
 
@@ -31,37 +37,69 @@ const WebInput: any = Platform.OS === 'web' ? 'input' : View;
 export default function AIEnhanceModal({
   visible,
   onClose,
+  initialValues,
   onApplyEnhance,
 }: AIEnhanceModalProps) {
-  const [hdr, setHdr] = useState(true);
-  const [sharpness, setSharpness] = useState(75);
-  const [colorBoost, setColorBoost] = useState(80);
-  const [skinSmoothing, setSkinSmoothing] = useState(40);
-  const [faceRadiance, setFaceRadiance] = useState(30);
-  const [denoise, setDenoise] = useState(true);
-  const [selectedPreset, setSelectedPreset] = useState<'hdr_pro' | 'vibrant' | 'cinema' | 'portrait'>('hdr_pro');
+  const [activeTab, setActiveTab] = useState<'beauty' | 'clarity'>('beauty');
 
-  const presets = [
-    { id: 'hdr_pro', name: 'HDR Ultra', desc: 'Deep dynamic range and shadow recovery', filter: 'teal_orange' },
-    { id: 'vibrant', name: 'Viral Pop', desc: 'High saturation & crisp contrast for TikTok', filter: 'cyberpunk' },
-    { id: 'cinema', name: 'Film 35mm', desc: 'Cinematic tone curve & natural skin hues', filter: 'warm_sunset' },
-    { id: 'portrait', name: 'Clean Studio', desc: 'Soft skin smoothing with vivid highlights', filter: 'vintage' },
-  ];
+  // Values (0 - 100)
+  const [skinSmoothing, setSkinSmoothing] = useState(initialValues?.skinSmoothing ?? 0);
+  const [faceRadiance, setFaceRadiance] = useState(initialValues?.faceRadiance ?? 0);
+  const [hdr, setHdr] = useState(initialValues?.hdr ?? false);
+  const [sharpness, setSharpness] = useState(initialValues?.sharpness ?? 0);
+  const [colorBoost, setColorBoost] = useState(initialValues?.colorBoost ?? 0);
 
-  const handleApply = () => {
-    soundEngine.playSfx('whoosh');
-    const chosen = presets.find((p) => p.id === selectedPreset) || presets[0];
+  // Sync if initialValues changes
+  useEffect(() => {
+    if (initialValues) {
+      setSkinSmoothing(initialValues.skinSmoothing ?? 0);
+      setFaceRadiance(initialValues.faceRadiance ?? 0);
+      setHdr(initialValues.hdr ?? false);
+      setSharpness(initialValues.sharpness ?? 0);
+      setColorBoost(initialValues.colorBoost ?? 0);
+    }
+  }, [initialValues]);
+
+  // Live trigger
+  const triggerUpdate = (updates: Partial<{
+    hdr: boolean;
+    sharpness: number;
+    colorBoost: number;
+    skinSmoothing: number;
+    faceRadiance: number;
+  }>) => {
+    const nextHdr = updates.hdr !== undefined ? updates.hdr : hdr;
+    const nextSharp = updates.sharpness !== undefined ? updates.sharpness : sharpness;
+    const nextBoost = updates.colorBoost !== undefined ? updates.colorBoost : colorBoost;
+    const nextSmooth = updates.skinSmoothing !== undefined ? updates.skinSmoothing : skinSmoothing;
+    const nextRad = updates.faceRadiance !== undefined ? updates.faceRadiance : faceRadiance;
+
     onApplyEnhance({
-      hdr,
-      sharpness,
-      colorBoost,
-      skinSmoothing,
-      faceRadiance,
-      denoise,
-      filterLut: chosen.filter,
+      hdr: nextHdr,
+      sharpness: nextSharp,
+      colorBoost: nextBoost,
+      skinSmoothing: nextSmooth,
+      faceRadiance: nextRad,
     });
-    onClose();
   };
+
+  const handleReset = () => {
+    soundEngine.playSfx('pop');
+    setSkinSmoothing(0);
+    setFaceRadiance(0);
+    setHdr(false);
+    setSharpness(0);
+    setColorBoost(0);
+    onApplyEnhance({
+      hdr: false,
+      sharpness: 0,
+      colorBoost: 0,
+      skinSmoothing: 0,
+      faceRadiance: 0,
+    });
+  };
+
+  const isModified = skinSmoothing > 0 || faceRadiance > 0 || hdr || sharpness > 0 || colorBoost > 0;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -70,283 +108,331 @@ export default function AIEnhanceModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Compact Space-Optimized Header */}
           <View style={styles.header}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, !isModified && { opacity: 0.4 }]}
+              disabled={!isModified}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>Reset</Text>
+            </TouchableOpacity>
+
             <View style={styles.headerTitleRow}>
-              <Ionicons name="sparkles" size={18} color="#D946EF" />
+              <Ionicons name="sparkles" size={17} color="#D946EF" />
               <Text style={styles.headerTitle}>AI Enhance</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={18} color="#8E95A5" />
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
+          {/* Tabs: Beauty vs Clarity */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'beauty' && styles.tabBtnActive]}
+              onPress={() => {
+                soundEngine.playSfx('click');
+                setActiveTab('beauty');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="person-outline"
+                size={15}
+                color={activeTab === 'beauty' ? '#D946EF' : '#8E95A5'}
+              />
+              <Text
+                style={[styles.tabText, activeTab === 'beauty' && { color: '#D946EF', fontWeight: '700' }]}
+              >
+                Face Beauty
+              </Text>
+              {(skinSmoothing > 0 || faceRadiance > 0) && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'clarity' && styles.tabBtnActive]}
+              onPress={() => {
+                soundEngine.playSfx('click');
+                setActiveTab('clarity');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="color-wand-outline"
+                size={15}
+                color={activeTab === 'clarity' ? '#00F2FE' : '#8E95A5'}
+              />
+              <Text
+                style={[styles.tabText, activeTab === 'clarity' && { color: '#00F2FE', fontWeight: '700' }]}
+              >
+                Clarity & HDR
+              </Text>
+              {(hdr || sharpness > 0 || colorBoost > 0) && <View style={styles.activeDotCyan} />}
+            </TouchableOpacity>
+          </View>
+
+          {/* Controls Body */}
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
-            {/* Presets Grid */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Style Profiles</Text>
-              <View style={styles.presetsGrid}>
-                {presets.map((p) => {
-                  const isSelected = selectedPreset === p.id;
-                  return (
-                    <TouchableOpacity
-                      key={p.id}
-                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
-                      onPress={() => {
-                        soundEngine.playSfx('pop');
-                        setSelectedPreset(p.id as any);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.presetHeader}>
-                        <Text style={[styles.presetName, isSelected && styles.presetNameActive]}>
-                          {p.name}
-                        </Text>
-                        <Ionicons
-                          name={isSelected ? 'sparkles' : 'sparkles-outline'}
-                          size={15}
-                          color={isSelected ? '#00F2FE' : '#8E95A5'}
-                        />
-                      </View>
-                      <Text style={styles.presetDesc}>{p.desc}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* AI Sliders */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Adjustments</Text>
-
-              {/* Sharpness */}
-              <View style={styles.sliderRow}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>Clarity & Sharpness</Text>
-                  <Text style={styles.badge}>{sharpness}%</Text>
-                </View>
-                {Platform.OS === 'web' ? (
-                  <WebDiv style={{ margin: '6px 0' }}>
-                    <WebInput
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={sharpness}
-                      onChange={(e: any) => setSharpness(parseInt(e.target.value))}
-                      style={{
-                        width: '100%',
-                        accentColor: '#D946EF',
-                        height: 4,
-                        borderRadius: 2,
-                        cursor: 'pointer',
-                      }}
-                    />
-                  </WebDiv>
-                ) : (
-                  <View style={styles.stepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setSharpness((s) => Math.max(0, s - 5))}
-                    >
-                      <Ionicons name="remove" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperVal}>{sharpness}%</Text>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setSharpness((s) => Math.min(100, s + 5))}
-                    >
-                      <Ionicons name="add" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
+            {activeTab === 'beauty' && (
+              <View style={styles.controlsGroup}>
+                {/* Skin Smoothing */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.labelRow}>
+                    <View style={styles.rowLeft}>
+                      <Ionicons name="happy-outline" size={16} color="#D946EF" />
+                      <Text style={styles.sliderLabel}>Skin Smoothing</Text>
+                    </View>
+                    <Text style={[styles.badge, { color: '#D946EF' }]}>{skinSmoothing}%</Text>
                   </View>
-                )}
-              </View>
-
-              {/* Color Boost */}
-              <View style={styles.sliderRow}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>Color Saturation</Text>
-                  <Text style={styles.badge}>{colorBoost}%</Text>
+                  {Platform.OS === 'web' ? (
+                    <WebDiv style={{ margin: '8px 0 2px 0' }}>
+                      <WebInput
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={skinSmoothing}
+                        onChange={(e: any) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setSkinSmoothing(val);
+                          triggerUpdate({ skinSmoothing: val });
+                        }}
+                        style={{
+                          width: '100%',
+                          accentColor: '#D946EF',
+                          height: 4,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    </WebDiv>
+                  ) : (
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.max(0, skinSmoothing - 10);
+                          setSkinSmoothing(val);
+                          triggerUpdate({ skinSmoothing: val });
+                        }}
+                      >
+                        <Ionicons name="remove" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperVal}>{skinSmoothing}%</Text>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.min(100, skinSmoothing + 10);
+                          setSkinSmoothing(val);
+                          triggerUpdate({ skinSmoothing: val });
+                        }}
+                      >
+                        <Ionicons name="add" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-                {Platform.OS === 'web' ? (
-                  <WebDiv style={{ margin: '6px 0' }}>
-                    <WebInput
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={colorBoost}
-                      onChange={(e: any) => setColorBoost(parseInt(e.target.value))}
-                      style={{
-                        width: '100%',
-                        accentColor: '#00F2FE',
-                        height: 4,
-                        borderRadius: 2,
-                        cursor: 'pointer',
-                      }}
-                    />
-                  </WebDiv>
-                ) : (
-                  <View style={styles.stepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setColorBoost((c) => Math.max(0, c - 5))}
-                    >
-                      <Ionicons name="remove" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperVal}>{colorBoost}%</Text>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setColorBoost((c) => Math.min(100, c + 5))}
-                    >
-                      <Ionicons name="add" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
+
+                {/* Face Radiance */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.labelRow}>
+                    <View style={styles.rowLeft}>
+                      <Ionicons name="sunny-outline" size={16} color="#FBBF24" />
+                      <Text style={styles.sliderLabel}>Face Radiance & Glow</Text>
+                    </View>
+                    <Text style={[styles.badge, { color: '#FBBF24' }]}>{faceRadiance}%</Text>
                   </View>
-                )}
-              </View>
-            </View>
-
-            {/* AI Beauty & Skin Retouch */}
-            <View style={styles.section}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <Ionicons name="person-outline" size={16} color="#D946EF" />
-                <Text style={styles.sectionTitle}>BEAUTY & SKIN RETOUCH</Text>
-              </View>
-
-              {/* Skin Smoothing Slider */}
-              <View style={styles.sliderRow}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>Skin Smoothing (Blemish Clean)</Text>
-                  <Text style={[styles.badge, { color: '#D946EF' }]}>{skinSmoothing}%</Text>
+                  {Platform.OS === 'web' ? (
+                    <WebDiv style={{ margin: '8px 0 2px 0' }}>
+                      <WebInput
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={faceRadiance}
+                        onChange={(e: any) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setFaceRadiance(val);
+                          triggerUpdate({ faceRadiance: val });
+                        }}
+                        style={{
+                          width: '100%',
+                          accentColor: '#FBBF24',
+                          height: 4,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    </WebDiv>
+                  ) : (
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.max(0, faceRadiance - 10);
+                          setFaceRadiance(val);
+                          triggerUpdate({ faceRadiance: val });
+                        }}
+                      >
+                        <Ionicons name="remove" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperVal}>{faceRadiance}%</Text>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.min(100, faceRadiance + 10);
+                          setFaceRadiance(val);
+                          triggerUpdate({ faceRadiance: val });
+                        }}
+                      >
+                        <Ionicons name="add" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-                {Platform.OS === 'web' ? (
-                  <WebDiv style={{ margin: '6px 0' }}>
-                    <WebInput
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={skinSmoothing}
-                      onChange={(e: any) => setSkinSmoothing(parseInt(e.target.value))}
-                      style={{
-                        width: '100%',
-                        accentColor: '#D946EF',
-                        height: 4,
-                        borderRadius: 2,
-                        cursor: 'pointer',
-                      }}
-                    />
-                  </WebDiv>
-                ) : (
-                  <View style={styles.stepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setSkinSmoothing((s) => Math.max(0, s - 5))}
-                    >
-                      <Ionicons name="remove" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperVal}>{skinSmoothing}%</Text>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setSkinSmoothing((s) => Math.min(100, s + 5))}
-                    >
-                      <Ionicons name="add" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
+              </View>
+            )}
+
+            {activeTab === 'clarity' && (
+              <View style={styles.controlsGroup}>
+                {/* Auto HDR Toggle */}
+                <TouchableOpacity
+                  style={styles.toggleCard}
+                  onPress={() => {
+                    soundEngine.playSfx('click');
+                    const next = !hdr;
+                    setHdr(next);
+                    triggerUpdate({ hdr: next });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.toggleInfo}>
+                    <Ionicons name="sparkles" size={16} color="#00F2FE" />
+                    <View style={{ marginLeft: 8 }}>
+                      <Text style={styles.toggleTitle}>Auto HDR Dynamic Range</Text>
+                      <Text style={styles.toggleSub}>Expand highlights and shadow recovery</Text>
+                    </View>
                   </View>
-                )}
-              </View>
+                  <Ionicons
+                    name={hdr ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={hdr ? '#00F2FE' : '#8E95A5'}
+                  />
+                </TouchableOpacity>
 
-              {/* Face Radiance Slider */}
-              <View style={styles.sliderRow}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.sliderLabel}>Face Radiance & Glow</Text>
-                  <Text style={[styles.badge, { color: '#00F2FE' }]}>{faceRadiance}%</Text>
-                </View>
-                {Platform.OS === 'web' ? (
-                  <WebDiv style={{ margin: '6px 0' }}>
-                    <WebInput
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={faceRadiance}
-                      onChange={(e: any) => setFaceRadiance(parseInt(e.target.value))}
-                      style={{
-                        width: '100%',
-                        accentColor: '#00F2FE',
-                        height: 4,
-                        borderRadius: 2,
-                        cursor: 'pointer',
-                      }}
-                    />
-                  </WebDiv>
-                ) : (
-                  <View style={styles.stepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setFaceRadiance((r) => Math.max(0, r - 5))}
-                    >
-                      <Ionicons name="remove" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.stepperVal}>{faceRadiance}%</Text>
-                    <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setFaceRadiance((r) => Math.min(100, r + 5))}
-                    >
-                      <Ionicons name="add" size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
+                {/* Sharpness */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.labelRow}>
+                    <View style={styles.rowLeft}>
+                      <Ionicons name="eye-outline" size={16} color="#38BDF8" />
+                      <Text style={styles.sliderLabel}>Crisp Sharpness</Text>
+                    </View>
+                    <Text style={[styles.badge, { color: '#38BDF8' }]}>{sharpness}%</Text>
                   </View>
-                )}
+                  {Platform.OS === 'web' ? (
+                    <WebDiv style={{ margin: '8px 0 2px 0' }}>
+                      <WebInput
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={sharpness}
+                        onChange={(e: any) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setSharpness(val);
+                          triggerUpdate({ sharpness: val });
+                        }}
+                        style={{
+                          width: '100%',
+                          accentColor: '#38BDF8',
+                          height: 4,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    </WebDiv>
+                  ) : (
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.max(0, sharpness - 10);
+                          setSharpness(val);
+                          triggerUpdate({ sharpness: val });
+                        }}
+                      >
+                        <Ionicons name="remove" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperVal}>{sharpness}%</Text>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.min(100, sharpness + 10);
+                          setSharpness(val);
+                          triggerUpdate({ sharpness: val });
+                        }}
+                      >
+                        <Ionicons name="add" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+
+                {/* Color Saturation / Vibrance */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.labelRow}>
+                    <View style={styles.rowLeft}>
+                      <Ionicons name="color-palette-outline" size={16} color="#10B981" />
+                      <Text style={styles.sliderLabel}>Color Saturation</Text>
+                    </View>
+                    <Text style={[styles.badge, { color: '#10B981' }]}>{colorBoost}%</Text>
+                  </View>
+                  {Platform.OS === 'web' ? (
+                    <WebDiv style={{ margin: '8px 0 2px 0' }}>
+                      <WebInput
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={colorBoost}
+                        onChange={(e: any) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setColorBoost(val);
+                          triggerUpdate({ colorBoost: val });
+                        }}
+                        style={{
+                          width: '100%',
+                          accentColor: '#10B981',
+                          height: 4,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    </WebDiv>
+                  ) : (
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.max(0, colorBoost - 10);
+                          setColorBoost(val);
+                          triggerUpdate({ colorBoost: val });
+                        }}
+                      >
+                        <Ionicons name="remove" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperVal}>{colorBoost}%</Text>
+                      <TouchableOpacity
+                        style={styles.stepBtn}
+                        onPress={() => {
+                          const val = Math.min(100, colorBoost + 10);
+                          setColorBoost(val);
+                          triggerUpdate({ colorBoost: val });
+                        }}
+                      >
+                        <Ionicons name="add" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-
-            {/* Toggles */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Intelligent Processing</Text>
-
-              <TouchableOpacity
-                style={styles.toggleRow}
-                onPress={() => {
-                  soundEngine.playSfx('click');
-                  setHdr(!hdr);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleTitle}>Auto HDR Tone Mapping</Text>
-                  <Text style={styles.toggleDesc}>Expand highlight and shadow detail</Text>
-                </View>
-                <Ionicons
-                  name={hdr ? 'checkbox' : 'square-outline'}
-                  size={20}
-                  color={hdr ? '#00F2FE' : '#8E95A5'}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.toggleRow}
-                onPress={() => {
-                  soundEngine.playSfx('click');
-                  setDenoise(!denoise);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleTitle}>Low-Light Denoise</Text>
-                  <Text style={styles.toggleDesc}>Reduce grain and sensor noise</Text>
-                </View>
-                <Ionicons
-                  name={denoise ? 'checkbox' : 'square-outline'}
-                  size={20}
-                  color={denoise ? '#00F2FE' : '#8E95A5'}
-                />
-              </TouchableOpacity>
-            </View>
+            )}
           </ScrollView>
-
-          {/* Footer Action */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.enhanceBtn} onPress={handleApply} activeOpacity={0.8}>
-              <Ionicons name="sparkles" size={16} color="#000000" />
-              <Text style={styles.enhanceBtnText}>Apply</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Modal>
@@ -356,23 +442,23 @@ export default function AIEnhanceModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#121620',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '80%',
-    paddingBottom: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '48%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderWidth: 1,
     borderColor: '#1E2333',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -383,106 +469,154 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A1F2C',
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  closeBtn: {
-    padding: 4,
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1A1F2C',
   },
-  contentScroll: {
-    padding: 16,
-  },
-  section: {
-    backgroundColor: '#161B26',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#252B3D',
-  },
-  sectionTitle: {
+  resetText: {
     color: '#8E95A5',
     fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
+    fontWeight: '600',
   },
-  presetsGrid: {
-    gap: 10,
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  presetCard: {
-    backgroundColor: '#1F2536',
+  tabContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#161B26',
     borderRadius: 10,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
+    padding: 3,
   },
-  presetCardActive: {
-    borderColor: '#D946EF',
-    backgroundColor: '#D946EF10',
-  },
-  presetHeader: {
+  tabBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    borderRadius: 8,
+    position: 'relative',
   },
-  presetName: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+  tabBtnActive: {
+    backgroundColor: '#202636',
   },
-  presetNameActive: {
-    color: '#D946EF',
-  },
-  presetDesc: {
+  tabText: {
+    fontSize: 13,
     color: '#8E95A5',
-    fontSize: 11,
-    marginTop: 4,
+    fontWeight: '500',
   },
-  sliderRow: {
-    marginTop: 10,
+  activeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#D946EF',
+    position: 'absolute',
+    top: 6,
+    right: 12,
+  },
+  activeDotCyan: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#00F2FE',
+    position: 'absolute',
+    top: 6,
+    right: 12,
+  },
+  contentScroll: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+  },
+  controlsGroup: {
+    gap: 8,
+    paddingBottom: 10,
+  },
+  sliderCard: {
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   labelRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sliderLabel: {
-    color: '#FFFFFF',
+    color: '#E2E8F0',
     fontSize: 13,
     fontWeight: '600',
   },
   badge: {
-    backgroundColor: '#D946EF20',
-    color: '#D946EF',
     fontSize: 12,
-    fontWeight: '800',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    fontWeight: '700',
+  },
+  toggleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#161B26',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#1E2536',
+  },
+  toggleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  toggleTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  toggleSub: {
+    color: '#8E95A5',
+    fontSize: 11,
+    marginTop: 1,
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    marginVertical: 4,
+    marginTop: 6,
   },
   stepBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
+    backgroundColor: '#262D3D',
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -490,43 +624,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
-    minWidth: 44,
+    minWidth: 42,
     textAlign: 'center',
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F2536',
-  },
-  toggleTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  toggleDesc: {
-    color: '#8E95A5',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  footer: {
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  enhanceBtn: {
-    backgroundColor: '#D946EF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  enhanceBtnText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
   },
 });

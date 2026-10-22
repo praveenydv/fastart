@@ -12,6 +12,8 @@ import {
 import { getMediaDuration } from "../utils/mediaDuration";
 import { soundEngine } from "../utils/audioEngine";
 
+import { extractRealMediaAudioPeaks } from "../utils/mediaAudioDetector";
+
 interface UseProjectFilterEffectsParams {
   project: FastArtProject | null;
   projectRef: React.MutableRefObject<FastArtProject | null>;
@@ -37,7 +39,7 @@ export function useProjectFilterEffects({
   const [processingMessage, setProcessingMessage] = useState("Processing Edit...");
   const processingTimer = useRef<any>(null);
 
-  const startProcessing = useCallback((msg: string, durationMs: number = 750) => {
+  const startProcessing = useCallback((msg: string, durationMs: number = 650) => {
     setProcessingMessage(msg);
     setIsProcessing(true);
     if (processingTimer.current) clearTimeout(processingTimer.current);
@@ -46,13 +48,32 @@ export function useProjectFilterEffects({
     }, durationMs);
   }, []);
 
+  const withProcessing = useCallback(
+    async <T,>(msg: string, task: () => Promise<T> | T, minDurationMs: number = 400): Promise<T> => {
+      setProcessingMessage(msg);
+      setIsProcessing(true);
+      const start = Date.now();
+      try {
+        const result = await Promise.resolve(task());
+        const elapsed = Date.now() - start;
+        if (elapsed < minDurationMs) {
+          await new Promise((r) => setTimeout(r, minDurationMs - elapsed));
+        }
+        return result;
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [],
+  );
+
   // Apply color filter or custom 3D LUT
   const handleApplyFilter = useCallback(
     (filterId: string, customLut?: CustomLutConfig) => {
-      startProcessing("Applying Color Grade & LUT...");
-      if (!project) return;
+      const current = projectRef.current || project;
+      if (!current) return;
       if (selectedClip && selectedClipType === "video") {
-        const videoClips = [...(project.tracks.video || [])];
+        const videoClips = [...(current.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
           videoClips[idx] = {
@@ -61,14 +82,13 @@ export function useProjectFilterEffects({
             customLut: customLut,
           };
           updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, video: videoClips },
+            ...current,
+            tracks: { ...current.tracks, video: videoClips },
           });
         }
       }
-      setActiveModal(null);
     },
-    [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory, setActiveModal],
+    [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
   );
 
   // Apply Cutout
@@ -290,10 +310,9 @@ export function useProjectFilterEffects({
     [project, projectRef, selectedClipId, updateProjectWithHistory],
   );
 
-  // Apply Volume, Fades & AI Denoise to video or audio clips
+  // Apply Volume & Fades to video or audio clips smoothly without flashing spinners
   const handleApplyVolume = useCallback(
     (vol: number, fadeIn: number, fadeOut: number, denoise?: boolean) => {
-      startProcessing(denoise ? "Applying AI Denoise DSP..." : "Updating Audio Volume...");
       const current = projectRef.current || project;
       if (!current || !selectedClipId) return;
 
@@ -336,49 +355,101 @@ export function useProjectFilterEffects({
     [project, projectRef, selectedClipId, updateProjectWithHistory],
   );
 
-  // Extract Audio from Video Clip to Independent Audio Track
-  const handleExtractAudioFromVideo = useCallback(() => {
-    const current = projectRef.current;
+  // Dedicated 1-tap AI Noise Reduction toggle
+  const handleToggleDenoise = useCallback(() => {
+    const current = projectRef.current || project;
     if (!current || !selectedClipId) return;
-    const videoClips = current.tracks.video || [];
-    const targetVideo = videoClips.find((v) => v.id === selectedClipId);
-    if (!targetVideo) return;
 
-    const newAudioClip: AudioClip = {
-      id: `clip-a-ext-${Date.now()}`,
-      title: `${targetVideo.title || "Video"} (Audio)`,
-      artist: "Extracted Audio",
-      duration: targetVideo.duration,
-      startTime: targetVideo.startTime,
-      trimIn: targetVideo.trimIn || 0,
-      trimOut: targetVideo.trimOut || targetVideo.duration,
-      mediaDuration: targetVideo.mediaDuration || targetVideo.duration,
-      volume: targetVideo.volume ?? 1.0,
-      fadeIn: targetVideo.fadeIn ?? 0,
-      fadeOut: targetVideo.fadeOut ?? 0,
-      denoise: targetVideo.denoise,
-      url: targetVideo.url,
-      trackIndex: 1,
-    };
+    // Check audio tracks first
+    const audioClips = [...(current.tracks.audio || [])];
+    const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
+    if (aIdx >= 0) {
+      const nextDenoise = !audioClips[aIdx].denoise;
+      audioClips[aIdx] = {
+        ...audioClips[aIdx],
+        denoise: nextDenoise,
+      };
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, audio: audioClips },
+      });
+      soundEngine.playSfx(nextDenoise ? "pop" : "click");
+      return nextDenoise;
+    }
 
-    // Mute the video clip
-    const updatedVideos = videoClips.map((v) =>
-      v.id === selectedClipId ? { ...v, volume: 0 } : v
-    );
+    // Check video tracks
+    const videoClips = [...(current.tracks.video || [])];
+    const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+    if (vIdx >= 0) {
+      const nextDenoise = !videoClips[vIdx].denoise;
+      startProcessing(
+        nextDenoise
+          ? "Activating AI Noise Reduction..."
+          : "Deactivating Noise Reduction...",
+        450,
+      );
+      videoClips[vIdx] = {
+        ...videoClips[vIdx],
+        denoise: nextDenoise,
+      };
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
+      });
+      soundEngine.playSfx(nextDenoise ? "pop" : "click");
+      return nextDenoise;
+    }
+  }, [project, projectRef, selectedClipId, updateProjectWithHistory, startProcessing]);
 
-    const updatedAudio = [...(current.tracks.audio || []), newAudioClip];
+  // Extract Audio from Video Clip to Independent Audio Track
+  const handleExtractAudioFromVideo = useCallback(async () => {
+    await withProcessing("Extracting Audio Track...", async () => {
+      const current = projectRef.current;
+      if (!current || !selectedClipId) return;
+      const videoClips = current.tracks.video || [];
+      const targetVideo = videoClips.find((v) => v.id === selectedClipId);
+      if (!targetVideo) return;
 
-    soundEngine.playSfx("split");
-    updateProjectWithHistory({
-      ...current,
-      tracks: {
-        ...current.tracks,
-        video: updatedVideos,
-        audio: updatedAudio,
-      },
+      const newAudioClip: AudioClip = {
+        id: `clip-a-ext-${Date.now()}`,
+        title: `${targetVideo.title || "Video"} (Audio)`,
+        artist: "Extracted Audio",
+        duration: targetVideo.duration,
+        startTime: targetVideo.startTime,
+        trimIn: targetVideo.trimIn || 0,
+        trimOut: targetVideo.trimOut || targetVideo.duration,
+        mediaDuration: targetVideo.mediaDuration || targetVideo.duration,
+        volume: targetVideo.volume ?? 1.0,
+        fadeIn: targetVideo.fadeIn ?? 0,
+        fadeOut: targetVideo.fadeOut ?? 0,
+        denoise: targetVideo.denoise,
+        url: targetVideo.url,
+        trackIndex: 1,
+      };
+
+      // Mute the video clip
+      const updatedVideos = videoClips.map((v) =>
+        v.id === selectedClipId ? { ...v, volume: 0 } : v,
+      );
+
+      const updatedAudio = [...(current.tracks.audio || []), newAudioClip];
+
+      soundEngine.playSfx("split");
+      updateProjectWithHistory({
+        ...current,
+        tracks: {
+          ...current.tracks,
+          video: updatedVideos,
+          audio: updatedAudio,
+        },
+      });
+
+      if (targetVideo.url) {
+        extractRealMediaAudioPeaks(targetVideo.url, newAudioClip.id);
+      }
+      setActiveModal(null);
     });
-    setActiveModal(null);
-  }, [projectRef, selectedClipId, updateProjectWithHistory, setActiveModal]);
+  }, [projectRef, selectedClipId, updateProjectWithHistory, setActiveModal, withProcessing]);
 
   // Apply Transform, Mask & Canvas Ratio
   const handleApplyTransform = useCallback(
@@ -423,40 +494,60 @@ export function useProjectFilterEffects({
     [projectRef, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
   );
 
-  // Apply AI Enhance
+  // Apply AI Enhance (Beauty, Clarity & HDR)
   const handleApplyEnhance = useCallback(
     (preset: {
       hdr?: boolean;
       sharpness?: number;
       colorBoost?: number;
-      denoise?: boolean;
-      filterLut: string;
       skinSmoothing?: number;
       faceRadiance?: number;
+      filterLut?: string;
     }) => {
-      const current = projectRef.current;
+      const current = projectRef.current || project;
       if (!current) return;
-      const boostVal = (preset.colorBoost ?? 80) / 100;
-      const sharpVal = (preset.sharpness ?? 75) / 100;
+      const boostVal = (preset.colorBoost ?? 0) / 100;
+      const sharpVal = (preset.sharpness ?? 0) / 100;
       const smoothVal = (preset.skinSmoothing ?? 0) / 100;
       const radianceVal = (preset.faceRadiance ?? 0) / 100;
 
       const sat = 1.0 + boostVal * 0.55;
       const cont = 1.0 + sharpVal * 0.3 + (preset.hdr ? 0.15 : 0);
-      const bright = (preset.hdr ? 1.05 : 1.0) + radianceVal * 0.1;
-      const blurDrop = smoothVal > 0.25 ? ` drop-shadow(0px 0px ${(smoothVal * 2.5).toFixed(1)}px rgba(255,255,255,0.18))` : "";
-      const cssFilter = `contrast(${cont.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})${blurDrop}`;
+      const bright = (preset.hdr ? 1.05 : 1.0) + radianceVal * 0.15;
+      const blurDrop =
+        smoothVal > 0.15
+          ? ` drop-shadow(0px 0px ${(smoothVal * 2.5).toFixed(1)}px rgba(255,255,255,0.18))`
+          : "";
+      const isZero =
+        !preset.hdr &&
+        (preset.colorBoost ?? 0) === 0 &&
+        (preset.sharpness ?? 0) === 0 &&
+        (preset.skinSmoothing ?? 0) === 0 &&
+        (preset.faceRadiance ?? 0) === 0;
+
+      const cssFilter = isZero
+        ? ""
+        : `contrast(${cont.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})${blurDrop}`;
 
       const videoClips = (current.tracks.video || []).map((c) => {
         if (!selectedClipId || c.id === selectedClipId) {
           return {
             ...c,
-            filter: preset.filterLut,
-            customLut: {
-              id: "ai_enhance",
-              name: "AI Enhanced",
-              cssFilter,
+            ...(preset.filterLut ? { filter: preset.filterLut } : {}),
+            enhance: {
+              hdr: preset.hdr ?? false,
+              sharpness: preset.sharpness ?? 0,
+              colorBoost: preset.colorBoost ?? 0,
+              skinSmoothing: preset.skinSmoothing ?? 0,
+              faceRadiance: preset.faceRadiance ?? 0,
             },
+            customLut: cssFilter
+              ? {
+                  id: "ai_enhance",
+                  name: "AI Enhanced",
+                  cssFilter,
+                }
+              : undefined,
           };
         }
         return c;
@@ -466,7 +557,7 @@ export function useProjectFilterEffects({
         tracks: { ...current.tracks, video: videoClips },
       });
     },
-    [projectRef, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, updateProjectWithHistory],
   );
 
   return {
@@ -476,11 +567,13 @@ export function useProjectFilterEffects({
     handleApplyTransition,
     handleApplySpeed,
     handleApplyVolume,
+    handleToggleDenoise,
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
     isProcessing,
     processingMessage,
     startProcessing,
+    withProcessing,
   };
 }

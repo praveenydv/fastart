@@ -147,12 +147,22 @@ export default function CutoutModal({
 
           {/* Header */}
           <View style={styles.sheetHeader}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, !enabled && { opacity: 0.4 }]}
+              disabled={!enabled}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>Reset</Text>
+            </TouchableOpacity>
+
             <View style={styles.titleRow}>
-              <Ionicons name="person-remove-outline" size={20} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>{"Cutout & Chroma"}</Text>
+              <Ionicons name="person-remove-outline" size={17} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>Cutout & Chroma</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
@@ -289,19 +299,6 @@ export default function CutoutModal({
               strokePresets={STROKE_PRESETS}
             />
           </ScrollView>
-
-          {/* Action Footer */}
-          <View style={styles.footerRow}>
-            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} activeOpacity={0.7}>
-              <Ionicons name="refresh-outline" size={18} color="#8E95A5" />
-              <Text style={styles.resetBtnText}>Reset</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.8}>
-              <Ionicons name="checkmark" size={18} color="#000000" />
-              <Text style={styles.applyBtnText}>Apply Cutout</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Modal>

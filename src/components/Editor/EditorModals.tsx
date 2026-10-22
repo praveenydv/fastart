@@ -36,6 +36,7 @@ interface EditorModalsProps {
   totalDuration: number;
   currentTime: number;
   setCurrentTime: (t: number) => void;
+  selectedClipId?: string | null;
   selectedClip: any;
   selectedClipType: string;
   settings: any;
@@ -93,6 +94,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   totalDuration,
   currentTime,
   setCurrentTime,
+  selectedClipId,
   selectedClip,
   selectedClipType,
   settings,
@@ -169,33 +171,41 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "text" && (
-        <TextModal
-          visible={true}
-          onClose={closeModal}
-          onAddText={handleAddText}
-          editingClip={
-            selectedClipType === "text" ||
+      {activeModal === "text" && (() => {
+        let editingTarget: any = null;
+        if (
+          selectedClip &&
+          (selectedClipType === "text" ||
             selectedClipType === "caption" ||
-            selectedClipType === "captions"
-              ? (selectedClip as any)
-              : null
-          }
-          onUpdateText={(clip) => {
-            if (
-              selectedClipType === "caption" ||
-              selectedClipType === "captions"
-            ) {
-              if (handleUpdateCaption) {
-                handleUpdateCaption(clip);
+            selectedClipType === "captions" ||
+            typeof (selectedClip as any).text === "string")
+        ) {
+          editingTarget = selectedClip;
+        } else if (selectedClipId && project) {
+          editingTarget =
+            project.tracks?.text?.find((c) => c.id === selectedClipId) ||
+            project.tracks?.captions?.find((c) => c.id === selectedClipId) ||
+            null;
+        }
+
+        return (
+          <TextModal
+            visible={true}
+            onClose={closeModal}
+            onAddText={handleAddText}
+            editingClip={editingTarget}
+            onUpdateText={(clip) => {
+              if (handleUpdateText) {
+                handleUpdateText(clip);
               }
-            } else if (handleUpdateText) {
-              handleUpdateText(clip);
-            }
-          }}
-          currentPlayheadTime={currentTime}
-        />
-      )}
+              if (handleUpdateCaption) {
+                handleUpdateCaption(clip as any);
+              }
+            }}
+            currentPlayheadTime={currentTime}
+          />
+        );
+      })()}
 
       {activeModal === "audio" && (
         <AudioModal
@@ -346,6 +356,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         <AIEnhanceModal
           visible={true}
           onClose={closeModal}
+          initialValues={(selectedClip as any)?.enhance}
           onApplyEnhance={handleApplyEnhance}
         />
       )}

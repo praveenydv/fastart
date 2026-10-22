@@ -3,14 +3,14 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#141721",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: "82%",
+    backgroundColor: "#121620",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: "54%",
     borderTopWidth: 1,
     borderColor: "#252B3B",
   },
@@ -213,6 +213,7 @@ export const styles = StyleSheet.create({
   },
   previewText: {
     fontWeight: "800",
+    fontSize: 20,
     textAlign: "center",
   },
   animBadge: {

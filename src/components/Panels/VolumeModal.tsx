@@ -33,14 +33,11 @@ export default function VolumeModal({
   currentFadeIn = 0,
   currentFadeOut = 0,
   currentDenoise = false,
-  isFromVideo = false,
   onApplyVolume,
-  onExtractAudio,
 }: VolumeModalProps) {
   const [volume, setVolume] = useState(currentVolume);
   const [fadeIn, setFadeIn] = useState(currentFadeIn);
   const [fadeOut, setFadeOut] = useState(currentFadeOut);
-  const [denoise, setDenoise] = useState(currentDenoise);
 
   // Sync when opened
   React.useEffect(() => {
@@ -48,9 +45,8 @@ export default function VolumeModal({
       setVolume(currentVolume);
       setFadeIn(currentFadeIn);
       setFadeOut(currentFadeOut);
-      setDenoise(currentDenoise);
     }
-  }, [visible, currentVolume, currentFadeIn, currentFadeOut, currentDenoise]);
+  }, [visible, currentVolume, currentFadeIn, currentFadeOut]);
 
   const volumePresets = [
     { label: 'Mute', val: 0.0, icon: 'volume-mute' },
@@ -60,9 +56,34 @@ export default function VolumeModal({
     { label: '200%', val: 2.0, icon: 'megaphone' },
   ];
 
-  const handleApply = () => {
+  const handleVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(2.0, parseFloat(newVol.toFixed(2))));
+    setVolume(clamped);
+    onApplyVolume(clamped, fadeIn, fadeOut, currentDenoise);
+  };
+
+  const handleFadeInChange = (newFade: number) => {
+    const clamped = Math.max(0, Math.min(5.0, parseFloat(newFade.toFixed(1))));
+    setFadeIn(clamped);
+    onApplyVolume(volume, clamped, fadeOut, currentDenoise);
+  };
+
+  const handleFadeOutChange = (newFade: number) => {
+    const clamped = Math.max(0, Math.min(5.0, parseFloat(newFade.toFixed(1))));
+    setFadeOut(clamped);
+    onApplyVolume(volume, fadeIn, clamped, currentDenoise);
+  };
+
+  const handleReset = () => {
     soundEngine.playSfx('click');
-    onApplyVolume(volume, fadeIn, fadeOut, denoise);
+    setVolume(1.0);
+    setFadeIn(0);
+    setFadeOut(0);
+    onApplyVolume(1.0, 0, 0, currentDenoise);
+  };
+
+  const handleDone = () => {
+    soundEngine.playSfx('click');
     onClose();
   };
 
@@ -70,35 +91,57 @@ export default function VolumeModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
+          {/* Top Handle */}
+          <View style={styles.sheetHandle} />
+
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <Ionicons name="volume-high" size={20} color="#00F2FE" />
-              <Text style={styles.headerTitle}>{"Volume & Fade"}</Text>
+              <View style={styles.titleIconBox}>
+                <Ionicons name="volume-high" size={17} color="#00F2FE" />
+              </View>
+              <Text style={styles.headerTitle}>Volume & Fade</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#8E95A5" />
-            </TouchableOpacity>
+
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                onPress={handleReset}
+                style={styles.resetBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh" size={14} color="#8E95A5" />
+                <Text style={styles.resetBtnText}>Reset</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleDone}
+                style={styles.doneBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="checkmark" size={16} color="#000000" />
+                <Text style={styles.doneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <ScrollView style={styles.contentScroll}>
+          <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
             {/* Main Volume Level */}
-            <View style={styles.section}>
+            <View style={styles.compactSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Volume</Text>
+                <Text style={styles.sectionTitle}>Volume Level</Text>
                 <Text style={styles.valueBadge}>{Math.round(volume * 100)}%</Text>
               </View>
 
               {/* Slider for Web / Mobile */}
               {Platform.OS === 'web' ? (
-                <WebDiv style={{ margin: '14px 0 10px' }}>
+                <WebDiv style={{ margin: '10px 0 8px' }}>
                   <WebInput
                     type="range"
                     min="0"
                     max="2"
                     step="0.05"
                     value={volume}
-                    onChange={(e: any) => setVolume(parseFloat(e.target.value))}
+                    onChange={(e: any) => handleVolumeChange(parseFloat(e.target.value))}
                     style={{
                       width: '100%',
                       accentColor: '#00F2FE',
@@ -112,16 +155,16 @@ export default function VolumeModal({
                 <View style={styles.stepperRow}>
                   <TouchableOpacity
                     style={styles.stepBtn}
-                    onPress={() => setVolume((v) => Math.max(0, parseFloat((v - 0.1).toFixed(2))))}
+                    onPress={() => handleVolumeChange(volume - 0.1)}
                   >
-                    <Ionicons name="remove" size={18} color="#FFFFFF" />
+                    <Ionicons name="remove" size={16} color="#FFFFFF" />
                   </TouchableOpacity>
                   <Text style={styles.stepperVal}>{Math.round(volume * 100)}%</Text>
                   <TouchableOpacity
                     style={styles.stepBtn}
-                    onPress={() => setVolume((v) => Math.min(2.0, parseFloat((v + 0.1).toFixed(2))))}
+                    onPress={() => handleVolumeChange(volume + 0.1)}
                   >
-                    <Ionicons name="add" size={18} color="#FFFFFF" />
+                    <Ionicons name="add" size={16} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
               )}
@@ -136,12 +179,12 @@ export default function VolumeModal({
                       style={[styles.presetCard, isSelected && styles.presetCardActive]}
                       onPress={() => {
                         soundEngine.playSfx('pop');
-                        setVolume(p.val);
+                        handleVolumeChange(p.val);
                       }}
                     >
                       <Ionicons
                         name={p.icon as any}
-                        size={16}
+                        size={14}
                         color={isSelected ? '#000000' : '#8E95A5'}
                       />
                       <Text
@@ -159,25 +202,25 @@ export default function VolumeModal({
             </View>
 
             {/* Fade In & Fade Out Controls */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Fade In / Out</Text>
+            <View style={styles.compactSection}>
+              <Text style={styles.sectionTitle}>Fades</Text>
 
               {/* Fade In */}
               <View style={styles.fadeRow}>
                 <View style={styles.fadeLabelBox}>
-                  <Ionicons name="trending-up" size={16} color="#10B981" />
+                  <Ionicons name="trending-up" size={15} color="#10B981" />
                   <Text style={styles.fadeLabel}>Fade In</Text>
                 </View>
                 <Text style={styles.fadeValText}>{fadeIn.toFixed(1)}s</Text>
                 {Platform.OS === 'web' ? (
-                  <WebDiv style={{ flex: 1, margin: '0 12px' }}>
+                  <WebDiv style={{ flex: 1, margin: '0 10px' }}>
                     <WebInput
                       type="range"
                       min="0"
                       max="5"
                       step="0.2"
                       value={fadeIn}
-                      onChange={(e: any) => setFadeIn(parseFloat(e.target.value))}
+                      onChange={(e: any) => handleFadeInChange(parseFloat(e.target.value))}
                       style={{
                         width: '100%',
                         accentColor: '#10B981',
@@ -188,18 +231,18 @@ export default function VolumeModal({
                     />
                   </WebDiv>
                 ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={styles.fadeStepperRow}>
                     <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setFadeIn((f) => Math.max(0, parseFloat((f - 0.2).toFixed(1))))}
+                      style={styles.stepBtnSmall}
+                      onPress={() => handleFadeInChange(fadeIn - 0.2)}
                     >
-                      <Ionicons name="remove" size={14} color="#FFFFFF" />
+                      <Ionicons name="remove" size={13} color="#FFFFFF" />
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setFadeIn((f) => Math.min(5, parseFloat((f + 0.2).toFixed(1))))}
+                      style={styles.stepBtnSmall}
+                      onPress={() => handleFadeInChange(fadeIn + 0.2)}
                     >
-                      <Ionicons name="add" size={14} color="#FFFFFF" />
+                      <Ionicons name="add" size={13} color="#FFFFFF" />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -208,19 +251,19 @@ export default function VolumeModal({
               {/* Fade Out */}
               <View style={styles.fadeRow}>
                 <View style={styles.fadeLabelBox}>
-                  <Ionicons name="trending-down" size={16} color="#F59E0B" />
+                  <Ionicons name="trending-down" size={15} color="#F59E0B" />
                   <Text style={styles.fadeLabel}>Fade Out</Text>
                 </View>
                 <Text style={styles.fadeValText}>{fadeOut.toFixed(1)}s</Text>
                 {Platform.OS === 'web' ? (
-                  <WebDiv style={{ flex: 1, margin: '0 12px' }}>
+                  <WebDiv style={{ flex: 1, margin: '0 10px' }}>
                     <WebInput
                       type="range"
                       min="0"
                       max="5"
                       step="0.2"
                       value={fadeOut}
-                      onChange={(e: any) => setFadeOut(parseFloat(e.target.value))}
+                      onChange={(e: any) => handleFadeOutChange(parseFloat(e.target.value))}
                       style={{
                         width: '100%',
                         accentColor: '#F59E0B',
@@ -231,103 +274,24 @@ export default function VolumeModal({
                     />
                   </WebDiv>
                 ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={styles.fadeStepperRow}>
                     <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setFadeOut((f) => Math.max(0, parseFloat((f - 0.2).toFixed(1))))}
+                      style={styles.stepBtnSmall}
+                      onPress={() => handleFadeOutChange(fadeOut - 0.2)}
                     >
-                      <Ionicons name="remove" size={14} color="#FFFFFF" />
+                      <Ionicons name="remove" size={13} color="#FFFFFF" />
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.stepBtn}
-                      onPress={() => setFadeOut((f) => Math.min(5, parseFloat((f + 0.2).toFixed(1))))}
+                      style={styles.stepBtnSmall}
+                      onPress={() => handleFadeOutChange(fadeOut + 0.2)}
                     >
-                      <Ionicons name="add" size={14} color="#FFFFFF" />
+                      <Ionicons name="add" size={13} color="#FFFFFF" />
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
             </View>
-
-            {/* AI Audio Denoise & Video Audio Tools */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Audio Enhancement</Text>
-
-              {/* AI Denoise Toggle */}
-              <TouchableOpacity
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: '#181C28',
-                  padding: 14,
-                  borderRadius: 12,
-                  marginBottom: 10,
-                  borderWidth: 1,
-                  borderColor: denoise ? '#00F2FE' : '#22293A',
-                }}
-                onPress={() => {
-                  soundEngine.playSfx('click');
-                  const nextDenoise = !denoise;
-                  setDenoise(nextDenoise);
-                  onApplyVolume(volume, fadeIn, fadeOut, nextDenoise);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Ionicons name="volume-mute-outline" size={16} color={denoise ? '#00F2FE' : '#FFFFFF'} />
-                    <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>AI Noise Reduction</Text>
-                  </View>
-                  <Text style={{ color: '#8E95A5', fontSize: 11, marginTop: 4 }}>
-                    Attenuate microphone hiss, wind, and room echo using intelligent spectral gating
-                  </Text>
-                </View>
-                <Ionicons
-                  name={denoise ? 'checkbox' : 'square-outline'}
-                  size={22}
-                  color={denoise ? '#00F2FE' : '#8E95A5'}
-                />
-              </TouchableOpacity>
-
-              {/* Extract Audio from Video Button */}
-              {isFromVideo && onExtractAudio && (
-                <TouchableOpacity
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: 'rgba(0, 242, 254, 0.4)',
-                    marginTop: 6,
-                  }}
-                  onPress={() => {
-                    soundEngine.playSfx('pop');
-                    onExtractAudio();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="cut-outline" size={16} color="#00F2FE" />
-                  <Text style={{ color: '#00F2FE', fontSize: 13, fontWeight: '800' }}>
-                    Extract Audio to Separate Track
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
           </ScrollView>
-
-          {/* Apply Footer */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.applyBtn} onPress={handleApply}>
-              <Ionicons name="checkmark" size={18} color="#000000" />
-              <Text style={styles.applyBtnText}>Apply</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Modal>
@@ -337,160 +301,207 @@ export default function VolumeModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#121620',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 24,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '48%',
+    paddingBottom: 20,
     borderWidth: 1,
     borderColor: '#1E2333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A2030',
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  titleIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
-  closeBtn: {
-    padding: 4,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  resetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#1A2030',
+  },
+  resetBtnText: {
+    color: '#8E95A5',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  doneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#00F2FE',
+  },
+  doneBtnText: {
+    color: '#000000',
+    fontSize: 12,
+    fontWeight: '700',
   },
   contentScroll: {
-    padding: 16,
+    paddingHorizontal: 14,
+    paddingTop: 10,
   },
-  section: {
+  compactSection: {
     backgroundColor: '#161B26',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#252B3D',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 4,
   },
   sectionTitle: {
-    color: '#8E95A5',
-    fontSize: 12,
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
   },
   valueBadge: {
-    backgroundColor: '#00F2FE20',
     color: '#00F2FE',
-    fontSize: 14,
-    fontWeight: '800',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
-    marginVertical: 12,
-  },
-  stepBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#202637',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginVertical: 6,
   },
   stepperVal: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    minWidth: 60,
+    minWidth: 50,
     textAlign: 'center',
+  },
+  stepBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#22293A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnSmall: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#22293A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   presetsGrid: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 8,
   },
   presetCard: {
     flex: 1,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1F2536',
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 4,
+    gap: 3,
+    backgroundColor: '#1C2232',
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#242C3E',
   },
   presetCardActive: {
     backgroundColor: '#00F2FE',
+    borderColor: '#00F2FE',
   },
   presetCardText: {
     color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '600',
   },
   presetCardTextActive: {
     color: '#000000',
-    fontWeight: '800',
+    fontWeight: '700',
   },
   fadeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
+    marginTop: 8,
   },
   fadeLabelBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    width: 90,
+    width: 80,
   },
   fadeLabel: {
-    color: '#FFFFFF',
-    fontSize: 13,
+    color: '#CBD5E1',
+    fontSize: 12,
     fontWeight: '600',
   },
   fadeValText: {
-    color: '#8E95A5',
-    fontSize: 12,
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: '700',
-    width: 40,
+    minWidth: 34,
     textAlign: 'right',
   },
-  footer: {
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  applyBtn: {
-    backgroundColor: '#00F2FE',
+  fadeStepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  applyBtnText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
+    gap: 6,
   },
 });

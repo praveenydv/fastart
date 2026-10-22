@@ -135,6 +135,12 @@ export default function FiltersModal({
     onSelectFilter(lut.id, lut);
   };
 
+  const handleResetToNormal = () => {
+    soundEngine.playSfx('click');
+    setSelectedLutId('normal');
+    onSelectFilter('normal');
+  };
+
   const filteredPresets = FILTER_PRESETS.filter((item) => {
     if (activeCategory === 'All') return true;
     if (activeCategory === '3D_LUTs') return false;
@@ -142,6 +148,7 @@ export default function FiltersModal({
   });
 
   const showCustomLuts = activeCategory === 'All' || activeCategory === '3D_LUTs';
+  const isNormal = !selectedLutId || selectedLutId === 'normal';
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -150,32 +157,45 @@ export default function FiltersModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Compact Space-Optimized Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>{"Filters & LUTs"}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Import .cube LUT CTA & Category Filter Pills */}
-          <View style={styles.topActionRow}>
             <TouchableOpacity
-              style={styles.importBtn}
-              onPress={handleImportCubeFile}
-              activeOpacity={0.8}
+              onPress={handleResetToNormal}
+              style={[styles.resetBtn, isNormal && { opacity: 0.4 }]}
+              disabled={isNormal}
+              activeOpacity={0.7}
             >
-              <Ionicons name="cloud-upload-outline" size={16} color="#000000" />
-              <Text style={styles.importBtnText}>+ Import LUT (.cube)</Text>
+              <Text style={styles.resetText}>Original</Text>
+            </TouchableOpacity>
+
+            <View style={styles.headerTitleRow}>
+              <Ionicons name="color-filter-outline" size={16} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>Filters & LUTs</Text>
+            </View>
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
+          {/* Top Bar: Category Pills + Import LUT button */}
           <View style={styles.categoryRow}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoryScroll}
             >
+              {Platform.OS === 'web' && (
+                <TouchableOpacity
+                  style={styles.importBtn}
+                  onPress={handleImportCubeFile}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="cloud-upload-outline" size={13} color="#00F2FE" />
+                  <Text style={styles.importBtnText}>+ .cube</Text>
+                </TouchableOpacity>
+              )}
+
               {categories.map((cat) => {
                 const isActive = activeCategory === cat.id;
                 return (
@@ -186,6 +206,7 @@ export default function FiltersModal({
                       soundEngine.playSfx('click');
                       setActiveCategory(cat.id);
                     }}
+                    activeOpacity={0.7}
                   >
                     <Text
                       style={[
@@ -201,7 +222,12 @@ export default function FiltersModal({
             </ScrollView>
           </View>
 
-          <ScrollView style={styles.sheetBody}>
+          {/* Filters Grid */}
+          <ScrollView
+            style={styles.sheetBody}
+            contentContainerStyle={styles.gridContainer}
+            showsVerticalScrollIndicator={false}
+          >
             {/* 3D LUTs Section */}
             {showCustomLuts && (
               <View style={styles.sectionBlock}>
@@ -220,12 +246,12 @@ export default function FiltersModal({
                         <View style={[styles.colorPreview, { backgroundColor: sampleColor }]}>
                           <Ionicons
                             name="cube-outline"
-                            size={22}
+                            size={18}
                             color={sampleColor === '#FFFFFF' ? '#000' : '#FFF'}
                           />
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={14} color="#000000" />
+                              <Ionicons name="checkmark" size={12} color="#000000" />
                             </View>
                           )}
                         </View>
@@ -248,11 +274,13 @@ export default function FiltersModal({
             {/* Standard Presets Section */}
             {activeCategory !== '3D_LUTs' && (
               <View style={styles.sectionBlock}>
-                <Text style={styles.sectionHeader}>CANVAS COLOR PRESETS</Text>
+                <Text style={styles.sectionHeader}>COLOR PRESETS</Text>
                 <View style={styles.grid}>
                   {filteredPresets.map((item) => {
                     const isSelected = selectedLutId === item.id;
                     const sampleColor = filterColorMap[item.id] || '#00F2FE';
+                    const isItemNormal = item.id === 'normal';
+
                     return (
                       <TouchableOpacity
                         key={item.id}
@@ -260,15 +288,21 @@ export default function FiltersModal({
                         onPress={() => handleSelectStandardPreset(item.id)}
                         activeOpacity={0.7}
                       >
-                        <View style={[styles.colorPreview, { backgroundColor: sampleColor }]}>
+                        <View
+                          style={[
+                            styles.colorPreview,
+                            { backgroundColor: sampleColor },
+                            isItemNormal && { borderWidth: 1, borderColor: '#333D52' },
+                          ]}
+                        >
                           <Ionicons
-                            name="color-filter-outline"
-                            size={20}
+                            name={isItemNormal ? 'contrast-outline' : 'color-filter-outline'}
+                            size={18}
                             color={sampleColor === '#FFFFFF' ? '#000' : '#FFF'}
                           />
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={14} color="#000000" />
+                              <Ionicons name="checkmark" size={12} color="#000000" />
                             </View>
                           )}
                         </View>
@@ -297,88 +331,101 @@ export default function FiltersModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#141721',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '80%',
+    backgroundColor: '#121620',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '52%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
     borderTopWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2333',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1F2C',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  sheetSubtitle: {
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1A1F2C',
+  },
+  resetText: {
     color: '#8E95A5',
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1E2333',
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topActionRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+  categoryRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#161B26',
+  },
+  categoryScroll: {
+    gap: 6,
+    alignItems: 'center',
   },
   importBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#00F2FE',
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#162232',
+    borderWidth: 1,
+    borderColor: '#00F2FE44',
   },
   importBtnText: {
-    fontSize: 12,
+    color: '#00F2FE',
+    fontSize: 11,
     fontWeight: '700',
-    color: '#000000',
-  },
-  categoryRow: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
-    paddingBottom: 10,
-  },
-  categoryScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
   },
   categoryPill: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#1E2333',
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#161B26',
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.2)',
-    borderWidth: 1,
+    backgroundColor: '#00F2FE',
     borderColor: '#00F2FE',
   },
   categoryPillText: {
@@ -387,42 +434,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   categoryPillTextActive: {
-    color: '#00F2FE',
+    color: '#000000',
     fontWeight: '700',
   },
   sheetBody: {
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  gridContainer: {
+    paddingBottom: 20,
   },
   sectionBlock: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   sectionHeader: {
-    color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 10,
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: 'space-between',
+    gap: 8,
   },
   card: {
     width: '31%',
-    backgroundColor: '#10131A',
+    backgroundColor: '#161B26',
     borderRadius: 10,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: '#1E2333',
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   cardActive: {
     borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    backgroundColor: '#1A2338',
   },
   colorPreview: {
-    height: 52,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -432,28 +482,26 @@ const styles = StyleSheet.create({
     top: 4,
     right: 4,
     backgroundColor: '#00F2FE',
-    borderRadius: 8,
     width: 18,
     height: 18,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
   metaBox: {
     padding: 6,
-    alignItems: 'center',
   },
   filterName: {
-    color: '#CBD5E1',
+    color: '#8E95A5',
     fontSize: 11,
     fontWeight: '600',
-    textAlign: 'center',
   },
   filterNameActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   categoryTag: {
-    color: '#666',
+    color: '#64748B',
     fontSize: 9,
     marginTop: 2,
   },

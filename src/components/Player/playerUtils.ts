@@ -25,31 +25,53 @@ export function getItemBaseDimensions(
 ): { baseW: number; baseH: number } {
   if (type === "text" || type === "caption") {
     const fontSize = clip.style?.fontSize || 22;
-    const str = clip.text || "";
-    let textWidth = 0;
-    if (Platform.OS === "web" && typeof document !== "undefined") {
-      try {
-        const font = `${clip.style?.fontWeight || "bold"} ${fontSize}px ${clip.style?.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto'}`;
-        const canvas =
-          (document as any)._measureCanvas ||
-          ((document as any)._measureCanvas = document.createElement("canvas"));
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.font = font;
-          textWidth = ctx.measureText(str).width;
-        }
-      } catch {}
-    }
-    if (!textWidth) {
-      textWidth = Math.round(str.length * (fontSize * 0.58));
-    }
+    const str = (clip.text || "").trim();
     const padX = clip.style?.paddingHorizontal || 14;
     const padY = clip.style?.paddingVertical || 8;
+    const maxAvailableW = Math.max(120, boxWidth * 0.88);
+
+    // Measure text width using 2D canvas context on web, or char heuristic
+    let measureLineWidth = (line: string): number => {
+      if (Platform.OS === "web" && typeof document !== "undefined") {
+        try {
+          const font = `${clip.style?.fontWeight || "bold"} ${fontSize}px ${clip.style?.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto'}`;
+          const canvas =
+            (document as any)._measureCanvas ||
+            ((document as any)._measureCanvas = document.createElement("canvas"));
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.font = font;
+            return ctx.measureText(line).width;
+          }
+        } catch {}
+      }
+      return Math.round(line.length * (fontSize * 0.58));
+    };
+
+    const rawLines = str.split("\n");
+    let wrappedLinesCount = 0;
+    let maxMeasuredLineW = 0;
+
+    for (const rawLine of rawLines) {
+      const lineW = measureLineWidth(rawLine);
+      if (lineW > maxAvailableW - padX * 2) {
+        // Line wraps into multiple lines
+        const subLines = Math.max(1, Math.ceil(lineW / (maxAvailableW - padX * 2)));
+        wrappedLinesCount += subLines;
+        maxMeasuredLineW = Math.max(maxMeasuredLineW, maxAvailableW - padX * 2);
+      } else {
+        wrappedLinesCount += 1;
+        maxMeasuredLineW = Math.max(maxMeasuredLineW, lineW);
+      }
+    }
+
+    const totalLines = Math.max(1, wrappedLinesCount);
     const baseW = Math.max(
-      50,
-      Math.min(boxWidth * 0.95, Math.round(textWidth + padX * 2)),
+      60,
+      Math.min(maxAvailableW, Math.round(maxMeasuredLineW + padX * 2)),
     );
-    const baseH = Math.max(30, Math.round(fontSize * 1.25 + padY * 2));
+    const lineHeight = fontSize * 1.35;
+    const baseH = Math.max(32, Math.round(totalLines * lineHeight + padY * 2));
     return { baseW, baseH };
   }
   if (type === "sticker") {

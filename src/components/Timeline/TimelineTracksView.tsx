@@ -12,6 +12,8 @@ import { soundEngine } from "../../utils/audioEngine";
 import { UnifiedClipItem, TRACK_ROW_HEIGHT } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
 import { TimelinePlayhead } from "./TimelinePlayhead";
+import { TimelineClipWaveform } from "./TimelineClipWaveform";
+import { clipHasAudio } from "../../utils/mediaAudioDetector";
 
 interface TimelineTracksViewProps {
   trackRows: UnifiedClipItem[][];
@@ -393,6 +395,13 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                         </View>
                       )}
 
+                      {/* Audio Waveform visualization (renders in audio clips & video clips with audio) */}
+                      <TimelineClipWaveform
+                        clip={clip}
+                        width={width}
+                        isSelected={isSelected || isBeingDragged}
+                      />
+
                       {/* Inner Content by Clip Type */}
                       <View
                         style={[
@@ -428,9 +437,32 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                             justifyContent: "center",
                           }}
                         >
-                          <Text style={styles.clipTitleText} numberOfLines={1}>
-                            {clip.title}
-                          </Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text style={styles.clipTitleText} numberOfLines={1}>
+                              {clip.title}
+                            </Text>
+                            {clip.type === "video" && clipHasAudio(clip) && (
+                              <Ionicons
+                                name="volume-medium-outline"
+                                size={10}
+                                color="#00F2FE"
+                                style={{ marginLeft: 3 }}
+                              />
+                            )}
+                            {clip.type === "video" && clip.rawClip?.volume === 0 && (
+                              <Ionicons
+                                name="volume-mute-outline"
+                                size={10}
+                                color="#64748B"
+                                style={{ marginLeft: 3 }}
+                              />
+                            )}
+                          </View>
                           <Text
                             style={styles.clipDurationSubtext}
                             numberOfLines={1}
@@ -441,27 +473,6 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                               : ""}
                           </Text>
                         </View>
-
-                        {/* Audio Waveform visualization */}
-                        {clip.type === "audio" && (
-                          <View style={styles.miniWaveformRow}>
-                            {Array.from({
-                              length: Math.min(24, Math.floor(width / 6)),
-                            }).map((_, wIdx) => (
-                              <View
-                                key={wIdx}
-                                style={[
-                                  styles.waveBar,
-                                  {
-                                    height:
-                                      4 +
-                                      Math.abs(Math.sin((wIdx + 1) * 0.8) * 12),
-                                  },
-                                ]}
-                              />
-                            ))}
-                          </View>
-                        )}
 
                         {/* LUT filter indicator */}
                         {clip.type === "video" &&

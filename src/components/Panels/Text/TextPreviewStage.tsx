@@ -12,9 +12,9 @@ interface TextPreviewStageProps {
   selectedColor: string;
   selectedStrokeColor?: string;
   selectedBg: string;
-  selectedScale: number;
-  selectedRotation: number;
-  selectedFontSize: number;
+  selectedScale?: number;
+  selectedRotation?: number;
+  selectedFontSize?: number;
   selectedFont: string;
 }
 
@@ -27,9 +27,6 @@ export default function TextPreviewStage({
   selectedColor,
   selectedStrokeColor,
   selectedBg,
-  selectedScale,
-  selectedRotation,
-  selectedFontSize,
   selectedFont,
 }: TextPreviewStageProps) {
   let previewTextValue = inputText || "Your Text Here";
@@ -234,9 +231,9 @@ export default function TextPreviewStage({
             borderColor: selectedBorderColor || "transparent",
             borderWidth: selectedBorderColor ? 2 : 0,
             opacity: animOpacity,
+            // Default transformation: no rotation, default scale (1.0 * animScale), default alignment
             transform: [
-              { scale: selectedScale * animScale },
-              { rotate: `${selectedRotation}deg` },
+              { scale: animScale },
               { translateX: animTranslateX },
               { translateY: animTranslateY },
             ],
@@ -248,7 +245,8 @@ export default function TextPreviewStage({
             styles.previewText,
             {
               color: selectedColor,
-              fontSize: selectedFontSize,
+              // Default text size in preview for clean, readable text add/edit
+              fontSize: 20,
               fontFamily: selectedFont,
               textShadowColor: effectShadowColor,
               textShadowRadius: effectShadowRadius,

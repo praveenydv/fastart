@@ -6,6 +6,7 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { EFFECT_PRESETS } from '../../constants/sampleMedia';
@@ -31,12 +32,12 @@ export default function EffectsModal({
 }: EffectsModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [intensity, setIntensity] = useState<number>(0.8);
-  const [selectedEffectId, setSelectedEffectId] = useState<string>(activeEffect || 'glitch');
+  const [selectedEffectId, setSelectedEffectId] = useState<string>(activeEffect || 'none');
 
   useEffect(() => {
     if (visible) {
       if (editingClip) {
-        const effType = editingClip.type || 'glitch';
+        const effType = editingClip.type || 'none';
         setSelectedEffectId(effType);
         setIntensity(editingClip.intensity !== undefined ? editingClip.intensity : 0.8);
         const preset = EFFECT_PRESETS.find((p) => p.type === effType || p.id === effType);
@@ -44,7 +45,7 @@ export default function EffectsModal({
           setActiveCategory(preset.category);
         }
       } else {
-        setSelectedEffectId(activeEffect || 'glitch');
+        setSelectedEffectId(activeEffect || 'none');
         setIntensity(0.8);
       }
     }
@@ -55,6 +56,7 @@ export default function EffectsModal({
     { id: 'Glitch', label: 'Glitch' },
     { id: 'Retro', label: 'Retro' },
     { id: 'Motion', label: 'Motion' },
+    { id: 'Light', label: 'Light' },
   ];
 
   const filteredEffects = EFFECT_PRESETS.filter((item) => {
@@ -64,35 +66,57 @@ export default function EffectsModal({
 
   const handleSelect = (item: any) => {
     soundEngine.playSfx('pop');
-    setSelectedEffectId(item.type || item.id);
+    const effId = item.type || item.id;
+    setSelectedEffectId(effId);
+
     if (editingClip && onUpdateEffect) {
       const updated: EffectClip = {
         ...editingClip,
-        type: item.type || item.id,
+        type: effId,
         name: item.name,
         intensity: item.id === 'none' ? 0 : intensity,
       };
       onUpdateEffect(updated);
-      onClose();
       return;
     }
+
     onAddEffect({
       ...item,
       intensity: item.id === 'none' ? 0 : intensity,
     });
-    onClose();
+  };
+
+  const handleClear = () => {
+    soundEngine.playSfx('click');
+    setSelectedEffectId('none');
+    const noneItem = EFFECT_PRESETS.find((p) => p.id === 'none') || { id: 'none', type: 'none', name: 'None' };
+    handleSelect(noneItem);
   };
 
   const handleIntensityChange = (val: number) => {
     soundEngine.playSfx('click');
     setIntensity(val);
+    if (selectedEffectId === 'none') return;
+
     if (editingClip && onUpdateEffect) {
       onUpdateEffect({
         ...editingClip,
         intensity: val,
       });
+    } else {
+      const currentPreset = EFFECT_PRESETS.find(
+        (p) => p.id === selectedEffectId || p.type === selectedEffectId
+      );
+      if (currentPreset) {
+        onAddEffect({
+          ...currentPreset,
+          intensity: val,
+        });
+      }
     }
   };
+
+  const isNone = !selectedEffectId || selectedEffectId === 'none';
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -101,38 +125,37 @@ export default function EffectsModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Compact Space-Optimized Header */}
           <View style={styles.sheetHeader}>
-            <View>
+            <TouchableOpacity
+              onPress={handleClear}
+              style={[styles.resetBtn, isNone && { opacity: 0.4 }]}
+              disabled={isNone}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>None</Text>
+            </TouchableOpacity>
+
+            <View style={styles.headerTitleRow}>
+              <Ionicons name="sparkles" size={16} color="#D946EF" />
               <Text style={styles.sheetTitle}>
-                {editingClip ? 'Edit Effect' : 'Effects'}
+                {editingClip ? 'Edit Effect' : 'Video Effects'}
               </Text>
-              {editingClip && (
-                <Text style={styles.sheetSubtitle}>
-                  {editingClip.name || editingClip.type} • {(editingClip.duration || 0).toFixed(1)}s
-                </Text>
-              )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {editingClip && (
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.doneBtn}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={15} color="#10B981" />
-                  <Text style={styles.doneBtnText}>Done</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
           </View>
 
-          {/* Category Filter Pills */}
-          <View style={styles.categoryRow}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+          {/* Category Tabs & Intensity Row */}
+          <View style={styles.controlsBar}>
+            {/* Category Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+            >
               {categories.map((cat) => {
                 const isActive = activeCategory === cat.id;
                 return (
@@ -143,65 +166,102 @@ export default function EffectsModal({
                       soundEngine.playSfx('click');
                       setActiveCategory(cat.id);
                     }}
+                    activeOpacity={0.7}
                   >
-                    <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        isActive && styles.categoryPillTextActive,
+                      ]}
+                    >
                       {cat.label}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
+
+            {/* Intensity Level Quick Controls */}
+            {!isNone && (
+              <View style={styles.intensityGroup}>
+                {[
+                  { label: 'Mild', val: 0.4 },
+                  { label: 'Normal', val: 0.75 },
+                  { label: 'Strong', val: 1.0 },
+                ].map((opt) => {
+                  const isSelected = Math.abs(intensity - opt.val) < 0.15;
+                  return (
+                    <TouchableOpacity
+                      key={opt.label}
+                      style={[
+                        styles.intensityPill,
+                        isSelected && styles.intensityPillActive,
+                      ]}
+                      onPress={() => handleIntensityChange(opt.val)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.intensityText,
+                          isSelected && styles.intensityTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
-          {/* Intensity Selector */}
-          <View style={styles.intensityRow}>
-            <Text style={styles.intensityLabel}>Intensity:</Text>
-            <View style={styles.intensityBtns}>
-              {[
-                { label: 'Mild', val: 0.4 },
-                { label: 'Standard', val: 0.8 },
-                { label: 'Intense', val: 1.0 },
-              ].map((opt) => {
-                const isSelected = Math.abs(intensity - opt.val) < 0.05;
-                return (
-                  <TouchableOpacity
-                    key={opt.label}
-                    style={[styles.intensityPill, isSelected && styles.intensityPillActive]}
-                    onPress={() => handleIntensityChange(opt.val)}
-                  >
-                    <Text style={[styles.intensityText, isSelected && styles.intensityTextActive]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <ScrollView style={styles.sheetBody}>
+          {/* Effects Grid Scroll */}
+          <ScrollView
+            style={styles.sheetBody}
+            contentContainerStyle={styles.gridContainer}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.grid}>
               {filteredEffects.map((item) => {
-                const isCurrentActive =
-                  selectedEffectId === item.id ||
-                  selectedEffectId === item.type ||
-                  activeEffect === item.id ||
-                  activeEffect === item.type;
+                const isItemNone = item.id === 'none';
+                const isCurrentActive = isItemNone
+                  ? isNone
+                  : selectedEffectId === item.id || selectedEffectId === item.type;
+
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.effectCard, isCurrentActive && styles.effectCardActive]}
+                    style={[
+                      styles.effectCard,
+                      isCurrentActive && styles.effectCardActive,
+                    ]}
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.8}
                   >
-                    <View style={[styles.iconBox, isCurrentActive && styles.iconBoxActive]}>
+                    <View
+                      style={[
+                        styles.iconBox,
+                        isCurrentActive && styles.iconBoxActive,
+                        isItemNone && styles.iconBoxNone,
+                      ]}
+                    >
                       <Ionicons
                         name={(item.icon || 'sparkles-outline') as any}
-                        size={24}
-                        color={isCurrentActive ? '#00F2FE' : '#D946EF'}
+                        size={22}
+                        color={
+                          isItemNone
+                            ? '#8E95A5'
+                            : isCurrentActive
+                            ? '#00F2FE'
+                            : '#D946EF'
+                        }
                       />
                     </View>
                     <Text
-                      style={[styles.effectLabel, isCurrentActive && styles.effectLabelActive]}
+                      style={[
+                        styles.effectLabel,
+                        isCurrentActive && styles.effectLabelActive,
+                      ]}
                       numberOfLines={1}
                     >
                       {item.name}
@@ -220,22 +280,23 @@ export default function EffectsModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#141721',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '80%',
+    backgroundColor: '#121620',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '48%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
     borderTopWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2333',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1.5,
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -244,150 +305,147 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A1F2C',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  sheetSubtitle: {
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1A1F2C',
+  },
+  resetText: {
     color: '#8E95A5',
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: '600',
   },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  doneBtnText: {
-    color: '#10B981',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  categoryRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  controlsBar: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1E29',
+    borderBottomColor: '#161B26',
   },
   categoryScroll: {
     gap: 6,
+    paddingVertical: 2,
   },
   categoryPill: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: '#10131A',
+    backgroundColor: '#161B26',
     borderWidth: 1,
-    borderColor: '#1E2333',
+    borderColor: '#1E2536',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(217, 70, 239, 0.15)',
-    borderColor: '#D946EF',
+    backgroundColor: '#00F2FE',
+    borderColor: '#00F2FE',
   },
   categoryPillText: {
     color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
   },
   categoryPillTextActive: {
-    color: '#D946EF',
+    color: '#000000',
+    fontWeight: '700',
   },
-  intensityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#0B0D13',
-  },
-  intensityLabel: {
-    color: '#8E95A5',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  intensityBtns: {
+  intensityGroup: {
     flexDirection: 'row',
     gap: 6,
+    alignItems: 'center',
   },
   intensityPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#1E2333',
+    backgroundColor: '#161B26',
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   intensityPillActive: {
-    backgroundColor: '#D946EF',
+    backgroundColor: '#262D3D',
+    borderColor: '#D946EF',
   },
   intensityText: {
     color: '#8E95A5',
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
   },
   intensityTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '900',
+    color: '#D946EF',
+    fontWeight: '700',
   },
   sheetBody: {
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  gridContainer: {
+    paddingBottom: 16,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   effectCard: {
-    width: '30.8%',
-    backgroundColor: '#10131A',
-    borderRadius: 12,
-    padding: 12,
+    width: '23%',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#1E2333',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    backgroundColor: '#161B26',
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   effectCardActive: {
     borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    backgroundColor: '#1A2234',
   },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(217, 70, 239, 0.12)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#1E2433',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   iconBoxActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.2)',
+    backgroundColor: '#00F2FE22',
+  },
+  iconBoxNone: {
+    backgroundColor: '#1E2433',
   },
   effectLabel: {
     color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '500',
     textAlign: 'center',
   },
   effectLabelActive: {
     color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

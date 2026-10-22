@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { FastArtProject } from "../../types/project";
 import { setCachedMediaDuration } from "../../utils/mediaDuration";
+import { setMediaHasAudio } from "../../utils/mediaAudioDetector";
 
 interface UsePlayerAudioSyncProps {
   project: FastArtProject;
@@ -120,6 +121,14 @@ export function usePlayerAudioSync({
           ) {
             setCachedMediaDuration(clip.url, el.duration);
             if (clip.sourceClipId) setCachedMediaDuration(clip.sourceClipId, el.duration);
+            setMediaHasAudio(clip.url, true);
+            if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, true);
+          }
+        });
+        el.addEventListener("error", () => {
+          if (clip.isFromVideo) {
+            setMediaHasAudio(clip.url, false);
+            if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, false);
           }
         });
         audioElementsRef.current[clip.id] = el;

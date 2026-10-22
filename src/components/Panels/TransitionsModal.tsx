@@ -6,50 +6,100 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TRANSITION_PRESETS } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
+
+interface TransitionsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  activeTransition?: { type: string; duration?: number };
+  onApplyTransition: (transition: { type: string; duration: number }) => void;
+}
 
 export default function TransitionsModal({
   visible,
   onClose,
   activeTransition,
   onApplyTransition,
-}) {
-  const [duration, setDuration] = useState(0.5);
+}: TransitionsModalProps) {
+  const [duration, setDuration] = useState(activeTransition?.duration || 0.5);
+  const [selectedType, setSelectedType] = useState<string>(activeTransition?.type || 'none');
 
   const durations = [0.3, 0.5, 0.8, 1.0];
 
-  const handleSelect = (item) => {
+  const handleSelect = (item: any) => {
     soundEngine.playSfx('whoosh');
+    setSelectedType(item.id);
     onApplyTransition({
       type: item.id,
       duration: item.duration > 0 ? duration : 0,
     });
-    onClose();
   };
 
+  const handleClear = () => {
+    soundEngine.playSfx('click');
+    setSelectedType('none');
+    onApplyTransition({
+      type: 'none',
+      duration: 0,
+    });
+  };
+
+  const allPresets = [
+    { id: 'none', name: 'None', duration: 0 },
+    ...TRANSITION_PRESETS,
+  ];
+
+  const isNone = !selectedType || selectedType === 'none';
+
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
+          {/* Sheet Handle */}
+          <View style={styles.sheetHandle} />
+
+          {/* Space-Optimized Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Transitions</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#FFFFFF" />
+            <TouchableOpacity
+              onPress={handleClear}
+              style={[styles.resetBtn, isNone && { opacity: 0.4 }]}
+              disabled={isNone}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>None</Text>
+            </TouchableOpacity>
+
+            <View style={styles.headerTitleRow}>
+              <Ionicons name="flash-outline" size={16} color="#00F2FE" />
+              <Text style={styles.sheetTitle}>Transitions</Text>
+            </View>
+
+            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+              <Ionicons name="checkmark" size={18} color="#000000" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.sheetBody}>
-            {/* Duration selector */}
-            <Text style={styles.sectionTitle}>Duration</Text>
+          {/* Duration Selector Bar */}
+          {!isNone && (
             <View style={styles.durationRow}>
+              <Text style={styles.durationLabel}>Duration:</Text>
               {durations.map((d) => (
                 <TouchableOpacity
                   key={d}
                   style={[styles.durationPill, duration === d && styles.durationPillActive]}
-                  onPress={() => setDuration(d)}
+                  onPress={() => {
+                    soundEngine.playSfx('click');
+                    setDuration(d);
+                    onApplyTransition({
+                      type: selectedType,
+                      duration: d,
+                    });
+                  }}
+                  activeOpacity={0.7}
                 >
                   <Text
                     style={[
@@ -62,11 +112,17 @@ export default function TransitionsModal({
                 </TouchableOpacity>
               ))}
             </View>
+          )}
 
-            <Text style={styles.sectionTitle}>Presets</Text>
+          {/* Transitions Grid */}
+          <ScrollView
+            style={styles.sheetBody}
+            contentContainerStyle={styles.gridContainer}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.grid}>
-              {TRANSITION_PRESETS.map((item) => {
-                const isActive = activeTransition?.type === item.id;
+              {allPresets.map((item) => {
+                const isActive = (selectedType === item.id) || (isNone && item.id === 'none');
                 return (
                   <TouchableOpacity
                     key={item.id}
@@ -74,10 +130,10 @@ export default function TransitionsModal({
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.8}
                   >
-                    <View style={styles.iconBox}>
+                    <View style={[styles.iconBox, isActive && styles.iconBoxActive]}>
                       <Ionicons
-                        name="flash-outline"
-                        size={22}
+                        name={item.id === 'none' ? 'close-circle-outline' : 'flash-outline'}
+                        size={20}
                         color={isActive ? '#00F2FE' : '#8E95A5'}
                       />
                     </View>
@@ -104,112 +160,146 @@ export default function TransitionsModal({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#141721',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '65%',
+    backgroundColor: '#121620',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '48%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
     borderTopWidth: 1,
-    borderColor: '#252B3B',
+    borderColor: '#1E2333',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2333',
+    borderBottomColor: '#1A1F2C',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#1E2333',
+  resetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1A1F2C',
+  },
+  resetText: {
+    color: '#8E95A5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  doneBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetBody: {
-    padding: 16,
-  },
-  sectionTitle: {
-    color: '#8E95A5',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 10,
-  },
   durationRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#161B26',
+  },
+  durationLabel: {
+    color: '#8E95A5',
+    fontSize: 12,
+    fontWeight: '600',
   },
   durationPill: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#10131A',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#161B26',
     borderWidth: 1,
-    borderColor: '#1E2333',
-    alignItems: 'center',
+    borderColor: '#1E2536',
   },
   durationPillActive: {
+    backgroundColor: '#00F2FE',
     borderColor: '#00F2FE',
-    backgroundColor: '#1E2333',
   },
   durationText: {
     color: '#8E95A5',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
   },
   durationTextActive: {
-    color: '#00F2FE',
+    color: '#000000',
+    fontWeight: '700',
+  },
+  sheetBody: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  gridContainer: {
+    paddingBottom: 20,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    gap: 8,
   },
   transitionCard: {
-    width: '48%',
-    backgroundColor: '#10131A',
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: 'row',
+    width: '31%',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#1E2333',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: '#161B26',
+    borderWidth: 1,
+    borderColor: '#1E2536',
   },
   transitionCardActive: {
     borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    backgroundColor: '#1A2234',
   },
   iconBox: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1E2333',
+    backgroundColor: '#1E2433',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginBottom: 4,
+  },
+  iconBoxActive: {
+    backgroundColor: '#00F2FE22',
   },
   transitionLabel: {
     color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   transitionLabelActive: {
     color: '#FFFFFF',
-    fontWeight: '800',
+    fontWeight: '700',
   },
 });

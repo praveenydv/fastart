@@ -35,7 +35,7 @@ export default function AutoCaptionModal({
   project,
   onAddCaptions,
 }: AutoCaptionModalProps) {
-  const [selectedLanguage, setSelectedLanguage] = useState("auto");
+  const [selectedLanguage, setSelectedLanguage] = useState("en-US");
   const [selectedPresetId, setSelectedPresetId] = useState("mrbeast");
   const [customScript, setCustomScript] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -43,6 +43,7 @@ export default function AutoCaptionModal({
   const [dictationSession, setDictationSession] = useState<{ stop: () => void } | null>(null);
   const [progressPct, setProgressPct] = useState(0);
   const [statusText, setStatusText] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible && isDictating && dictationSession) {
@@ -57,6 +58,7 @@ export default function AutoCaptionModal({
     CAPTION_STYLE_PRESETS[0];
 
   const handleToggleLiveDictation = () => {
+    setErrorMessage(null);
     if (isDictating && dictationSession) {
       dictationSession.stop();
       setDictationSession(null);
@@ -68,11 +70,14 @@ export default function AutoCaptionModal({
         selectedLanguage,
         (text) => {
           setCustomScript(text);
+          setErrorMessage(null);
         },
         (err) => {
           console.warn("Live speech dictation error:", err);
           setIsDictating(false);
-          setStatusText("Microphone dictation error: " + (err?.message || "Check permissions"));
+          const errStr = "Microphone dictation error: " + (err?.message || "Check microphone permissions");
+          setStatusText(errStr);
+          setErrorMessage(errStr);
         }
       );
       if (session) {
@@ -80,7 +85,9 @@ export default function AutoCaptionModal({
         setIsDictating(true);
         setStatusText("Listening... Speak clearly to dictate captions.");
       } else {
-        setStatusText("Speech recognition not supported in this browser. Please type or paste script.");
+        const unsupp = "Speech recognition is not supported in this browser. Please type or paste your script.";
+        setStatusText(unsupp);
+        setErrorMessage(unsupp);
       }
     }
   };
@@ -88,10 +95,11 @@ export default function AutoCaptionModal({
   const handleGenerate = async () => {
     const targetProject = project || loadAllProjects()[0] || null;
     if (!targetProject) {
-      setStatusText("Please open or create a project first.");
+      setErrorMessage("Please open or create a project first.");
       return;
     }
     soundEngine.playSfx("click");
+    setErrorMessage(null);
     setIsGenerating(true);
     setProgressPct(10);
     setStatusText("Analyzing master timeline audio...");
@@ -115,12 +123,20 @@ export default function AutoCaptionModal({
         }
       );
 
+      if (!generated || generated.length === 0) {
+        throw new Error(
+          "No spoken dialogue could be transcribed from the video audio. Use 'Live Mic' to dictate, or paste your script."
+        );
+      }
+
       soundEngine.playSfx("pop");
       onAddCaptions(generated);
       onClose();
     } catch (err: any) {
       console.error("FastArt: AutoCaption error", err);
-      setStatusText(err.message || "Failed to generate captions.");
+      const msg = err?.message || "Failed to generate captions.";
+      setStatusText(msg);
+      setErrorMessage(msg);
       soundEngine.playSfx("click");
     } finally {
       setIsGenerating(false);
@@ -335,8 +351,22 @@ export default function AutoCaptionModal({
             </View>
           </ScrollView>
 
-          {/* Footer Action */}
+          {/* Footer Action & Error Banner */}
           <View style={styles.footer}>
+            {errorMessage && !isGenerating && (
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle" size={18} color="#EF4444" />
+                <Text style={styles.errorText}>{errorMessage}</Text>
+                <TouchableOpacity
+                  onPress={() => setErrorMessage(null)}
+                  style={styles.errorDismissBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={16} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            )}
+
             {isGenerating ? (
               <View style={styles.progressContainer}>
                 <View style={styles.progressBarBg}>
@@ -370,14 +400,14 @@ export default function AutoCaptionModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.78)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0E1118",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: "84%",
+    backgroundColor: "#121620",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: "54%",
     paddingBottom: 16,
     borderWidth: 1,
     borderColor: "#1E2333",
@@ -586,5 +616,28 @@ const styles = StyleSheet.create({
     color: "#00F2FE",
     fontSize: 12,
     fontWeight: "800",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.4)",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  errorText: {
+    flex: 1,
+    color: "#FCA5A5",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
+  errorDismissBtn: {
+    padding: 4,
+    borderRadius: 4,
   },
 });

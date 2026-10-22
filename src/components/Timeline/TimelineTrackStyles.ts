@@ -65,6 +65,7 @@ export const trackStyles = {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     paddingHorizontal: 6,
+    zIndex: 3,
   },
   clipIconBadge: {
     width: 18,
@@ -78,11 +79,17 @@ export const trackStyles = {
     color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "700" as const,
+    textShadowColor: "rgba(0, 0, 0, 0.85)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   clipDurationSubtext: {
-    color: "#94A3B8",
+    color: "#CBD5E1",
     fontSize: 9,
     marginTop: 1,
+    textShadowColor: "rgba(0, 0, 0, 0.85)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   miniWaveformRow: {
     flexDirection: "row" as const,

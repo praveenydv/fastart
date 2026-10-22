@@ -91,6 +91,16 @@ export default function SpeedModal({
     onApplySpeed(speedVal, curvePayload, val);
   };
 
+  const handleResetSpeed = () => {
+    soundEngine.playSfx('click');
+    setSpeedVal(1.0);
+    setActiveTab('normal');
+    setSmoothSlowMo('none');
+    onApplySpeed(1.0, null, 'none');
+  };
+
+  const isDefaultSpeed = speedVal === 1.0 && activeTab === 'normal' && smoothSlowMo === 'none';
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -98,8 +108,17 @@ export default function SpeedModal({
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Header */}
+          {/* Space-Optimized Header */}
           <View style={styles.sheetHeader}>
+            <TouchableOpacity
+              onPress={handleResetSpeed}
+              style={[styles.resetBtn, isDefaultSpeed && { opacity: 0.4 }]}
+              disabled={isDefaultSpeed}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetText}>1.0x</Text>
+            </TouchableOpacity>
+
             <View style={styles.tabsRow}>
               <TouchableOpacity
                 style={[styles.tabBtn, activeTab === 'normal' && styles.tabBtnActive]}
@@ -141,21 +160,13 @@ export default function SpeedModal({
               </TouchableOpacity>
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <TouchableOpacity
-                onPress={() => {
-                  soundEngine.playSfx('click');
-                  onClose();
-                }}
-                style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="checkmark" size={18} color="#000000" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-                <Ionicons name="close" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="checkmark" size={18} color="#000000" />
+            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>

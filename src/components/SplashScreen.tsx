@@ -33,12 +33,14 @@ export default function SplashScreen({
 
   // Pulse animation for the glowing halo
   useEffect(() => {
+    const useNative = Platform.OS !== "web";
+
     // Logo entrance scale
     Animated.spring(logoScale, {
       toValue: 1,
       friction: 6,
       tension: 40,
-      useNativeDriver: true,
+      useNativeDriver: useNative,
     }).start();
 
     // Subtle breathing glow loop
@@ -48,13 +50,13 @@ export default function SplashScreen({
           toValue: 1,
           duration: 1000,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: useNative,
         }),
         Animated.timing(logoGlow, {
           toValue: 0.4,
           duration: 1000,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: useNative,
         }),
       ])
     );
@@ -94,19 +96,20 @@ export default function SplashScreen({
         easing: Easing.ease,
         useNativeDriver: false,
       }).start(() => {
+        const useNative = Platform.OS !== "web";
         // Cinematic exit fade-out
         Animated.parallel([
           Animated.timing(fadeAnim, {
             toValue: 0,
             duration: 400,
             easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
+            useNativeDriver: useNative,
           }),
           Animated.timing(logoScale, {
             toValue: 1.08,
             duration: 400,
             easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
+            useNativeDriver: useNative,
           }),
         ]).start(() => {
           if (onFinished) {

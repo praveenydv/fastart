@@ -41,7 +41,7 @@ export function useTimelineClips({
         accentColor: "#00F2FE",
         bgColor: "#0B1E2E",
         borderColor: "#00F2FE",
-        iconName: "videocam" as const,
+        iconName: (v.type === "photo" ? "image" : "videocam") as any,
         rawClip: v,
       })),
       ...audioClips.map((a) => ({

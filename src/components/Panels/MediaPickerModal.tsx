@@ -493,14 +493,14 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#141721',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '82%',
+    backgroundColor: '#121620',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: '60%',
     borderTopWidth: 1,
     borderColor: '#252B3B',
   },

@@ -23,6 +23,7 @@ interface UseProjectClipMutationsParams {
   setClipToDelete: (val: any) => void;
   updateProjectWithHistory: (proj: any) => void;
   setIsCroppingPreview: (val: boolean) => void;
+  startProcessing?: (msg: string, durationMs?: number) => void;
 }
 
 export function useProjectClipMutations({
@@ -40,6 +41,7 @@ export function useProjectClipMutations({
   setClipToDelete,
   updateProjectWithHistory,
   setIsCroppingPreview,
+  startProcessing,
 }: UseProjectClipMutationsParams) {
   // Delegate transform, crop, rotate, reverse, trim, move operations
   const {
@@ -57,6 +59,7 @@ export function useProjectClipMutations({
     selectedClipId,
     selectedClipType,
     updateProjectWithHistory,
+    startProcessing,
   });
 
   // Split active clip at currentTime
@@ -92,6 +95,7 @@ export function useProjectClipMutations({
 
     soundEngine.playSfx("split");
     triggerHaptic("medium", settings?.hapticFeedback !== false);
+    startProcessing?.("Splitting Clip at Playhead...", 350);
 
     const firstDuration = curTime - clipStart;
     const secondDuration = clipEnd - curTime;
@@ -296,6 +300,7 @@ export function useProjectClipMutations({
       if (idx === -1) return;
 
       const original = list[idx];
+      startProcessing?.("Duplicating Clip to Timeline...", 350);
       const dur = original.duration || 3.0;
       const origTrack =
         typeof original.trackIndex === "number"
