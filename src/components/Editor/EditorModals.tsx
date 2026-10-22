@@ -32,6 +32,8 @@ import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 interface EditorModalsProps {
   activeModal: string | null;
   closeModal: () => void;
+  onCancelModal?: () => void;
+  onApplyModal?: () => void;
   project: FastArtProject | null;
   route: any;
   totalDuration: number;
@@ -88,6 +90,8 @@ interface EditorModalsProps {
 export const EditorModals: React.FC<EditorModalsProps> = ({
   activeModal,
   closeModal,
+  onCancelModal,
+  onApplyModal,
   project,
   handleAddCaptions,
   handleUpdateCaption,
@@ -135,13 +139,16 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleClearAllKeyframes,
   handleConfirmDeleteClip,
 }) => {
+  const handleCancel = onCancelModal || closeModal;
+  const handleApply = onApplyModal || closeModal;
+
   return (
     <>
       {/* LAZY LOADED MODALS ON MOBILE (Only mounted when active to save CPU and RAM) */}
       {activeModal === "media" && (
         <MediaPickerModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           onAddMedia={handleAddMedia}
         />
       )}
@@ -149,7 +156,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "cutout" && (
         <CutoutModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           currentCutout={selectedClip?.cutout}
           onApplyCutout={handleApplyCutout}
         />
@@ -158,7 +166,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "tracking" && (
         <MotionTrackingModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           targetType={
             selectedClipType === "text"
               ? "text"
@@ -192,7 +201,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         return (
           <TextModal
             visible={true}
-            onClose={closeModal}
+            onClose={handleCancel}
             onAddText={handleAddText}
             editingClip={editingTarget}
             onUpdateText={(clip) => {
@@ -208,7 +217,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "audio" && (
         <AudioModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           onAddAudio={handleAddAudio}
         />
       )}
@@ -216,7 +225,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "filters" && (
         <FiltersModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           activeFilter={selectedClip?.filter || "normal"}
           onSelectFilter={handleApplyFilter}
         />
@@ -225,7 +235,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "effects" && (
         <EffectsModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           activeEffect={selectedClip?.effect || "none"}
           onAddEffect={handleAddEffect}
           editingClip={
@@ -240,7 +251,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "stickers" && (
         <StickersModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           onAddSticker={handleAddSticker}
           editingClip={
             selectedClipType === "stickers" || selectedClipType === "sticker"
@@ -255,7 +266,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "transitions" && (
         <TransitionsModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           activeTransition={
             project?.tracks?.video?.find(
               (c) => c.id === transitionTargetClipId,
@@ -268,7 +280,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "speed" && (
         <SpeedModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           clipType={selectedClipType || selectedClip?.type}
           clipDuration={selectedClip?.duration}
           currentSpeed={selectedClip?.speed || 1.0}
@@ -281,7 +294,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {(activeModal === "export" || route.screen === "export") && project && (
         <ExportModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           project={project}
           totalDuration={totalDuration}
         />
@@ -290,7 +303,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "settings" && (
         <SettingsModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
           onReloadData={handleReloadAllData}
@@ -300,7 +313,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "notifications" && (
         <NotificationsModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           notifications={notifications}
           onMarkAllAsRead={handleMarkAllAsRead}
           onClearAll={handleClearAllNotifications}
@@ -312,7 +325,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "volume" && mediaHasAudioTrack(selectedClip) && (
         <VolumeModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           currentVolume={selectedClip?.volume ?? 1.0}
           currentFadeIn={selectedClip?.fadeIn ?? 0}
           currentFadeOut={selectedClip?.fadeOut ?? 0}
@@ -327,7 +341,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "mask" && (
         <CropTransformModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           currentTransform={selectedClip?.transform}
           currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
           initialTab="mask"
@@ -338,7 +353,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "autocut" && (
         <AutoCutModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           onAutoCutGenerated={handleAutoCutGenerated}
           currentProject={project}
         />
@@ -347,7 +362,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "canvas" && (
         <CanvasModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           project={project}
           onUpdateProject={(updates) => updateProjectWithHistory(updates)}
         />
@@ -356,7 +372,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "enhance" && (
         <AIEnhanceModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           initialValues={(selectedClip as any)?.enhance}
           onApplyEnhance={handleApplyEnhance}
         />
@@ -365,7 +382,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "tts" && (
         <TextToSpeechModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
           onAddAudio={handleAddAudio}
           initialScript={
             selectedClipType === "text" && selectedClip
@@ -392,7 +409,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         return (
           <KeyframeModal
             visible={true}
-            onClose={closeModal}
+            onClose={handleCancel}
+            onApply={handleApply}
             selectedClip={effectiveClip}
             selectedClipType={effectiveType}
             currentTime={currentTime}
@@ -410,7 +428,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "captions" && (
         <AutoCaptionModal
           visible={true}
-          onClose={closeModal}
+          onClose={handleCancel}
+          onApply={handleApply}
           project={project}
           onAddCaptions={(captions) => {
             if (handleAddCaptions) {

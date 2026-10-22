@@ -18,6 +18,7 @@ import { CutoutBgColorControls } from './Cutout/CutoutBgColorControls';
 interface CutoutModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   currentCutout?: CutoutConfig;
   onApplyCutout: (config: CutoutConfig) => void;
 }
@@ -61,6 +62,7 @@ const BG_COLOR_PRESETS = [
 export default function CutoutModal({
   visible,
   onClose,
+  onApply,
   currentCutout,
   onApplyCutout,
 }: CutoutModalProps) {
@@ -114,7 +116,11 @@ export default function CutoutModal({
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
     syncConfig({ enabled: true });
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   const handleReset = () => {
@@ -140,15 +146,6 @@ export default function CutoutModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplyCutout(
-      currentCutout || {
-        enabled: false,
-        mode: 'chroma',
-        keyColor: '#00FF00',
-        intensity: 45,
-        shadow: 25,
-      }
-    );
     onClose();
   };
 

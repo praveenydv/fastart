@@ -15,6 +15,7 @@ import { soundEngine } from '../../utils/audioEngine';
 interface MotionTrackingModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   targetType: 'text' | 'sticker' | 'video';
   currentTrack?: MotionTrackConfig;
   onApplyTracking: (config: MotionTrackConfig) => void;
@@ -25,6 +26,7 @@ const WebInput: any = Platform.OS === 'web' ? 'input' : View;
 export default function MotionTrackingModal({
   visible,
   onClose,
+  onApply,
   targetType = 'text',
   currentTrack,
   onApplyTracking,
@@ -97,19 +99,17 @@ export default function MotionTrackingModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplyTracking(
-      currentTrack || {
-        enabled: false,
-        mode: 'follow_center',
-      }
-    );
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
     triggerUpdate({ enabled: true, mode, intensity });
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

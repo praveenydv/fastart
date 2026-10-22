@@ -17,11 +17,6 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
 }) => {
   const videoClips = project.tracks?.video || [];
   const numClips = videoClips.length;
-  const thumbUrl =
-    project.thumbnailUrl ||
-    videoClips[0]?.thumbnail ||
-    videoClips[0]?.url;
-
   return (
     <TouchableOpacity
       style={styles.projectCard}
@@ -33,15 +28,7 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
     >
       {/* Clean Thumbnail */}
       <View style={styles.projectThumb}>
-        {thumbUrl ? (
-          <Image
-            source={{ uri: thumbUrl }}
-            style={{ width: "100%", height: "100%", borderRadius: 6 }}
-            resizeMode="cover"
-          />
-        ) : (
-          <Ionicons name="film" size={20} color="#00F2FE" />
-        )}
+        <Ionicons name="film" size={20} color="#00F2FE" />
       </View>
 
       {/* Info Column */}

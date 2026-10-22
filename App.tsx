@@ -23,9 +23,9 @@ import { useProjectMediaAdders } from "./src/hooks/useProjectMediaAdders";
 import { useProjectKeyframes } from "./src/hooks/useProjectKeyframes";
 import { useKeyboardShortcuts } from "./src/hooks/useKeyboardShortcuts";
 import { usePlaybackLoop } from "./src/hooks/usePlaybackLoop";
-import { computeTotalDuration } from "./src/types/project";
+import { computeTotalDuration, FastArtProject } from "./src/types/project";
 import { soundEngine } from "./src/utils/audioEngine";
-import { saveLastSession, LastEditSession } from "./src/utils/storage";
+import { saveLastSession, LastEditSession, saveProject } from "./src/utils/storage";
 import { mediaHasAudioTrack } from "./src/utils/mediaAudioDetector";
 
 // Keep native splash screen visible while app hydrates
@@ -56,8 +56,17 @@ export default function App() {
   const [isCroppingPreview, setIsCroppingPreview] = useState(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
 
+  // Snapshot refs for rolling back unapplied preview changes
+  const modalInitialSnapshotRef = useRef<FastArtProject | null>(null);
+  const initialHistoryLengthRef = useRef<number>(0);
+  const historyStackRef = useRef<FastArtProject[]>([]);
+
   // Modal helpers synced with URL
   const openModal = useCallback((modalName: string) => {
+    if (projectRef.current) {
+      modalInitialSnapshotRef.current = JSON.parse(JSON.stringify(projectRef.current));
+      initialHistoryLengthRef.current = historyStackRef.current.length;
+    }
     setActiveModal(modalName);
     if (route.screen === "editor" && projectRef.current) {
       navigate(`/project/${projectRef.current.id}?tool=${modalName}`, { replace: true });
@@ -115,6 +124,8 @@ export default function App() {
   const {
     historyStack,
     redoStack,
+    setHistoryStack,
+    setRedoStack,
     updateProjectWithHistory,
     handleUndo,
     handleRedo,
@@ -123,6 +134,44 @@ export default function App() {
     setProject,
     setProjects,
   });
+  historyStackRef.current = historyStack;
+
+  // Discard all unapplied preview changes and restore pristine state before modal was opened
+  const handleCancelModal = useCallback(() => {
+    if (modalInitialSnapshotRef.current) {
+      const rollback = modalInitialSnapshotRef.current;
+      projectRef.current = rollback;
+      setProject(rollback);
+      saveProject(rollback);
+      setProjects((prev) => prev.map((p) => (p.id === rollback.id ? rollback : p)));
+      setHistoryStack((prev) => prev.slice(0, initialHistoryLengthRef.current));
+      modalInitialSnapshotRef.current = null;
+    }
+    closeModal();
+  }, [closeModal, setProject, setProjects, setHistoryStack]);
+
+  // Commit preview changes with a single atomic undo entry
+  const handleApplyModal = useCallback(() => {
+    if (modalInitialSnapshotRef.current) {
+      const snapshot = modalInitialSnapshotRef.current;
+      const current = projectRef.current;
+      if (current && JSON.stringify(current) !== JSON.stringify(snapshot)) {
+        setHistoryStack((prev) => [
+          ...prev.slice(0, initialHistoryLengthRef.current).slice(-19),
+          snapshot,
+        ]);
+        setRedoStack([]);
+        const saved = saveProject(current);
+        projectRef.current = saved;
+        setProject(saved);
+        setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+      } else {
+        setHistoryStack((prev) => prev.slice(0, initialHistoryLengthRef.current));
+      }
+      modalInitialSnapshotRef.current = null;
+    }
+    closeModal();
+  }, [closeModal, setProject, setProjects, setHistoryStack, setRedoStack]);
 
   // Selected clip object
   const selectedClip = useMemo(() => {
@@ -249,7 +298,7 @@ export default function App() {
     activeModal,
     clipToDelete,
     setClipToDelete,
-    closeModal,
+    closeModal: handleCancelModal,
     setSelectedClipId,
     isPlaying,
     setIsPlaying,
@@ -312,6 +361,9 @@ export default function App() {
   const activeModalRef = useRef(activeModal);
   activeModalRef.current = activeModal;
 
+  const handleCancelModalRef = useRef(handleCancelModal);
+  handleCancelModalRef.current = handleCancelModal;
+
   const clipToDeleteRef = useRef(clipToDelete);
   clipToDeleteRef.current = clipToDelete;
 
@@ -342,9 +394,9 @@ export default function App() {
         return true;
       }
 
-      // 3. If any Editing/Tool Modal is active, dismiss the modal
+      // 3. If any Editing/Tool Modal is active, dismiss the modal and discard preview changes
       if (activeModalRef.current) {
-        closeModal();
+        handleCancelModalRef.current();
         return true;
       }
 
@@ -543,6 +595,8 @@ export default function App() {
         <EditorModals
           activeModal={activeModal}
           closeModal={closeModal}
+          onCancelModal={handleCancelModal}
+          onApplyModal={handleApplyModal}
           project={project}
           route={route}
           totalDuration={totalDuration}

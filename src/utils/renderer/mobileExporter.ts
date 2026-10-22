@@ -1284,7 +1284,8 @@ function createMp4Container(
   width: number,
   height: number,
   fps: number,
-  sampleNals: Uint8Array[]
+  sampleNals: Uint8Array[],
+  audioWavBytes?: Uint8Array
 ): Uint8Array {
   const mbW = width >> 4;
   const mbH = height >> 4;
@@ -1295,6 +1296,13 @@ function createMp4Container(
   const timescale = 1000;
   const frameDurationMs = Math.round(1000 / fps);
   const durationMs = totalFrames * frameDurationMs;
+
+  const rawAudio =
+    audioWavBytes && audioWavBytes.byteLength > 44 ? audioWavBytes.subarray(44) : null;
+  const hasAudio = Boolean(rawAudio && rawAudio.length >= 4);
+  const audioTimescale = 44100;
+  const totalAudioSamples = hasAudio ? Math.floor(rawAudio!.length / 4) : 0;
+  const audioDurationInMovieTimescale = durationMs;
 
   const b = new Mp4BoxBuilder();
 
@@ -1317,6 +1325,7 @@ function createMp4Container(
 
   const buildMoov = (chunkOffset: number) => {
     const mb = new Mp4BoxBuilder();
+    const audioChunkOffset = chunkOffset + totalSampleBytes;
     mb.box("moov", () => {
       // mvhd
       mb.box("mvhd", () => {
@@ -1340,7 +1349,7 @@ function createMp4Container(
         mb.writeU32(0);
         mb.writeU32(0x40000000);
         for (let i = 0; i < 6; i++) mb.writeU32(0);
-        mb.writeU32(2); // next_track_id
+        mb.writeU32(hasAudio ? 3 : 2); // next_track_id
       });
 
       // trak
@@ -1500,19 +1509,142 @@ function createMp4Container(
           });
         });
       });
+
+      // trak 2: Audio Track (Uncompressed 16-bit Stereo PCM)
+      if (hasAudio) {
+        mb.box("trak", () => {
+          // tkhd
+          mb.box("tkhd", () => {
+            mb.writeU32(0x00000007); // flags
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(2); // track_id = 2
+            mb.writeU32(0);
+            mb.writeU32(audioDurationInMovieTimescale);
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU16(0);
+            mb.writeU16(0);
+            mb.writeU16(0x0100); // volume = 1.0
+            mb.writeU16(0);
+            mb.writeU32(0x00010000);
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(0x00010000);
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(0);
+            mb.writeU32(0x40000000);
+            mb.writeU32(0);
+            mb.writeU32(0);
+          });
+
+          // mdia
+          mb.box("mdia", () => {
+            mb.box("mdhd", () => {
+              mb.writeU32(0);
+              mb.writeU32(0);
+              mb.writeU32(0);
+              mb.writeU32(audioTimescale);
+              mb.writeU32(totalAudioSamples);
+              mb.writeU16(0x55c4);
+              mb.writeU16(0);
+            });
+
+            mb.box("hdlr", () => {
+              mb.writeU32(0);
+              mb.writeU32(0);
+              mb.writeAscii("soun");
+              for (let i = 0; i < 3; i++) mb.writeU32(0);
+              mb.writeAscii("SoundHandler\0");
+            });
+
+            mb.box("minf", () => {
+              mb.box("smhd", () => {
+                mb.writeU32(0);
+                mb.writeU16(0);
+                mb.writeU16(0);
+              });
+
+              mb.box("dinf", () => {
+                mb.box("dref", () => {
+                  mb.writeU32(0);
+                  mb.writeU32(1);
+                  mb.box("url ", () => {
+                    mb.writeU32(0x00000001);
+                  });
+                });
+              });
+
+              mb.box("stbl", () => {
+                // stsd
+                mb.box("stsd", () => {
+                  mb.writeU32(0);
+                  mb.writeU32(1);
+                  mb.box("sowt", () => {
+                    for (let i = 0; i < 6; i++) mb.writeU8(0);
+                    mb.writeU16(1); // data_reference_index
+                    mb.writeU16(0); // version
+                    mb.writeU16(0); // revision
+                    mb.writeU32(0); // vendor
+                    mb.writeU16(2); // channelcount = 2 (stereo)
+                    mb.writeU16(16); // samplesize = 16-bit
+                    mb.writeU16(0); // compression_id
+                    mb.writeU16(0); // packet_size
+                    mb.writeU32(audioTimescale << 16); // sample_rate 44100
+                  });
+                });
+
+                // stts
+                mb.box("stts", () => {
+                  mb.writeU32(0);
+                  mb.writeU32(1);
+                  mb.writeU32(totalAudioSamples);
+                  mb.writeU32(1);
+                });
+
+                // stsc
+                mb.box("stsc", () => {
+                  mb.writeU32(0);
+                  mb.writeU32(1);
+                  mb.writeU32(1);
+                  mb.writeU32(totalAudioSamples);
+                  mb.writeU32(1);
+                });
+
+                // stsz
+                mb.box("stsz", () => {
+                  mb.writeU32(0);
+                  mb.writeU32(4); // constant 4 bytes per sample (2ch * 2 bytes)
+                  mb.writeU32(totalAudioSamples);
+                });
+
+                // stco
+                mb.box("stco", () => {
+                  mb.writeU32(0);
+                  mb.writeU32(1);
+                  mb.writeU32(audioChunkOffset);
+                });
+              });
+            });
+          });
+        });
+      }
     });
     return mb.toBytes();
   };
 
   const ftypBytes = b.toBytes();
-  const estimatedOffset = ftypBytes.length + 1024;
+  const estimatedOffset = ftypBytes.length + 1500;
   let moovBytes = buildMoov(estimatedOffset + 8);
   const actualOffset = ftypBytes.length + moovBytes.length + 8;
   moovBytes = buildMoov(actualOffset);
 
   // Directly construct final contiguous MP4 container with zero array copies
+  const rawAudioLength = hasAudio ? rawAudio!.length : 0;
   const mdatHeaderSize = 8;
-  const mdatTotalSize = mdatHeaderSize + totalSampleBytes;
+  const mdatTotalSize = mdatHeaderSize + totalSampleBytes + rawAudioLength;
   const totalMp4Size = ftypBytes.length + moovBytes.length + mdatTotalSize;
   const finalMp4 = new Uint8Array(totalMp4Size);
   const view = new DataView(finalMp4.buffer);
@@ -1541,6 +1673,12 @@ function createMp4Container(
     offset += 4;
     finalMp4.set(s, offset);
     offset += s.length;
+  }
+
+  // 5. Raw Audio PCM Bytes
+  if (hasAudio && rawAudio) {
+    finalMp4.set(rawAudio, offset);
+    offset += rawAudio.length;
   }
 
   return finalMp4;
@@ -1608,7 +1746,7 @@ export async function exportMobileProject(
   // 2. Studio Audio Track (WAV)
   if (format === "wav") {
     if (onProgress) onProgress(40, 0, duration);
-    const uint8 = exportProjectAudioToWavBytes(project, duration, 44100);
+    const uint8 = await exportProjectAudioToWavBytes(project, duration, 44100);
     const audioBlob = await exportProjectAudioToWav(project, duration, 44100);
     const filename = `${cleanTitle}_audio_${Date.now()}.wav`;
     const targetFileUri = `${targetDir}${filename}`;
@@ -1754,8 +1892,10 @@ export async function exportMobileProject(
 
   if (onProgress) onProgress(92, duration, duration);
 
-  // Mux into standard ISO Base Media MP4 container
-  const mp4Bytes = createMp4Container(targetW, targetH, renderFps, frameNals);
+  // Mux into standard ISO Base Media MP4 container with synchronized audio track
+  if (onProgress) onProgress(94, duration, duration);
+  const audioBytes = await exportProjectAudioToWavBytes(project, duration, 44100);
+  const mp4Bytes = createMp4Container(targetW, targetH, renderFps, frameNals, audioBytes);
 
   const filename = `${cleanTitle}_${Date.now()}.mp4`;
   const targetFileUri = `${targetDir}${filename}`;

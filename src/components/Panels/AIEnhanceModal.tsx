@@ -14,6 +14,7 @@ import { soundEngine } from '../../utils/audioEngine';
 interface AIEnhanceModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   initialValues?: {
     hdr?: boolean;
     sharpness?: number;
@@ -37,6 +38,7 @@ const WebInput: any = Platform.OS === 'web' ? 'input' : View;
 export default function AIEnhanceModal({
   visible,
   onClose,
+  onApply,
   initialValues,
   onApplyEnhance,
 }: AIEnhanceModalProps) {
@@ -103,19 +105,16 @@ export default function AIEnhanceModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplyEnhance({
-      hdr: initialValues?.hdr ?? false,
-      sharpness: initialValues?.sharpness ?? 0,
-      colorBoost: initialValues?.colorBoost ?? 0,
-      skinSmoothing: initialValues?.skinSmoothing ?? 0,
-      faceRadiance: initialValues?.faceRadiance ?? 0,
-    });
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

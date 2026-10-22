@@ -17,6 +17,7 @@ import { ASPECT_RATIOS } from '../../constants/sampleMedia';
 interface CanvasModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   project: FastArtProject | null;
   onUpdateProject: (updates: Partial<FastArtProject>) => void;
 }
@@ -64,6 +65,7 @@ function normalizeHex(input: string): string | null {
 export default function CanvasModal({
   visible,
   onClose,
+  onApply,
   project,
   onUpdateProject,
 }: CanvasModalProps) {
@@ -111,16 +113,16 @@ export default function CanvasModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onUpdateProject({
-      aspectRatio: currentRatio,
-      canvasBackground: currentBg,
-    });
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

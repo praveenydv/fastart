@@ -31,6 +31,7 @@ import {
 interface AutoCaptionModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   project: FastArtProject | null;
   onAddCaptions: (clips: CaptionClip[]) => void;
   onUpdateProject?: (updates: Partial<FastArtProject>) => void;
@@ -159,6 +160,7 @@ export const CHUNK_MODE_OPTIONS = [
 export default function AutoCaptionModal({
   visible,
   onClose,
+  onApply,
   project,
   onAddCaptions,
   onUpdateProject,
@@ -674,15 +676,6 @@ export default function AutoCaptionModal({
 
   const handleCancel = () => {
     soundEngine.playSfx("pop");
-    if (onUpdateProject && currentProject) {
-      onUpdateProject({
-        tracks: {
-          ...currentProject.tracks,
-          captions: initialCaptionsRef.current,
-        },
-        captionSettings: initialSettingsRef.current,
-      });
-    }
     onClose();
   };
 
@@ -692,6 +685,9 @@ export default function AutoCaptionModal({
       handleApplyStyleToSelected();
     } else {
       handleApplyStyleToAll();
+    }
+    if (onApply) {
+      onApply();
     }
   };
 

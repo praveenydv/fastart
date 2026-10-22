@@ -15,6 +15,7 @@ import { soundEngine } from '../../utils/audioEngine';
 interface TransitionsModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   activeTransition?: { type: string; duration?: number };
   onApplyTransition: (transition: { type: string; duration: number }) => void;
 }
@@ -22,6 +23,7 @@ interface TransitionsModalProps {
 export default function TransitionsModal({
   visible,
   onClose,
+  onApply,
   activeTransition,
   onApplyTransition,
 }: TransitionsModalProps) {
@@ -57,16 +59,16 @@ export default function TransitionsModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplyTransition({
-      type: activeTransition?.type || 'none',
-      duration: activeTransition?.duration ?? 0.5,
-    });
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

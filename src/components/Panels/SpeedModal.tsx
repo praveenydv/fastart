@@ -19,6 +19,7 @@ import { SpeedAudioView } from './Speed/SpeedAudioView';
 interface SpeedModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   clipType?: string;
   clipDuration?: number;
   currentSpeed?: number;
@@ -34,6 +35,7 @@ interface SpeedModalProps {
 export default function SpeedModal({
   visible,
   onClose,
+  onApply,
   clipType,
   clipDuration,
   currentSpeed = 1.0,
@@ -85,7 +87,11 @@ export default function SpeedModal({
   const handleApplyCustomCurve = () => {
     soundEngine.playSfx('whoosh');
     onApplySpeed(1.0, { id: 'custom', name: 'Custom Bezier', points: customPoints }, smoothSlowMo);
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   const handleSelectSlowMo = (val: 'none' | 'blend' | 'optical_flow') => {
@@ -110,13 +116,16 @@ export default function SpeedModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplySpeed(currentSpeed, currentCurve, currentSlowMo);
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

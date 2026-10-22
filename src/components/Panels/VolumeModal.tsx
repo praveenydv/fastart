@@ -14,6 +14,7 @@ import { soundEngine } from '../../utils/audioEngine';
 interface VolumeModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   currentVolume?: number;
   currentFadeIn?: number;
   currentFadeOut?: number;
@@ -30,6 +31,7 @@ const WebInput: any = Platform.OS === 'web' ? 'input' : View;
 export default function VolumeModal({
   visible,
   onClose,
+  onApply,
   currentVolume = 1.0,
   currentFadeIn = 0,
   currentFadeOut = 0,
@@ -87,13 +89,16 @@ export default function VolumeModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplyVolume(currentVolume, currentFadeIn, currentFadeOut, currentDenoise);
     onClose();
   };
 
   const handleDone = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

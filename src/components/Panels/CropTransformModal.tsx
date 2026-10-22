@@ -15,6 +15,7 @@ import { ClipTransform, MaskConfig, MaskShape } from '../../types/project';
 interface CropTransformModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   currentTransform?: ClipTransform;
   currentMask?: MaskConfig;
   initialTab?: 'mask' | 'adjust';
@@ -41,6 +42,7 @@ const MASK_SHAPES: { id: MaskShape; label: string; icon: string; desc: string }[
 export default function CropTransformModal({
   visible,
   onClose,
+  onApply,
   currentTransform,
   currentMask,
   initialTab = 'mask',
@@ -154,13 +156,16 @@ export default function CropTransformModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onApplyTransform(currentTransform, undefined, currentMask);
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

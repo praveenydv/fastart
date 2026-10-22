@@ -18,6 +18,7 @@ import { getStorageItem, setStorageItem } from '../../utils/storage';
 interface FiltersModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   activeFilter?: string;
   onSelectFilter: (filterId: string, customLut?: CustomLutConfig) => void;
 }
@@ -25,6 +26,7 @@ interface FiltersModalProps {
 export default function FiltersModal({
   visible,
   onClose,
+  onApply,
   activeFilter = 'normal',
   onSelectFilter,
 }: FiltersModalProps) {
@@ -152,13 +154,16 @@ export default function FiltersModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    onSelectFilter(activeFilter || 'normal');
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

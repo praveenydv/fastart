@@ -16,6 +16,7 @@ import { EffectClip } from '../../types/project';
 interface EffectsModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   activeEffect?: string;
   onAddEffect: (effect: any) => void;
   editingClip?: EffectClip | null;
@@ -25,6 +26,7 @@ interface EffectsModalProps {
 export default function EffectsModal({
   visible,
   onClose,
+  onApply,
   activeEffect,
   onAddEffect,
   editingClip,
@@ -120,15 +122,16 @@ export default function EffectsModal({
 
   const handleCancel = () => {
     soundEngine.playSfx('pop');
-    if (editingClip && onUpdateEffect) {
-      onUpdateEffect(editingClip);
-    }
     onClose();
   };
 
   const handleApply = () => {
     soundEngine.playSfx('whoosh');
-    onClose();
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
   };
 
   return (

@@ -22,6 +22,7 @@ import KeyframePointsList from "./Keyframe/KeyframePointsList";
 export interface KeyframeModalProps {
   visible: boolean;
   onClose: () => void;
+  onApply?: () => void;
   selectedClip: any | null;
   selectedClipType?: string;
   currentTime: number;
@@ -40,6 +41,7 @@ export interface KeyframeModalProps {
 export default function KeyframeModal({
   visible,
   onClose,
+  onApply,
   selectedClip,
   selectedClipType = "video",
   currentTime,
@@ -142,7 +144,11 @@ export default function KeyframeModal({
               style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
               onPress={() => {
                 soundEngine.playSfx("whoosh");
-                onClose();
+                if (onApply) {
+                  onApply();
+                } else {
+                  onClose();
+                }
               }}
               activeOpacity={0.7}
               accessibilityLabel="Done"
