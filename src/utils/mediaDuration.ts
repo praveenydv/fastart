@@ -55,15 +55,160 @@ export function probeAndCacheMediaDuration(url: string, id?: string, isAudio = f
 }
 
 /**
+ * Checks whether a clip is an image/photo (which has no fixed media duration ceiling).
+ */
+export function isImageClip(clip: any, clipType?: string): boolean {
+  if (!clip) return false;
+  const raw = clip.rawClip || clip;
+
+  // 1. Direct type attributes
+  const rawType = (raw.type || clip.type || "").toLowerCase();
+  const cType = (clipType || "").toLowerCase();
+  if (rawType === "photo" || rawType === "image" || cType === "photo" || cType === "image") {
+    return true;
+  }
+  if (raw.isImage || clip.isImage || clip.mediaType === "image" || raw.mediaType === "image") {
+    return true;
+  }
+  if (clip.iconName === "image" || raw.iconName === "image") {
+    return true;
+  }
+
+  // 2. Data URLs and image file extensions
+  const url = (raw.url || clip.url || raw.thumbnail || clip.thumbnail || "").toLowerCase();
+  if (url) {
+    if (url.startsWith("data:image/")) return true;
+    if (
+      url.includes("format=jpg") ||
+      url.includes("format=png") ||
+      url.includes("format=webp") ||
+      url.includes("format=jpeg")
+    ) {
+      return true;
+    }
+    if (/\.(jpe?g|png|gif|webp|svg|bmp|avif|ico)(\?.*)?$/i.test(url)) {
+      return true;
+    }
+  }
+
+  // 3. Title indicators (e.g., "Imported Photo", "photo-123.jpg")
+  const title = (raw.title || clip.title || "").toLowerCase();
+  if (
+    title.includes("photo") ||
+    title.endsWith(".jpg") ||
+    title.endsWith(".jpeg") ||
+    title.endsWith(".png") ||
+    title.endsWith(".webp") ||
+    title.endsWith(".svg")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks whether a clip is an extendable element without a fixed media file length limit
+ * (e.g. photos, images, text, captions, stickers, effects, and filters).
+ */
+export function isExtendableClip(clip: any, clipType?: string): boolean {
+  if (!clip) return false;
+  if (isImageClip(clip, clipType)) return true;
+
+  const raw = clip.rawClip || clip;
+  const rawType = (raw.type || clip.type || clipType || "").toLowerCase();
+  const cType = (clipType || clip.type || "").toLowerCase();
+  const id = String(clip.id || raw.id || "").toLowerCase();
+
+  // Effects & Filters
+  if (
+    rawType === "effect" ||
+    rawType === "effects" ||
+    cType === "effect" ||
+    cType === "effects" ||
+    id.startsWith("eff-") ||
+    id.startsWith("effect-") ||
+    clip.intensity !== undefined ||
+    raw.intensity !== undefined
+  ) {
+    return true;
+  }
+
+  // Text
+  if (
+    rawType === "text" ||
+    rawType === "texts" ||
+    cType === "text" ||
+    cType === "texts" ||
+    id.startsWith("text-") ||
+    clip.text !== undefined ||
+    raw.text !== undefined
+  ) {
+    return true;
+  }
+
+  // Captions
+  if (
+    rawType === "caption" ||
+    rawType === "captions" ||
+    cType === "caption" ||
+    cType === "captions" ||
+    id.startsWith("cap-")
+  ) {
+    return true;
+  }
+
+  // Stickers
+  if (
+    rawType === "sticker" ||
+    rawType === "stickers" ||
+    cType === "sticker" ||
+    cType === "stickers" ||
+    id.startsWith("stk-") ||
+    id.startsWith("sticker-") ||
+    raw.char !== undefined
+  ) {
+    return true;
+  }
+
+  // Filters
+  if (
+    rawType === "filter" ||
+    rawType === "filters" ||
+    cType === "filter" ||
+    cType === "filters"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Resolves the true media file duration in seconds for a clip.
- * Returns null if the clip is not a finite media file (e.g. photo, text, sticker, filter).
+ * Returns null if the clip is not a finite media file (e.g. photo, image, text, sticker, filter, effect).
  */
 export function getMediaDuration(clip: any, clipType?: string): number | null {
   if (!clip) return null;
 
-  // Photos, text, stickers, and effects have no native file length limit
-  const type = clipType || clip.type;
-  if (type === "photo" || clip.rawClip?.type === "photo" || type === "text" || type === "sticker" || type === "effects" || type === "filters") {
+  // Photos, images, text, captions, stickers, and effects have NO native file length limit!
+  if (isExtendableClip(clip, clipType)) {
+    return null;
+  }
+
+  const raw = clip.rawClip || clip;
+  const type = (raw.type || clip.type || clipType || "").toLowerCase();
+  if (
+    type === "photo" ||
+    type === "image" ||
+    type === "text" ||
+    type === "sticker" ||
+    type === "effect" ||
+    type === "effects" ||
+    type === "filter" ||
+    type === "filters" ||
+    type === "caption"
+  ) {
     return null;
   }
 
@@ -174,12 +319,24 @@ export function clampClipTrimUpdates(
   clipType?: string,
   minDuration = 0.2
 ): { startTime?: number; duration?: number; trimIn?: number; trimOut?: number; trackIndex?: number } {
-  const mediaDur = getMediaDuration(clip, clipType);
   const clamped = { ...updates };
 
   if (typeof clamped.startTime === "number") {
     clamped.startTime = Math.max(0, clamped.startTime);
   }
+
+  // Photos, images, text, stickers, captions, effects have NO native media limit - allow extending freely!
+  if (isExtendableClip(clip, clipType)) {
+    if (typeof clamped.duration === "number") {
+      clamped.duration = Math.max(minDuration, clamped.duration);
+    }
+    if (typeof clamped.trimOut === "number") {
+      clamped.trimOut = Math.max(minDuration, clamped.trimOut);
+    }
+    return clamped;
+  }
+
+  const mediaDur = getMediaDuration(clip, clipType);
 
   // If photo or text, only clamp min duration
   if (!mediaDur || mediaDur <= 0) {

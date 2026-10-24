@@ -11,6 +11,7 @@ interface TextPreviewStageProps {
   selectedBorderColor?: string;
   selectedColor: string;
   selectedStrokeColor?: string;
+  selectedStrokeWidth?: number;
   selectedBg: string;
   selectedScale?: number;
   selectedRotation?: number;
@@ -26,6 +27,7 @@ export default function TextPreviewStage({
   selectedBorderColor,
   selectedColor,
   selectedStrokeColor,
+  selectedStrokeWidth,
   selectedBg,
   selectedFont,
 }: TextPreviewStageProps) {
@@ -169,7 +171,7 @@ export default function TextPreviewStage({
   } else if (selectedTextEffect === "stroke") {
     effectShadowColor = selectedStrokeColor || "#000000";
     effectShadowRadius = 2;
-    webStroke = `1.5px ${selectedStrokeColor || "#000000"}`;
+    webStroke = `${selectedStrokeWidth || 2}px ${selectedStrokeColor || "#000000"}`;
     webTextShadow =
       "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000";
   } else if (selectedTextEffect === "cyber") {
@@ -206,17 +208,43 @@ export default function TextPreviewStage({
     effectShadowRadius = 8;
   }
 
+  // Universal custom stroke application (independent of effect)
+  const isStrokeActive =
+    Boolean(
+      selectedStrokeColor &&
+        selectedStrokeColor !== "none" &&
+        selectedStrokeColor !== "transparent",
+    ) &&
+    (selectedStrokeWidth ?? 0) > 0;
+
+  if (isStrokeActive) {
+    const sw = selectedStrokeWidth || 2;
+    const sc = selectedStrokeColor || "#000000";
+    webStroke = `${sw}px ${sc}`;
+    webTextShadow = `${-sw}px ${-sw}px 0 ${sc}, ${sw}px ${-sw}px 0 ${sc}, ${-sw}px ${sw}px 0 ${sc}, ${sw}px ${sw}px 0 ${sc}`;
+    effectShadowColor = sc;
+    effectShadowRadius = sw;
+  }
+
   return (
     <View style={styles.previewStage}>
       <View style={styles.previewTopBar}>
         <View style={styles.effectBadge}>
-          <Ionicons name="color-wand" size={10} color="#FFE600" />
+          <Ionicons name="color-wand" size={10} color="#FFFFFF" />
           <Text style={styles.effectBadgeText}>
             {selectedTextEffect.toUpperCase()} EFFECT
           </Text>
         </View>
+        {isStrokeActive && (
+          <View style={[styles.effectBadge, { borderColor: "#00F2FE", backgroundColor: "rgba(0, 242, 254, 0.15)" }]}>
+            <Ionicons name="brush" size={10} color="#00F2FE" />
+            <Text style={[styles.effectBadgeText, { color: "#00F2FE" }]}>
+              STROKE {selectedStrokeWidth}PX
+            </Text>
+          </View>
+        )}
         <View style={styles.animBadge}>
-          <Ionicons name="sparkles" size={10} color="#00F2FE" />
+          <Ionicons name="sparkles" size={10} color="#FFFFFF" />
           <Text style={styles.animBadgeText}>
             {selectedAnim.toUpperCase()}
           </Text>

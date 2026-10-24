@@ -20,7 +20,7 @@ export default function ProjectNotFoundScreen({
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconCircle}>
-          <Ionicons name="film-outline" size={48} color="#FF0050" />
+          <Ionicons name="film-outline" size={40} color="#FFFFFF" />
         </View>
 
         <Text style={styles.title}>Project Not Found</Text>
@@ -60,7 +60,7 @@ export default function ProjectNotFoundScreen({
               onGoHome();
             }}
           >
-            <Ionicons name="home-outline" size={16} color="#8E95A5" />
+            <Ionicons name="home-outline" size={16} color="#71717A" />
             <Text style={styles.textBtnText}>Go to Home Dashboard</Text>
           </TouchableOpacity>
         </View>
@@ -72,7 +72,7 @@ export default function ProjectNotFoundScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0D13',
+    backgroundColor: '#09090B',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -81,69 +81,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     maxWidth: 420,
     width: '100%',
-    backgroundColor: '#141721',
-    padding: 32,
-    borderRadius: 18,
+    backgroundColor: '#18181C',
+    padding: 28,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#1E2333',
+    borderColor: '#27272F',
   },
   iconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: 'rgba(255, 0, 80, 0.12)',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#202026',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 0, 80, 0.3)',
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#27272F',
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#8E95A5',
-    fontSize: 14,
+    color: '#A1A1AA',
+    fontSize: 13,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 28,
+    lineHeight: 18,
+    marginBottom: 24,
   },
   keyText: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   actionsRow: {
     width: '100%',
-    gap: 12,
+    gap: 10,
   },
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   primaryBtnText: {
     color: '#000000',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   secondaryBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E2333',
+    backgroundColor: '#202026',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#27272F',
   },
   secondaryBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   textBtn: {
     flexDirection: 'row',
@@ -153,7 +155,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   textBtnText: {
-    color: '#8E95A5',
+    color: '#71717A',
     fontSize: 13,
     fontWeight: '600',
   },

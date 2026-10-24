@@ -21,6 +21,7 @@ interface FiltersModalProps {
   onApply?: () => void;
   activeFilter?: string;
   onSelectFilter: (filterId: string, customLut?: CustomLutConfig) => void;
+  isInline?: boolean;
 }
 
 export default function FiltersModal({
@@ -29,6 +30,7 @@ export default function FiltersModal({
   onApply,
   activeFilter = 'normal',
   onSelectFilter,
+  isInline = false,
 }: FiltersModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [customLuts, setCustomLuts] = useState<CustomLutConfig[]>(PRO_3D_LUTS);
@@ -166,12 +168,10 @@ export default function FiltersModal({
     }
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
           {/* Compact Space-Optimized Header */}
           <View style={styles.sheetHeader}>
@@ -355,30 +355,57 @@ export default function FiltersModal({
             )}
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
+      <View style={styles.modalOverlay}>
+        {sheetContent}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#121215',
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
+    paddingBottom: 0,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#121215',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     borderTopWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: '#27272F',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -388,9 +415,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#27272F',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -400,27 +427,27 @@ const styles = StyleSheet.create({
   sheetTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   resetBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#141A28',
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   resetText: {
-    color: '#8E95A5',
+    color: '#A1A1AA',
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   doneBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -428,7 +455,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#27272F',
   },
   categoryScroll: {
     gap: 6,
@@ -440,36 +467,36 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
-    backgroundColor: '#162232',
+    borderRadius: 8,
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#00F2FE44',
+    borderColor: '#27272F',
   },
   importBtnText: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   categoryPill: {
     paddingHorizontal: 11,
     paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#141A28',
+    borderRadius: 8,
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   categoryPillActive: {
-    backgroundColor: '#00F2FE',
-    borderColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   categoryPillText: {
-    color: '#8E95A5',
+    color: '#71717A',
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   categoryPillTextActive: {
     color: '#000000',
-    fontWeight: '800',
+    fontWeight: '700',
   },
   sheetBody: {
     paddingHorizontal: 12,
@@ -482,7 +509,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionHeader: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.8,
@@ -495,15 +522,15 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '31%',
-    backgroundColor: '#161B26',
-    borderRadius: 10,
+    backgroundColor: '#18181C',
+    borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1E2536',
+    borderColor: '#27272F',
   },
   cardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: '#1A2338',
+    borderColor: '#FFFFFF',
+    backgroundColor: '#202026',
   },
   colorPreview: {
     height: 48,
@@ -515,7 +542,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -526,7 +553,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   filterName: {
-    color: '#8E95A5',
+    color: '#A1A1AA',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -535,7 +562,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   categoryTag: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 9,
     marginTop: 2,
   },

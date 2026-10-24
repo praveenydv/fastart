@@ -19,7 +19,7 @@ import {
   setCachedMediaPeaks,
   getMediaAudioDuration,
 } from "../utils/mediaAudioDetector";
-import { allocateClipPlacement } from "../utils/trackPlacement";
+import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
 
 interface UseProjectFilterEffectsParams {
   project: FastArtProject | null;
@@ -377,10 +377,6 @@ export function useProjectFilterEffects({
     const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
     if (aIdx >= 0) {
       const nextDenoise = !audioClips[aIdx].denoise;
-      startProcessing(
-        nextDenoise ? "Noise Reduction On" : "Noise Reduction Off",
-        800,
-      );
       audioClips[aIdx] = {
         ...audioClips[aIdx],
         denoise: nextDenoise,
@@ -405,10 +401,6 @@ export function useProjectFilterEffects({
         return false;
       }
       const nextDenoise = !videoClips[vIdx].denoise;
-      startProcessing(
-        nextDenoise ? "Noise Reduction On" : "Noise Reduction Off",
-        800,
-      );
       videoClips[vIdx] = {
         ...videoClips[vIdx],
         denoise: nextDenoise,
@@ -420,7 +412,7 @@ export function useProjectFilterEffects({
       soundEngine.playSfx(nextDenoise ? "pop" : "click");
       return nextDenoise;
     }
-  }, [project, projectRef, selectedClipId, updateProjectWithHistory, startProcessing]);
+  }, [project, projectRef, selectedClipId, updateProjectWithHistory]);
 
   // Extract Audio from Video Clip to Independent Audio Track
   const handleExtractAudioFromVideo = useCallback(async () => {
@@ -451,12 +443,10 @@ export function useProjectFilterEffects({
         (targetVideo.url ? getMediaAudioDuration(targetVideo.url) : null) ||
         Math.max(0.1, trimIn + targetVideo.duration * speed);
 
-      // Intelligent placement on audio track lane (preferred 1, or next non-overlapping track)
-      const placement = allocateClipPlacement(
+      // Allocate a brand-new track for extracted audio
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         current,
         targetVideo.startTime,
-        targetVideo.duration,
-        1,
       );
 
       const existingPeaks = targetVideo.peaks;
@@ -480,7 +470,7 @@ export function useProjectFilterEffects({
         fadeOut: targetVideo.fadeOut ?? 0,
         denoise: targetVideo.denoise,
         url: targetVideo.url,
-        trackIndex: placement ? placement.trackIndex : 1,
+        trackIndex: newTrackIndex,
         peaks: existingPeaks ? [...existingPeaks] : undefined,
       };
 
@@ -535,17 +525,20 @@ export function useProjectFilterEffects({
               : t.mask !== undefined
                 ? t.mask
                 : videoClips[idx].mask;
-          const preservedCrop = videoClips[idx].crop;
+          const finalCrop =
+            t.crop !== undefined
+              ? t.crop
+              : videoClips[idx].crop;
           videoClips[idx] = {
             ...videoClips[idx],
             transform: {
               ...(videoClips[idx].transform || {}),
               ...t,
               mask: finalMask,
-              crop: preservedCrop,
+              crop: finalCrop,
             },
             mask: finalMask,
-            crop: preservedCrop,
+            crop: finalCrop,
           };
           updated.tracks = { ...current.tracks, video: videoClips };
         }

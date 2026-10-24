@@ -25,6 +25,30 @@ export const BG_SWATCHES = [
   { label: "White", value: "rgba(255,255,255,0.92)" },
 ];
 
+export const STROKE_COLOR_SWATCHES = [
+  { label: "None", value: "none" },
+  { label: "Black", value: "#000000" },
+  { label: "White", value: "#FFFFFF" },
+  { label: "Yellow", value: "#FFE600" },
+  { label: "Cyan", value: "#00F2FE" },
+  { label: "Red", value: "#FF0050" },
+  { label: "Green", value: "#10B981" },
+  { label: "Purple", value: "#8B5CF6" },
+  { label: "Pink", value: "#FB7185" },
+  { label: "Orange", value: "#F59E0B" },
+  { label: "Blue", value: "#38BDF8" },
+  { label: "Slate", value: "#64748B" },
+];
+
+export const STROKE_WIDTH_OPTIONS = [
+  { label: "None", value: 0 },
+  { label: "1px", value: 1 },
+  { label: "2px", value: 2 },
+  { label: "3px", value: 3 },
+  { label: "5px", value: 5 },
+  { label: "8px", value: 8 },
+];
+
 import { FONT_CATALOG, FontDefinition } from "../../../utils/fontCatalog";
 
 export const FONT_OPTIONS = FONT_CATALOG;

@@ -1,4 +1,7 @@
 import React from "react";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { soundEngine } from "../../utils/audioEngine";
 import MediaPickerModal from "../Panels/MediaPickerModal";
 import TextModal from "../Panels/TextModal";
 import AudioModal from "../Panels/AudioModal";
@@ -11,9 +14,11 @@ import ExportModal from "../Panels/ExportModal";
 import SettingsModal from "../Panels/SettingsModal";
 import NotificationsModal from "../Panels/NotificationsModal";
 import VolumeModal from "../Panels/VolumeModal";
-import CropTransformModal from "../Panels/CropTransformModal";
+import MaskModal from "../Panels/MaskModal";
+import TransformModal from "../Panels/TransformModal";
 import AutoCutModal from "../Panels/AutoCutModal";
 import CanvasModal from "../Panels/CanvasModal";
+import BackgroundModal from "../Panels/BackgroundModal";
 import AIEnhanceModal from "../Panels/AIEnhanceModal";
 import TextToSpeechModal from "../Panels/TextToSpeechModal";
 import CutoutModal from "../Panels/CutoutModal";
@@ -54,6 +59,7 @@ interface EditorModalsProps {
   setClipToDelete: (val: any) => void;
   handleAddMedia: (media: any[]) => void;
   handleApplyCutout: (cutout: any) => void;
+  cutoutInitialMode?: 'auto' | 'chroma';
   handleApplyMotionTracking: (track: any) => void;
   handleAddText: (clip: TextClip) => void;
   handleUpdateText: (clip: TextClip) => void;
@@ -85,7 +91,42 @@ interface EditorModalsProps {
   handleConfirmDeleteClip: () => void;
   handleAddCaptions?: (captions: any[]) => void;
   handleUpdateCaption?: (clip: any) => void;
+  transformInitialTab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle';
+  onOpenScreenCrop?: () => void;
+  isInline?: boolean;
+  handleMoveClip?: (
+    clipId: string,
+    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    newStartTime: number,
+    newTrackIndex?: number,
+    isInsertNewTrack?: boolean,
+  ) => void;
 }
+
+export const INLINE_MODAL_KEYS = new Set([
+  'filters',
+  'transform',
+  'mask',
+  'speed',
+  'volume',
+  'text',
+  'stickers',
+  'effects',
+  'captions',
+  'transitions',
+  'enhance',
+  'autocut',
+  'canvas',
+  'background',
+  'keyframe',
+  'tts',
+  'cutout',
+  'tracking',
+  'layer',
+  'opacity',
+  'animation',
+  'audio_effects',
+]);
 
 export const EditorModals: React.FC<EditorModalsProps> = ({
   activeModal,
@@ -109,6 +150,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   setClipToDelete,
   handleAddMedia,
   handleApplyCutout,
+  cutoutInitialMode,
   handleApplyMotionTracking,
   handleAddText,
   handleUpdateText,
@@ -138,9 +180,22 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleDeleteKeyframeAtTime,
   handleClearAllKeyframes,
   handleConfirmDeleteClip,
+  transformInitialTab,
+  onOpenScreenCrop,
+  isInline = false,
+  handleMoveClip,
 }) => {
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
+
+  // When isInline is true, only render if activeModal is an inline modal tool
+  if (isInline && (!activeModal || !INLINE_MODAL_KEYS.has(activeModal))) {
+    return null;
+  }
+  // When isInline is false, do not render inline modal tools (they are rendered in the panel/dock)
+  if (!isInline && activeModal && INLINE_MODAL_KEYS.has(activeModal)) {
+    return null;
+  }
 
   return (
     <>
@@ -148,7 +203,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "media" && (
         <MediaPickerModal
           visible={true}
-          onClose={handleCancel}
+          onClose={closeModal}
           onAddMedia={handleAddMedia}
         />
       )}
@@ -160,6 +215,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onApply={handleApply}
           currentCutout={selectedClip?.cutout}
           onApplyCutout={handleApplyCutout}
+          initialMode={cutoutInitialMode}
+          isInline={isInline}
         />
       )}
 
@@ -178,6 +235,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           }
           currentTrack={selectedClip?.motionTrack}
           onApplyTracking={handleApplyMotionTracking}
+          isInline={isInline}
         />
       )}
 
@@ -210,6 +268,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
               }
             }}
             currentPlayheadTime={currentTime}
+            isInline={isInline}
           />
         );
       })()}
@@ -217,8 +276,10 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {activeModal === "audio" && (
         <AudioModal
           visible={true}
-          onClose={handleCancel}
+          onClose={closeModal}
           onAddAudio={handleAddAudio}
+          project={project}
+          onUpdateProject={updateProjectWithHistory}
         />
       )}
 
@@ -229,6 +290,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onApply={handleApply}
           activeFilter={selectedClip?.filter || "normal"}
           onSelectFilter={handleApplyFilter}
+          isInline={isInline}
         />
       )}
 
@@ -245,6 +307,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
               : null
           }
           onUpdateEffect={handleUpdateEffect}
+          isVideoClip={selectedClipType === "video" && !!selectedClip}
+          isInline={isInline}
         />
       )}
 
@@ -260,6 +324,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           }
           onUpdateSticker={handleUpdateSticker}
           currentPlayheadTime={currentTime}
+          isInline={isInline}
         />
       )}
 
@@ -274,6 +339,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
             )?.transition
           }
           onApplyTransition={handleApplyTransition}
+          isInline={isInline}
         />
       )}
 
@@ -288,6 +354,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentCurve={selectedClip?.speedCurve}
           currentSlowMo={selectedClip?.smoothSlowMo}
           onApplySpeed={handleApplySpeed}
+          isInline={isInline}
         />
       )}
 
@@ -335,18 +402,34 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           hasAudio={mediaHasAudioTrack(selectedClip)}
           onApplyVolume={handleApplyVolume}
           onExtractAudio={handleExtractAudioFromVideo}
+          isInline={isInline}
         />
       )}
 
       {activeModal === "mask" && (
-        <CropTransformModal
+        <MaskModal
+          visible={true}
+          onClose={handleCancel}
+          onApply={handleApply}
+          currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
+          onApplyMask={(newMask) =>
+            handleApplyTransform(selectedClip?.transform || {}, undefined, newMask)
+          }
+          isInline={isInline}
+        />
+      )}
+
+      {activeModal === "transform" && (
+        <TransformModal
           visible={true}
           onClose={handleCancel}
           onApply={handleApply}
           currentTransform={selectedClip?.transform}
-          currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
-          initialTab="mask"
+          currentCrop={selectedClip?.crop || selectedClip?.transform?.crop}
+          initialTab={transformInitialTab || "crop"}
           onApplyTransform={handleApplyTransform}
+          onOpenScreenCrop={onOpenScreenCrop}
+          isInline={isInline}
         />
       )}
 
@@ -366,6 +449,18 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onApply={handleApply}
           project={project}
           onUpdateProject={(updates) => updateProjectWithHistory(updates)}
+          isInline={isInline}
+        />
+      )}
+
+      {activeModal === "background" && (
+        <BackgroundModal
+          visible={true}
+          onClose={handleCancel}
+          onApply={handleApply}
+          project={project}
+          onUpdateProject={(updates) => updateProjectWithHistory(updates)}
+          isInline={isInline}
         />
       )}
 
@@ -376,6 +471,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onApply={handleApply}
           initialValues={(selectedClip as any)?.enhance}
           onApplyEnhance={handleApplyEnhance}
+          isInline={isInline}
         />
       )}
 
@@ -389,6 +485,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
               ? (selectedClip as TextClip).text
               : undefined
           }
+          isInline={isInline}
         />
       )}
 
@@ -420,6 +517,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
             onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
             onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
             onClearAllKeyframes={handleClearAllKeyframes}
+            isInline={isInline}
           />
         );
       })()}
@@ -443,7 +541,213 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentTime={currentTime}
           onSeek={(t) => setCurrentTime && setCurrentTime(t)}
           selectedClipId={selectedClipId}
+          isInline={isInline}
         />
+      )}
+
+      {/* Layer / Track Order Panel */}
+      {activeModal === "layer" && selectedClip && (
+        <View style={modalStyles.panelContainer}>
+          <Text style={modalStyles.panelSectionTitle}>LAYER ORDER</Text>
+          <View style={modalStyles.layerInfoBox}>
+            <MaterialCommunityIcons name="layers-outline" size={24} color="#00F2FE" />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={modalStyles.layerInfoTitle}>
+                Current: Layer {((typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : (selectedClipType === "video" ? 0 : 2))) + 1}
+              </Text>
+              <Text style={modalStyles.layerInfoSubtitle}>
+                Higher layer numbers render in front of lower layer numbers.
+              </Text>
+            </View>
+          </View>
+
+          <View style={modalStyles.btnGrid}>
+            <TouchableOpacity
+              style={modalStyles.actionCardBtn}
+              onPress={() => {
+                soundEngine.playSfx("click");
+                const cur = typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : 0;
+                if (cur > 0 && handleMoveClip) {
+                  handleMoveClip(selectedClip.id, selectedClipType as any, selectedClip.startTime, cur - 1);
+                } else if (cur > 0 && project) {
+                  const tracks = { ...project.tracks };
+                  const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                  const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                  if (idx >= 0) {
+                    targetList[idx] = { ...targetList[idx], trackIndex: cur - 1 };
+                    updateProjectWithHistory({ ...project, tracks });
+                  }
+                }
+              }}
+            >
+              <Ionicons name="arrow-down" size={16} color="#00F2FE" />
+              <Text style={modalStyles.actionCardText}>Move Down</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={modalStyles.actionCardBtn}
+              onPress={() => {
+                soundEngine.playSfx("click");
+                const cur = typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : 0;
+                if (handleMoveClip) {
+                  handleMoveClip(selectedClip.id, selectedClipType as any, selectedClip.startTime, cur + 1);
+                } else if (project) {
+                  const tracks = { ...project.tracks };
+                  const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                  const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                  if (idx >= 0) {
+                    targetList[idx] = { ...targetList[idx], trackIndex: cur + 1 };
+                    updateProjectWithHistory({ ...project, tracks });
+                  }
+                }
+              }}
+            >
+              <Ionicons name="arrow-up" size={16} color="#00F2FE" />
+              <Text style={modalStyles.actionCardText}>Move Up</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[modalStyles.panelSectionTitle, { marginTop: 16 }]}>QUICK LAYER ASSIGN</Text>
+          <View style={modalStyles.chipRow}>
+            {[1, 2, 3, 4, 5].map((lvl) => {
+              const curLvl = ((typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : (selectedClipType === "video" ? 0 : 2))) + 1;
+              const isSel = curLvl === lvl;
+              return (
+                <TouchableOpacity
+                  key={lvl}
+                  style={[modalStyles.chipBtn, isSel && modalStyles.chipBtnActive]}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (handleMoveClip) {
+                      handleMoveClip(selectedClip.id, selectedClipType as any, selectedClip.startTime, lvl - 1);
+                    } else if (project) {
+                      const tracks = { ...project.tracks };
+                      const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                      const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                      if (idx >= 0) {
+                        targetList[idx] = { ...targetList[idx], trackIndex: lvl - 1 };
+                        updateProjectWithHistory({ ...project, tracks });
+                      }
+                    }
+                  }}
+                >
+                  <Text style={[modalStyles.chipText, isSel && modalStyles.chipTextActive]}>
+                    Layer {lvl}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Opacity Panel */}
+      {activeModal === "opacity" && selectedClip && (
+        <View style={modalStyles.panelContainer}>
+          <Text style={modalStyles.panelSectionTitle}>CLIP OPACITY</Text>
+          <View style={modalStyles.chipRow}>
+            {[100, 75, 50, 25, 0].map((op) => {
+              const curOp = selectedClip?.opacity !== undefined ? Math.round(selectedClip.opacity * 100) : 100;
+              const isSel = curOp === op;
+              return (
+                <TouchableOpacity
+                  key={op}
+                  style={[modalStyles.chipBtn, isSel && modalStyles.chipBtnActive]}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (project) {
+                      const tracks = { ...project.tracks };
+                      const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                      const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                      if (idx >= 0) {
+                        targetList[idx] = { ...targetList[idx], opacity: op / 100 };
+                        updateProjectWithHistory({ ...project, tracks });
+                      }
+                    }
+                  }}
+                >
+                  <Text style={[modalStyles.chipText, isSel && modalStyles.chipTextActive]}>
+                    {op}%
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Animation Presets Panel */}
+      {activeModal === "animation" && selectedClip && (
+        <ScrollView style={modalStyles.panelContainer} showsVerticalScrollIndicator={false}>
+          <Text style={modalStyles.panelSectionTitle}>ENTRANCE & MOTION</Text>
+          <View style={modalStyles.chipGrid}>
+            {[
+              { id: "none", name: "None", icon: "close-circle-outline" },
+              { id: "fade_in", name: "Fade In", icon: "arrow-up-right" },
+              { id: "slide_left", name: "Slide Left", icon: "arrow-back-outline" },
+              { id: "slide_right", name: "Slide Right", icon: "arrow-forward-outline" },
+              { id: "zoom_in", name: "Zoom In", icon: "expand-outline" },
+              { id: "zoom_out", name: "Zoom Out", icon: "contract-outline" },
+              { id: "bounce", name: "Bounce", icon: "flash-outline" },
+            ].map((anim) => {
+              const isSel = (selectedClip?.animation?.preset || "none") === anim.id;
+              return (
+                <TouchableOpacity
+                  key={anim.id}
+                  style={[modalStyles.animCard, isSel && modalStyles.animCardActive]}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    if (project) {
+                      const tracks = { ...project.tracks };
+                      const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                      const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                      if (idx >= 0) {
+                        targetList[idx] = {
+                          ...targetList[idx],
+                          animation: anim.id === "none" ? undefined : { preset: anim.id, duration: 0.5 },
+                        };
+                        updateProjectWithHistory({ ...project, tracks });
+                      }
+                    }
+                  }}
+                >
+                  <Ionicons name={anim.icon as any} size={20} color={isSel ? "#00F2FE" : "#A1A1AA"} />
+                  <Text style={[modalStyles.animCardText, isSel && modalStyles.animCardTextActive]}>
+                    {anim.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+      )}
+
+      {/* Audio Effects Panel */}
+      {activeModal === "audio_effects" && (
+        <ScrollView style={modalStyles.panelContainer} showsVerticalScrollIndicator={false}>
+          <Text style={modalStyles.panelSectionTitle}>VOICE & AUDIO EFFECTS</Text>
+          <View style={modalStyles.chipGrid}>
+            {[
+              { id: "deep", name: "Deep Voice", icon: "waveform" },
+              { id: "echo", name: "Echo Chamber", icon: "ear-hearing" },
+              { id: "robot", name: "Robot Synth", icon: "robot-outline" },
+              { id: "reverb", name: "Mic Reverb", icon: "surround-sound" },
+              { id: "lofi", name: "Lo-Fi Vinyl", icon: "disc" },
+              { id: "high", name: "High Pitch", icon: "arrow-up-circle-outline" },
+            ].map((eff) => (
+              <TouchableOpacity
+                key={eff.id}
+                style={modalStyles.animCard}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                }}
+              >
+                <MaterialCommunityIcons name={eff.icon as any} size={20} color="#00F2FE" />
+                <Text style={modalStyles.animCardText}>{eff.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
       )}
 
       {/* Clip Deletion Confirmation Modal */}
@@ -466,3 +770,114 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
     </>
   );
 };
+
+const modalStyles = StyleSheet.create({
+  panelContainer: {
+    padding: 16,
+    flex: 1,
+    backgroundColor: "#0E0F14",
+  },
+  panelSectionTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#71717A",
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  layerInfoBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#16171F",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#262838",
+    marginBottom: 16,
+  },
+  layerInfoTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  layerInfoSubtitle: {
+    fontSize: 11,
+    color: "#8E95A5",
+    marginTop: 2,
+  },
+  btnGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionCardBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1A1B24",
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2A2D3C",
+    gap: 6,
+  },
+  actionCardText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chipBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#16171F",
+    borderWidth: 1,
+    borderColor: "#272836",
+  },
+  chipBtnActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderColor: "#00F2FE",
+  },
+  chipText: {
+    fontSize: 12,
+    color: "#A1A1AA",
+    fontWeight: "600",
+  },
+  chipTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+  chipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  animCard: {
+    width: "47%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#16171F",
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#262838",
+    gap: 6,
+  },
+  animCardActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderColor: "#00F2FE",
+  },
+  animCardText: {
+    fontSize: 12,
+    color: "#D1D5DB",
+    fontWeight: "600",
+  },
+  animCardTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+});

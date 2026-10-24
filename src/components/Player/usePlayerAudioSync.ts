@@ -29,6 +29,7 @@ export function usePlayerAudioSync({
     [id: string]: {
       source: any;
       highpass: any;
+      presence: any;
       lowpass: any;
       compressor: any;
       gain: any;
@@ -150,33 +151,41 @@ export function usePlayerAudioSync({
         try {
           const source = actx.createMediaElementSource(el);
 
-          // 1. Highpass filter to eliminate low-frequency rumble, AC mains hum (50/60Hz), and mic handling thumps
+          // 1. Highpass filter to eliminate sub-bass rumble (<55Hz), DC drift & mic handling thumps
           const highpass = actx.createBiquadFilter();
           highpass.type = "highpass";
-          highpass.frequency.value = clip.denoise ? 95 : 10;
+          highpass.frequency.value = clip.denoise ? 55 : 10;
           highpass.Q.value = 0.707;
 
-          // 2. Lowpass filter to attenuate high-frequency preamp hiss, digital quantization hiss, and white noise
+          // 2. Vocal presence peaking filter for gentle speech intelligibility without harshness
+          const presence = actx.createBiquadFilter();
+          presence.type = "peaking";
+          presence.frequency.value = 2800;
+          presence.Q.value = 0.8;
+          presence.gain.value = clip.denoise ? 1.2 : 0;
+
+          // 3. Lowpass filter preserving natural vocal sibilance, air, and high-frequency brilliance
           const lowpass = actx.createBiquadFilter();
           lowpass.type = "lowpass";
-          lowpass.frequency.value = clip.denoise ? 9500 : 22000;
+          lowpass.frequency.value = clip.denoise ? 19000 : 22000;
           lowpass.Q.value = 0.707;
 
-          // 3. Dynamics Noise Gate & Compressor to suppress background room noise floor
+          // 4. Transparent dynamics limiter (preserves full vocal dynamic range without crushing audio)
           const compressor = actx.createDynamicsCompressor();
-          compressor.threshold.value = clip.denoise ? -36 : 0;
-          compressor.knee.value = 12;
-          compressor.ratio.value = clip.denoise ? 6 : 1;
+          compressor.threshold.value = clip.denoise ? -6 : 0;
+          compressor.knee.value = 24;
+          compressor.ratio.value = clip.denoise ? 1.5 : 1;
           compressor.attack.value = 0.005;
-          compressor.release.value = 0.2;
+          compressor.release.value = 0.15;
 
-          // 4. Output gain node
+          // 5. Output gain node
           const gain = actx.createGain();
           gain.gain.value = 1.0;
 
-          // Connect DSP chain: source -> highpass -> lowpass -> compressor -> gain -> destination
+          // Connect DSP chain: source -> highpass -> presence -> lowpass -> compressor -> gain -> destination
           source.connect(highpass);
-          highpass.connect(lowpass);
+          highpass.connect(presence);
+          presence.connect(lowpass);
           lowpass.connect(compressor);
           compressor.connect(gain);
           gain.connect(actx.destination);
@@ -184,6 +193,7 @@ export function usePlayerAudioSync({
           audioNodesRef.current[clip.id] = {
             source,
             highpass,
+            presence,
             lowpass,
             compressor,
             gain,
@@ -227,12 +237,14 @@ export function usePlayerAudioSync({
           const now = actx.currentTime;
           // Apply active Denoise DSP filtering or transparent bypass
           if (clip.denoise) {
-            nodes.highpass.frequency.setTargetAtTime(95, now, 0.02);
-            nodes.lowpass.frequency.setTargetAtTime(9500, now, 0.02);
-            nodes.compressor.threshold.setTargetAtTime(-36, now, 0.02);
-            nodes.compressor.ratio.setTargetAtTime(6, now, 0.02);
+            nodes.highpass.frequency.setTargetAtTime(55, now, 0.02);
+            nodes.presence.gain.setTargetAtTime(1.2, now, 0.02);
+            nodes.lowpass.frequency.setTargetAtTime(19000, now, 0.02);
+            nodes.compressor.threshold.setTargetAtTime(-6, now, 0.02);
+            nodes.compressor.ratio.setTargetAtTime(1.5, now, 0.02);
           } else {
             nodes.highpass.frequency.setTargetAtTime(10, now, 0.02);
+            nodes.presence.gain.setTargetAtTime(0, now, 0.02);
             nodes.lowpass.frequency.setTargetAtTime(22000, now, 0.02);
             nodes.compressor.threshold.setTargetAtTime(0, now, 0.02);
             nodes.compressor.ratio.setTargetAtTime(1, now, 0.02);

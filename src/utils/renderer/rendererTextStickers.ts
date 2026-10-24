@@ -10,6 +10,7 @@ export function drawSticker(
   h: number,
 ) {
   ctx.save();
+  const previewScale = Math.max(0.2, (w || 360) / 360);
   const motion = applyMotionTracking(
     time,
     stk.startTime,
@@ -31,7 +32,7 @@ export function drawSticker(
   } else if (anim === "pulse") {
     scale *= 1.0 + Math.sin(elapsed * 6) * 0.1;
   } else if (anim === "wave") {
-    offsetY = Math.sin(elapsed * 4) * 8;
+    offsetY = Math.sin(elapsed * 4) * (8 * previewScale);
   } else if (anim === "fade") {
     if (elapsed < 0.35) alpha = elapsed / 0.35;
   } else if (anim === "pop") {
@@ -51,22 +52,23 @@ export function drawSticker(
   const isBadge = charText.length > 2;
 
   if (isBadge) {
+    const badgeFontSize = Math.round(20 * previewScale);
     ctx.font =
-      'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+      `bold ${badgeFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto`;
     const metrics = ctx.measureText(charText);
-    const badgeW = metrics.width + 24;
-    const badgeH = 38;
+    const badgeW = metrics.width + 24 * previewScale;
+    const badgeH = 38 * previewScale;
 
     ctx.shadowColor = "rgba(0, 242, 254, 0.4)";
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 12 * previewScale;
 
     ctx.fillStyle = "rgba(11, 13, 19, 0.9)";
     if ((ctx as any).roundRect) {
       ctx.beginPath();
-      (ctx as any).roundRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 19);
+      (ctx as any).roundRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 19 * previewScale);
       ctx.fill();
       ctx.strokeStyle = "#00F2FE";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = Math.max(1, 2 * previewScale);
       ctx.stroke();
     } else {
       ctx.fillRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH);
@@ -78,7 +80,8 @@ export function drawSticker(
     ctx.textBaseline = "middle";
     ctx.fillText(charText, 0, 0);
   } else {
-    ctx.font = "64px sans-serif";
+    const stickerFontSize = Math.round(64 * previewScale);
+    ctx.font = `${stickerFontSize}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(charText, 0, 0);
@@ -96,6 +99,7 @@ export function drawTextOverlay(
   isPlaying: boolean = false,
 ) {
   ctx.save();
+  const previewScale = Math.max(0.2, (w || 360) / 360);
   const motion = applyMotionTracking(
     time,
     txt.startTime,
@@ -136,44 +140,44 @@ export function drawTextOverlay(
     if (elapsed < introDur) {
       const p = elapsed / introDur;
       const easeOut = Math.sin((p * Math.PI) / 2);
-      yOffset = (1 - easeOut) * 50;
+      yOffset = (1 - easeOut) * (50 * previewScale);
       alpha = p;
     } else if (timeLeft < exitDur) {
       const p = 1 - timeLeft / exitDur;
-      yOffset = -p * 30;
+      yOffset = -p * (30 * previewScale);
       alpha = 1 - p;
     }
   } else if (anim === "slidedown" || anim === "down") {
     if (elapsed < introDur) {
       const p = elapsed / introDur;
       const easeOut = Math.sin((p * Math.PI) / 2);
-      yOffset = -(1 - easeOut) * 50;
+      yOffset = -(1 - easeOut) * (50 * previewScale);
       alpha = p;
     } else if (timeLeft < exitDur) {
       const p = 1 - timeLeft / exitDur;
-      yOffset = p * 30;
+      yOffset = p * (30 * previewScale);
       alpha = 1 - p;
     }
   } else if (anim === "slide" || anim === "slideleft") {
     if (elapsed < introDur) {
       const p = elapsed / introDur;
       const easeOut = Math.sin((p * Math.PI) / 2);
-      xOffset = (1 - easeOut) * 70;
+      xOffset = (1 - easeOut) * (70 * previewScale);
       alpha = p;
     } else if (timeLeft < exitDur) {
       const p = 1 - timeLeft / exitDur;
-      xOffset = -p * 40;
+      xOffset = -p * (40 * previewScale);
       alpha = 1 - p;
     }
   } else if (anim === "slideright") {
     if (elapsed < introDur) {
       const p = elapsed / introDur;
       const easeOut = Math.sin((p * Math.PI) / 2);
-      xOffset = -(1 - easeOut) * 70;
+      xOffset = -(1 - easeOut) * (70 * previewScale);
       alpha = p;
     } else if (timeLeft < exitDur) {
       const p = 1 - timeLeft / exitDur;
-      xOffset = p * 40;
+      xOffset = p * (40 * previewScale);
       alpha = 1 - p;
     }
   } else if (anim === "zoomin" || anim === "zoom") {
@@ -191,15 +195,15 @@ export function drawTextOverlay(
     scale = (1.0 + Math.sin(elapsed * 6) * 0.08) * (txt.scale || 1.0);
   } else if (anim === "glitch") {
     if (isPlaying && Math.random() > 0.7) {
-      xOffset = (Math.random() - 0.5) * 8;
-      yOffset = (Math.random() - 0.5) * 4;
+      xOffset = (Math.random() - 0.5) * (8 * previewScale);
+      yOffset = (Math.random() - 0.5) * (4 * previewScale);
     }
   } else if (anim === "shake") {
     if (elapsed < 0.8) {
-      xOffset = Math.sin(elapsed * 40) * 4;
+      xOffset = Math.sin(elapsed * 40) * (4 * previewScale);
     }
   } else if (anim === "wave") {
-    yOffset = Math.sin(elapsed * 4) * 8;
+    yOffset = Math.sin(elapsed * 4) * (8 * previewScale);
   } else if (anim === "stamp") {
     if (elapsed < introDur) {
       const p = elapsed / introDur;
@@ -225,7 +229,7 @@ export function drawTextOverlay(
       scale = (1.15 - p * 0.15) * (txt.scale || 1.0);
     }
   } else if (anim === "wiggle") {
-    xOffset = Math.sin(elapsed * 12) * 5;
+    xOffset = Math.sin(elapsed * 12) * (5 * previewScale);
   } else if (anim === "flicker") {
     const flick = Math.sin(elapsed * 25);
     alpha = flick > 0.3 ? 1.0 : 0.45;
@@ -254,7 +258,8 @@ export function drawTextOverlay(
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
   const style = txt.style || {};
-  const fontSize = style.fontSize || 24;
+  const rawFontSize = style.fontSize || 24;
+  const fontSize = Math.round(rawFontSize * previewScale);
   const fontWeight = style.fontWeight || "bold";
   const fontFamily =
     style.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
@@ -263,7 +268,7 @@ export function drawTextOverlay(
   ctx.textBaseline = "middle";
 
   // Automatic multi-line word wrapping so long text never spills outside canvas
-  const maxAllowedW = Math.max(140, (w * 0.88) / Math.max(0.1, scale));
+  const maxAllowedW = Math.max(120 * previewScale, (w * 0.88) / Math.max(0.1, scale));
   const rawParagraphs = displayText.split("\n");
   const lines: string[] = [];
 
@@ -303,9 +308,9 @@ export function drawTextOverlay(
   // Draw Background Pill or Box if present
   if (style.backgroundColor && style.backgroundColor !== "transparent") {
     ctx.fillStyle = style.backgroundColor;
-    const padX = style.paddingHorizontal || 14;
-    const padY = style.paddingVertical || 8;
-    const radius = style.borderRadius || 8;
+    const padX = (style.paddingHorizontal || 14) * previewScale;
+    const padY = (style.paddingVertical || 8) * previewScale;
+    const radius = (style.borderRadius || 8) * previewScale;
 
     ctx.beginPath();
     if ((ctx as any).roundRect) {
@@ -328,7 +333,7 @@ export function drawTextOverlay(
 
     if (style.borderColor && (style.borderWidth || 1)) {
       ctx.strokeStyle = style.borderColor;
-      ctx.lineWidth = style.borderWidth || 2;
+      ctx.lineWidth = Math.max(1, (style.borderWidth || 2) * previewScale);
       ctx.stroke();
     }
   }
@@ -339,49 +344,49 @@ export function drawTextOverlay(
   if (effect === "neon") {
     const glowColor = style.borderColor || style.color || "#00F2FE";
     ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 20 * previewScale;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
   } else if (effect === "3d") {
     ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 4;
-    ctx.shadowOffsetY = 4;
+    ctx.shadowBlur = 4 * previewScale;
+    ctx.shadowOffsetX = 4 * previewScale;
+    ctx.shadowOffsetY = 4 * previewScale;
   } else if (effect === "shadow") {
     ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetX = 3;
-    ctx.shadowOffsetY = 5;
+    ctx.shadowBlur = 12 * previewScale;
+    ctx.shadowOffsetX = 3 * previewScale;
+    ctx.shadowOffsetY = 5 * previewScale;
   } else if (effect === "gold") {
     ctx.shadowColor = "#FFE600";
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 18 * previewScale;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
   } else if (effect === "fire") {
     ctx.shadowColor = "#FF3300";
-    ctx.shadowBlur = 22;
+    ctx.shadowBlur = 22 * previewScale;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = -2;
+    ctx.shadowOffsetY = -2 * previewScale;
   } else if (effect === "frost") {
     ctx.shadowColor = "#00E5FF";
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 20 * previewScale;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
   } else if (effect === "retro_box") {
     ctx.save();
     ctx.fillStyle = "#000000";
     ctx.fillRect(
-      -textWidth / 2 - 8,
-      -textHeight / 2 - 4,
-      textWidth + 16,
-      textHeight + 8,
+      -textWidth / 2 - 8 * previewScale,
+      -textHeight / 2 - 4 * previewScale,
+      textWidth + 16 * previewScale,
+      textHeight + 8 * previewScale,
     );
     ctx.restore();
   } else if (style.textShadowColor) {
     ctx.shadowColor = style.textShadowColor;
-    ctx.shadowBlur = style.textShadowRadius || 12;
-    ctx.shadowOffsetX = style.textShadowOffset?.width || 0;
-    ctx.shadowOffsetY = style.textShadowOffset?.height || 0;
+    ctx.shadowBlur = (style.textShadowRadius || 12) * previewScale;
+    ctx.shadowOffsetX = (style.textShadowOffset?.width || 0) * previewScale;
+    ctx.shadowOffsetY = (style.textShadowOffset?.height || 0) * previewScale;
   }
 
   // Render each wrapped line centered vertically and horizontally
@@ -393,37 +398,37 @@ export function drawTextOverlay(
     if (effect === "3d") {
       ctx.save();
       ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-      for (let offset = 4; offset >= 1; offset--) {
+      for (let offset = Math.max(1, Math.round(4 * previewScale)); offset >= 1; offset--) {
         ctx.fillText(line, offset, lineY + offset);
       }
       ctx.restore();
     } else if (effect === "cyber") {
       ctx.save();
       ctx.fillStyle = "rgba(255, 0, 80, 0.85)";
-      ctx.fillText(line, 3, lineY + 2);
+      ctx.fillText(line, 3 * previewScale, lineY + 2 * previewScale);
       ctx.fillStyle = "rgba(0, 242, 254, 0.85)";
-      ctx.fillText(line, -2, lineY - 2);
+      ctx.fillText(line, -2 * previewScale, lineY - 2 * previewScale);
       ctx.restore();
     } else if (effect === "glitch") {
       ctx.save();
       ctx.fillStyle = "rgba(255, 0, 80, 0.8)";
-      ctx.fillText(line, 3, lineY);
+      ctx.fillText(line, 3 * previewScale, lineY);
       ctx.fillStyle = "rgba(0, 242, 254, 0.8)";
-      ctx.fillText(line, -3, lineY);
+      ctx.fillText(line, -3 * previewScale, lineY);
       ctx.restore();
     } else if (effect === "hologram") {
       ctx.save();
       ctx.fillStyle = "rgba(0, 242, 254, 0.6)";
-      ctx.fillText(line, -2, lineY);
+      ctx.fillText(line, -2 * previewScale, lineY);
       ctx.fillStyle = "rgba(255, 0, 128, 0.6)";
-      ctx.fillText(line, 2, lineY);
+      ctx.fillText(line, 2 * previewScale, lineY);
       ctx.restore();
     }
 
     // Optional Stroke / Outline
     if (effect === "stroke" || (style.strokeColor && (style.strokeWidth || 2))) {
       ctx.strokeStyle = style.strokeColor || style.borderColor || "#000000";
-      ctx.lineWidth = style.strokeWidth || 3;
+      ctx.lineWidth = Math.max(0.5, (style.strokeWidth || 3) * previewScale);
       ctx.strokeText(line, 0, lineY);
     }
 
@@ -447,6 +452,7 @@ export function drawCaptionOverlay(
   isPlaying: boolean = false,
 ) {
   ctx.save();
+  const previewScale = Math.max(0.2, (w || 360) / 360);
   const motion = applyMotionTracking(
     time,
     cap.startTime,
@@ -497,7 +503,8 @@ export function drawCaptionOverlay(
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
   const style = cap.style || {};
-  const fontSize = style.fontSize || 26;
+  const rawFontSize = style.fontSize || 26;
+  const fontSize = Math.round(rawFontSize * previewScale);
   const fontWeight = style.fontWeight || "900";
   const fontFamily =
     style.fontFamily || 'Impact, Arial Black, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -528,11 +535,11 @@ export function drawCaptionOverlay(
     cap.highlightColor || cap.style?.highlightColor || "#FFE600";
   const baseTextColor = style.color || "#FFFFFF";
   const strokeColor = style.strokeColor || "#000000";
-  const strokeWidth = style.strokeWidth ?? 3.5;
+  const strokeWidth = Math.max(0.5, (style.strokeWidth ?? 3.5) * previewScale);
 
   // Measure word widths and lay them out into wrapped lines
   const spaceWidth = ctx.measureText(" ").width;
-  const maxAllowedW = Math.max(160, (w * 0.9) / Math.max(0.1, scale));
+  const maxAllowedW = Math.max(140 * previewScale, (w * 0.9) / Math.max(0.1, scale));
 
   interface MeasuredWord {
     word: string;
@@ -596,9 +603,9 @@ export function drawCaptionOverlay(
   // Draw Background Box / Pill if configured (e.g. Minimal subtitle box)
   if (style.backgroundColor && style.backgroundColor !== "transparent") {
     ctx.fillStyle = style.backgroundColor;
-    const padX = style.paddingHorizontal || 16;
-    const padY = style.paddingVertical || 8;
-    const radius = style.borderRadius || 10;
+    const padX = (style.paddingHorizontal || 16) * previewScale;
+    const padY = (style.paddingVertical || 8) * previewScale;
+    const radius = (style.borderRadius || 10) * previewScale;
 
     ctx.beginPath();
     if ((ctx as any).roundRect) {
@@ -621,7 +628,7 @@ export function drawCaptionOverlay(
 
     if (style.borderColor && (style.borderWidth || 1)) {
       ctx.strokeStyle = style.borderColor;
-      ctx.lineWidth = style.borderWidth || 2;
+      ctx.lineWidth = Math.max(1, (style.borderWidth || 2) * previewScale);
       ctx.stroke();
     }
   }
@@ -630,17 +637,17 @@ export function drawCaptionOverlay(
   const effect = style.textEffect || "none";
   if (effect === "neon") {
     ctx.shadowColor = highlightColor || "#00F2FE";
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 18 * previewScale;
   } else if (effect === "3d") {
     ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 3;
-    ctx.shadowOffsetY = 3;
+    ctx.shadowBlur = 4 * previewScale;
+    ctx.shadowOffsetX = 3 * previewScale;
+    ctx.shadowOffsetY = 3 * previewScale;
   } else if (effect === "shadow") {
     ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 4;
+    ctx.shadowBlur = 10 * previewScale;
+    ctx.shadowOffsetX = 2 * previewScale;
+    ctx.shadowOffsetY = 4 * previewScale;
   }
 
   // Draw lines & words with live speaking word highlight
@@ -671,20 +678,20 @@ export function drawCaptionOverlay(
           ctx.translate(-(curX + mw.width / 2), -lineY);
         } else if (hlStyle === "glow") {
           ctx.shadowColor = highlightColor;
-          ctx.shadowBlur = 24;
+          ctx.shadowBlur = 24 * previewScale;
         } else if (hlStyle === "box") {
           // Rounded background badge behind active word
           ctx.save();
           ctx.fillStyle = highlightColor;
-          const hp = 6;
-          const vp = 3;
+          const hp = 6 * previewScale;
+          const vp = 3 * previewScale;
           const bw = mw.width + hp * 2;
           const bh = fontSize * 1.3 + vp * 2;
           const bx = curX - hp;
           const by = lineY - fontSize * 0.65 - vp;
           ctx.beginPath();
           if ((ctx as any).roundRect) {
-            (ctx as any).roundRect(bx, by, bw, bh, 6);
+            (ctx as any).roundRect(bx, by, bw, bh, 6 * previewScale);
           } else {
             ctx.rect(bx, by, bw, bh);
           }
@@ -694,7 +701,7 @@ export function drawCaptionOverlay(
           // Underline bar beneath the active word
           ctx.save();
           ctx.fillStyle = highlightColor;
-          ctx.fillRect(curX, lineY + fontSize * 0.55, mw.width, 4);
+          ctx.fillRect(curX, lineY + fontSize * 0.55, mw.width, Math.max(1, 4 * previewScale));
           ctx.restore();
         }
       }

@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { styles } from './HomeDashboardStyles';
 import { soundEngine } from '../../utils/audioEngine';
 
@@ -32,19 +31,14 @@ export const RenameProjectModal: React.FC<RenameProjectModalProps> = ({
         onPress={onClose}
       >
         <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-          <View style={styles.modalHeaderRow}>
-            <View style={styles.modalHeaderIcon}>
-              <Ionicons name="create-outline" size={18} color="#00F2FE" />
-            </View>
-            <Text style={styles.modalTitle}>Rename Project</Text>
-          </View>
+          <Text style={styles.modalTitle}>Rename Project</Text>
 
           <TextInput
             style={styles.titleInput}
             value={newTitleText}
             onChangeText={setNewTitleText}
             placeholder="Project title..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#71717A"
             autoFocus
             selectTextOnFocus
             maxLength={40}
@@ -78,3 +72,5 @@ export const RenameProjectModal: React.FC<RenameProjectModalProps> = ({
     </Modal>
   );
 };
+
+export default RenameProjectModal;

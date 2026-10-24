@@ -36,6 +36,7 @@ export interface KeyframeModalProps {
   ) => void;
   onDeleteKeyframeAtTime?: (time: number) => void;
   onClearAllKeyframes?: () => void;
+  isInline?: boolean;
 }
 
 export default function KeyframeModal({
@@ -51,6 +52,7 @@ export default function KeyframeModal({
   onUpdateKeyframeTransform,
   onDeleteKeyframeAtTime,
   onClearAllKeyframes,
+  isInline = false,
 }: KeyframeModalProps) {
   useEffect(() => {
     if (visible) {
@@ -107,20 +109,13 @@ export default function KeyframeModal({
     return `${min < 10 ? "0" : ""}${min}:${sec < 10 ? "0" : ""}${sec.toFixed(2)}`;
   };
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.backdrop}>
-        <View style={styles.modalCard}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.modalCard, isInline && ({ flex: 1, maxHeight: '100%', borderTopLeftRadius: 0, borderTopRightRadius: 0, borderWidth: 0 } as any)]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Standardized Header */}
-          <View style={styles.header}>
+      {/* Standardized Header */}
+      <View style={styles.header}>
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
               onPress={() => {
@@ -304,6 +299,26 @@ export default function KeyframeModal({
             )}
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return (
+      <View style={{ flex: 1, width: "100%", height: "100%", backgroundColor: "#12131A" }}>
+        {sheetContent}
+      </View>
+    );
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.backdrop}>
+        {sheetContent}
       </View>
     </Modal>
   );

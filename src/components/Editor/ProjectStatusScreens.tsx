@@ -32,7 +32,7 @@ export const ProjectStatusScreens: React.FC<ProjectStatusScreensProps> = ({
   ) {
     return (
       <View style={styles.projectLoadingSurface}>
-        <ActivityIndicator size="large" color="#00F2FE" />
+        <ActivityIndicator size="large" color="#FFFFFF" />
         <Text style={styles.projectLoadingText}>Opening project...</Text>
       </View>
     );
@@ -71,13 +71,13 @@ export const ProjectStatusScreens: React.FC<ProjectStatusScreensProps> = ({
 const styles = StyleSheet.create({
   projectLoadingSurface: {
     flex: 1,
-    backgroundColor: "#0B0D13",
+    backgroundColor: "#09090B",
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
   },
   projectLoadingText: {
-    color: "#94A3B8",
+    color: "#A1A1AA",
     fontSize: 14,
     fontWeight: "600",
   },

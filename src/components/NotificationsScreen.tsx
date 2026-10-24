@@ -5,10 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
 import { AppNotification, formatNotificationTime } from "../utils/storage";
+import { theme } from "../constants/theme";
 
 interface NotificationsScreenProps {
   notifications: AppNotification[];
@@ -27,6 +29,9 @@ export default function NotificationsScreen({
   onActionClick,
   onBack,
 }: NotificationsScreenProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const unreadCount = notifications.filter((n) => n.unread).length;
 
@@ -43,51 +48,43 @@ export default function NotificationsScreen({
     if (combined.includes("delete") || combined.includes("remove")) {
       return {
         icon: "trash-outline",
-        color: "#FF4567",
-        bgColor: "rgba(255, 69, 103, 0.12)",
+        color: "#EF4444",
+        bgColor: "rgba(239, 68, 68, 0.15)",
       };
     }
     if (combined.includes("export") || combined.includes("render") || combined.includes("download")) {
       return {
         icon: "cloud-download-outline",
-        color: "#38BDF8",
-        bgColor: "rgba(56, 189, 248, 0.12)",
+        color: "#00F2FE",
+        bgColor: "rgba(0, 242, 254, 0.15)",
       };
     }
     if (combined.includes("duplicate") || combined.includes("copy")) {
       return {
         icon: "copy-outline",
-        color: "#818CF8",
-        bgColor: "rgba(129, 140, 248, 0.12)",
+        color: "#A78BFA",
+        bgColor: "rgba(167, 139, 250, 0.15)",
       };
     }
     if (combined.includes("create") || combined.includes("new project") || combined.includes("ready for editing")) {
       return {
         icon: "film-outline",
-        color: "#00F2FE",
-        bgColor: "rgba(0, 242, 254, 0.12)",
+        color: "#10B981",
+        bgColor: "rgba(16, 185, 129, 0.15)",
       };
     }
     if (combined.includes("media") || combined.includes("audio") || combined.includes("music") || combined.includes("sound")) {
       return {
         icon: "musical-notes-outline",
-        color: "#10B981",
-        bgColor: "rgba(16, 185, 129, 0.12)",
-      };
-    }
-
-    if (item.icon && (Ionicons.glyphMap as any)[item.icon]) {
-      return {
-        icon: item.icon as keyof typeof Ionicons.glyphMap,
-        color: item.unread ? "#00F2FE" : "#94A3B8",
-        bgColor: item.unread ? "rgba(0, 242, 254, 0.1)" : "rgba(148, 163, 184, 0.08)",
+        color: "#38BDF8",
+        bgColor: "rgba(56, 189, 248, 0.15)",
       };
     }
 
     return {
       icon: item.projectId ? "videocam-outline" : "notifications-outline",
       color: item.unread ? "#00F2FE" : "#94A3B8",
-      bgColor: item.unread ? "rgba(0, 242, 254, 0.1)" : "rgba(148, 163, 184, 0.08)",
+      bgColor: item.unread ? "rgba(0, 242, 254, 0.12)" : "rgba(255, 255, 255, 0.05)",
     };
   };
 
@@ -95,62 +92,69 @@ export default function NotificationsScreen({
     <View style={styles.container}>
       {/* Top Navigation Bar */}
       <View style={styles.navBar}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            soundEngine.playSfx("click");
-            onBack();
-          }}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        <View
+          style={[
+            styles.navBarInner,
+            isDesktop ? styles.desktopWrapper : styles.mobileWrapper,
+          ]}
         >
-          <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              onBack();
+            }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+            <Text style={styles.backButtonText}>Home</Text>
+          </TouchableOpacity>
 
-        <View style={styles.titleRow}>
-          <Text style={styles.navTitle}>Notifications</Text>
-          {unreadCount > 0 && (
-            <View style={styles.unreadCountBadge}>
-              <Text style={styles.unreadCountText}>{unreadCount} new</Text>
-            </View>
-          )}
-        </View>
+          <View style={styles.titleRow}>
+            <Text style={styles.navTitle}>Notifications</Text>
+            {unreadCount > 0 && (
+              <View style={styles.unreadCountBadge}>
+                <Text style={styles.unreadCountText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
 
-        <View style={styles.navActions}>
-          {unreadCount > 0 && (
-            <TouchableOpacity
-              style={styles.markReadBtn}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                onMarkAllAsRead();
-              }}
-              activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons
-                name="checkmark-done-outline"
-                size={14}
-                color="#00F2FE"
-              />
-              <Text style={styles.markReadText}>Mark read</Text>
-            </TouchableOpacity>
-          )}
+          <View style={styles.navActions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity
+                style={styles.markReadBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  onMarkAllAsRead();
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons
+                  name="checkmark-done"
+                  size={14}
+                  color="#00F2FE"
+                />
+                <Text style={styles.markReadText}>Mark read</Text>
+              </TouchableOpacity>
+            )}
 
-          {notifications.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearBtn}
-              onPress={() => {
-                soundEngine.playSfx("pop");
-                onClearAll();
-              }}
-              activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              accessibilityLabel="Clear all notifications"
-            >
-              <Ionicons name="trash-outline" size={17} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
+            {notifications.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearBtn}
+                onPress={() => {
+                  soundEngine.playSfx("pop");
+                  onClearAll();
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityLabel="Clear all notifications"
+              >
+                <Ionicons name="trash-outline" size={16} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -159,51 +163,58 @@ export default function NotificationsScreen({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.innerWrapper}>
+        <View
+          style={[
+            styles.contentContainer,
+            isDesktop ? styles.desktopWrapper : styles.mobileWrapper,
+          ]}
+        >
           {/* Filter Pills (All / Unread) */}
           {notifications.length > 0 && (
-            <View style={styles.filterRow}>
-              <TouchableOpacity
-                style={[
-                  styles.filterPill,
-                  filter === "all" && styles.filterPillActive,
-                ]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  setFilter("all");
-                }}
-                activeOpacity={0.7}
-              >
-                <Text
+            <View style={styles.filterBar}>
+              <View style={styles.filterTrack}>
+                <TouchableOpacity
                   style={[
-                    styles.filterPillText,
-                    filter === "all" && styles.filterPillTextActive,
+                    styles.filterPill,
+                    filter === "all" && styles.filterPillActive,
                   ]}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    setFilter("all");
+                  }}
+                  activeOpacity={0.7}
                 >
-                  All ({notifications.length})
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      filter === "all" && styles.filterPillTextActive,
+                    ]}
+                  >
+                    All ({notifications.length})
+                  </Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.filterPill,
-                  filter === "unread" && styles.filterPillActive,
-                ]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  setFilter("unread");
-                }}
-                activeOpacity={0.7}
-              >
-                <Text
+                <TouchableOpacity
                   style={[
-                    styles.filterPillText,
-                    filter === "unread" && styles.filterPillTextActive,
+                    styles.filterPill,
+                    filter === "unread" && styles.filterPillActive,
                   ]}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    setFilter("unread");
+                  }}
+                  activeOpacity={0.7}
                 >
-                  Unread ({unreadCount})
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      filter === "unread" && styles.filterPillTextActive,
+                    ]}
+                  >
+                    Unread ({unreadCount})
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -212,146 +223,151 @@ export default function NotificationsScreen({
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconCircle}>
                 <Ionicons
-                  name={filter === "unread" ? "checkmark-circle-outline" : "notifications-outline"}
-                  size={32}
-                  color="#64748B"
+                  name={filter === "unread" ? "checkmark-done-circle-outline" : "notifications-off-outline"}
+                  size={36}
+                  color="#00F2FE"
                 />
               </View>
               <Text style={styles.emptyTitle}>
-                {filter === "unread" ? "No unread notifications" : "No Notifications"}
+                {filter === "unread" ? "You're All Caught Up" : "No Notifications Yet"}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {filter === "unread"
-                  ? "You're all caught up! Switch to 'All' to view history."
-                  : "Updates about your projects, renders, and media will show up here."}
+                  ? "All notifications have been reviewed. Switch to 'All' to view your project history."
+                  : "Updates regarding your video renders, exports, project status, and audio clips will appear here."}
               </Text>
             </View>
           ) : (
-            filteredNotifications.map((item) => {
-              const meta = getNotificationMeta(item);
-              const messageText =
-                item.message || item.body || item.description || "";
-              const formattedTime = item.createdAt
-                ? formatNotificationTime(item.createdAt)
-                : item.timestamp || "Just now";
+            <View style={styles.cardList}>
+              {filteredNotifications.map((item) => {
+                const meta = getNotificationMeta(item);
+                const messageText =
+                  item.message || item.body || item.description || "";
+                const formattedTime = item.createdAt
+                  ? formatNotificationTime(item.createdAt)
+                  : item.timestamp || "Just now";
 
-              const hasAction = Boolean(item.actionText && onActionClick);
+                const hasAction = Boolean(item.actionText && onActionClick);
 
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.notifCard,
-                    item.unread && styles.notifCardUnread,
-                  ]}
-                  activeOpacity={hasAction ? 0.75 : 1}
-                  onPress={() => {
-                    if (hasAction && onActionClick) {
-                      soundEngine.playSfx("whoosh");
-                      onActionClick(item);
-                    }
-                  }}
-                >
-                  {/* Left Icon Badge */}
-                  <View
+                return (
+                  <TouchableOpacity
+                    key={item.id}
                     style={[
-                      styles.iconCircle,
-                      { backgroundColor: meta.bgColor },
+                      styles.notifCard,
+                      item.unread && styles.notifCardUnread,
                     ]}
+                    activeOpacity={hasAction ? 0.75 : 0.95}
+                    onPress={() => {
+                      if (hasAction && onActionClick) {
+                        soundEngine.playSfx("whoosh");
+                        onActionClick(item);
+                      }
+                    }}
                   >
-                    <Ionicons
-                      name={meta.icon}
-                      size={15}
-                      color={meta.color}
-                    />
-                  </View>
+                    {/* Unread Accent Indicator Bar */}
+                    {item.unread && <View style={styles.unreadAccentBar} />}
 
-                  {/* Center Content Column */}
-                  <View style={styles.contentCol}>
-                    <View style={styles.topRow}>
-                      <View style={styles.titleWrapper}>
-                        <Text
-                          style={[
-                            styles.notifTitle,
-                            item.unread && styles.notifTitleUnread,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {item.title}
-                        </Text>
-                        {item.unread && <View style={styles.unreadDot} />}
-                      </View>
-
-                      <Text style={styles.timeText}>{formattedTime}</Text>
+                    {/* Left Icon Badge */}
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        { backgroundColor: meta.bgColor },
+                      ]}
+                    >
+                      <Ionicons
+                        name={meta.icon}
+                        size={17}
+                        color={meta.color}
+                      />
                     </View>
 
-                    {messageText ? (
-                      <Text style={styles.notifDesc} numberOfLines={2}>
-                        {messageText}
-                      </Text>
-                    ) : null}
-
-                    {/* Compact Inline Tags & Action Row */}
-                    {(item.projectTitle || hasAction) && (
-                      <View style={styles.footerRow}>
-                        {item.projectTitle && (
-                          <View style={styles.projectBadge}>
-                            <Ionicons
-                              name="folder-outline"
-                              size={10.5}
-                              color="#64748B"
-                            />
-                            <Text
-                              style={styles.projectBadgeText}
-                              numberOfLines={1}
-                            >
-                              {item.projectTitle}
-                            </Text>
-                          </View>
-                        )}
-
-                        {hasAction && (
-                          <TouchableOpacity
-                            style={styles.actionBtn}
-                            onPress={() => {
-                              soundEngine.playSfx("whoosh");
-                              onActionClick?.(item);
-                            }}
-                            activeOpacity={0.7}
-                            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    {/* Center Content Column */}
+                    <View style={styles.contentCol}>
+                      <View style={styles.topRow}>
+                        <View style={styles.titleWrapper}>
+                          <Text
+                            style={[
+                              styles.notifTitle,
+                              item.unread && styles.notifTitleUnread,
+                            ]}
+                            numberOfLines={1}
                           >
-                            <Text style={styles.actionBtnText}>
-                              {item.actionText}
-                            </Text>
-                            <Ionicons
-                              name="arrow-forward"
-                              size={11}
-                              color="#00F2FE"
-                            />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    )}
-                  </View>
+                            {item.title}
+                          </Text>
+                          {item.unread && <View style={styles.unreadDot} />}
+                        </View>
 
-                  {/* Right Dismiss Button */}
-                  {onDeleteNotification && (
-                    <TouchableOpacity
-                      style={styles.deleteItemBtn}
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        soundEngine.playSfx("pop");
-                        onDeleteNotification(item.id);
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      accessibilityLabel="Dismiss notification"
-                    >
-                      <Ionicons name="close" size={14} color="#64748B" />
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-              );
-            })
+                        <Text style={styles.timeText}>{formattedTime}</Text>
+                      </View>
+
+                      {messageText ? (
+                        <Text style={styles.notifDesc} numberOfLines={2}>
+                          {messageText}
+                        </Text>
+                      ) : null}
+
+                      {/* Compact Inline Tags & Action Row */}
+                      {(item.projectTitle || hasAction) && (
+                        <View style={styles.footerRow}>
+                          {item.projectTitle && (
+                            <View style={styles.projectBadge}>
+                              <Ionicons
+                                name="folder-outline"
+                                size={11}
+                                color="#94A3B8"
+                              />
+                              <Text
+                                style={styles.projectBadgeText}
+                                numberOfLines={1}
+                              >
+                                {item.projectTitle}
+                              </Text>
+                            </View>
+                          )}
+
+                          {hasAction && (
+                            <TouchableOpacity
+                              style={styles.actionBtn}
+                              onPress={() => {
+                                soundEngine.playSfx("whoosh");
+                                onActionClick?.(item);
+                              }}
+                              activeOpacity={0.7}
+                              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                            >
+                              <Text style={styles.actionBtnText}>
+                                {item.actionText}
+                              </Text>
+                              <Ionicons
+                                name="arrow-forward"
+                                size={11}
+                                color="#00F2FE"
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Right Dismiss Button */}
+                    {onDeleteNotification && (
+                      <TouchableOpacity
+                        style={styles.deleteItemBtn}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          soundEngine.playSfx("pop");
+                          onDeleteNotification(item.id);
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel="Dismiss notification"
+                      >
+                        <Ionicons name="close" size={15} color="#64748B" />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -362,24 +378,35 @@ export default function NotificationsScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B0D13",
+    backgroundColor: "#08090E",
+  },
+  desktopWrapper: {
+    width: "100%",
+    maxWidth: 720,
+    alignSelf: "center",
+  },
+  mobileWrapper: {
+    width: "100%",
   },
   navBar: {
-    height: 52,
+    height: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#0F131D",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  navBarInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#171B26",
-    backgroundColor: "#0E1118",
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 4,
     paddingVertical: 6,
-    paddingRight: 8,
+    paddingRight: 10,
   },
   backButtonText: {
     color: "#FFFFFF",
@@ -389,23 +416,23 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
   },
   navTitle: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   unreadCountBadge: {
     backgroundColor: "#00F2FE",
-    paddingHorizontal: 6,
+    paddingHorizontal: 6.5,
     paddingVertical: 1.5,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   unreadCountText: {
-    color: "#000000",
-    fontSize: 10,
+    color: "#08090E",
+    fontSize: 11,
     fontWeight: "800",
   },
   navActions: {
@@ -416,99 +443,114 @@ const styles = StyleSheet.create({
   markReadBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.2)",
+    borderColor: "#1F2637",
   },
   markReadText: {
-    color: "#00F2FE",
-    fontSize: 11.5,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
   },
   clearBtn: {
-    padding: 6,
-    borderRadius: 6,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    padding: 7,
+    borderRadius: 8,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
   },
-  innerWrapper: {
+  contentContainer: {
     width: "100%",
-    maxWidth: 640,
   },
-  filterRow: {
+  filterBar: {
+    marginBottom: 16,
+  },
+  filterTrack: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
-    paddingHorizontal: 2,
+    backgroundColor: "#0F131D",
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    alignSelf: "flex-start",
   },
   filterPill: {
-    paddingVertical: 5,
-    paddingHorizontal: 11,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
   },
   filterPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "rgba(0, 242, 254, 0.3)",
+    backgroundColor: "#1B2234",
+    borderWidth: 1,
+    borderColor: "#2C364D",
   },
   filterPillText: {
     color: "#64748B",
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: "600",
   },
   filterPillTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
+  cardList: {
+    gap: 8,
+  },
   notifCard: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#10141E",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 6,
+    backgroundColor: "#131826",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderColor: "#1F2637",
+    overflow: "hidden",
   },
   notifCardUnread: {
-    backgroundColor: "#121826",
-    borderColor: "rgba(0, 242, 254, 0.22)",
+    backgroundColor: "#161D2E",
+    borderColor: "#2A3650",
+  },
+  unreadAccentBar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3.5,
+    backgroundColor: "#00F2FE",
   },
   iconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
-    marginRight: 10,
+    marginRight: 12,
     flexShrink: 0,
   },
   contentCol: {
     flex: 1,
-    marginRight: 6,
+    marginRight: 8,
   },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 8,
   },
   titleWrapper: {
     flex: 1,
@@ -517,7 +559,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   notifTitle: {
-    color: "#CBD5E1",
+    color: "#94A3B8",
     fontSize: 13.5,
     fontWeight: "600",
     letterSpacing: -0.1,
@@ -535,90 +577,95 @@ const styles = StyleSheet.create({
   },
   timeText: {
     color: "#64748B",
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: "500",
     flexShrink: 0,
-  },
-  deleteItemBtn: {
-    padding: 3,
-    marginTop: -1,
-    marginRight: -2,
-    opacity: 0.75,
   },
   notifDesc: {
     color: "#94A3B8",
     fontSize: 12.5,
-    lineHeight: 17,
-    marginTop: 3,
+    lineHeight: 18,
+    marginTop: 4,
   },
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
-    marginTop: 7,
+    gap: 8,
+    marginTop: 10,
   },
   projectBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    gap: 4.5,
+    backgroundColor: "#0F131D",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 5,
+    borderColor: "#1F2637",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   projectBadgeText: {
-    color: "#8E95A5",
-    fontSize: 10.5,
+    color: "#94A3B8",
+    fontSize: 11,
     fontWeight: "600",
-    maxWidth: 160,
+    maxWidth: 200,
   },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    gap: 4.5,
+    backgroundColor: "#1B2234",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.26)",
-    paddingVertical: 2.5,
-    paddingHorizontal: 8,
-    borderRadius: 5,
+    borderColor: "#2C364D",
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 6,
   },
   actionBtnText: {
-    color: "#00F2FE",
-    fontSize: 10.5,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  deleteItemBtn: {
+    padding: 4,
+    marginTop: -2,
+    marginRight: -4,
+    opacity: 0.8,
   },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
+    paddingVertical: 64,
     paddingHorizontal: 20,
+    backgroundColor: "#0F131D",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    marginTop: 12,
   },
   emptyIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#131722",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
+    marginBottom: 16,
   },
   emptyTitle: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   emptySubtitle: {
     color: "#64748B",
-    fontSize: 12.5,
+    fontSize: 13,
     textAlign: "center",
-    maxWidth: 300,
-    lineHeight: 18,
+    maxWidth: 320,
+    lineHeight: 19,
   },
 });

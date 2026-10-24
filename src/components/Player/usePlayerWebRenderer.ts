@@ -78,16 +78,26 @@ export function usePlayerWebRenderer({
       const clips = project.tracks.video || [];
       clips.forEach(async (clip) => {
         if (clip.url.startsWith("blob:")) {
-          // Keep existing video element if already loaded and working without error
+          // Verify if element is genuinely working and loaded in DOM
           const existingEl = rendererRef.current?.videoElements.get(clip.url);
-          if (existingEl && !(existingEl as any).error) {
+          const isMediaWorking =
+            existingEl instanceof HTMLVideoElement
+              ? !(existingEl as any).error && existingEl.readyState >= 1
+              : existingEl instanceof HTMLImageElement
+                ? existingEl.complete && existingEl.naturalWidth > 0
+                : false;
+          if (isMediaWorking) {
             return;
           }
+
           try {
             const lookupId = clip.sourceMediaId || clip.id;
             const freshUrl = await getLiveMediaUrl(lookupId);
-            if (freshUrl && freshUrl !== clip.url) {
+            if (freshUrl) {
               clip.url = freshUrl;
+              if (clip.type === "photo" && (!clip.thumbnail || clip.thumbnail.startsWith("blob:"))) {
+                clip.thumbnail = freshUrl;
+              }
               if (rendererRef.current && canvasRef.current) {
                 rendererRef.current.preloadClip(clip);
                 rendererRef.current.renderFrame(

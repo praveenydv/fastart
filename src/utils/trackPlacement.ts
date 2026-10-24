@@ -141,3 +141,34 @@ export function allocateClipPlacement(
   // 3. All 10 tracks occupied at desiredStart!
   return null;
 }
+
+// Allocate a brand-new track for a newly added item
+export function allocateNewTrackForClip(
+  proj: FastArtProject | null,
+  desiredStart: number = 0,
+): { trackIndex: number; startTime: number } {
+  const start = Math.max(0, Number(desiredStart.toFixed(3)));
+  if (!proj) return { trackIndex: 0, startTime: start };
+
+  const allClips = getAllTrackClips(proj);
+  if (allClips.length === 0) {
+    return { trackIndex: 0, startTime: start };
+  }
+
+  // Find the next unoccupied track lane
+  const usedTracks = new Set(allClips.map((c) => c.trackIndex));
+  let targetTrack = 0;
+  while (usedTracks.has(targetTrack) && targetTrack < 9) {
+    targetTrack++;
+  }
+
+  if (usedTracks.has(targetTrack)) {
+    const maxTrack = Math.max(...usedTracks);
+    targetTrack = Math.min(9, maxTrack + 1);
+  }
+
+  return {
+    trackIndex: Math.min(9, targetTrack),
+    startTime: start,
+  };
+}

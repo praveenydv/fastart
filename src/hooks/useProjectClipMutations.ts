@@ -4,7 +4,7 @@ import { FastArtProject } from "../types/project";
 import { soundEngine } from "../utils/audioEngine";
 import { triggerHaptic } from "../utils/haptics";
 import { deleteMedia } from "../utils/largeMediaStorage";
-import { allocateClipPlacement } from "../utils/trackPlacement";
+import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
 import { addNotification } from "../utils/storage";
 import { useClipTransformOperations } from "./useClipTransformOperations";
 
@@ -47,6 +47,7 @@ export function useProjectClipMutations({
   const {
     handleUpdateClipTransform,
     handleUpdateClipCrop,
+    handleUpdateClipMask,
     handleRotateClip,
     handleToggleReverse,
     handleTrimClip,
@@ -339,25 +340,17 @@ export function useProjectClipMutations({
           t += c.duration;
         });
       } else {
-        const placement = allocateClipPlacement(
+        const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
           project,
           original.startTime,
-          dur,
-          origTrack + 1,
-          original.id,
         );
-        if (placement) {
-          clone.startTime = placement.startTime;
-          clone.trackIndex = placement.trackIndex;
-          addNotification({
-            title: "Clip Duplicated",
-            message: `Placed on Track ${placement.trackIndex + 1} to prevent overlapping.`,
-            icon: "copy-outline",
-          });
-        } else {
-          clone.startTime = original.startTime + original.duration;
-          clone.trackIndex = origTrack;
-        }
+        clone.startTime = original.startTime;
+        clone.trackIndex = newTrackIndex;
+        addNotification({
+          title: "Clip Duplicated",
+          message: `Placed on Track ${newTrackIndex + 1}.`,
+          icon: "copy-outline",
+        });
         list.push(clone);
       }
 
@@ -384,6 +377,7 @@ export function useProjectClipMutations({
     handleToggleReverse,
     handleUpdateClipTransform,
     handleUpdateClipCrop,
+    handleUpdateClipMask,
     handleTrimClip,
     handleMoveClip,
   };

@@ -2,6 +2,7 @@ import { VideoClip } from "../../types/project";
 import { getInterpolatedTransform } from "../keyframeEngine";
 import {
   applyMaskPath,
+  drawClipWithMask,
   drawClipWithCutout,
   drawLoadingPreview,
   applyColorFilter,
@@ -21,6 +22,12 @@ export interface ClipRenderContext {
   ensureOffscreen: (cw: number, ch: number) => HTMLCanvasElement | null;
 }
 
+export interface TransitionRenderState {
+  role: "outgoing" | "incoming";
+  type: string;
+  progress: number;
+}
+
 export function drawClip(
   ctx: CanvasRenderingContext2D,
   clip: VideoClip,
@@ -28,6 +35,7 @@ export function drawClip(
   w: number,
   h: number,
   renderCtx: ClipRenderContext,
+  transitionState?: TransitionRenderState | null,
 ) {
   ctx.save();
   const clipLocalTime = Math.max(0, time - clip.startTime);
@@ -39,42 +47,95 @@ export function drawClip(
   let yOffset = 0;
   let motionRot = 0;
 
-  if (trans && trans.duration > 0 && timeLeft <= trans.duration) {
-    const progress = 1 - timeLeft / trans.duration;
-    if (trans.type === "dissolve") {
-      alpha = 1 - progress;
-    } else if (trans.type === "zoom_in") {
-      scaleModifier = 1 + progress * 0.45;
-      alpha = 1 - progress * 0.5;
-    } else if (trans.type === "zoom_out") {
-      scaleModifier = 1 - progress * 0.45;
-      alpha = 1 - progress;
-    } else if (trans.type === "slide_left") {
-      xOffset = -progress * w;
-    } else if (trans.type === "slide_right") {
-      xOffset = progress * w;
-    } else if (trans.type === "push_up") {
-      yOffset = -progress * h;
-    } else if (trans.type === "push_down") {
-      yOffset = progress * h;
-    } else if (trans.type === "flash_white") {
-      if (progress > 0.5) alpha = 1 - (progress - 0.5) * 2;
-    } else if (trans.type === "fade_black") {
-      alpha = 1 - progress;
-    } else if (trans.type === "spin_cw") {
-      motionRot += progress * 180;
-      scaleModifier = 1 - progress * 0.4;
-      alpha = 1 - progress * 0.6;
-    } else if (trans.type === "spin_ccw") {
-      motionRot -= progress * 180;
-      scaleModifier = 1 - progress * 0.4;
-      alpha = 1 - progress * 0.6;
-    } else if (trans.type === "light_leak") {
-      alpha = 1 - progress * 0.4;
-      scaleModifier = 1 + progress * 0.2;
-    } else if (trans.type === "glitch_transition") {
-      if (Math.random() > 0.3) xOffset = (Math.random() - 0.5) * 60;
-      alpha = 1 - progress * 0.6;
+  // Resolve transition type and progress
+  let activeTransType: string | null = null;
+  let activeProgress = 0;
+  let activeRole: "outgoing" | "incoming" = "outgoing";
+
+  if (transitionState) {
+    activeTransType = transitionState.type;
+    activeProgress = Math.max(0, Math.min(1, transitionState.progress));
+    activeRole = transitionState.role;
+  } else if (trans && trans.duration > 0 && trans.type && trans.type !== "none" && timeLeft <= trans.duration) {
+    activeTransType = trans.type;
+    activeProgress = Math.max(0, Math.min(1, 1 - timeLeft / trans.duration));
+    activeRole = "outgoing";
+  }
+
+  if (activeTransType && activeTransType !== "none" && activeTransType !== "cut") {
+    const progress = activeProgress;
+    if (activeRole === "outgoing") {
+      if (activeTransType === "dissolve") {
+        alpha = 1 - progress;
+      } else if (activeTransType === "zoom_in") {
+        scaleModifier = 1 + progress * 0.5;
+        alpha = 1 - progress;
+      } else if (activeTransType === "zoom_out") {
+        scaleModifier = 1 - progress * 0.45;
+        alpha = 1 - progress;
+      } else if (activeTransType === "slide_left") {
+        xOffset = -progress * w;
+      } else if (activeTransType === "slide_right") {
+        xOffset = progress * w;
+      } else if (activeTransType === "push_up") {
+        yOffset = -progress * h;
+      } else if (activeTransType === "push_down") {
+        yOffset = progress * h;
+      } else if (activeTransType === "flash_white") {
+        if (progress > 0.5) alpha = 0;
+      } else if (activeTransType === "fade_black") {
+        alpha = Math.max(0, 1 - progress * 2);
+      } else if (activeTransType === "spin_cw") {
+        motionRot += progress * 180;
+        scaleModifier = 1 - progress * 0.4;
+        alpha = 1 - progress;
+      } else if (activeTransType === "spin_ccw") {
+        motionRot -= progress * 180;
+        scaleModifier = 1 - progress * 0.4;
+        alpha = 1 - progress;
+      } else if (activeTransType === "light_leak") {
+        alpha = 1 - progress;
+        scaleModifier = 1 + progress * 0.15;
+      } else if (activeTransType === "glitch_transition") {
+        if (Math.random() > 0.3) xOffset = (Math.random() - 0.5) * 60;
+        alpha = 1 - progress;
+      }
+    } else {
+      // Incoming clip transitioning IN
+      if (activeTransType === "dissolve") {
+        alpha = progress;
+      } else if (activeTransType === "zoom_in") {
+        scaleModifier = 0.8 + progress * 0.2;
+        alpha = progress;
+      } else if (activeTransType === "zoom_out") {
+        scaleModifier = 1.3 - progress * 0.3;
+        alpha = progress;
+      } else if (activeTransType === "slide_left") {
+        xOffset = (1 - progress) * w;
+      } else if (activeTransType === "slide_right") {
+        xOffset = -(1 - progress) * w;
+      } else if (activeTransType === "push_up") {
+        yOffset = (1 - progress) * h;
+      } else if (activeTransType === "push_down") {
+        yOffset = -(1 - progress) * h;
+      } else if (activeTransType === "flash_white") {
+        if (progress < 0.5) alpha = 0;
+      } else if (activeTransType === "fade_black") {
+        alpha = Math.max(0, (progress - 0.5) * 2);
+      } else if (activeTransType === "spin_cw") {
+        motionRot += -(1 - progress) * 180;
+        scaleModifier = 0.6 + progress * 0.4;
+        alpha = progress;
+      } else if (activeTransType === "spin_ccw") {
+        motionRot -= -(1 - progress) * 180;
+        scaleModifier = 0.6 + progress * 0.4;
+        alpha = progress;
+      } else if (activeTransType === "light_leak") {
+        alpha = progress;
+      } else if (activeTransType === "glitch_transition") {
+        if (Math.random() > 0.4) xOffset = (Math.random() - 0.5) * 35;
+        alpha = progress;
+      }
     }
   }
 
@@ -95,8 +156,29 @@ export function drawClip(
   ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y + yOffset);
   ctx.rotate((((t.rotation || 0) + motionRot) * Math.PI) / 180);
 
-  const scaleX = (t.flipX ? -1 : 1) * (t.scale || 1) * scaleModifier;
-  const scaleY = (t.flipY ? -1 : 1) * (t.scale || 1) * scaleModifier;
+  const stretchX = t.scaleX !== undefined ? t.scaleX : 1.0;
+  const stretchY = t.scaleY !== undefined ? t.scaleY : 1.0;
+  const scaleX = (t.flipX ? -1 : 1) * (t.scale || 1) * stretchX * scaleModifier;
+  const scaleY = (t.flipY ? -1 : 1) * (t.scale || 1) * stretchY * scaleModifier;
+
+  const rotX = t.rotateX || 0;
+  const rotY = t.rotateY || 0;
+  const skewX = t.skewX || 0;
+  const skewY = t.skewY || 0;
+
+  if (rotX !== 0 || rotY !== 0 || skewX !== 0 || skewY !== 0) {
+    const radRotX = (rotX * Math.PI) / 180;
+    const radRotY = (rotY * Math.PI) / 180;
+    const radSkewX = (skewX * Math.PI) / 180;
+    const radSkewY = (skewY * Math.PI) / 180;
+    const cosX = Math.max(0.05, Math.cos(radRotX));
+    const cosY = Math.max(0.05, Math.cos(radRotY));
+    ctx.scale(cosY, cosX);
+    if (skewX !== 0 || skewY !== 0) {
+      ctx.transform(1, Math.tan(radSkewY), Math.tan(radSkewX), 1, 0, 0);
+    }
+  }
+
   ctx.scale(scaleX, scaleY);
 
   applyColorFilter(ctx, clip.filter, clip.customLut);
@@ -172,28 +254,56 @@ export function drawClip(
     }
 
     const mask = clip.mask || clip.transform?.mask;
-    if (mask && mask.shape && mask.shape !== "none") {
-      applyMaskPath(ctx, mask, dw, dh);
-    }
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-
     const cutout = clip.cutout || clip.transform?.cutout;
-    if (cutout && cutout.enabled) {
-      drawClipWithCutout(ctx, activeMedia as any, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh, cutout, renderCtx.offscreenCanvas, renderCtx.offscreenCtx);
-    } else {
-      ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
-    }
 
-    if (
-      (clip.smoothSlowMo === "blend" || clip.smoothSlowMo === "optical_flow") &&
-      (clip.speed || 1.0) < 1.0
-    ) {
-      ctx.save();
-      ctx.globalAlpha = clip.smoothSlowMo === "optical_flow" ? 0.35 : 0.22;
-      ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
-      ctx.restore();
+    if (mask && mask.shape && mask.shape !== "none") {
+      drawClipWithMask(
+        ctx,
+        activeMedia as any,
+        sx,
+        sy,
+        sw,
+        sh,
+        dw,
+        dh,
+        mask,
+        cutout,
+        clip,
+        renderCtx,
+      );
+    } else {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      if (cutout && cutout.enabled) {
+        drawClipWithCutout(
+          ctx,
+          activeMedia as any,
+          sx,
+          sy,
+          sw,
+          sh,
+          -dw / 2,
+          -dh / 2,
+          dw,
+          dh,
+          cutout,
+          renderCtx.offscreenCanvas,
+          renderCtx.offscreenCtx,
+        );
+      } else {
+        ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+      }
+
+      if (
+        (clip.smoothSlowMo === "blend" || clip.smoothSlowMo === "optical_flow") &&
+        (clip.speed || 1.0) < 1.0
+      ) {
+        ctx.save();
+        ctx.globalAlpha = clip.smoothSlowMo === "optical_flow" ? 0.35 : 0.22;
+        ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
+        ctx.restore();
+      }
     }
   } else {
     const hasError = Boolean(mediaEl && (mediaEl as any).error);
@@ -242,10 +352,20 @@ export function drawClip(
     );
   }
 
-  if (trans && trans.type === "flash_white" && timeLeft <= trans.duration) {
-    const p = 1 - timeLeft / trans.duration;
+  if (activeTransType === "flash_white") {
     ctx.save();
-    ctx.fillStyle = `rgba(255, 255, 255, ${Math.sin(p * Math.PI)})`;
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.sin(activeProgress * Math.PI) * 0.95})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else if (activeTransType === "light_leak") {
+    ctx.save();
+    const leakGrad = ctx.createLinearGradient(0, 0, w, h);
+    const leakIntensity = Math.sin(activeProgress * Math.PI) * 0.85;
+    leakGrad.addColorStop(0, `rgba(255, 120, 0, ${leakIntensity * 0.6})`);
+    leakGrad.addColorStop(0.5, `rgba(255, 240, 180, ${leakIntensity * 0.9})`);
+    leakGrad.addColorStop(1, `rgba(255, 0, 120, ${leakIntensity * 0.5})`);
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = leakGrad;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }

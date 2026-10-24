@@ -4,6 +4,8 @@
 // 2. WebAssembly (WASM) Linear Memory Vectorized Pixel Processing
 // 3. 32-Bit SIMD-Style TypedArray Integer Kernel for Zero-Allocation Fallback
 
+import { getHumanSegmentationMask, requestHumanSegmentation } from "../services/selfieSegmentationService";
+
 export interface CutoutOptions {
   keyColor?: string;
   intensity?: number;
@@ -532,65 +534,125 @@ export class LowLevelPixelEngine {
       offCtx.clearRect(0, 0, procW, procH);
       offCtx.drawImage(media as any, sx, sy, sw, sh, 0, 0, procW, procH);
 
-      const imgData = offCtx.getImageData(0, 0, procW, procH);
-      const u32 = new Uint32Array(imgData.data.buffer);
-      const totalPixels = u32.length;
-
-      const hex = options.keyColor || "#00FF00";
-      const rKey = parseInt(hex.slice(1, 3), 16) || 0;
-      const gKey = parseInt(hex.slice(3, 5), 16) || 255;
-      const bKey = parseInt(hex.slice(5, 7), 16) || 0;
-
-      const thresh = ((options.intensity ?? 45) / 100) * 195;
-      const threshSq = thresh * thresh;
-      const feather = Math.max(1, ((options.shadow ?? 25) / 100) * 70);
-      const outerDist = thresh + feather;
-      const outerSq = outerDist * outerDist;
-      const invFeather = 1.0 / feather;
-
       const isAuto = options.mode === "auto";
 
       if (isAuto) {
-        // Multi-point perimeter sampling to reliably detect background color & luminance
-        const c0 = u32[0];
-        const c1 = u32[procW - 1];
-        const c2 = u32[(procH - 1) * procW];
-        const c3 = u32[procH * procW - 1];
-        const cMidTop = u32[Math.floor(procW / 2)];
-        const cMidBot = u32[(procH - 1) * procW + Math.floor(procW / 2)];
+        requestHumanSegmentation(media);
+        const humanMask = getHumanSegmentationMask();
+        if (humanMask) {
+          // High-accuracy AI Neural Human Segmentation Mask
+          offCtx.globalCompositeOperation = "destination-in";
+          offCtx.drawImage(humanMask, 0, 0, procW, procH);
+          offCtx.globalCompositeOperation = "source-over";
+        } else {
+          // Intelligent Human Saliency & Skin/Torso Computer Vision Fallback
+          const imgData = offCtx.getImageData(0, 0, procW, procH);
+          const u32 = new Uint32Array(imgData.data.buffer);
 
-        const bgR = Math.round(((c0 & 0xff) + (c1 & 0xff) + (c2 & 0xff) + (c3 & 0xff) + (cMidTop & 0xff) + (cMidBot & 0xff)) / 6);
-        const bgG = Math.round((((c0 >> 8) & 0xff) + ((c1 >> 8) & 0xff) + ((c2 >> 8) & 0xff) + ((c3 >> 8) & 0xff) + ((cMidTop >> 8) & 0xff) + ((cMidBot >> 8) & 0xff)) / 6);
-        const bgB = Math.round((((c0 >> 16) & 0xff) + ((c1 >> 16) & 0xff) + ((c2 >> 16) & 0xff) + ((c3 >> 16) & 0xff) + ((cMidTop >> 16) & 0xff) + ((cMidBot >> 16) & 0xff)) / 6);
-
-        const autoThresh = Math.max(12, ((options.intensity ?? 45) / 100) * 165);
-        const autoThreshSq = autoThresh * autoThresh;
-        const autoFeather = Math.max(2, ((options.shadow ?? 25) / 100) * 65);
-        const autoOuterDist = autoThresh + autoFeather;
-        const autoOuterSq = autoOuterDist * autoOuterDist;
-        const autoInvFeather = 1.0 / autoFeather;
-
-        for (let i = 0; i < totalPixels; i++) {
-          const pixel = u32[i];
-          const r = pixel & 0xff;
-          const g = (pixel >> 8) & 0xff;
-          const b = (pixel >> 16) & 0xff;
-
-          const dr = r - bgR;
-          const dg = g - bgG;
-          const db = b - bgB;
-          const distSq = dr * dr + dg * dg + db * db;
-
-          if (distSq < autoThreshSq) {
-            u32[i] = pixel & 0x00ffffff; // Background removed in 1 cycle
-          } else if (distSq < autoOuterSq) {
-            const dist = Math.sqrt(distSq);
-            const alpha = Math.floor(((dist - autoThresh) * autoInvFeather) * 255);
-            u32[i] = (((alpha << 24) >>> 0) | (pixel & 0x00ffffff)) >>> 0;
+          // 1. Perimeter background sampling (top edge and side borders)
+          let bgRSum = 0, bgGSum = 0, bgBSum = 0, bgCount = 0;
+          for (let x = 0; x < procW; x += 4) {
+            const pTop = u32[x];
+            bgRSum += pTop & 0xff;
+            bgGSum += (pTop >> 8) & 0xff;
+            bgBSum += (pTop >> 16) & 0xff;
+            bgCount++;
           }
+          for (let y = 0; y < procH; y += 4) {
+            const pLeft = u32[y * procW];
+            const pRight = u32[y * procW + (procW - 1)];
+            bgRSum += (pLeft & 0xff) + (pRight & 0xff);
+            bgGSum += ((pLeft >> 8) & 0xff) + ((pRight >> 8) & 0xff);
+            bgBSum += ((pLeft >> 16) & 0xff) + ((pRight >> 16) & 0xff);
+            bgCount += 2;
+          }
+          const bgR = Math.round(bgRSum / Math.max(1, bgCount));
+          const bgG = Math.round(bgGSum / Math.max(1, bgCount));
+          const bgB = Math.round(bgBSum / Math.max(1, bgCount));
+
+          // 2. Identify human skin-tone centroid to anchor human subject
+          let skinXSum = 0;
+          let skinYSum = 0;
+          let skinCount = 0;
+          for (let y = Math.floor(procH * 0.1); y < Math.floor(procH * 0.7); y += 3) {
+            const rowOffset = y * procW;
+            for (let x = Math.floor(procW * 0.15); x < Math.floor(procW * 0.85); x += 3) {
+              const p = u32[rowOffset + x];
+              const r = p & 0xff;
+              const g = (p >> 8) & 0xff;
+              const b = (p >> 16) & 0xff;
+              if (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) >= 10 && (r - b) >= 14) {
+                skinXSum += x;
+                skinYSum += y;
+                skinCount++;
+              }
+            }
+          }
+          const humanCenterX = skinCount > 20 ? (skinXSum / skinCount) : (procW * 0.5);
+          const humanCenterY = skinCount > 20 ? (skinYSum / skinCount) : (procH * 0.35);
+
+          const autoThresh = Math.max(15, ((options.intensity ?? 45) / 100) * 160);
+          const autoThreshSq = autoThresh * autoThresh;
+          const autoFeather = Math.max(2, ((options.shadow ?? 25) / 100) * 60);
+          const autoOuterDist = autoThresh + autoFeather;
+          const autoOuterSq = autoOuterDist * autoOuterDist;
+          const autoInvFeather = 1.0 / autoFeather;
+
+          for (let y = 0; y < procH; y++) {
+            const rowOffset = y * procW;
+            const dyFromCenter = y - humanCenterY;
+            const allowedRadius = dyFromCenter > 0
+              ? procW * (0.35 + (dyFromCenter / procH) * 0.30)
+              : procW * 0.32;
+
+            for (let x = 0; x < procW; x++) {
+              const i = rowOffset + x;
+              const pixel = u32[i];
+              const r = pixel & 0xff;
+              const g = (pixel >> 8) & 0xff;
+              const b = (pixel >> 16) & 0xff;
+
+              const dxFromCenter = Math.abs(x - humanCenterX);
+              const isSkin = (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) >= 8 && (r - b) >= 12);
+
+              if (isSkin || (dxFromCenter < allowedRadius * 0.7 && dyFromCenter > -procH * 0.25)) {
+                continue;
+              }
+
+              const dr = r - bgR;
+              const dg = g - bgG;
+              const db = b - bgB;
+              const distSq = dr * dr + dg * dg + db * db;
+
+              if (distSq < autoThreshSq || dxFromCenter > allowedRadius) {
+                u32[i] = pixel & 0x00ffffff; // Zero alpha
+              } else if (distSq < autoOuterSq) {
+                const dist = Math.sqrt(distSq);
+                const alpha = Math.floor(((dist - autoThresh) * autoInvFeather) * 255);
+                u32[i] = (((alpha << 24) >>> 0) | (pixel & 0x00ffffff)) >>> 0;
+              }
+            }
+          }
+          offCtx.putImageData(imgData, 0, 0);
         }
       } else {
         // Chroma Key mode (e.g. green screen #00FF00, blue screen, or custom color)
+        const imgData = offCtx.getImageData(0, 0, procW, procH);
+        const u32 = new Uint32Array(imgData.data.buffer);
+        const totalPixels = u32.length;
+
+        const hex = options.keyColor || "#00FF00";
+        const rKey = parseInt(hex.slice(1, 3), 16) || 0;
+        const gKey = parseInt(hex.slice(3, 5), 16) || 255;
+        const bKey = parseInt(hex.slice(5, 7), 16) || 0;
+
+        const thresh = ((options.intensity ?? 45) / 100) * 195;
+        const threshSq = thresh * thresh;
+        const feather = Math.max(1, ((options.shadow ?? 25) / 100) * 70);
+        const outerDist = thresh + feather;
+        const outerSq = outerDist * outerDist;
+        const invFeather = 1.0 / feather;
+
         for (let i = 0; i < totalPixels; i++) {
           const pixel = u32[i];
           let r = pixel & 0xff;
@@ -607,16 +669,14 @@ export class LowLevelPixelEngine {
           } else if (distSq < outerSq) {
             const dist = Math.sqrt(distSq);
             const alpha = Math.floor(((dist - thresh) * invFeather) * 255);
-            // Edge green/blue spill suppression
             if (gKey > rKey && gKey > bKey && g > Math.max(r, b)) {
               g = Math.round(g * 0.45 + Math.max(r, b) * 0.55);
             }
             u32[i] = (((alpha << 24) >>> 0) | (b << 16) | (g << 8) | r) >>> 0;
           }
         }
+        offCtx.putImageData(imgData, 0, 0);
       }
-
-      offCtx.putImageData(imgData, 0, 0);
 
       // Glow outline if requested
       if (options.strokeColor && options.strokeColor !== "none" && options.strokeWidth && options.strokeWidth > 0) {

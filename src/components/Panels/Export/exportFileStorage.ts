@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
+import { BinaryFileWriter } from "../../../utils/renderer/mobileExporter";
 import {
   Asset,
   requestPermissionsAsync,
@@ -274,9 +276,6 @@ export async function executeDirectDownload({
           const perm =
             await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
           if (perm.granted) {
-            const fileContent = await FileSystem.readAsStringAsync(fileToSave, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
             const mime =
               activeResult?.mimeType ||
               (mediaType === "mp4"
@@ -290,11 +289,79 @@ export async function executeDirectDownload({
                 filename,
                 mime
               );
-            await FileSystem.writeAsStringAsync(createdUri, fileContent, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            savedSuccess = true;
-            savedPath = "Device Downloads / " + filename;
+
+            // Stream file directly to SAF createdUri with zero monolithic heap allocations
+            let copied = false;
+
+            // Strategy 1: Native SAF copyAsync (zero memory overhead, native Java stream transfer)
+            try {
+              if ((FileSystem as any).StorageAccessFramework?.copyAsync) {
+                await (FileSystem as any).StorageAccessFramework.copyAsync({
+                  from: fileToSave,
+                  to: createdUri,
+                });
+                copied = true;
+              } else if (FileSystem.copyAsync) {
+                await FileSystem.copyAsync({
+                  from: fileToSave,
+                  to: createdUri,
+                });
+                copied = true;
+              }
+            } catch (copyErr) {
+              console.warn("SAF native copy failed, trying streams:", copyErr);
+            }
+
+            // Strategy 2: WebStreams file pipe
+            if (!copied) {
+              try {
+                const srcFile = new File(fileToSave);
+                const destFile = new File(createdUri);
+                await srcFile.readableStream().pipeTo(destFile.writableStream());
+                copied = true;
+              } catch (streamErr) {
+                console.warn("SAF stream pipe failed, falling back to chunked writer:", streamErr);
+              }
+            }
+
+            // Strategy 3: Binary bytes write
+            if (!copied) {
+              try {
+                const srcFile = new File(fileToSave);
+                const bytes = await srcFile.bytes();
+                const writer = new BinaryFileWriter(createdUri);
+                await writer.write(bytes);
+                await writer.close();
+                copied = true;
+              } catch (bytesErr) {
+                console.warn("SAF binary copy failed, falling back to chunked Base64:", bytesErr);
+              }
+            }
+
+            if (!copied) {
+              // Legacy chunked read/write
+              const info = await FileSystem.getInfoAsync(fileToSave);
+              const size = (info as any).size || 0;
+              const CHUNK = 512 * 1024;
+              if (size > 0) {
+                for (let pos = 0; pos < size; pos += CHUNK) {
+                  const b64 = await FileSystem.readAsStringAsync(fileToSave, {
+                    encoding: FileSystem.EncodingType.Base64,
+                    position: pos,
+                    length: Math.min(CHUNK, size - pos),
+                  });
+                  await FileSystem.writeAsStringAsync(createdUri, b64, {
+                    encoding: FileSystem.EncodingType.Base64,
+                    append: pos > 0,
+                  });
+                }
+              }
+            }
+
+            if (copied) {
+              savedSuccess = true;
+              savedPath = "Device Downloads / " + filename;
+            }
           }
         } catch (safErr) {
           console.warn("StorageAccessFramework save error:", safErr);

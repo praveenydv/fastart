@@ -8,7 +8,7 @@ import {
   EffectClip,
 } from "../types/project";
 import { addNotification } from "../utils/storage";
-import { allocateClipPlacement, doesClipOverlap } from "../utils/trackPlacement";
+import { allocateClipPlacement, doesClipOverlap, allocateNewTrackForClip } from "../utils/trackPlacement";
 import { useProjectFilterEffects } from "./useProjectFilterEffects";
 import { extractRealMediaAudioPeaks } from "../utils/mediaAudioDetector";
 
@@ -152,85 +152,58 @@ export function useProjectMediaAdders({
   // Update effect clip from modal
   const handleUpdateEffect = useCallback(
     (updatedClip: EffectClip) => {
-      const current = projectRef.current;
+      const current = projectRef.current || project;
       if (!current) return;
       const list = [...(current.tracks.effects || [])];
       const idx = list.findIndex((c) => c.id === updatedClip.id);
       if (idx >= 0) {
-        list[idx] = updatedClip;
+        list[idx] = { ...list[idx], ...updatedClip };
         updateProjectWithHistory({
+          ...current,
           tracks: { ...current.tracks, effects: list },
         });
       }
     },
-    [projectRef, updateProjectWithHistory],
+    [project, projectRef, updateProjectWithHistory],
   );
 
   // Add new media clip
   const handleAddMedia = useCallback(
     (newClip: any) => {
-      if (!project) return;
+      const current = projectRef.current || project;
+      if (!current) return;
       startProcessing(
         `Importing ${newClip.title || (newClip.type === "photo" ? "Photo" : "Video")}...`,
         450,
       );
-      const videoClips = [...(project.tracks.video || [])];
+      const videoClips = [...(current.tracks.video || [])];
       const endingIdx = videoClips.findIndex((c) => (c as any).isEnding);
       const endingClip =
         endingIdx >= 0 ? videoClips.splice(endingIdx, 1)[0] : null;
-      const newDuration = newClip.duration || 5.0;
 
       let targetStart = currentTime > 0 ? currentTime : 0;
       if (typeof newClip.startTime === "number" && newClip.startTime > 0) {
         targetStart = newClip.startTime;
       }
 
-      const track0Clips = videoClips.filter((c) => (c.trackIndex ?? 0) === 0);
-      const lastTrack0End =
-        track0Clips.length > 0
-          ? Math.max(...track0Clips.map((c) => c.startTime + c.duration))
-          : 0;
-
-      if (targetStart === 0 && track0Clips.length > 0) {
-        targetStart = lastTrack0End;
-      }
-
-      const fitsOnTrack0 = !doesClipOverlap(
-        targetStart,
-        newDuration,
-        track0Clips,
-      );
-
-      if (fitsOnTrack0) {
+      // If project has no media clips yet, place on Track 0. Otherwise allocate brand-new track.
+      if (videoClips.length === 0) {
         newClip.startTime = Math.max(0, Number(targetStart.toFixed(3)));
         newClip.trackIndex = 0;
         videoClips.push(newClip);
       } else {
-        const placement = allocateClipPlacement(
-          project,
+        const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+          current,
           targetStart,
-          newDuration,
-          0,
         );
-        if (placement && placement.trackIndex !== 0) {
-          newClip.startTime = placement.startTime;
-          newClip.trackIndex = placement.trackIndex;
-          videoClips.push(newClip);
-          addNotification({
-            title: "Added on New Track",
-            message: `Placed on Track ${placement.trackIndex + 1} to prevent overlapping.`,
-            icon: "videocam-outline",
-          });
-        } else {
-          newClip.startTime = Math.max(0, Number(lastTrack0End.toFixed(3)));
-          newClip.trackIndex = 0;
-          videoClips.push(newClip);
-          addNotification({
-            title: "Appended to Timeline",
-            message: `Position occupied; placed after previous clip to prevent overlap.`,
-            icon: "videocam-outline",
-          });
-        }
+        newClip.startTime = Math.max(0, Number(targetStart.toFixed(3)));
+        newClip.trackIndex = newTrackIndex;
+        videoClips.push(newClip);
+        addNotification({
+          title: "Added on New Track",
+          message: `Placed on Track ${newTrackIndex + 1}.`,
+          icon: "videocam-outline",
+        });
       }
 
       if (endingClip) {
@@ -242,49 +215,49 @@ export function useProjectMediaAdders({
       }
 
       updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, video: videoClips },
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
       });
+
+      if (setSelectedClipId) {
+        setSelectedClipId(newClip.id);
+      }
+      if (setSelectedClipType) {
+        setSelectedClipType(newClip.type === "photo" ? "photo" : "video");
+      }
 
       if (newClip.url && newClip.type !== "photo") {
         extractRealMediaAudioPeaks(newClip.url, newClip.id);
       }
     },
-    [project, currentTime, updateProjectWithHistory],
+    [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
-  // Add text overlay
+  // Add text overlay on a new track
   const handleAddText = useCallback(
     (newTextClip: any) => {
-      if (!project) return;
+      const current = projectRef.current || project;
+      if (!current) return;
       startProcessing("Adding Text Overlay...", 350);
-      const dur = newTextClip.duration || 3.0;
       const desiredStart = currentTime;
-      const placement = allocateClipPlacement(project, desiredStart, dur, 2);
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        current,
+        desiredStart,
+      );
 
-      if (!placement) {
-        Alert.alert(
-          "Not Enough Space",
-          "All tracks are occupied at this playhead position. Please move existing clips or free up a track.",
-        );
-        return;
-      }
+      newTextClip.startTime = Math.max(0, Number(desiredStart.toFixed(3)));
+      newTextClip.trackIndex = newTrackIndex;
+      const textClips = [...(current.tracks.text || []), newTextClip];
 
-      newTextClip.startTime = placement.startTime;
-      newTextClip.trackIndex = placement.trackIndex;
-      const textClips = [...(project.tracks.text || []), newTextClip];
-
-      if (placement.trackIndex !== 2) {
-        addNotification({
-          title: "Text Overlay Added",
-          message: `Placed on Track ${placement.trackIndex + 1} to prevent overlapping.`,
-          icon: "text-outline",
-        });
-      }
+      addNotification({
+        title: "Text Overlay Added",
+        message: `Placed on Track ${newTrackIndex + 1}.`,
+        icon: "text-outline",
+      });
 
       updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, text: textClips },
+        ...current,
+        tracks: { ...current.tracks, text: textClips },
       });
 
       if (setSelectedClipId) {
@@ -294,10 +267,10 @@ export function useProjectMediaAdders({
         setSelectedClipType("text");
       }
     },
-    [project, currentTime, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, currentTime, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType, startProcessing],
   );
 
-  // Add multiple synchronized auto-captions
+  // Add multiple synchronized auto-captions on a new dedicated track
   const handleAddCaptions = useCallback(
     (captions: any[]) => {
       const current = projectRef.current || project;
@@ -306,129 +279,131 @@ export function useProjectMediaAdders({
         `Synchronizing ${captions.length} Auto Captions...`,
         500,
       );
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        current,
+        0,
+      );
+      const syncedCaptions = captions.map((c) => ({
+        ...c,
+        trackIndex: newTrackIndex,
+      }));
       // Clean up previous auto-captions so re-running replaces them cleanly without overlap
       const nonAuto = (current.tracks.captions || []).filter(
         (c: any) => !c.id?.startsWith("cap-"),
       );
       const updatedTracks = {
         ...current.tracks,
-        captions: [...nonAuto, ...captions],
+        captions: [...nonAuto, ...syncedCaptions],
       };
       updateProjectWithHistory({
         tracks: updatedTracks,
       });
       if (setSelectedClipId) {
-        setSelectedClipId(captions[0].id);
+        setSelectedClipId(syncedCaptions[0].id);
       }
       if (setSelectedClipType) {
         setSelectedClipType("caption");
       }
       addNotification({
         title: "Auto-Captions Added",
-        message: `Successfully synchronized ${captions.length} captions along the timeline.`,
+        message: `Successfully synchronized on Track ${newTrackIndex + 1}.`,
         icon: "chatbox-ellipses-outline",
       });
     },
-    [project, projectRef, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType, startProcessing],
   );
 
-  // Add audio clip
+  // Add audio clip on a new track
   const handleAddAudio = useCallback(
     (newAudioClip: any) => {
-      if (!project) return;
+      const current = projectRef.current || project;
+      if (!current) return;
       startProcessing(
         `Adding Audio "${newAudioClip.title || "Sound Track"}"...`,
         450,
       );
-      const dur = newAudioClip.duration || 5.0;
       const desiredStart = currentTime;
-      const placement = allocateClipPlacement(project, desiredStart, dur, 1);
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        current,
+        desiredStart,
+      );
 
-      if (!placement) {
-        Alert.alert(
-          "Not Enough Space",
-          "All audio/track lanes are occupied at this playhead position. Please move existing clips or free up a track.",
-        );
-        return;
-      }
+      newAudioClip.startTime = Math.max(0, Number(desiredStart.toFixed(3)));
+      newAudioClip.trackIndex = newTrackIndex;
+      const audioClips = [...(current.tracks.audio || []), newAudioClip];
 
-      newAudioClip.startTime = placement.startTime;
-      newAudioClip.trackIndex = placement.trackIndex;
-      const audioClips = [...(project.tracks.audio || []), newAudioClip];
-
-      if (placement.trackIndex !== 1) {
-        addNotification({
-          title: "Audio Track Added",
-          message: `Placed on Track ${placement.trackIndex + 1} to prevent overlapping.`,
-          icon: "musical-notes-outline",
-        });
-      }
+      addNotification({
+        title: "Audio Track Added",
+        message: `Placed on Track ${newTrackIndex + 1}.`,
+        icon: "musical-notes-outline",
+      });
 
       updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, audio: audioClips },
+        ...current,
+        tracks: { ...current.tracks, audio: audioClips },
       });
+
+      if (setSelectedClipId) {
+        setSelectedClipId(newAudioClip.id);
+      }
+      if (setSelectedClipType) {
+        setSelectedClipType("audio");
+      }
 
       if (newAudioClip.url) {
         extractRealMediaAudioPeaks(newAudioClip.url, newAudioClip.id);
       }
     },
-    [project, currentTime, updateProjectWithHistory, startProcessing],
+    [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
-  // Add sticker overlay
+  // Add sticker overlay on a new track
   const handleAddSticker = useCallback(
     (newStickerClip: any) => {
-      if (!project) return;
+      const current = projectRef.current || project;
+      if (!current) return;
       startProcessing("Adding Sticker Overlay...", 350);
-      const dur = newStickerClip.duration || 3.0;
       const desiredStart = currentTime;
-      const placement = allocateClipPlacement(project, desiredStart, dur, 3);
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        current,
+        desiredStart,
+      );
 
-      if (!placement) {
-        Alert.alert(
-          "Not Enough Space",
-          "All tracks are occupied at this playhead position. Please move existing clips or free up a track.",
-        );
-        return;
-      }
+      newStickerClip.startTime = Math.max(0, Number(desiredStart.toFixed(3)));
+      newStickerClip.trackIndex = newTrackIndex;
+      const stickerClips = [...(current.tracks.stickers || []), newStickerClip];
 
-      newStickerClip.startTime = placement.startTime;
-      newStickerClip.trackIndex = placement.trackIndex;
-      const stickerClips = [...(project.tracks.stickers || []), newStickerClip];
-
-      if (placement.trackIndex !== 3) {
-        addNotification({
-          title: "Sticker Added",
-          message: `Placed on Track ${placement.trackIndex + 1} to prevent overlapping.`,
-          icon: "happy-outline",
-        });
-      }
+      addNotification({
+        title: "Sticker Added",
+        message: `Placed on Track ${newTrackIndex + 1}.`,
+        icon: "happy-outline",
+      });
 
       updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, stickers: stickerClips },
+        ...current,
+        tracks: { ...current.tracks, stickers: stickerClips },
       });
+
+      if (setSelectedClipId) {
+        setSelectedClipId(newStickerClip.id);
+      }
+      if (setSelectedClipType) {
+        setSelectedClipType("sticker");
+      }
     },
-    [project, currentTime, updateProjectWithHistory],
+    [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
-  // Add or preview effect
+  // Add or preview effect on a new track
   const handleAddEffect = useCallback(
     (preset: any) => {
       const current = projectRef.current || project;
       if (!current) return;
 
-      const targetId =
-        (selectedClip && selectedClipType === "video" ? selectedClipId : null) ||
-        current.tracks.video?.find(
-          (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
-        )?.id ||
-        current.tracks.video?.[0]?.id;
-
-      if (targetId) {
+      // 1. If explicit on-clip application requested:
+      if (preset.applyToClip && selectedClip && selectedClipType === "video" && selectedClipId) {
         const videoClips = [...(current.tracks.video || [])];
-        const idx = videoClips.findIndex((c) => c.id === targetId);
+        const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
           videoClips[idx] = {
             ...videoClips[idx],
@@ -443,27 +418,23 @@ export function useProjectMediaAdders({
         }
       }
 
+      // 2. Otherwise: create a standalone Timeline Effect Clip on a brand-new track!
       if (preset.id === "none") return;
-      const dur = 3.0;
-      const desiredStart = currentTime;
-      const placement = allocateClipPlacement(current, desiredStart, dur, 4);
+      const dur = preset.duration || 3.0;
+      const desiredStart = currentTime || 0;
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        current,
+        desiredStart,
+      );
 
-      if (!placement) {
-        Alert.alert(
-          "Not Enough Space",
-          "All tracks are occupied at this playhead position. Please move existing clips or free up a track.",
-        );
-        return;
-      }
-
-      const newEff = {
-        id: "eff-" + Date.now(),
+      const newEff: EffectClip = {
+        id: preset.id && String(preset.id).startsWith("eff-") ? preset.id : "eff-" + Date.now(),
         type: preset.type || preset.id,
-        name: preset.name,
-        startTime: placement.startTime,
+        name: preset.name || "Effect",
+        startTime: Math.max(0, Number(desiredStart.toFixed(3))),
         duration: dur,
-        intensity: preset.intensity || 0.8,
-        trackIndex: placement.trackIndex,
+        intensity: preset.intensity !== undefined ? preset.intensity : 0.8,
+        trackIndex: newTrackIndex,
       };
       const effectClips = [...(current.tracks.effects || []), newEff];
 
@@ -471,8 +442,21 @@ export function useProjectMediaAdders({
         ...current,
         tracks: { ...current.tracks, effects: effectClips },
       });
+
+      if (setSelectedClipId) {
+        setSelectedClipId(newEff.id);
+      }
+      if (setSelectedClipType) {
+        setSelectedClipType("effects");
+      }
+
+      addNotification({
+        title: "Effect Added",
+        message: `Placed "${newEff.name}" on Track ${newTrackIndex + 1}.`,
+        icon: "sparkles",
+      });
     },
-    [project, projectRef, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory],
+    [project, projectRef, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType, addNotification],
   );
 
   return {

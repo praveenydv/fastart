@@ -19,9 +19,10 @@ interface UseTimelineDragTrimParams {
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   onMoveClip?: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects",
+    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
     newStartTime: number,
     newTrackIndex?: number,
+    isInsertNewTrack?: boolean,
   ) => void;
   onTrimClip?: (
     clipId: string,

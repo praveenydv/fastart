@@ -21,13 +21,13 @@ export const AutoCutoutControls: React.FC<AutoCutoutControlsProps> = ({
   return (
     <View style={styles.sectionBox}>
       <View style={styles.autoCutoutBadge}>
-        <Ionicons name="sparkles" size={18} color="#FFE600" />
+        <Ionicons name="person" size={17} color="#FFE600" />
         <Text style={styles.autoCutoutBadgeText}>
-          Subject Segmentation & Luminance Thresholding
+          AI Human Cutout & Portrait Isolation
         </Text>
       </View>
       <Text style={styles.helperText}>
-        Automatically isolates foreground subjects and cuts out static or high-contrast background without requiring a green screen.
+        Neural human figure segmentation. Automatically isolates human persons, face, hair, and body from video or photo backgrounds without green screen.
       </Text>
 
       <View style={styles.sliderGroup}>

@@ -40,15 +40,17 @@ export default function TextAnimTab({
               style={{
                 paddingHorizontal: 8,
                 paddingVertical: 3,
-                borderRadius: 8,
-                backgroundColor: animCategory === cat ? "#00F2FE" : "#1E2333",
+                borderRadius: 6,
+                backgroundColor: animCategory === cat ? "#FFFFFF" : "#18181C",
+                borderWidth: 1,
+                borderColor: animCategory === cat ? "#FFFFFF" : "#27272F",
               }}
             >
               <Text
                 style={{
                   fontSize: 10,
-                  fontWeight: "800",
-                  color: animCategory === cat ? "#000000" : "#8E95A5",
+                  fontWeight: "700",
+                  color: animCategory === cat ? "#000000" : "#71717A",
                   textTransform: "uppercase",
                 }}
               >

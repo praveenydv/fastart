@@ -68,7 +68,7 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
         <View style={styles.timelineBarLeft}>
           <View style={styles.trackPreferenceGroup}>
             <View style={styles.trackTitleBadge}>
-              <Ionicons name="layers-outline" size={12} color="#00F2FE" />
+              <Ionicons name="layers-outline" size={12} color="#A1A1AA" />
               <Text style={styles.trackLabelTitle}>
                 {isMobile ? "TRACKS" : "MULTI-TRACK"}
               </Text>
@@ -88,7 +88,7 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
                   {activeClipInfo.type} • T{activeClipInfo.trackIndex + 1}
                 </Text>
               </View>
-              <Ionicons name="time-outline" size={10} color="#00F2FE" />
+              <Ionicons name="time-outline" size={10} color="#A1A1AA" />
               <Text style={styles.activeClipTimeframeText} numberOfLines={1}>
                 {isMobile
                   ? `${activeClipInfo.duration.toFixed(1)}s`

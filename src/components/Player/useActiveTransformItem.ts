@@ -5,6 +5,7 @@ import { FastArtProject } from "../../types/project";
 
 interface UseActiveTransformItemProps {
   isCroppingMode: boolean;
+  isPlaying?: boolean;
   selectedClipId?: string | null;
   selectedClipType?: string;
   activeCaptions?: any[];
@@ -25,6 +26,7 @@ interface UseActiveTransformItemProps {
 
 export function useActiveTransformItem({
   isCroppingMode,
+  isPlaying = false,
   selectedClipId,
   selectedClipType,
   activeCaptions,
@@ -39,7 +41,7 @@ export function useActiveTransformItem({
   getInterpolatedTransform,
 }: UseActiveTransformItemProps): ActiveTransformItem | null {
   return useMemo(() => {
-    if (isCroppingMode || !selectedClipId) return null;
+    if (isPlaying || isCroppingMode || !selectedClipId) return null;
 
     const isCaptionType =
       !selectedClipType ||

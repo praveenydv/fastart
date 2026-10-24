@@ -16,12 +16,14 @@ import {
 } from "./Timeline/timelineTypes";
 import { formatPlayheadTime, getPointerCoords } from "./Timeline/timelineUtils";
 import { styles } from "./Timeline/TimelineStyles";
+import { soundEngine } from "../utils/audioEngine";
 import { useTimelineClips } from "./Timeline/useTimelineClips";
 import { useTimelineResize } from "./Timeline/useTimelineResize";
 import { useTimelineScrubbing } from "./Timeline/useTimelineScrubbing";
 import { useTimelineDragTrim } from "./Timeline/useTimelineDragTrim";
 import { TimelineHeaderBar } from "./Timeline/TimelineHeaderBar";
 import { TimelineTracksView } from "./Timeline/TimelineTracksView";
+import TimelinePlayhead from "./Timeline/TimelinePlayhead";
 
 // Re-export constants and helpers for backwards-compatibility
 export {
@@ -47,6 +49,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   onZoomChange,
   onOpenEditModal,
   onUpdateProject,
+  onAddMedia,
+  onAddAudio,
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
@@ -306,10 +310,13 @@ export const Timeline: React.FC<TimelineProps> = ({
     );
   }, [ticks, pxPerSec, project?.beatMarkers]);
 
-  // Left track header cells
+  // Left track header cells (stable layout without in-between jumping)
   const renderedTrackHeaders = useMemo(() => {
-    return trackRows.map((_, idx) => (
-      <View key={idx} style={styles.trackHeaderCellUniversal}>
+    const headers: React.ReactNode[] = trackRows.map((_, idx) => (
+      <View
+        key={`track-header-${idx}`}
+        style={styles.trackHeaderCellUniversal}
+      >
         <View style={styles.trackHeaderLabelBox}>
           <Text style={styles.trackHeaderLabelUniversal}>
             {isMobile ? `T${idx + 1}` : `Track ${idx + 1}`}
@@ -317,7 +324,41 @@ export const Timeline: React.FC<TimelineProps> = ({
         </View>
       </View>
     ));
-  }, [trackRows, isMobile]);
+
+    // If dragging to bottom to create a new track (when all tracks are occupied)
+    if (dragState?.isInsertingNewTrack) {
+      headers.push(
+        <View
+          key="insert-header-bottom"
+          style={[
+            styles.trackHeaderCellUniversal,
+            {
+              borderColor: "#00F2FE",
+              borderWidth: 1.5,
+              borderStyle: "dashed",
+              backgroundColor: "rgba(0, 242, 254, 0.15)",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2,
+            },
+          ]}
+        >
+          <Ionicons name="add" size={12} color="#00F2FE" />
+          <Text
+            style={[
+              styles.trackHeaderLabelUniversal,
+              { color: "#00F2FE", fontWeight: "700" },
+            ]}
+          >
+            {isMobile ? `T${trackRows.length + 1}` : "New"}
+          </Text>
+        </View>,
+      );
+    }
+
+    return headers;
+  }, [trackRows, isMobile, dragState?.isInsertingNewTrack]);
 
   return (
     <View
@@ -407,39 +448,82 @@ export const Timeline: React.FC<TimelineProps> = ({
             ]}
             contentContainerStyle={styles.timelineContent}
           >
-            <TimelineTracksView
-              trackRows={trackRows}
-              activeTrackCount={activeTrackCount}
-              timelineContentWidth={timelineContentWidth}
-              rulerRef={rulerRef}
-              rulerPanResponder={rulerPanResponder}
-              renderedTicks={renderedTicks}
-              selectedClipId={selectedClipId}
-              currentTime={currentTime}
-              pxPerSec={pxPerSec}
-              activeTrimming={activeTrimming}
-              activeTrimDelta={activeTrimDelta}
-              dragState={dragState}
-              isScrubbingRuler={isScrubbingRuler}
-              onSelectClip={onSelectClip}
-              onOpenTransitions={onOpenTransitions}
-              handleRemoveTrack={handleRemoveTrack}
-              handleClipPress={handleClipPress}
-              handleClipLongPress={handleClipLongPress}
-              handleClipMouseDown={handleClipMouseDown}
-              handleClipTouchStart={handleClipTouchStart}
-              handleClipTouchMove={handleClipTouchMove}
-              handleClipTouchEnd={handleClipTouchEnd}
-              handleClipTouchCancel={handleClipTouchCancel}
-              leftTrimPanResponder={leftTrimPanResponder}
-              rightTrimPanResponder={rightTrimPanResponder}
-              clipMovePanResponder={clipMovePanResponder}
-              playheadPanResponder={playheadPanResponder}
-              handlePlayheadPointerDown={handlePlayheadPointerDown}
-              handleLeftTrimStart={handleLeftTrimStart}
-              handleRightTrimStart={handleRightTrimStart}
-              onOpenEditModal={onOpenEditModal}
-            />
+            <View
+              style={{ width: timelineContentWidth, position: "relative" }}
+              {...(Platform.OS === "web"
+                ? {
+                    onDragOver: (e: any) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "copy";
+                    },
+                    onDrop: (e: any) => {
+                      e.preventDefault();
+                      try {
+                        const raw = e.dataTransfer.getData("application/fastart-clip");
+                        if (!raw) return;
+                        const data = JSON.parse(raw);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const dropX = Math.max(0, e.clientX - rect.left);
+                        const dropTime = Math.max(0, dropX / pxPerSec);
+                        soundEngine.playSfx("whoosh");
+                        if (data.type === "media" && onAddMedia) {
+                          onAddMedia({
+                            ...data.clip,
+                            id: `clip-${Date.now()}`,
+                            startTime: dropTime,
+                          });
+                        } else if (data.type === "audio" && onAddAudio) {
+                          onAddAudio({
+                            ...data.clip,
+                            id: `audio-${Date.now()}`,
+                            startTime: dropTime,
+                          });
+                        }
+                      } catch (err) {
+                        console.error("Drop failed:", err);
+                      }
+                    },
+                  }
+                : {})}
+            >
+              <TimelineTracksView
+                trackRows={trackRows}
+                activeTrackCount={activeTrackCount}
+                timelineContentWidth={timelineContentWidth}
+                rulerRef={rulerRef}
+                rulerPanResponder={rulerPanResponder}
+                renderedTicks={renderedTicks}
+                selectedClipId={selectedClipId}
+                pxPerSec={pxPerSec}
+                activeTrimming={activeTrimming}
+                activeTrimDelta={activeTrimDelta}
+                dragState={dragState}
+                onSelectClip={onSelectClip}
+                onOpenTransitions={onOpenTransitions}
+                handleRemoveTrack={handleRemoveTrack}
+                handleClipPress={handleClipPress}
+                handleClipLongPress={handleClipLongPress}
+                handleClipMouseDown={handleClipMouseDown}
+                handleClipTouchStart={handleClipTouchStart}
+                handleClipTouchMove={handleClipTouchMove}
+                handleClipTouchEnd={handleClipTouchEnd}
+                handleClipTouchCancel={handleClipTouchCancel}
+                leftTrimPanResponder={leftTrimPanResponder}
+                rightTrimPanResponder={rightTrimPanResponder}
+                clipMovePanResponder={clipMovePanResponder}
+                handleLeftTrimStart={handleLeftTrimStart}
+                handleRightTrimStart={handleRightTrimStart}
+                onOpenEditModal={onOpenEditModal}
+              />
+
+              <TimelinePlayhead
+                currentTime={currentTime}
+                pxPerSec={pxPerSec}
+                isScrubbingRuler={isScrubbingRuler}
+                playheadPanResponder={playheadPanResponder}
+                handlePlayheadPointerDown={handlePlayheadPointerDown}
+              />
+            </View>
           </ScrollView>
         </View>
       </ScrollView>
@@ -447,4 +531,4 @@ export const Timeline: React.FC<TimelineProps> = ({
   );
 };
 
-export default Timeline;
+export default React.memo(Timeline);

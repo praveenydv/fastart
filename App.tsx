@@ -55,17 +55,37 @@ export default function App() {
   const [transitionTargetClipId, setTransitionTargetClipId] = useState<string | null>(null);
   const [isCroppingPreview, setIsCroppingPreview] = useState(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const [cutoutInitialMode, setCutoutInitialMode] = useState<'auto' | 'chroma'>('auto');
+  const [transformInitialTab, setTransformInitialTab] = useState<'crop' | 'flip' | 'rotate' | 'stretch' | 'angle'>('crop');
 
   // Snapshot refs for rolling back unapplied preview changes
   const modalInitialSnapshotRef = useRef<FastArtProject | null>(null);
   const initialHistoryLengthRef = useRef<number>(0);
   const historyStackRef = useRef<FastArtProject[]>([]);
 
+  // Modals that support interactive preview with cancel rollback
+  const PREVIEW_MODALS = new Set([
+    "filters",
+    "effects",
+    "transitions",
+    "speed",
+    "volume",
+    "mask",
+    "cutout",
+    "canvas",
+    "enhance",
+    "keyframe",
+    "tracking",
+    "transform",
+  ]);
+
   // Modal helpers synced with URL
   const openModal = useCallback((modalName: string) => {
-    if (projectRef.current) {
+    if (PREVIEW_MODALS.has(modalName) && projectRef.current) {
       modalInitialSnapshotRef.current = JSON.parse(JSON.stringify(projectRef.current));
       initialHistoryLengthRef.current = historyStackRef.current.length;
+    } else {
+      modalInitialSnapshotRef.current = null;
     }
     setActiveModal(modalName);
     if (route.screen === "editor" && projectRef.current) {
@@ -265,6 +285,7 @@ export default function App() {
     handleToggleReverse,
     handleUpdateClipTransform,
     handleUpdateClipCrop,
+    handleUpdateClipMask,
     handleTrimClip,
     handleMoveClip,
   } = useProjectClipMutations({
@@ -517,172 +538,202 @@ export default function App() {
         />
 
         {/* 5. FULL VIDEO EDITOR SUITE */}
-        {(route.screen === "editor" || route.screen === "export") && project && (
-          <EditorWorkspace
-            project={project}
-            currentTime={currentTime}
-            setCurrentTime={setCurrentTime}
-            isPlaying={isPlaying}
-            setIsPlaying={setIsPlaying}
-            totalDuration={totalDuration}
-            isFullscreen={isFullscreen}
-            setIsFullscreen={setIsFullscreen}
-            selectedClipId={selectedClipId}
-            setSelectedClipId={setSelectedClipId}
-            selectedClipType={selectedClipType}
-            setSelectedClipType={setSelectedClipType}
-            selectedClip={selectedClip}
-            zoom={zoom}
-            setZoom={setZoom}
-            settings={settings}
-            isCroppingPreview={isCroppingPreview}
-            setIsCroppingPreview={setIsCroppingPreview}
-            canUndo={historyStack.length > 0}
-            canRedo={redoStack.length > 0}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            onOpenExport={() => openModal("export")}
-            onBackToHome={() => {
-              soundEngine.playSfx("pop");
-              setShowExitConfirmModal(true);
-            }}
-            onAddKeyframe={handleAddKeyframe}
-            onOpenKeyframeModal={() => {
-              if (!selectedClipId && project) {
-                const videoAtTime =
-                  project.tracks.video?.find(
-                    (c) =>
-                      currentTime >= c.startTime &&
-                      currentTime <= c.startTime + c.duration,
-                  ) || project.tracks.video?.[0];
-                if (videoAtTime) {
-                  setSelectedClipId(videoAtTime.id);
-                  setSelectedClipType("video");
-                }
-              }
-              openModal("keyframe");
-            }}
-            isKeyframeAtPlayhead={isKeyframeAtPlayhead}
-            openModal={openModal}
-            updateProjectWithHistory={updateProjectDispatcher}
-            handleUpdateClipTransform={handleUpdateClipTransform}
-            handleUpdateClipCrop={handleUpdateClipCrop}
-            handleSplitClip={handleSplitClip}
-            handleDuplicateClip={handleDuplicateClip}
-            handleDeleteClip={handleDeleteClip}
-            handleMoveClip={handleMoveClip}
-            handleTrimClip={handleTrimClip}
-            handleRotateClip={handleRotateClip}
-            handleToggleReverse={handleToggleReverse}
-            handleOpenTransitionsModal={handleOpenTransitionsModal}
-            handleDeselectClip={() => setSelectedClipId(null)}
-            handleOpenSpeedModal={() => {
-              ensureSelectedVideoClip();
-              openModal("speed");
-            }}
-            handleOpenVolumeModal={() => {
-              const clip = ensureSelectedVideoClip();
-              if (clip && selectedClipType === "video" && !mediaHasAudioTrack(clip)) {
-                return;
-              }
-              openModal("volume");
-            }}
-            handleOpenCropModal={() => {
-              soundEngine.playSfx("click");
-              setIsCroppingPreview(true);
-            }}
-            handleOpenMaskModal={() => {
-              ensureSelectedVideoClip();
-              openModal("mask");
-            }}
-            handleOpenAudioModal={() => openModal("audio")}
-            handleOpenTextModal={() => openModal("text")}
-            handleOpenFiltersModal={() => {
-              ensureSelectedVideoClip();
-              openModal("filters");
-            }}
-            handleOpenEffectsModal={() => {
-              ensureSelectedVideoClip();
-              openModal("effects");
-            }}
-            handleOpenStickersModal={() => openModal("stickers")}
-            handleOpenMediaPicker={() => openModal("media")}
-            handleOpenTTS={() => openModal("tts")}
-            handleOpenEnhance={() => {
-              ensureSelectedVideoClip();
-              openModal("enhance");
-            }}
-            handleOpenAutoCut={() => openModal("autocut")}
-            handleOpenCanvasModal={() => openModal("canvas")}
-            handleOpenCutoutModal={() => {
-              ensureSelectedVideoClip();
-              openModal("cutout");
-            }}
-            handleOpenMotionTracking={() => {
-              ensureSelectedVideoClip();
-              openModal("tracking");
-            }}
-            handleOpenAutoCaptions={() => openModal("captions")}
-            handleToggleDenoise={handleToggleDenoise}
-            handleExtractAudio={handleExtractAudioFromVideo}
-            isProcessing={isProcessing}
-            processingMessage={processingMessage}
-          />
-        )}
+        {(() => {
+          const renderSharedModals = (isInline?: boolean) => (
+            <EditorModals
+              activeModal={activeModal}
+              closeModal={handleCancelModal}
+              onCancelModal={handleCancelModal}
+              onApplyModal={handleApplyModal}
+              project={project}
+              route={route}
+              totalDuration={totalDuration}
+              currentTime={currentTime}
+              setCurrentTime={setCurrentTime}
+              selectedClipId={selectedClipId}
+              selectedClip={selectedClip}
+              selectedClipType={selectedClipType}
+              settings={settings}
+              notifications={notifications}
+              transitionTargetClipId={transitionTargetClipId}
+              clipToDelete={clipToDelete}
+              setClipToDelete={setClipToDelete}
+              handleAddMedia={handleAddMedia}
+              handleApplyCutout={handleApplyCutout}
+              cutoutInitialMode={cutoutInitialMode}
+              transformInitialTab={transformInitialTab}
+              onOpenScreenCrop={() => {
+                soundEngine.playSfx("click");
+                closeModal();
+                setIsCroppingPreview(true);
+              }}
+              handleApplyMotionTracking={handleApplyMotionTracking}
+              handleAddText={handleAddText}
+              handleUpdateText={handleUpdateText}
+              handleAddAudio={handleAddAudio}
+              handleApplyFilter={handleApplyFilter}
+              handleAddEffect={handleAddEffect}
+              handleUpdateEffect={handleUpdateEffect}
+              handleAddSticker={handleAddSticker}
+              handleUpdateSticker={handleUpdateSticker}
+              handleApplyTransition={handleApplyTransition}
+              handleApplySpeed={handleApplySpeed}
+              handleUpdateSettings={handleUpdateSettings}
+              handleReloadAllData={handleReloadAllData}
+              handleMarkAllAsRead={handleMarkAllAsRead}
+              handleClearAllNotifications={handleClearAllNotifications}
+              handleDeleteNotification={handleDeleteNotification}
+              handleNotificationAction={handleNotificationAction}
+              handleApplyVolume={handleApplyVolume}
+              handleExtractAudioFromVideo={handleExtractAudioFromVideo}
+              handleApplyTransform={handleApplyTransform}
+              handleAutoCutGenerated={handleAutoCutGenerated}
+              updateProjectWithHistory={updateProjectDispatcher}
+              handleApplyEnhance={handleApplyEnhance}
+              handleAddKeyframe={handleAddKeyframe}
+              isKeyframeAtPlayhead={isKeyframeAtPlayhead}
+              handleUpdateKeyframeTransform={handleUpdateKeyframeTransform}
+              handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
+              handleClearAllKeyframes={handleClearAllKeyframes}
+              handleConfirmDeleteClip={handleConfirmDeleteClip}
+              handleAddCaptions={handleAddCaptions}
+              handleUpdateCaption={handleUpdateCaption}
+              handleMoveClip={handleMoveClip}
+              isInline={isInline}
+            />
+          );
 
-        {/* LAZY LOADED MODALS */}
-        <EditorModals
-          activeModal={activeModal}
-          closeModal={handleCancelModal}
-          onCancelModal={handleCancelModal}
-          onApplyModal={handleApplyModal}
-          project={project}
-          route={route}
-          totalDuration={totalDuration}
-          currentTime={currentTime}
-          setCurrentTime={setCurrentTime}
-          selectedClipId={selectedClipId}
-          selectedClip={selectedClip}
-          selectedClipType={selectedClipType}
-          settings={settings}
-          notifications={notifications}
-          transitionTargetClipId={transitionTargetClipId}
-          clipToDelete={clipToDelete}
-          setClipToDelete={setClipToDelete}
-          handleAddMedia={handleAddMedia}
-          handleApplyCutout={handleApplyCutout}
-          handleApplyMotionTracking={handleApplyMotionTracking}
-          handleAddText={handleAddText}
-          handleUpdateText={handleUpdateText}
-          handleAddAudio={handleAddAudio}
-          handleApplyFilter={handleApplyFilter}
-          handleAddEffect={handleAddEffect}
-          handleUpdateEffect={handleUpdateEffect}
-          handleAddSticker={handleAddSticker}
-          handleUpdateSticker={handleUpdateSticker}
-          handleApplyTransition={handleApplyTransition}
-          handleApplySpeed={handleApplySpeed}
-          handleUpdateSettings={handleUpdateSettings}
-          handleReloadAllData={handleReloadAllData}
-          handleMarkAllAsRead={handleMarkAllAsRead}
-          handleClearAllNotifications={handleClearAllNotifications}
-          handleDeleteNotification={handleDeleteNotification}
-          handleNotificationAction={handleNotificationAction}
-          handleApplyVolume={handleApplyVolume}
-          handleExtractAudioFromVideo={handleExtractAudioFromVideo}
-          handleApplyTransform={handleApplyTransform}
-          handleAutoCutGenerated={handleAutoCutGenerated}
-          updateProjectWithHistory={updateProjectDispatcher}
-          handleApplyEnhance={handleApplyEnhance}
-          handleAddKeyframe={handleAddKeyframe}
-          isKeyframeAtPlayhead={isKeyframeAtPlayhead}
-          handleUpdateKeyframeTransform={handleUpdateKeyframeTransform}
-          handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
-          handleClearAllKeyframes={handleClearAllKeyframes}
-          handleConfirmDeleteClip={handleConfirmDeleteClip}
-          handleAddCaptions={handleAddCaptions}
-          handleUpdateCaption={handleUpdateCaption}
-        />
+          return (
+            <>
+              {(route.screen === "editor" || route.screen === "export") && project && (
+                <EditorWorkspace
+                  project={project}
+                  currentTime={currentTime}
+                  setCurrentTime={setCurrentTime}
+                  isPlaying={isPlaying}
+                  setIsPlaying={setIsPlaying}
+                  totalDuration={totalDuration}
+                  isFullscreen={isFullscreen}
+                  setIsFullscreen={setIsFullscreen}
+                  selectedClipId={selectedClipId}
+                  setSelectedClipId={setSelectedClipId}
+                  selectedClipType={selectedClipType}
+                  setSelectedClipType={setSelectedClipType}
+                  selectedClip={selectedClip}
+                  zoom={zoom}
+                  setZoom={setZoom}
+                  settings={settings}
+                  isCroppingPreview={isCroppingPreview}
+                  setIsCroppingPreview={setIsCroppingPreview}
+                  canUndo={historyStack.length > 0}
+                  canRedo={redoStack.length > 0}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  onOpenExport={() => openModal("export")}
+                  onBackToHome={() => {
+                    soundEngine.playSfx("pop");
+                    setShowExitConfirmModal(true);
+                  }}
+                  onAddKeyframe={handleAddKeyframe}
+                  onOpenKeyframeModal={() => {
+                    if (!selectedClipId && project) {
+                      const videoAtTime =
+                        project.tracks.video?.find(
+                          (c) =>
+                            currentTime >= c.startTime &&
+                            currentTime <= c.startTime + c.duration,
+                        ) || project.tracks.video?.[0];
+                      if (videoAtTime) {
+                        setSelectedClipId(videoAtTime.id);
+                        setSelectedClipType("video");
+                      }
+                    }
+                    openModal("keyframe");
+                  }}
+                  isKeyframeAtPlayhead={isKeyframeAtPlayhead}
+                  activeModal={activeModal}
+                  openModal={openModal}
+                  updateProjectWithHistory={updateProjectDispatcher}
+                  handleUpdateClipTransform={handleUpdateClipTransform}
+                  handleUpdateClipCrop={handleUpdateClipCrop}
+                  handleUpdateClipMask={handleUpdateClipMask}
+                  handleSplitClip={handleSplitClip}
+                  handleDuplicateClip={handleDuplicateClip}
+                  handleDeleteClip={handleDeleteClip}
+                  handleMoveClip={handleMoveClip}
+                  handleTrimClip={handleTrimClip}
+                  handleRotateClip={handleRotateClip}
+                  handleToggleReverse={handleToggleReverse}
+                  handleOpenTransitionsModal={handleOpenTransitionsModal}
+                  handleDeselectClip={() => setSelectedClipId(null)}
+                  handleOpenSpeedModal={() => {
+                    ensureSelectedVideoClip();
+                    openModal("speed");
+                  }}
+                  handleOpenVolumeModal={() => {
+                    const clip = ensureSelectedVideoClip();
+                    if (clip && selectedClipType === "video" && !mediaHasAudioTrack(clip)) {
+                      return;
+                    }
+                    openModal("volume");
+                  }}
+                  handleOpenCropModal={() => {
+                    soundEngine.playSfx("click");
+                    setIsCroppingPreview(true);
+                  }}
+                  handleOpenTransformModal={(tab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle') => {
+                    ensureSelectedVideoClip();
+                    setTransformInitialTab(tab || 'crop');
+                    openModal("transform");
+                  }}
+                  handleOpenMaskModal={() => {
+                    ensureSelectedVideoClip();
+                    openModal("mask");
+                  }}
+                  handleOpenAudioModal={() => openModal("audio")}
+                  handleOpenTextModal={() => openModal("text")}
+                  handleOpenFiltersModal={() => {
+                    ensureSelectedVideoClip();
+                    openModal("filters");
+                  }}
+                  handleOpenEffectsModal={() => {
+                    openModal("effects");
+                  }}
+                  handleOpenStickersModal={() => openModal("stickers")}
+                  handleOpenMediaPicker={() => openModal("media")}
+                  handleOpenTTS={() => openModal("tts")}
+                  handleOpenEnhance={() => {
+                    ensureSelectedVideoClip();
+                    openModal("enhance");
+                  }}
+                  handleOpenAutoCut={() => openModal("autocut")}
+                  handleOpenCanvasModal={() => openModal("canvas")}
+                  handleOpenBackgroundModal={() => openModal("background")}
+                  handleOpenCutoutModal={(mode?: 'auto' | 'chroma') => {
+                    ensureSelectedVideoClip();
+                    setCutoutInitialMode(mode || 'auto');
+                    openModal("cutout");
+                  }}
+                  handleOpenMotionTracking={() => {
+                    ensureSelectedVideoClip();
+                    openModal("tracking");
+                  }}
+                  handleOpenAutoCaptions={() => openModal("captions")}
+                  handleToggleDenoise={handleToggleDenoise}
+                  handleExtractAudio={handleExtractAudioFromVideo}
+                  isProcessing={isProcessing}
+                  processingMessage={processingMessage}
+                  renderModals={renderSharedModals}
+                  handleAddMedia={handleAddMedia}
+                  handleAddAudio={handleAddAudio}
+                />
+              )}
+
+              {/* OVERLAY / FULLSCREEN MODALS (media picker, audio picker, export, settings, notifications, delete confirm) */}
+              {renderSharedModals(false)}
+            </>
+          );
+        })()}
 
         {/* Confirmation Modal to Exit Project to Home */}
         <ConfirmExitModal
@@ -712,12 +763,12 @@ const STATUS_BAR_HEIGHT =
 const styles = StyleSheet.create({
   rootWrapper: {
     flex: 1,
-    backgroundColor: "#0B0D13",
+    backgroundColor: "#09090B",
     paddingTop: STATUS_BAR_HEIGHT,
   },
   rootContainer: {
     flex: 1,
-    backgroundColor: "#0B0D13",
+    backgroundColor: "#09090B",
     overflow: "hidden" as any,
   },
 });

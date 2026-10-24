@@ -231,7 +231,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
 
     return (
       <View style={styles.videoWaveformOverlay} pointerEvents="none">
-        {/* Clean dark backdrop band for high contrast over video frames */}
+        {/* Transparent bottom-anchored band so video preview remains 100% visible */}
         <View style={styles.videoBackdropBand}>
           {isDenoised && availableWidth > 70 && (
             <View style={styles.videoDenoiseTag}>
@@ -247,7 +247,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
             </View>
           )}
 
-          <View style={styles.barsRow}>
+          <View style={styles.barsRowBottom}>
             {peaks.map((peak, idx) => (
               <View
                 key={idx}
@@ -256,7 +256,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
                   {
                     height: Math.max(
                       minBarHeight,
-                      Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
+                      Math.min(10, Math.round(peak * 10)),
                     ),
                     backgroundColor: videoBarColor,
                     marginRight: idx === numBars - 1 ? 0 : dynamicGap,
@@ -283,30 +283,35 @@ const styles = StyleSheet.create({
     bottom: 2,
     justifyContent: "center",
     overflow: "hidden",
-    zIndex: 1,
+    zIndex: 2,
   },
   videoWaveformOverlay: {
     position: "absolute",
     left: 4,
     right: 4,
-    top: 2,
     bottom: 2,
-    justifyContent: "center",
+    height: 14,
+    justifyContent: "flex-end",
     overflow: "hidden",
-    zIndex: 1,
+    zIndex: 2,
   },
   videoBackdropBand: {
     width: "100%",
-    height: 32,
-    backgroundColor: "rgba(3, 7, 18, 0.55)",
-    borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
+    height: 14,
+    backgroundColor: "transparent",
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
   },
   barsRow: {
     flexDirection: "row",
     alignItems: "center",
     height: "100%",
+    width: "100%",
+  },
+  barsRowBottom: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    height: 12,
     width: "100%",
   },
   waveBar: {
@@ -384,9 +389,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 4,
     right: 4,
-    top: 4,
-    bottom: 4,
-    justifyContent: "center",
+    bottom: 2,
+    height: 12,
+    justifyContent: "flex-end",
     overflow: "hidden",
     zIndex: 1,
   },

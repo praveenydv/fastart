@@ -74,6 +74,16 @@ export const FILTER_PRESETS = [
 
 export const EFFECT_PRESETS = [
   { id: 'none', name: 'None', type: 'none', icon: 'close-circle-outline', intensity: 0, category: 'Basic' },
+  // --- ✨ AI EFFECTS SUITE ---
+  { id: 'beauty_smooth', name: 'AI Beauty Smooth', type: 'beauty_smooth', intensity: 0.6, icon: 'heart-outline', category: 'AI' },
+  { id: 'ai_cyberpunk', name: 'AI Cyberpunk Glow', type: 'ai_cyberpunk', intensity: 0.75, icon: 'color-wand-outline', category: 'AI' },
+  { id: 'ai_manga', name: 'AI Anime Manga', type: 'ai_manga', intensity: 0.8, icon: 'brush-outline', category: 'AI' },
+  { id: 'ai_matrix', name: 'AI Matrix Cascade', type: 'ai_matrix', intensity: 0.75, icon: 'code-slash-outline', category: 'AI' },
+  { id: 'thermal', name: 'AI Thermal Heatmap', type: 'thermal', intensity: 0.8, icon: 'flame-outline', category: 'AI' },
+  { id: 'ai_aura', name: 'AI Radiant Aura', type: 'ai_aura', intensity: 0.7, icon: 'sparkles', category: 'AI' },
+  { id: 'ai_night_vision', name: 'AI Night Vision', type: 'ai_night_vision', intensity: 0.75, icon: 'eye-outline', category: 'AI' },
+  { id: 'ai_cartoon', name: 'AI Cel Cartoon', type: 'ai_cartoon', intensity: 0.7, icon: 'happy-outline', category: 'AI' },
+  // --- CREATIVE VIDEO EFFECTS ---
   { id: 'glitch', name: 'Glitch Shake', type: 'glitch', intensity: 0.8, icon: 'flash-outline', category: 'Glitch' },
   { id: 'vhs', name: 'VHS Tape', type: 'vhs', intensity: 0.6, icon: 'videocam-outline', category: 'Retro' },
   { id: 'rgb_split', name: 'RGB Split', type: 'rgb_split', intensity: 0.7, icon: 'layers-outline', category: 'Glitch' },
@@ -93,10 +103,8 @@ export const EFFECT_PRESETS = [
   { id: 'cyberpunk_dual', name: 'Cyberpunk Dual', type: 'cyberpunk_dual', intensity: 0.75, icon: 'color-wand-outline', category: 'Light' },
   { id: 'water_ripple', name: 'Water Ripple', type: 'water_ripple', intensity: 0.6, icon: 'water', category: 'Glitch' },
   { id: 'fisheye', name: 'Fisheye Lens', type: 'fisheye', intensity: 0.7, icon: 'aperture-outline', category: 'Motion' },
-  { id: 'thermal', name: 'Thermal Infrared', type: 'thermal', intensity: 0.8, icon: 'flame-outline', category: 'Light' },
   { id: 'tilt_shift', name: 'Tilt Shift Blur', type: 'tilt_shift', intensity: 0.5, icon: 'camera-outline', category: 'Motion' },
   { id: 'kaleidoscope', name: 'Kaleidoscope Quad', type: 'kaleidoscope', intensity: 0.8, icon: 'grid-outline', category: 'Glitch' },
-  { id: 'beauty_smooth', name: 'AI Beauty Smooth', type: 'beauty_smooth', intensity: 0.6, icon: 'heart-outline', category: 'Light' },
 ];
 
 export const TRANSITION_PRESETS = [

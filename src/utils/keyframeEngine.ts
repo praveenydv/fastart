@@ -4,7 +4,14 @@ export interface ResolvedTransform {
   x: number;
   y: number;
   scale: number;
+  scaleX?: number;
+  scaleY?: number;
   rotation: number;
+  rotateX?: number;
+  rotateY?: number;
+  skewX?: number;
+  skewY?: number;
+  perspective?: number;
   opacity: number;
   flipX: boolean;
   flipY: boolean;
@@ -22,7 +29,14 @@ export function getBaseTransform(
       x: 0,
       y: 0,
       scale: 1.0,
+      scaleX: 1.0,
+      scaleY: 1.0,
       rotation: 0,
+      rotateX: 0,
+      rotateY: 0,
+      skewX: 0,
+      skewY: 0,
+      perspective: 800,
       opacity: 1.0,
       flipX: false,
       flipY: false,
@@ -100,12 +114,26 @@ export function getBaseTransform(
 
   const flipX = Boolean(t.flipX ?? clip.flipX ?? false);
   const flipY = Boolean(t.flipY ?? clip.flipY ?? false);
+  const scaleX = Number.isFinite(t.scaleX) ? Number(t.scaleX) : 1.0;
+  const scaleY = Number.isFinite(t.scaleY) ? Number(t.scaleY) : 1.0;
+  const rotateX = Number.isFinite(t.rotateX) ? Number(t.rotateX) : 0;
+  const rotateY = Number.isFinite(t.rotateY) ? Number(t.rotateY) : 0;
+  const skewX = Number.isFinite(t.skewX) ? Number(t.skewX) : 0;
+  const skewY = Number.isFinite(t.skewY) ? Number(t.skewY) : 0;
+  const perspective = Number.isFinite(t.perspective) ? Number(t.perspective) : 800;
 
   return {
     x,
     y,
     scale: Math.max(0.1, Math.min(10.0, scale)),
+    scaleX,
+    scaleY,
     rotation: ((Math.round(rotation) % 360) + 360) % 360,
+    rotateX,
+    rotateY,
+    skewX,
+    skewY,
+    perspective,
     opacity: Math.max(0, Math.min(1, opacity)),
     flipX,
     flipY,
@@ -143,6 +171,13 @@ export function cleanAndSortKeyframes(
       rotation: Number.isFinite(kf.transform?.rotation)
         ? ((Math.round(Number(kf.transform.rotation)) % 360) + 360) % 360
         : 0,
+      scaleX: Number.isFinite(kf.transform?.scaleX) ? Number(kf.transform?.scaleX) : 1.0,
+      scaleY: Number.isFinite(kf.transform?.scaleY) ? Number(kf.transform?.scaleY) : 1.0,
+      rotateX: Number.isFinite(kf.transform?.rotateX) ? Number(kf.transform?.rotateX) : 0,
+      rotateY: Number.isFinite(kf.transform?.rotateY) ? Number(kf.transform?.rotateY) : 0,
+      skewX: Number.isFinite(kf.transform?.skewX) ? Number(kf.transform?.skewX) : 0,
+      skewY: Number.isFinite(kf.transform?.skewY) ? Number(kf.transform?.skewY) : 0,
+      perspective: Number.isFinite(kf.transform?.perspective) ? Number(kf.transform?.perspective) : 800,
       flipX: Boolean(kf.transform?.flipX),
       flipY: Boolean(kf.transform?.flipY),
     };
@@ -215,7 +250,14 @@ export function getInterpolatedTransform(
       x: t0.x ?? baseT.x,
       y: t0.y ?? baseT.y,
       scale: t0.scale ?? baseT.scale,
+      scaleX: t0.scaleX ?? baseT.scaleX ?? 1.0,
+      scaleY: t0.scaleY ?? baseT.scaleY ?? 1.0,
       rotation: t0.rotation ?? baseT.rotation,
+      rotateX: t0.rotateX ?? baseT.rotateX ?? 0,
+      rotateY: t0.rotateY ?? baseT.rotateY ?? 0,
+      skewX: t0.skewX ?? baseT.skewX ?? 0,
+      skewY: t0.skewY ?? baseT.skewY ?? 0,
+      perspective: t0.perspective ?? baseT.perspective ?? 800,
       opacity: kfs[0].opacity !== undefined ? kfs[0].opacity : baseT.opacity,
       flipX: t0.flipX !== undefined ? t0.flipX : baseT.flipX,
       flipY: t0.flipY !== undefined ? t0.flipY : baseT.flipY,
@@ -230,7 +272,14 @@ export function getInterpolatedTransform(
       x: tLast.x ?? baseT.x,
       y: tLast.y ?? baseT.y,
       scale: tLast.scale ?? baseT.scale,
+      scaleX: tLast.scaleX ?? baseT.scaleX ?? 1.0,
+      scaleY: tLast.scaleY ?? baseT.scaleY ?? 1.0,
       rotation: tLast.rotation ?? baseT.rotation,
+      rotateX: tLast.rotateX ?? baseT.rotateX ?? 0,
+      rotateY: tLast.rotateY ?? baseT.rotateY ?? 0,
+      skewX: tLast.skewX ?? baseT.skewX ?? 0,
+      skewY: tLast.skewY ?? baseT.skewY ?? 0,
+      perspective: tLast.perspective ?? baseT.perspective ?? 800,
       opacity: last.opacity !== undefined ? last.opacity : baseT.opacity,
       flipX: tLast.flipX !== undefined ? tLast.flipX : baseT.flipX,
       flipY: tLast.flipY !== undefined ? tLast.flipY : baseT.flipY,
@@ -254,6 +303,18 @@ export function getInterpolatedTransform(
 
       const scale1 = t1.scale ?? baseT.scale;
       const scale2 = t2.scale ?? baseT.scale;
+      const sx1 = t1.scaleX ?? baseT.scaleX ?? 1.0;
+      const sx2 = t2.scaleX ?? baseT.scaleX ?? 1.0;
+      const sy1 = t1.scaleY ?? baseT.scaleY ?? 1.0;
+      const sy2 = t2.scaleY ?? baseT.scaleY ?? 1.0;
+      const rx1 = t1.rotateX ?? baseT.rotateX ?? 0;
+      const rx2 = t2.rotateX ?? baseT.rotateX ?? 0;
+      const ry1 = t1.rotateY ?? baseT.rotateY ?? 0;
+      const ry2 = t2.rotateY ?? baseT.rotateY ?? 0;
+      const sk1 = t1.skewX ?? baseT.skewX ?? 0;
+      const sk2 = t2.skewX ?? baseT.skewX ?? 0;
+      const p1 = t1.perspective ?? baseT.perspective ?? 800;
+      const p2 = t2.perspective ?? baseT.perspective ?? 800;
       const x1 = t1.x ?? baseT.x;
       const x2 = t2.x ?? baseT.x;
       const y1 = t1.y ?? baseT.y;
@@ -271,7 +332,14 @@ export function getInterpolatedTransform(
         x: x1 + (x2 - x1) * ease,
         y: y1 + (y2 - y1) * ease,
         scale: scale1 + (scale2 - scale1) * ease,
+        scaleX: sx1 + (sx2 - sx1) * ease,
+        scaleY: sy1 + (sy2 - sy1) * ease,
         rotation: interpolatedRot,
+        rotateX: rx1 + (rx2 - rx1) * ease,
+        rotateY: ry1 + (ry2 - ry1) * ease,
+        skewX: sk1 + (sk2 - sk1) * ease,
+        skewY: 0,
+        perspective: p1 + (p2 - p1) * ease,
         opacity: op1 + (op2 - op1) * ease,
         flipX: t2.flipX !== undefined ? t2.flipX : (t1.flipX ?? baseT.flipX),
         flipY: t2.flipY !== undefined ? t2.flipY : (t1.flipY ?? baseT.flipY),

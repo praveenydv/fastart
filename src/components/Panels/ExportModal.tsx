@@ -1,11 +1,12 @@
 import React from "react";
-import { View, Text, Modal, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, Modal, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ExportModalProps } from "./Export/exportTypes";
 import { styles } from "./Export/ExportModalStyles";
 import { useExportProcess } from "./Export/useExportProcess";
 import ExportIdleSettings from "./Export/ExportIdleSettings";
 import ExportResultView from "./Export/ExportResultView";
+import MobileCanvasExportView from "./Export/MobileCanvasExportView";
 
 export default function ExportModal({
   visible,
@@ -40,7 +41,22 @@ export default function ExportModal({
     getProgressStatusMessage,
     exportFilename,
     setExportFilename,
+    isMobileCanvasRendering,
+    handleMobileCanvasComplete,
+    handleMobileCanvasError,
+    handleMobileCanvasProgress,
   } = useExportProcess(project, totalDuration, visible);
+
+  const mobileExportOptions = React.useMemo(
+    () => ({
+      fps,
+      duration: Math.max(totalDuration || 2.0, 1.0),
+      format: mediaType,
+      resolution,
+      currentTime: project?.currentTime || 0,
+    }),
+    [fps, totalDuration, mediaType, resolution, project?.currentTime]
+  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -212,6 +228,18 @@ export default function ExportModal({
             </View>
           </View>
         </Modal>
+      )}
+
+      {/* Hardware-accelerated Skia Canvas & MediaRecorder engine on mobile */}
+      {Platform.OS !== "web" && isMobileCanvasRendering && (
+        <MobileCanvasExportView
+          isExporting={isMobileCanvasRendering}
+          project={project}
+          options={mobileExportOptions}
+          onProgress={handleMobileCanvasProgress}
+          onComplete={handleMobileCanvasComplete}
+          onError={handleMobileCanvasError}
+        />
       )}
     </Modal>
   );

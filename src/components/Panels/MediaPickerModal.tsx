@@ -25,13 +25,6 @@ interface MediaPickerModalProps {
 export default function MediaPickerModal({ visible, onClose, onAddMedia }: MediaPickerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
 
-  // Directly ask to upload whenever modal becomes visible
-  useEffect(() => {
-    if (visible) {
-      handleDeviceUpload();
-    }
-  }, [visible]);
-
   // Handle local device file upload (video / photo)
   const handleDeviceUpload = async () => {
     try {
@@ -61,7 +54,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 startTime: 0,
                 trimIn: 0,
                 trimOut: saved.duration,
-                mediaDuration: saved.duration,
+                mediaDuration: isVideo ? saved.duration : undefined,
                 speed: 1.0,
                 volume: 1.0,
                 filter: 'normal',
@@ -98,42 +91,62 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
           return;
         }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.All,
-          allowsEditing: false,
-          quality: 1,
-        });
-        if (!result.canceled && result.assets?.[0]) {
-          const asset = result.assets[0];
-          const isVideo = asset.type === 'video';
-          const dur = asset.duration ? asset.duration / 1000 : isVideo ? 6.0 : 4.0;
-          const clip = {
-            id: 'clip-' + Date.now(),
-            sourceMediaId: 'clip-' + Date.now(),
-            title: asset.fileName || (isVideo ? 'Imported Video' : 'Imported Photo'),
-            type: isVideo ? 'video' : 'photo',
-            url: asset.uri,
-            duration: dur,
-            startTime: 0,
-            trimIn: 0,
-            trimOut: dur,
-            mediaDuration: dur,
-            speed: 1.0,
-            volume: 1.0,
-            filter: 'normal',
-            effect: 'none',
-            transform: { scale: 1, rotation: 0, x: 0, y: 0 },
-          };
-
-          addNotification({
-            title: 'Media Added',
-            message: `Added "${clip.title}" to project timeline.`,
-            icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
+        setIsLoading(true);
+        try {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            allowsEditing: false,
+            quality: 1,
           });
+          if (!result.canceled && result.assets?.[0]) {
+            const asset = result.assets[0];
+            const isVideo = asset.type === 'video';
+            const dur = asset.duration ? asset.duration / 1000 : isVideo ? 6.0 : 4.0;
 
-          soundEngine.playSfx('pop');
-          onAddMedia(clip);
-          onClose();
+            let thumbnailUri: string | undefined = !isVideo ? asset.uri : undefined;
+            if (isVideo) {
+              try {
+                const { getThumbnailAsync } = await import('expo-video-thumbnails');
+                const thumb = await getThumbnailAsync(asset.uri, { time: 500 });
+                if (thumb && thumb.uri) {
+                  thumbnailUri = thumb.uri;
+                }
+              } catch (thumbErr) {
+                console.warn('Video thumbnail generation fallback:', thumbErr);
+              }
+            }
+
+            const clip = {
+              id: 'clip-' + Date.now(),
+              sourceMediaId: 'clip-' + Date.now(),
+              title: asset.fileName || (isVideo ? 'Imported Video' : 'Imported Photo'),
+              type: isVideo ? 'video' : 'photo',
+              url: asset.uri,
+              thumbnail: thumbnailUri,
+              duration: dur,
+              startTime: 0,
+              trimIn: 0,
+              trimOut: dur,
+              mediaDuration: isVideo ? dur : undefined,
+              speed: 1.0,
+              volume: 1.0,
+              filter: 'normal',
+              effect: 'none',
+              transform: { scale: 1, rotation: 0, x: 0, y: 0 },
+            };
+
+            addNotification({
+              title: 'Media Added',
+              message: `Added "${clip.title}" to project timeline.`,
+              icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
+            });
+
+            soundEngine.playSfx('pop');
+            onAddMedia(clip);
+            onClose();
+          }
+        } finally {
+          setIsLoading(false);
         }
       }
     } catch (err: any) {

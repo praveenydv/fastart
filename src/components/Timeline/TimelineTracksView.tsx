@@ -11,8 +11,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { UnifiedClipItem, TRACK_ROW_HEIGHT } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
-import { TimelinePlayhead } from "./TimelinePlayhead";
 import { TimelineClipWaveform } from "./TimelineClipWaveform";
+import { TimelineClipPreview } from "./TimelineClipPreview";
 import { clipHasAudio, mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface TimelineTracksViewProps {
@@ -23,12 +23,10 @@ interface TimelineTracksViewProps {
   rulerPanResponder: any;
   renderedTicks: React.ReactNode;
   selectedClipId: string | null;
-  currentTime: number;
   pxPerSec: number;
   activeTrimming: any;
   activeTrimDelta: any;
   dragState: any;
-  isScrubbingRuler: boolean;
   onSelectClip: (
     id: string,
     type: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
@@ -61,8 +59,6 @@ interface TimelineTracksViewProps {
   leftTrimPanResponder: any;
   rightTrimPanResponder: any;
   clipMovePanResponder: any;
-  playheadPanResponder: any;
-  handlePlayheadPointerDown: (e: any) => void;
   handleLeftTrimStart: (
     e: any,
     clipId: string,
@@ -82,7 +78,7 @@ interface TimelineTracksViewProps {
   onOpenEditModal?: (clipId: string, clipType: string) => void;
 }
 
-export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
+const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
   trackRows,
   activeTrackCount,
   timelineContentWidth,
@@ -90,12 +86,10 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
   rulerPanResponder,
   renderedTicks,
   selectedClipId,
-  currentTime,
   pxPerSec,
   activeTrimming,
   activeTrimDelta,
   dragState,
-  isScrubbingRuler,
   onSelectClip,
   onOpenTransitions,
   handleRemoveTrack,
@@ -109,8 +103,6 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
   leftTrimPanResponder,
   rightTrimPanResponder,
   clipMovePanResponder,
-  playheadPanResponder,
-  handlePlayheadPointerDown,
   handleLeftTrimStart,
   handleRightTrimStart,
   onOpenEditModal,
@@ -135,7 +127,7 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
         {renderedTicks}
       </View>
 
-      {/* General Multi-Track Rows */}
+      {/* Track Lanes */}
       {trackRows.map((rowClips, trackIdx) => {
         const isEmptyTrack = rowClips.length === 0;
 
@@ -154,97 +146,101 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
             <View style={styles.trackLaneGuideline} />
 
             {/* Target Drop Zone Ghost Indicator when dragging a clip over this track */}
-            {dragState && dragState.currentTrack === trackIdx && (
-              <View
-                pointerEvents="none"
-                style={{
-                  position: "absolute",
-                  left: dragState.currentStart * pxPerSec,
-                  width: Math.max(
-                    24,
-                    (draggedClip ? draggedClip.duration : 1) * pxPerSec,
-                  ),
-                  top: 2,
-                  bottom: 2,
-                  borderRadius: 6,
-                  borderWidth: 2,
-                  borderStyle: "dashed",
-                  borderColor: "#00F2FE",
-                  backgroundColor: "rgba(0, 242, 254, 0.14)",
-                  zIndex: 8,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: 8,
-                }}
-              >
-                <Text
+            {dragState &&
+              !dragState.isInsertingNewTrack &&
+              dragState.currentTrack === trackIdx && (
+                <View
+                  pointerEvents="none"
                   style={{
-                    color: "#00F2FE",
-                    fontSize: 10,
-                    fontWeight: "700",
-                    letterSpacing: 0.5,
+                    position: "absolute",
+                    left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
+                    width: Math.max(
+                      24,
+                      (draggedClip ? draggedClip.duration : 1) * pxPerSec,
+                    ),
+                    top: 2,
+                    bottom: 2,
+                    borderRadius: 4,
+                    borderWidth: 1.5,
+                    borderStyle: "dashed",
+                    borderColor: "#00F2FE",
+                    backgroundColor: "rgba(0, 242, 254, 0.16)",
+                    zIndex: 10,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    paddingHorizontal: 8,
                   }}
-                  numberOfLines={1}
                 >
-                  Track {trackIdx + 1}
-                </Text>
-              </View>
-            )}
+                  <Ionicons
+                    name="arrow-down-circle-outline"
+                    size={12}
+                    color="#00F2FE"
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    style={{
+                      color: "#00F2FE",
+                      fontSize: 10.5,
+                      fontWeight: "700",
+                      letterSpacing: 0.3,
+                    }}
+                    numberOfLines={1}
+                  >
+                    Drop Position • Track {trackIdx + 1}
+                  </Text>
+                </View>
+              )}
 
-            {/* Empty track lane helper with quick delete option */}
-            {isEmptyTrack && activeTrackCount > 1 && (
+            {/* Empty track lane with delete option */}
+            {isEmptyTrack && (
               <View style={styles.emptyTrackLaneContainer}>
                 <Text style={styles.emptyTrackLanePrompt}>
                   Track {trackIdx + 1} is empty
                 </Text>
-                <TouchableOpacity
-                  style={styles.removeEmptyTrackLaneBtn}
-                  onPress={() => handleRemoveTrack(trackIdx)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={11} color="#EF4444" />
-                  <Text style={styles.removeEmptyTrackLaneText}>
-                    Remove Track
-                  </Text>
-                </TouchableOpacity>
+                {activeTrackCount > 1 && (
+                  <TouchableOpacity
+                    style={styles.removeEmptyTrackLaneBtn}
+                    onPress={(e: any) => {
+                      if (e?.stopPropagation) e.stopPropagation();
+                      soundEngine.playSfx("click");
+                      handleRemoveTrack(trackIdx);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="trash-outline" size={10} color="#EF4444" />
+                    <Text style={styles.removeEmptyTrackLaneText}>Delete</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
-            {isEmptyTrack && activeTrackCount <= 1 && (
-              <View style={styles.emptyTrackLaneContainer} pointerEvents="none">
-                <Text style={styles.emptyTrackLanePrompt}>
-                  Track 1 is empty • Add media below
-                </Text>
-              </View>
-            )}
+                    {/* Render all clips in this track */}
+                    {rowClips.map((clip, clipIndexInRow) => {
+                      const isThisTrimmed =
+                        activeTrimDelta && activeTrimDelta.clipId === clip.id;
+                      const isBeingDragged =
+                        dragState && dragState.clipId === clip.id;
+                      const displayStart = isThisTrimmed
+                        ? activeTrimDelta.startTime
+                        : isBeingDragged
+                          ? dragState.currentStart
+                          : clip.startTime;
+                      const displayDuration = isThisTrimmed
+                        ? activeTrimDelta.duration
+                        : clip.duration;
+                      const left = displayStart * pxPerSec;
+                      const width = Math.max(24, displayDuration * pxPerSec);
+                      const isSelected = selectedClipId === clip.id;
 
-            {/* Render all clips in this track */}
-            {rowClips.map((clip, clipIndexInRow) => {
-              const isThisTrimmed =
-                activeTrimDelta && activeTrimDelta.clipId === clip.id;
-              const isBeingDragged =
-                dragState && dragState.clipId === clip.id;
-              const displayStart = isThisTrimmed
-                ? activeTrimDelta.startTime
-                : isBeingDragged
-                  ? dragState.currentStart
-                  : clip.startTime;
-              const displayDuration = isThisTrimmed
-                ? activeTrimDelta.duration
-                : clip.duration;
-              const left = displayStart * pxPerSec;
-              const width = Math.max(24, displayDuration * pxPerSec);
-              const isSelected = selectedClipId === clip.id;
+                      const visualOffsetY = isBeingDragged
+                        ? (dragState.dragOffsetY ??
+                          (dragState.currentTrack - trackIdx) * TRACK_ROW_HEIGHT)
+                        : 0;
 
-              const visualOffsetY = isBeingDragged
-                ? (dragState.dragOffsetY ??
-                  (dragState.currentTrack - trackIdx) * TRACK_ROW_HEIGHT)
-                : 0;
-
-              return (
-                <React.Fragment key={clip.id}>
-                  {/* Draggable Clip Card across tracks & time */}
+                      return (
+                        <React.Fragment key={clip.id}>
+                          {/* Draggable Clip Card across tracks & time */}
                   <Pressable
                     onPress={(e: any) => {
                       if (e?.stopPropagation) e.stopPropagation();
@@ -318,7 +314,8 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                           borderColor:
                             isSelected || isBeingDragged
                               ? clip.accentColor
-                              : (clip.borderColor || clip.accentColor),
+                              : "rgba(255, 255, 255, 0.08)",
+                          borderWidth: isSelected || isBeingDragged ? 1.5 : 0.5,
                           backgroundColor: clip.bgColor,
                         },
                         (isSelected || isBeingDragged) && [
@@ -404,6 +401,9 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                         </View>
                       )}
 
+                      {/* Video & Image Thumbnail Filmstrip Preview */}
+                      <TimelineClipPreview clip={clip} width={width} />
+
                       {/* Audio Waveform visualization (renders in audio clips & video clips with audio) */}
                       <TimelineClipWaveform
                         clip={clip}
@@ -422,7 +422,13 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                         <View
                           style={[
                             styles.clipIconBadge,
-                            { backgroundColor: clip.accentColor },
+                            clip.type === "video"
+                              ? {
+                                  backgroundColor: "rgba(0, 0, 0, 0.65)",
+                                  borderWidth: 1,
+                                  borderColor: "rgba(255, 255, 255, 0.2)",
+                                }
+                              : { backgroundColor: clip.accentColor },
                           ]}
                         >
                           {clip.type === "sticker" ? (
@@ -433,7 +439,11 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                             <Ionicons
                               name={clip.iconName}
                               size={11}
-                              color="#000000"
+                              color={
+                                clip.type === "video"
+                                  ? "#00F2FE"
+                                  : "#000000"
+                              }
                             />
                           )}
                         </View>
@@ -467,7 +477,7 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                                 <Ionicons
                                   name="volume-medium-outline"
                                   size={10}
-                                  color="#00F2FE"
+                                  color="#A1A1AA"
                                   style={{ marginLeft: 3 }}
                                 />
                               )
@@ -505,11 +515,7 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                               (kf: any, kfIdx: number) => {
                                 const kfPos = kf.time * pxPerSec;
                                 if (kfPos < 0 || kfPos > width) return null;
-                                const isPlayheadNear =
-                                  isSelected &&
-                                  Math.abs(
-                                    clip.startTime + kf.time - currentTime,
-                                  ) < 0.12;
+                                const isPlayheadNear = isSelected;
                                 return (
                                   <View
                                     key={`kf-${kfIdx}`}
@@ -631,8 +637,8 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
                           color={
                             clip.rawClip?.transition?.type &&
                             clip.rawClip?.transition?.type !== "none"
-                              ? "#00F2FE"
-                              : "#94A3B8"
+                              ? "#FFFFFF"
+                              : "#71717A"
                           }
                         />
                       </TouchableOpacity>
@@ -643,6 +649,63 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
           </Pressable>
         );
       })}
+
+      {/* Calm Bottom Ghost Lane when dragging below the last track to create a new track (only if NO empty track exists) */}
+      {dragState?.isInsertingNewTrack && (
+        <View
+          key="insert-lane-bottom"
+          pointerEvents="none"
+          style={[
+            styles.universalTrackLane,
+            {
+              borderStyle: "dashed",
+              borderColor: "#00F2FE",
+              borderWidth: 1.5,
+              backgroundColor: "rgba(0, 242, 254, 0.08)",
+            },
+          ]}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
+              width: Math.max(
+                24,
+                (draggedClip ? draggedClip.duration : 1) * pxPerSec,
+              ),
+              top: 2,
+              bottom: 2,
+              borderRadius: 4,
+              borderWidth: 1.5,
+              borderStyle: "dashed",
+              borderColor: "#00F2FE",
+              backgroundColor: "rgba(0, 242, 254, 0.2)",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingHorizontal: 8,
+            }}
+          >
+            <Ionicons
+              name="add-circle-outline"
+              size={12}
+              color="#00F2FE"
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={{
+                color: "#00F2FE",
+                fontSize: 10.5,
+                fontWeight: "700",
+                letterSpacing: 0.3,
+              }}
+              numberOfLines={1}
+            >
+              New Track {activeTrackCount + 1}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Tap empty space below tracks to deselect */}
       <Pressable
@@ -655,14 +718,9 @@ export const TimelineTracksView: React.FC<TimelineTracksViewProps> = ({
         }}
       />
 
-      {/* Playhead Needle with Diamond Head */}
-      <TimelinePlayhead
-        currentTime={currentTime}
-        pxPerSec={pxPerSec}
-        isScrubbingRuler={isScrubbingRuler}
-        playheadPanResponder={playheadPanResponder}
-        handlePlayheadPointerDown={handlePlayheadPointerDown}
-      />
     </View>
   );
 };
+
+export const TimelineTracksView = React.memo(TimelineTracksViewComponent);
+export default TimelineTracksView;

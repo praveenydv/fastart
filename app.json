@@ -46,7 +46,8 @@
         }
       ],
       "expo-font",
-      "expo-video"
+      "expo-video",
+      "expo-speech-recognition"
     ]
   }
 }

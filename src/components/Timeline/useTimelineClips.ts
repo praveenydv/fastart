@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
 import { Platform } from "react-native";
 import { FastArtProject } from "../../types/project";
-import { UnifiedClipItem, MAX_TRACKS } from "./timelineTypes";
-import { probeAndCacheMediaDuration } from "../../utils/mediaDuration";
+import { UnifiedClipItem, MAX_TRACKS, TimelineDragState } from "./timelineTypes";
+import { probeAndCacheMediaDuration, isImageClip } from "../../utils/mediaDuration";
 import { soundEngine } from "../../utils/audioEngine";
 
 interface UseTimelineClipsProps {
   project: FastArtProject;
-  dragState: { clipId: string; currentStart: number; currentTrack: number } | null;
+  dragState: TimelineDragState | null;
   selectedClipId: string | null;
   onUpdateProject?: (updates: Partial<FastArtProject>) => void;
 }
@@ -37,13 +37,15 @@ export function useTimelineClips({
           typeof v.trackIndex === "number"
             ? Math.min(MAX_TRACKS - 1, Math.max(0, v.trackIndex))
             : 0,
-        title: v.title || `Video ${i + 1}`,
-        subtitle: `${v.duration.toFixed(2)}s • ${v.speed || 1}x`,
+        title: v.title || (isImageClip(v) ? `Photo ${i + 1}` : `Video ${i + 1}`),
+        subtitle: isImageClip(v)
+          ? `Photo • ${v.duration.toFixed(2)}s`
+          : `${v.duration.toFixed(2)}s • ${v.speed || 1}x`,
         badge: `${i + 1}`,
         accentColor: "#00F2FE",
         bgColor: "#0B1E2E",
-        borderColor: "#00F2FE",
-        iconName: (v.type === "photo" ? "image" : "videocam") as any,
+        borderColor: "rgba(255, 255, 255, 0.08)",
+        iconName: (isImageClip(v) ? "image" : "videocam") as any,
         rawClip: v,
       })),
       ...audioClips.map((a) => ({
@@ -60,7 +62,7 @@ export function useTimelineClips({
         subtitle: `${a.duration.toFixed(2)}s`,
         accentColor: "#10B981",
         bgColor: "#09241B",
-        borderColor: "#10B981",
+        borderColor: "rgba(255, 255, 255, 0.08)",
         iconName: "musical-notes" as const,
         rawClip: a,
       })),
@@ -76,9 +78,9 @@ export function useTimelineClips({
             : 2,
         title: c.text || "Caption Subtitle",
         subtitle: `Caption • ${c.duration.toFixed(2)}s`,
-        accentColor: "#00F2FE",
-        bgColor: "#072B38",
-        borderColor: "#00F2FE",
+        accentColor: "#6366F1",
+        bgColor: "#141535",
+        borderColor: "rgba(255, 255, 255, 0.08)",
         iconName: "chatbox-ellipses" as const,
         rawClip: c,
       })),
@@ -96,7 +98,7 @@ export function useTimelineClips({
         subtitle: `Text • ${t.duration.toFixed(2)}s`,
         accentColor: "#D946EF",
         bgColor: "#260B2E",
-        borderColor: "#D946EF",
+        borderColor: "rgba(255, 255, 255, 0.08)",
         iconName: "text" as const,
         rawClip: t,
       })),
@@ -114,7 +116,7 @@ export function useTimelineClips({
         subtitle: `Sticker • ${s.duration.toFixed(2)}s`,
         accentColor: "#FBBF24",
         bgColor: "#2D1F08",
-        borderColor: "#FBBF24",
+        borderColor: "rgba(255, 255, 255, 0.08)",
         iconName: "happy" as const,
         rawClip: s,
       })),
@@ -132,7 +134,7 @@ export function useTimelineClips({
         subtitle: `FX • ${e.duration.toFixed(2)}s`,
         accentColor: "#F59E0B",
         bgColor: "#2A1A06",
-        borderColor: "#F59E0B",
+        borderColor: "rgba(255, 255, 255, 0.08)",
         iconName: "sparkles" as const,
         rawClip: e,
       })),
@@ -143,7 +145,7 @@ export function useTimelineClips({
   useEffect(() => {
     if (Platform.OS !== "web") return;
     allClipsWithTracks.forEach((clip) => {
-      if (clip.type === "video" && clip.rawClip?.type !== "photo" && clip.rawClip?.url) {
+      if (clip.type === "video" && !isImageClip(clip) && clip.rawClip?.url) {
         probeAndCacheMediaDuration(clip.rawClip.url, clip.id, false);
       } else if (clip.type === "audio" && clip.rawClip?.url) {
         probeAndCacheMediaDuration(clip.rawClip.url, clip.id, true);
@@ -151,20 +153,30 @@ export function useTimelineClips({
     });
   }, [allClipsWithTracks]);
 
-  const maxUsedTrackIndex = useMemo(() => {
-    if (allClipsWithTracks.length === 0) return 0;
-    return Math.max(...allClipsWithTracks.map((c) => c.effectiveTrackIndex));
+  const [persistentTrackCount, setPersistentTrackCount] = useState<number>(() => {
+    const initialMax = allClipsWithTracks.length > 0
+      ? Math.max(...allClipsWithTracks.map((c) => c.effectiveTrackIndex))
+      : 0;
+    return Math.max(1, initialMax + 1);
+  });
+
+  // Expand track count when a clip is on a higher track, but NEVER auto-remove tracks when clips leave!
+  useEffect(() => {
+    if (allClipsWithTracks.length > 0) {
+      const currentMax = Math.max(...allClipsWithTracks.map((c) => c.effectiveTrackIndex));
+      setPersistentTrackCount((prev) => Math.max(prev, currentMax + 1));
+    }
   }, [allClipsWithTracks]);
 
-  const [userTrackCount, setUserTrackCount] = useState<number>(3);
-  const activeTrackCount = Math.max(
-    1,
-    Math.min(MAX_TRACKS, Math.max(userTrackCount, maxUsedTrackIndex + 1)),
+  const [extraTracks, setExtraTracks] = useState<number>(0);
+  const activeTrackCount = Math.min(
+    MAX_TRACKS,
+    Math.max(1, persistentTrackCount + extraTracks),
   );
 
   const handleAddTrack = () => {
     soundEngine.playSfx("click");
-    setUserTrackCount((prev) => Math.min(MAX_TRACKS, Math.max(prev, activeTrackCount) + 1));
+    setPersistentTrackCount((prev) => Math.min(MAX_TRACKS, prev + 1));
   };
 
   const handleRemoveTrack = (trackIdx: number) => {
@@ -207,7 +219,8 @@ export function useTimelineClips({
       });
     }
 
-    setUserTrackCount((prev) => Math.max(1, prev - 1));
+    setPersistentTrackCount((prev) => Math.max(1, prev - 1));
+    setExtraTracks((prev) => Math.max(0, prev - 1));
   };
 
   const trackRows = useMemo(() => {

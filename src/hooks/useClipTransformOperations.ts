@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { FastArtProject, CustomCrop } from "../types/project";
+import { FastArtProject, CustomCrop, MaskConfig } from "../types/project";
 import { clampClipTrimUpdates } from "../utils/mediaDuration";
 import {
   applyTransformUpdateToClip,
@@ -171,6 +171,37 @@ export function useClipTransformOperations({
     [projectRef, setProject, updateProjectWithHistory],
   );
 
+  // Update clip mask
+  const handleUpdateClipMask = useCallback(
+    (clipId: string, newMask: MaskConfig, isFinal = true) => {
+      const current = projectRef.current;
+      if (!current) return;
+      const videoClips = [...(current.tracks.video || [])];
+      const idx = videoClips.findIndex((c) => c.id === clipId);
+      if (idx >= 0) {
+        videoClips[idx] = {
+          ...videoClips[idx],
+          mask: newMask,
+          transform: {
+            ...(videoClips[idx].transform || {}),
+            mask: newMask,
+          },
+        };
+        const updatedProject = {
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
+        };
+        if (isFinal) {
+          updateProjectWithHistory(updatedProject);
+        } else {
+          projectRef.current = updatedProject;
+          setProject(updatedProject);
+        }
+      }
+    },
+    [projectRef, setProject, updateProjectWithHistory],
+  );
+
   // Draggable Trim Clip
   const handleTrimClip = useCallback(
     (
@@ -259,13 +290,14 @@ export function useClipTransformOperations({
     [project, setProject, updateProjectWithHistory],
   );
 
-  // Draggable Move Clip
+  // Draggable Move Clip with automatic track insertion and empty track cleanup
   const handleMoveClip = useCallback(
     (
       clipId: string,
       trackType: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
       newStartTime: number,
       newTrackIndex?: number,
+      isInsertNewTrack?: boolean,
     ) => {
       if (!project) return;
       const tracks = {
@@ -278,31 +310,60 @@ export function useClipTransformOperations({
         filters: project.tracks.filters ? [...project.tracks.filters] : [],
       };
 
+      // 1. If inserting a new track in between, shift subsequent tracks down by 1
+      if (isInsertNewTrack && typeof newTrackIndex === "number") {
+        const shiftTrackDown = (c: any) => {
+          if (c.id === clipId) return c;
+          const curTrk = typeof c.trackIndex === "number" ? c.trackIndex : 0;
+          if (curTrk >= newTrackIndex) {
+            return { ...c, trackIndex: curTrk + 1 };
+          }
+          return c;
+        };
+        tracks.video = tracks.video.map(shiftTrackDown);
+        tracks.audio = tracks.audio.map(shiftTrackDown);
+        tracks.captions = tracks.captions.map(shiftTrackDown);
+        tracks.text = tracks.text.map(shiftTrackDown);
+        tracks.stickers = tracks.stickers.map(shiftTrackDown);
+        tracks.effects = tracks.effects.map(shiftTrackDown);
+      }
+
+      // 2. Update the target clip's start time and track index
       const updateItem = (c: any) =>
         c.id === clipId
           ? {
               ...c,
-              startTime: newStartTime,
+              startTime: Math.max(0, Number(newStartTime.toFixed(3))),
               ...(typeof newTrackIndex === "number"
                 ? { trackIndex: newTrackIndex }
                 : {}),
             }
           : c;
 
-      if (trackType === "video" && tracks.video) {
+      const typeStr = String(trackType || "").toLowerCase();
+      if ((typeStr === "video" || typeStr === "photo") && tracks.video) {
         tracks.video = tracks.video.map(updateItem);
-      } else if (trackType === "audio" && tracks.audio) {
+      } else if (typeStr === "audio" && tracks.audio) {
         tracks.audio = tracks.audio.map(updateItem);
-      } else if (trackType === "caption" && tracks.captions) {
+      } else if ((typeStr === "caption" || typeStr === "captions") && tracks.captions) {
         tracks.captions = tracks.captions.map(updateItem);
-      } else if (trackType === "text" && tracks.text) {
+      } else if (typeStr === "text" && tracks.text) {
         tracks.text = tracks.text.map(updateItem);
-      } else if (trackType === "sticker" && tracks.stickers) {
+      } else if ((typeStr === "sticker" || typeStr === "stickers") && tracks.stickers) {
         tracks.stickers = tracks.stickers.map(updateItem);
-      } else if (trackType === "effects" && tracks.effects) {
+      } else if ((typeStr === "effect" || typeStr === "effects") && tracks.effects) {
+        tracks.effects = tracks.effects.map(updateItem);
+      } else {
+        // Fallback across all tracks if type was ambiguous
+        tracks.video = tracks.video.map(updateItem);
+        tracks.audio = tracks.audio.map(updateItem);
+        tracks.captions = tracks.captions.map(updateItem);
+        tracks.text = tracks.text.map(updateItem);
+        tracks.stickers = tracks.stickers.map(updateItem);
         tracks.effects = tracks.effects.map(updateItem);
       }
 
+      // Do NOT auto-remove or compact empty tracks on clip leave (keeps tracks stable)
       updateProjectWithHistory({ ...project, tracks });
     },
     [project, updateProjectWithHistory],
@@ -311,9 +372,10 @@ export function useClipTransformOperations({
   return {
     handleUpdateClipTransform,
     handleUpdateClipCrop,
+    handleUpdateClipMask,
     handleRotateClip,
     handleToggleReverse,
     handleTrimClip,
     handleMoveClip,
   };
-}
+    }

@@ -43,17 +43,12 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         fullscreen && styles.controlBarFullscreen,
       ]}
     >
+      {/* Left: Timecode */}
       <View style={styles.controlGroupLeft}>
-        <View style={[styles.timecodePill, isMobile && { paddingHorizontal: 5 }]}>
-          <Ionicons
-            name="time-outline"
-            size={isMobile ? 10 : 11}
-            color="#00F2FE"
-            style={{ marginRight: 2 }}
-          />
-          <Text style={[styles.timecodeText, isMobile && { fontSize: 10 }]}>
+        <View style={styles.timecodePill}>
+          <Text style={styles.timecodeText}>
             {formatTime(currentTime)}
-            <Text style={[styles.timecodeTotalText, isMobile && { fontSize: 9.5 }]}>
+            <Text style={styles.timecodeTotalText}>
               {" "}
               / {formatTime(totalDuration)}
             </Text>
@@ -61,15 +56,16 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         </View>
       </View>
 
+      {/* Center: Frame Step & Play / Pause Button */}
       <View
-        style={[styles.controlGroupCenter, isMobile && { gap: 6 }]}
+        style={styles.controlGroupCenter}
         pointerEvents="box-none"
       >
         <TouchableOpacity
           style={[
             styles.stepBtn,
             isMobile && styles.stepBtnMobile,
-            totalDuration <= 0 && { opacity: 0.4 },
+            totalDuration <= 0 && { opacity: 0.3 },
           ]}
           onPress={() => {
             if (totalDuration <= 0) return;
@@ -82,8 +78,8 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         >
           <Ionicons
             name="play-skip-back"
-            size={isMobile ? 12 : 14}
-            color="#8E95A5"
+            size={isMobile ? 12 : 13}
+            color="#8E8E93"
           />
         </TouchableOpacity>
 
@@ -91,18 +87,18 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           style={[
             styles.playPauseBtn,
             isMobile && styles.playPauseBtnMobile,
-            totalDuration <= 0 && { opacity: 0.5 },
+            totalDuration <= 0 && { opacity: 0.4 },
           ]}
           onPress={onTogglePlay}
           disabled={totalDuration <= 0}
-          activeOpacity={totalDuration <= 0 ? 1 : 0.8}
+          activeOpacity={0.8}
           accessibilityLabel={isPlaying ? "Pause" : "Play"}
         >
           <Ionicons
             name={isPlaying ? "pause" : "play"}
-            size={isMobile ? 16 : 20}
+            size={isMobile ? 15 : 17}
             color="#FFFFFF"
-            style={!isPlaying ? { marginLeft: 2 } : undefined}
+            style={!isPlaying ? { marginLeft: 1.5 } : undefined}
           />
         </TouchableOpacity>
 
@@ -110,7 +106,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           style={[
             styles.stepBtn,
             isMobile && styles.stepBtnMobile,
-            totalDuration <= 0 && { opacity: 0.4 },
+            totalDuration <= 0 && { opacity: 0.3 },
           ]}
           onPress={() => {
             if (totalDuration <= 0) return;
@@ -123,12 +119,13 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         >
           <Ionicons
             name="play-skip-forward"
-            size={isMobile ? 12 : 14}
-            color="#8E95A5"
+            size={isMobile ? 12 : 13}
+            color="#8E8E93"
           />
         </TouchableOpacity>
       </View>
 
+      {/* Right: Keyframe, Grid, Fullscreen */}
       <View style={styles.controlGroupRight}>
         <TouchableOpacity
           style={[styles.smallBtn, showSafeZone && styles.smallBtnActive]}
@@ -139,8 +136,8 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         >
           <Ionicons
             name="grid-outline"
-            size={isMobile ? 13 : 15}
-            color={showSafeZone ? "#00F2FE" : "#8E95A5"}
+            size={14}
+            color={showSafeZone ? "#00E5FF" : "#8E8E93"}
           />
         </TouchableOpacity>
 
@@ -155,14 +152,13 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           delayLongPress={350}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
           activeOpacity={0.7}
-          accessibilityLabel="Open Keyframe Studio (Hold to stamp)"
+          accessibilityLabel="Keyframe"
         >
           <Ionicons
             name={hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"}
-            size={isMobile ? 14 : 16}
-            color={hasKeyframeAtCurrentTime ? "#FFE600" : "#8E95A5"}
+            size={15}
+            color={hasKeyframeAtCurrentTime ? "#00E5FF" : "#8E8E93"}
           />
-          {/* Badge indicator (+ / -) */}
           <View
             style={[
               styles.kfBadgeIcon,
@@ -173,8 +169,8 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           >
             <Ionicons
               name={hasKeyframeAtCurrentTime ? "remove" : "add"}
-              size={7}
-              color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#00F2FE"}
+              size={6}
+              color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#00E5FF"}
             />
           </View>
         </TouchableOpacity>
@@ -190,8 +186,8 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         >
           <Ionicons
             name={fullscreen ? "contract-outline" : "expand-outline"}
-            size={isMobile ? 13 : 15}
-            color={fullscreen ? "#00F2FE" : "#8E95A5"}
+            size={14}
+            color={fullscreen ? "#00E5FF" : "#8E8E93"}
           />
         </TouchableOpacity>
       </View>

@@ -18,6 +18,7 @@ interface TransitionsModalProps {
   onApply?: () => void;
   activeTransition?: { type: string; duration?: number };
   onApplyTransition: (transition: { type: string; duration: number }) => void;
+  isInline?: boolean;
 }
 
 export default function TransitionsModal({
@@ -26,6 +27,7 @@ export default function TransitionsModal({
   onApply,
   activeTransition,
   onApplyTransition,
+  isInline = false,
 }: TransitionsModalProps) {
   const [duration, setDuration] = useState(activeTransition?.duration || 0.5);
   const [selectedType, setSelectedType] = useState<string>(activeTransition?.type || 'none');
@@ -71,15 +73,13 @@ export default function TransitionsModal({
     }
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Space-Optimized Header */}
-          <View style={styles.sheetHeader}>
+      {/* Space-Optimized Header */}
+      <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
                 onPress={handleCancel}
@@ -101,7 +101,7 @@ export default function TransitionsModal({
             </View>
 
             <View style={styles.headerTitleRow}>
-              <Ionicons name="flash-outline" size={16} color="#00F2FE" />
+              <Ionicons name="flash-outline" size={16} color="#FFFFFF" />
               <Text style={styles.sheetTitle}>Transitions</Text>
             </View>
 
@@ -166,7 +166,7 @@ export default function TransitionsModal({
                       <Ionicons
                         name={item.id === 'none' ? 'close-circle-outline' : 'flash-outline'}
                         size={20}
-                        color={isActive ? '#00F2FE' : '#8E95A5'}
+                        color={isActive ? '#FFFFFF' : '#71717A'}
                       />
                     </View>
                     <Text
@@ -184,30 +184,57 @@ export default function TransitionsModal({
             </View>
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
+      <View style={styles.modalOverlay}>
+        {sheetContent}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#121215',
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
+    paddingBottom: 0,
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#121215',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     borderTopWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: '#27272F',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -217,9 +244,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#27272F',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -229,27 +256,27 @@ const styles = StyleSheet.create({
   sheetTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   resetBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#141A28',
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   resetText: {
-    color: '#8E95A5',
+    color: '#A1A1AA',
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   doneBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -260,33 +287,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#27272F',
   },
   durationLabel: {
-    color: '#8E95A5',
+    color: '#71717A',
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   durationPill: {
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#141A28',
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   durationPillActive: {
-    backgroundColor: '#00F2FE',
-    borderColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   durationText: {
-    color: '#8E95A5',
+    color: '#71717A',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   durationTextActive: {
     color: '#000000',
-    fontWeight: '800',
+    fontWeight: '700',
   },
   sheetBody: {
     paddingHorizontal: 12,
@@ -305,29 +332,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 6,
-    borderRadius: 10,
-    backgroundColor: '#161B26',
+    borderRadius: 8,
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#1E2536',
+    borderColor: '#27272F',
   },
   transitionCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: '#1A2234',
+    borderColor: '#FFFFFF',
+    backgroundColor: '#202026',
   },
   iconBox: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1E2433',
+    backgroundColor: '#202026',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
   iconBoxActive: {
-    backgroundColor: '#00F2FE22',
+    backgroundColor: '#FFFFFF22',
   },
   transitionLabel: {
-    color: '#8E95A5',
+    color: '#71717A',
     fontSize: 11,
     fontWeight: '500',
     textAlign: 'center',

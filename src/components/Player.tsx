@@ -16,6 +16,7 @@ import { styles } from "./Player/PlayerStyles";
 import { PlayerControlsBar } from "./Player/PlayerControlsBar";
 import { PlayerCropBar } from "./Player/PlayerCropBar";
 import { PlayerCropOverlay } from "./Player/PlayerCropOverlay";
+import { PlayerMaskOverlay } from "./Player/PlayerMaskOverlay";
 import { PlayerNativeCompositor } from "./Player/PlayerNativeCompositor";
 import { PlayerTransformOverlay } from "./Player/PlayerTransformOverlay";
 import { usePlayerCropGestures } from "./Player/usePlayerCropGestures";
@@ -51,10 +52,18 @@ function Player({
   isCroppingPreview: isCroppingPreviewProp,
   onToggleCropPreview,
   onUpdateClipCrop,
+  isMaskingPreview: isMaskingPreviewProp,
+  onToggleMaskPreview,
+  onUpdateClipMask,
   isProcessing,
   processingMessage,
 }: PlayerProps) {
   const [internalFullscreen, setInternalFullscreen] = useState(false);
+  const [internalMaskingMode, setInternalMaskingMode] = useState(false);
+  const isMaskingMode =
+    isMaskingPreviewProp !== undefined
+      ? isMaskingPreviewProp
+      : internalMaskingMode;
   const fullscreen =
     fullscreenProp !== undefined ? fullscreenProp : internalFullscreen;
 
@@ -108,7 +117,7 @@ function Player({
 
   const isLightBg = useMemo(() => {
     const bg = (project.canvasBackground || "#000000").toLowerCase();
-    if (bg.startsWith("blur:") || bg.startsWith("gradient:")) return false;
+    if (bg.startsWith("blur:") || bg.startsWith("gradient:") || bg.startsWith("image:")) return false;
     return (
       bg === "#ffffff" ||
       bg === "white" ||
@@ -120,7 +129,7 @@ function Player({
 
   const effectiveCanvasBg = useMemo(() => {
     const raw = project.canvasBackground || "#000000";
-    if (raw.startsWith("blur:")) return "#000000";
+    if (raw.startsWith("blur:") || raw.startsWith("image:")) return "#000000";
     if (raw.startsWith("gradient:")) return raw.replace("gradient:", "").split(",")[0] || "#000000";
     return raw;
   }, [project.canvasBackground]);
@@ -170,6 +179,7 @@ function Player({
       ),
     [project.tracks.stickers, currentTime],
   );
+  // Visible active videos (strictly within active playback interval, used for transform & overlays)
   const activeVideos = useMemo(
     () =>
       (project.tracks.video || []).filter(
@@ -178,14 +188,43 @@ function Player({
       ),
     [project.tracks.video, currentTime],
   );
-  const activeEffects = useMemo(
-    () =>
-      (project.tracks.effects || []).filter(
-        (e) =>
-          currentTime >= e.startTime && currentTime <= e.startTime + e.duration,
-      ),
-    [project.tracks.effects, currentTime],
-  );
+
+  // Buffered native videos: includes 1.5s lookahead pre-warming and 0.25s tail-hold for seamless cuts
+  const bufferedNativeVideos = useMemo(() => {
+    const list = project.tracks.video || [];
+    if (list.length === 0) return [];
+    const filtered = list.filter((v) => {
+      const start = v.startTime;
+      const end = v.startTime + v.duration;
+      // 1. Actively inside playback
+      if (currentTime >= start && currentTime <= end) return true;
+      // 2. Pre-warm upcoming clip within 1.5s before its cut
+      if (currentTime < start && start - currentTime <= 1.5) return true;
+      // 3. Tail-hold recently finished clip for 0.25s after cut to prevent black frames
+      if (currentTime > end && currentTime - end <= 0.25) return true;
+      return false;
+    });
+    return filtered.sort((a, b) => (a.trackIndex || 0) - (b.trackIndex || 0));
+  }, [project.tracks.video, currentTime]);
+
+  const activeEffects = useMemo(() => {
+    const trackEffs = (project.tracks.effects || []).filter(
+      (e) =>
+        currentTime >= (e.startTime - 0.005) &&
+        currentTime <= (e.startTime + e.duration + 0.005),
+    );
+    const clipEffs = activeVideos
+      .filter((v) => v.effect && v.effect !== "none")
+      .map((v) => ({
+        id: "clip-eff-" + v.id,
+        type: v.effect!,
+        startTime: v.startTime,
+        duration: v.duration,
+        intensity: v.effectIntensity !== undefined ? v.effectIntensity : 0.8,
+      }));
+    return [...trackEffs, ...clipEffs];
+  }, [project.tracks.effects, activeVideos, currentTime]);
+
   const activeAudios = useMemo(
     () =>
       (project.tracks.audio || []).filter(
@@ -194,6 +233,19 @@ function Player({
       ),
     [project.tracks.audio, currentTime],
   );
+
+  // Buffered native audio tracks: includes 1.5s lookahead pre-warming
+  const bufferedNativeAudios = useMemo(() => {
+    const list = project.tracks.audio || [];
+    if (list.length === 0) return [];
+    return list.filter((a) => {
+      const start = a.startTime;
+      const end = a.startTime + a.duration;
+      if (currentTime >= start && currentTime <= end) return true;
+      if (currentTime < start && start - currentTime <= 1.5) return true;
+      return false;
+    });
+  }, [project.tracks.audio, currentTime]);
 
   // Crop Gestures Hook
   const {
@@ -229,9 +281,18 @@ function Player({
     canvasRef,
   });
 
+  const targetMaskClip = useMemo(() => {
+    if (selectedClipId) {
+      const match = (project.tracks.video || []).find((v) => v.id === selectedClipId);
+      if (match) return match;
+    }
+    return activeVideos[0] || (project.tracks.video || [])[0] || null;
+  }, [selectedClipId, project.tracks.video, activeVideos]);
+
   // Resolved Active Selected Transform Item
   const activeTransformItem = useActiveTransformItem({
     isCroppingMode,
+    isPlaying,
     selectedClipId,
     selectedClipType,
     activeCaptions,
@@ -393,8 +454,8 @@ function Player({
           ) : (
             <>
               <PlayerNativeCompositor
-                activeVideos={activeVideos}
-                activeAudios={activeAudios}
+                activeVideos={bufferedNativeVideos}
+                activeAudios={bufferedNativeAudios}
                 activeCaptions={activeCaptions}
                 activeTexts={activeTexts}
                 activeStickers={activeStickers}
@@ -427,7 +488,21 @@ function Player({
                 handleCropDragStart={handleCropDragStart}
                 cropResponders={cropResponders}
               />
-            ) : (
+            ) : isMaskingMode && targetMaskClip ? (
+              <PlayerMaskOverlay
+                targetClip={targetMaskClip}
+                boxWidth={boxWidth}
+                canvasHeight={canvasHeight}
+                currentTime={currentTime}
+                onUpdateClipMask={onUpdateClipMask}
+                onCloseMaskPreview={() => {
+                  if (onToggleMaskPreview) onToggleMaskPreview(false);
+                  else setInternalMaskingMode(false);
+                }}
+                getInterpolatedTransform={getInterpolatedTransform}
+                rendererRef={rendererRef}
+              />
+            ) : !isPlaying ? (
               <PlayerTransformOverlay
                 selectedClipId={selectedClipId}
                 activeVideos={activeVideos}
@@ -440,6 +515,7 @@ function Player({
                 currentTime={currentTime}
                 onSelectClip={onSelectClip}
                 onOpenEditModal={onOpenEditModal}
+                onOpenMaskModal={onOpenMaskModal}
                 onDeleteClip={onDeleteClip}
                 handleEnterCropMode={handleEnterCropMode}
                 handleStartDrag={handleStartDrag}
@@ -453,7 +529,7 @@ function Player({
                 getItemBaseDimensions={getItemDimsHelper}
                 getInterpolatedTransform={getInterpolatedTransform}
               />
-            )}
+            ) : null}
           </View>
 
           {/* Processing / Status HUD Overlay */}

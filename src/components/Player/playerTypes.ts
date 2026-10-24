@@ -1,4 +1,4 @@
-import { FastArtProject, CustomCrop } from "../../types/project";
+import { FastArtProject, CustomCrop, MaskConfig } from "../../types/project";
 
 export interface PlayerProps {
   project: FastArtProject;
@@ -33,6 +33,13 @@ export interface PlayerProps {
   onUpdateClipCrop?: (
     clipId: string,
     crop: CustomCrop,
+    isFinal?: boolean,
+  ) => void;
+  isMaskingPreview?: boolean;
+  onToggleMaskPreview?: (isMasking: boolean) => void;
+  onUpdateClipMask?: (
+    clipId: string,
+    mask: MaskConfig,
     isFinal?: boolean,
   ) => void;
   isProcessing?: boolean;

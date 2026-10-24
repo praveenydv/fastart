@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { UnifiedClipItem } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
 import { TimelineClipWaveform } from "./TimelineClipWaveform";
+import { TimelineClipPreview } from "./TimelineClipPreview";
 import { clipHasAudio, mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface TimelineClipItemProps {
@@ -110,7 +111,10 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
             styles.universalClipCard,
             {
               backgroundColor: clip.bgColor,
-              borderColor: isSelected ? clip.accentColor : clip.borderColor,
+              borderColor: isSelected
+                ? clip.accentColor
+                : "rgba(255, 255, 255, 0.08)",
+              borderWidth: isSelected ? 1.5 : 0.5,
             },
             isSelected && [
               styles.clipSelectedUniversal,
@@ -191,6 +195,9 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
             </View>
           )}
 
+          {/* Video & Image Thumbnail Filmstrip Preview */}
+          <TimelineClipPreview clip={clip} width={width} />
+
           {/* Audio Waveform visualization (renders in audio clips & video clips with audio) */}
           <TimelineClipWaveform
             clip={clip}
@@ -209,7 +216,13 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
             <View
               style={[
                 styles.clipIconBadge,
-                { backgroundColor: clip.accentColor },
+                clip.type === "video"
+                  ? {
+                      backgroundColor: "rgba(0, 0, 0, 0.65)",
+                      borderWidth: 1,
+                      borderColor: "rgba(255, 255, 255, 0.2)",
+                    }
+                  : { backgroundColor: clip.accentColor },
               ]}
             >
               {clip.type === "sticker" ? (
@@ -217,7 +230,15 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                   {clip.rawClip?.char || "✨"}
                 </Text>
               ) : (
-                <Ionicons name={clip.iconName} size={11} color="#000000" />
+                <Ionicons
+                  name={clip.iconName}
+                  size={11}
+                  color={
+                    clip.type === "video"
+                      ? "#00F2FE"
+                      : "#000000"
+                  }
+                />
               )}
             </View>
 
@@ -384,12 +405,7 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                   : "flash-outline"
               }
               size={11}
-              color={
-                clip.rawClip?.transition?.type &&
-                clip.rawClip?.transition?.type !== "none"
-                  ? "#00F2FE"
-                  : "#FFFFFF"
-              }
+              color="#FFFFFF"
             />
           </TouchableOpacity>
         )}

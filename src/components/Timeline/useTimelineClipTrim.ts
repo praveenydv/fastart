@@ -2,7 +2,7 @@ import { useState, useRef, useMemo, useCallback } from "react";
 import { PanResponder, Platform } from "react-native";
 import { soundEngine } from "../../utils/audioEngine";
 import { triggerHaptic } from "../../utils/haptics";
-import { getMediaDuration } from "../../utils/mediaDuration";
+import { getMediaDuration, isImageClip, isExtendableClip } from "../../utils/mediaDuration";
 import { UnifiedClipItem } from "./timelineTypes";
 import { getPointerCoords } from "./timelineUtils";
 import {
@@ -226,7 +226,8 @@ export function useTimelineClipTrim({
           const targetClip = allClipsRef.current.find(
             (c) => c.id === info.clipId,
           );
-          const mediaDur = targetClip
+          const isUnlimited = targetClip ? isExtendableClip(targetClip, targetClip.type) : false;
+          const mediaDur = !isUnlimited && targetClip
             ? getMediaDuration(targetClip.rawClip, targetClip.type)
             : null;
           const speed = Math.max(

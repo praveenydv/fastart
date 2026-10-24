@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from './HomeDashboardStyles';
 import { soundEngine } from '../../utils/audioEngine';
+import { theme } from '../../constants/theme';
 
 interface ProjectOptionsMenuProps {
   optionsProject: any | null;
@@ -52,7 +53,7 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
                   resizeMode="cover"
                 />
               ) : (
-                <Ionicons name="film" size={18} color="#00F2FE" />
+                <Ionicons name="film-outline" size={18} color="#FFFFFF" />
               )}
             </View>
             <View style={{ flex: 1 }}>
@@ -78,22 +79,10 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
                 }
               }}
             >
-              <View
-                style={[
-                  styles.actionIconBox,
-                  { backgroundColor: 'rgba(0, 242, 254, 0.12)' },
-                ]}
-              >
-                <Ionicons name="play" size={17} color="#00F2FE" />
+              <View style={styles.actionIconBox}>
+                <Ionicons name="play" size={16} color="#FFFFFF" />
               </View>
-              <Text
-                style={[
-                  styles.sheetActionText,
-                  { color: '#00F2FE', fontWeight: '700' },
-                ]}
-              >
-                Open in Editor
-              </Text>
+              <Text style={styles.sheetActionText}>Open in Editor</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -105,7 +94,7 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
               }}
             >
               <View style={styles.actionIconBox}>
-                <Ionicons name="pencil-outline" size={17} color="#94A3B8" />
+                <Feather name="edit-2" size={16} color="#A1A1AA" />
               </View>
               <Text style={styles.sheetActionText}>Rename Project</Text>
             </TouchableOpacity>
@@ -121,13 +110,13 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
               }}
             >
               <View style={styles.actionIconBox}>
-                <Ionicons name="copy-outline" size={17} color="#94A3B8" />
+                <Feather name="copy" size={16} color="#A1A1AA" />
               </View>
               <Text style={styles.sheetActionText}>Duplicate Project</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.sheetActionItem, styles.sheetActionItemDanger]}
+              style={styles.sheetActionItem}
               onPress={() => {
                 if (optionsProject) {
                   soundEngine.playSfx('click');
@@ -136,15 +125,10 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
                 }
               }}
             >
-              <View
-                style={[
-                  styles.actionIconBox,
-                  { backgroundColor: 'rgba(255, 0, 80, 0.12)' },
-                ]}
-              >
-                <Ionicons name="trash-outline" size={17} color="#FF0050" />
+              <View style={[styles.actionIconBox, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
+                <Feather name="trash-2" size={16} color={theme.colors.danger} />
               </View>
-              <Text style={[styles.sheetActionText, { color: '#FF0050' }]}>
+              <Text style={[styles.sheetActionText, { color: theme.colors.danger }]}>
                 Delete Project
               </Text>
             </TouchableOpacity>
@@ -162,3 +146,5 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
     </Modal>
   );
 };
+
+export default ProjectOptionsMenu;

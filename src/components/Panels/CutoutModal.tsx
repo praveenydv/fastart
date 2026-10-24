@@ -21,6 +21,8 @@ interface CutoutModalProps {
   onApply?: () => void;
   currentCutout?: CutoutConfig;
   onApplyCutout: (config: CutoutConfig) => void;
+  initialMode?: 'auto' | 'chroma';
+  isInline?: boolean;
 }
 
 const COLOR_PRESETS = [
@@ -65,9 +67,11 @@ export default function CutoutModal({
   onApply,
   currentCutout,
   onApplyCutout,
+  initialMode,
+  isInline = false,
 }: CutoutModalProps) {
   const [enabled, setEnabled] = useState<boolean>(currentCutout?.enabled || false);
-  const [mode, setMode] = useState<'chroma' | 'auto'>(currentCutout?.mode || 'chroma');
+  const [mode, setMode] = useState<'chroma' | 'auto'>(initialMode || currentCutout?.mode || 'chroma');
   const [keyColor, setKeyColor] = useState<string>(currentCutout?.keyColor || '#00FF00');
   const [intensity, setIntensity] = useState<number>(currentCutout?.intensity ?? 45);
   const [shadow, setShadow] = useState<number>(currentCutout?.shadow ?? 25);
@@ -77,16 +81,31 @@ export default function CutoutModal({
 
   useEffect(() => {
     if (visible) {
-      setEnabled(currentCutout?.enabled || false);
-      setMode(currentCutout?.mode || 'chroma');
+      const targetMode = initialMode || currentCutout?.mode || 'chroma';
+      const shouldEnable = targetMode === 'auto' ? true : (currentCutout?.enabled || false);
+      setEnabled(shouldEnable);
+      setMode(targetMode);
       setKeyColor(currentCutout?.keyColor || '#00FF00');
       setIntensity(currentCutout?.intensity ?? 45);
       setShadow(currentCutout?.shadow ?? 25);
       setStrokeColor(currentCutout?.strokeColor || 'none');
       setStrokeWidth(currentCutout?.strokeWidth || 3);
       setBgColor(currentCutout?.bgColor || 'none');
+
+      if (targetMode === 'auto' && !currentCutout?.enabled) {
+        onApplyCutout({
+          enabled: true,
+          mode: 'auto',
+          keyColor: currentCutout?.keyColor || '#00FF00',
+          intensity: currentCutout?.intensity ?? 45,
+          shadow: currentCutout?.shadow ?? 25,
+          strokeColor: currentCutout?.strokeColor,
+          strokeWidth: currentCutout?.strokeWidth,
+          bgColor: currentCutout?.bgColor,
+        });
+      }
     }
-  }, [visible, currentCutout]);
+  }, [visible, currentCutout, initialMode, onApplyCutout]);
 
   const syncConfig = useCallback(
     (overrides?: Partial<CutoutConfig>) => {
@@ -149,15 +168,13 @@ export default function CutoutModal({
     onClose();
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && ({ flex: 1, maxHeight: '100%', borderTopLeftRadius: 0, borderTopRightRadius: 0, borderWidth: 0 } as any)]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
+      {/* Standardized Header */}
+      <View style={styles.sheetHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
                 onPress={handleCancel}
@@ -178,7 +195,7 @@ export default function CutoutModal({
             </View>
 
             <View style={styles.titleRow}>
-              <Ionicons name="person-remove-outline" size={17} color="#00F2FE" />
+              <Ionicons name="person-remove-outline" size={17} color="#FFFFFF" />
               <Text style={styles.sheetTitle}>Cutout & Chroma</Text>
             </View>
 
@@ -306,6 +323,21 @@ export default function CutoutModal({
             />
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return (
+      <View style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#121215' }}>
+        {sheetContent}
+      </View>
+    );
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
+      <View style={styles.modalOverlay}>
+        {sheetContent}
       </View>
     </Modal>
   );

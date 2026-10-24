@@ -17,6 +17,7 @@ interface PlayerTransformOverlayProps {
   currentTime: number;
   onSelectClip?: (id: string | null, type?: string) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
+  onOpenMaskModal?: (clipId: string) => void;
   onDeleteClip?: (clipId: string, clipType: string) => void;
   handleEnterCropMode: (clipId?: string) => void;
   handleStartDrag: (
@@ -55,6 +56,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   currentTime,
   onSelectClip,
   onOpenEditModal,
+  onOpenMaskModal,
   onDeleteClip,
   handleEnterCropMode,
   handleStartDrag,
@@ -87,7 +89,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {activeVideos.map((vid) => {
           if (selectedClipId === vid.id) return null;
           const vidTrackZ =
-            (typeof vid.trackIndex === "number" ? vid.trackIndex : 0) * 2 + 10;
+            (typeof vid.trackIndex === "number" ? vid.trackIndex : 0) * 100 + 10;
           const kfT = getInterpolatedTransform(vid, currentTime, "video");
           const cx = boxWidth / 2 + kfT.x;
           const cy = canvasHeight / 2 + kfT.y;
@@ -145,7 +147,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {(activeCaptions || []).map((cap) => {
           if (cap.id === selectedClipId) return null;
           const capTrackZ =
-            (typeof cap.trackIndex === "number" ? cap.trackIndex : 1) * 2 + 28;
+            (typeof cap.trackIndex === "number" ? cap.trackIndex : 2) * 100 + 15;
           const kfT = getInterpolatedTransform(cap, currentTime, "caption");
           const cx = (kfT.x / 100) * boxWidth;
           const cy = (kfT.y / 100) * canvasHeight;
@@ -200,7 +202,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {activeTexts.map((txt) => {
           if (txt.id === selectedClipId) return null;
           const txtTrackZ =
-            (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 2 + 30;
+            (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 100 + 20;
           const kfT = getInterpolatedTransform(txt, currentTime, "text");
           const cx = (kfT.x / 100) * boxWidth;
           const cy = (kfT.y / 100) * canvasHeight;
@@ -255,7 +257,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {activeStickers.map((stk) => {
           if (stk.id === selectedClipId) return null;
           const stkTrackZ =
-            (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 2 + 32;
+            (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 100 + 25;
           const kfT = getInterpolatedTransform(stk, currentTime, "sticker");
           const cx = (kfT.x / 100) * boxWidth;
           const cy = (kfT.y / 100) * canvasHeight;
@@ -312,6 +314,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             style={[
               styles.activeTransformBox,
               {
+                zIndex: 10000,
                 left:
                   (activeTransformItem.pos.x / 100) * boxWidth -
                   activeTransformItem.width / 2,
@@ -439,7 +442,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons name="pencil" size={13} color="#00F2FE" />
+                <Ionicons name="pencil" size={13} color="#FFFFFF" />
                 <Text style={styles.floatingBtnText}>Edit</Text>
               </TouchableOpacity>
             )}
@@ -464,8 +467,35 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons name="crop" size={13} color="#00F2FE" />
+                <Ionicons name="crop" size={13} color="#FFFFFF" />
                 <Text style={styles.floatingBtnText}>Crop</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Video Mask Action */}
+            {activeTransformItem.type === "video" && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  onOpenMaskModal?.(activeTransformItem.id);
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        onOpenMaskModal?.(activeTransformItem.id);
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="shapes-outline" size={13} color="#00F2FE" />
+                <Text style={[styles.floatingBtnText, { color: "#00F2FE" }]}>
+                  Mask
+                </Text>
               </TouchableOpacity>
             )}
 

@@ -36,7 +36,7 @@ import {
   syncPlayback,
   MediaSyncContext,
 } from "./renderer/rendererMediaSync";
-import { drawClip as renderClipItem } from "./renderer/rendererClip";
+import { drawClip as renderClipItem, TransitionRenderState } from "./renderer/rendererClip";
 
 export type { ExportFormat, ExportOptions, ExportResult };
 
@@ -273,9 +273,65 @@ export class VideoRenderer {
       const stickerClips = project.tracks.stickers || [];
       const effectClips = project.tracks.effects || [];
 
-      const activeVideos = videoClips.filter(
-        (c) => time >= c.startTime - 0.02 && time <= c.startTime + c.duration + 0.02,
-      );
+      // Collect active video clips and detect any active cross-clip transitions
+      const activeVideoItems: {
+        clip: VideoClip;
+        trackIndex: number;
+        transitionState?: TransitionRenderState | null;
+      }[] = [];
+      const handledVideoIds = new Set<string>();
+
+      // Check transitions between adjacent clips on the same track
+      for (let i = 0; i < videoClips.length; i++) {
+        const c = videoClips[i];
+        const cEnd = c.startTime + c.duration;
+        const trans = c.transition;
+        const transDur =
+          trans && trans.type && trans.type !== "none" && trans.type !== "cut"
+            ? trans.duration || 0.5
+            : 0;
+
+        // Is clip c currently in an active transition window leading into next clip?
+        if (transDur > 0 && time >= cEnd - transDur && time <= cEnd) {
+          const nextClip = videoClips.find(
+            (other) =>
+              other.id !== c.id &&
+              (other.trackIndex || 0) === (c.trackIndex || 0) &&
+              Math.abs(other.startTime - cEnd) < 0.35,
+          );
+          const p = Math.max(0, Math.min(1, (time - (cEnd - transDur)) / transDur));
+
+          if (nextClip) {
+            // 1. Draw incoming nextClip first (underneath / entering)
+            activeVideoItems.push({
+              clip: nextClip,
+              trackIndex: (nextClip.trackIndex || 0) * 100,
+              transitionState: { role: "incoming", type: trans.type, progress: p },
+            });
+            handledVideoIds.add(nextClip.id);
+
+            // 2. Draw outgoing clip c on top (exiting / fading / wiping)
+            activeVideoItems.push({
+              clip: c,
+              trackIndex: (c.trackIndex || 0) * 100 + 1,
+              transitionState: { role: "outgoing", type: trans.type, progress: p },
+            });
+            handledVideoIds.add(c.id);
+            continue;
+          }
+        }
+
+        // Standard active video playback window
+        if (!handledVideoIds.has(c.id) && time >= c.startTime - 0.02 && time <= cEnd + 0.02) {
+          activeVideoItems.push({
+            clip: c,
+            trackIndex: (c.trackIndex || 0) * 100,
+          });
+          handledVideoIds.add(c.id);
+        }
+      }
+
+      const activeVideos = activeVideoItems.map((item) => item.clip);
       const activeCaptions = captionClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
       const activeTexts = textClips.filter((t) => time >= t.startTime && time <= t.startTime + t.duration);
       const activeStickers = stickerClips.filter((s) => time >= s.startTime && time <= s.startTime + s.duration);
@@ -332,59 +388,60 @@ export class VideoRenderer {
       }
 
       type VisualItem =
-        | { kind: "video"; clip: VideoClip; trackIndex: number }
+        | { kind: "video"; clip: VideoClip; trackIndex: number; transitionState?: TransitionRenderState | null }
         | { kind: "caption"; clip: CaptionClip; trackIndex: number }
-      | { kind: "text"; clip: TextClip; trackIndex: number }
-      | { kind: "sticker"; clip: StickerClip; trackIndex: number }
-      | { kind: "effect"; clip: EffectClip; trackIndex: number };
+        | { kind: "text"; clip: TextClip; trackIndex: number }
+        | { kind: "sticker"; clip: StickerClip; trackIndex: number }
+        | { kind: "effect"; clip: EffectClip; trackIndex: number };
 
-    const visualItems: VisualItem[] = [
-      ...activeVideos.map((c) => ({
-        kind: "video" as const,
-        clip: c,
-        trackIndex: typeof c.trackIndex === "number" ? c.trackIndex : 0,
-      })),
-      ...activeCaptions.map((c) => ({
-        kind: "caption" as const,
-        clip: c,
-        trackIndex: typeof c.trackIndex === "number" ? c.trackIndex : 1,
-      })),
-      ...activeTexts.map((t) => ({
-        kind: "text" as const,
-        clip: t,
-        trackIndex: typeof t.trackIndex === "number" ? t.trackIndex : 2,
-      })),
-      ...activeStickers.map((s) => ({
-        kind: "sticker" as const,
-        clip: s,
-        trackIndex: typeof s.trackIndex === "number" ? s.trackIndex : 3,
-      })),
-      ...activeEffects.map((e) => ({
-        kind: "effect" as const,
-        clip: e,
-        trackIndex: typeof e.trackIndex === "number" ? e.trackIndex : 4,
-      })),
-    ];
+      const visualItems: VisualItem[] = [
+        ...activeVideoItems.map((item) => ({
+          kind: "video" as const,
+          clip: item.clip,
+          trackIndex: item.trackIndex,
+          transitionState: item.transitionState,
+        })),
+        ...activeCaptions.map((c) => ({
+          kind: "caption" as const,
+          clip: c,
+          trackIndex: (typeof c.trackIndex === "number" ? c.trackIndex : 2) * 100 + 2,
+        })),
+        ...activeTexts.map((t) => ({
+          kind: "text" as const,
+          clip: t,
+          trackIndex: (typeof t.trackIndex === "number" ? t.trackIndex : 2) * 100 + 3,
+        })),
+        ...activeStickers.map((s) => ({
+          kind: "sticker" as const,
+          clip: s,
+          trackIndex: (typeof s.trackIndex === "number" ? s.trackIndex : 3) * 100 + 4,
+        })),
+        ...activeEffects.map((e) => ({
+          kind: "effect" as const,
+          clip: e,
+          trackIndex: (typeof e.trackIndex === "number" ? e.trackIndex : 4) * 100 + 5,
+        })),
+      ];
 
-    visualItems.sort((a, b) => a.trackIndex - b.trackIndex);
+      visualItems.sort((a, b) => a.trackIndex - b.trackIndex);
 
-    visualItems.forEach((item) => {
-      const isOverridden = transientOverride && transientOverride.clipId === item.clip.id;
-      if (item.kind === "video") {
-        const clipToDraw: VideoClip = isOverridden
-          ? {
-              ...item.clip,
-              transform: {
-                ...(item.clip.transform || {}),
-                x: transientOverride!.x,
-                y: transientOverride!.y,
-                scale: transientOverride!.scale,
-                rotation: transientOverride!.rotation,
-              },
-            }
-          : item.clip;
-        this.drawClip(ctx, clipToDraw, time, w, h, null);
-      } else if (item.kind === "caption") {
+      visualItems.forEach((item) => {
+        const isOverridden = transientOverride && transientOverride.clipId === item.clip.id;
+        if (item.kind === "video") {
+          const clipToDraw: VideoClip = isOverridden
+            ? {
+                ...item.clip,
+                transform: {
+                  ...(item.clip.transform || {}),
+                  x: transientOverride!.x,
+                  y: transientOverride!.y,
+                  scale: transientOverride!.scale,
+                  rotation: transientOverride!.rotation,
+                },
+              }
+            : item.clip;
+          this.drawClip(ctx, clipToDraw, time, w, h, item.transitionState || null);
+        } else if (item.kind === "caption") {
         const clipToDraw: CaptionClip = isOverridden
           ? {
               ...item.clip,
@@ -438,23 +495,31 @@ export class VideoRenderer {
     time: number,
     w: number,
     h: number,
-    _nextClip: VideoClip | null = null,
+    transitionState?: TransitionRenderState | null,
   ) {
     if (!this.offscreenCanvas && typeof document !== "undefined") {
       this.offscreenCanvas = document.createElement("canvas");
       this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
     }
-    renderClipItem(ctx, clip, time, w, h, {
-      videoElements: this.videoElements,
-      thumbnailElements: this.thumbnailElements,
-      previewCropClipId: this.previewCropClipId,
-      offscreenCanvas: this.offscreenCanvas,
-      offscreenCtx: this.offscreenCtx,
-      canvas: this.canvas,
-      onFrameNeeded: this.onFrameNeeded,
-      preloadClip: (c) => this.preloadClip(c),
-      ensureOffscreen: (cw, ch) => this.ensureOffscreen(cw, ch),
-    });
+    renderClipItem(
+      ctx,
+      clip,
+      time,
+      w,
+      h,
+      {
+        videoElements: this.videoElements,
+        thumbnailElements: this.thumbnailElements,
+        previewCropClipId: this.previewCropClipId,
+        offscreenCanvas: this.offscreenCanvas,
+        offscreenCtx: this.offscreenCtx,
+        canvas: this.canvas,
+        onFrameNeeded: this.onFrameNeeded,
+        preloadClip: (c) => this.preloadClip(c),
+        ensureOffscreen: (cw, ch) => this.ensureOffscreen(cw, ch),
+      },
+      transitionState,
+    );
   }
 
   async exportVideo(

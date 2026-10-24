@@ -24,6 +24,7 @@ interface TextModalProps {
   editingClip?: TextClip | null;
   onUpdateText?: (clip: TextClip) => void;
   currentPlayheadTime?: number;
+  isInline?: boolean;
 }
 
 export default function TextModal({
@@ -33,6 +34,7 @@ export default function TextModal({
   editingClip,
   onUpdateText,
   currentPlayheadTime = 0,
+  isInline = false,
 }: TextModalProps) {
   const [inputText, setInputText] = useState("VIRAL HOOK");
   const [selectedColor, setSelectedColor] = useState("#FFFFFF");
@@ -237,17 +239,10 @@ export default function TextModal({
     onClose();
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
           {/* Standardized Header */}
           <View style={styles.sheetHeader}>
@@ -324,6 +319,7 @@ export default function TextModal({
               selectedBorderColor={selectedBorderColor}
               selectedColor={selectedColor}
               selectedStrokeColor={selectedStrokeColor}
+              selectedStrokeWidth={selectedStrokeWidth}
               selectedBg={selectedBg}
               selectedScale={selectedScale}
               selectedRotation={selectedRotation}
@@ -420,6 +416,10 @@ export default function TextModal({
                 setSelectedColor={setSelectedColor}
                 selectedBg={selectedBg}
                 setSelectedBg={setSelectedBg}
+                selectedStrokeColor={selectedStrokeColor}
+                setSelectedStrokeColor={setSelectedStrokeColor}
+                selectedStrokeWidth={selectedStrokeWidth}
+                setSelectedStrokeWidth={setSelectedStrokeWidth}
               />
             )}
 
@@ -441,6 +441,22 @@ export default function TextModal({
             )}
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        {sheetContent}
       </View>
     </Modal>
   );

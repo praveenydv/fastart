@@ -56,6 +56,16 @@ export interface TrimSession {
   currentTrimOut: number;
 }
 
+export interface TimelineDragState {
+  clipId: string;
+  currentStart: number;
+  targetStart?: number;
+  currentTrack: number;
+  dragOffsetY: number;
+  isInsertingNewTrack?: boolean;
+  insertTrackIndex?: number | null;
+}
+
 export interface TimelineProps {
   project: FastArtProject;
   currentTime: number;
@@ -84,6 +94,7 @@ export interface TimelineProps {
     trackType: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
     newStartTime: number,
     newTrackIndex?: number,
+    isInsertNewTrack?: boolean,
   ) => void;
   onOpenTransitions: (clipId: string) => void;
   onOpenMediaPicker?: () => void;
@@ -100,4 +111,6 @@ export interface TimelineProps {
   onDeleteClip?: () => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   settings?: any;
+  onAddMedia?: (clip: any) => void;
+  onAddAudio?: (clip: any) => void;
 }

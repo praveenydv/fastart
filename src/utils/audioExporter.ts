@@ -126,6 +126,20 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
     return decodedAudioCache.get(cacheKey)!;
   }
 
+  // On mobile without Web Audio API, only uncompressed WAV files can be decoded via pure JS
+  const hasAudioContext =
+    typeof window !== 'undefined' &&
+    Boolean((window as any).AudioContext || (window as any).webkitAudioContext);
+  const isWav =
+    url.toLowerCase().includes('.wav') ||
+    url.startsWith('data:audio/wav') ||
+    url.startsWith('data:audio/x-wav');
+
+  if (!hasAudioContext && !isWav) {
+    // Skip loading large video files into memory on mobile when Web Audio API is absent
+    return null;
+  }
+
   try {
     const arrayBuf = await getMediaBinaryBuffer(url, clipId);
     if (!arrayBuf || arrayBuf.byteLength === 0) return null;
@@ -302,6 +316,34 @@ export async function exportProjectAudioToWavBytes(
     let srcFrame = (trimIn + (startSample / sampleRate - clipStart) * speed) * srcRate;
     const invSampleRate = 1.0 / sampleRate;
 
+    // Multi-Band Adaptive Spectral Noise Reduction DSP State & Coefficients
+    const dt = invSampleRate;
+
+    // Sub-bass highpass (45Hz) to remove DC drift, subsonic rumble & wind thumps
+    const hpAlpha = 1.0 / (1.0 + 2.0 * Math.PI * 45 * dt);
+    let hpPrevInL = 0, hpPrevOutL = 0;
+    let hpPrevInR = 0, hpPrevOutR = 0;
+
+    // Complementary Crossover 1 at 450Hz (Low / Rest)
+    const xoverAlpha1 = (2.0 * Math.PI * 450 * dt) / (1.0 + 2.0 * Math.PI * 450 * dt);
+    let lpLowL = 0, lpLowR = 0;
+
+    // Complementary Crossover 2 at 4200Hz (Mid / High)
+    const xoverAlpha2 = (2.0 * Math.PI * 4200 * dt) / (1.0 + 2.0 * Math.PI * 4200 * dt);
+    let lpMidL = 0, lpMidR = 0;
+
+    // Adaptive Envelopes & Noise Floor Trackers for 3 bands
+    let envLowL = 0.005, envMidL = 0.005, envHighL = 0.005;
+    let envLowR = 0.005, envMidR = 0.005, envHighR = 0.005;
+    let noiseFloorLow = 0.003, noiseFloorMid = 0.002, noiseFloorHigh = 0.0015;
+
+    // Smoothed Gating Gains (initialized to full unity 1.0)
+    let gainLowL = 1.0, gainMidL = 1.0, gainHighL = 1.0;
+    let gainLowR = 1.0, gainMidR = 1.0, gainHighR = 1.0;
+
+    const envAttAlpha = 1.0 - Math.exp(-dt / 0.003); // 3ms fast attack
+    const envRelAlpha = 1.0 - Math.exp(-dt / 0.045); // 45ms release
+
     for (let i = startSample; i < endSample; i++, srcFrame += step) {
       if (srcFrame >= 0 && srcFrame < srcLen - 1) {
         const idx0 = srcFrame | 0;
@@ -321,8 +363,97 @@ export async function exportProjectAudioToWavBytes(
         }
 
         if (denoise) {
-          if (leftSamp > -0.02 && leftSamp < 0.02) leftSamp *= 0.1;
-          if (rightSamp > -0.02 && rightSamp < 0.02) rightSamp *= 0.1;
+          // 1. Sub-bass cleanup (< 45Hz): Removes rumble/handling noise without touching audible frequencies
+          const hpL = hpAlpha * (hpPrevOutL + leftSamp - hpPrevInL);
+          hpPrevInL = leftSamp;
+          hpPrevOutL = hpL;
+
+          const hpR = hpAlpha * (hpPrevOutR + rightSamp - hpPrevInR);
+          hpPrevInR = rightSamp;
+          hpPrevOutR = hpR;
+
+          // 2. Phase-perfect 3-band complementary crossover (low + mid + high = hpL exactly)
+          // Low band (< 450Hz)
+          lpLowL = lpLowL + xoverAlpha1 * (hpL - lpLowL);
+          lpLowR = lpLowR + xoverAlpha1 * (hpR - lpLowR);
+          const bandLowL = lpLowL;
+          const bandLowR = lpLowR;
+
+          const restL = hpL - lpLowL;
+          const restR = hpR - lpLowR;
+
+          // Mid band (450Hz - 4200Hz) & High band (> 4200Hz)
+          lpMidL = lpMidL + xoverAlpha2 * (restL - lpMidL);
+          lpMidR = lpMidR + xoverAlpha2 * (restR - lpMidR);
+          const bandMidL = lpMidL;
+          const bandMidR = lpMidR;
+          const bandHighL = restL - lpMidL;
+          const bandHighR = restR - lpMidR;
+
+          // 3. Update fast speech/signal envelope per band
+          const absLow = Math.max(Math.abs(bandLowL), Math.abs(bandLowR));
+          const absMid = Math.max(Math.abs(bandMidL), Math.abs(bandMidR));
+          const absHigh = Math.max(Math.abs(bandHighL), Math.abs(bandHighR));
+
+          envLowL += (absLow > envLowL ? envAttAlpha : envRelAlpha) * (absLow - envLowL);
+          envMidL += (absMid > envMidL ? envAttAlpha : envRelAlpha) * (absMid - envMidL);
+          envHighL += (absHigh > envHighL ? envAttAlpha : envRelAlpha) * (absHigh - envHighL);
+
+          // 4. Continuous minimum statistics noise floor estimation per band
+          if (envLowL < noiseFloorLow) {
+            noiseFloorLow += 0.05 * (envLowL - noiseFloorLow);
+          } else {
+            noiseFloorLow += 0.000008 * (envLowL - noiseFloorLow);
+          }
+
+          if (envMidL < noiseFloorMid) {
+            noiseFloorMid += 0.05 * (envMidL - noiseFloorMid);
+          } else {
+            noiseFloorMid += 0.000008 * (envMidL - noiseFloorMid);
+          }
+
+          if (envHighL < noiseFloorHigh) {
+            noiseFloorHigh += 0.05 * (envHighL - noiseFloorHigh);
+          } else {
+            noiseFloorHigh += 0.000008 * (envHighL - noiseFloorHigh);
+          }
+
+          // 5. Calculate transparent multi-band spectral gains
+          // Low band target gain (keeps vocal warmth, attenuates low AC hum/drone)
+          const ratioLow = envLowL / (noiseFloorLow * 1.5 + 1e-6);
+          let targetGainLow = 1.0;
+          if (ratioLow < 1.0) targetGainLow = 0.18;
+          else if (ratioLow < 2.0) {
+            const t = (ratioLow - 1.0);
+            targetGainLow = 0.18 + 0.82 * (0.5 - 0.5 * Math.cos(Math.PI * t));
+          }
+
+          // Mid band target gain (protects 100% of speech formants, suppresses room tone)
+          const ratioMid = envMidL / (noiseFloorMid * 1.4 + 1e-6);
+          let targetGainMid = 1.0;
+          if (ratioMid < 1.0) targetGainMid = 0.16;
+          else if (ratioMid < 1.8) {
+            const t = (ratioMid - 1.0) / 0.8;
+            targetGainMid = 0.16 + 0.84 * (0.5 - 0.5 * Math.cos(Math.PI * t));
+          }
+
+          // High band target gain (protects consonants/air, cleans preamp hiss)
+          const ratioHigh = envHighL / (noiseFloorHigh * 1.4 + 1e-6);
+          let targetGainHigh = 1.0;
+          if (ratioHigh < 1.0) targetGainHigh = 0.14;
+          else if (ratioHigh < 1.8) {
+            const t = (ratioHigh - 1.0) / 0.8;
+            targetGainHigh = 0.14 + 0.86 * (0.5 - 0.5 * Math.cos(Math.PI * t));
+          }
+
+          // 6. Smooth gain interpolation to prevent chattering/clicks on word boundaries
+          gainLowL += 0.015 * (targetGainLow - gainLowL);
+          gainMidL += 0.025 * (targetGainMid - gainMidL);
+          gainHighL += 0.025 * (targetGainHigh - gainHighL);
+
+          // 7. Reconstruction: Sum bands with transparent weighting (when gains=1, output = original signal)
+          leftSamp = bandLowL * gainLowL + bandMidL * gainMidL + bandHighL * gainHighL;
+          rightSamp = bandLowR * gainLowL + bandMidR * gainMidL + bandHighR * gainHighL;
         }
 
         const effVol = volume * env;

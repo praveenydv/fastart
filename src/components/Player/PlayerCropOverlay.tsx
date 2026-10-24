@@ -126,7 +126,7 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
           <Ionicons
             name="crop"
             size={10}
-            color="#00F2FE"
+            color="#FFFFFF"
             style={{ marginRight: 4 }}
           />
           <Text style={styles.cropBadgeText}>

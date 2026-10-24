@@ -56,7 +56,14 @@ export interface CustomCrop {
 
 export interface ClipTransform {
   scale?: number;
+  scaleX?: number; // Horizontal stretch factor (1.0 = normal)
+  scaleY?: number; // Vertical stretch factor (1.0 = normal)
   rotation?: number;
+  rotateX?: number; // 3D Pitch / tilt X (degrees) for distance/receding view
+  rotateY?: number; // 3D Yaw / tilt Y (degrees) for side angle view
+  skewX?: number; // Skew angle X (degrees)
+  skewY?: number; // Skew angle Y (degrees)
+  perspective?: number; // 3D camera depth distance in px (default 800)
   x?: number;
   y?: number;
   flipX?: boolean;

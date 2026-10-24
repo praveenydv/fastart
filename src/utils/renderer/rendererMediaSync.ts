@@ -160,7 +160,22 @@ export async function preloadClip(
     img.onload = () => {
       if (ctx.onFrameNeeded) ctx.onFrameNeeded();
     };
-    img.onerror = () => {
+    img.onerror = async () => {
+      try {
+        const lookupId = clip.sourceMediaId || clip.id;
+        const freshUrl = await getLiveMediaUrl(lookupId);
+        if (freshUrl && freshUrl !== clip.url) {
+          ctx.videoElements.delete(clip.url);
+          clip.url = freshUrl;
+          ctx.videoElements.set(freshUrl, img);
+          img.src = freshUrl;
+          return;
+        }
+      } catch (e) {}
+      if (clip.thumbnail && clip.thumbnail !== clip.url) {
+        img.src = clip.thumbnail;
+        return;
+      }
       if (img.crossOrigin) {
         img.removeAttribute("crossorigin");
         img.src = clip.url;

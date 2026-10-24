@@ -72,6 +72,14 @@ export function setCachedMediaPeaks(
 }
 
 /**
+ * Returns cached peak samples (0.0 to 1.0) for a media URL or clip ID if available
+ */
+export function getCachedMediaPeaks(key?: string): number[] | null {
+  if (!key) return null;
+  return mediaPeaksCache.get(key) ?? null;
+}
+
+/**
  * Returns the cached total audio duration in seconds for a media URL
  */
 export function getMediaAudioDuration(url?: string): number | null {
@@ -102,6 +110,8 @@ export function mediaHasAudioTrack(clip: any): boolean {
   if (!clip) return false;
   const raw = clip.rawClip || clip;
   const type = clip.type || raw.type;
+  const clipId = raw.id || clip.id;
+  const clipUrl = raw.url || clip.url;
 
   // 1. Photos, images, endings definitely have NO audio track
   if (type === "photo" || raw.type === "photo") return false;
@@ -111,28 +121,12 @@ export function mediaHasAudioTrack(clip: any): boolean {
   if (raw.hasAudio === false || clip.hasAudio === false) return false;
   if (raw.hasAudio === true || clip.hasAudio === true) return true;
 
-  // 3. Check cached audio presence by clip ID or URL
-  const clipId = raw.id || clip.id;
-  const clipUrl = raw.url || clip.url;
-
-  if (clipId) {
-    const byId = isMediaAudioDetected(clipId);
-    if (byId !== null) return byId;
-  }
-  if (clipUrl) {
-    const byUrl = isMediaAudioDetected(clipUrl);
-    if (byUrl !== null) return byUrl;
+  // 3. Audio track lane clips (type === "audio")
+  if (type === "audio") {
+    return Boolean(clipUrl);
   }
 
-  // 4. Check cached waveform peaks: if peaks array is empty, then NO audio
-  if (clipUrl && mediaPeaksCache.has(clipUrl)) {
-    return (mediaPeaksCache.get(clipUrl)?.length ?? 0) > 0;
-  }
-  if (clipId && mediaPeaksCache.has(clipId)) {
-    return (mediaPeaksCache.get(clipId)?.length ?? 0) > 0;
-  }
-
-  // 5. Check file extension: photo and image formats never have audio
+  // 4. Check file extension: photo and image formats never have audio
   if (clipUrl) {
     const cleanUrl = clipUrl.split("?")[0].toLowerCase();
     if (/\.(jpg|jpeg|png|webp|gif|bmp|svg|avif)$/i.test(cleanUrl)) {
@@ -142,12 +136,17 @@ export function mediaHasAudioTrack(clip: any): boolean {
     }
   }
 
-  // 6. Audio track lane clips (type === "audio")
-  if (type === "audio") {
-    return Boolean(clipUrl);
+  // 5. Check cached audio presence by clip ID or URL
+  if (clipId) {
+    const byId = isMediaAudioDetected(clipId);
+    if (byId !== null) return byId;
+  }
+  if (clipUrl) {
+    const byUrl = isMediaAudioDetected(clipUrl);
+    if (byUrl !== null) return byUrl;
   }
 
-  // 7. For video clips (type === "video"):
+  // 6. For video clips (type === "video"):
   // Trigger background binary audio extraction immediately if not already decoded
   if (clipUrl) {
     extractRealMediaAudioPeaks(clipUrl, clipId);
@@ -628,16 +627,29 @@ export async function extractRealMediaAudioPeaks(
         return mp4Parsed.peaks;
       }
 
-      // No audio found
-      setMediaHasAudio(url, false);
-      if (clipId) setMediaHasAudio(clipId, false);
+      // If pure-JS container decoders did not extract peaks, check if media is a photo
+      const isPhoto = /\.(jpg|jpeg|png|webp|gif|bmp|svg|avif)$/i.test(cleanUrl);
+      if (isPhoto) {
+        setMediaHasAudio(url, false);
+        if (clipId) setMediaHasAudio(clipId, false);
+      } else {
+        // Video files (MP4/MOV) play audio natively even if pure-JS parser did not generate visual peaks
+        setMediaHasAudio(url, true);
+        if (clipId) setMediaHasAudio(clipId, true);
+      }
       mediaPeaksCache.set(url, []);
       notifyAudioChange();
       return [];
     } catch (err) {
       console.warn("[mediaAudioDetector] Could not decode audio from:", url, err);
-      setMediaHasAudio(url, false);
-      if (clipId) setMediaHasAudio(clipId, false);
+      const isPhoto = /\.(jpg|jpeg|png|webp|gif|bmp|svg|avif)$/i.test(cleanUrl);
+      if (isPhoto) {
+        setMediaHasAudio(url, false);
+        if (clipId) setMediaHasAudio(clipId, false);
+      } else {
+        setMediaHasAudio(url, true);
+        if (clipId) setMediaHasAudio(clipId, true);
+      }
       mediaPeaksCache.set(url, []);
       notifyAudioChange();
       return [];

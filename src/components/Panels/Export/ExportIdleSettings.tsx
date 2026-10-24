@@ -53,13 +53,13 @@ export default function ExportIdleSettings({
       </View>
 
       <View style={styles.fileNameInputContainer}>
-        <Ionicons name="document-text-outline" size={16} color="#00F2FE" />
+        <Ionicons name="document-text-outline" size={16} color="#A1A1AA" />
         <TextInput
           style={styles.fileNameInput}
           value={exportFilename}
           onChangeText={setExportFilename}
           placeholder="File name..."
-          placeholderTextColor="#64748B"
+          placeholderTextColor="#71717A"
           maxLength={60}
           selectTextOnFocus
         />
@@ -212,7 +212,7 @@ export default function ExportIdleSettings({
       {/* SPECIAL NOTICES FOR WAV / STILL FRAME */}
       {mediaType === "wav" && (
         <View style={styles.noticeCard}>
-          <Ionicons name="musical-notes" size={15} color="#00F2FE" />
+          <Ionicons name="musical-notes" size={15} color="#FFFFFF" />
           <Text style={styles.noticeCardText}>
             Master 16-bit 48kHz Stereo PCM audio mixdown from all tracks.
           </Text>
@@ -220,7 +220,7 @@ export default function ExportIdleSettings({
       )}
       {mediaType === "png" && (
         <View style={styles.noticeCard}>
-          <Ionicons name="image" size={15} color="#00F2FE" />
+          <Ionicons name="image" size={15} color="#FFFFFF" />
           <Text style={styles.noticeCardText}>
             Single full-resolution lossless snapshot frame captured at playhead.
           </Text>
@@ -230,26 +230,26 @@ export default function ExportIdleSettings({
       {/* 4. COMPACT STATS STRIP */}
       <View style={styles.compactSummaryCard}>
         <View style={styles.summaryItem}>
-          <Ionicons name="document-text-outline" size={12} color="#00F2FE" />
+          <Ionicons name="document-text-outline" size={12} color="#A1A1AA" />
           <Text style={styles.summaryValue}>
             {selectedFormatConfig.shortLabel}
           </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Ionicons name="speedometer-outline" size={12} color="#00F2FE" />
+          <Ionicons name="speedometer-outline" size={12} color="#A1A1AA" />
           <Text style={styles.summaryValue}>{calculateEstimatedSize()}</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Ionicons name="time-outline" size={12} color="#00F2FE" />
+          <Ionicons name="time-outline" size={12} color="#A1A1AA" />
           <Text style={styles.summaryValue}>
             {mediaType === "png" ? "1 Frame" : `${totalDuration.toFixed(1)}s`}
           </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Ionicons name="crop-outline" size={12} color="#00F2FE" />
+          <Ionicons name="crop-outline" size={12} color="#A1A1AA" />
           <Text style={styles.summaryValue}>
             {project.aspectRatio || "9:16"}
           </Text>

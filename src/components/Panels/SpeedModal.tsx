@@ -30,6 +30,7 @@ interface SpeedModalProps {
     curve?: any,
     smoothSlowMo?: 'none' | 'blend' | 'optical_flow'
   ) => void;
+  isInline?: boolean;
 }
 
 export default function SpeedModal({
@@ -42,6 +43,7 @@ export default function SpeedModal({
   currentCurve,
   currentSlowMo = 'none',
   onApplySpeed,
+  isInline = false,
 }: SpeedModalProps) {
   const isAudio = clipType === 'audio';
   const [activeTab, setActiveTab] = useState<'normal' | 'curve' | 'custom'>('normal');
@@ -128,12 +130,10 @@ export default function SpeedModal({
     }
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
           {/* Standardized Header */}
           <View style={styles.sheetHeader}>
@@ -266,6 +266,17 @@ export default function SpeedModal({
             )}
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
+      <View style={styles.modalOverlay}>
+        {sheetContent}
       </View>
     </Modal>
   );

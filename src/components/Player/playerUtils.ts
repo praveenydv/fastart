@@ -28,12 +28,15 @@ export function getItemBaseDimensions(
   boxWidth: number,
   canvasHeight: number,
 ): { baseW: number; baseH: number } {
+  const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
+
   if (type === "text" || type === "caption") {
-    const fontSize = clip.style?.fontSize || 22;
+    const rawFontSize = clip.style?.fontSize || (type === "caption" ? 24 : 22);
+    const fontSize = Math.round(rawFontSize * previewScale);
     const str = (clip.text || "").trim();
-    const padX = clip.style?.paddingHorizontal || 14;
-    const padY = clip.style?.paddingVertical || 8;
-    const maxAvailableW = Math.max(120, boxWidth * 0.88);
+    const padX = (clip.style?.paddingHorizontal || 14) * previewScale;
+    const padY = (clip.style?.paddingVertical || 8) * previewScale;
+    const maxAvailableW = Math.max(100 * previewScale, boxWidth * 0.88);
 
     // Measure text width using 2D canvas context on web, or char heuristic
     let measureLineWidth = (line: string): number => {
@@ -72,20 +75,22 @@ export function getItemBaseDimensions(
 
     const totalLines = Math.max(1, wrappedLinesCount);
     const baseW = Math.max(
-      60,
+      Math.round(50 * previewScale),
       Math.min(maxAvailableW, Math.round(maxMeasuredLineW + padX * 2)),
     );
     const lineHeight = fontSize * 1.35;
-    const baseH = Math.max(32, Math.round(totalLines * lineHeight + padY * 2));
+    const baseH = Math.max(Math.round(28 * previewScale), Math.round(totalLines * lineHeight + padY * 2));
     return { baseW, baseH };
   }
   if (type === "sticker") {
     const isBadge = (clip.char || "").length > 2;
-    const baseW = isBadge
-      ? Math.max(90, Math.round((clip.char || "").length * 11 + 24))
-      : 56;
-    const baseH = isBadge ? 36 : 56;
-    return { baseW, baseH };
+    const baseW = Math.round(
+      (isBadge
+        ? Math.max(90, Math.round((clip.char || "").length * 11 + 24))
+        : 56) * previewScale,
+    );
+    const baseH = Math.round((isBadge ? 36 : 56) * previewScale);
+    return { baseW: Math.max(20, baseW), baseH: Math.max(20, baseH) };
   }
   return { baseW: boxWidth, baseH: canvasHeight };
 }

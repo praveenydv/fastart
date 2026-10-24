@@ -30,6 +30,7 @@ interface AIEnhanceModalProps {
     faceRadiance?: number;
     filterLut?: string;
   }) => void;
+  isInline?: boolean;
 }
 
 const WebDiv: any = Platform.OS === 'web' ? 'div' : View;
@@ -41,6 +42,7 @@ export default function AIEnhanceModal({
   onApply,
   initialValues,
   onApplyEnhance,
+  isInline = false,
 }: AIEnhanceModalProps) {
   const [activeTab, setActiveTab] = useState<'beauty' | 'clarity'>('beauty');
 
@@ -117,15 +119,13 @@ export default function AIEnhanceModal({
     }
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.overlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Compact Space-Optimized Header */}
-          <View style={styles.header}>
+      {/* Compact Space-Optimized Header */}
+      <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
                 onPress={handleCancel}
@@ -195,10 +195,10 @@ export default function AIEnhanceModal({
               <Ionicons
                 name="color-wand-outline"
                 size={15}
-                color={activeTab === 'clarity' ? '#00F2FE' : '#8E95A5'}
+                color={activeTab === 'clarity' ? '#FFFFFF' : '#71717A'}
               />
               <Text
-                style={[styles.tabText, activeTab === 'clarity' && { color: '#00F2FE', fontWeight: '700' }]}
+                style={[styles.tabText, activeTab === 'clarity' && { color: '#FFFFFF', fontWeight: '700' }]}
               >
                 Clarity & HDR
               </Text>
@@ -338,7 +338,7 @@ export default function AIEnhanceModal({
                   activeOpacity={0.7}
                 >
                   <View style={styles.toggleInfo}>
-                    <Ionicons name="sparkles" size={16} color="#00F2FE" />
+                    <Ionicons name="sparkles" size={16} color="#FFFFFF" />
                     <View style={{ marginLeft: 8 }}>
                       <Text style={styles.toggleTitle}>Auto HDR Dynamic Range</Text>
                       <Text style={styles.toggleSub}>Expand highlights and shadow recovery</Text>
@@ -347,7 +347,7 @@ export default function AIEnhanceModal({
                   <Ionicons
                     name={hdr ? 'checkbox' : 'square-outline'}
                     size={22}
-                    color={hdr ? '#00F2FE' : '#8E95A5'}
+                    color={hdr ? '#FFFFFF' : '#71717A'}
                   />
                 </TouchableOpacity>
 
@@ -466,30 +466,57 @@ export default function AIEnhanceModal({
             )}
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
+      <View style={styles.overlay}>
+        {sheetContent}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#121215',
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 0,
+    paddingBottom: 0,
+  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#121215',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: '#27272F',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -499,9 +526,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#27272F',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -511,27 +538,27 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   resetBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#141A28',
+    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#27272F',
   },
   resetText: {
-    color: '#8E95A5',
+    color: '#A1A1AA',
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   doneBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -540,11 +567,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 6,
     marginBottom: 4,
-    backgroundColor: '#080B12',
-    borderRadius: 10,
-    padding: 2,
+    backgroundColor: '#18181C',
+    borderRadius: 8,
+    padding: 3,
     borderWidth: 1,
-    borderColor: '#1A2234',
+    borderColor: '#27272F',
   },
   tabBtn: {
     flex: 1,
@@ -552,23 +579,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 7,
+    borderRadius: 6,
     position: 'relative',
   },
   tabBtnActive: {
-    backgroundColor: '#1E2638',
+    backgroundColor: '#202026',
   },
   tabText: {
     fontSize: 11.5,
-    color: '#8E95A5',
-    fontWeight: '700',
+    color: '#71717A',
+    fontWeight: '600',
   },
   activeDot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#D946EF',
+    backgroundColor: '#FFFFFF',
     position: 'absolute',
     top: 6,
     right: 12,
@@ -577,7 +604,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     position: 'absolute',
     top: 6,
     right: 12,
@@ -591,11 +618,11 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   sliderCard: {
-    backgroundColor: '#161B26',
-    borderRadius: 10,
+    backgroundColor: '#18181C',
+    borderRadius: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#1E2536',
+    borderColor: '#27272F',
   },
   labelRow: {
     flexDirection: 'row',
@@ -608,7 +635,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sliderLabel: {
-    color: '#E2E8F0',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -620,11 +647,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#161B26',
-    borderRadius: 10,
+    backgroundColor: '#18181C',
+    borderRadius: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#1E2536',
+    borderColor: '#27272F',
   },
   toggleInfo: {
     flexDirection: 'row',
@@ -637,7 +664,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   toggleSub: {
-    color: '#8E95A5',
+    color: '#71717A',
     fontSize: 11,
     marginTop: 1,
   },
@@ -649,12 +676,14 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   stepBtn: {
-    backgroundColor: '#262D3D',
+    backgroundColor: '#202026',
     width: 28,
     height: 28,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#27272F',
   },
   stepperVal: {
     color: '#FFFFFF',

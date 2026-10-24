@@ -1,4 +1,4 @@
-import { getMediaDuration } from "../../utils/mediaDuration";
+import { getMediaDuration, isImageClip, isExtendableClip } from "../../utils/mediaDuration";
 import { UnifiedClipItem, MIN_CLIP_DURATION } from "./timelineTypes";
 
 export function computeLeftTrimUpdates(
@@ -10,8 +10,11 @@ export function computeLeftTrimUpdates(
   deltaX: number,
   allClips: UnifiedClipItem[],
 ) {
-  const mediaDur = getMediaDuration(targetClip.rawClip, targetClip.type);
-  const isMediaClip = mediaDur !== null && mediaDur > 0;
+  const isUnlimited = isExtendableClip(targetClip, targetClip.type);
+  const mediaDur = isUnlimited
+    ? null
+    : getMediaDuration(targetClip.rawClip, targetClip.type);
+  const isMediaClip = !isUnlimited && mediaDur !== null && mediaDur > 0;
   const speed = Math.max(0.1, Math.min(16, targetClip?.rawClip?.speed || 1.0));
 
   const clipsBefore = allClips
@@ -58,8 +61,11 @@ export function computeRightTrimUpdates(
   deltaX: number,
   allClips: UnifiedClipItem[],
 ) {
-  const mediaDur = getMediaDuration(targetClip.rawClip, targetClip.type);
-  const isMediaClip = mediaDur !== null && mediaDur > 0;
+  const isUnlimited = isExtendableClip(targetClip, targetClip.type);
+  const mediaDur = isUnlimited
+    ? null
+    : getMediaDuration(targetClip.rawClip, targetClip.type);
+  const isMediaClip = !isUnlimited && mediaDur !== null && mediaDur > 0;
   const speed = Math.max(0.1, Math.min(16, targetClip?.rawClip?.speed || 1.0));
   const currentTrimIn = Math.max(0, targetClip?.rawClip?.trimIn || 0);
 

@@ -18,6 +18,7 @@ interface TextToSpeechModalProps {
   onClose: () => void;
   onAddAudio: (clip: AudioClip) => void;
   initialScript?: string;
+  isInline?: boolean;
 }
 
 export default function TextToSpeechModal({
@@ -25,6 +26,7 @@ export default function TextToSpeechModal({
   onClose,
   onAddAudio,
   initialScript,
+  isInline = false,
 }: TextToSpeechModalProps) {
   const [script, setScript] = useState('Welcome to FastArt Pro, the ultimate video editing studio.');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -102,10 +104,8 @@ export default function TextToSpeechModal({
     onClose();
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
           {/* Sheet Handle */}
           <View style={styles.sheetHandle} />
 
@@ -215,12 +215,39 @@ export default function TextToSpeechModal({
             </View>
           </ScrollView>
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        {sheetContent}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#0F131D',
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
+    paddingBottom: 0,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',

@@ -5,6 +5,8 @@ import { triggerHaptic } from "../../utils/haptics";
 import {
   UnifiedClipItem,
   TRACK_ROW_HEIGHT,
+  MAX_TRACKS,
+  TimelineDragState,
 } from "./timelineTypes";
 import { clampNonOverlapping, getPointerCoords } from "./timelineUtils";
 
@@ -28,13 +30,14 @@ interface UseTimelineClipDragParams {
     trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
     newStartTime: number,
     newTrackIndex?: number,
+    isInsertNewTrack?: boolean,
   ) => void;
 }
 
-// Universal snap & non-overlapping position calculator
+// Universal snap, in-between track creation & non-overlapping position calculator
 function computeTargetPosition(
   deltaX: number,
-  trackShift: number,
+  deltaYPixels: number,
   initialStart: number,
   initialTrack: number,
   duration: number,
@@ -45,16 +48,55 @@ function computeTargetPosition(
   isSnappingEnabled: boolean,
   isHapticEnabled: boolean,
 ) {
-  const targetTrack = Math.max(
-    0,
-    Math.min(activeTrackCount - 1, initialTrack + trackShift),
+  const rawTrackPos = initialTrack + deltaYPixels / TRACK_ROW_HEIGHT;
+
+  // Check if any existing active track is currently empty
+  const usedTracks = new Set(
+    allClips
+      .filter((c) => c.id !== clipId)
+      .map((c) => c.effectiveTrackIndex),
   );
+  const hasEmptyTrack = Array.from({ length: activeTrackCount }).some(
+    (_, idx) => !usedTracks.has(idx),
+  );
+
+  let isInsertingNewTrack = false;
+  let insertTrackIndex: number | null = null;
+  let targetTrack = Math.max(
+    0,
+    Math.min(activeTrackCount - 1, Math.round(rawTrackPos)),
+  );
+
+  // If there is already an empty track, DO NOT create a new track (use the empty track)!
+  // If NO empty track exists AND user specifically drags below the bottom track, target a new bottom track
+  if (!hasEmptyTrack && activeTrackCount < MAX_TRACKS && rawTrackPos >= activeTrackCount - 0.25) {
+    isInsertingNewTrack = true;
+    insertTrackIndex = activeTrackCount;
+    targetTrack = activeTrackCount;
+  }
+
+  let desiredStart = Math.max(0, initialStart + deltaX);
+
+  // If hovering over an insertion slot for a new track, no other clips exist on it yet
+  if (isInsertingNewTrack) {
+    if (isSnappingEnabled) {
+      const snapThresholdSec = 12 / pxPerSec;
+      if (Math.abs(desiredStart) < snapThresholdSec) {
+        desiredStart = 0;
+      }
+    }
+    return {
+      targetTrack,
+      rawStart: desiredStart,
+      clampedStart: desiredStart,
+      isInsertingNewTrack,
+      insertTrackIndex,
+    };
+  }
 
   const otherClipsOnTarget = allClips.filter(
     (c) => c.id !== clipId && c.effectiveTrackIndex === targetTrack,
   );
-
-  let desiredStart = Math.max(0, initialStart + deltaX);
 
   if (isSnappingEnabled) {
     const snapThresholdSec = 12 / pxPerSec;
@@ -90,7 +132,13 @@ function computeTargetPosition(
     otherClipsOnTarget,
   );
 
-  return { targetTrack, clampedStart };
+  return {
+    targetTrack,
+    rawStart: desiredStart,
+    clampedStart,
+    isInsertingNewTrack: false,
+    insertTrackIndex: null,
+  };
 }
 
 export function useTimelineClipDrag({
@@ -107,15 +155,12 @@ export function useTimelineClipDrag({
   onOpenEditModal,
   onMoveClip,
 }: UseTimelineClipDragParams) {
-  const [dragState, setDragState] = useState<{
-    clipId: string;
-    currentStart: number;
-    currentTrack: number;
-    dragOffsetY: number;
-  } | null>(null);
+  const [dragState, setDragState] = useState<TimelineDragState | null>(null);
 
   const [isDraggingClip, setIsDraggingClip] = useState(false);
   const previousTargetTrackRef = useRef<number | null>(null);
+  const previousIsInsertingRef = useRef<boolean>(false);
+  const previousInsertTrackRef = useRef<number | null>(null);
 
   // Mutable refs
   const allClipsRef = useRef(allClips);
@@ -251,6 +296,7 @@ export function useTimelineClipDrag({
         setDragState({
           clipId: clip.id,
           currentStart: clip.startTime,
+          targetStart: clip.startTime,
           currentTrack: trackIdx,
           dragOffsetY: 0,
         });
@@ -302,39 +348,46 @@ export function useTimelineClipDrag({
       }
 
       const deltaX = deltaXPixels / pxPerSecRef.current;
-      const trackShift = Math.round(deltaYPixels / TRACK_ROW_HEIGHT);
-      const minY = -state.initialTrack * TRACK_ROW_HEIGHT;
-      const maxY = (activeTrackCount - 1 - state.initialTrack) * TRACK_ROW_HEIGHT;
+      const minY = (-state.initialTrack - 1) * TRACK_ROW_HEIGHT;
+      const maxY = (activeTrackCount - state.initialTrack) * TRACK_ROW_HEIGHT;
       const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
-      const { targetTrack, clampedStart } = computeTargetPosition(
-        deltaX,
-        trackShift,
-        state.initialStart,
-        state.initialTrack,
-        state.duration,
-        state.clipId,
-        activeTrackCount,
-        pxPerSecRef.current,
-        allClipsRef.current,
-        isSnappingEnabledRef.current,
-        isHapticEnabledRef.current,
-      );
+      const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex } =
+        computeTargetPosition(
+          deltaX,
+          deltaYPixels,
+          state.initialStart,
+          state.initialTrack,
+          state.duration,
+          state.clipId,
+          activeTrackCount,
+          pxPerSecRef.current,
+          allClipsRef.current,
+          isSnappingEnabledRef.current,
+          isHapticEnabledRef.current,
+        );
 
-      if (
-        previousTargetTrackRef.current !== null &&
-        previousTargetTrackRef.current !== targetTrack
-      ) {
+      const hasChangedState =
+        previousTargetTrackRef.current !== targetTrack ||
+        previousIsInsertingRef.current !== isInsertingNewTrack ||
+        previousInsertTrackRef.current !== insertTrackIndex;
+
+      if (hasChangedState) {
         soundEngine.playSfx("pop");
         triggerHaptic("selection", isHapticEnabledRef.current);
       }
       previousTargetTrackRef.current = targetTrack;
+      previousIsInsertingRef.current = isInsertingNewTrack;
+      previousInsertTrackRef.current = insertTrackIndex;
 
       setDragState({
         clipId: state.clipId,
-        currentStart: clampedStart,
+        currentStart: rawStart,
+        targetStart: clampedStart,
         currentTrack: targetTrack,
         dragOffsetY,
+        isInsertingNewTrack,
+        insertTrackIndex,
       });
     },
     [activeTrackCount],
@@ -354,11 +407,20 @@ export function useTimelineClipDrag({
         setIsDraggingClip(false);
         setDragState(null);
         clipDragStartInfoRef.current = null;
+        previousIsInsertingRef.current = false;
+        previousInsertTrackRef.current = null;
 
         if (state && currentDrag && onMoveClipRef.current) {
+          const isInsert = !!currentDrag.isInsertingNewTrack;
+          const finalTrack = isInsert
+            ? (currentDrag.insertTrackIndex ?? currentDrag.currentTrack)
+            : currentDrag.currentTrack;
+          const finalStart = currentDrag.targetStart ?? currentDrag.currentStart;
+
           const hasPositionChanged =
-            Math.abs(currentDrag.currentStart - state.initialStart) > 0.01 ||
-            currentDrag.currentTrack !== state.initialTrack;
+            isInsert ||
+            Math.abs(finalStart - state.initialStart) > 0.01 ||
+            finalTrack !== state.initialTrack;
 
           if (hasPositionChanged) {
             soundEngine.playSfx("pop");
@@ -366,20 +428,21 @@ export function useTimelineClipDrag({
             onMoveClipRef.current(
               state.clipId,
               state.trackType,
-              currentDrag.currentStart,
-              currentDrag.currentTrack,
+              finalStart,
+              finalTrack,
+              isInsert,
             );
             if (onSeekRef.current) {
               const prevOffset = currentTimeRef.current - state.initialStart;
               if (prevOffset >= 0 && prevOffset <= state.duration) {
                 onSeekRef.current(
-                  Math.max(0, currentDrag.currentStart + prevOffset),
+                  Math.max(0, finalStart + prevOffset),
                 );
               } else if (
-                currentTimeRef.current < currentDrag.currentStart ||
-                currentTimeRef.current > currentDrag.currentStart + state.duration
+                currentTimeRef.current < finalStart ||
+                currentTimeRef.current > finalStart + state.duration
               ) {
-                onSeekRef.current(currentDrag.currentStart);
+                onSeekRef.current(finalStart);
               }
             }
           }
@@ -391,6 +454,8 @@ export function useTimelineClipDrag({
       setIsDraggingClip(false);
       setDragState(null);
       touchStateRef.current = null;
+      previousIsInsertingRef.current = false;
+      previousInsertTrackRef.current = null;
     },
     [isDraggingClip],
   );
@@ -423,6 +488,7 @@ export function useTimelineClipDrag({
       setDragState({
         clipId,
         currentStart: initialStartTime,
+        targetStart: initialStartTime,
         currentTrack: initialTrackIndex,
         dragOffsetY: 0,
       });
@@ -434,6 +500,8 @@ export function useTimelineClipDrag({
           setIsDraggingClip(false);
           setDragState(null);
           clipDragStartInfoRef.current = null;
+          previousIsInsertingRef.current = false;
+          previousInsertTrackRef.current = null;
         };
         window.addEventListener("mouseup", cleanup, { once: true });
         window.addEventListener("touchend", cleanup, { once: true });
@@ -491,35 +559,40 @@ export function useTimelineClipDrag({
         }
 
         const deltaX = deltaXPixels / pxPerSecRef.current;
-        const trackShift = Math.round(deltaYPixels / TRACK_ROW_HEIGHT);
-        const minY = -initialTrackIndex * TRACK_ROW_HEIGHT;
-        const maxY = (activeTrackCount - 1 - initialTrackIndex) * TRACK_ROW_HEIGHT;
+        const minY = (-initialTrackIndex - 1) * TRACK_ROW_HEIGHT;
+        const maxY = (activeTrackCount - initialTrackIndex) * TRACK_ROW_HEIGHT;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
-        const { targetTrack, clampedStart } = computeTargetPosition(
-          deltaX,
-          trackShift,
-          initialStartTime,
-          initialTrackIndex,
-          duration,
-          clipId,
-          activeTrackCount,
-          pxPerSecRef.current,
-          allClipsRef.current,
-          isSnappingEnabledRef.current,
-          isHapticEnabledRef.current,
-        );
+        const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex } =
+          computeTargetPosition(
+            deltaX,
+            deltaYPixels,
+            initialStartTime,
+            initialTrackIndex,
+            duration,
+            clipId,
+            activeTrackCount,
+            pxPerSecRef.current,
+            allClipsRef.current,
+            isSnappingEnabledRef.current,
+            isHapticEnabledRef.current,
+          );
 
-        if (
-          previousTargetTrackRef.current !== null &&
-          previousTargetTrackRef.current !== targetTrack
-        ) {
+        const hasChangedState =
+          previousTargetTrackRef.current !== targetTrack ||
+          previousIsInsertingRef.current !== isInsertingNewTrack ||
+          previousInsertTrackRef.current !== insertTrackIndex;
+
+        if (hasChangedState) {
           soundEngine.playSfx("pop");
           triggerHaptic("selection", isHapticEnabledRef.current);
         }
         previousTargetTrackRef.current = targetTrack;
+        previousIsInsertingRef.current = isInsertingNewTrack;
+        previousInsertTrackRef.current = insertTrackIndex;
 
         latestStart = clampedStart;
+        const currentRaw = rawStart;
         latestTrack = targetTrack;
 
         if (pendingRaf === null) {
@@ -527,9 +600,12 @@ export function useTimelineClipDrag({
             pendingRaf = null;
             setDragState({
               clipId,
-              currentStart: latestStart,
+              currentStart: currentRaw,
+              targetStart: latestStart,
               currentTrack: latestTrack,
               dragOffsetY,
+              isInsertingNewTrack,
+              insertTrackIndex,
             });
           });
         }
@@ -542,11 +618,25 @@ export function useTimelineClipDrag({
         setIsDraggingClip(false);
 
         if (hasStartedDragging) {
+          const currentDrag = dragStateRef.current;
           setDragState(null);
+          previousIsInsertingRef.current = false;
+          previousInsertTrackRef.current = null;
           soundEngine.playSfx("pop");
           triggerHaptic("light", isHapticEnabledRef.current);
           if (onMoveClipRef.current) {
-            onMoveClipRef.current(clipId, trackType, latestStart, latestTrack);
+            const isInsert = !!currentDrag?.isInsertingNewTrack;
+            const finalTrack = isInsert
+              ? (currentDrag?.insertTrackIndex ?? latestTrack)
+              : latestTrack;
+            const finalStart = currentDrag?.targetStart ?? latestStart;
+            onMoveClipRef.current(
+              clipId,
+              trackType,
+              finalStart,
+              finalTrack,
+              isInsert,
+            );
           }
         }
       };
@@ -585,6 +675,7 @@ export function useTimelineClipDrag({
         setDragState({
           clipId: clip.id,
           currentStart: clip.startTime,
+          targetStart: clip.startTime,
           currentTrack: clip.effectiveTrackIndex,
           dragOffsetY: 0,
         });
@@ -595,39 +686,46 @@ export function useTimelineClipDrag({
 
         const deltaX = gestureState.dx / pxPerSecRef.current;
         const deltaYPixels = gestureState.dy;
-        const trackShift = Math.round(deltaYPixels / TRACK_ROW_HEIGHT);
-        const minY = -info.initialTrack * TRACK_ROW_HEIGHT;
-        const maxY = (activeTrackCount - 1 - info.initialTrack) * TRACK_ROW_HEIGHT;
+        const minY = (-info.initialTrack - 1) * TRACK_ROW_HEIGHT;
+        const maxY = (activeTrackCount - info.initialTrack) * TRACK_ROW_HEIGHT;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
-        const { targetTrack, clampedStart } = computeTargetPosition(
-          deltaX,
-          trackShift,
-          info.initialStart,
-          info.initialTrack,
-          info.duration,
-          info.clipId,
-          activeTrackCount,
-          pxPerSecRef.current,
-          allClipsRef.current,
-          isSnappingEnabledRef.current,
-          isHapticEnabledRef.current,
-        );
+        const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex } =
+          computeTargetPosition(
+            deltaX,
+            deltaYPixels,
+            info.initialStart,
+            info.initialTrack,
+            info.duration,
+            info.clipId,
+            activeTrackCount,
+            pxPerSecRef.current,
+            allClipsRef.current,
+            isSnappingEnabledRef.current,
+            isHapticEnabledRef.current,
+          );
 
-        if (
-          previousTargetTrackRef.current !== null &&
-          previousTargetTrackRef.current !== targetTrack
-        ) {
+        const hasChangedState =
+          previousTargetTrackRef.current !== targetTrack ||
+          previousIsInsertingRef.current !== isInsertingNewTrack ||
+          previousInsertTrackRef.current !== insertTrackIndex;
+
+        if (hasChangedState) {
           soundEngine.playSfx("pop");
           triggerHaptic("selection", isHapticEnabledRef.current);
         }
         previousTargetTrackRef.current = targetTrack;
+        previousIsInsertingRef.current = isInsertingNewTrack;
+        previousInsertTrackRef.current = insertTrackIndex;
 
         setDragState({
           clipId: info.clipId,
-          currentStart: clampedStart,
+          currentStart: rawStart,
+          targetStart: clampedStart,
           currentTrack: targetTrack,
           dragOffsetY,
+          isInsertingNewTrack,
+          insertTrackIndex,
         });
       },
       onPanResponderRelease: () => {
@@ -636,30 +734,42 @@ export function useTimelineClipDrag({
         setIsDraggingClip(false);
         setDragState(null);
         clipDragStartInfoRef.current = null;
+        previousIsInsertingRef.current = false;
+        previousInsertTrackRef.current = null;
+
         if (info && currentDrag && onMoveClipRef.current) {
+          const isInsert = !!currentDrag.isInsertingNewTrack;
+          const finalTrack = isInsert
+            ? (currentDrag.insertTrackIndex ?? currentDrag.currentTrack)
+            : currentDrag.currentTrack;
+          const finalStart = currentDrag.targetStart ?? currentDrag.currentStart;
+
           const hasPositionChanged =
-            Math.abs(currentDrag.currentStart - info.initialStart) > 0.01 ||
-            currentDrag.currentTrack !== info.initialTrack;
+            isInsert ||
+            Math.abs(finalStart - info.initialStart) > 0.01 ||
+            finalTrack !== info.initialTrack;
+
           if (hasPositionChanged) {
             soundEngine.playSfx("pop");
             triggerHaptic("light", isHapticEnabledRef.current);
             onMoveClipRef.current(
               info.clipId,
               info.trackType,
-              currentDrag.currentStart,
-              currentDrag.currentTrack,
+              finalStart,
+              finalTrack,
+              isInsert,
             );
             if (onSeekRef.current) {
               const prevOffset = currentTimeRef.current - info.initialStart;
               if (prevOffset >= 0 && prevOffset <= info.duration) {
                 onSeekRef.current(
-                  Math.max(0, currentDrag.currentStart + prevOffset),
+                  Math.max(0, finalStart + prevOffset),
                 );
               } else if (
-                currentTimeRef.current < currentDrag.currentStart ||
-                currentTimeRef.current > currentDrag.currentStart + info.duration
+                currentTimeRef.current < finalStart ||
+                currentTimeRef.current > finalStart + info.duration
               ) {
-                onSeekRef.current(currentDrag.currentStart);
+                onSeekRef.current(finalStart);
               }
             }
           }
@@ -669,6 +779,8 @@ export function useTimelineClipDrag({
         setIsDraggingClip(false);
         setDragState(null);
         clipDragStartInfoRef.current = null;
+        previousIsInsertingRef.current = false;
+        previousInsertTrackRef.current = null;
       },
     });
   }, [activeTrackCount]);

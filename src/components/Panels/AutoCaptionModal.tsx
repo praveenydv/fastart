@@ -14,7 +14,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { FastArtProject, CaptionClip } from "../../types/project";
-import { generateAutoCaptions } from "../../services/aiCaptionEngine";
+import { generateAutoCaptions, WHISPER_API_KEY_STORAGE_KEY } from "../../services/aiCaptionEngine";
+import MobileWhisperTranscriberView from "./MobileWhisperTranscriberView";
 import {
   parseSrtOrVttContent,
   generateWordTimings,
@@ -26,6 +27,8 @@ import {
   saveCaptionSettings,
   CaptionSettings,
   defaultCaptionSettings,
+  getStorageItem,
+  setStorageItem,
 } from "../../utils/storage";
 
 interface AutoCaptionModalProps {
@@ -38,6 +41,7 @@ interface AutoCaptionModalProps {
   currentTime?: number;
   onSeek?: (time: number) => void;
   selectedClipId?: string | null;
+  isInline?: boolean;
 }
 
 const HIGHLIGHT_STYLE_OPTIONS: {
@@ -167,6 +171,7 @@ export default function AutoCaptionModal({
   currentTime = 0,
   onSeek,
   selectedClipId,
+  isInline = false,
 }: AutoCaptionModalProps) {
   const currentProject = project || loadAllProjects()[0] || null;
   const existingCaptions = currentProject?.tracks?.captions || [];
@@ -361,9 +366,12 @@ export default function AutoCaptionModal({
   const [statusText, setStatusText] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Manual Paste SRT Modal state
+  // Manual Paste SRT / API Key Modal state
   const [showPasteSrtBox, setShowPasteSrtBox] = useState(false);
   const [pastedSrtText, setPastedSrtText] = useState("");
+  const [whisperApiKey, setWhisperApiKey] = useState(
+    () => getStorageItem(WHISPER_API_KEY_STORAGE_KEY) || "",
+  );
 
   // Live Highlight demo ticker for the Style tab preview
   const [previewTick, setPreviewTick] = useState(0);
@@ -418,7 +426,7 @@ export default function AutoCaptionModal({
     }
   };
 
-  const handleApplyPastedSrt = () => {
+  const handleApplyPastedSrt = async () => {
     if (!pastedSrtText.trim()) return;
     const parsed = parseSrtOrVttContent(
       pastedSrtText,
@@ -431,9 +439,44 @@ export default function AutoCaptionModal({
       setPastedSrtText("");
       setShowPasteSrtBox(false);
       setActiveTab("captions");
+      return;
+    }
+
+    // If not standard SRT/VTT format, treat as dialogue sentences and align to audio cadence
+    const lines = pastedSrtText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !/^\d+$/.test(l));
+
+    if (lines.length > 0 && currentProject) {
+      try {
+        setIsGenerating(true);
+        setStatusText("Aligning dialogue script to audio cadence...");
+        const aligned = await generateAutoCaptions(
+          currentProject,
+          "en-US",
+          selectedPresetId,
+          lines,
+          undefined,
+          getActiveStyleOverrides(),
+        );
+        if (aligned && aligned.length > 0) {
+          soundEngine.playSfx("pop");
+          onAddCaptions(aligned);
+          setPastedSrtText("");
+          setShowPasteSrtBox(false);
+          setActiveTab("captions");
+          setStatusText(`Imported and aligned ${aligned.length} subtitle cues!`);
+          return;
+        }
+      } catch (e: any) {
+        setErrorMessage(e?.message || "Failed to align dialogue.");
+      } finally {
+        setIsGenerating(false);
+      }
     } else {
       setErrorMessage(
-        "Invalid subtitle format. Paste standard SRT (e.g. 00:00:01,000 --> 00:00:04,000).",
+        "Invalid subtitle format. Paste standard SRT or dialogue text.",
       );
     }
   };
@@ -697,12 +740,14 @@ export default function AutoCaptionModal({
       setErrorMessage("Please open or create a project first.");
       return;
     }
+
     soundEngine.playSfx("click");
     setErrorMessage(null);
     setIsGenerating(true);
     setProgressPct(10);
     setStatusText("Analyzing master timeline audio...");
 
+    let maxSeenPct = 10;
     try {
       const generated = await generateAutoCaptions(
         currentProject,
@@ -710,8 +755,9 @@ export default function AutoCaptionModal({
         selectedPresetId,
         undefined,
         (pct, status) => {
-          setProgressPct(pct);
-          setStatusText(status);
+          maxSeenPct = Math.max(maxSeenPct, Math.min(99, Math.round(pct)));
+          setProgressPct(maxSeenPct);
+          if (status) setStatusText(status);
         },
         getActiveStyleOverrides(),
       );
@@ -738,20 +784,13 @@ export default function AutoCaptionModal({
     }
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleCancel}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Standardized Header: Cancel (Left) | Title (Center) | Apply (Right) */}
-          <View style={styles.sheetHeader}>
+      {/* Standardized Header: Cancel (Left) | Title (Center) | Apply (Right) */}
+      <View style={styles.sheetHeader}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <TouchableOpacity
                 onPress={handleCancel}
@@ -1778,21 +1817,115 @@ export default function AutoCaptionModal({
             </View>
           )}
 
-          {/* Manual Paste SRT Dialog */}
+          {/* Manual Paste SRT / API Key Dialog */}
           {showPasteSrtBox && (
             <Modal transparent animationType="fade">
               <View style={styles.dialogOverlay}>
                 <View style={styles.dialogCard}>
-                  <Text style={styles.dialogTitle}>Paste Subtitle Text</Text>
+                  <Text style={styles.dialogTitle}>Import Subtitle / Script</Text>
+
+                  {/* Mobile-only: API key section for cloud Whisper */}
+                  {Platform.OS !== "web" && (
+                    <View
+                      style={{
+                        backgroundColor: "rgba(0,242,254,0.07)",
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: "rgba(0,242,254,0.18)",
+                        padding: 12,
+                        marginBottom: 12,
+                        gap: 6,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                        <Ionicons name="flash-outline" size={15} color="#00F2FE" />
+                        <Text style={{ color: "#00F2FE", fontSize: 13, fontWeight: "800" }}>
+                          CLOUD ACCELERATION (OPTIONAL)
+                        </Text>
+                      </View>
+                      <Text style={{ color: "#94A3B8", fontSize: 11, lineHeight: 16 }}>
+                        FastArt generates captions on mobile for free with zero API keys and zero mic permissions. If you prefer ultra-fast cloud processing (1s), you can optionally paste a Groq or OpenAI key below:
+                      </Text>
+                      <TextInput
+                        style={{
+                          backgroundColor: "#0F1929",
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: whisperApiKey
+                            ? "rgba(0,242,254,0.4)"
+                            : "rgba(255,255,255,0.08)",
+                          color: "#E2E8F0",
+                          fontSize: 12,
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          fontFamily: "monospace",
+                        }}
+                        value={whisperApiKey}
+                        onChangeText={setWhisperApiKey}
+                        placeholder="gsk_... or sk-... or groq:gsk_..."
+                        placeholderTextColor="#475569"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        secureTextEntry={false}
+                      />
+                      <TouchableOpacity
+                        onPress={() => {
+                          const trimmed = whisperApiKey.trim();
+                          setStorageItem(WHISPER_API_KEY_STORAGE_KEY, trimmed);
+                          if (trimmed) {
+                            setShowPasteSrtBox(false);
+                            setTimeout(() => {
+                              handleGenerate();
+                            }, 150);
+                          }
+                        }}
+                        style={{
+                          alignSelf: "flex-start",
+                          backgroundColor: whisperApiKey.trim()
+                            ? "rgba(0,242,254,0.15)"
+                            : "rgba(255,255,255,0.05)",
+                          borderRadius: 7,
+                          borderWidth: 1,
+                          borderColor: whisperApiKey.trim()
+                            ? "rgba(0,242,254,0.35)"
+                            : "rgba(255,255,255,0.08)",
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons
+                          name="sparkles"
+                          size={14}
+                          color={whisperApiKey.trim() ? "#00F2FE" : "#475569"}
+                        />
+                        <Text
+                          style={{
+                            color: whisperApiKey.trim() ? "#00F2FE" : "#475569",
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Save Key & Transcribe With Whisper AI
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
                   <Text style={styles.dialogSubtitle}>
-                    Paste raw .SRT or WebVTT content below:
+                    {Platform.OS !== "web"
+                      ? "— OR — Paste dialogue script / .SRT below:"
+                      : "Paste .SRT, WebVTT, or plain dialogue sentences:"}
                   </Text>
                   <TextInput
                     style={styles.dialogInput}
                     multiline
                     value={pastedSrtText}
                     onChangeText={setPastedSrtText}
-                    placeholder={`1\n00:00:01,000 --> 00:00:04,000\nHello world`}
+                    placeholder={`Paste .SRT timestamps or dialogue script lines:\n\nHello welcome to my video\nToday we talk about FastArt`}
                     placeholderTextColor="#64748B"
                   />
                   <View style={styles.dialogButtonsRow}>
@@ -1813,13 +1946,50 @@ export default function AutoCaptionModal({
               </View>
             </Modal>
           )}
+
+          {/* Headless Mobile Whisper Speech Recognizer (Browser Parity) */}
+          {Platform.OS !== "web" && (
+            <MobileWhisperTranscriberView />
+          )}
         </View>
+  );
+
+  if (isInline) {
+    if (!visible) return null;
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={handleCancel}
+    >
+      <View style={styles.overlay}>
+        {sheetContent}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#0F131D",
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    maxHeight: "100%",
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
+    paddingBottom: 0,
+  },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.55)",

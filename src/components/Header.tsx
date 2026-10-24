@@ -6,13 +6,11 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
 import { ASPECT_RATIOS } from "../constants/sampleMedia";
-import { FastArtProject, AspectRatio } from "../types/project";
+import { FastArtProject } from "../types/project";
 
 interface HeaderProps {
   project: FastArtProject;
@@ -24,6 +22,7 @@ interface HeaderProps {
   onRedo: () => void;
   onOpenExport: () => void;
   onOpenCanvasModal?: () => void;
+  hideBackButton?: boolean;
 }
 
 function Header({
@@ -36,6 +35,7 @@ function Header({
   onRedo,
   onOpenExport,
   onOpenCanvasModal,
+  hideBackButton = false,
 }: HeaderProps) {
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
@@ -52,19 +52,38 @@ function Header({
 
   return (
     <View style={styles.header}>
-      {/* Left: Back button, Ratio & Project Name */}
+      {/* Left: Back button & Resolution/Aspect Ratio Pill */}
       <View style={styles.leftSection}>
+        {!hideBackButton && (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onBackToHome}
+            activeOpacity={0.7}
+            accessibilityLabel="Back to Home"
+          >
+            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+
+        {/* CapCut Resolution / Aspect Ratio Pill Button */}
         <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onBackToHome}
+          style={styles.ratioPill}
+          onPress={() => {
+            soundEngine.playSfx("click");
+            if (onOpenCanvasModal) onOpenCanvasModal();
+          }}
           activeOpacity={0.7}
-          accessibilityLabel="Back to Home"
+          accessibilityLabel="Change Canvas Format"
         >
-          <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+          <Text style={styles.ratioText}>{currentRatio.label}</Text>
+          <Text style={styles.ratioDivider}>•</Text>
+          <Text style={styles.resolutionText}>1080P</Text>
+          <Ionicons name="chevron-down" size={11} color="#8E8E93" style={{ marginLeft: 3 }} />
         </TouchableOpacity>
 
+        {/* Project Title (Clean, tap to rename) */}
         <TouchableOpacity
-          style={styles.projectTitlePill}
+          style={styles.titlePill}
           onPress={() => {
             soundEngine.playSfx("click");
             setEditedTitle(displayTitle);
@@ -73,33 +92,15 @@ function Header({
           activeOpacity={0.7}
           accessibilityLabel="Rename Project"
         >
-          <Ionicons name="film-outline" size={12} color="#00F2FE" />
-          <Text style={styles.projectTitleText} numberOfLines={1}>
+          <Text style={styles.titleText} numberOfLines={1}>
             {displayTitle}
           </Text>
-          <Ionicons name="pencil" size={9} color="#64748B" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.ratioPill}
-          onPress={() => {
-            soundEngine.playSfx("click");
-            if (onOpenCanvasModal) onOpenCanvasModal();
-          }}
-          activeOpacity={0.7}
-          accessibilityLabel="Change Canvas Ratio"
-        >
-          <Ionicons
-            name={currentRatio.icon || "phone-portrait-outline"}
-            size={13}
-            color="#00F2FE"
-          />
-          <Text style={styles.ratioText}>{currentRatio.label}</Text>
-          <Ionicons name="chevron-down" size={11} color="#8E95A5" />
         </TouchableOpacity>
       </View>
 
-      {/* Center: Undo / Redo */}
-      <View style={styles.centerSection}>
+      {/* Right: Undo / Redo & Export CTA */}
+      <View style={styles.rightSection}>
+        {/* Undo */}
         <TouchableOpacity
           style={[styles.historyButton, !canUndo && styles.disabledButton]}
           onPress={onUndo}
@@ -110,9 +111,11 @@ function Header({
           <Ionicons
             name="arrow-undo-outline"
             size={18}
-            color={canUndo ? "#FFFFFF" : "#4B5563"}
+            color={canUndo ? "#FFFFFF" : "#48484A"}
           />
         </TouchableOpacity>
+
+        {/* Redo */}
         <TouchableOpacity
           style={[styles.historyButton, !canRedo && styles.disabledButton]}
           onPress={onRedo}
@@ -123,20 +126,18 @@ function Header({
           <Ionicons
             name="arrow-redo-outline"
             size={18}
-            color={canRedo ? "#FFFFFF" : "#4B5563"}
+            color={canRedo ? "#FFFFFF" : "#48484A"}
           />
         </TouchableOpacity>
-      </View>
 
-      {/* Right: Export CTA */}
-      <View style={styles.rightSection}>
+        {/* CapCut Export Pill Button */}
         <TouchableOpacity
           style={styles.exportButton}
           onPress={onOpenExport}
           activeOpacity={0.8}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={16} color="#000000ff" />
+          <Ionicons name="arrow-up" size={13} color="#000000" style={{ marginRight: 3 }} />
           <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
@@ -154,19 +155,14 @@ function Header({
           onPress={() => setIsRenaming(false)}
         >
           <View style={styles.renameCard}>
-            <View style={styles.renameHeaderRow}>
-              <View style={styles.renameHeaderIcon}>
-                <Ionicons name="film-outline" size={16} color="#00F2FE" />
-              </View>
-              <Text style={styles.renameTitle}>Rename Project</Text>
-            </View>
+            <Text style={styles.renameTitle}>Rename Project</Text>
 
             <TextInput
               style={styles.renameInput}
               value={editedTitle}
               onChangeText={setEditedTitle}
               placeholder="Project Name..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#8E8E93"
               autoFocus
               selectTextOnFocus
               maxLength={40}
@@ -217,181 +213,155 @@ function Header({
 
 const styles = StyleSheet.create({
   header: {
-    height: 48,
-    backgroundColor: "#0B0D13",
+    height: 44,
+    backgroundColor: "#000000",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A1E29",
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
     zIndex: 10,
     flexShrink: 0,
   },
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+    flex: 1,
   },
-  iconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#141721",
-  },
-  projectTitlePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#141721",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#252B3B",
-    gap: 4,
-    maxWidth: Platform.OS === "web" ? 160 : 96,
-  },
-  projectTitleText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-    maxWidth: Platform.OS === "web" ? 110 : 66,
   },
   ratioPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#141721",
+    backgroundColor: "#1C1C1E",
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#252B3B",
-    gap: 4,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   ratioText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
   },
-  centerSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  ratioDivider: {
+    color: "#8E8E93",
+    fontSize: 10,
+    marginHorizontal: 3,
   },
-  historyButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#141721",
+  resolutionText: {
+    color: "#8E8E93",
+    fontSize: 11,
+    fontWeight: "500",
   },
-  disabledButton: {
-    opacity: 0.4,
+  titlePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    maxWidth: 120,
+  },
+  titleText: {
+    color: "#8E8E93",
+    fontSize: 11,
+    fontWeight: "500",
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 10,
+  },
+  historyButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.35,
   },
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#00E5FF",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   exportText: {
     color: "#000000",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.75)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
-    zIndex: 99999,
+    padding: 24,
   },
   renameCard: {
     width: "100%",
     maxWidth: 320,
-    backgroundColor: "#10141E",
-    borderRadius: 16,
-    padding: 18,
+    backgroundColor: "#1C1C1E",
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "#252B3B",
-  },
-  renameHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 14,
-  },
-  renameHeaderIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   renameTitle: {
     color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "700",
+    marginBottom: 12,
   },
   renameInput: {
-    backgroundColor: "#0B0D13",
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
+    backgroundColor: "#2C2C2E",
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "#00F2FE",
-    marginBottom: 16,
+    paddingVertical: 8,
+    color: "#FFFFFF",
+    fontSize: 13,
+    marginBottom: 14,
   },
   renameActionsRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
+    gap: 8,
   },
   cancelBtn: {
-    paddingHorizontal: 14,
+    flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#1A1F2C",
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelBtnText: {
-    color: "#8E95A5",
-    fontSize: 13,
+    color: "#8E8E93",
+    fontSize: 12,
     fontWeight: "600",
   },
   saveBtn: {
-    paddingHorizontal: 16,
+    flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#00E5FF",
+    alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnDisabled: {
     opacity: 0.4,
   },
   saveBtnText: {
     color: "#000000",
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
 

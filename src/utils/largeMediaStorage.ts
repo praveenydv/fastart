@@ -94,9 +94,22 @@ export async function persistLargeMedia(
       } else if (type === 'audio') {
         const extracted = await extractAudioMetadata(fileOrBlob);
         duration = extracted.duration || duration;
+      } else if (type === 'photo') {
+        const extracted = await extractImageMetadata(fileOrBlob);
+        width = extracted.width || width;
+        height = extracted.height || height;
+        thumbnail = extracted.thumbnail || thumbnail;
       }
     } catch (e) {
       console.warn('Metadata extraction fallback:', e);
+    }
+  } else if (Platform.OS !== 'web' && type === 'video' && !thumbnail && typeof fileOrBlob === 'string') {
+    try {
+      const { getThumbnailAsync } = await import('expo-video-thumbnails');
+      const thumb = await getThumbnailAsync(fileOrBlob, { time: 500 });
+      thumbnail = thumb?.uri || thumbnail;
+    } catch (e) {
+      console.warn('Native thumbnail extraction fallback:', e);
     }
   }
 
@@ -149,7 +162,7 @@ export async function getLiveMediaUrl(id: string): Promise<string | null> {
 
   try {
     const db = await getIndexedDB();
-    const record = await new Promise<StoredMediaRecord | null>((resolve, reject) => {
+    let record = await new Promise<StoredMediaRecord | null>((resolve, reject) => {
       const tx = db.transaction(STORE_MEDIA, 'readonly');
       const store = tx.objectStore(STORE_MEDIA);
       const req = store.get(id);
@@ -157,9 +170,16 @@ export async function getLiveMediaUrl(id: string): Promise<string | null> {
       req.onerror = () => reject(req.error);
     });
 
+    // Fallback: If not found by exact id, match against all records
+    if (!record) {
+      const all = await getAllStoredMedia();
+      record = all.find((r) => r.id === id || id.startsWith(r.id) || r.id.startsWith(id)) || null;
+    }
+
     if (record && record.blob) {
       const url = URL.createObjectURL(record.blob);
       objectUrlCache.set(id, url);
+      objectUrlCache.set(record.id, url);
       blobByUrlCache.set(url, record.blob);
       return url;
     }
@@ -247,6 +267,13 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
 
   // 3. Mobile FileSystem read for file://, content://, or local paths (React Native Android & iOS)
   if (Platform.OS !== 'web' && url && (url.startsWith('file:') || url.startsWith('content:') || url.startsWith('/'))) {
+    try {
+      const { File } = await import('expo-file-system');
+      const file = new File(url);
+      const ab = await file.arrayBuffer();
+      if (ab && ab.byteLength > 0) return ab;
+    } catch (_) {}
+
     try {
       const FileSystemLegacy = await import('expo-file-system/legacy');
       const base64Data = await FileSystemLegacy.readAsStringAsync(url, {
@@ -341,21 +368,28 @@ export function extractVideoMetadata(
     const vid = document.createElement('video');
     vid.muted = true;
     vid.playsInline = true;
-    vid.preload = 'metadata';
-    vid.src = url;
+    vid.preload = 'auto';
+    vid.style.position = 'fixed';
+    vid.style.top = '-9999px';
+    vid.style.left = '-9999px';
+    vid.style.width = '1px';
+    vid.style.height = '1px';
+    vid.style.opacity = '0';
+    vid.style.pointerEvents = 'none';
 
     const cleanup = () => {
       try {
         vid.pause();
         vid.removeAttribute('src');
         vid.load();
-        if (typeof fileOrBlob !== 'string') {
-          // Do not revoke if cached, or let GC handle
+        if (vid.parentNode) {
+          vid.parentNode.removeChild(vid);
         }
       } catch (e) {}
     };
 
     let resolved = false;
+    let seekAttempt = 0;
     const finish = (duration: number, width: number, height: number, thumbnail = '') => {
       if (resolved) return;
       resolved = true;
@@ -369,25 +403,23 @@ export function extractVideoMetadata(
         vid.videoWidth || 1920,
         vid.videoHeight || 1080
       );
-    }, 3000);
+    }, 4500);
 
     vid.onloadedmetadata = () => {
       const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
-      const w = vid.videoWidth || 1920;
-      const h = vid.videoHeight || 1080;
-
-      // Capture small thumbnail at 0.5s
-      const seekTime = Math.min(0.5, Math.max(0.1, dur * 0.1));
+      // Seek to at least 0.25s to avoid pre-roll black frames
+      const seekTime = Math.min(Math.max(0.25, dur * 0.15), Math.max(0.2, dur - 0.2));
       vid.currentTime = seekTime;
     };
 
     vid.onseeked = () => {
-      clearTimeout(timeout);
       let thumb = '';
       try {
+        const vw = vid.videoWidth || 640;
+        const vh = vid.videoHeight || 360;
         const thumbCanvas = document.createElement('canvas');
-        const tw = Math.min(640, vid.videoWidth || 640);
-        const aspect = (vid.videoWidth || 16) / (vid.videoHeight || 9);
+        const tw = Math.min(480, vw);
+        const aspect = vw / (vh || 1);
         const th = Math.round(tw / aspect);
         thumbCanvas.width = tw;
         thumbCanvas.height = th;
@@ -396,10 +428,28 @@ export function extractVideoMetadata(
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(vid, 0, 0, tw, th);
+
+          // Check if frame is pure black
+          let isBlack = false;
+          try {
+            const p = ctx.getImageData(Math.floor(tw / 2), Math.floor(th / 2), 1, 1).data;
+            if (p[0] < 15 && p[1] < 15 && p[2] < 15) {
+              isBlack = true;
+            }
+          } catch (_) {}
+
+          const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
+          if (isBlack && seekAttempt === 0 && dur > 0.8) {
+            seekAttempt++;
+            vid.currentTime = Math.min(1.0, dur * 0.35);
+            return;
+          }
+
           thumb = thumbCanvas.toDataURL('image/jpeg', 0.85);
         }
       } catch (e) {}
 
+      clearTimeout(timeout);
       const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
       finish(dur, vid.videoWidth || 1920, vid.videoHeight || 1080, thumb);
     };
@@ -444,6 +494,61 @@ export function extractAudioMetadata(fileOrBlob: Blob | File | string): Promise<
       clearTimeout(timeout);
       finish(15.0);
     };
+  });
+}
+
+// Extract image dimensions and generate a persistent lightweight base64 thumbnail
+export function extractImageMetadata(
+  fileOrBlob: Blob | File | string
+): Promise<{ width: number; height: number; thumbnail: string }> {
+  return new Promise((resolve) => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') {
+      return resolve({ width: 1080, height: 1920, thumbnail: '' });
+    }
+
+    const url = typeof fileOrBlob === 'string' ? fileOrBlob : URL.createObjectURL(fileOrBlob);
+    const img = new Image();
+
+    let resolved = false;
+    const finish = (width: number, height: number, thumbnail = '') => {
+      if (resolved) return;
+      resolved = true;
+      resolve({ width, height, thumbnail });
+    };
+
+    const timeout = setTimeout(() => {
+      finish(1080, 1920, '');
+    }, 3000);
+
+    img.onload = () => {
+      clearTimeout(timeout);
+      const w = img.naturalWidth || 1080;
+      const h = img.naturalHeight || 1920;
+      let thumb = '';
+      try {
+        const canvas = document.createElement('canvas');
+        const aspect = (w || 1) / (h || 1);
+        const targetW = Math.min(320, w);
+        const targetH = Math.round(targetW / aspect);
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+          thumb = canvas.toDataURL('image/jpeg', 0.85);
+        }
+      } catch (e) {}
+      finish(w, h, thumb);
+    };
+
+    img.onerror = () => {
+      clearTimeout(timeout);
+      finish(1080, 1920, '');
+    };
+
+    img.src = url;
   });
 }
 
@@ -545,4 +650,75 @@ export async function estimateMediaStorageUsage(): Promise<{ totalBytes: number;
     console.warn('Failed to estimate media storage:', err);
     return { totalBytes: 0, count: 0 };
   }
+}
+
+// Rehydrate all dead blob URLs across video, photo, and audio clips upon page refresh
+export async function rehydrateProjectMedia(project: any): Promise<any> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return project;
+  if (!project || !project.tracks) return project;
+
+  let hasChanges = false;
+  const updatedVideo = await Promise.all(
+    (project.tracks.video || []).map(async (clip: any) => {
+      const lookupId = clip.sourceMediaId || clip.id;
+      const isBlob = clip.url && clip.url.startsWith('blob:');
+      const isKnown = isBlob && objectUrlCache.has(clip.url);
+
+      if (!isKnown) {
+        const freshUrl = await getLiveMediaUrl(lookupId);
+        if (freshUrl && freshUrl !== clip.url) {
+          hasChanges = true;
+          return {
+            ...clip,
+            url: freshUrl,
+            thumbnail:
+              clip.thumbnail && !clip.thumbnail.startsWith('blob:')
+                ? clip.thumbnail
+                : clip.type === 'photo'
+                  ? freshUrl
+                  : clip.thumbnail,
+          };
+        }
+      }
+      return clip;
+    })
+  );
+
+  const updatedAudio = await Promise.all(
+    (project.tracks.audio || []).map(async (clip: any) => {
+      const lookupId = clip.sourceMediaId || clip.id;
+      const isBlob = clip.url && clip.url.startsWith('blob:');
+      const isKnown = isBlob && objectUrlCache.has(clip.url);
+
+      if (!isKnown) {
+        const freshUrl = await getLiveMediaUrl(lookupId);
+        if (freshUrl && freshUrl !== clip.url) {
+          hasChanges = true;
+          return {
+            ...clip,
+            url: freshUrl,
+          };
+        }
+      }
+      return clip;
+    })
+  );
+
+  if (hasChanges) {
+    return {
+      ...project,
+      tracks: {
+        ...project.tracks,
+        video: updatedVideo,
+        audio: updatedAudio,
+      },
+    };
+  }
+
+  return project;
+}
+
+export async function rehydrateProjectsMedia(projects: any[]): Promise<any[]> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return projects;
+  return Promise.all(projects.map(rehydrateProjectMedia));
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { soundEngine } from "../utils/audioEngine";
-import { deleteMedia } from "../utils/largeMediaStorage";
+import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia } from "../utils/largeMediaStorage";
 import {
   FastArtProject,
   createDefaultProject,
@@ -104,6 +104,12 @@ export function useAppBootstrap({
               matched.title = "Project 1";
             }
             setProject(matched);
+            rehydrateProjectMedia(matched).then((hydrated: any) => {
+              if (isMounted && hydrated) {
+                setProject(hydrated);
+                saveProject(hydrated);
+              }
+            });
             const resumeTime =
               session &&
               session.projectId === matched.id &&
@@ -118,6 +124,12 @@ export function useAppBootstrap({
             );
           }
         }
+
+        rehydrateProjectsMedia(projs).then((hydratedProjs: any) => {
+          if (isMounted && hydratedProjs) {
+            setProjects(hydratedProjs);
+          }
+        });
 
         setSplashStatus("Ready");
         setTimeout(() => {
@@ -145,6 +157,12 @@ export function useAppBootstrap({
     const target = projects.find((p) => p.id === id);
     if (target) {
       setProject(target);
+      rehydrateProjectMedia(target).then((hydrated: any) => {
+        if (hydrated) {
+          setProject(hydrated);
+          saveProject(hydrated);
+        }
+      });
       const session = loadLastSession();
       const resumeTime =
         session &&

@@ -34,13 +34,6 @@ export default function AudioModal({
 }: AudioModalProps) {
   const [isLoading, setIsLoading] = useState(false);
 
-  // Directly ask to upload whenever modal becomes visible
-  useEffect(() => {
-    if (visible) {
-      handleDeviceAudioUpload();
-    }
-  }, [visible]);
-
   // Upload custom audio file from device storage (MP3, WAV, M4A, AAC, OGG, FLAC)
   const handleDeviceAudioUpload = async () => {
     try {
@@ -120,31 +113,36 @@ export default function AudioModal({
           return;
         }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.All,
-          allowsEditing: false,
-          quality: 1,
-        });
-        if (!result.canceled && result.assets?.[0]) {
-          const asset = result.assets[0];
-          const dur = asset.duration ? asset.duration / 1000 : 15.0;
-          const fileName = asset.fileName || 'Imported Audio';
+        setIsLoading(true);
+        try {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            allowsEditing: false,
+            quality: 1,
+          });
+          if (!result.canceled && result.assets?.[0]) {
+            const asset = result.assets[0];
+            const dur = asset.duration ? asset.duration / 1000 : 15.0;
+            const fileName = asset.fileName || 'Imported Audio';
 
-          const audioClip: AudioClip = {
-            id: 'clip-a-' + Date.now(),
-            title: fileName,
-            artist: 'Device Audio',
-            duration: dur,
-            startTime: 0,
-            trimIn: 0,
-            trimOut: dur,
-            mediaDuration: dur,
-            volume: 1.0,
-            url: asset.uri,
-          };
-          soundEngine.playSfx('pop');
-          onAddAudio(audioClip);
-          onClose();
+            const audioClip: AudioClip = {
+              id: 'clip-a-' + Date.now(),
+              title: fileName,
+              artist: 'Device Audio',
+              duration: dur,
+              startTime: 0,
+              trimIn: 0,
+              trimOut: dur,
+              mediaDuration: dur,
+              volume: 1.0,
+              url: asset.uri,
+            };
+            soundEngine.playSfx('pop');
+            onAddAudio(audioClip);
+            onClose();
+          }
+        } finally {
+          setIsLoading(false);
         }
       }
     } catch (err: any) {

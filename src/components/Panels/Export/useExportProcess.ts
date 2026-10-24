@@ -38,6 +38,18 @@ export function useExportProcess(
   );
   const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState | null>(null);
   const isCancelledRef = useRef(false);
+  const lastSeenProgressRef = useRef(0);
+  const [isMobileCanvasRendering, setIsMobileCanvasRendering] = useState(false);
+  const mobileCanvasResolverRef = useRef<{
+    resolve: (res: ExportResult) => void;
+    reject: (err: any) => void;
+  } | null>(null);
+
+  const updateProgressMonotonic = (pct: number) => {
+    const safe = Math.min(100, Math.max(lastSeenProgressRef.current, Math.round(pct)));
+    lastSeenProgressRef.current = safe;
+    setProgress(safe);
+  };
 
   const getInitialFilename = () => {
     let raw = (project?.title || project?.name || "").trim();
@@ -51,6 +63,12 @@ export function useExportProcess(
 
   const handleCancelExport = () => {
     isCancelledRef.current = true;
+    lastSeenProgressRef.current = 0;
+    if (mobileCanvasResolverRef.current) {
+      mobileCanvasResolverRef.current.reject(new Error("Export cancelled"));
+      mobileCanvasResolverRef.current = null;
+    }
+    setIsMobileCanvasRendering(false);
     setStatus("idle");
     setProgress(0);
     setErrorMessage(null);
@@ -109,6 +127,7 @@ export function useExportProcess(
 
   const handleStartExport = async () => {
     isCancelledRef.current = false;
+    lastSeenProgressRef.current = 0;
     setStatus("rendering");
     setErrorMessage(null);
     setProgress(0);
@@ -173,12 +192,13 @@ export function useExportProcess(
             isCancelled: () => isCancelledRef.current,
           },
           (pct) => {
-            setProgress(pct);
+            updateProgressMonotonic(pct);
           },
         );
 
         if (isCancelledRef.current) return;
 
+        updateProgressMonotonic(100);
         setExportedResult(result);
         setExportedUrl(result.videoUrl);
         setStatus("done");
@@ -192,25 +212,77 @@ export function useExportProcess(
           icon: "videocam",
         });
       } else {
-        // Native Composite Mobile Export (bakes in canvas background, text, stickers, video, audio)
         const renderDuration = Math.max(totalDuration || 2.0, 1.0);
-        const result = await exportMobileProject(
-          project,
-          {
-            fps,
-            duration: renderDuration,
-            format: mediaType,
-            currentTime: project.currentTime || 0,
-            resolution,
-            isCancelled: () => isCancelledRef.current,
-          },
-          (pct) => {
-            setProgress(pct);
+        updateProgressMonotonic(3);
+
+        let result: ExportResult | null = null;
+
+        // If exporting PNG, WAV, or GIF, use mobileExporter directly
+        if (mediaType === "png" || mediaType === "wav" || mediaType === "gif") {
+          result = await exportMobileProject(
+            project,
+            {
+              fps,
+              duration: renderDuration,
+              format: mediaType,
+              currentTime: project.currentTime || 0,
+              resolution,
+              isCancelled: () => isCancelledRef.current,
+            },
+            (pct) => {
+              updateProgressMonotonic(pct);
+            }
+          );
+        } else {
+          // Hardware-accelerated Skia Canvas & MediaRecorder engine via MobileCanvasExportView
+          try {
+            setIsMobileCanvasRendering(true);
+            result = await new Promise<ExportResult>((resolve, reject) => {
+              mobileCanvasResolverRef.current = { resolve, reject };
+              // Set generous safety timeout (at least 60s, or 3.5x real-time)
+              const safetyTimeout = Math.max(60000, renderDuration * 3500);
+              const timer = setTimeout(() => {
+                if (mobileCanvasResolverRef.current) {
+                  mobileCanvasResolverRef.current.reject(new Error("Mobile canvas bridge timeout"));
+                }
+              }, safetyTimeout);
+              // Clean up timer if cancelled
+              const checkCancel = setInterval(() => {
+                if (isCancelledRef.current) {
+                  clearTimeout(timer);
+                  clearInterval(checkCancel);
+                  reject(new Error("Export cancelled"));
+                }
+              }, 500);
+            });
+          } catch (canvasErr: any) {
+            if (isCancelledRef.current) return;
+            console.warn("[useExportProcess] Canvas exporter fallback:", canvasErr);
+
+            // Fallback: Pure native compositor
+            result = await exportMobileProject(
+              project,
+              {
+                fps,
+                duration: renderDuration,
+                format: mediaType,
+                currentTime: project.currentTime || 0,
+                resolution,
+                isCancelled: () => isCancelledRef.current,
+              },
+              (pct) => {
+                updateProgressMonotonic(pct);
+              }
+            );
+          } finally {
+            setIsMobileCanvasRendering(false);
+            mobileCanvasResolverRef.current = null;
           }
-        );
+        }
 
-        if (isCancelledRef.current) return;
+        if (isCancelledRef.current || !result) return;
 
+        updateProgressMonotonic(100);
         setExportedResult(result);
         setExportedUrl(result.videoUrl);
         setStatus("done");
@@ -233,7 +305,28 @@ export function useExportProcess(
       console.warn("Export error:", err);
       setStatus("error");
       setErrorMessage("Export could not be completed. Please try another format.");
+    } finally {
+      setIsMobileCanvasRendering(false);
+      mobileCanvasResolverRef.current = null;
     }
+  };
+
+  const handleMobileCanvasComplete = (result: ExportResult) => {
+    if (mobileCanvasResolverRef.current) {
+      mobileCanvasResolverRef.current.resolve(result);
+      mobileCanvasResolverRef.current = null;
+    }
+  };
+
+  const handleMobileCanvasError = (err: Error) => {
+    if (mobileCanvasResolverRef.current) {
+      mobileCanvasResolverRef.current.reject(err);
+      mobileCanvasResolverRef.current = null;
+    }
+  };
+
+  const handleMobileCanvasProgress = (pct: number) => {
+    updateProgressMonotonic(pct);
   };
 
   const getProgressStatusMessage = () => {
@@ -283,5 +376,9 @@ export function useExportProcess(
     getProgressStatusMessage,
     exportFilename,
     setExportFilename,
+    isMobileCanvasRendering,
+    handleMobileCanvasComplete,
+    handleMobileCanvasError,
+    handleMobileCanvasProgress,
   };
 }
