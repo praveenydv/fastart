@@ -7,10 +7,7 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
 import { theme } from "../constants/theme";
 import { mediaHasAudioTrack } from "../utils/mediaAudioDetector";
@@ -29,14 +26,15 @@ export interface ToolbarProps {
   onOpenSpeedModal: () => void;
   onOpenVolumeModal?: () => void;
   onOpenCropModal?: () => void;
-  onOpenTransformModal?: (tab?: "crop" | "flip" | "rotate" | "stretch" | "angle") => void;
+  onOpenTransformModal?: (
+    tab?: "crop" | "flip" | "rotate" | "stretch" | "angle",
+  ) => void;
   onOpenAudioModal: () => void;
   onOpenTextModal: () => void;
   onOpenFiltersModal: () => void;
   onOpenEffectsModal: () => void;
   onOpenStickersModal: () => void;
   onOpenMediaPicker: () => void;
-  onOpenTTS?: () => void;
   onOpenEnhance?: () => void;
   onOpenAutoCut?: () => void;
   onOpenCutoutModal?: (mode?: "auto" | "chroma") => void;
@@ -65,7 +63,6 @@ export interface ToolbarProps {
   onAddEffect?: (effectId: string) => void;
   orientation?: "horizontal" | "vertical";
   onSelectDesktopTab?: (tab: "media" | "audio") => void;
-  onOpenLayerModal?: () => void;
   onOpenOpacityModal?: () => void;
   onOpenAnimationModal?: () => void;
   onOpenAudioEffectsModal?: () => void;
@@ -79,7 +76,6 @@ const ROOT_TOOLS = [
   { id: "captions", title: "Caption", icon: "subtitles-outline" as const },
   { id: "stickers", title: "Sticker", icon: "emoticon-happy-outline" as const },
   { id: "effects", title: "Effect", icon: "auto-fix" as const },
-  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
   { id: "filters", title: "Filter", icon: "palette-outline" as const },
   { id: "canvas", title: "Canvas", icon: "aspect-ratio" as const },
   { id: "background", title: "BG", icon: "image-outline" as const },
@@ -89,16 +85,32 @@ const ROOT_TOOLS = [
 const VIDEO_CLIP_TOOLS = [
   { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
-  { id: "volume", title: "Volume", icon: "volume-high" as const, requiresAudio: true },
-  { id: "layer", title: "Layer", icon: "layers-outline" as const },
+  {
+    id: "volume",
+    title: "Volume",
+    icon: "volume-high" as const,
+    requiresAudio: true,
+  },
   { id: "transform", title: "Transform", icon: "crop" as const },
   { id: "cutout", title: "Cutout", icon: "account-outline" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
+  { id: "effects", title: "Effect", icon: "auto-fix" as const },
+  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
   { id: "adjust", title: "Enhance", icon: "tune" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "tracking", title: "Tracking", icon: "crosshairs-gps" as const },
-  { id: "extract_audio", title: "Extract", icon: "music-box-outline" as const, requiresAudio: true },
-  { id: "denoise", title: "Denoise", icon: "ear-hearing" as const, requiresAudio: true },
+  {
+    id: "extract_audio",
+    title: "Extract",
+    icon: "music-box-outline" as const,
+    requiresAudio: true,
+  },
+  {
+    id: "denoise",
+    title: "Denoise",
+    icon: "ear-hearing" as const,
+    requiresAudio: true,
+  },
   { id: "reverse", title: "Reverse", icon: "rewind" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
@@ -106,21 +118,14 @@ const VIDEO_CLIP_TOOLS = [
 
 const TEXT_CLIP_TOOLS = [
   { id: "edit", title: "Edit", icon: "format-text" as const },
-  { id: "layer", title: "Layer", icon: "layers-outline" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
-  { id: "tts", title: "Speech", icon: "microphone-outline" as const },
-  { id: "tracking", title: "Tracking", icon: "crosshairs-gps" as const },
-  { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
 const STICKER_CLIP_TOOLS = [
   { id: "edit", title: "Change", icon: "emoticon-happy-outline" as const },
-  { id: "layer", title: "Layer", icon: "layers-outline" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
-  { id: "tracking", title: "Tracking", icon: "crosshairs-gps" as const },
-  { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -136,8 +141,6 @@ const AUDIO_CLIP_TOOLS = [
 
 const EFFECT_CLIP_TOOLS = [
   { id: "effects", title: "Change", icon: "auto-fix" as const },
-  { id: "layer", title: "Layer", icon: "layers-outline" as const },
-  { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -163,7 +166,6 @@ export default function Toolbar({
   onOpenEffectsModal,
   onOpenStickersModal,
   onOpenMediaPicker,
-  onOpenTTS,
   onOpenEnhance,
   onOpenCutoutModal,
   onOpenMotionTracking,
@@ -176,7 +178,6 @@ export default function Toolbar({
   onExtractAudio,
   orientation = "horizontal",
   onSelectDesktopTab,
-  onOpenLayerModal,
   onOpenOpacityModal,
 }: ToolbarProps) {
   const isVertical = orientation === "vertical";
@@ -276,9 +277,6 @@ export default function Toolbar({
         if (onOpenBackgroundModal) onOpenBackgroundModal();
         else if (onOpenCanvasModal) onOpenCanvasModal();
         break;
-      case "tts":
-        if (onOpenTTS) onOpenTTS();
-        break;
       case "split":
         soundEngine.playSfx("split");
         onSplitClip();
@@ -297,9 +295,6 @@ export default function Toolbar({
         break;
       case "denoise":
         if (onToggleDenoise) onToggleDenoise();
-        break;
-      case "layer":
-        if (onOpenLayerModal) onOpenLayerModal();
         break;
       case "opacity":
         if (onOpenOpacityModal) onOpenOpacityModal();
@@ -343,8 +338,7 @@ export default function Toolbar({
               activeOpacity={0.7}
               accessibilityLabel="Back to root tools"
             >
-              <Ionicons name="chevron-back" size={16} color="#00F2FE" />
-              <Text style={styles.verticalBackText}>Back</Text>
+              <Ionicons name="chevron-back" size={16} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.verticalClipBadge}>
               <Text style={styles.verticalClipBadgeText} numberOfLines={1}>
@@ -360,7 +354,11 @@ export default function Toolbar({
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          style={Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : undefined}
+          style={
+            Platform.OS === "web"
+              ? ({ scrollbarWidth: "none", msOverflowStyle: "none" } as any)
+              : undefined
+          }
           contentContainerStyle={styles.verticalScrollContent}
         >
           {activeTools.map((item) => {
@@ -379,7 +377,7 @@ export default function Toolbar({
                 <MaterialCommunityIcons
                   name={item.icon}
                   size={20}
-                  color={isDelete ? "#EF4444" : "#8E95A5"}
+                  color={isDelete ? "#EF4444" : "#FFFFFF"}
                 />
                 <Text
                   style={[
@@ -409,14 +407,18 @@ export default function Toolbar({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel="Back to root tools"
         >
-          <Ionicons name="chevron-back" size={17} color="#00F2FE" />
+          <Ionicons name="chevron-back" size={17} color="#FFFFFF" />
         </TouchableOpacity>
       )}
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : undefined}
+        style={
+          Platform.OS === "web"
+            ? ({ scrollbarWidth: "none", msOverflowStyle: "none" } as any)
+            : undefined
+        }
         contentContainerStyle={styles.horizontalScrollContent}
       >
         {activeTools.map((tool) => {
@@ -434,7 +436,7 @@ export default function Toolbar({
               <MaterialCommunityIcons
                 name={tool.icon}
                 size={20}
-                color={isDelete ? "#EF4444" : "#D4D4D8"}
+                color={isDelete ? "#EF4444" : "#FFFFFF"}
               />
               <Text
                 style={[
@@ -456,7 +458,7 @@ export default function Toolbar({
 const styles = StyleSheet.create({
   // Desktop Vertical Toolbar
   verticalContainer: {
-    width: 50,
+    width: 62,
     backgroundColor: "#08090E",
     borderRightWidth: 1,
     borderRightColor: "#1F2637",
@@ -464,102 +466,104 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   verticalScrollContent: {
-    paddingVertical: 4,
+    paddingVertical: 6,
     alignItems: "center",
-    gap: 1,
+    gap: 3,
   },
   verticalToolBtn: {
-    width: 44,
-    height: 38,
+    width: 52,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 6,
+    borderRadius: 7,
     paddingHorizontal: 2,
     marginVertical: 1,
   },
   verticalToolLabel: {
     color: "#94A3B8",
-    fontSize: 8,
-    fontWeight: "500",
-    marginTop: 1,
+    fontSize: 9.5,
+    fontWeight: "600",
+    marginTop: 2,
     textAlign: "center",
     letterSpacing: 0.1,
   },
   verticalHeader: {
-    paddingTop: 6,
-    paddingBottom: 4,
-    paddingHorizontal: 3,
+    paddingTop: 8,
+    paddingBottom: 6,
+    paddingHorizontal: 4,
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
-    gap: 2,
+    gap: 4,
   },
   verticalBackBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
-    paddingVertical: 3,
-    paddingHorizontal: 4,
-    borderRadius: 5,
+    backgroundColor: "#0F131D",
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    borderRadius: 6,
     width: "100%",
   },
   verticalBackText: {
-    color: "#00F2FE",
-    fontSize: 9,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "600",
   },
   verticalClipBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.06)",
-    paddingVertical: 1,
-    paddingHorizontal: 4,
-    borderRadius: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
   },
   verticalClipBadgeText: {
     color: "#94A3B8",
-    fontSize: 7.5,
-    fontWeight: "600",
+    fontSize: 8.5,
+    fontWeight: "700",
     textTransform: "uppercase",
   },
   verticalRootHeader: {
-    paddingVertical: 5,
+    paddingVertical: 8,
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
   },
   verticalRootTitle: {
     color: "#64748B",
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
   verticalDeleteBtn: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   verticalClipActions: {
-    paddingBottom: 6,
-    paddingHorizontal: 3,
-    gap: 3,
+    paddingBottom: 8,
+    paddingHorizontal: 4,
+    gap: 4,
     alignItems: "center",
   },
   verticalDivider: {
-    width: 32,
+    width: 40,
     height: 1,
     backgroundColor: "#1F2637",
-    marginVertical: 2,
+    marginVertical: 3,
   },
   verticalActionBtn: {
-    width: 44,
-    height: 30,
-    borderRadius: 5,
+    width: 52,
+    height: 34,
+    borderRadius: 6,
     backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
   verticalActionText: {
     color: "#94A3B8",
-    fontSize: 7.5,
+    fontSize: 8.5,
     fontWeight: "600",
     marginTop: 1,
   },
@@ -571,41 +575,43 @@ const styles = StyleSheet.create({
     backgroundColor: "#08090E",
     borderTopWidth: 1,
     borderTopColor: "#1F2637",
-    height: 44,
-    paddingHorizontal: 4,
+    height: 52,
+    paddingHorizontal: 6,
   },
   mobileBackBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
-    marginRight: 4,
+    backgroundColor: "#0F131D",
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    marginRight: 6,
   },
   mobileBackText: {
-    color: "#00F2FE",
-    fontSize: 8,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "600",
   },
   horizontalScrollContent: {
     alignItems: "center",
     paddingHorizontal: 2,
-    gap: 3,
+    gap: 4,
   },
   horizontalToolBtn: {
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 40,
-    height: 38,
-    paddingHorizontal: 2,
-    borderRadius: 5,
+    minWidth: 46,
+    height: 44,
+    paddingHorizontal: 4,
+    borderRadius: 7,
   },
   horizontalToolLabel: {
     color: "#94A3B8",
-    fontSize: 8,
-    fontWeight: "500",
-    marginTop: 1,
+    fontSize: 9.5,
+    fontWeight: "600",
+    marginTop: 2,
     textAlign: "center",
     letterSpacing: 0.1,
   },

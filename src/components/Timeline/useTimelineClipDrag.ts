@@ -103,19 +103,36 @@ function computeTargetPosition(
     );
   });
 
+  // Track emptiness helper (from perspective of other clips during drag)
+  const isTrackEmpty = (t: number) => {
+    if (t < 0 || t >= activeTrackCount) return false;
+    return !otherClips.some((c) => c.effectiveTrackIndex === t);
+  };
+
   // Seam detection between tracks (Clipchamp-style deliberate drag between tracks)
   const baseTrack = Math.floor(rawTrackPos);
   const fraction = rawTrackPos - baseTrack;
 
   // The user is deliberately hovering right on the boundary between baseTrack and baseTrack + 1
+  // Do NOT insert a new track if the track just above (baseTrack) or just below (baseTrack + 1) is already empty!
   const isHoveringBetweenTracks =
     baseTrack >= 0 &&
     baseTrack < activeTrackCount - 1 &&
     fraction >= 0.38 &&
-    fraction <= 0.62;
+    fraction <= 0.62 &&
+    !isTrackEmpty(baseTrack) &&
+    !isTrackEmpty(baseTrack + 1);
+
+  // Dragging into the top area above all active tracks (only if track 0 is not empty)
+  const isDraggingAboveTop =
+    rawTrackPos <= -0.2 &&
+    !isTrackEmpty(0);
 
   // Dragging into the bottom area below all active tracks
-  const isDraggingPastBottom = rawTrackPos >= activeTrackCount - 0.2;
+  // Do NOT insert a new track if the track just above it (activeTrackCount - 1) is already empty!
+  const isDraggingPastBottom =
+    rawTrackPos >= activeTrackCount - 0.2 &&
+    !isTrackEmpty(activeTrackCount - 1);
 
   let isInsertingNewTrack = false;
   let insertTrackIndex: number | null = null;
@@ -126,18 +143,39 @@ function computeTargetPosition(
       isInsertingNewTrack = true;
       insertTrackIndex = activeTrackCount;
       targetTrack = activeTrackCount;
+    } else if (isDraggingAboveTop) {
+      isInsertingNewTrack = true;
+      insertTrackIndex = 0;
+      targetTrack = 0;
     } else if (isHoveringBetweenTracks) {
       isInsertingNewTrack = true;
       insertTrackIndex = baseTrack + 1;
       targetTrack = baseTrack + 1;
     } else if (wasInsertingNewTrack) {
+      const proposedTrack =
+        previousInsertTrack !== null ? previousInsertTrack : baseTrack + 1;
+      const hasEmptyAbove = proposedTrack > 0 && isTrackEmpty(proposedTrack - 1);
+      const hasEmptyBelow =
+        proposedTrack < activeTrackCount && isTrackEmpty(proposedTrack);
+
       // Hysteresis: only exit when cursor moves clearly back into the body of a track
       const isClearlyInsideTrack = fraction < 0.22 || fraction > 0.78;
-      if (isClearlyInsideTrack && rawTrackPos < activeTrackCount - 0.45) {
+      if (
+        hasEmptyAbove ||
+        hasEmptyBelow ||
+        (isClearlyInsideTrack &&
+          rawTrackPos < activeTrackCount - 0.45 &&
+          rawTrackPos > 0.2)
+      ) {
         isInsertingNewTrack = false;
+        targetTrack = hasEmptyAbove
+          ? proposedTrack - 1
+          : hasEmptyBelow
+            ? proposedTrack
+            : nearestTrack;
       } else {
         isInsertingNewTrack = true;
-        insertTrackIndex = previousInsertTrack !== null ? previousInsertTrack : (baseTrack + 1);
+        insertTrackIndex = proposedTrack;
         targetTrack = insertTrackIndex;
       }
     }

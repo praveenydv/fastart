@@ -131,7 +131,7 @@ export default function ExportResultView({
     return (
       <View style={styles.doneContainer}>
         <View style={styles.successIconBox}>
-          <Ionicons name="checkmark-circle" size={68} color="#10B981" />
+          <Ionicons name="checkmark-circle" size={48} color="#00F2FE" />
         </View>
         <Text style={styles.doneTitle}>Export Ready!</Text>
         <Text style={styles.doneSubtext}>
@@ -156,12 +156,12 @@ export default function ExportResultView({
           activeOpacity={0.8}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#000000" />
+            <ActivityIndicator size="small" color="#08090E" />
           ) : (
             <Ionicons
               name={isSaved ? "checkmark-done" : "cloud-download"}
-              size={20}
-              color="#000000"
+              size={18}
+              color="#08090E"
             />
           )}
           <Text style={styles.downloadBtnText}>
@@ -172,7 +172,7 @@ export default function ExportResultView({
         {/* 2. Download Location Info Card */}
         <View style={styles.downloadLocationCard}>
           <View style={styles.downloadLocationHeader}>
-            <Ionicons name="folder-open-outline" size={16} color="#00F2FE" />
+            <Ionicons name="folder-open-outline" size={15} color="#00F2FE" />
             <Text style={styles.downloadLocationTitle}>Saved Location</Text>
           </View>
           <Text style={styles.downloadLocationPath} numberOfLines={2}>
@@ -185,7 +185,7 @@ export default function ExportResultView({
 
         {/* 3. Clean Secondary Actions */}
         <TouchableOpacity style={styles.reExportBtn} onPress={onReExport}>
-          <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
+          <Ionicons name="refresh-outline" size={15} color="#94A3B8" />
           <Text style={styles.reExportBtnText}>
             Choose Another Format / Re-Export
           </Text>
@@ -202,7 +202,7 @@ export default function ExportResultView({
     return (
       <View style={styles.doneContainer}>
         <View style={styles.successIconBox}>
-          <Ionicons name="alert-circle" size={68} color="#EF4444" />
+          <Ionicons name="alert-circle" size={48} color="#EF4444" />
         </View>
         <Text style={styles.doneTitle}>Export Issue</Text>
         <Text style={styles.doneSubtext}>
@@ -210,7 +210,7 @@ export default function ExportResultView({
             "Unable to encode video in the selected format. Please try PNG cover or GIF."}
         </Text>
         <TouchableOpacity style={styles.downloadBtn} onPress={onReExport}>
-          <Ionicons name="refresh-outline" size={20} color="#000000" />
+          <Ionicons name="refresh-outline" size={18} color="#08090E" />
           <Text style={styles.downloadBtnText}>Try Another Format</Text>
         </TouchableOpacity>
       </View>

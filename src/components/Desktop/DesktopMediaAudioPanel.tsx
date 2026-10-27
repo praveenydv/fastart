@@ -477,7 +477,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                       }
                     : {})}
                 >
-                  <Ionicons name="musical-notes" size={15} color="#818CF8" />
+                  <Ionicons name="musical-notes" size={15} color="#00F2FE" />
                   <View style={{ flex: 1, paddingHorizontal: 8 }}>
                     <Text style={styles.audioRowTitle} numberOfLines={1}>
                       {a.title || `Audio ${i + 1}`}

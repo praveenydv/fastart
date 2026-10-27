@@ -84,7 +84,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
 
       {/* Background Dynamic Blur Fill (Auto from video or photo) */}
       {(() => {
-        if (!isBlur || activeVideos.length === 0) return null;
+        if (!isBlur) return null;
         const currentVid =
           activeVideos.find(
             (v) =>
@@ -93,7 +93,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           ) || activeVideos[0];
         const mediaUri =
           currentVid?.thumbnail ||
-          (currentVid?.type === "photo" ? currentVid.url : currentVid?.thumbnail || currentVid?.url);
+          (currentVid?.type === "photo" ? currentVid?.url : null);
         if (!mediaUri) return null;
         const blurAmount = parseInt(rawBg.replace("blur:", ""), 10) || 25;
 
@@ -103,7 +103,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               source={{ uri: mediaUri }}
               style={[
                 StyleSheet.absoluteFill,
-                { opacity: 0.65, transform: [{ scale: 1.35 }] },
+                { opacity: 0.72, transform: [{ scale: 1.45 }] },
                 Platform.OS === 'web' ? ({ filter: `blur(${blurAmount}px)` } as any) : null,
               ]}
               blurRadius={blurAmount}
@@ -788,7 +788,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         let animScale = 1.0;
         let animAlpha = 1.0;
         let animOffsetY = 0;
-        const anim = stk.animation || "bounce";
+        const anim = stk.animation || "none";
 
         if (anim === "bounce") {
           animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;
@@ -861,6 +861,24 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         const type = (eff.type || "").toLowerCase().replace(/[-_]/g, "");
 
         const renderEffectBody = () => {
+          // 0. Filter clip on timeline
+          if (eff.filter || eff.type?.startsWith("filter_")) {
+            const filterName = (eff.filter || eff.type.replace(/^filter_/, "")).toLowerCase();
+            let tint = "rgba(0,0,0,0)";
+            if (filterName === "cyberpunk") tint = `rgba(0, 242, 254, ${0.16 * intensity})`;
+            else if (filterName === "warm" || filterName === "vintage" || filterName === "sunset") tint = `rgba(255, 160, 0, ${0.15 * intensity})`;
+            else if (filterName === "cool" || filterName === "frost") tint = `rgba(0, 140, 255, ${0.14 * intensity})`;
+            else if (filterName === "bw" || filterName === "noir") tint = `rgba(20, 20, 20, ${0.35 * intensity})`;
+            else if (filterName === "cinematic") tint = `rgba(15, 25, 45, ${0.18 * intensity})`;
+            else if (filterName === "emerald") tint = `rgba(16, 185, 129, ${0.14 * intensity})`;
+            else tint = `rgba(255, 255, 255, ${0.08 * intensity})`;
+            return (
+              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+              </View>
+            );
+          }
+
           // 1. Dark Vignette / Cinematic Border
           if (type === "vignette" || type === "darkborder") {
             return (

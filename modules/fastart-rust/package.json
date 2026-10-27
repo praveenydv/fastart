@@ -1,0 +1,7 @@
+{
+  "name": "fastart-rust",
+  "version": "1.0.0",
+  "description": "FastArt Native Rust Core Engine",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

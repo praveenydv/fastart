@@ -110,8 +110,8 @@ function Header({
         >
           <Ionicons
             name="arrow-undo-outline"
-            size={18}
-            color={canUndo ? "#FFFFFF" : "#48484A"}
+            size={16}
+            color={canUndo ? "#FFFFFF" : "#64748B"}
           />
         </TouchableOpacity>
 
@@ -125,19 +125,19 @@ function Header({
         >
           <Ionicons
             name="arrow-redo-outline"
-            size={18}
-            color={canRedo ? "#FFFFFF" : "#48484A"}
+            size={16}
+            color={canRedo ? "#FFFFFF" : "#64748B"}
           />
         </TouchableOpacity>
 
-        {/* CapCut Export Pill Button */}
+        {/* Monochromatic Pro Export CTA Button */}
         <TouchableOpacity
           style={styles.exportButton}
           onPress={onOpenExport}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={13} color="#000000" style={{ marginRight: 3 }} />
+          <Ionicons name="arrow-up" size={14} color="#000000" style={{ marginRight: 2 }} />
           <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
@@ -213,12 +213,12 @@ function Header({
 
 const styles = StyleSheet.create({
   header: {
-    height: 38,
-    backgroundColor: "#08090E",
+    height: 48,
+    backgroundColor: "rgba(8, 9, 14, 0.98)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
     zIndex: 10,
@@ -227,50 +227,53 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     flex: 1,
   },
   backButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#0F131D",
+    borderWidth: 1,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
   ratioPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#131826",
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 10,
+    backgroundColor: "#0F131D",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
   ratioText: {
     color: "#FFFFFF",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
   },
   ratioDivider: {
     color: "#64748B",
-    fontSize: 9,
-    marginHorizontal: 3,
+    fontSize: 10,
+    marginHorizontal: 4,
   },
   resolutionText: {
     color: "#94A3B8",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
   },
   titlePill: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    maxWidth: 140,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    maxWidth: 160,
   },
   titleText: {
-    color: "#94A3B8",
-    fontSize: 10.5,
-    fontWeight: "500",
+    color: "#FFFFFF",
+    fontSize: 12.5,
+    fontWeight: "600",
   },
   rightSection: {
     flexDirection: "row",
@@ -278,25 +281,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   historyButton: {
-    width: 24,
-    height: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#0F131D",
+    borderWidth: 1,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
   disabledButton: {
-    opacity: 0.35,
+    opacity: 0.45,
   },
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 4,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 6.5,
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   exportText: {
     color: "#000000",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   modalOverlay: {

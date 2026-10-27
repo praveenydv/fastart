@@ -74,26 +74,19 @@ export default function ExportModal({
                 }
                 onClose();
               }}
-              style={[
-                styles.closeBtn,
-                {
-                  backgroundColor: "rgba(239, 68, 68, 0.15)",
-                  borderWidth: 1,
-                  borderColor: "rgba(239, 68, 68, 0.3)",
-                },
-              ]}
+              style={styles.closeBtn}
               activeOpacity={0.7}
               accessibilityLabel={
                 status === "rendering" ? "Cancel Export and Close" : "Cancel"
               }
             >
-              <Ionicons name="close" size={17} color="#EF4444" />
+              <Ionicons name="close" size={15} color="#94A3B8" />
             </TouchableOpacity>
 
             <View style={styles.headerTitleRow}>
               <Ionicons
                 name="cloud-download-outline"
-                size={17}
+                size={15}
                 color="#00F2FE"
               />
               <Text style={styles.sheetTitle}>Export Video</Text>
@@ -102,23 +95,23 @@ export default function ExportModal({
             {status === "idle" ? (
               <TouchableOpacity
                 onPress={handleStartExport}
-                style={[styles.closeBtn, { backgroundColor: "#00F2FE" }]}
+                style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
                 activeOpacity={0.7}
                 accessibilityLabel="Start Export"
               >
-                <Ionicons name="checkmark" size={18} color="#000000" />
+                <Ionicons name="checkmark" size={15} color="#08090E" />
               </TouchableOpacity>
             ) : status === "done" ? (
               <TouchableOpacity
                 onPress={onClose}
-                style={[styles.closeBtn, { backgroundColor: "#00F2FE" }]}
+                style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
                 activeOpacity={0.7}
                 accessibilityLabel="Done"
               >
-                <Ionicons name="checkmark" size={18} color="#000000" />
+                <Ionicons name="checkmark" size={15} color="#08090E" />
               </TouchableOpacity>
             ) : (
-              <View style={{ width: 28 }} />
+              <View style={{ width: 26 }} />
             )}
           </View>
 

@@ -27,6 +27,7 @@ import KeyframeModal from "../Panels/KeyframeModal";
 import AutoCaptionModal from "../Panels/AutoCaptionModal";
 import {
   FastArtProject,
+  VideoClip,
   TextClip,
   StickerClip,
   EffectClip,
@@ -122,7 +123,6 @@ export const INLINE_MODAL_KEYS = new Set([
   'tts',
   'cutout',
   'tracking',
-  'layer',
   'opacity',
   'animation',
   'audio_effects',
@@ -306,7 +306,13 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           visible={true}
           onClose={handleCancel}
           onApply={handleApply}
-          activeFilter={selectedClip?.filter || "normal"}
+          activeFilter={
+            selectedClipType === "video"
+              ? (selectedClip as VideoClip)?.filter || "normal"
+              : selectedClipType === "effects" || selectedClipType === "effect"
+              ? (selectedClip as EffectClip)?.filter || ((selectedClip as EffectClip)?.type?.startsWith("filter_") ? (selectedClip as EffectClip).type.replace(/^filter_/, "") : "normal")
+              : "normal"
+          }
           onSelectFilter={handleApplyFilter}
           isInline={isInline}
         />
@@ -317,7 +323,13 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           visible={true}
           onClose={handleCancel}
           onApply={handleApply}
-          activeEffect={selectedClip?.effect || "none"}
+          activeEffect={
+            selectedClipType === "effects" || selectedClipType === "effect"
+              ? (selectedClip as EffectClip)?.type
+              : selectedClipType === "video"
+              ? (selectedClip as VideoClip)?.effect || "none"
+              : "none"
+          }
           onAddEffect={handleAddEffect}
           editingClip={
             selectedClipType === "effects" || selectedClipType === "effect"
@@ -325,7 +337,6 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
               : null
           }
           onUpdateEffect={handleUpdateEffect}
-          isVideoClip={selectedClipType === "video" && !!selectedClip}
           isInline={isInline}
         />
       )}
@@ -566,102 +577,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {/* Layer / Track Order Panel */}
-      {/* Layer / Track Order Panel */}
-      {activeModal === "layer" && selectedClip && (
-        <View style={modalStyles.panelContainer}>
-          <Text style={modalStyles.panelSectionTitle}>LAYER ORDER</Text>
-          <View style={modalStyles.layerInfoBox}>
-            <MaterialCommunityIcons name="layers-outline" size={20} color="#00F2FE" />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={modalStyles.layerInfoTitle}>
-                Current: Layer {((typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : (selectedClipType === "video" ? 0 : 2))) + 1}
-              </Text>
-              <Text style={modalStyles.layerInfoSubtitle}>
-                Higher layer numbers render in front of lower layer numbers.
-              </Text>
-            </View>
-          </View>
 
-          <View style={modalStyles.btnGrid}>
-            <TouchableOpacity
-              style={modalStyles.actionCardBtn}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                const cur = typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : 0;
-                if (cur > 0 && handleMoveClip) {
-                  handleMoveClip(selectedClip.id, selectedClipType as any, selectedClip.startTime, cur - 1);
-                } else if (cur > 0 && project) {
-                  const tracks = { ...project.tracks };
-                  const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                  const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                  if (idx >= 0) {
-                    targetList[idx] = { ...targetList[idx], trackIndex: cur - 1 };
-                    updateProjectWithHistory({ ...project, tracks });
-                  }
-                }
-              }}
-            >
-              <Ionicons name="arrow-down" size={14} color="#00F2FE" />
-              <Text style={modalStyles.actionCardText}>Move Down</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={modalStyles.actionCardBtn}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                const cur = typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : 0;
-                if (handleMoveClip) {
-                  handleMoveClip(selectedClip.id, selectedClipType as any, selectedClip.startTime, cur + 1);
-                } else if (project) {
-                  const tracks = { ...project.tracks };
-                  const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                  const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                  if (idx >= 0) {
-                    targetList[idx] = { ...targetList[idx], trackIndex: cur + 1 };
-                    updateProjectWithHistory({ ...project, tracks });
-                  }
-                }
-              }}
-            >
-              <Ionicons name="arrow-up" size={14} color="#00F2FE" />
-              <Text style={modalStyles.actionCardText}>Move Up</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={[modalStyles.panelSectionTitle, { marginTop: 10 }]}>QUICK LAYER ASSIGN</Text>
-          <View style={modalStyles.chipRow}>
-            {[1, 2, 3, 4, 5].map((lvl) => {
-              const curLvl = ((typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : (selectedClipType === "video" ? 0 : 2))) + 1;
-              const isSel = curLvl === lvl;
-              return (
-                <TouchableOpacity
-                  key={lvl}
-                  style={[modalStyles.chipBtn, isSel && modalStyles.chipBtnActive]}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    if (handleMoveClip) {
-                      handleMoveClip(selectedClip.id, selectedClipType as any, selectedClip.startTime, lvl - 1);
-                    } else if (project) {
-                      const tracks = { ...project.tracks };
-                      const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                      const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                      if (idx >= 0) {
-                        targetList[idx] = { ...targetList[idx], trackIndex: lvl - 1 };
-                        updateProjectWithHistory({ ...project, tracks });
-                      }
-                    }
-                  }}
-                >
-                  <Text style={[modalStyles.chipText, isSel && modalStyles.chipTextActive]}>
-                    Layer {lvl}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
 
       {/* Opacity Panel */}
       {activeModal === "opacity" && selectedClip && (

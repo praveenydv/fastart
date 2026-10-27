@@ -45,6 +45,7 @@ export class VideoRenderer {
   public ctx: CanvasRenderingContext2D | null;
   public videoElements: Map<string, HTMLVideoElement | HTMLImageElement>;
   public thumbnailElements: Map<string, HTMLImageElement> = new Map();
+  public bgImageElements: Map<string, HTMLImageElement> = new Map();
   public lastUsedTimestamp: Map<string, number> = new Map();
   public onFrameNeeded?: () => void;
   public offscreenCanvas: HTMLCanvasElement | null = null;
@@ -134,6 +135,7 @@ export class VideoRenderer {
 
   cleanup() {
     cleanupMedia(this.getMediaSyncContext(), this.offscreenCanvas);
+    this.bgImageElements.clear();
     this.offscreenCanvas = null;
     this.offscreenCtx = null;
     this.canvas = null;
@@ -347,20 +349,128 @@ export class VideoRenderer {
       const canvasBg = (project.canvasBackground && project.canvasBackground.trim()) || "#000000";
 
       const drawBackground = () => {
+        if (canvasBg.startsWith("image:")) {
+          const imgUrl = canvasBg.replace("image:", "");
+          let imgEl = this.bgImageElements.get(imgUrl);
+          if (!imgEl) {
+            imgEl = new Image();
+            if (!imgUrl.startsWith("blob:") && !imgUrl.startsWith("data:")) {
+              imgEl.crossOrigin = "anonymous";
+            }
+            imgEl.onload = () => {
+              if (this.onFrameNeeded) this.onFrameNeeded();
+            };
+            imgEl.onerror = () => {
+              if (imgEl && imgEl.crossOrigin) {
+                imgEl.removeAttribute("crossorigin");
+                imgEl.src = imgUrl;
+              }
+            };
+            imgEl.src = imgUrl;
+            this.bgImageElements.set(imgUrl, imgEl);
+          }
+
+          if (imgEl.complete && imgEl.naturalWidth > 0) {
+            const imgAspect = imgEl.naturalWidth / imgEl.naturalHeight;
+            const canvasAspect = w / h;
+            let sx = 0, sy = 0, sw = imgEl.naturalWidth, sh = imgEl.naturalHeight;
+            if (imgAspect > canvasAspect) {
+              sw = imgEl.naturalHeight * canvasAspect;
+              sx = (imgEl.naturalWidth - sw) / 2;
+            } else {
+              sh = imgEl.naturalWidth / canvasAspect;
+              sy = (imgEl.naturalHeight - sh) / 2;
+            }
+            ctx.save();
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, w, h);
+            ctx.restore();
+            return;
+          }
+          ctx.fillStyle = "#121620";
+          ctx.fillRect(0, 0, w, h);
+          return;
+        }
+
         if (canvasBg.startsWith("blur:")) {
           const blurPx = parseInt(canvasBg.split(":")[1]) || 25;
-          if (activeVideos.length > 0) {
-            const primary = activeVideos[0];
-            const media = this.videoElements.get(primary.url) || this.thumbnailElements.get(primary.id);
-            if (media) {
-              ctx.save();
-              ctx.filter = `blur(${blurPx}px) brightness(0.68)`;
-              ctx.drawImage(media as any, -30, -30, w + 60, h + 60);
-              ctx.restore();
-              return;
+          let media: any = null;
+
+          // 1. Check currently active video elements
+          for (const vid of activeVideos) {
+            const el = this.videoElements.get(vid.url);
+            if (el) {
+              if (el instanceof HTMLVideoElement && (el.readyState >= 1 || el.videoWidth > 0)) {
+                media = el;
+                break;
+              } else if (el instanceof HTMLImageElement && el.complete && el.naturalWidth > 0) {
+                media = el;
+                break;
+              }
+            }
+            const thumb = this.thumbnailElements.get(vid.id);
+            if (thumb && thumb.complete && thumb.naturalWidth > 0) {
+              media = thumb;
+              break;
             }
           }
-          ctx.fillStyle = "#000000";
+
+          // 2. If no active video element is ready, check other clips from project.tracks.video
+          if (!media && videoClips.length > 0) {
+            for (const vid of videoClips) {
+              const el = this.videoElements.get(vid.url);
+              if (el) {
+                if (el instanceof HTMLVideoElement && (el.readyState >= 1 || el.videoWidth > 0)) {
+                  media = el;
+                  break;
+                } else if (el instanceof HTMLImageElement && el.complete && el.naturalWidth > 0) {
+                  media = el;
+                  break;
+                }
+              }
+              const thumb = this.thumbnailElements.get(vid.id);
+              if (thumb && thumb.complete && thumb.naturalWidth > 0) {
+                media = thumb;
+                break;
+              }
+            }
+          }
+
+          if (media) {
+            const mw = (media as any).videoWidth || (media as any).naturalWidth || (media as any).width || w;
+            const mh = (media as any).videoHeight || (media as any).naturalHeight || (media as any).height || h;
+            const mediaAspect = mw / mh;
+            const canvasAspect = w / h;
+
+            let drawW = w;
+            let drawH = h;
+            if (mediaAspect > canvasAspect) {
+              drawH = h;
+              drawW = h * mediaAspect;
+            } else {
+              drawW = w;
+              drawH = w / mediaAspect;
+            }
+
+            // Margin and scale so blur expands beyond canvas boundaries without edge feathering
+            const margin = Math.max(48, blurPx * 2.5);
+            const scale = Math.max((w + margin * 2) / drawW, (h + margin * 2) / drawH, 1.25);
+            const finalW = drawW * scale;
+            const finalH = drawH * scale;
+            const finalX = (w - finalW) / 2;
+            const finalY = (h - finalH) / 2;
+
+            ctx.save();
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.filter = `blur(${blurPx}px) brightness(0.72) saturate(1.2)`;
+            ctx.drawImage(media as any, finalX, finalY, finalW, finalH);
+            ctx.restore();
+            return;
+          }
+
+          ctx.fillStyle = "#0B0D13";
           ctx.fillRect(0, 0, w, h);
         } else if (canvasBg.startsWith("gradient:")) {
           const parts = canvasBg.replace("gradient:", "").split(",");
@@ -435,9 +545,14 @@ export class VideoRenderer {
       visualItems.forEach((item) => {
         const isOverridden = transientOverride && transientOverride.clipId === item.clip.id;
         if (item.kind === "video") {
+          const activeFilterClip = activeEffects.find((e) => e.filter || e.type?.startsWith("filter_"));
+          const effectiveFilter = item.clip.filter || activeFilterClip?.filter || (activeFilterClip ? activeFilterClip.type.replace(/^filter_/, "") : undefined) || project.filter;
+          const effectiveCustomLut = item.clip.customLut || activeFilterClip?.customLut || project.customLut;
           const clipToDraw: VideoClip = isOverridden
             ? {
                 ...item.clip,
+                filter: effectiveFilter,
+                customLut: effectiveCustomLut,
                 transform: {
                   ...(item.clip.transform || {}),
                   x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.transform?.x || 0),
@@ -448,7 +563,11 @@ export class VideoRenderer {
                 },
                 mask: transientOverride!.mask !== undefined ? transientOverride!.mask : (item.clip.mask || item.clip.transform?.mask),
               }
-            : item.clip;
+            : {
+                ...item.clip,
+                filter: effectiveFilter,
+                customLut: effectiveCustomLut,
+              };
           this.drawClip(ctx, clipToDraw, time, w, h, item.transitionState || null);
         } else if (item.kind === "caption") {
         const clipToDraw: CaptionClip = isOverridden

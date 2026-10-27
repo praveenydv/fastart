@@ -289,6 +289,24 @@ export function generateCanvasBridgeHtml(
             mediaMap.set(clip.id, img);
           }
         }
+        // Preload canvas background image if specified
+        if (PROJECT.canvasBackground && PROJECT.canvasBackground.startsWith("image:")) {
+          const bgUrl = PROJECT.canvasBackground.replace("image:", "");
+          const bgImg = new Image();
+          bgImg.crossOrigin = "anonymous";
+          promises.push(new Promise((resolve) => {
+            bgImg.onload = () => resolve();
+            bgImg.onerror = () => {
+              bgImg.removeAttribute("crossorigin");
+              bgImg.src = bgUrl;
+              resolve();
+            };
+            setTimeout(resolve, 2000);
+          }));
+          bgImg.src = bgUrl;
+          mediaMap.set("__background_image__", bgImg);
+        }
+
         await Promise.all(promises);
       }
 
@@ -299,7 +317,59 @@ export function generateCanvasBridgeHtml(
 
         // 1. Background Fill
         const canvasBg = PROJECT.canvasBackground || "#000000";
-        if (canvasBg.startsWith("gradient:")) {
+        if (canvasBg.startsWith("image:")) {
+          const bgImg = mediaMap.get("__background_image__");
+          if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+            const imgAspect = bgImg.naturalWidth / bgImg.naturalHeight;
+            const canvasAspect = width / height;
+            let sx = 0, sy = 0, sw = bgImg.naturalWidth, sh = bgImg.naturalHeight;
+            if (imgAspect > canvasAspect) {
+              sw = bgImg.naturalHeight * canvasAspect;
+              sx = (bgImg.naturalWidth - sw) / 2;
+            } else {
+              sh = bgImg.naturalWidth / canvasAspect;
+              sy = (bgImg.naturalHeight - sh) / 2;
+            }
+            ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, width, height);
+          } else {
+            ctx.fillStyle = "#121620";
+            ctx.fillRect(0, 0, width, height);
+          }
+        } else if (canvasBg.startsWith("blur:")) {
+          const blurPx = parseInt(canvasBg.split(":")[1]) || 25;
+          let blurMedia = null;
+          for (const v of (PROJECT.tracks?.video || [])) {
+            const m = mediaMap.get(v.url) || mediaMap.get(v.id);
+            if (m) { blurMedia = m; break; }
+          }
+          if (blurMedia) {
+            const mw = blurMedia.videoWidth || blurMedia.naturalWidth || blurMedia.width || width;
+            const mh = blurMedia.videoHeight || blurMedia.naturalHeight || blurMedia.height || height;
+            const mAspect = mw / mh;
+            const cAspect = width / height;
+            let dw = width, dh = height;
+            if (mAspect > cAspect) {
+              dh = height;
+              dw = height * mAspect;
+            } else {
+              dw = width;
+              dh = width / mAspect;
+            }
+            const margin = Math.max(48, blurPx * 2.5);
+            const scale = Math.max((width + margin * 2) / dw, (height + margin * 2) / dh, 1.25);
+            const fw = dw * scale;
+            const fh = dh * scale;
+            const fx = (width - fw) / 2;
+            const fy = (height - fh) / 2;
+            ctx.save();
+            ctx.filter = "blur(" + blurPx + "px) brightness(0.72) saturate(1.2)";
+            ctx.drawImage(blurMedia, fx, fy, fw, fh);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "#0B0D13";
+            ctx.fillRect(0, 0, width, height);
+          }
+        } else if (canvasBg.startsWith("gradient:")) {
           const parts = canvasBg.replace("gradient:", "").split(",");
           const c1 = parts[0]?.trim() || "#0B0D13";
           const c2 = parts[1]?.trim() || "#1A1F2C";
@@ -308,11 +378,8 @@ export function generateCanvasBridgeHtml(
           bgGrad.addColorStop(1, c2);
           ctx.fillStyle = bgGrad;
           ctx.fillRect(0, 0, width, height);
-        } else if (!canvasBg.startsWith("blur:")) {
+        } else if (canvasBg.toLowerCase() !== "transparent") {
           ctx.fillStyle = canvasBg.startsWith("#") ? canvasBg : "#000000";
-          ctx.fillRect(0, 0, width, height);
-        } else {
-          ctx.fillStyle = "#0B0D13";
           ctx.fillRect(0, 0, width, height);
         }
 

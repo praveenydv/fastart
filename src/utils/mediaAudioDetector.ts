@@ -18,12 +18,25 @@ export function subscribeMediaAudioChange(fn: () => void): () => void {
   };
 }
 
+let notifyScheduled = false;
+
 function notifyAudioChange() {
-  listeners.forEach((fn) => {
-    try {
-      fn();
-    } catch {}
-  });
+  if (notifyScheduled) return;
+  notifyScheduled = true;
+  const dispatch = () => {
+    notifyScheduled = false;
+    listeners.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+  };
+
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(dispatch);
+  } else {
+    setTimeout(dispatch, 0);
+  }
 }
 
 /**

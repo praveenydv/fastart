@@ -9,6 +9,7 @@ import {
   ClipTransform,
   AspectRatio,
   MaskConfig,
+  EffectClip,
 } from "../types/project";
 import { getMediaDuration } from "../utils/mediaDuration";
 import { soundEngine } from "../utils/audioEngine";
@@ -54,7 +55,7 @@ export function useProjectFilterEffects({
 
   // Helper to resolve the active clip at the current playhead or first clip
   const resolveTargetClipId = useCallback(
-    (preferredType: "video" | "audio" = "video"): string | null => {
+    (preferredType: "video" | "audio" = "video", autoSelect: boolean = false): string | null => {
       const current = projectRef.current || project;
       if (!current) return null;
       if (selectedClipId) return selectedClipId;
@@ -65,8 +66,8 @@ export function useProjectFilterEffects({
           (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
         ) || current.tracks.audio?.[0];
         if (audioAtTime) {
-          if (setSelectedClipId) setSelectedClipId(audioAtTime.id);
-          if (setSelectedClipType) setSelectedClipType("audio");
+          if (autoSelect && setSelectedClipId) setSelectedClipId(audioAtTime.id);
+          if (autoSelect && setSelectedClipType) setSelectedClipType("audio");
           return audioAtTime.id;
         }
       }
@@ -76,8 +77,8 @@ export function useProjectFilterEffects({
       ) || current.tracks.video?.[0];
 
       if (videoAtTime) {
-        if (setSelectedClipId) setSelectedClipId(videoAtTime.id);
-        if (setSelectedClipType) setSelectedClipType("video");
+        if (autoSelect && setSelectedClipId) setSelectedClipId(videoAtTime.id);
+        if (autoSelect && setSelectedClipType) setSelectedClipType("video");
         return videoAtTime.id;
       }
 
@@ -114,30 +115,95 @@ export function useProjectFilterEffects({
     [],
   );
 
-  // Apply color filter or custom 3D LUT
+  // Apply color filter or custom 3D LUT (attached to video clip if selected, or create timeline filter clip if global)
   const handleApplyFilter = useCallback(
     (filterId: string, customLut?: CustomLutConfig) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const targetId = resolveTargetClipId("video");
 
-      if (targetId) {
+      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the filter to that clip!
+      if (selectedClipId && selectedClipType === "video") {
         const videoClips = [...(current.tracks.video || [])];
-        const idx = videoClips.findIndex((c) => c.id === targetId);
+        const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
+          const isNone = filterId === "none" || filterId === "normal";
           videoClips[idx] = {
             ...videoClips[idx],
-            filter: filterId,
-            customLut: customLut,
+            filter: isNone ? undefined : filterId,
+            customLut: isNone ? undefined : customLut,
           };
           updateProjectWithHistory({
             ...current,
             tracks: { ...current.tracks, video: videoClips },
           });
         }
+        return;
       }
+
+      // 2. If an effect/filter clip is currently selected, update its filter!
+      if ((selectedClipType === "effects" || selectedClipType === "effect") && selectedClipId) {
+        const effectClips = [...(current.tracks.effects || [])];
+        const idx = effectClips.findIndex((e) => e.id === selectedClipId);
+        if (idx >= 0) {
+          const isNone = filterId === "none" || filterId === "normal";
+          if (isNone) {
+            effectClips.splice(idx, 1);
+            updateProjectWithHistory({
+              ...current,
+              tracks: { ...current.tracks, effects: effectClips },
+            });
+            if (setSelectedClipId) setSelectedClipId(null);
+            if (setSelectedClipType) setSelectedClipType("");
+          } else {
+            const filterName = filterId.charAt(0).toUpperCase() + filterId.slice(1);
+            effectClips[idx] = {
+              ...effectClips[idx],
+              filter: filterId,
+              type: "filter_" + filterId,
+              name: `Filter: ${filterName}`,
+              customLut,
+            };
+            updateProjectWithHistory({
+              ...current,
+              tracks: { ...current.tracks, effects: effectClips },
+            });
+          }
+          return;
+        }
+      }
+
+      // 3. GLOBAL: Create timeline filter clip!
+      if (filterId === "none" || filterId === "normal") return;
+
+      const desiredStart = currentTime || 0;
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        current,
+        desiredStart,
+      );
+
+      const filterName = filterId.charAt(0).toUpperCase() + filterId.slice(1);
+      const newFilterClip: EffectClip = {
+        id: "eff-flt-" + Date.now(),
+        type: "filter_" + filterId,
+        name: `Filter: ${filterName}`,
+        filter: filterId,
+        customLut,
+        startTime: Math.max(0, Number(desiredStart.toFixed(3))),
+        duration: 3.0,
+        intensity: 0.8,
+        trackIndex: newTrackIndex,
+      };
+
+      const effectClips = [...(current.tracks.effects || []), newFilterClip];
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, effects: effectClips },
+      });
+
+      if (setSelectedClipId) setSelectedClipId(newFilterClip.id);
+      if (setSelectedClipType) setSelectedClipType("effects");
     },
-    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, selectedClipType, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
   );
 
   // Apply Cutout — only writes to clip.cutout, never overwrites clip.transform

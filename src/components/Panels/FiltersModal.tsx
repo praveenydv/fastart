@@ -19,8 +19,9 @@ interface FiltersModalProps {
   onClose: () => void;
   onApply?: () => void;
   activeFilter?: string;
-  onSelectFilter: (filterId: string, customLut?: CustomLutConfig) => void;
+  onSelectFilter: (filterId: string, customLut?: CustomLutConfig, applyToAll?: boolean) => void;
   isInline?: boolean;
+  isWholeProject?: boolean;
 }
 
 export default function FiltersModal({
@@ -30,6 +31,7 @@ export default function FiltersModal({
   activeFilter = 'normal',
   onSelectFilter,
   isInline = false,
+  isWholeProject = false,
 }: FiltersModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [customLuts, setCustomLuts] = useState<CustomLutConfig[]>(PRO_3D_LUTS);
@@ -118,7 +120,7 @@ export default function FiltersModal({
             setStorageItem('fastart_custom_luts', JSON.stringify(userOnly));
           } catch (err) {}
 
-          onSelectFilter(newLut.id, newLut);
+          onSelectFilter(newLut.id, newLut, isWholeProject);
         };
         reader.readAsText(file);
       };
@@ -129,19 +131,19 @@ export default function FiltersModal({
   const handleSelectStandardPreset = (presetId: string) => {
     soundEngine.playSfx('click');
     setSelectedLutId(presetId);
-    onSelectFilter(presetId);
+    onSelectFilter(presetId, undefined, isWholeProject);
   };
 
   const handleSelectCustomLut = (lut: CustomLutConfig) => {
     soundEngine.playSfx('click');
     setSelectedLutId(lut.id);
-    onSelectFilter(lut.id, lut);
+    onSelectFilter(lut.id, lut, isWholeProject);
   };
 
   const handleResetToNormal = () => {
     soundEngine.playSfx('click');
     setSelectedLutId('normal');
-    onSelectFilter('normal');
+    onSelectFilter('normal', undefined, isWholeProject);
   };
 
   const filteredPresets = FILTER_PRESETS.filter((item) => {
@@ -159,20 +161,23 @@ export default function FiltersModal({
       {!isInline ? (
         <View style={styles.unifiedHeader}>
           <View style={styles.headerTitleRow}>
-            <Ionicons name="color-filter-outline" size={16} color="#00F2FE" />
+            <Ionicons name="color-filter-outline" size={16} color="#FFFFFF" />
             <Text style={styles.sheetTitle}>Filters & LUTs</Text>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
               onPress={handleResetToNormal}
-              style={[styles.resetBtn, isNormal && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
+              style={[
+                styles.resetBtn,
+                isNormal && { opacity: 0.4 },
+              ]}
               disabled={isNormal}
               activeOpacity={0.7}
-              accessibilityLabel="Reset to original"
+              accessibilityLabel="Reset to original filter"
             >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={styles.resetText}>Original</Text>
+              <Ionicons name="refresh-outline" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.resetText} numberOfLines={1}>Original</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -194,14 +199,31 @@ export default function FiltersModal({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoryScroll}
             >
-              {isInline && !isNormal && (
+              {!isNormal && (
                 <TouchableOpacity
-                  style={[styles.categoryPill, { borderColor: '#00F2FE', backgroundColor: 'rgba(0, 242, 254, 0.12)' }]}
+                  style={[
+                    styles.categoryPill,
+                    {
+                      borderColor: 'rgba(255, 255, 255, 0.35)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    },
+                  ]}
                   onPress={handleResetToNormal}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 3 }} />
-                  <Text style={[styles.categoryPillText, { color: '#00F2FE', fontWeight: '700' }]}>Original</Text>
+                  <Ionicons name="refresh-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text
+                    style={[
+                      styles.categoryPillText,
+                      { color: '#FFFFFF', fontWeight: '700', flexShrink: 0 },
+                      Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : null,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Original
+                  </Text>
                 </TouchableOpacity>
               )}
               {Platform.OS === 'web' && (
@@ -210,7 +232,7 @@ export default function FiltersModal({
                   onPress={handleImportCubeFile}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="cloud-upload-outline" size={13} color="#00F2FE" />
+                  <Ionicons name="cloud-upload-outline" size={13} color="#FFFFFF" />
                   <Text style={styles.importBtnText}>+ .cube</Text>
                 </TouchableOpacity>
               )}
@@ -254,7 +276,7 @@ export default function FiltersModal({
                 <View style={styles.grid}>
                   {customLuts.map((lut) => {
                     const isSelected = selectedLutId === lut.id;
-                    const sampleColor = filterColorMap[lut.id] || '#00F2FE';
+                    const sampleColor = filterColorMap[lut.id] || '#475569';
                     return (
                       <TouchableOpacity
                         key={lut.id}
@@ -278,6 +300,7 @@ export default function FiltersModal({
                           <Text
                             style={[styles.filterName, isSelected && styles.filterNameActive]}
                             numberOfLines={1}
+                            ellipsizeMode="tail"
                           >
                             {lut.name}
                           </Text>
@@ -297,7 +320,7 @@ export default function FiltersModal({
                 <View style={styles.grid}>
                   {filteredPresets.map((item) => {
                     const isSelected = selectedLutId === item.id;
-                    const sampleColor = filterColorMap[item.id] || '#00F2FE';
+                    const sampleColor = filterColorMap[item.id] || '#475569';
                     const isItemNormal = item.id === 'normal';
 
                     return (
@@ -329,6 +352,7 @@ export default function FiltersModal({
                           <Text
                             style={[styles.filterName, isSelected && styles.filterNameActive]}
                             numberOfLines={1}
+                            ellipsizeMode="tail"
                           >
                             {item.name}
                           </Text>
@@ -360,16 +384,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
-    backgroundColor: '#0B0D14',
+    backgroundColor: '#08090E',
   },
   closeBtnCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -385,7 +411,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
@@ -400,7 +426,7 @@ const styles = StyleSheet.create({
   sheetHandle: {
     width: 32,
     height: 3,
-    backgroundColor: '#2C364D',
+    backgroundColor: '#1F2637',
     borderRadius: 1.5,
     alignSelf: 'center',
     marginTop: 6,
@@ -413,7 +439,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
-    backgroundColor: '#131826',
+    backgroundColor: '#08090E',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -427,110 +453,118 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   resetBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 6,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   resetText: {
-    color: '#00F2FE',
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    flexShrink: 0,
+    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   categoryRow: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
     backgroundColor: '#08090E',
   },
   categoryScroll: {
-    gap: 4,
+    gap: 6,
     alignItems: 'center',
   },
   importBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   importBtnText: {
-    color: '#00F2FE',
-    fontSize: 10,
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: '600',
   },
   categoryPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   categoryPillActive: {
-    backgroundColor: '#1F2637',
-    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   categoryPillText: {
     color: '#94A3B8',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
+    flexShrink: 0,
+    ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   categoryPillTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   sheetBody: {
     paddingHorizontal: 10,
-    paddingTop: 6,
+    paddingTop: 8,
   },
   gridContainer: {
     paddingBottom: 16,
   },
   sectionBlock: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionHeader: {
-    color: '#64748B',
-    fontSize: 8.5,
-    fontWeight: '800',
+    color: '#94A3B8',
+    fontSize: 10.5,
+    fontWeight: '700',
     letterSpacing: 0.8,
     marginBottom: 6,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   card: {
-    width: '31.5%',
+    width: '31.3%',
     backgroundColor: '#131826',
-    borderRadius: 6,
+    borderRadius: 7,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   cardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   colorPreview: {
-    height: 36,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -539,7 +573,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 3,
     right: 3,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     width: 14,
     height: 14,
     borderRadius: 7,
@@ -547,12 +581,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   metaBox: {
-    padding: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    overflow: 'hidden',
   },
   filterName: {
     color: '#94A3B8',
-    fontSize: 9.5,
+    fontSize: 10.5,
     fontWeight: '600',
+    textAlign: 'center',
+    flexShrink: 0,
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: 'block',
+          width: '100%',
+        } as any)
+      : {}),
   },
   filterNameActive: {
     color: '#FFFFFF',

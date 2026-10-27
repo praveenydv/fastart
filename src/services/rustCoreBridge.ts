@@ -7,7 +7,11 @@
 import { NativeModules, Platform } from "react-native";
 import { FastArtProject } from "../types/project";
 
-const { FastArtRust } = NativeModules;
+let FastArtRust: any = NativeModules.FastArtRust;
+try {
+  const { requireNativeModule } = require("expo-modules-core");
+  FastArtRust = requireNativeModule("FastArtRust") || FastArtRust;
+} catch (_) {}
 
 export interface RustBeatResult {
   bpm: number;
@@ -79,20 +83,28 @@ class RustCoreBridgeService {
       // 2. Check WebAssembly on Web
       if (Platform.OS === "web" && typeof window !== "undefined" && window.WebAssembly) {
         try {
-          // Attempt loading WASM binary from static assets
-          const wasmUrl = "/assets/wasm/fastart_wasm.wasm";
-          const res = await fetch(wasmUrl);
-          if (res.ok) {
-            const buf = await res.arrayBuffer();
-            const module = await WebAssembly.instantiate(buf, {
-              env: {},
-              wasi_snapshot_preview1: {},
-            });
-            this.wasmInstance = module.instance.exports as unknown as WasmExports;
-            this.backendType = "web_wasm";
-            this.isInitialized = true;
-            console.log("[RustCoreBridge] Initialized with WebAssembly Rust Engine (fastart_wasm.wasm)");
-            return true;
+          // Attempt loading WASM binary from static public directory
+          const candidates = ["/wasm/fastart_wasm.wasm", "/assets/wasm/fastart_wasm.wasm"];
+          for (const wasmUrl of candidates) {
+            try {
+              const res = await fetch(wasmUrl);
+              if (res.ok) {
+                const buf = await res.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                // Verify WebAssembly magic header: \0asm
+                if (bytes[0] === 0x00 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d) {
+                  const module = await WebAssembly.instantiate(buf, {
+                    env: {},
+                    wasi_snapshot_preview1: {},
+                  });
+                  this.wasmInstance = module.instance.exports as unknown as WasmExports;
+                  this.backendType = "web_wasm";
+                  this.isInitialized = true;
+                  console.log("[RustCoreBridge] Initialized with WebAssembly Rust Engine (fastart_wasm.wasm)");
+                  return true;
+                }
+              }
+            } catch (_) {}
           }
         } catch (wasmErr) {
           console.warn("[RustCoreBridge] WebAssembly fetch skipped, fallback active:", wasmErr);

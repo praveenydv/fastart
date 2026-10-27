@@ -84,8 +84,6 @@ export default function App() {
   // Modal helpers synced with URL
   const openModal = useCallback((modalName: string) => {
     const CLIP_DEPENDENT_TOOLS = new Set([
-      "filters",
-      "effects",
       "transitions",
       "speed",
       "volume",
@@ -723,7 +721,6 @@ export default function App() {
                   handleOpenAudioModal={() => openModal("audio")}
                   handleOpenTextModal={() => openModal("text")}
                   handleOpenFiltersModal={() => {
-                    ensureSelectedVideoClip();
                     openModal("filters");
                   }}
                   handleOpenEffectsModal={() => {

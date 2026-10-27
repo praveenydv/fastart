@@ -83,13 +83,6 @@ export default function CanvasModal({
     onUpdateProject({ aspectRatio: ratio });
   };
 
-  const handleReset = () => {
-    soundEngine.playSfx("pop");
-    onUpdateProject({ aspectRatio: "9:16" });
-  };
-
-  const isDefault = currentRatio === "9:16";
-
   const sheetContent = (
     <View
       style={[styles.sheetContainer, styles.inlineSheetContainer]}
@@ -103,17 +96,6 @@ export default function CanvasModal({
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, isDefault && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
-              disabled={isDefault}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset ratio to 9:16"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]}>9:16</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               onPress={onClose}
               style={styles.doneBtn}
@@ -132,18 +114,6 @@ export default function CanvasModal({
         contentContainerStyle={[styles.scrollBody, isInline && { paddingTop: 12 }]}
         showsVerticalScrollIndicator={false}
       >
-        {isInline && !isDefault && (
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8, paddingHorizontal: 4 }}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, { paddingHorizontal: 10, height: 24, flexDirection: 'row', alignItems: 'center' }]}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]}>Reset 9:16</Text>
-            </TouchableOpacity>
-          </View>
-        )}
         <View style={styles.ratioGrid}>
           {RATIO_OPTIONS.map((item) => {
             const isSelected = currentRatio === item.id;
@@ -228,7 +198,7 @@ const styles = StyleSheet.create({
   sheetHandle: {
     width: 32,
     height: 3,
-    backgroundColor: "#2C364D",
+    backgroundColor: "#1F2637",
     borderRadius: 1.5,
     alignSelf: "center",
     marginTop: 6,
@@ -241,13 +211,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
-    backgroundColor: "#131826",
+    backgroundColor: "#08090E",
   },
   headerCloseBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -264,21 +236,25 @@ const styles = StyleSheet.create({
   resetBtn: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 6,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
+    flexDirection: "row",
+    alignItems: "center",
   },
   resetText: {
-    color: "#00F2FE",
-    fontSize: 10,
+    color: "#94A3B8",
+    fontSize: 10.5,
     fontWeight: "600",
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -297,8 +273,8 @@ const styles = StyleSheet.create({
   ratioCard: {
     width: "31.5%",
     backgroundColor: "#131826",
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderRadius: 6,
+    paddingVertical: 7,
     paddingHorizontal: 4,
     alignItems: "center",
     borderWidth: 1,
@@ -310,28 +286,28 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   ratioIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#0F131D",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#08090E",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 3,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
   ratioIconBoxActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   ratioLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: "#94A3B8",
     fontWeight: "600",
     marginBottom: 1,
   },
   ratioLabelActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "700",
   },
   ratioDesc: {
@@ -341,11 +317,11 @@ const styles = StyleSheet.create({
   },
   checkBadge: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    top: 3,
+    right: 3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
@@ -357,13 +333,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#00F2FE",
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   inlineAppliedBtn: {
     backgroundColor: "#10B981",
   },
   inlineApplyText: {
-    color: "#000000",
+    color: "#08090E",
     fontSize: 11,
     fontWeight: "700",
   },

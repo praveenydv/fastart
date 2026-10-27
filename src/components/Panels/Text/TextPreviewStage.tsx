@@ -1,7 +1,6 @@
 import React from "react";
-import { View, Text, Platform } from "react-native";
+import { View, Text, Platform, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { styles } from "./TextModalStyles";
 
 interface TextPreviewStageProps {
   inputText: string;
@@ -295,3 +294,76 @@ export default function TextPreviewStage({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  previewStage: {
+    backgroundColor: "#08090E",
+    borderRadius: 8,
+    padding: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    minHeight: 80,
+    position: "relative",
+    overflow: "hidden",
+  },
+  previewTopBar: {
+    position: "absolute",
+    top: 5,
+    left: 6,
+    right: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    zIndex: 5,
+  },
+  effectBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#131826",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+  },
+  effectBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  animBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#131826",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+  },
+  animBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "700",
+  },
+  previewPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    maxWidth: "90%",
+    marginVertical: 12,
+  },
+  previewText: {
+    fontWeight: "800",
+    fontSize: 16,
+    textAlign: "center",
+  },
+});

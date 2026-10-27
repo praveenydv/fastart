@@ -1,85 +1,34 @@
 // FastArt Unified Obsidian Dark Design System
+import { THEME_COLORS, DESIGN_CONSTANTS } from './designConstants';
+
 export const theme = {
-  colors: {
-    background: '#08090E',
-    surface: '#0F131D',
-    cardBackground: '#131826',
-    cardElevated: '#1B2234',
-    cardHover: '#232B42',
-    border: '#1F2637',
-    borderLight: '#2C364D',
-    borderGlow: 'rgba(0, 242, 254, 0.35)',
-
-    // Brand Accents
-    primary: '#FFFFFF',
-    primaryHover: '#E4E4E7',
-    accent: '#00F2FE',
-    accentHover: '#38F8FF',
-    accentGlow: 'rgba(0, 242, 254, 0.18)',
-
-    // Text Hierarchy
-    white: '#FFFFFF',
-    textPrimary: '#FFFFFF',
-    textSecondary: '#94A3B8',
-    textMuted: '#64748B',
-    textDisabled: '#475569',
-
-    // Status & Utility
-    danger: '#EF4444',
-    dangerBg: 'rgba(239, 68, 68, 0.12)',
-    success: '#10B981',
-    successBg: 'rgba(16, 185, 129, 0.12)',
-    warning: '#F59E0B',
-    proGold: '#FBBF24',
-
-    // Timeline & Canvas
-    timelineTrackBg: '#0F131D',
-    timelineVideo: '#FFFFFF',
-    timelineAudio: '#18181B',
-    timelineAudioText: '#D4D4D8',
-    timelineText: '#18181B',
-    timelineTextTag: '#D4D4D8',
-    timelineEffect: '#18181B',
-    timelineEffectTag: '#D4D4D8',
-    timelineOverlay: '#18181B',
-    timelineOverlayTag: '#D4D4D8',
-    timelineHandle: '#00F2FE',
-  },
+  colors: THEME_COLORS,
   typography: {
-    fontFamily: 'System',
+    fontFamily: DESIGN_CONSTANTS.TYPOGRAPHY.fontFamily,
     sizes: {
-      xs: 11,
-      sm: 13,
-      base: 15,
-      lg: 17,
+      xs: DESIGN_CONSTANTS.TYPOGRAPHY.sizes.micro,
+      sm: DESIGN_CONSTANTS.TYPOGRAPHY.sizes.label,
+      base: DESIGN_CONSTANTS.TYPOGRAPHY.sizes.input,
+      lg: DESIGN_CONSTANTS.TYPOGRAPHY.sizes.heading,
       xl: 20,
-      xxl: 24,
+      xxl: DESIGN_CONSTANTS.TYPOGRAPHY.sizes.display,
       display: 30,
     },
-    weights: {
-      regular: '400' as const,
-      medium: '500' as const,
-      semibold: '600' as const,
-      bold: '700' as const,
-    },
+    weights: DESIGN_CONSTANTS.TYPOGRAPHY.weights,
   },
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 12,
-    base: 16,
-    lg: 20,
-    xl: 24,
-    xxl: 32,
-  },
+  spacing: DESIGN_CONSTANTS.SPACING,
   borderRadius: {
-    xs: 4,
-    sm: 6,
-    md: 10,
-    lg: 14,
-    xl: 20,
-    full: 9999,
+    xs: DESIGN_CONSTANTS.RADII.xs,
+    sm: DESIGN_CONSTANTS.RADII.sm,
+    md: DESIGN_CONSTANTS.RADII.md,
+    lg: DESIGN_CONSTANTS.RADII.lg,
+    xl: DESIGN_CONSTANTS.RADII.xl,
+    full: DESIGN_CONSTANTS.RADII.full,
   },
+  dimensions: DESIGN_CONSTANTS.DIMENSIONS,
+  shadows: DESIGN_CONSTANTS.SHADOWS,
+  zIndex: DESIGN_CONSTANTS.Z_INDEX,
 };
 
+export { THEME_COLORS, DESIGN_CONSTANTS };
 export default theme;

@@ -314,8 +314,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const renderedTrackHeaders = useMemo(() => {
     const headers: React.ReactNode[] = [];
 
-    trackRows.forEach((rowClips, idx) => {
-      const isEmpty = rowClips.length === 0;
+    trackRows.forEach((_rowClips, idx) => {
       const isSeamActive =
         dragState?.isInsertingNewTrack && dragState?.insertTrackIndex === idx;
 
@@ -362,25 +361,18 @@ export const Timeline: React.FC<TimelineProps> = ({
               {`T${idx + 1}`}
             </Text>
           </View>
-          {isEmpty && activeTrackCount > 1 && (
-            <TouchableOpacity
-              style={styles.removeEmptyTrackHeaderBtn}
-              onPress={(e: any) => {
-                if (e?.stopPropagation) e.stopPropagation();
-                soundEngine.playSfx("click");
-                handleRemoveTrack(idx);
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="trash-outline" size={11} color="#EF4444" />
-            </TouchableOpacity>
-          )}
         </View>,
       );
     });
 
-    // Bottom new track header preview when dragging clip
-    if (dragState && activeTrackCount < 10) {
+    // Bottom new track header preview when dragging clip (only if track just above it is not empty)
+    const isLastTrackEmpty =
+      trackRows.length > 0 &&
+      (trackRows[trackRows.length - 1].length === 0 ||
+        (trackRows[trackRows.length - 1].length === 1 &&
+          trackRows[trackRows.length - 1][0].id === dragState?.clipId));
+
+    if (dragState && activeTrackCount < 10 && !isLastTrackEmpty) {
       const isBottomActive =
         dragState.isInsertingNewTrack &&
         (dragState.insertTrackIndex === null ||

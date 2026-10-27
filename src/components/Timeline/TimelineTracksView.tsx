@@ -265,9 +265,39 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                   </View>
                 )}
 
+              {/* Empty track indicator & delete track button directly on the track lane */}
+              {isEmptyTrack && !dragState && (
+                <View style={styles.emptyTrackLaneContainer} pointerEvents="box-none">
+                  <Text style={styles.emptyTrackLanePrompt}>Empty Track</Text>
+                  {activeTrackCount > 1 && (
+                    <TouchableOpacity
+                      style={styles.removeEmptyTrackLaneBtn}
+                      onPress={(e: any) => {
+                        if (e?.stopPropagation) e.stopPropagation();
+                        e?.nativeEvent?.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        handleRemoveTrack(trackIdx);
+                      }}
+                      {...(Platform.OS === "web"
+                        ? {
+                            onClick: (e: any) => {
+                              e.stopPropagation();
+                            },
+                          }
+                        : {})}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel={`Delete empty track ${trackIdx + 1}`}
+                    >
+                      <Ionicons name="trash-outline" size={11} color="#EF4444" />
+                      <Text style={styles.removeEmptyTrackLaneText}>Delete Track</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
 
-                    {/* Render all clips in this track */}
-                    {rowClips.map((clip, clipIndexInRow) => {
+              {/* Render all clips in this track */}
+              {rowClips.map((clip, clipIndexInRow) => {
                       const isThisTrimmed =
                         activeTrimDelta && activeTrimDelta.clipId === clip.id;
                       const isBeingDragged =
@@ -710,9 +740,18 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
       );
     })}
 
-      {/* Bottom Drop Target Lane: Always rock-solid below tracks while dragging */}
-      {dragState && activeTrackCount < 10 && (
-        <View
+      {/* Bottom Drop Target Lane: Only show if track just above it is not empty */}
+      {(() => {
+        const isLastTrackEmpty =
+          trackRows.length > 0 &&
+          (trackRows[trackRows.length - 1].length === 0 ||
+            (trackRows[trackRows.length - 1].length === 1 &&
+              trackRows[trackRows.length - 1][0].id === dragState?.clipId));
+
+        if (!dragState || activeTrackCount >= 10 || isLastTrackEmpty) return null;
+
+        return (
+          <View
           key="drag-drop-bottom-target"
           pointerEvents="none"
           style={[
@@ -801,7 +840,8 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
             </>
           )}
         </View>
-      )}
+        );
+      })()}
 
       {/* Tap empty space below tracks to deselect */}
       <Pressable

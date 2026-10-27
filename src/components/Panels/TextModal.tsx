@@ -6,12 +6,17 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { TextClip } from "../../types/project";
+import {
+  startLiveSpeechRecognition,
+  isLiveSpeechRecognitionSupported,
+} from "../../services/aiCaptionEngine";
 import { styles } from "./Text/TextModalStyles";
-import TextPreviewStage from "./Text/TextPreviewStage";
+import TextFontTab from "./Text/TextFontTab";
 import TextStyleTab from "./Text/TextStyleTab";
 import TextEffectsTab from "./Text/TextEffectsTab";
 import TextAnimTab from "./Text/TextAnimTab";
@@ -58,13 +63,70 @@ export default function TextModal({
     y: number;
   }>({ x: 50, y: 35 });
   const [duration, setDuration] = useState(3.0);
-  const [animTick, setAnimTick] = useState(0);
-  const [activeTab, setActiveTab] = useState<"style" | "effects" | "anim">(
-    "style",
+  const [activeTab, setActiveTab] = useState<"font" | "style" | "effects" | "anim">(
+    "font",
   );
   const lastLoadedClipIdRef = useRef<string | null>(null);
   const wasVisibleRef = useRef<boolean>(false);
   const isInitialLoadRef = useRef<boolean>(true);
+
+  const [isListening, setIsListening] = useState(false);
+  const recognitionSessionRef = useRef<{ stop: () => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionSessionRef.current) {
+        try {
+          recognitionSessionRef.current.stop();
+        } catch (_) {}
+        recognitionSessionRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleToggleSpeechToText = () => {
+    if (isListening) {
+      if (recognitionSessionRef.current) {
+        try {
+          recognitionSessionRef.current.stop();
+        } catch (_) {}
+        recognitionSessionRef.current = null;
+      }
+      setIsListening(false);
+      soundEngine.playSfx("click");
+      return;
+    }
+
+    soundEngine.playSfx("pop");
+    if (isLiveSpeechRecognitionSupported()) {
+      const session = startLiveSpeechRecognition(
+        "auto",
+        (transcript: string) => {
+          if (transcript) {
+            setInputText(transcript);
+          }
+        },
+        (err: any) => {
+          console.warn("Speech recognition error:", err);
+          setIsListening(false);
+        }
+      );
+      if (session) {
+        recognitionSessionRef.current = session;
+        setIsListening(true);
+      } else {
+        Alert.alert(
+          "Microphone Unavailable",
+          "Speech recognition could not be started. Please check microphone permissions."
+        );
+      }
+    } else {
+      Alert.alert(
+        "Speech to Text",
+        "Live speech-to-text dictation is supported in modern browsers like Chrome, Edge, and Safari."
+      );
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -108,19 +170,18 @@ export default function TextModal({
         }
       }
     } else {
+      if (recognitionSessionRef.current) {
+        try {
+          recognitionSessionRef.current.stop();
+        } catch (_) {}
+        recognitionSessionRef.current = null;
+      }
+      setIsListening(false);
       lastLoadedClipIdRef.current = null;
       isInitialLoadRef.current = true;
     }
     wasVisibleRef.current = visible;
   }, [visible, editingClip]);
-
-  useEffect(() => {
-    if (!visible) return;
-    const interval = setInterval(() => {
-      setAnimTick((t) => t + 1);
-    }, 60);
-    return () => clearInterval(interval);
-  }, [visible]);
 
   const buildBaseStyle = () => {
     let shadowColor = "rgba(0,0,0,0.5)";
@@ -321,13 +382,21 @@ export default function TextModal({
             showsVerticalScrollIndicator={false}
           >
             {/* Input Box + Inline Add Button */}
-            <View style={styles.inputContainer}>
+            <View
+              style={[
+                styles.inputContainer,
+                isListening && {
+                  borderColor: "#FF0050",
+                  backgroundColor: "rgba(255, 0, 80, 0.05)",
+                },
+              ]}
+            >
               <TextInput
                 style={styles.textInput}
                 value={inputText}
                 onChangeText={setInputText}
-                placeholder="Type your viral text..."
-                placeholderTextColor="#64748B"
+                placeholder={isListening ? "Listening... Speak now" : "Type your viral text..."}
+                placeholderTextColor={isListening ? "#FF0050" : "#64748B"}
                 returnKeyType="done"
                 onSubmitEditing={handleSave}
                 {...(Platform.OS === "web"
@@ -350,6 +419,25 @@ export default function TextModal({
                   <Ionicons name="close-circle" size={18} color="#8E95A5" />
                 </TouchableOpacity>
               )}
+
+              {/* Speech to Text Microphone inside text input */}
+              <TouchableOpacity
+                onPress={handleToggleSpeechToText}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{
+                  marginRight: isInline && !editingClip ? 6 : 0,
+                  padding: 4,
+                  borderRadius: 6,
+                  backgroundColor: isListening ? "rgba(255, 0, 80, 0.2)" : "rgba(0, 242, 254, 0.08)",
+                }}
+                accessibilityLabel={isListening ? "Stop voice dictation" : "Speech to Text"}
+              >
+                <Ionicons
+                  name={isListening ? "mic" : "mic-outline"}
+                  size={17}
+                  color={isListening ? "#FF0050" : "#00F2FE"}
+                />
+              </TouchableOpacity>
               {isInline && !editingClip && (
                 <TouchableOpacity
                   onPress={handleAddTextClip}
@@ -372,25 +460,34 @@ export default function TextModal({
               )}
             </View>
 
-            {/* Live Text Canvas Preview Stage */}
-            <TextPreviewStage
-              inputText={inputText}
-              selectedAnim={selectedAnim}
-              animTick={animTick}
-              selectedTextEffect={selectedTextEffect}
-              selectedBorderColor={selectedBorderColor}
-              selectedColor={selectedColor}
-              selectedStrokeColor={selectedStrokeColor}
-              selectedStrokeWidth={selectedStrokeWidth}
-              selectedBg={selectedBg}
-              selectedScale={selectedScale}
-              selectedRotation={selectedRotation}
-              selectedFontSize={selectedFontSize}
-              selectedFont={selectedFont}
-            />
-
-            {/* Category Tab Bar for Compact Mobile Ergonomics */}
+            {/* Category Tab Bar for Modern Ergonomic Text Configuration */}
             <View style={styles.tabBar}>
+              <TouchableOpacity
+                style={[
+                  styles.tabBtn,
+                  activeTab === "font" && styles.tabBtnActive,
+                ]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  setActiveTab("font");
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="text-outline"
+                  size={13}
+                  color={activeTab === "font" ? "#00F2FE" : "#8E9AA8"}
+                />
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    activeTab === "font" && styles.tabBtnTextActive,
+                  ]}
+                >
+                  Font
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[
                   styles.tabBtn,
@@ -405,7 +502,7 @@ export default function TextModal({
                 <Ionicons
                   name="color-palette-outline"
                   size={13}
-                  color={activeTab === "style" ? "#00F2FE" : "#94A3B8"}
+                  color={activeTab === "style" ? "#00F2FE" : "#8E9AA8"}
                 />
                 <Text
                   style={[
@@ -413,7 +510,7 @@ export default function TextModal({
                     activeTab === "style" && styles.tabBtnTextActive,
                   ]}
                 >
-                  Style & Font
+                  Style
                 </Text>
               </TouchableOpacity>
 
@@ -431,7 +528,7 @@ export default function TextModal({
                 <Ionicons
                   name="sparkles-outline"
                   size={13}
-                  color={activeTab === "effects" ? "#00F2FE" : "#94A3B8"}
+                  color={activeTab === "effects" ? "#00F2FE" : "#8E9AA8"}
                 />
                 <Text
                   style={[
@@ -439,7 +536,7 @@ export default function TextModal({
                     activeTab === "effects" && styles.tabBtnTextActive,
                   ]}
                 >
-                  Effects & Glow
+                  Effects
                 </Text>
               </TouchableOpacity>
 
@@ -457,7 +554,7 @@ export default function TextModal({
                 <Ionicons
                   name="play-outline"
                   size={13}
-                  color={activeTab === "anim" ? "#00F2FE" : "#94A3B8"}
+                  color={activeTab === "anim" ? "#00F2FE" : "#8E9AA8"}
                 />
                 <Text
                   style={[
@@ -465,15 +562,22 @@ export default function TextModal({
                     activeTab === "anim" && styles.tabBtnTextActive,
                   ]}
                 >
-                  Motion & Hooks
+                  Motion
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {activeTab === "style" && (
-              <TextStyleTab
+            {activeTab === "font" && (
+              <TextFontTab
                 selectedFont={selectedFont}
                 setSelectedFont={setSelectedFont}
+                selectedFontSize={selectedFontSize}
+                setSelectedFontSize={setSelectedFontSize}
+              />
+            )}
+
+            {activeTab === "style" && (
+              <TextStyleTab
                 selectedColor={selectedColor}
                 setSelectedColor={setSelectedColor}
                 selectedBg={selectedBg}

@@ -170,25 +170,25 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
           <View style={styles.sheetHeader}>
             <TouchableOpacity
               onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+              style={styles.closeBtn}
               activeOpacity={0.7}
               accessibilityLabel="Cancel"
             >
-              <Ionicons name="close" size={17} color="#EF4444" />
+              <Ionicons name="close" size={15} color="#94A3B8" />
             </TouchableOpacity>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="images-outline" size={17} color="#00F2FE" />
+              <Ionicons name="images-outline" size={15} color="#00F2FE" />
               <Text style={styles.sheetTitle}>Import Media</Text>
             </View>
 
             <TouchableOpacity
               onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              style={[styles.closeBtn, { backgroundColor: '#00F2FE', borderColor: '#00F2FE' }]}
               activeOpacity={0.7}
               accessibilityLabel="Done"
             >
-              <Ionicons name="checkmark" size={18} color="#000000" />
+              <Ionicons name="checkmark" size={15} color="#08090E" />
             </TouchableOpacity>
           </View>
 
@@ -197,7 +197,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
             <View style={styles.uploadPromptContainer}>
               <View style={styles.uploadIconOuterCircle}>
                 <View style={styles.uploadIconInnerCircle}>
-                  <Ionicons name="cloud-upload" size={40} color="#00F2FE" />
+                  <Ionicons name="cloud-upload" size={32} color="#00F2FE" />
                 </View>
               </View>
 
@@ -209,11 +209,11 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
               {/* Supported Format Pills */}
               <View style={styles.formatPillsRow}>
                 <View style={styles.formatPill}>
-                  <Ionicons name="videocam-outline" size={12} color="#00F2FE" />
+                  <Ionicons name="videocam-outline" size={11} color="#00F2FE" />
                   <Text style={styles.formatPillText}>MP4 / MOV / WebM</Text>
                 </View>
                 <View style={styles.formatPill}>
-                  <Ionicons name="image-outline" size={12} color="#10B981" />
+                  <Ionicons name="image-outline" size={11} color="#00F2FE" />
                   <Text style={styles.formatPillText}>JPG / PNG / WebP</Text>
                 </View>
               </View>
@@ -226,9 +226,9 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 activeOpacity={0.8}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color="#000000" />
+                  <ActivityIndicator size="small" color="#08090E" />
                 ) : (
-                  <Ionicons name="add-circle" size={20} color="#000000" />
+                  <Ionicons name="add-circle" size={16} color="#08090E" />
                 )}
                 <Text style={styles.primaryUploadButtonText}>
                   {isLoading ? 'Importing Media...' : 'Choose File From Device'}
@@ -249,19 +249,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131C',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: '80%',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#1F2637',
     borderBottomWidth: 0,
     overflow: 'hidden',
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 32,
+    height: 3,
+    backgroundColor: '#1F2637',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -270,110 +270,114 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#08090E',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    borderBottomColor: '#1F2637',
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
   closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetBody: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
   },
   uploadPromptContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
+    paddingVertical: 18,
     paddingHorizontal: 12,
   },
   uploadIconOuterCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0, 242, 254, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.2)',
+    borderColor: 'rgba(0, 242, 254, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   uploadIconInnerCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(0, 242, 254, 0.16)',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   uploadMainTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    marginBottom: 6,
+    marginBottom: 4,
     textAlign: 'center',
   },
   uploadSubtitle: {
-    color: '#8E95A5',
-    fontSize: 12,
-    lineHeight: 18,
+    color: '#94A3B8',
+    fontSize: 11,
+    lineHeight: 16,
     textAlign: 'center',
-    maxWidth: 290,
-    marginBottom: 18,
+    maxWidth: 280,
+    marginBottom: 16,
   },
   formatPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   formatPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#161B26',
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    borderColor: '#1F2637',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   formatPillText: {
-    color: '#CBD5E1',
-    fontSize: 10.5,
+    color: '#94A3B8',
+    fontSize: 10,
     fontWeight: '700',
   },
   primaryUploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: '#00F2FE',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     width: '100%',
-    maxWidth: 320,
+    maxWidth: 280,
     shadowColor: '#00F2FE',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
     elevation: 3,
   },
   primaryUploadButtonText: {
-    color: '#000000',
-    fontSize: 14,
+    color: '#08090E',
+    fontSize: 12.5,
     fontWeight: '800',
   },
 });

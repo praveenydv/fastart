@@ -54,29 +54,44 @@ export const trackStyles = {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 8,
+    zIndex: 20,
+    ...(Platform.OS === "web"
+      ? ({
+          position: "sticky" as any,
+          left: 12,
+        } as any)
+      : {}),
   },
   emptyTrackLanePrompt: {
     color: "#71717A",
-    fontSize: 10,
-    fontStyle: "italic" as const,
+    fontSize: 10.5,
+    fontWeight: "500" as const,
+    letterSpacing: 0.2,
   },
   removeEmptyTrackLaneBtn: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 3,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    gap: 4,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.25)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
     cursor: "pointer" as any,
-    zIndex: 15,
+    zIndex: 25,
+    ...(Platform.OS === "web"
+      ? ({
+          transition: "all 0.15s ease",
+          boxShadow: "0 1px 3px rgba(239, 68, 68, 0.12)",
+        } as any)
+      : {}),
   },
   removeEmptyTrackLaneText: {
     color: "#EF4444",
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: "700" as const,
+    letterSpacing: 0.2,
   },
   universalClipCard: {
     flex: 1,

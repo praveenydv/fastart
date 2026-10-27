@@ -71,7 +71,7 @@ export default function DownloadCompleteModal({
             {/* Header / Celebration Icon */}
             <View style={styles.iconCircleOuter}>
               <View style={styles.iconCircleInner}>
-                <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+                <Ionicons name="checkmark-circle" size={36} color="#00F2FE" />
               </View>
             </View>
 
@@ -90,7 +90,7 @@ export default function DownloadCompleteModal({
                         ? "musical-notes"
                         : "film"
                   }
-                  size={18}
+                  size={15}
                   color="#00F2FE"
                 />
                 <Text
@@ -138,7 +138,7 @@ export default function DownloadCompleteModal({
               {/* Exact Destination Path Card */}
               {destinationPath ? (
                 <View style={styles.destinationCard}>
-                  <Ionicons name="folder-open" size={16} color="#00F2FE" />
+                  <Ionicons name="folder-open" size={14} color="#00F2FE" />
                   <View style={styles.destinationTextContainer}>
                     <Text style={styles.destinationHeader}>File Location</Text>
                     <Text
@@ -154,7 +154,7 @@ export default function DownloadCompleteModal({
 
               {/* Status Verification Pill */}
               <View style={styles.verifiedRow}>
-                <Ionicons name="shield-checkmark" size={14} color="#10B981" />
+                <Ionicons name="shield-checkmark" size={13} color="#00F2FE" />
                 <Text style={styles.verifiedText}>
                   {isWeb
                     ? "Verified download • Check your Downloads folder"
@@ -174,7 +174,7 @@ export default function DownloadCompleteModal({
                 }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="checkmark-sharp" size={18} color="#000000" />
+                <Ionicons name="checkmark-sharp" size={16} color="#08090E" />
                 <Text style={styles.primaryBtnText}>Done / Back to Editor</Text>
               </TouchableOpacity>
 
@@ -190,7 +190,7 @@ export default function DownloadCompleteModal({
                 >
                   <Ionicons
                     name="cloud-download-outline"
-                    size={17}
+                    size={15}
                     color="#00F2FE"
                   />
                   <Text style={styles.secondaryBtnText}>
@@ -209,178 +209,178 @@ export default function DownloadCompleteModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(3, 6, 12, 0.82)",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 18,
     zIndex: 99999,
   },
   cardContainer: {
     width: "100%",
-    maxWidth: 420,
-    borderRadius: 24,
-    backgroundColor: "#0D111A",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 28,
-    elevation: 20,
+    maxWidth: 380,
+    borderRadius: 16,
+    backgroundColor: "#0F131D",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 12,
     overflow: "hidden",
   },
   glowBorder: {
-    borderWidth: 1.2,
-    borderColor: "rgba(0, 242, 254, 0.3)",
-    borderRadius: 24,
-    padding: 24,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    borderRadius: 16,
+    padding: 18,
     alignItems: "center",
-    backgroundColor: "rgba(16, 21, 33, 0.95)",
+    backgroundColor: "#0F131D",
   },
   iconCircleOuter: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.28)",
+    borderColor: "rgba(0, 242, 254, 0.2)",
   },
   iconCircleInner: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: "rgba(16, 185, 129, 0.2)",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0, 242, 254, 0.14)",
     justifyContent: "center",
     alignItems: "center",
   },
   title: {
     color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.3,
-    marginBottom: 6,
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    marginBottom: 4,
     textAlign: "center",
   },
   subtitle: {
-    color: "#8E95A5",
-    fontSize: 13,
+    color: "#94A3B8",
+    fontSize: 11,
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     fontWeight: "500",
   },
   infoCard: {
     width: "100%",
-    backgroundColor: "#090C14",
-    borderRadius: 16,
-    padding: 14,
+    backgroundColor: "#08090E",
+    borderRadius: 10,
+    padding: 10,
     borderWidth: 1,
-    borderColor: "#1E2638",
-    marginBottom: 22,
+    borderColor: "#1F2637",
+    marginBottom: 16,
   },
   filenameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 8,
   },
   filenameText: {
     flex: 1,
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: -0.2,
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 10,
+    gap: 5,
+    marginBottom: 8,
   },
   badge: {
-    backgroundColor: "#161D2B",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    backgroundColor: "#131826",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#243046",
+    borderColor: "#1F2637",
   },
   badgeText: {
-    color: "#C2C9D6",
-    fontSize: 11,
+    color: "#94A3B8",
+    fontSize: 10,
     fontWeight: "600",
   },
   formatBadge: {
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "rgba(0, 242, 254, 0.25)",
   },
   formatBadgeText: {
     color: "#00F2FE",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
   },
   verifiedRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingTop: 8,
+    gap: 5,
+    paddingTop: 7,
     borderTopWidth: 1,
-    borderTopColor: "#161D2B",
+    borderTopColor: "#1F2637",
   },
   verifiedText: {
-    color: "#10B981",
-    fontSize: 11,
-    fontWeight: "600",
+    color: "#94A3B8",
+    fontSize: 10,
+    fontWeight: "500",
   },
   destinationCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: "rgba(0, 242, 254, 0.05)",
+    gap: 6,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.2)",
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
+    borderColor: "#1F2637",
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
   },
   destinationTextContainer: {
     flex: 1,
   },
   destinationHeader: {
     color: "#00F2FE",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   destinationValue: {
-    color: "#C2C9D6",
-    fontSize: 11,
+    color: "#94A3B8",
+    fontSize: 10,
     fontWeight: "500",
-    lineHeight: 15,
+    lineHeight: 14,
   },
   actionsContainer: {
     width: "100%",
-    gap: 10,
+    gap: 8,
   },
   primaryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     backgroundColor: "#00F2FE",
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
     shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   primaryBtnText: {
-    color: "#000000",
-    fontSize: 14,
+    color: "#08090E",
+    fontSize: 12.5,
     fontWeight: "800",
     letterSpacing: -0.2,
   },
@@ -388,27 +388,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 6,
+    backgroundColor: "#131826",
+    paddingVertical: 9,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "#1F2637",
   },
   secondaryBtnText: {
     color: "#00F2FE",
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "700",
   },
   doneBtn: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 11,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
   },
   doneBtnText: {
-    color: "#8E95A5",
-    fontSize: 13,
+    color: "#94A3B8",
+    fontSize: 11.5,
     fontWeight: "600",
   },
 });

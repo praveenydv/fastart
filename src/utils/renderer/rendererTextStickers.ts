@@ -25,7 +25,7 @@ export function drawSticker(
   let alpha = 1.0;
   let offsetY = 0;
 
-  const anim = stk.animation || "bounce";
+  const anim = stk.animation || "none";
   if (anim === "bounce") {
     const bounce = Math.sin(elapsed * 4) * 0.08;
     scale += bounce;

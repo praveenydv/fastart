@@ -17,7 +17,9 @@ export default function TextAnimTab({
   setSelectedAnim,
   onApplyTemplate,
 }: TextAnimTabProps) {
-  const [animCategory, setAnimCategory] = React.useState<"all" | "in" | "loop">("all");
+  const [animCategory, setAnimCategory] = React.useState<"all" | "in" | "loop">(
+    "all",
+  );
 
   const filteredAnims = ANIMATION_OPTIONS.filter((a: any) => {
     if (animCategory === "all") return true;
@@ -27,8 +29,13 @@ export default function TextAnimTab({
   return (
     <>
       {/* Animation Category Filter */}
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={styles.sectionTitle}>MOTION ANIMATION ({filteredAnims.length})</Text>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
         <View style={{ flexDirection: "row", gap: 6 }}>
           {(["all", "in", "loop"] as const).map((cat) => (
             <TouchableOpacity
@@ -41,20 +48,25 @@ export default function TextAnimTab({
                 paddingHorizontal: 8,
                 paddingVertical: 3,
                 borderRadius: 6,
-                backgroundColor: animCategory === cat ? "#FFFFFF" : "#18181C",
+                backgroundColor:
+                  animCategory === cat ? "rgba(0, 242, 254, 0.12)" : "#131826",
                 borderWidth: 1,
-                borderColor: animCategory === cat ? "#FFFFFF" : "#27272F",
+                borderColor: animCategory === cat ? "#00F2FE" : "#1F2637",
               }}
             >
               <Text
                 style={{
                   fontSize: 10,
                   fontWeight: "700",
-                  color: animCategory === cat ? "#000000" : "#71717A",
+                  color: animCategory === cat ? "#00F2FE" : "#64748B",
                   textTransform: "uppercase",
                 }}
               >
-                {cat === "all" ? "All" : cat === "in" ? "Entrance (In)" : "Continuous (Loop)"}
+                {cat === "all"
+                  ? "All"
+                  : cat === "in"
+                    ? "Entrance (In)"
+                    : "Continuous (Loop)"}
               </Text>
             </TouchableOpacity>
           ))}
@@ -81,7 +93,7 @@ export default function TextAnimTab({
               <Ionicons
                 name={anim.icon as any}
                 size={14}
-                color={isActive ? "#000000" : "#8E95A5"}
+                color={isActive ? "#00F2FE" : "#94A3B8"}
               />
               <Text
                 style={[
@@ -95,7 +107,6 @@ export default function TextAnimTab({
           );
         })}
       </ScrollView>
-
 
       {/* Viral Presets & Hooks */}
       <Text style={styles.sectionTitle}>{"VIRAL HOOKS & PRESETS"}</Text>

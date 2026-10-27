@@ -234,9 +234,12 @@ export interface EffectClip {
   startTime: number;
   duration: number;
   intensity?: number;
+  filter?: string;
+  customLut?: CustomLutConfig;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
   layer?: number;
+  isWholeProject?: boolean;
 }
 
 export interface ProjectTracks {
@@ -265,6 +268,8 @@ export interface FastArtProject {
   beatMarkers?: number[];
   aiDenoise?: boolean;
   captionSettings?: any;
+  filter?: string;
+  customLut?: CustomLutConfig;
   tracks: ProjectTracks;
 }
 

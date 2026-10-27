@@ -6,6 +6,7 @@ import {
   CaptionClip,
   StickerClip,
   EffectClip,
+  computeTotalDuration,
 } from "../types/project";
 import { addNotification } from "../utils/storage";
 import { allocateClipPlacement, doesClipOverlap, allocateNewTrackForClip } from "../utils/trackPlacement";
@@ -374,6 +375,7 @@ export function useProjectMediaAdders({
 
       newStickerClip.startTime = Math.max(0, Number(desiredStart.toFixed(3)));
       newStickerClip.trackIndex = newTrackIndex;
+      newStickerClip.animation = newStickerClip.animation || 'none';
       const stickerClips = [...(current.tracks.stickers || []), newStickerClip];
 
       addNotification({
@@ -397,32 +399,71 @@ export function useProjectMediaAdders({
     [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
-  // Add or preview effect on a new track
+  // Add effect (attached to video clip if selected, or create timeline effect clip if global)
   const handleAddEffect = useCallback(
     (preset: any) => {
       const current = projectRef.current || project;
       if (!current) return;
 
-      // 1. If explicit on-clip application requested:
-      if (preset.applyToClip && selectedClip && selectedClipType === "video" && selectedClipId) {
+      const effType = typeof preset === "string" ? preset : (preset.type || preset.id);
+      const effInt = typeof preset === "object" && preset.intensity !== undefined ? preset.intensity : 0.8;
+
+      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the effect to that clip!
+      if (selectedClipId && selectedClipType === "video") {
         const videoClips = [...(current.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
+          const isNone = effType === "none";
           videoClips[idx] = {
             ...videoClips[idx],
-            effect: preset.id === "none" ? undefined : (preset.type || preset.id),
-            effectIntensity: preset.intensity !== undefined ? preset.intensity : 0.8,
+            effect: isNone ? undefined : effType,
+            effectIntensity: isNone ? undefined : effInt,
           };
           updateProjectWithHistory({
             ...current,
             tracks: { ...current.tracks, video: videoClips },
           });
+          addNotification({
+            title: isNone ? "Effect Removed" : "Effect Applied",
+            message: isNone ? "Effect cleared from video clip." : `Attached to selected video clip.`,
+            icon: "sparkles",
+          });
+        }
+        return;
+      }
+
+      // 2. If an effect clip is already selected on timeline, update it!
+      if ((selectedClipType === "effects" || selectedClipType === "effect") && selectedClipId) {
+        const effectClips = [...(current.tracks.effects || [])];
+        const idx = effectClips.findIndex((e) => e.id === selectedClipId);
+        if (idx >= 0) {
+          if (effType === "none") {
+            effectClips.splice(idx, 1);
+            updateProjectWithHistory({
+              ...current,
+              tracks: { ...current.tracks, effects: effectClips },
+            });
+            if (setSelectedClipId) setSelectedClipId(null);
+            if (setSelectedClipType) setSelectedClipType("");
+          } else {
+            effectClips[idx] = {
+              ...effectClips[idx],
+              type: effType,
+              name: preset.name || "Effect",
+              intensity: effInt,
+            };
+            updateProjectWithHistory({
+              ...current,
+              tracks: { ...current.tracks, effects: effectClips },
+            });
+          }
           return;
         }
       }
 
-      // 2. Otherwise: create a standalone Timeline Effect Clip on a brand-new track!
-      if (preset.id === "none") return;
+      // 3. GLOBAL: Create timeline effect clip!
+      if (effType === "none") return;
+
       const dur = preset.duration || 3.0;
       const desiredStart = currentTime || 0;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
@@ -432,11 +473,11 @@ export function useProjectMediaAdders({
 
       const newEff: EffectClip = {
         id: preset.id && String(preset.id).startsWith("eff-") ? preset.id : "eff-" + Date.now(),
-        type: preset.type || preset.id,
+        type: effType,
         name: preset.name || "Effect",
         startTime: Math.max(0, Number(desiredStart.toFixed(3))),
         duration: dur,
-        intensity: preset.intensity !== undefined ? preset.intensity : 0.8,
+        intensity: effInt,
         trackIndex: newTrackIndex,
       };
       const effectClips = [...(current.tracks.effects || []), newEff];
@@ -459,7 +500,7 @@ export function useProjectMediaAdders({
         icon: "sparkles",
       });
     },
-    [project, projectRef, selectedClip, selectedClipType, selectedClipId, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType, addNotification],
+    [project, projectRef, currentTime, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType, addNotification],
   );
 
   return {

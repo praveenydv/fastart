@@ -302,7 +302,7 @@ export function useActiveTransformItem({
       const elapsed = Math.max(0, currentTime - (selectedSticker.startTime || 0));
       let animScale = 1.0;
       let animOffsetY = 0;
-      const anim = selectedSticker.animation || "bounce";
+      const anim = selectedSticker.animation || "none";
 
       if (anim === "bounce") {
         animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;

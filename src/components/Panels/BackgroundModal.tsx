@@ -130,6 +130,8 @@ export default function BackgroundModal({
 
   // Find sample active media thumbnail to preview auto blur
   const sampleMediaThumb =
+    project.tracks?.video?.find((v) => v.thumbnail)?.thumbnail ||
+    project.tracks?.video?.find((v) => v.type === 'photo')?.url ||
     project.tracks?.video?.[0]?.thumbnail ||
     (project.tracks?.video?.[0]?.type === 'photo'
       ? project.tracks?.video?.[0]?.url
@@ -244,12 +246,12 @@ export default function BackgroundModal({
               <Ionicons
                 name="color-palette-outline"
                 size={14}
-                color={activeTab === 'color' ? '#FFFFFF' : '#71717A'}
+                color={activeTab === 'color' ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'color' && { color: '#FFFFFF', fontWeight: '700' },
+                  activeTab === 'color' && { color: '#00F2FE', fontWeight: '700' },
                 ]}
               >
                 Color
@@ -267,12 +269,12 @@ export default function BackgroundModal({
               <Ionicons
                 name="image-outline"
                 size={14}
-                color={activeTab === 'image' ? '#FFFFFF' : '#71717A'}
+                color={activeTab === 'image' ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'image' && { color: '#FFFFFF', fontWeight: '700' },
+                  activeTab === 'image' && { color: '#00F2FE', fontWeight: '700' },
                 ]}
               >
                 Image
@@ -290,12 +292,12 @@ export default function BackgroundModal({
               <Ionicons
                 name="water-outline"
                 size={14}
-                color={activeTab === 'blur' ? '#FFFFFF' : '#71717A'}
+                color={activeTab === 'blur' ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'blur' && { color: '#FFFFFF', fontWeight: '700' },
+                  activeTab === 'blur' && { color: '#00F2FE', fontWeight: '700' },
                 ]}
               >
                 Blur
@@ -346,7 +348,7 @@ export default function BackgroundModal({
                             styles.colorCircle,
                             { backgroundColor: col.id },
                             col.id === '#FFFFFF' && { borderWidth: 1, borderColor: '#52525B' },
-                            col.id === '#000000' && { borderWidth: 1, borderColor: '#27272F' },
+                            col.id === '#000000' && { borderWidth: 1, borderColor: '#1F2637' },
                           ]}
                         >
                           {isSelected && (
@@ -598,9 +600,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#1F2637',
   },
   headerCloseBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#131826',
     alignItems: 'center',
     justifyContent: 'center',
@@ -614,16 +616,18 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   resetText: {
     color: '#94A3B8',
@@ -631,10 +635,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -648,7 +654,7 @@ const styles = StyleSheet.create({
     padding: 2,
     borderWidth: 1,
     borderColor: '#1F2637',
-    height: 32,
+    height: 30,
   },
   tabBtn: {
     flex: 1,
@@ -660,6 +666,8 @@ const styles = StyleSheet.create({
   },
   tabBtnActive: {
     backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#00F2FE',
   },
   tabText: {
     fontSize: 10.5,
@@ -667,18 +675,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   contentScroll: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingHorizontal: 12,
+    paddingTop: 6,
   },
   scrollBody: {
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   tabBodySection: {
     flex: 1,
   },
   sectionTitle: {
     color: '#94A3B8',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
@@ -686,31 +694,31 @@ const styles = StyleSheet.create({
   },
   colorRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     paddingVertical: 2,
   },
   colorItem: {
     alignItems: 'center',
-    width: 36,
+    width: 32,
   },
   colorItemActive: {
     transform: [{ scale: 1.05 }],
   },
   colorCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   colorLabel: {
-    fontSize: 9,
+    fontSize: 8.5,
     color: '#64748B',
     marginTop: 2,
     textAlign: 'center',
   },
   colorLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '700',
   },
   hexInputRow: {
@@ -721,20 +729,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1F2637',
     paddingHorizontal: 8,
-    height: 34,
+    height: 30,
     gap: 6,
   },
   colorCircleSmall: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#3F3F46',
+    borderColor: '#1F2637',
   },
   hexInput: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 11.5,
+    fontSize: 11,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     fontWeight: '700',
   },
@@ -746,73 +754,73 @@ const styles = StyleSheet.create({
     borderColor: '#1F2637',
     borderStyle: 'dashed',
     borderRadius: 8,
-    padding: 10,
+    padding: 8,
     gap: 8,
   },
   uploadIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#202026',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1B2234',
     alignItems: 'center',
     justifyContent: 'center',
   },
   uploadTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   uploadSubtitle: {
-    color: '#71717A',
-    fontSize: 11,
-    marginTop: 2,
+    color: '#64748B',
+    fontSize: 10,
+    marginTop: 1,
   },
   activeCustomImageContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181C',
+    backgroundColor: '#131826',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#27272F',
-    padding: 8,
-    marginTop: 10,
+    borderColor: '#1F2637',
+    padding: 6,
+    marginTop: 8,
   },
   activeCustomImageThumb: {
-    width: 44,
-    height: 44,
+    width: 38,
+    height: 38,
     borderRadius: 6,
   },
   activeCustomImageText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   activeCustomImageSub: {
-    color: '#71717A',
-    fontSize: 10,
+    color: '#64748B',
+    fontSize: 9.5,
     marginTop: 1,
   },
   removeImageBtn: {
-    padding: 6,
+    padding: 5,
     borderRadius: 4,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   wallpaperGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   wallpaperCard: {
-    width: '31%',
-    height: 72,
-    borderRadius: 8,
+    width: '31.5%',
+    height: 66,
+    borderRadius: 6,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: '#27272F',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     position: 'relative',
   },
   wallpaperCardActive: {
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   wallpaperCardImage: {
     width: '100%',
@@ -823,7 +831,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 4,
     paddingVertical: 2,
     flexDirection: 'row',
@@ -832,60 +840,60 @@ const styles = StyleSheet.create({
   },
   wallpaperCardTitle: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: '700',
     flex: 1,
   },
   wallpaperCheckBadge: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#FFFFFF',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
   blurNoticeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#18181C',
-    padding: 10,
+    gap: 6,
+    backgroundColor: '#131826',
+    padding: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#27272F',
-    marginBottom: 14,
+    borderColor: '#1F2637',
+    marginBottom: 10,
   },
   blurNoticeText: {
-    color: '#A1A1AA',
-    fontSize: 11,
+    color: '#94A3B8',
+    fontSize: 10.5,
     flex: 1,
-    lineHeight: 15,
+    lineHeight: 14,
   },
   blurLevelsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   blurPresetCard: {
-    width: '31%',
+    width: '31.5%',
     backgroundColor: '#131826',
-    borderRadius: 8,
-    padding: 5,
+    borderRadius: 6,
+    padding: 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   blurPresetCardActive: {
     borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   blurThumbnailContainer: {
     width: '100%',
-    height: 52,
-    borderRadius: 6,
+    height: 48,
+    borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: '#09090B',
-    marginBottom: 6,
+    backgroundColor: '#08090E',
+    marginBottom: 4,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -901,27 +909,27 @@ const styles = StyleSheet.create({
   },
   blurSelectedCheckBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
+    top: 3,
+    right: 3,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
   blurCardTitle: {
-    color: '#A1A1AA',
-    fontSize: 11,
+    color: '#94A3B8',
+    fontSize: 10,
     fontWeight: '600',
   },
   blurCardTitleActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '700',
   },
   blurCardDesc: {
-    color: '#71717A',
-    fontSize: 9,
+    color: '#64748B',
+    fontSize: 8.5,
     marginTop: 1,
   },
   inlineApplyBtn: {
@@ -929,16 +937,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#00F2FE',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 6,
   },
   inlineAppliedBtn: {
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
-    color: '#000000',
-    fontSize: 12,
+    color: '#08090E',
+    fontSize: 11,
     fontWeight: '700',
   },
 });

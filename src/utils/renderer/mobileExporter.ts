@@ -2399,7 +2399,8 @@ export function renderMobileProjectFrame(
         const crop = vid.crop || vid.transform?.crop;
         const flipX = Boolean((vid as any).flipHorizontal || vid.transform?.flipX || kfT?.flipX);
         const flipY = Boolean((vid as any).flipVertical || vid.transform?.flipY || kfT?.flipY);
-        const filter = vid.filter || vid.effect;
+        const activeFilterClip = activeEffects.find((e: any) => e.filter || e.type?.startsWith("filter_"));
+        const filter = vid.filter || activeFilterClip?.filter || (activeFilterClip ? activeFilterClip.type.replace(/^filter_/, "") : undefined) || project.filter || vid.effect;
         const mask = vid.mask || vid.transform?.mask;
         const cutout = vid.cutout;
 

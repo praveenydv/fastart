@@ -8,7 +8,8 @@ import Toolbar from "../Toolbar";
 import { DesktopMediaAudioPanel } from "../Desktop/DesktopMediaAudioPanel";
 import { INLINE_MODAL_KEYS } from "./EditorModals";
 import { soundEngine } from "../../utils/audioEngine";
-import { FastArtProject } from "../../types/project";
+import { FastArtProject, EffectClip } from "../../types/project";
+import { allocateNewTrackForClip } from "../../utils/trackPlacement";
 
 interface EditorWorkspaceProps {
   project: FastArtProject;
@@ -223,44 +224,104 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         const audio =
           project.tracks?.audio?.find((c: any) => cur >= c.startTime && cur <= c.startTime + c.duration) ||
           project.tracks?.audio?.[0];
-        if (audio) {
-          setSelectedClipId(audio.id);
-          setSelectedClipType("audio");
-          return audio.id;
-        }
+        return audio ? audio.id : null;
       }
       const video =
         project.tracks?.video?.find((c: any) => cur >= c.startTime && cur <= c.startTime + c.duration) ||
         project.tracks?.video?.[0];
-      if (video) {
-        setSelectedClipId(video.id);
-        setSelectedClipType("video");
-        return video.id;
-      }
-      return null;
+      return video ? video.id : null;
     },
-    [project, selectedClipId, currentTime, setSelectedClipId, setSelectedClipType]
+    [project, selectedClipId, currentTime]
   );
 
   const handleApplyFilter = React.useCallback(
     (filter: string, intensity?: number) => {
-      const targetId = resolveActiveClipId("video");
-      if (!targetId || !project) return;
+      if (!project) return;
       const safeIntensity = intensity ?? 80;
-      const updatedVideos = (project.tracks?.video || []).map((c: any) =>
-        c.id === targetId
-          ? { ...c, filter, filterIntensity: safeIntensity }
-          : c
+
+      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the filter to that clip!
+      if (selectedClipId && selectedClipType === "video") {
+        const isNone = filter === "none" || filter === "normal";
+        const updatedVideos = (project.tracks?.video || []).map((c: any) =>
+          c.id === selectedClipId
+            ? { ...c, filter: isNone ? undefined : filter, filterIntensity: safeIntensity }
+            : c
+        );
+        updateProjectWithHistory({
+          ...project,
+          tracks: {
+            ...project.tracks,
+            video: updatedVideos,
+          },
+        });
+        return;
+      }
+
+      // 2. If an effect/filter clip is currently selected, update its filter!
+      if ((selectedClipType === "effects" || selectedClipType === "effect") && selectedClipId) {
+        const effectClips = [...(project.tracks?.effects || [])];
+        const idx = effectClips.findIndex((e) => e.id === selectedClipId);
+        if (idx >= 0) {
+          const isNone = filter === "none" || filter === "normal";
+          if (isNone) {
+            effectClips.splice(idx, 1);
+            updateProjectWithHistory({
+              ...project,
+              tracks: { ...project.tracks, effects: effectClips },
+            });
+            if (setSelectedClipId) setSelectedClipId(null);
+            if (setSelectedClipType) setSelectedClipType("");
+          } else {
+            const filterName = filter.charAt(0).toUpperCase() + filter.slice(1);
+            effectClips[idx] = {
+              ...effectClips[idx],
+              filter,
+              type: "filter_" + filter,
+              name: `Filter: ${filterName}`,
+            };
+            updateProjectWithHistory({
+              ...project,
+              tracks: { ...project.tracks, effects: effectClips },
+            });
+          }
+          return;
+        }
+      }
+
+      // 3. GLOBAL: Create timeline filter clip!
+      if (filter === "none" || filter === "normal") return;
+
+      const desiredStart = currentTime || 0;
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        project,
+        desiredStart,
       );
+
+      const filterName = filter.charAt(0).toUpperCase() + filter.slice(1);
+      const newFilterClip: EffectClip = {
+        id: "eff-flt-" + Date.now(),
+        type: "filter_" + filter,
+        name: `Filter: ${filterName}`,
+        filter,
+        startTime: Math.max(0, Number(desiredStart.toFixed(3))),
+        duration: 3.0,
+        intensity: safeIntensity / 100,
+        trackIndex: newTrackIndex,
+      };
+
+      const effectClips = [...(project.tracks?.effects || []), newFilterClip];
       updateProjectWithHistory({
         ...project,
         tracks: {
           ...project.tracks,
-          video: updatedVideos,
+          effects: effectClips,
         },
       });
+
+      if (setSelectedClipId) setSelectedClipId(newFilterClip.id);
+      if (setSelectedClipType) setSelectedClipType("effects");
     },
-    [project, resolveActiveClipId, updateProjectWithHistory]
+    [project, selectedClipId, selectedClipType, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType]
   );
 
   const handleApplySpeed = React.useCallback(
@@ -355,13 +416,68 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const handleAddEffect = React.useCallback(
     (name: string) => {
       if (!project) return;
-      const newEffect = {
-        id: `fx_${Date.now()}`,
+
+      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the effect to that clip!
+      if (selectedClipId && selectedClipType === "video") {
+        const isNone = name === "none";
+        const updatedVideos = (project.tracks?.video || []).map((c: any) =>
+          c.id === selectedClipId
+            ? { ...c, effect: isNone ? undefined : name }
+            : c
+        );
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, video: updatedVideos },
+        });
+        return;
+      }
+
+      // 2. If an effect clip is already selected on timeline, update it!
+      if ((selectedClipType === "effects" || selectedClipType === "effect") && selectedClipId) {
+        const effectClips = [...(project.tracks?.effects || [])];
+        const idx = effectClips.findIndex((e) => e.id === selectedClipId);
+        if (idx >= 0) {
+          if (name === "none") {
+            effectClips.splice(idx, 1);
+            updateProjectWithHistory({
+              ...project,
+              tracks: { ...project.tracks, effects: effectClips },
+            });
+            if (setSelectedClipId) setSelectedClipId(null);
+            if (setSelectedClipType) setSelectedClipType("");
+          } else {
+            effectClips[idx] = {
+              ...effectClips[idx],
+              type: name,
+              name: name || "Effect",
+            };
+            updateProjectWithHistory({
+              ...project,
+              tracks: { ...project.tracks, effects: effectClips },
+            });
+          }
+          return;
+        }
+      }
+
+      // 3. GLOBAL: Create timeline effect clip!
+      if (name === "none") return;
+
+      const desiredStart = currentTime || 0;
+      const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
+        project,
+        desiredStart,
+      );
+
+      const newEffect: EffectClip = {
+        id: `eff_${Date.now()}`,
+        type: name || "Glitch",
         name: name || "Glitch",
-        startTime: currentTime,
+        startTime: Math.max(0, Number(desiredStart.toFixed(3))),
         duration: 3,
-        trackIndex: 4,
+        trackIndex: newTrackIndex,
       };
+
       updateProjectWithHistory({
         ...project,
         tracks: {
@@ -369,8 +485,11 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           effects: [...(project.tracks?.effects || []), newEffect],
         },
       });
+
+      if (setSelectedClipId) setSelectedClipId(newEffect.id);
+      if (setSelectedClipType) setSelectedClipType("effects");
     },
-    [currentTime, project, updateProjectWithHistory]
+    [currentTime, project, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType]
   );
 
   // Determine platform layout
@@ -502,7 +621,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       onOpenEffectsModal={handleOpenEffectsModal}
       onOpenStickersModal={handleOpenStickersModal}
       onOpenMediaPicker={handleOpenMediaPicker}
-      onOpenTTS={handleOpenTTS}
       onOpenEnhance={handleOpenEnhance}
       onOpenAutoCut={handleOpenAutoCut}
       onOpenCanvasModal={handleOpenCanvasModal}
@@ -527,7 +645,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         setDesktopTab(tab);
         setIsMediaPanelCollapsed(false);
       }}
-      onOpenLayerModal={() => openModal("layer")}
       onOpenOpacityModal={() => openModal("opacity")}
       onOpenAnimationModal={() => openModal("animation")}
       onOpenAudioEffectsModal={() => openModal("audio_effects")}
@@ -1054,11 +1171,11 @@ const styles = StyleSheet.create({
     overflow: "hidden" as any,
   },
   desktopLeftNav: {
-    width: 52,
+    width: 62,
     backgroundColor: "#08090E",
     borderRightWidth: 1,
     borderRightColor: "#1F2637",
-    paddingVertical: 4,
+    paddingVertical: 6,
     alignItems: "center",
     overflowY: "auto" as any,
     overflowX: "hidden" as any,
@@ -1068,7 +1185,7 @@ const styles = StyleSheet.create({
     width: "100%",
     position: "relative",
     alignItems: "center",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   desktopNavActiveBar: {
     position: "absolute",
@@ -1081,10 +1198,10 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   desktopNavItem: {
-    width: 46,
-    paddingVertical: 4,
+    width: 52,
+    paddingVertical: 6,
     paddingHorizontal: 2,
-    borderRadius: 6,
+    borderRadius: 7,
     alignItems: "center",
     cursor: "pointer" as any,
   } as any,
@@ -1094,14 +1211,14 @@ const styles = StyleSheet.create({
   desktopNavIconWrap: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 1,
+    marginBottom: 2,
   },
   desktopNavLabel: {
     color: "#64748B",
-    fontSize: 8,
+    fontSize: 9.5,
     fontWeight: "600",
     textAlign: "center",
-    letterSpacing: 0.1,
+    letterSpacing: 0.15,
   },
   desktopNavLabelActive: {
     color: "#00F2FE",
@@ -1261,9 +1378,6 @@ const styles = StyleSheet.create({
     display: "flex",
     flexDirection: "column",
     overflow: "hidden" as any,
-    ...(Platform.OS === "web"
-      ? ({ animation: "fastartPanelIn 0.16s cubic-bezier(0.16, 1, 0.3, 1)" } as any)
-      : {}),
   } as any,
   desktopConfigPanelHeader: {
     height: 34,
@@ -1390,7 +1504,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#08090E",
   },
   mobileInlineConfigArea: {
-    height: 260,
+    height: 300,
     width: "100%",
     backgroundColor: "#0F131D",
     borderTopWidth: 1,

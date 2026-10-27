@@ -69,6 +69,29 @@ Before running the project, make sure you have installed:
 
 ---
 
+## ⚡ Standard Expo Local Module Architecture (Git & CNG Friendly)
+
+`/android` and `/ios` directories are generated on demand via Expo Continuous Native Generation (CNG) and are ignored by git.
+All native source files, bridges, and native configurations live cleanly inside the tracked application root:
+* **Expo Local Module**: `modules/fastart-rust/`
+  - `expo-module.config.json`: Automatically discovered and linked by Expo Autolinking on both Android and iOS.
+  - `android/`: Kotlin module registered with `expo-modules-core`.
+  - `ios/`: Swift module and `FastArtRust.podspec` registered with `ExpoModulesCore`.
+* **Rust Compute Workspace**: `rust/`
+  - `fastart_core`: Pure multi-core SIMD compute engine.
+  - `fastart_jni`: JNI bridge for Android.
+  - `fastart_ios`: C-FFI static library for iOS.
+  - `fastart_wasm`: WebAssembly module for Web.
+
+Anyone cloning this repository fresh can simply run:
+```bash
+npm install
+npm run android   # or npm run ios / npm run web
+```
+Expo will generate `android`/`ios` with CNG, autolink `fastart-rust` natively, and run the app with 100% Rust acceleration.
+
+---
+
 ## 🚀 Running the App
 
 All platform commands are configured in `package.json` with integrated Rust build steps.
@@ -136,6 +159,26 @@ npm run typecheck
 
 # Run linter
 npm run lint
+```
+
+---
+
+### 📦 5. Production Builds
+
+All production builds automatically compile and bundle the Rust core engine:
+
+```bash
+# Compile and deploy all Rust artifacts (WASM, Android jniLibs, iOS Pod)
+npm run build:all
+
+# Production Android APK / Release
+npm run build:prod:android
+
+# Production iOS Release
+npm run build:prod:ios
+
+# Production Web Export
+npm run build:prod:web
 ```
 
 ---

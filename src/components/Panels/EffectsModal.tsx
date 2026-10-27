@@ -20,7 +20,6 @@ interface EffectsModalProps {
   onAddEffect: (effect: any) => void;
   editingClip?: EffectClip | null;
   onUpdateEffect?: (effect: EffectClip) => void;
-  isVideoClip?: boolean;
   isInline?: boolean;
 }
 
@@ -32,7 +31,6 @@ export default function EffectsModal({
   onAddEffect,
   editingClip,
   onUpdateEffect,
-  isVideoClip = false,
   isInline = false,
 }: EffectsModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
@@ -42,22 +40,15 @@ export default function EffectsModal({
 
   useEffect(() => {
     if (visible) {
+      setActiveCategory('All');
       if (editingClip) {
         setActiveSessionClipId(editingClip.id);
         const effType = editingClip.type || 'none';
         setSelectedEffectId(effType);
         setIntensity(editingClip.intensity !== undefined ? editingClip.intensity : 0.8);
-        const preset = EFFECT_PRESETS.find((p) => p.type === effType || p.id === effType);
-        if (preset && preset.category) {
-          setActiveCategory(preset.category);
-        }
       } else {
         setActiveSessionClipId(null);
         setSelectedEffectId(activeEffect || 'none');
-        const preset = EFFECT_PRESETS.find((p) => p.type === activeEffect || p.id === activeEffect);
-        if (preset && preset.category) {
-          setActiveCategory(preset.category);
-        }
         setIntensity(0.8);
       }
     }
@@ -85,29 +76,7 @@ export default function EffectsModal({
     const effId = item.type || item.id;
     setSelectedEffectId(effId);
 
-    // 1. Direct on-clip video effect application
-    if (isVideoClip) {
-      if (item.id === 'none') {
-        onAddEffect({
-          id: 'none',
-          type: 'none',
-          name: 'None',
-          intensity: 0,
-          applyToClip: true,
-        });
-      } else {
-        onAddEffect({
-          ...item,
-          id: effId,
-          type: effId,
-          intensity,
-          applyToClip: true,
-        });
-      }
-      return;
-    }
-
-    // 2. Timeline effect clip clear
+    // 1. Timeline effect clip clear
     if (item.id === 'none') {
       if (editingClip && onUpdateEffect) {
         onUpdateEffect({
@@ -120,7 +89,7 @@ export default function EffectsModal({
       return;
     }
 
-    // 3. Update existing timeline effect clip
+    // 2. Update existing timeline effect clip
     const targetId = editingClip?.id || activeSessionClipId;
     if (targetId && onUpdateEffect) {
       const baseClip: EffectClip = editingClip || {
@@ -141,12 +110,13 @@ export default function EffectsModal({
       return;
     }
 
-    // 4. Create new timeline effect clip for this session
+    // 3. Create new standalone timeline effect clip at current playhead
     const newId = 'eff-' + Date.now();
     setActiveSessionClipId(newId);
     onAddEffect({
       ...item,
       id: newId,
+      duration: 3.0,
       intensity,
     });
   };
@@ -162,20 +132,6 @@ export default function EffectsModal({
     soundEngine.playSfx('click');
     setIntensity(val);
     if (selectedEffectId === 'none') return;
-
-    if (isVideoClip) {
-      const currentPreset = EFFECT_PRESETS.find(
-        (p) => p.id === selectedEffectId || p.type === selectedEffectId
-      );
-      onAddEffect({
-        id: selectedEffectId,
-        type: selectedEffectId,
-        name: currentPreset?.name || 'Effect',
-        intensity: val,
-        applyToClip: true,
-      });
-      return;
-    }
 
     const targetId = editingClip?.id || activeSessionClipId;
     if (targetId && onUpdateEffect) {
@@ -208,7 +164,7 @@ export default function EffectsModal({
           <View style={styles.headerTitleRow}>
             <Ionicons name="sparkles" size={16} color="#00F2FE" />
             <Text style={styles.sheetTitle}>
-              {editingClip ? 'Edit Effect' : isVideoClip ? 'Video Clip Effect' : 'Video Effects'}
+              {editingClip ? 'Edit Effect' : 'Video Effects'}
             </Text>
           </View>
 
@@ -220,8 +176,8 @@ export default function EffectsModal({
               activeOpacity={0.7}
               accessibilityLabel="Clear effect"
             >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]}>None</Text>
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]} numberOfLines={1}>None</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -246,12 +202,29 @@ export default function EffectsModal({
             >
               {isInline && !isNone && (
                 <TouchableOpacity
-                  style={[styles.categoryPill, { borderColor: '#00F2FE', backgroundColor: 'rgba(0, 242, 254, 0.12)' }]}
+                  style={[
+                    styles.categoryPill,
+                    {
+                      borderColor: '#00F2FE',
+                      backgroundColor: 'rgba(0, 242, 254, 0.12)',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    },
+                  ]}
                   onPress={handleClear}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 3 }} />
-                  <Text style={[styles.categoryPillText, { color: '#00F2FE', fontWeight: '700' }]}>None</Text>
+                  <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 4 }} />
+                  <Text
+                    style={[
+                      styles.categoryPillText,
+                      { color: '#00F2FE', fontWeight: '700', flexShrink: 0 },
+                      Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : null,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    None
+                  </Text>
                 </TouchableOpacity>
               )}
               {categories.map((cat) => {
@@ -345,13 +318,13 @@ export default function EffectsModal({
                     >
                       <Ionicons
                         name={(item.icon || 'sparkles-outline') as any}
-                        size={22}
+                        size={20}
                         color={
                           isItemNone
-                            ? '#71717A'
+                            ? '#64748B'
                             : isCurrentActive
-                            ? '#FFFFFF'
-                            : '#A1A1AA'
+                            ? '#00F2FE'
+                            : '#94A3B8'
                         }
                       />
                     </View>
@@ -381,7 +354,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#121215',
+    backgroundColor: '#0F131D',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -395,34 +368,35 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#121215',
+    backgroundColor: '#0F131D',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 6,
     borderTopWidth: 1,
-    borderColor: '#27272F',
+    borderColor: '#1F2637',
   },
   sheetHandle: {
-    width: 36,
+    width: 32,
     height: 4,
-    backgroundColor: '#27272F',
+    backgroundColor: '#1F2637',
     borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#08090E',
     borderBottomWidth: 1,
-    borderBottomColor: '#27272F',
+    borderBottomColor: '#1F2637',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -431,91 +405,96 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#18181C',
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: '#1F2637',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   resetText: {
-    color: '#A1A1AA',
-    fontSize: 11.5,
+    color: '#94A3B8',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   controlsBar: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+    backgroundColor: '#08090E',
     borderBottomWidth: 1,
-    borderBottomColor: '#27272F',
+    borderBottomColor: '#1F2637',
   },
   categoryScroll: {
-    gap: 6,
+    gap: 5,
     paddingVertical: 2,
   },
   categoryPill: {
-    paddingHorizontal: 11,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#18181C',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: '#1F2637',
   },
   categoryPillActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderColor: '#00F2FE',
   },
   categoryPillText: {
-    color: '#71717A',
-    fontSize: 11.5,
+    color: '#94A3B8',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   categoryPillTextActive: {
-    color: '#000000',
+    color: '#00F2FE',
     fontWeight: '700',
   },
   intensityGroup: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
     alignItems: 'center',
   },
   intensityPill: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#18181C',
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: '#1F2637',
   },
   intensityPillActive: {
-    backgroundColor: '#202026',
-    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderColor: '#00F2FE',
   },
   intensityText: {
-    color: '#71717A',
-    fontSize: 11,
+    color: '#94A3B8',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   intensityTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '700',
   },
   sheetBody: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingTop: 8,
   },
   gridContainer: {
@@ -524,45 +503,45 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   effectCard: {
-    width: '23%',
+    width: '23.5%',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: '#18181C',
+    paddingVertical: 7,
+    paddingHorizontal: 3,
+    borderRadius: 6,
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: '#1F2637',
   },
   effectCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#202026',
+    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#202026',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#08090E',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   iconBoxActive: {
-    backgroundColor: '#FFFFFF22',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
   },
   iconBoxNone: {
-    backgroundColor: '#202026',
+    backgroundColor: '#08090E',
   },
   effectLabel: {
-    color: '#71717A',
-    fontSize: 10,
+    color: '#94A3B8',
+    fontSize: 9.5,
     fontWeight: '500',
     textAlign: 'center',
   },
   effectLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '700',
   },
   inlineApplyBtn: {
@@ -571,14 +550,14 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: '#00F2FE',
     paddingHorizontal: 10,
-    height: 26,
+    height: 24,
     borderRadius: 6,
   },
   inlineAppliedBtn: {
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
-    color: '#000000',
+    color: '#08090E',
     fontSize: 11,
     fontWeight: '700',
   },

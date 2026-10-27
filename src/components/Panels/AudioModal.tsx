@@ -192,7 +192,7 @@ export default function AudioModal({
             <View style={styles.uploadPromptContainer}>
               <View style={styles.uploadIconOuterCircle}>
                 <View style={styles.uploadIconInnerCircle}>
-                  <Ionicons name="musical-notes" size={38} color="#10B981" />
+                  <Ionicons name="musical-notes" size={28} color="#00F2FE" />
                 </View>
               </View>
 
@@ -204,11 +204,11 @@ export default function AudioModal({
               {/* Supported Format Pills */}
               <View style={styles.formatPillsRow}>
                 <View style={styles.formatPill}>
-                  <Ionicons name="musical-note" size={12} color="#10B981" />
+                  <Ionicons name="musical-note" size={12} color="#00F2FE" />
                   <Text style={styles.formatPillText}>MP3 / WAV</Text>
                 </View>
                 <View style={styles.formatPill}>
-                  <Ionicons name="musical-note" size={12} color="#34D399" />
+                  <Ionicons name="musical-note" size={12} color="#00F2FE" />
                   <Text style={styles.formatPillText}>M4A / AAC / FLAC</Text>
                 </View>
               </View>
@@ -221,9 +221,9 @@ export default function AudioModal({
                 activeOpacity={0.8}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color="#000000" />
+                  <ActivityIndicator size="small" color="#08090E" />
                 ) : (
-                  <Ionicons name="cloud-upload" size={19} color="#000000" />
+                  <Ionicons name="cloud-upload" size={16} color="#08090E" />
                 )}
                 <Text style={styles.primaryUploadButtonText}>
                   {isLoading ? 'Importing Audio...' : 'Choose Audio File'}
@@ -242,8 +242,8 @@ export default function AudioModal({
                 >
                   <Ionicons
                     name="musical-note"
-                    size={15}
-                    color={hasBeats ? '#000000' : '#FFE600'}
+                    size={14}
+                    color={hasBeats ? '#00F2FE' : '#94A3B8'}
                   />
                   <Text
                     style={[
@@ -280,140 +280,138 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
-    backgroundColor: '#0B0D14',
+    backgroundColor: '#08090E',
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   sheetTitle: {
-    color: '#F1F5F9',
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
   closeBtnCircle: {
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetBody: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
   },
   uploadPromptContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
   },
   uploadIconOuterCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: 'rgba(0, 242, 254, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   uploadIconInnerCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 242, 254, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   uploadMainTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 6,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
     textAlign: 'center',
   },
   uploadSubtitle: {
-    color: '#8E95A5',
-    fontSize: 12,
-    lineHeight: 18,
+    color: '#64748B',
+    fontSize: 11,
+    lineHeight: 16,
     textAlign: 'center',
-    maxWidth: 290,
-    marginBottom: 18,
+    maxWidth: 280,
+    marginBottom: 14,
   },
   formatPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 24,
+    gap: 6,
+    marginBottom: 16,
   },
   formatPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#161B26',
+    gap: 4,
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    borderColor: '#1F2637',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   formatPillText: {
-    color: '#CBD5E1',
-    fontSize: 10.5,
-    fontWeight: '700',
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '600',
   },
   primaryUploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    gap: 6,
+    backgroundColor: '#00F2FE',
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 20,
     width: '100%',
-    maxWidth: 320,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 3,
+    maxWidth: 280,
   },
   primaryUploadButtonText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
+    color: '#08090E',
+    fontSize: 12,
+    fontWeight: '700',
   },
   beatsUtilityBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 230, 0, 0.1)',
+    gap: 5,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: 'rgba(255, 230, 0, 0.3)',
+    borderColor: '#1F2637',
   },
   beatsUtilityBtnActive: {
-    backgroundColor: '#FFE600',
-    borderColor: '#FFE600',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderColor: '#00F2FE',
   },
   beatsUtilityBtnText: {
-    color: '#FFE600',
-    fontSize: 12,
-    fontWeight: '800',
+    color: '#94A3B8',
+    fontSize: 10.5,
+    fontWeight: '600',
   },
   beatsUtilityBtnTextActive: {
-    color: '#000000',
+    color: '#00F2FE',
+    fontWeight: '700',
   },
 });
