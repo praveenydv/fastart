@@ -59,7 +59,7 @@ export default function ExportModal({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} transparent>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}

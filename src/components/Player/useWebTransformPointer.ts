@@ -142,8 +142,8 @@ export function useWebTransformPointer({
             dragSession.clipId,
             dragSession.clipType,
             {
-              x: Math.max(0, Math.min(100, Number(((newCenterX / boxWidth) * 100).toFixed(1)))),
-              y: Math.max(0, Math.min(100, Number(((newCenterY / canvasHeight) * 100).toFixed(1)))),
+              x: Number(((newCenterX / boxWidth) * 100).toFixed(2)),
+              y: Number(((newCenterY / canvasHeight) * 100).toFixed(2)),
               scale: dragSession.startScale,
               rotation: dragSession.startRotation,
             },
@@ -172,8 +172,8 @@ export function useWebTransformPointer({
             dragSession.clipId,
             dragSession.clipType,
             {
-              x: Number(((dragSession.startCenterX / boxWidth) * 100).toFixed(1)),
-              y: Number(((dragSession.startCenterY / canvasHeight) * 100).toFixed(1)),
+              x: Number(((dragSession.startCenterX / boxWidth) * 100).toFixed(2)),
+              y: Number(((dragSession.startCenterY / canvasHeight) * 100).toFixed(2)),
               scale: newScale,
               rotation: dragSession.startRotation,
             },
@@ -207,8 +207,8 @@ export function useWebTransformPointer({
             dragSession.clipId,
             dragSession.clipType,
             {
-              x: Number(((dragSession.startCenterX / boxWidth) * 100).toFixed(1)),
-              y: Number(((dragSession.startCenterY / canvasHeight) * 100).toFixed(1)),
+              x: Number(((dragSession.startCenterX / boxWidth) * 100).toFixed(2)),
+              y: Number(((dragSession.startCenterY / canvasHeight) * 100).toFixed(2)),
               scale: dragSession.startScale,
               rotation: snapped,
             },
@@ -231,6 +231,9 @@ export function useWebTransformPointer({
       }
     };
 
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
     window.addEventListener("mousemove", handlePointerMove);
     window.addEventListener("mouseup", handlePointerUp);
     window.addEventListener("touchmove", handlePointerMove, { passive: false });
@@ -238,6 +241,9 @@ export function useWebTransformPointer({
     window.addEventListener("touchcancel", handlePointerUp);
 
     dragCleanupRef.current = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mouseup", handlePointerUp);
       window.removeEventListener("touchmove", handlePointerMove);

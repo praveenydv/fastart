@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -425,67 +424,53 @@ export default function TransformModal({
     syncTransform({ rotateX: 0, rotateY: 0, skewX: 0, perspective: 800 });
   };
 
-  const handleApplyAll = () => {
-    soundEngine.playSfx("whoosh");
-    syncTransform();
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  };
-
-  const handleCancel = () => {
-    soundEngine.playSfx("pop");
-    onClose();
-  };
-
   const sheetContent = (
     <View
-      style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}
+      style={[styles.sheetContainer, styles.inlineSheetContainer]}
     >
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.header}>
+          <View style={styles.headerTitleRow}>
+            <MaterialCommunityIcons
+              name="vector-arrange-below"
+              size={18}
+              color="#00F2FE"
+            />
+            <Text style={styles.headerTitle}>Transform</Text>
+          </View>
 
-      {/* Modal Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleCancel}
-          style={[
-            styles.doneBtn,
-            {
-              backgroundColor: "rgba(239, 68, 68, 0.15)",
-              borderWidth: 1,
-              borderColor: "rgba(239, 68, 68, 0.3)",
-            },
-          ]}
-          activeOpacity={0.7}
-          accessibilityLabel="Cancel changes"
-        >
-          <Ionicons name="close" size={17} color="#EF4444" />
-        </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => {
+                if (activeTab === "crop") handleResetCrop();
+                else if (activeTab === "rotate") handleResetRotation();
+                else if (activeTab === "flip") handleResetFlip();
+                else if (activeTab === "stretch") handleResetStretch();
+                else handleResetAngle();
+              }}
+              style={[styles.resetBtn, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
+              activeOpacity={0.7}
+              accessibilityLabel={`Reset ${activeTab}`}
+            >
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
+              <Text style={[styles.resetBtnText, { fontSize: 11 }]}>Reset {activeTab.toUpperCase()}</Text>
+            </TouchableOpacity>
 
-        <View style={styles.headerTitleRow}>
-          <MaterialCommunityIcons
-            name="vector-arrange-below"
-            size={18}
-            color="#00F2FE"
-          />
-          <Text style={styles.headerTitle}>Transform</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Close panel"
+            >
+              <Ionicons name="close" size={14} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
         </View>
-
-        <TouchableOpacity
-          onPress={handleApplyAll}
-          style={styles.doneBtn}
-          activeOpacity={0.7}
-          accessibilityLabel="Apply all transform changes"
-        >
-          <Ionicons name="checkmark" size={18} color="#000000" />
-        </TouchableOpacity>
-      </View>
+      ) : null}
 
       {/* 5 Main Tabs: Crop, Rotate, Flip, Stretch, 3D Angle */}
-      <View style={styles.tabBarContainer}>
+      <View style={[styles.tabBarContainer, isInline && { marginTop: 6 }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -501,8 +486,8 @@ export default function TransformModal({
           >
             <Ionicons
               name="crop"
-              size={14}
-              color={activeTab === "crop" ? "#000000" : "#8E95A5"}
+              size={13}
+              color={activeTab === "crop" ? "#00F2FE" : "#94A3B8"}
             />
             <Text
               style={[
@@ -527,8 +512,8 @@ export default function TransformModal({
           >
             <Ionicons
               name="reload"
-              size={14}
-              color={activeTab === "rotate" ? "#000000" : "#8E95A5"}
+              size={13}
+              color={activeTab === "rotate" ? "#00F2FE" : "#94A3B8"}
             />
             <Text
               style={[
@@ -550,8 +535,8 @@ export default function TransformModal({
           >
             <MaterialCommunityIcons
               name="flip-horizontal"
-              size={15}
-              color={activeTab === "flip" ? "#000000" : "#8E95A5"}
+              size={14}
+              color={activeTab === "flip" ? "#00F2FE" : "#94A3B8"}
             />
             <Text
               style={[
@@ -576,8 +561,8 @@ export default function TransformModal({
           >
             <MaterialCommunityIcons
               name="arrow-expand-horizontal"
-              size={15}
-              color={activeTab === "stretch" ? "#000000" : "#8E95A5"}
+              size={14}
+              color={activeTab === "stretch" ? "#00F2FE" : "#94A3B8"}
             />
             <Text
               style={[
@@ -603,8 +588,8 @@ export default function TransformModal({
           >
             <MaterialCommunityIcons
               name="cube-outline"
-              size={15}
-              color={activeTab === "angle" ? "#000000" : "#8E95A5"}
+              size={14}
+              color={activeTab === "angle" ? "#00F2FE" : "#94A3B8"}
             />
             <Text
               style={[
@@ -1637,21 +1622,8 @@ export default function TransformModal({
     </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleCancel}
-    >
-      <View style={styles.overlay}>{sheetContent}</View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -1659,7 +1631,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0D111A",
+    backgroundColor: "#0F131D",
   },
   inlineSheetContainer: {
     flex: 1,
@@ -1671,37 +1643,53 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     paddingBottom: 0,
   },
+  resetBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetBtnText: {
+    color: '#00F2FE',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0D111A",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: "#0F131D",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: "80%",
     borderTopWidth: 1,
-    borderColor: "#1E2638",
-    paddingBottom: 24,
+    borderColor: "#1F2637",
+    paddingBottom: 16,
   },
   sheetHandle: {
-    width: 38,
-    height: 4,
+    width: 32,
+    height: 3,
     borderRadius: 2,
-    backgroundColor: "#2A354D",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
     alignSelf: "center",
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 4,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderColor: "#182030",
+    borderColor: "#1F2637",
+    backgroundColor: "#08090E",
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -1710,92 +1698,102 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   doneBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
+  closeBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tabBarContainer: {
-    marginTop: 10,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 4,
   },
   tabBarScroll: {
-    paddingHorizontal: 14,
-    gap: 6,
+    paddingHorizontal: 10,
+    gap: 5,
   },
   tabBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: "#141A28",
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#1F2637",
   },
   tabBtnActive: {
-    backgroundColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   tabBtnText: {
-    color: "#8E95A5",
-    fontSize: 12,
+    color: "#94A3B8",
+    fontSize: 10.5,
     fontWeight: "600",
   },
   tabBtnTextActive: {
-    color: "#000000",
+    color: "#00F2FE",
     fontWeight: "700",
   },
   contentScroll: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingHorizontal: 10,
+    paddingTop: 6,
   },
   sectionContainer: {
-    gap: 10,
-    paddingBottom: 20,
+    gap: 8,
+    paddingBottom: 16,
   },
   sectionLabel: {
-    color: "#8E95A5",
-    fontSize: 11.5,
-    fontWeight: "600",
+    color: "#94A3B8",
+    fontSize: 9.5,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 4,
+    marginTop: 2,
   },
   hintText: {
     color: "#64748B",
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 9.5,
+    lineHeight: 13,
     marginBottom: 2,
   },
   ratioScroll: {
-    gap: 8,
-    paddingVertical: 4,
+    gap: 6,
+    paddingVertical: 2,
   },
   ratioChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: "#161B26",
-    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "#131826",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E2536",
+    borderColor: "#1F2637",
   },
   ratioChipActive: {
     backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   ratioChipText: {
-    color: "#8E95A5",
-    fontSize: 12,
+    color: "#94A3B8",
+    fontSize: 10.5,
     fontWeight: "600",
   },
   ratioChipTextActive: {
@@ -1806,33 +1804,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     backgroundColor: "rgba(0, 242, 254, 0.08)",
     borderWidth: 1,
     borderColor: "rgba(0, 242, 254, 0.25)",
-    paddingVertical: 10,
-    borderRadius: 9,
+    paddingVertical: 7,
+    borderRadius: 7,
   },
   screenCropBtnText: {
     color: "#00F2FE",
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "600",
   },
   card: {
-    backgroundColor: "#161B26",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: "#131826",
+    borderRadius: 8,
+    padding: 10,
     borderWidth: 1,
-    borderColor: "#1E2536",
-    gap: 12,
+    borderColor: "#1F2637",
+    gap: 8,
   },
   sliderRow: {
-    gap: 4,
+    gap: 3,
   },
   sliderTitleWithIcon: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   labelValueRow: {
     flexDirection: "row",
@@ -1841,32 +1839,32 @@ const styles = StyleSheet.create({
   },
   sliderLabel: {
     color: "#E2E8F0",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
   },
   badge: {
     color: "#00F2FE",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
   },
   lockRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 6,
+    paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F283C",
+    borderBottomColor: "#1F2637",
   },
   lockBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: "rgba(0, 242, 254, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(0, 242, 254, 0.25)",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 5,
   },
   lockBtnActive: {
     backgroundColor: "#00F2FE",
@@ -1874,33 +1872,33 @@ const styles = StyleSheet.create({
   },
   lockBtnText: {
     color: "#00F2FE",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
   },
   lockBtnTextActive: {
-    color: "#000000",
+    color: "#08090E",
     fontWeight: "700",
   },
   actionBtnRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
+    gap: 8,
+    marginTop: 2,
   },
   secondaryBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#1A2130",
+    gap: 5,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "#263145",
-    paddingVertical: 10,
-    borderRadius: 8,
+    borderColor: "#1F2637",
+    paddingVertical: 7,
+    borderRadius: 6,
   },
   secondaryBtnText: {
-    color: "#8E95A5",
-    fontSize: 12,
+    color: "#94A3B8",
+    fontSize: 11,
     fontWeight: "600",
   },
   primaryActionBtn: {
@@ -1908,110 +1906,112 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
     backgroundColor: "#00F2FE",
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 7,
+    borderRadius: 6,
   },
   primaryActionBtnText: {
-    color: "#000000",
-    fontSize: 12,
+    color: "#08090E",
+    fontSize: 11,
     fontWeight: "700",
   },
   flipGrid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   flipCard: {
     flex: 1,
-    backgroundColor: "#111622",
+    backgroundColor: "#08090E",
     borderWidth: 1,
-    borderColor: "#1E2536",
-    borderRadius: 9,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    borderColor: "#1F2637",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
     alignItems: "center",
-    gap: 6,
+    gap: 4,
   },
   flipCardActive: {
-    backgroundColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   flipCardTitle: {
     color: "#FFFFFF",
-    fontSize: 12.5,
+    fontSize: 11.5,
     fontWeight: "600",
   },
   flipCardTitleActive: {
-    color: "#000000",
+    color: "#00F2FE",
     fontWeight: "700",
   },
   flipCardSub: {
-    color: "#8E95A5",
-    fontSize: 10,
+    color: "#94A3B8",
+    fontSize: 9,
     fontWeight: "500",
   },
   flipCardSubActive: {
-    color: "#000000",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   quickRotateBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    gap: 6,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
-    paddingVertical: 12,
-    borderRadius: 9,
+    borderColor: "rgba(0, 242, 254, 0.25)",
+    paddingVertical: 8,
+    borderRadius: 7,
   },
   quickRotateBtnText: {
     color: "#00F2FE",
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "700",
   },
   rotatePresetsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   rotatePresetBtn: {
     flex: 1,
-    backgroundColor: "#161B26",
+    backgroundColor: "#08090E",
     borderWidth: 1,
-    borderColor: "#1E2536",
-    paddingVertical: 8,
-    borderRadius: 7,
+    borderColor: "#1F2637",
+    paddingVertical: 5,
+    borderRadius: 6,
     alignItems: "center",
   },
   rotatePresetBtnActive: {
-    backgroundColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   rotatePresetBtnText: {
-    color: "#8E95A5",
-    fontSize: 12,
+    color: "#94A3B8",
+    fontSize: 11,
     fontWeight: "600",
   },
   rotatePresetBtnTextActive: {
-    color: "#000000",
+    color: "#00F2FE",
     fontWeight: "700",
   },
   fineTuneRow: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
+    gap: 5,
+    marginTop: 2,
   },
   fineBtn: {
     flex: 1,
-    backgroundColor: "#1E2536",
-    paddingVertical: 6,
-    borderRadius: 6,
+    backgroundColor: "#08090E",
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    paddingVertical: 4,
+    borderRadius: 5,
     alignItems: "center",
   },
   fineBtnText: {
-    color: "#E2E8F0",
-    fontSize: 11,
+    color: "#94A3B8",
+    fontSize: 10,
     fontWeight: "600",
   },
 });

@@ -39,13 +39,15 @@ export function useTimelineResize({
   const autoTimelineHeight = useMemo(() => {
     const contentH =
       10 + 30 + 26 + Math.max(1, activeTrackCount) * TRACK_ROW_HEIGHT + 2;
-    const maxH = isMobile ? 240 : 280;
+    const maxH = isMobile
+      ? 240
+      : Math.max(280, Math.min(450, Math.round(screenHeight * 0.45)));
     return Math.min(maxH, contentH);
-  }, [activeTrackCount, isMobile]);
+  }, [activeTrackCount, isMobile, screenHeight]);
 
   const timelineHeight =
     userTimelineHeight !== null
-      ? Math.max(userTimelineHeight, Math.min(autoTimelineHeight, isMobile ? 160 : 190))
+      ? userTimelineHeight
       : autoTimelineHeight;
 
   const minTimelineHeight = 74;

@@ -160,7 +160,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.sheetContainer}>
           {/* Sheet Handle */}

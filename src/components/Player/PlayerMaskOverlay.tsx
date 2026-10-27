@@ -10,6 +10,7 @@ interface PlayerMaskOverlayProps {
   boxWidth: number;
   canvasHeight: number;
   currentTime: number;
+  project?: any;
   onUpdateClipMask?: (clipId: string, mask: MaskConfig, isFinal?: boolean) => void;
   onCloseMaskPreview?: () => void;
   getInterpolatedTransform?: (clip: any, curTime: number, clipType?: string) => any;
@@ -21,6 +22,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   boxWidth,
   canvasHeight,
   currentTime,
+  project,
   onUpdateClipMask,
   onCloseMaskPreview,
   getInterpolatedTransform,
@@ -43,9 +45,31 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const [activeDrag, setActiveDrag] = useState<"move" | "rotate" | "scale" | null>(null);
   const [localMask, setLocalMask] = useState<MaskConfig>(mask);
 
+  const pendingMaskRafRef = useRef<number | null>(null);
+  const pendingMaskRef = useRef<MaskConfig>(mask);
+  pendingMaskRef.current = localMask;
+
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const boxWidthRef = useRef(boxWidth);
+  boxWidthRef.current = boxWidth;
+  const canvasHeightRef = useRef(canvasHeight);
+  canvasHeightRef.current = canvasHeight;
+
   useEffect(() => {
     setLocalMask(mask);
   }, [mask]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingMaskRafRef.current !== null) {
+        cancelAnimationFrame(pendingMaskRafRef.current);
+        pendingMaskRafRef.current = null;
+      }
+    };
+  }, []);
 
   const onUpdateClipMaskRef = useRef(onUpdateClipMask);
   onUpdateClipMaskRef.current = onUpdateClipMask;
@@ -269,6 +293,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       );
 
       let currentUpdatedMask = { ...localMask };
+      pendingMaskRef.current = currentUpdatedMask;
 
       const onPointerMove = (moveEv: any) => {
         if (moveEv.cancelable && moveEv.preventDefault) moveEv.preventDefault();
@@ -296,8 +321,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             x: nextX,
             y: nextY,
           };
-          setLocalMask(currentUpdatedMask);
-          onUpdateClipMaskRef.current?.(targetClip.id, currentUpdatedMask, false);
         } else if (mode === "rotate") {
           const curAngle =
             Math.atan2(curClientY - maskCanvasCenterY, curClientX - maskCanvasCenterX) *
@@ -311,8 +334,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ...currentUpdatedMask,
             rotation: nextRot,
           };
-          setLocalMask(currentUpdatedMask);
-          onUpdateClipMaskRef.current?.(targetClip.id, currentUpdatedMask, false);
         } else if (mode === "scale") {
           const curDist = Math.hypot(
             curClientX - maskCanvasCenterX,
@@ -325,30 +346,66 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ...currentUpdatedMask,
             size: nextSize,
           };
-          setLocalMask(currentUpdatedMask);
-          onUpdateClipMaskRef.current?.(targetClip.id, currentUpdatedMask, false);
+        }
+
+        pendingMaskRef.current = currentUpdatedMask;
+
+        if (pendingMaskRafRef.current === null) {
+          pendingMaskRafRef.current = requestAnimationFrame(() => {
+            pendingMaskRafRef.current = null;
+            const targetMask = pendingMaskRef.current;
+            setLocalMask(targetMask);
+
+            // Directly render live mask preview on canvas at 60fps without full project re-render
+            if (rendererRef?.current && projectRef.current) {
+              rendererRef.current.renderFrame(
+                projectRef.current,
+                currentTimeRef.current,
+                false,
+                boxWidthRef.current,
+                canvasHeightRef.current,
+                {
+                  clipId: targetClip.id,
+                  mask: targetMask,
+                },
+              );
+            }
+          });
         }
       };
 
       const onPointerUp = () => {
         setActiveDrag(null);
         soundEngine.playSfx("pop");
+
+        if (pendingMaskRafRef.current !== null) {
+          cancelAnimationFrame(pendingMaskRafRef.current);
+          pendingMaskRafRef.current = null;
+        }
+
+        const finalMask = pendingMaskRef.current;
+        setLocalMask(finalMask);
+
         if (typeof window !== "undefined") {
           window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerUp);
           window.removeEventListener("touchmove", onPointerMove);
           window.removeEventListener("touchend", onPointerUp);
+          window.removeEventListener("touchcancel", onPointerUp);
           window.removeEventListener("mousemove", onPointerMove);
           window.removeEventListener("mouseup", onPointerUp);
         }
-        onUpdateClipMaskRef.current?.(targetClip.id, currentUpdatedMask, true);
+        onUpdateClipMaskRef.current?.(targetClip.id, finalMask, true);
       };
 
       if (typeof window !== "undefined") {
         window.addEventListener("pointermove", onPointerMove, { passive: false });
         window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("pointercancel", onPointerUp);
         window.addEventListener("touchmove", onPointerMove, { passive: false });
         window.addEventListener("touchend", onPointerUp);
+        window.addEventListener("touchcancel", onPointerUp);
         window.addEventListener("mousemove", onPointerMove);
         window.addEventListener("mouseup", onPointerUp);
       }
@@ -614,6 +671,8 @@ const styles = StyleSheet.create({
     zIndex: 10000,
     alignItems: "center",
     justifyContent: "center",
+    willChange: "transform, left, top" as any,
+    transition: "none" as any,
   },
   centerMoveKnob: {
     width: 28,
@@ -690,4 +749,4 @@ const styles = StyleSheet.create({
     bottom: -10,
     right: -10,
   },
-});
+} as any);

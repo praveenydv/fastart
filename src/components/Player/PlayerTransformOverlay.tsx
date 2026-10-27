@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { styles } from "./PlayerStyles";
 import { ActiveTransformItem } from "./playerTypes";
+import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
 
 interface PlayerTransformOverlayProps {
   selectedClipId?: string | null;
@@ -70,31 +71,40 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   getItemBaseDimensions,
   getInterpolatedTransform,
 }) => {
-  return (
-    <>
-      <View
-        style={StyleSheet.absoluteFill}
-        {...canvasMultiTouchPanResponder.panHandlers}
-      >
-        {/* Background Tap on empty canvas area to cleanly Deselect */}
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => {
-            if (selectedClipId) onSelectClip?.(null);
-          }}
-        />
+  const safeBoxW = Math.max(1, boxWidth || 360);
+  const safeCanvasH = Math.max(1, canvasHeight || 640);
 
+  const unselectedHitboxes = useMemo(
+    () => (
+      <>
         {/* Unselected Clickable & Immediately Draggable Hit Areas for Active Videos */}
         {activeVideos.map((vid) => {
           if (selectedClipId === vid.id) return null;
           const vidTrackZ =
             (typeof vid.trackIndex === "number" ? vid.trackIndex : 0) * 100 + 10;
           const kfT = getInterpolatedTransform(vid, currentTime, "video");
-          const cx = boxWidth / 2 + kfT.x;
-          const cy = canvasHeight / 2 + kfT.y;
-          const s = kfT.scale;
-          const rot = kfT.rotation;
+          let motionX = 0;
+          let motionY = 0;
+          let motionScale = 1.0;
+          let motionRot = 0;
+          if (vid.motionTrack && vid.motionTrack.enabled) {
+            const motion = applyMotionTracking(
+              currentTime,
+              vid.startTime,
+              vid.duration,
+              vid.motionTrack,
+            );
+            motionX = motion.dx;
+            motionY = motion.dy;
+            motionScale = motion.dScale;
+            motionRot = motion.dRot;
+          }
+          const s = (kfT?.scale ?? vid.transform?.scale ?? vid.scale ?? 1.0) * motionScale;
+          const rot = (kfT?.rotation ?? vid.transform?.rotation ?? vid.rotation ?? 0) + motionRot;
+          const rawX = kfT ? kfT.x : (vid.transform?.x || 0);
+          const rawY = kfT ? kfT.y : (vid.transform?.y || 0);
+          const cx = boxWidth / 2 + rawX + motionX;
+          const cy = canvasHeight / 2 + rawY + motionY;
           const { baseW, baseH } = getItemBaseDimensions("video", vid);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -103,8 +113,8 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             type: "video" as const,
             label: vid.title,
             pos: {
-              x: 50 + (kfT.x / boxWidth) * 100,
-              y: 50 + (kfT.y / canvasHeight) * 100,
+              x: 50 + ((rawX + motionX) / safeBoxW) * 100,
+              y: 50 + ((rawY + motionY) / safeCanvasH) * 100,
             },
             scale: s,
             rotation: rot,
@@ -149,10 +159,38 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           const capTrackZ =
             (typeof cap.trackIndex === "number" ? cap.trackIndex : 2) * 100 + 15;
           const kfT = getInterpolatedTransform(cap, currentTime, "caption");
-          const cx = (kfT.x / 100) * boxWidth;
-          const cy = (kfT.y / 100) * canvasHeight;
-          const s = kfT.scale;
-          const rot = kfT.rotation;
+          const elapsed = Math.max(0, currentTime - cap.startTime);
+          const anim = (cap.animation || "none").toLowerCase();
+          let animScale = 1.0;
+          if (anim === "bounce" && elapsed < 0.35) {
+            const p = elapsed / 0.35;
+            animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
+          } else if (anim === "zoomin" && elapsed < 0.3) {
+            const p = elapsed / 0.3;
+            animScale = 0.4 + p * 0.6;
+          }
+          let motionX = 0;
+          let motionY = 0;
+          let motionScale = 1.0;
+          let motionRot = 0;
+          if (cap.motionTrack && cap.motionTrack.enabled) {
+            const motion = applyMotionTracking(
+              currentTime,
+              cap.startTime,
+              cap.duration,
+              cap.motionTrack,
+            );
+            motionX = motion.dx;
+            motionY = motion.dy;
+            motionScale = motion.dScale;
+            motionRot = motion.dRot;
+          }
+          const s = (kfT?.scale ?? cap.scale ?? 1.0) * animScale * motionScale;
+          const rot = (kfT?.rotation ?? cap.rotation ?? 0) + motionRot;
+          const rawX = kfT ? kfT.x : (cap.position?.x ?? 50);
+          const rawY = kfT ? kfT.y : (cap.position?.y ?? 80);
+          const cx = (rawX / 100) * boxWidth + motionX;
+          const cy = (rawY / 100) * canvasHeight + motionY;
           const { baseW, baseH } = getItemBaseDimensions("caption", cap);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -160,7 +198,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             id: cap.id,
             type: "caption" as const,
             label: cap.text,
-            pos: { x: kfT.x, y: kfT.y },
+            pos: {
+              x: rawX + (motionX / safeBoxW) * 100,
+              y: rawY + (motionY / safeCanvasH) * 100,
+            },
             scale: s,
             rotation: rot,
             width: w,
@@ -204,10 +245,48 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           const txtTrackZ =
             (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 100 + 20;
           const kfT = getInterpolatedTransform(txt, currentTime, "text");
-          const cx = (kfT.x / 100) * boxWidth;
-          const cy = (kfT.y / 100) * canvasHeight;
-          const s = kfT.scale;
-          const rot = kfT.rotation;
+          const elapsed = Math.max(0, currentTime - (txt.startTime || 0));
+          let animScale = 1.0;
+          let animOffsetX = 0;
+          let animOffsetY = 0;
+          const anim = (txt.animation || "none").toLowerCase();
+          if (anim === "bounce" && elapsed < 0.4) {
+            const p = elapsed / 0.4;
+            animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
+          } else if (anim === "zoomin" && elapsed < 0.35) {
+            const p = elapsed / 0.35;
+            animScale = 0.4 + p * 0.6;
+          } else if (anim === "pulse") {
+            animScale = 1.0 + Math.sin(elapsed * 6) * 0.08;
+          } else if (anim === "shake") {
+            if (elapsed < 0.8) {
+              animOffsetX = Math.sin(elapsed * 40) * 4;
+            }
+          } else if (anim === "wave") {
+            animOffsetY = Math.sin(elapsed * 4) * 6;
+          }
+          let motionX = 0;
+          let motionY = 0;
+          let motionScale = 1.0;
+          let motionRot = 0;
+          if (txt.motionTrack && txt.motionTrack.enabled) {
+            const motion = applyMotionTracking(
+              currentTime,
+              txt.startTime,
+              txt.duration,
+              txt.motionTrack,
+            );
+            motionX = motion.dx;
+            motionY = motion.dy;
+            motionScale = motion.dScale;
+            motionRot = motion.dRot;
+          }
+          const s = (kfT?.scale ?? txt.scale ?? 1.0) * animScale * motionScale;
+          const rot = (kfT?.rotation ?? txt.rotation ?? 0) + motionRot;
+          const rawX = kfT ? kfT.x : (txt.position?.x ?? 50);
+          const rawY = kfT ? kfT.y : (txt.position?.y ?? 35);
+          const cx = (rawX / 100) * boxWidth + animOffsetX + motionX;
+          const cy = (rawY / 100) * canvasHeight + animOffsetY + motionY;
           const { baseW, baseH } = getItemBaseDimensions("text", txt);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -215,7 +294,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             id: txt.id,
             type: "text" as const,
             label: txt.text,
-            pos: { x: kfT.x, y: kfT.y },
+            pos: {
+              x: rawX + ((animOffsetX + motionX) / safeBoxW) * 100,
+              y: rawY + ((animOffsetY + motionY) / safeCanvasH) * 100,
+            },
             scale: s,
             rotation: rot,
             width: w,
@@ -259,10 +341,42 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           const stkTrackZ =
             (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 100 + 25;
           const kfT = getInterpolatedTransform(stk, currentTime, "sticker");
-          const cx = (kfT.x / 100) * boxWidth;
-          const cy = (kfT.y / 100) * canvasHeight;
-          const s = kfT.scale;
-          const rot = kfT.rotation;
+          const elapsed = Math.max(0, currentTime - (stk.startTime || 0));
+          let animScale = 1.0;
+          let animOffsetY = 0;
+          const anim = stk.animation || "bounce";
+          if (anim === "bounce") {
+            animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;
+          } else if (anim === "pulse") {
+            animScale = 1.0 + Math.sin(elapsed * 6) * 0.1;
+          } else if (anim === "wave") {
+            animOffsetY = Math.sin(elapsed * 4) * 8;
+          } else if (anim === "pop" && elapsed < 0.3) {
+            const p = elapsed / 0.3;
+            animScale = 0.3 + p * 0.85;
+          }
+          let motionX = 0;
+          let motionY = 0;
+          let motionScale = 1.0;
+          let motionRot = 0;
+          if (stk.motionTrack && stk.motionTrack.enabled) {
+            const motion = applyMotionTracking(
+              currentTime,
+              stk.startTime,
+              stk.duration,
+              stk.motionTrack,
+            );
+            motionX = motion.dx;
+            motionY = motion.dy;
+            motionScale = motion.dScale;
+            motionRot = motion.dRot;
+          }
+          const s = (kfT?.scale ?? stk.scale ?? 1.2) * animScale * motionScale;
+          const rot = (kfT?.rotation ?? stk.rotation ?? 0) + motionRot;
+          const rawX = kfT ? kfT.x : (stk.position?.x ?? 50);
+          const rawY = kfT ? kfT.y : (stk.position?.y ?? 50);
+          const cx = (rawX / 100) * boxWidth + motionX;
+          const cy = (rawY / 100) * canvasHeight + animOffsetY + motionY;
           const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -270,7 +384,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             id: stk.id,
             type: "sticker" as const,
             label: stk.char,
-            pos: { x: kfT.x, y: kfT.y },
+            pos: {
+              x: rawX + (motionX / safeBoxW) * 100,
+              y: rawY + ((animOffsetY + motionY) / safeCanvasH) * 100,
+            },
             scale: s,
             rotation: rot,
             width: w,
@@ -307,6 +424,43 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             />
           );
         })}
+      </>
+    ),
+    [
+      activeVideos,
+      activeCaptions,
+      activeTexts,
+      activeStickers,
+      selectedClipId,
+      boxWidth,
+      canvasHeight,
+      currentTime,
+      safeBoxW,
+      safeCanvasH,
+      onSelectClip,
+      handleStartDrag,
+      getItemBaseDimensions,
+      getInterpolatedTransform,
+    ],
+  );
+
+  return (
+    <>
+      <View
+        style={StyleSheet.absoluteFill}
+        {...canvasMultiTouchPanResponder.panHandlers}
+      >
+        {/* Background Tap on empty canvas area to cleanly Deselect */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => {
+            if (selectedClipId) onSelectClip?.(null);
+          }}
+        />
+
+        {/* Unselected Clickable & Immediately Draggable Hit Areas */}
+        {unselectedHitboxes}
 
         {/* Active Selected Transform Bounding Box with Hand Drag, Resize & Rotate Handles */}
         {activeTransformItem && (

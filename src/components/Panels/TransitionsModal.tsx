@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -59,61 +58,39 @@ export default function TransitionsModal({
 
   const isNone = !selectedType || selectedType === 'none';
 
-  const handleCancel = () => {
-    soundEngine.playSfx('pop');
-    onClose();
-  };
-
-  const handleApply = () => {
-    soundEngine.playSfx('whoosh');
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  };
-
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.sheetHeader}>
+          <View style={styles.headerTitleRow}>
+            <Ionicons name="flash-outline" size={16} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>Transitions</Text>
+          </View>
 
-      {/* Space-Optimized Header */}
-      <View style={styles.sheetHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel changes"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleClear}
-                style={[styles.resetBtn, isNone && { opacity: 0.4 }]}
-                disabled={isNone}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resetText}>None</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.headerTitleRow}>
-              <Ionicons name="flash-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.sheetTitle}>Transitions</Text>
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleClear}
+              style={[styles.resetBtn, isNone && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
+              disabled={isNone}
+              activeOpacity={0.7}
+              accessibilityLabel="Remove transition"
+            >
+              <Ionicons name="close-circle-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]}>None</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleApply}
+              onPress={onClose}
               style={styles.doneBtn}
               activeOpacity={0.7}
-              accessibilityLabel="Apply transition"
+              accessibilityLabel="Close panel"
             >
-              <Ionicons name="checkmark" size={18} color="#000000" />
+              <Ionicons name="close" size={16} color="#A1A1AA" />
             </TouchableOpacity>
           </View>
+        </View>
+      ) : null}
 
           {/* Duration Selector Bar */}
           {!isNone && (
@@ -186,18 +163,8 @@ export default function TransitionsModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -361,6 +328,23 @@ const styles = StyleSheet.create({
   },
   transitionLabelActive: {
     color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  inlineApplyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#00F2FE',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  inlineAppliedBtn: {
+    backgroundColor: '#10B981',
+  },
+  inlineApplyText: {
+    color: '#000000',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

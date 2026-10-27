@@ -64,6 +64,7 @@ export interface TimelineDragState {
   dragOffsetY: number;
   isInsertingNewTrack?: boolean;
   insertTrackIndex?: number | null;
+  hasOverlap?: boolean;
 }
 
 export interface TimelineProps {

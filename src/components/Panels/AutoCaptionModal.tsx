@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   TextInput,
@@ -785,54 +784,35 @@ export default function AutoCaptionModal({
   };
 
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Panel Header */}
+      <View style={styles.unifiedHeader}>
+        <View style={styles.headerTitleRow}>
+          <Ionicons name="chatbox-ellipses-outline" size={16} color="#00F2FE" />
+          <Text style={styles.sheetTitle}>Captions</Text>
+        </View>
 
-      {/* Standardized Header: Cancel (Left) | Title (Center) | Apply (Right) */}
-      <View style={styles.sheetHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={[
-                  styles.doneBtn,
-                  {
-                    backgroundColor: "rgba(239, 68, 68, 0.15)",
-                    borderWidth: 1,
-                    borderColor: "rgba(239, 68, 68, 0.3)",
-                  },
-                ]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel changes"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={handleResetToDefaults}
+            style={[styles.resetBtn, { paddingHorizontal: 10, height: 26 }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Reset to defaults"
+          >
+            <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+            <Text style={styles.resetText}>Reset Defaults</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={handleResetToDefaults}
-                style={styles.resetBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resetText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.titleRow}>
-              <View style={styles.titleIconBadge}>
-                <Ionicons name="chatbox-ellipses" size={13} color="#000000" />
-              </View>
-              <Text style={styles.sheetTitle}>Captions</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleApply}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply captions"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtnCircle}
+            activeOpacity={0.7}
+            accessibilityLabel="Close panel"
+          >
+            <Ionicons name="close" size={16} color="#A1A1AA" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
           {/* Top Category Tabs & SRT Actions */}
           <View style={styles.topControlRow}>
@@ -1819,132 +1799,130 @@ export default function AutoCaptionModal({
 
           {/* Manual Paste SRT / API Key Dialog */}
           {showPasteSrtBox && (
-            <Modal transparent animationType="fade">
-              <View style={styles.dialogOverlay}>
-                <View style={styles.dialogCard}>
-                  <Text style={styles.dialogTitle}>Import Subtitle / Script</Text>
+            <View style={[StyleSheet.absoluteFill, styles.dialogOverlay, { zIndex: 999 }]}>
+              <View style={styles.dialogCard}>
+                <Text style={styles.dialogTitle}>Import Subtitle / Script</Text>
 
-                  {/* Mobile-only: API key section for cloud Whisper */}
-                  {Platform.OS !== "web" && (
-                    <View
+                {/* Mobile-only: API key section for cloud Whisper */}
+                {Platform.OS !== "web" && (
+                  <View
+                    style={{
+                      backgroundColor: "rgba(0,242,254,0.07)",
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: "rgba(0,242,254,0.18)",
+                      padding: 12,
+                      marginBottom: 12,
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <Ionicons name="flash-outline" size={15} color="#00F2FE" />
+                      <Text style={{ color: "#00F2FE", fontSize: 13, fontWeight: "800" }}>
+                        CLOUD ACCELERATION (OPTIONAL)
+                      </Text>
+                    </View>
+                    <Text style={{ color: "#94A3B8", fontSize: 11, lineHeight: 16 }}>
+                      FastArt generates captions on mobile for free with zero API keys and zero mic permissions. If you prefer ultra-fast cloud processing (1s), you can optionally paste a Groq or OpenAI key below:
+                    </Text>
+                    <TextInput
                       style={{
-                        backgroundColor: "rgba(0,242,254,0.07)",
-                        borderRadius: 10,
+                        backgroundColor: "#0F1929",
+                        borderRadius: 8,
                         borderWidth: 1,
-                        borderColor: "rgba(0,242,254,0.18)",
-                        padding: 12,
-                        marginBottom: 12,
+                        borderColor: whisperApiKey
+                          ? "rgba(0,242,254,0.4)"
+                          : "rgba(255,255,255,0.08)",
+                        color: "#E2E8F0",
+                        fontSize: 12,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        fontFamily: "monospace",
+                      }}
+                      value={whisperApiKey}
+                      onChangeText={setWhisperApiKey}
+                      placeholder="gsk_... or sk-... or groq:gsk_..."
+                      placeholderTextColor="#475569"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      secureTextEntry={false}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        const trimmed = whisperApiKey.trim();
+                        setStorageItem(WHISPER_API_KEY_STORAGE_KEY, trimmed);
+                        if (trimmed) {
+                          setShowPasteSrtBox(false);
+                          setTimeout(() => {
+                            handleGenerate();
+                          }, 150);
+                        }
+                      }}
+                      style={{
+                        alignSelf: "flex-start",
+                        backgroundColor: whisperApiKey.trim()
+                          ? "rgba(0,242,254,0.15)"
+                          : "rgba(255,255,255,0.05)",
+                        borderRadius: 7,
+                        borderWidth: 1,
+                        borderColor: whisperApiKey.trim()
+                          ? "rgba(0,242,254,0.35)"
+                          : "rgba(255,255,255,0.08)",
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                        flexDirection: "row",
+                        alignItems: "center",
                         gap: 6,
                       }}
+                      activeOpacity={0.75}
                     >
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                        <Ionicons name="flash-outline" size={15} color="#00F2FE" />
-                        <Text style={{ color: "#00F2FE", fontSize: 13, fontWeight: "800" }}>
-                          CLOUD ACCELERATION (OPTIONAL)
-                        </Text>
-                      </View>
-                      <Text style={{ color: "#94A3B8", fontSize: 11, lineHeight: 16 }}>
-                        FastArt generates captions on mobile for free with zero API keys and zero mic permissions. If you prefer ultra-fast cloud processing (1s), you can optionally paste a Groq or OpenAI key below:
-                      </Text>
-                      <TextInput
-                        style={{
-                          backgroundColor: "#0F1929",
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: whisperApiKey
-                            ? "rgba(0,242,254,0.4)"
-                            : "rgba(255,255,255,0.08)",
-                          color: "#E2E8F0",
-                          fontSize: 12,
-                          paddingHorizontal: 10,
-                          paddingVertical: 8,
-                          fontFamily: "monospace",
-                        }}
-                        value={whisperApiKey}
-                        onChangeText={setWhisperApiKey}
-                        placeholder="gsk_... or sk-... or groq:gsk_..."
-                        placeholderTextColor="#475569"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        secureTextEntry={false}
+                      <Ionicons
+                        name="sparkles"
+                        size={14}
+                        color={whisperApiKey.trim() ? "#00F2FE" : "#475569"}
                       />
-                      <TouchableOpacity
-                        onPress={() => {
-                          const trimmed = whisperApiKey.trim();
-                          setStorageItem(WHISPER_API_KEY_STORAGE_KEY, trimmed);
-                          if (trimmed) {
-                            setShowPasteSrtBox(false);
-                            setTimeout(() => {
-                              handleGenerate();
-                            }, 150);
-                          }
-                        }}
+                      <Text
                         style={{
-                          alignSelf: "flex-start",
-                          backgroundColor: whisperApiKey.trim()
-                            ? "rgba(0,242,254,0.15)"
-                            : "rgba(255,255,255,0.05)",
-                          borderRadius: 7,
-                          borderWidth: 1,
-                          borderColor: whisperApiKey.trim()
-                            ? "rgba(0,242,254,0.35)"
-                            : "rgba(255,255,255,0.08)",
-                          paddingHorizontal: 14,
-                          paddingVertical: 8,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
+                          color: whisperApiKey.trim() ? "#00F2FE" : "#475569",
+                          fontSize: 12,
+                          fontWeight: "700",
                         }}
-                        activeOpacity={0.75}
                       >
-                        <Ionicons
-                          name="sparkles"
-                          size={14}
-                          color={whisperApiKey.trim() ? "#00F2FE" : "#475569"}
-                        />
-                        <Text
-                          style={{
-                            color: whisperApiKey.trim() ? "#00F2FE" : "#475569",
-                            fontSize: 12,
-                            fontWeight: "700",
-                          }}
-                        >
-                          Save Key & Transcribe With Whisper AI
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  <Text style={styles.dialogSubtitle}>
-                    {Platform.OS !== "web"
-                      ? "— OR — Paste dialogue script / .SRT below:"
-                      : "Paste .SRT, WebVTT, or plain dialogue sentences:"}
-                  </Text>
-                  <TextInput
-                    style={styles.dialogInput}
-                    multiline
-                    value={pastedSrtText}
-                    onChangeText={setPastedSrtText}
-                    placeholder={`Paste .SRT timestamps or dialogue script lines:\n\nHello welcome to my video\nToday we talk about FastArt`}
-                    placeholderTextColor="#64748B"
-                  />
-                  <View style={styles.dialogButtonsRow}>
-                    <TouchableOpacity
-                      style={styles.dialogCancelBtn}
-                      onPress={() => setShowPasteSrtBox(false)}
-                    >
-                      <Text style={styles.dialogCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.dialogApplyBtn}
-                      onPress={handleApplyPastedSrt}
-                    >
-                      <Text style={styles.dialogApplyText}>Import</Text>
+                        Save Key & Transcribe With Whisper AI
+                      </Text>
                     </TouchableOpacity>
                   </View>
+                )}
+
+                <Text style={styles.dialogSubtitle}>
+                  {Platform.OS !== "web"
+                    ? "— OR — Paste dialogue script / .SRT below:"
+                    : "Paste .SRT, WebVTT, or plain dialogue sentences:"}
+                </Text>
+                <TextInput
+                  style={styles.dialogInput}
+                  multiline
+                  value={pastedSrtText}
+                  onChangeText={setPastedSrtText}
+                  placeholder={`Paste .SRT timestamps or dialogue script lines:\n\nHello welcome to my video\nToday we talk about FastArt`}
+                  placeholderTextColor="#64748B"
+                />
+                <View style={styles.dialogButtonsRow}>
+                  <TouchableOpacity
+                    style={styles.dialogCancelBtn}
+                    onPress={() => setShowPasteSrtBox(false)}
+                  >
+                    <Text style={styles.dialogCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dialogApplyBtn}
+                    onPress={handleApplyPastedSrt}
+                  >
+                    <Text style={styles.dialogApplyText}>Import</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-            </Modal>
+            </View>
           )}
 
           {/* Headless Mobile Whisper Speech Recognizer (Browser Parity) */}
@@ -1954,23 +1932,8 @@ export default function AutoCaptionModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleCancel}
-    >
-      <View style={styles.overlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -1979,6 +1942,31 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     backgroundColor: "#0F131D",
+  },
+  unifiedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2637',
+    backgroundColor: '#08090E',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  closeBtnCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -1997,31 +1985,32 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: "#0F131D",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: Platform.OS === "web" ? "78%" : "85%",
     minHeight: "60%",
     borderTopWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#1F2637",
     overflow: "hidden",
-    paddingBottom: Platform.OS === "ios" ? 18 : 6,
+    paddingBottom: Platform.OS === "ios" ? 16 : 6,
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    width: 32,
+    height: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
     borderRadius: 2,
     alignSelf: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   sheetHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A2234",
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#08090E",
   },
   titleRow: {
     flexDirection: "row",
@@ -2029,29 +2018,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sheetTitle: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: "#FFFFFF",
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   resetBtn: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: "#141A28",
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#1F2637",
   },
   resetText: {
-    color: "#8E95A5",
-    fontSize: 11.5,
+    color: "#94A3B8",
+    fontSize: 10,
     fontWeight: "700",
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#00F2FE",
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2059,9 +2050,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     marginTop: 6,
-    gap: 8,
+    gap: 6,
   },
   srtActionGroup: {
     flexDirection: "row",
@@ -2073,71 +2064,76 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    backgroundColor: "#141A28",
+    paddingVertical: 4,
+    backgroundColor: "#131826",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#1F2637",
   },
   srtBtnText: {
     color: "#00F2FE",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A2234",
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#08090E",
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   titleIconBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#00F2FE",
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.1,
   },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   headerActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 4,
-    backgroundColor: "#141A28",
+    backgroundColor: "#131826",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#1F2637",
   },
   headerActionText: {
     color: "#00F2FE",
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "700",
   },
   closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#1E2638",
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 4,
@@ -2145,130 +2141,132 @@ const styles = StyleSheet.create({
   tabsRow: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#080B12",
+    backgroundColor: "#08090E",
     padding: 2,
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1A2234",
+    borderColor: "#1F2637",
   },
   tabButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 6,
-    borderRadius: 8,
+    gap: 4,
+    paddingVertical: 4,
+    borderRadius: 5,
   },
   tabButtonActive: {
-    backgroundColor: "#1E2638",
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
   },
   tabButtonText: {
-    color: "#8E95A5",
-    fontSize: 11.5,
-    fontWeight: "700",
+    color: "#94A3B8",
+    fontSize: 10.5,
+    fontWeight: "600",
   },
   tabButtonTextActive: {
     color: "#00F2FE",
-    fontWeight: "800",
+    fontWeight: "700",
   },
   bodyScroll: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingHorizontal: 10,
+    paddingTop: 6,
   },
   cuesHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   cuesSectionTitle: {
-    color: "#8E95A5",
-    fontSize: 10.5,
-    fontWeight: "800",
+    color: "#94A3B8",
+    fontSize: 9.5,
+    fontWeight: "700",
     letterSpacing: 0.5,
   },
   cueActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 3,
-    backgroundColor: "#141A28",
-    borderRadius: 6,
+    backgroundColor: "#131826",
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: "#00F2FE",
   },
   cueActionText: {
     color: "#00F2FE",
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "700",
   },
   emptyCuesContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    backgroundColor: "#141A28",
-    borderRadius: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    backgroundColor: "#131826",
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1E2638",
-    marginVertical: 8,
+    borderColor: "#1F2637",
+    marginVertical: 6,
   },
   emptyCuesTitle: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: "700",
-    marginTop: 8,
+    marginTop: 6,
   },
   emptyCuesSubtitle: {
-    color: "#8E95A5",
-    fontSize: 11.5,
+    color: "#94A3B8",
+    fontSize: 10.5,
     textAlign: "center",
-    marginTop: 4,
-    lineHeight: 16,
+    marginTop: 3,
+    lineHeight: 14,
   },
   emptyCuesButtonsRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 10,
   },
   emptyPrimaryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: "#00F2FE",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   emptyPrimaryBtnText: {
-    color: "#000000",
-    fontSize: 11.5,
-    fontWeight: "800",
+    color: "#08090E",
+    fontSize: 10.5,
+    fontWeight: "700",
   },
   emptySecondaryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "#1E2638",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 7,
+    gap: 4,
+    backgroundColor: "#131826",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#00F2FE",
+    borderColor: "#1F2637",
   },
   emptySecondaryBtnText: {
     color: "#00F2FE",
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   cuesList: {
-    gap: 6,
-    paddingBottom: 20,
+    gap: 5,
+    paddingBottom: 16,
   },
   cueCard: {
-    backgroundColor: "#141926",
+    backgroundColor: "#131826",
     borderRadius: 8,
     padding: 8,
     borderWidth: 1,

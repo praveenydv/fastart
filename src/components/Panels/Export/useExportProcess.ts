@@ -11,6 +11,7 @@ import { addNotification } from "../../../utils/storage";
 import { MEDIA_FORMATS, NoticeDialogState } from "./exportTypes";
 import { executeDirectDownload } from "./exportFileStorage";
 import { exportMobileProject } from "../../../utils/renderer/mobileExporter";
+import { rustCoreBridge } from "../../../services/rustCoreBridge";
 
 export function useExportProcess(
   project: any,
@@ -173,6 +174,34 @@ export function useExportProcess(
           "2.35:1": [705, 300],
         };
         const [baseW, baseH] = baseLogicalDims[project.aspectRatio] || [360, 640];
+
+        // 1. Rust WebAssembly Fast Snapshot Export
+        if (mediaType === "png") {
+          try {
+            const isRustReady = await rustCoreBridge.isAvailable();
+            if (isRustReady) {
+              updateProgressMonotonic(50);
+              const rustPng = await rustCoreBridge.renderSnapshot(project, 0, baseW * 2, baseH * 2);
+              if (rustPng) {
+                updateProgressMonotonic(100);
+                const result: ExportResult = {
+                  blob: new Blob([]),
+                  videoUrl: rustPng,
+                  mimeType: "image/png",
+                  format: "png",
+                  extension: "png",
+                };
+                setExportedResult(result);
+                setExportedUrl(result.videoUrl);
+                setStatus("done");
+                soundEngine.playSfx("pop");
+                return;
+              }
+            }
+          } catch (rustErr) {
+            console.warn("[useExportProcess] Rust snapshot fallback:", rustErr);
+          }
+        }
 
         const renderer = new VideoRenderer(offscreenCanvas);
         for (const clip of project.tracks?.video || []) {

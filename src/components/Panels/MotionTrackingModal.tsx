@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -115,47 +114,39 @@ export default function MotionTrackingModal({
   };
 
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
-
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel changes"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleReset}
-                style={styles.resetBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resetText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.titleRow}>
-              <Ionicons name="scan" size={17} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Motion Tracking</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleApply}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply tracking"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.sheetHeader}>
+          <View style={styles.titleRow}>
+            <Ionicons name="scan" size={16} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>Motion Tracking</Text>
           </View>
 
-          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Reset tracking"
+            >
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]}>Reset</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Close panel"
+            >
+              <Ionicons name="close" size={14} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
+          <ScrollView style={[styles.sheetBody, isInline && { paddingTop: 8 }]} showsVerticalScrollIndicator={false}>
             {/* Mode Cards */}
             <Text style={styles.sectionHeader}>TRACKING MODES</Text>
             <View style={styles.modesContainer}>
@@ -176,8 +167,8 @@ export default function MotionTrackingModal({
                     <View style={[styles.iconBox, isSelected && styles.iconBoxActive]}>
                       <Ionicons
                         name={m.icon as any}
-                        size={18}
-                        color={isSelected ? '#00F2FE' : '#8E95A5'}
+                        size={16}
+                        color={isSelected ? '#00F2FE' : '#94A3B8'}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -187,7 +178,7 @@ export default function MotionTrackingModal({
                       <Text style={styles.modeDesc}>{m.description}</Text>
                     </View>
                     {isSelected && (
-                      <Ionicons name="checkmark-circle" size={18} color="#00F2FE" />
+                      <Ionicons name="checkmark-circle" size={16} color="#00F2FE" />
                     )}
                   </TouchableOpacity>
                 );
@@ -202,7 +193,7 @@ export default function MotionTrackingModal({
               </View>
 
               {Platform.OS === 'web' ? (
-                <View style={{ marginVertical: 6 }}>
+                <View style={{ marginVertical: 4 }}>
                   <WebInput
                     type="range"
                     min="10"
@@ -231,7 +222,7 @@ export default function MotionTrackingModal({
                       triggerUpdate({ intensity: val });
                     }}
                   >
-                    <Ionicons name="remove" size={16} color="#FFFFFF" />
+                    <Ionicons name="remove" size={14} color="#FFFFFF" />
                   </TouchableOpacity>
                   <Text style={styles.stepperVal}>{intensity}%</Text>
                   <TouchableOpacity
@@ -242,7 +233,7 @@ export default function MotionTrackingModal({
                       triggerUpdate({ intensity: val });
                     }}
                   >
-                    <Ionicons name="add" size={16} color="#FFFFFF" />
+                    <Ionicons name="add" size={14} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
               )}
@@ -251,18 +242,8 @@ export default function MotionTrackingModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -289,29 +270,30 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#0F131D',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#1F2637',
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 6,
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#1F2637',
+    backgroundColor: '#08090E',
   },
   titleRow: {
     flexDirection: 'row',
@@ -319,116 +301,125 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sheetTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   resetBtn: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#141A28',
+    backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#1F2637',
   },
   resetText: {
-    color: '#8E95A5',
-    fontSize: 11.5,
+    color: '#94A3B8',
+    fontSize: 10,
     fontWeight: '700',
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#00F2FE',
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetBody: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingTop: 8,
   },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#161B26',
-    padding: 10,
-    borderRadius: 10,
+    backgroundColor: '#131826',
+    padding: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1E2536',
-    marginBottom: 10,
+    borderColor: '#1F2637',
+    marginBottom: 8,
   },
   toggleTitle: {
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#FFFFFF',
   },
   toggleSub: {
-    fontSize: 11,
-    color: '#8E95A5',
-    marginTop: 2,
+    fontSize: 9.5,
+    color: '#94A3B8',
+    marginTop: 1,
   },
   switchTrack: {
-    width: 44,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#262D3D',
+    width: 38,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#08090E',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     padding: 2,
     justifyContent: 'center',
   },
   switchTrackActive: {
     backgroundColor: '#00F2FE',
+    borderColor: '#00F2FE',
   },
   switchThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: '#FFFFFF',
   },
   switchThumbActive: {
     alignSelf: 'flex-end',
+    backgroundColor: '#08090E',
   },
   sectionHeader: {
-    color: '#64748B',
-    fontSize: 10,
+    color: '#94A3B8',
+    fontSize: 9.5,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     marginBottom: 6,
   },
   modesContainer: {
-    gap: 6,
-    marginBottom: 10,
+    gap: 5,
+    marginBottom: 8,
   },
   modeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#161B26',
-    borderRadius: 10,
-    padding: 10,
+    gap: 8,
+    backgroundColor: '#131826',
+    borderRadius: 8,
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#1E2536',
+    borderColor: '#1F2637',
   },
   modeCardActive: {
     borderColor: '#00F2FE',
-    backgroundColor: '#1A2234',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   iconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1E2433',
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: '#08090E',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconBoxActive: {
-    backgroundColor: '#00F2FE22',
+    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    borderColor: 'rgba(0, 242, 254, 0.3)',
   },
   modeTitle: {
     color: '#E2E8F0',
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
   },
   modeTitleActive: {
@@ -436,54 +427,56 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modeDesc: {
-    color: '#8E95A5',
-    fontSize: 10,
+    color: '#94A3B8',
+    fontSize: 9.5,
     marginTop: 1,
   },
   sliderSection: {
-    backgroundColor: '#161B26',
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: '#131826',
+    borderRadius: 8,
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#1E2536',
-    marginBottom: 16,
+    borderColor: '#1F2637',
+    marginBottom: 12,
   },
   sliderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   sliderLabel: {
     color: '#E2E8F0',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   sliderVal: {
     color: '#00F2FE',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 4,
+    gap: 10,
+    marginTop: 2,
   },
   stepBtn: {
-    backgroundColor: '#262D3D',
-    width: 28,
-    height: 28,
+    backgroundColor: '#08090E',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    width: 26,
+    height: 26,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperVal: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '700',
-    minWidth: 42,
+    minWidth: 36,
     textAlign: 'center',
   },
 });

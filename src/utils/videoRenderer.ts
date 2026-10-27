@@ -246,7 +246,14 @@ export class VideoRenderer {
     isPlaying: boolean = false,
     logicalWidth?: number,
     logicalHeight?: number,
-    transientOverride?: { clipId: string; x: number; y: number; scale: number; rotation: number } | null,
+    transientOverride?: {
+      clipId: string;
+      x?: number;
+      y?: number;
+      scale?: number;
+      rotation?: number;
+      mask?: any;
+    } | null,
   ) {
     if (!this.canvas || !this.ctx) return;
     const ctx = this.ctx;
@@ -398,7 +405,7 @@ export class VideoRenderer {
         ...activeVideoItems.map((item) => ({
           kind: "video" as const,
           clip: item.clip,
-          trackIndex: item.trackIndex,
+          trackIndex: (typeof item.clip.trackIndex === "number" ? item.clip.trackIndex : 0) * 100,
           transitionState: item.transitionState,
         })),
         ...activeCaptions.map((c) => ({
@@ -433,11 +440,13 @@ export class VideoRenderer {
                 ...item.clip,
                 transform: {
                   ...(item.clip.transform || {}),
-                  x: transientOverride!.x,
-                  y: transientOverride!.y,
-                  scale: transientOverride!.scale,
-                  rotation: transientOverride!.rotation,
+                  x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.transform?.x || 0),
+                  y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.transform?.y || 0),
+                  scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.transform?.scale ?? 1.0),
+                  rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.transform?.rotation ?? 0),
+                  mask: transientOverride!.mask !== undefined ? transientOverride!.mask : (item.clip.transform?.mask || item.clip.mask),
                 },
+                mask: transientOverride!.mask !== undefined ? transientOverride!.mask : (item.clip.mask || item.clip.transform?.mask),
               }
             : item.clip;
           this.drawClip(ctx, clipToDraw, time, w, h, item.transitionState || null);

@@ -33,7 +33,6 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
     { id: 'transitions', label: 'Transitions', icon: 'swap-horizontal-outline', type: 'ion' },
     { id: 'filters', label: 'Filters', icon: 'color-filter-outline', type: 'ion' },
     { id: 'transform', label: 'Transform', icon: 'crop-outline', type: 'ion' },
-    { id: 'mask', label: 'Mask', icon: 'shapes-outline', type: 'ion' },
     { id: 'speed', label: 'Speed', icon: 'speedometer-outline', type: 'ion' },
     { id: 'volume', label: 'Volume', icon: 'volume-high-outline', type: 'ion' },
     { id: 'cutout', label: 'Cutout', icon: 'person-outline', type: 'ion' },
@@ -105,10 +104,10 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
                   onDuplicateClip();
                 }}
                 activeOpacity={0.7}
-                accessibilityLabel="Duplicate clip"
+                accessibilityLabel="Copy clip"
               >
                 <Ionicons name="copy-outline" size={18} color="#E4E4E7" />
-                <Text style={styles.clipActionText}>Duplicate</Text>
+                <Text style={styles.clipActionText}>Copy</Text>
               </TouchableOpacity>
             )}
 
@@ -150,45 +149,45 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    width: 68,
-    backgroundColor: '#0D0E12',
+    width: 50,
+    backgroundColor: '#08090E',
     borderRightWidth: 1,
-    borderRightColor: '#1E2028',
+    borderRightColor: '#1F2637',
     height: '100%',
     zIndex: 20,
   },
   scrollContent: {
-    paddingVertical: 8,
+    paddingVertical: 4,
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
   sidebarBtn: {
-    width: 58,
-    height: 52,
-    borderRadius: 8,
+    width: 44,
+    height: 38,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   sidebarBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: 'rgba(0, 242, 254, 0.1)',
   },
   activeBar: {
     position: 'absolute',
     left: 2,
-    top: 8,
-    bottom: 8,
-    width: 3,
+    top: 6,
+    bottom: 6,
+    width: 2.5,
     borderRadius: 1.5,
     backgroundColor: '#00F2FE',
   },
   btnLabel: {
-    color: '#8E95A5',
-    fontSize: 9.5,
+    color: '#64748B',
+    fontSize: 8,
     fontWeight: '600',
-    marginTop: 3,
-    letterSpacing: 0.2,
+    marginTop: 1,
+    letterSpacing: 0.1,
   },
   btnLabelActive: {
     color: '#00F2FE',
@@ -197,35 +196,35 @@ const styles = StyleSheet.create({
   clipSection: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 6,
-    paddingTop: 4,
+    marginTop: 4,
+    paddingTop: 2,
   },
   divider: {
-    width: 44,
+    width: 32,
     height: 1,
-    backgroundColor: '#1E2028',
-    marginBottom: 6,
-  },
-  sectionHeader: {
-    color: '#52525B',
-    fontSize: 8.5,
-    fontWeight: '800',
-    letterSpacing: 1,
+    backgroundColor: '#1F2637',
     marginBottom: 4,
   },
+  sectionHeader: {
+    color: '#64748B',
+    fontSize: 7.5,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
   clipActionBtn: {
-    width: 58,
-    height: 44,
-    borderRadius: 8,
+    width: 44,
+    height: 34,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   clipActionText: {
-    color: '#A1A1AA',
-    fontSize: 9,
+    color: '#94A3B8',
+    fontSize: 8,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 1,
   },
   deleteBtn: {
     backgroundColor: 'rgba(239, 68, 68, 0.08)',

@@ -665,10 +665,28 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           animScale = 0.4 + p * 0.6;
         }
 
-        const s = baseS * animScale;
+        let motionX = 0;
+        let motionY = 0;
+        let motionScale = 1.0;
+        let motionRot = 0;
+        if (cap.motionTrack && cap.motionTrack.enabled) {
+          const motion = applyMotionTracking(
+            currentTime,
+            cap.startTime,
+            cap.duration,
+            cap.motionTrack,
+          );
+          motionX = motion.dx;
+          motionY = motion.dy;
+          motionScale = motion.dScale;
+          motionRot = motion.dRot;
+        }
+
+        const s = baseS * animScale * motionScale;
         const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
-        const cx = (effX / 100) * boxWidth;
-        const cy = (effY / 100) * canvasHeight;
+        const cx = (effX / 100) * boxWidth + motionX;
+        const cy = (effY / 100) * canvasHeight + motionY;
+        const effRot = rot + motionRot;
         const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
         const { baseW, baseH } = getItemBaseDimensions("caption", cap);
         const w = Math.round(baseW * s);
@@ -705,7 +723,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               opacity,
               zIndex: capZ,
               elevation: capElevation,
-              transform: [{ rotate: `${rot}deg` }],
+              transform: [{ rotate: `${effRot}deg` }],
             }}
           >
             <Text
@@ -964,8 +982,6 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                   StyleSheet.absoluteFill,
                   {
                     transform: [{ translateX: jx }, { translateY: jy }],
-                    borderWidth: 2,
-                    borderColor: "rgba(0, 242, 254, " + (0.35 * intensity) + ")",
                   },
                 ]}
               />
@@ -1144,8 +1160,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           if (type === "mirror" || type === "kaleidoscope") {
             return (
               <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 2.5, backgroundColor: "rgba(0, 242, 254, 0.75)" }} />
-                <View style={{ position: "absolute", top: 0, bottom: 0, left: "50%", right: 0, backgroundColor: "rgba(0, 242, 254, " + (0.16 * intensity) + ")" }} />
+                <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, opacity: 0.12 * intensity, backgroundColor: "rgba(0, 242, 254, 0.2)" }} />
               </View>
             );
           }

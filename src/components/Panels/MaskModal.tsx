@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -140,57 +139,40 @@ export default function MaskModal({
     <View
       style={[
         styles.sheetContainer,
-        isInline && styles.inlineSheetContainer,
+        styles.inlineSheetContainer,
         Platform.OS === 'web' ? ({ pointerEvents: 'auto' } as any) : undefined,
       ]}
       pointerEvents="auto"
     >
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
+      {/* Unified Live Panel Header */}
+      <View style={styles.unifiedHeader}>
+        <View style={styles.headerTitleRow}>
+          <Ionicons name="shapes-outline" size={16} color="#00F2FE" />
+          <Text style={styles.sheetTitle}>Mask</Text>
+        </View>
 
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={[
-                  styles.doneBtn,
-                  {
-                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(239, 68, 68, 0.3)',
-                  },
-                ]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel changes"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={handleReset}
+            style={[styles.resetBtn, !isModified && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
+            disabled={!isModified}
+            activeOpacity={0.7}
+            accessibilityLabel="Reset mask"
+          >
+            <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+            <Text style={styles.resetText}>Reset</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={handleReset}
-                style={[styles.resetBtn, !isModified && { opacity: 0.4 }]}
-                disabled={!isModified}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resetText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.headerTitleRow}>
-              <Ionicons name="shapes-outline" size={17} color="#00F2FE" />
-              <Text style={styles.headerTitle}>Mask</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleApply}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply mask"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtnCircle}
+            activeOpacity={0.7}
+            accessibilityLabel="Close panel"
+          >
+            <Ionicons name="close" size={16} color="#A1A1AA" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
             <View style={styles.groupContainer}>
@@ -497,24 +479,8 @@ export default function MaskModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View
-        style={[
-          styles.overlay,
-          Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : undefined,
-        ]}
-        pointerEvents="box-none"
-      >
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -522,7 +488,32 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0D111A',
+    backgroundColor: '#0F131D',
+  },
+  unifiedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2637',
+    backgroundColor: '#08090E',
+  },
+  sheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  closeBtnCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -540,31 +531,32 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0D111A',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: '#0F131D',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: '75%',
     borderTopWidth: 1,
-    borderColor: '#1E2638',
-    paddingBottom: 24,
+    borderColor: '#1F2637',
+    paddingBottom: 16,
   },
   sheetHandle: {
-    width: 38,
+    width: 32,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#2A354D',
+    backgroundColor: '#1F2637',
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 4,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#08090E',
     borderBottomWidth: 1,
-    borderColor: '#182030',
+    borderColor: '#1F2637',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -573,59 +565,67 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   doneBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#00F2FE',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   resetBtn: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   resetText: {
-    color: '#8E95A5',
-    fontSize: 12,
+    color: '#94A3B8',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   contentScroll: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
+    paddingHorizontal: 10,
+    paddingTop: 8,
   },
   groupContainer: {
-    gap: 10,
-    paddingBottom: 16,
+    gap: 8,
+    paddingBottom: 12,
   },
   maskGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   maskCard: {
-    width: '23%',
-    backgroundColor: '#141A28',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    width: '23.5%',
+    backgroundColor: '#131826',
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 3,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#1F2637',
   },
   maskCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   maskCardTitle: {
-    color: '#8E95A5',
-    fontSize: 10.5,
+    color: '#94A3B8',
+    fontSize: 9.5,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 3,
     textAlign: 'center',
   },
   maskCardTitleActive: {
@@ -633,15 +633,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   controlsCard: {
-    backgroundColor: '#161B26',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: '#131826',
+    borderRadius: 8,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#1E2536',
-    gap: 12,
+    borderColor: '#1F2637',
+    gap: 8,
   },
   sliderRow: {
-    gap: 6,
+    gap: 4,
   },
   labelValueRow: {
     flexDirection: 'row',
@@ -649,13 +649,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sliderLabel: {
-    color: '#E2E8F0',
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '500',
   },
   badge: {
     color: '#00F2FE',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   toggleRow: {
@@ -663,27 +663,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#1F2637',
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 4,
+    gap: 8,
+    marginTop: 3,
   },
   stepBtn: {
-    backgroundColor: '#262D3D',
-    width: 28,
-    height: 28,
+    backgroundColor: '#1B2234',
+    width: 26,
+    height: 26,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperVal: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    minWidth: 42,
+    minWidth: 36,
     textAlign: 'center',
   },
 });

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  Modal,
   TextInput,
   TouchableOpacity,
   ScrollView,
@@ -63,9 +62,9 @@ export default function TextModal({
   const [activeTab, setActiveTab] = useState<"style" | "effects" | "anim">(
     "style",
   );
-
   const lastLoadedClipIdRef = useRef<string | null>(null);
   const wasVisibleRef = useRef<boolean>(false);
+  const isInitialLoadRef = useRef<boolean>(true);
 
   useEffect(() => {
     if (visible) {
@@ -75,6 +74,7 @@ export default function TextModal({
 
       if (isNewlyOpened || isClipChanged) {
         lastLoadedClipIdRef.current = currentClipId;
+        isInitialLoadRef.current = true;
         if (editingClip) {
           setInputText(editingClip.text || "");
           setDuration(editingClip.duration || 3.0);
@@ -109,6 +109,7 @@ export default function TextModal({
       }
     } else {
       lastLoadedClipIdRef.current = null;
+      isInitialLoadRef.current = true;
     }
     wasVisibleRef.current = visible;
   }, [visible, editingClip]);
@@ -121,21 +122,7 @@ export default function TextModal({
     return () => clearInterval(interval);
   }, [visible]);
 
-  const handleApplyTemplate = (tmpl: any) => {
-    setInputText(tmpl.text);
-    setSelectedColor(tmpl.style?.color || "#FFFFFF");
-    setSelectedBg(tmpl.style?.backgroundColor || "transparent");
-    setSelectedAnim(tmpl.animation || "fade");
-    if (tmpl.style?.fontFamily) setSelectedFont(tmpl.style.fontFamily);
-    if (tmpl.style?.fontSize) setSelectedFontSize(tmpl.style.fontSize);
-    if (tmpl.style?.borderColor) setSelectedBorderColor(tmpl.style.borderColor);
-    if (tmpl.style?.textEffect) setSelectedTextEffect(tmpl.style.textEffect);
-    soundEngine.playSfx("click");
-  };
-
-  const handleSave = () => {
-    if (!inputText.trim()) return;
-
+  const buildBaseStyle = () => {
     let shadowColor = "rgba(0,0,0,0.5)";
     let shadowRadius = 8;
     let shadowOffset = { width: 0, height: 0 };
@@ -168,7 +155,7 @@ export default function TextModal({
       shadowRadius = 8;
     }
 
-    const baseStyle = {
+    return {
       color: selectedColor,
       fontSize: selectedFontSize,
       fontWeight: "800" as const,
@@ -187,97 +174,153 @@ export default function TextModal({
       strokeColor: selectedStrokeColor,
       strokeWidth: selectedStrokeWidth,
     };
+  };
 
-    if (editingClip && onUpdateText) {
-      let updatedWords = (editingClip as any).words;
-      if (updatedWords && inputText.trim()) {
-        const newWordStrings = inputText.trim().split(/\s+/).filter(Boolean);
-        const clipStart = editingClip.startTime || 0;
-        const clipDur = duration || editingClip.duration || 3.0;
-        const wDur = clipDur / Math.max(1, newWordStrings.length);
-        updatedWords = newWordStrings.map((w: string, wIdx: number) => ({
-          word: w,
-          start: Number((clipStart + wIdx * wDur).toFixed(2)),
-          end: Number((clipStart + (wIdx + 1) * wDur).toFixed(2)),
-        }));
-      }
-
-      const updatedClip: TextClip = {
-        ...editingClip,
-        text: inputText,
-        duration: duration || editingClip.duration || 3.0,
-        animation: selectedAnim as any,
-        scale: editingClip.scale ?? selectedScale,
-        rotation: editingClip.rotation ?? selectedRotation,
-        position: editingClip.position ?? selectedPosition,
-        ...(updatedWords ? { words: updatedWords } : {}),
-        style: {
-          ...editingClip.style,
-          ...baseStyle,
-        },
-      };
-      soundEngine.playSfx("pop");
-      onUpdateText(updatedClip);
-      onClose();
+  // Live apply updates directly to editingClip in real time
+  useEffect(() => {
+    if (!visible || !editingClip || !onUpdateText) return;
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
       return;
     }
 
+    const baseStyle = buildBaseStyle();
+    let updatedWords = (editingClip as any).words;
+    if (updatedWords && inputText.trim()) {
+      const newWordStrings = inputText.trim().split(/\s+/).filter(Boolean);
+      const clipStart = editingClip.startTime || 0;
+      const clipDur = duration || editingClip.duration || 3.0;
+      const wDur = clipDur / Math.max(1, newWordStrings.length);
+      updatedWords = newWordStrings.map((w: string, wIdx: number) => ({
+        word: w,
+        start: Number((clipStart + wIdx * wDur).toFixed(2)),
+        end: Number((clipStart + (wIdx + 1) * wDur).toFixed(2)),
+      }));
+    }
+
+    const updatedClip: TextClip = {
+      ...editingClip,
+      text: inputText,
+      duration: duration || editingClip.duration || 3.0,
+      animation: selectedAnim as any,
+      scale: editingClip.scale ?? selectedScale,
+      rotation: editingClip.rotation ?? selectedRotation,
+      position: editingClip.position ?? selectedPosition,
+      ...(updatedWords ? { words: updatedWords } : {}),
+      style: {
+        ...editingClip.style,
+        ...baseStyle,
+      },
+    };
+    onUpdateText(updatedClip);
+  }, [
+    inputText,
+    selectedColor,
+    selectedBg,
+    selectedAnim,
+    selectedFont,
+    selectedFontSize,
+    selectedBorderColor,
+    selectedTextEffect,
+    selectedStrokeColor,
+    selectedStrokeWidth,
+    duration,
+  ]);
+
+  const handleApplyTemplate = (tmpl: any) => {
+    setInputText(tmpl.text);
+    setSelectedColor(tmpl.style?.color || "#FFFFFF");
+    setSelectedBg(tmpl.style?.backgroundColor || "transparent");
+    setSelectedAnim(tmpl.animation || "fade");
+    if (tmpl.style?.fontFamily) setSelectedFont(tmpl.style.fontFamily);
+    if (tmpl.style?.fontSize) setSelectedFontSize(tmpl.style.fontSize);
+    if (tmpl.style?.borderColor) setSelectedBorderColor(tmpl.style.borderColor);
+    if (tmpl.style?.textEffect) setSelectedTextEffect(tmpl.style.textEffect);
+    soundEngine.playSfx("click");
+  };
+
+  const handleAddTextClip = () => {
+    if (!inputText.trim()) return;
+    const baseStyle = buildBaseStyle();
     const textClip: TextClip = {
       id: "clip-t-" + Date.now(),
       text: inputText,
       startTime: currentPlayheadTime,
-      duration: 3.0,
+      duration: duration || 3.0,
       position: selectedPosition,
       scale: selectedScale,
       rotation: selectedRotation,
       animation: selectedAnim as any,
       style: baseStyle,
     };
-
     soundEngine.playSfx("pop");
     onAddText(textClip);
-    onClose();
+  };
+
+  const handleSave = () => {
+    if (editingClip) {
+      onClose();
+    } else {
+      handleAddTextClip();
+    }
   };
 
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Header - only shown in standalone modal to avoid duplicate header on desktop */}
+      {!isInline ? (
+        <View style={styles.sheetHeader}>
+          <View style={styles.headerTitleRow}>
+            <Ionicons name="text" size={16} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>
+              {editingClip ? "Edit Text" : "Add Text"}
+            </Text>
+          </View>
 
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {!editingClip && (
+              <TouchableOpacity
+                onPress={handleAddTextClip}
+                style={[
+                  {
+                    paddingHorizontal: 10,
+                    height: 24,
+                    borderRadius: 6,
+                    backgroundColor: '#00F2FE',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                  },
+                  !inputText.trim() && { opacity: 0.4 },
+                ]}
+                disabled={!inputText.trim()}
+                activeOpacity={0.7}
+                accessibilityLabel="Add text to track"
+              >
+                <Ionicons name="add" size={13} color="#08090E" />
+                <Text style={{ color: '#08090E', fontSize: 10.5, fontWeight: '700' }}>
+                  Add to Track
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               onPress={onClose}
               style={styles.closeBtn}
               activeOpacity={0.7}
-              accessibilityLabel="Cancel changes"
+              accessibilityLabel="Close panel"
             >
-              <Ionicons name="close" size={17} color="#EF4444" />
-            </TouchableOpacity>
-
-            <View style={styles.headerTitleRow}>
-              <Ionicons name="text" size={16} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>
-                {editingClip ? "Edit Text" : "Add Text"}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleSave}
-              style={[styles.doneBtn, !inputText.trim() && { opacity: 0.4 }]}
-              disabled={!inputText.trim()}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply text"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
+              <Ionicons name="close" size={14} color="#94A3B8" />
             </TouchableOpacity>
           </View>
+        </View>
+      ) : null}
 
           <ScrollView
-            style={styles.sheetBody}
+            style={[styles.sheetBody, isInline && { paddingTop: 10 }]}
             showsVerticalScrollIndicator={false}
           >
-            {/* Input Box */}
+            {/* Input Box + Inline Add Button */}
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.textInput}
@@ -285,7 +328,6 @@ export default function TextModal({
                 onChangeText={setInputText}
                 placeholder="Type your viral text..."
                 placeholderTextColor="#64748B"
-                autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleSave}
                 {...(Platform.OS === "web"
@@ -306,6 +348,26 @@ export default function TextModal({
                   style={{ marginRight: 6 }}
                 >
                   <Ionicons name="close-circle" size={18} color="#8E95A5" />
+                </TouchableOpacity>
+              )}
+              {isInline && !editingClip && (
+                <TouchableOpacity
+                  onPress={handleAddTextClip}
+                  style={{
+                    backgroundColor: "#00F2FE",
+                    borderRadius: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 3,
+                    opacity: inputText.trim() ? 1 : 0.4,
+                  }}
+                  disabled={!inputText.trim()}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="add" size={14} color="#000000" />
+                  <Text style={{ color: "#000000", fontSize: 11, fontWeight: "700" }}>Add</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -342,8 +404,8 @@ export default function TextModal({
               >
                 <Ionicons
                   name="color-palette-outline"
-                  size={14}
-                  color={activeTab === "style" ? "#000000" : "#8E95A5"}
+                  size={13}
+                  color={activeTab === "style" ? "#00F2FE" : "#94A3B8"}
                 />
                 <Text
                   style={[
@@ -368,8 +430,8 @@ export default function TextModal({
               >
                 <Ionicons
                   name="sparkles-outline"
-                  size={14}
-                  color={activeTab === "effects" ? "#000000" : "#8E95A5"}
+                  size={13}
+                  color={activeTab === "effects" ? "#00F2FE" : "#94A3B8"}
                 />
                 <Text
                   style={[
@@ -394,8 +456,8 @@ export default function TextModal({
               >
                 <Ionicons
                   name="play-outline"
-                  size={14}
-                  color={activeTab === "anim" ? "#000000" : "#8E95A5"}
+                  size={13}
+                  color={activeTab === "anim" ? "#00F2FE" : "#94A3B8"}
                 />
                 <Text
                   style={[
@@ -443,21 +505,6 @@ export default function TextModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }

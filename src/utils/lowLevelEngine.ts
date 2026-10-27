@@ -353,13 +353,16 @@ class WebGlGpuPipeline {
     const u1 = mw > 0 ? Math.max(0, Math.min(1, (sx + sw) / mw)) : 1;
     const v1 = mh > 0 ? Math.max(0, Math.min(1, (sy + sh) / mh)) : 1;
 
+    // Keep the texture orientation identical to the normal canvas renderer.
+    // The previous cropped quad assigned top and bottom UVs in reverse, so
+    // enabling chroma cutout inverted the processed video vertically.
     const vertices = new Float32Array([
-      -1.0,  1.0, u0, v1,
-       1.0,  1.0, u1, v1,
-      -1.0, -1.0, u0, v0,
-      -1.0, -1.0, u0, v0,
-       1.0,  1.0, u1, v1,
-       1.0, -1.0, u1, v0,
+      -1.0, -1.0, u0, v1,
+       1.0, -1.0, u1, v1,
+      -1.0,  1.0, u0, v0,
+      -1.0,  1.0, u0, v0,
+       1.0, -1.0, u1, v1,
+       1.0,  1.0, u1, v0,
     ]);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
@@ -540,10 +543,18 @@ export class LowLevelPixelEngine {
         requestHumanSegmentation(media);
         const humanMask = getHumanSegmentationMask();
         if (humanMask) {
-          // High-accuracy AI Neural Human Segmentation Mask
+          // High-accuracy AI Neural Human Segmentation Mask. Draw the matte with
+          // the same sensitivity and feather controls used by the fallback path.
+          // A blurred matte creates a real soft edge instead of only changing UI.
+          const sensitivity = Math.max(1, Math.min(100, options.intensity ?? 45));
+          const featherPx = Math.max(0, ((options.shadow ?? 25) / 100) * Math.min(procW, procH) * 0.08);
           offCtx.globalCompositeOperation = "destination-in";
+          offCtx.globalAlpha = 0.35 + (sensitivity / 100) * 0.65;
+          offCtx.filter = featherPx > 0 ? `blur(${featherPx.toFixed(1)}px)` : "none";
           offCtx.drawImage(humanMask, 0, 0, procW, procH);
           offCtx.globalCompositeOperation = "source-over";
+          offCtx.globalAlpha = 1;
+          offCtx.filter = "none";
         } else {
           // Intelligent Human Saliency & Skin/Torso Computer Vision Fallback
           const imgData = offCtx.getImageData(0, 0, procW, procH);

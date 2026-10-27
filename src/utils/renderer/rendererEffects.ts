@@ -1,5 +1,6 @@
 import { VideoClip, EffectClip } from "../../types/project";
 import { LowLevelPixelEngine } from "../lowLevelEngine";
+import { rustCoreBridge } from "../../services/rustCoreBridge";
 
 export function evaluateSpeedCurve(curveInput: any, progress: number): number {
   if (!curveInput) return 1.0;
@@ -48,35 +49,13 @@ export function applyMotionTracking(
   if (!motionTrack || !motionTrack.enabled) {
     return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
   }
-  const elapsed = Math.max(0, time - clipStartTime);
-  const progress = clipDuration > 0 ? elapsed / clipDuration : 0;
-  const intensity = (motionTrack.intensity || 60) / 100;
-
-  switch (motionTrack.mode) {
-    case "follow_center": {
-      const dx = Math.sin(progress * Math.PI * 2) * 28 * intensity;
-      const dy = Math.cos(progress * Math.PI * 2) * 14 * intensity;
-      return { dx, dy, dScale: 1.0, dRot: 0 };
-    }
-    case "cinematic_drift": {
-      const dx = (progress - 0.5) * 65 * intensity;
-      const dy = Math.sin(progress * Math.PI) * -16 * intensity;
-      return { dx, dy, dScale: 1.0 + progress * 0.12 * intensity, dRot: 0 };
-    }
-    case "dynamic_zoom": {
-      const dScale = 1.0 + Math.sin(progress * Math.PI) * 0.28 * intensity;
-      const dy = (progress - 0.5) * -22 * intensity;
-      return { dx: 0, dy, dScale, dRot: 0 };
-    }
-    case "orbit_float": {
-      const dx = Math.sin(elapsed * 2.5) * 18 * intensity;
-      const dy = Math.cos(elapsed * 2.5) * 18 * intensity;
-      const dRot = Math.sin(elapsed * 1.5) * 4 * intensity;
-      return { dx, dy, dScale: 1.0, dRot };
-    }
-    default:
-      return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
-  }
+  return rustCoreBridge.evaluateMotionTrack(
+    time,
+    clipStartTime,
+    clipDuration,
+    motionTrack.mode || "follow_center",
+    motionTrack.intensity ?? 60,
+  );
 }
 
 let maskClipCanvas: HTMLCanvasElement | null = null;
@@ -693,10 +672,11 @@ export function applyEffectOverlay(
     ctx.globalCompositeOperation = "source-over";
   } else if (eff.type === "cyberpunk_dual") {
     ctx.globalCompositeOperation = "color";
-    ctx.fillStyle = `rgba(0, 242, 254, ${0.4 * intensity})`;
-    ctx.fillRect(0, 0, w / 2, h);
-    ctx.fillStyle = `rgba(255, 0, 128, ${0.4 * intensity})`;
-    ctx.fillRect(w / 2, 0, w / 2, h);
+    const cpGrad = ctx.createLinearGradient(0, 0, w, 0);
+    cpGrad.addColorStop(0, `rgba(0, 242, 254, ${0.4 * intensity})`);
+    cpGrad.addColorStop(1, `rgba(255, 0, 128, ${0.4 * intensity})`);
+    ctx.fillStyle = cpGrad;
+    ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
   } else if (eff.type === "water_ripple") {
     if (sourceCanvas && sourceCanvas !== canvas) {
@@ -774,14 +754,12 @@ export function applyEffectOverlay(
     }
   } else if (eff.type === "ai_cyberpunk") {
     ctx.globalCompositeOperation = "color";
-    ctx.fillStyle = `rgba(0, 242, 254, ${0.35 * intensity})`;
-    ctx.fillRect(0, 0, w / 2, h);
-    ctx.fillStyle = `rgba(255, 0, 128, ${0.35 * intensity})`;
-    ctx.fillRect(w / 2, 0, w / 2, h);
+    const cpGrad = ctx.createLinearGradient(0, 0, w, 0);
+    cpGrad.addColorStop(0, `rgba(0, 242, 254, ${0.35 * intensity})`);
+    cpGrad.addColorStop(1, `rgba(255, 0, 128, ${0.35 * intensity})`);
+    ctx.fillStyle = cpGrad;
+    ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
-    ctx.strokeStyle = "rgba(0, 242, 254, 0.75)";
-    ctx.lineWidth = Math.max(3, w * 0.012) * intensity;
-    ctx.strokeRect(4, 4, w - 8, h - 8);
   } else if (eff.type === "ai_manga") {
     if (sourceCanvas && sourceCanvas !== canvas) {
       ctx.save();

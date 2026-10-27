@@ -61,9 +61,12 @@ export function useProjectMediaAdders({
     selectedClip,
     selectedClipId,
     selectedClipType,
+    currentTime,
     transitionTargetClipId,
     updateProjectWithHistory,
     setActiveModal,
+    setSelectedClipId,
+    setSelectedClipType,
   });
 
   // Update text clip from modal

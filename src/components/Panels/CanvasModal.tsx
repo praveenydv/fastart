@@ -1,16 +1,15 @@
-import React from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
-import { FastArtProject, AspectRatio } from '../../types/project';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { soundEngine } from "../../utils/audioEngine";
+import { FastArtProject, AspectRatio } from "../../types/project";
 
 interface CanvasModalProps {
   visible: boolean;
@@ -31,39 +30,39 @@ export interface ExtendedRatioOption {
 
 export const RATIO_OPTIONS: ExtendedRatioOption[] = [
   {
-    id: '9:16',
-    label: '9:16',
-    desc: 'TikTok, Shorts, Reels',
-    icon: 'phone-portrait-outline',
-    platform: 'Mobile Vertical',
+    id: "9:16",
+    label: "9:16",
+    desc: "TikTok, Shorts, Reels",
+    icon: "phone-portrait-outline",
+    platform: "Mobile Vertical",
   },
   {
-    id: '16:9',
-    label: '16:9',
-    desc: 'YouTube, Landscape',
-    icon: 'phone-landscape-outline',
-    platform: 'Widescreen',
+    id: "16:9",
+    label: "16:9",
+    desc: "YouTube, Landscape",
+    icon: "phone-landscape-outline",
+    platform: "Widescreen",
   },
   {
-    id: '1:1',
-    label: '1:1',
-    desc: 'Instagram, Square Feed',
-    icon: 'square-outline',
-    platform: 'Square',
+    id: "1:1",
+    label: "1:1",
+    desc: "Instagram, Square Feed",
+    icon: "square-outline",
+    platform: "Square",
   },
   {
-    id: '4:5',
-    label: '4:5',
-    desc: 'Instagram Portrait',
-    icon: 'newspaper-outline',
-    platform: 'Portrait Feed',
+    id: "4:5",
+    label: "4:5",
+    desc: "Instagram Portrait",
+    icon: "newspaper-outline",
+    platform: "Portrait Feed",
   },
   {
-    id: '2.35:1',
-    label: '2.35:1',
-    desc: 'Cinematic Widescreen',
-    icon: 'film-outline',
-    platform: 'Cinemascope',
+    id: "2.35:1",
+    label: "2.35:1",
+    desc: "Cinematic Widescreen",
+    icon: "film-outline",
+    platform: "Cinemascope",
   },
 ];
 
@@ -77,156 +76,136 @@ export default function CanvasModal({
 }: CanvasModalProps) {
   if (!project) return null;
 
-  const currentRatio = project.aspectRatio || '9:16';
+  const currentRatio = project.aspectRatio || "9:16";
 
   const handleSelectRatio = (ratio: AspectRatio) => {
-    soundEngine.playSfx('pop');
+    soundEngine.playSfx("pop");
     onUpdateProject({ aspectRatio: ratio });
   };
 
   const handleReset = () => {
-    soundEngine.playSfx('pop');
-    onUpdateProject({ aspectRatio: '9:16' });
+    soundEngine.playSfx("pop");
+    onUpdateProject({ aspectRatio: "9:16" });
   };
 
-  const isDefault = currentRatio === '9:16';
-
-  const handleCancel = () => {
-    soundEngine.playSfx('pop');
-    onClose();
-  };
-
-  const handleApply = () => {
-    soundEngine.playSfx('whoosh');
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  };
+  const isDefault = currentRatio === "9:16";
 
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
-
-      {/* Header (Only for floating modal mode) */}
-      {!isInline && (
+    <View
+      style={[styles.sheetContainer, styles.inlineSheetContainer]}
+    >
+      {/* Unified Live Header - only shown in standalone modal to avoid duplicate header on desktop */}
+      {!isInline ? (
         <View style={styles.header}>
+          <View style={styles.headerTitleRow}>
+            <Ionicons name="scan-outline" size={16} color="#00F2FE" />
+            <Text style={styles.headerTitle}>Canvas Ratio</Text>
+          </View>
+
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
-              onPress={handleCancel}
-              style={styles.headerCloseBtn}
+              onPress={handleReset}
+              style={[styles.resetBtn, isDefault && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
+              disabled={isDefault}
               activeOpacity={0.7}
-              accessibilityLabel="Close Ratio"
+              accessibilityLabel="Reset ratio to 9:16"
             >
-              <Ionicons name="close" size={18} color="#FFFFFF" />
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]}>9:16</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, isDefault && { opacity: 0.4 }]}
-              disabled={isDefault}
+              onPress={onClose}
+              style={styles.doneBtn}
               activeOpacity={0.7}
+              accessibilityLabel="Close panel"
             >
-              <Text style={styles.resetText}>Reset</Text>
+              <Ionicons name="close" size={16} color="#A1A1AA" />
             </TouchableOpacity>
           </View>
+        </View>
+      ) : null}
 
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="scan-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.headerTitle}>Ratio</Text>
+      {/* Aspect Ratios Grid */}
+      <ScrollView
+        style={styles.contentScroll}
+        contentContainerStyle={[styles.scrollBody, isInline && { paddingTop: 12 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {isInline && !isDefault && (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8, paddingHorizontal: 4 }}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, { paddingHorizontal: 10, height: 24, flexDirection: 'row', alignItems: 'center' }]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]}>Reset 9:16</Text>
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            onPress={handleApply}
-            style={styles.doneBtn}
-            activeOpacity={0.7}
-            accessibilityLabel="Apply Ratio"
-          >
-            <Ionicons name="checkmark" size={18} color="#000000" />
-          </TouchableOpacity>
+        )}
+        <View style={styles.ratioGrid}>
+          {RATIO_OPTIONS.map((item) => {
+            const isSelected = currentRatio === item.id;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.ratioCard, isSelected && styles.ratioCardActive]}
+                onPress={() => handleSelectRatio(item.id)}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.ratioIconBox,
+                    isSelected && styles.ratioIconBoxActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={item.icon}
+                    size={18}
+                    color={isSelected ? "#00F2FE" : "#8E95A5"}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.ratioLabel,
+                    isSelected && styles.ratioLabelActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                <Text style={styles.ratioDesc} numberOfLines={1}>
+                  {item.platform}
+                </Text>
+                {isSelected && (
+                  <View style={styles.checkBadge}>
+                    <Ionicons name="checkmark" size={10} color="#000000" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      )}
-
-          {/* Aspect Ratios Grid */}
-          <ScrollView
-            style={styles.contentScroll}
-            contentContainerStyle={styles.scrollBody}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.ratioGrid}>
-              {RATIO_OPTIONS.map((item) => {
-                const isSelected = currentRatio === item.id;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.ratioCard, isSelected && styles.ratioCardActive]}
-                    onPress={() => handleSelectRatio(item.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.ratioIconBox,
-                        isSelected && styles.ratioIconBoxActive,
-                      ]}
-                    >
-                      <Ionicons
-                        name={item.icon}
-                        size={22}
-                        color={isSelected ? '#000000' : '#A1A1AA'}
-                      />
-                    </View>
-                    <Text
-                      style={[
-                        styles.ratioLabel,
-                        isSelected && styles.ratioLabelActive,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                    <Text style={styles.ratioDesc} numberOfLines={1}>
-                      {item.desc}
-                    </Text>
-                    {isSelected && (
-                      <View style={styles.checkBadge}>
-                        <Ionicons name="checkmark" size={10} color="#000000" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </ScrollView>
-        </View>
+      </ScrollView>
+    </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.overlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
   inlineWrapper: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#121215',
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#0F131D",
   },
   inlineSheetContainer: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    maxHeight: '100%',
+    width: "100%",
+    height: "100%",
+    maxHeight: "100%",
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
     borderTopWidth: 0,
@@ -234,139 +213,158 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: '#121215',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: Platform.OS === 'web' ? '55%' : '65%',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    backgroundColor: "#0F131D",
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    maxHeight: Platform.OS === "web" ? "55%" : "65%",
+    paddingBottom: Platform.OS === "ios" ? 20 : 10,
     borderTopWidth: 1,
-    borderColor: '#27272F',
+    borderColor: "#1F2637",
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#3F3F46',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8,
+    width: 32,
+    height: 3,
+    backgroundColor: "#2C364D",
+    borderRadius: 1.5,
+    alignSelf: "center",
+    marginTop: 6,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#18181C',
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#131826",
   },
   headerCloseBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#18181C',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#27272F',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#18181C',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: "#1F2637",
   },
   resetText: {
-    color: '#A1A1AA',
-    fontSize: 11,
-    fontWeight: '600',
+    color: "#00F2FE",
+    fontSize: 10,
+    fontWeight: "600",
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   contentScroll: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
+    paddingHorizontal: 10,
+    paddingTop: 8,
   },
   scrollBody: {
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   ratioGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
   },
   ratioCard: {
-    width: '31.5%',
-    backgroundColor: '#18181C',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#27272F',
-    position: 'relative',
+    width: "31.5%",
+    backgroundColor: "#131826",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#1F2637",
+    position: "relative",
   },
   ratioCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#202026',
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   ratioIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#202026',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#0F131D",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#1F2637",
   },
   ratioIconBoxActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderColor: "#00F2FE",
   },
   ratioLabel: {
-    fontSize: 13,
-    color: '#A1A1AA',
-    fontWeight: '600',
-    marginBottom: 2,
+    fontSize: 11,
+    color: "#94A3B8",
+    fontWeight: "600",
+    marginBottom: 1,
   },
   ratioLabelActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
   ratioDesc: {
-    fontSize: 9,
-    color: '#71717A',
-    textAlign: 'center',
+    fontSize: 8.5,
+    color: "#64748B",
+    textAlign: "center",
   },
   checkBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#00F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlineApplyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#00F2FE",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  inlineAppliedBtn: {
+    backgroundColor: "#10B981",
+  },
+  inlineApplyText: {
+    color: "#000000",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

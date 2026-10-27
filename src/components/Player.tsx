@@ -494,6 +494,7 @@ function Player({
                 boxWidth={boxWidth}
                 canvasHeight={canvasHeight}
                 currentTime={currentTime}
+                project={project}
                 onUpdateClipMask={onUpdateClipMask}
                 onCloseMaskPreview={() => {
                   if (onToggleMaskPreview) onToggleMaskPreview(false);

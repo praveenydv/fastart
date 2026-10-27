@@ -45,3 +45,11 @@ AGENTS.md
 scripts/generate_audio.js
 assets/media
 /media
+
+# Rust
+target/
+rust/target/
+rust/**/target/
+*.a
+*.so
+*.dylib

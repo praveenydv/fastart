@@ -25,6 +25,7 @@ import { ExportFormat, ExportOptions, ExportResult } from "./videoExporter";
 import { applyMotionTracking } from "./rendererEffects";
 import { getInterpolatedTransform } from "../keyframeEngine";
 import { Buffer } from "buffer";
+import { rustCoreBridge } from "../../services/rustCoreBridge";
 
 const jpeg = require("jpeg-js");
 const UPNG = require("upng-js");
@@ -3889,6 +3890,33 @@ export async function exportMobileProject(
     const pngW = 720;
     const pngH =
       project.aspectRatio === "16:9" ? 405 : project.aspectRatio === "1:1" ? 720 : 1280;
+
+    // Fast-path: Native Rust Core Snapshot
+    try {
+      const isRustReady = await rustCoreBridge.isAvailable();
+      if (isRustReady) {
+        if (onProgress) onProgress(40, currentTime, duration);
+        const rustDataUri = await rustCoreBridge.renderSnapshot(project, currentTime, pngW, pngH);
+        if (rustDataUri && rustDataUri.startsWith("data:image/png;base64,")) {
+          const filename = `${cleanTitle}_snapshot_${Date.now()}.png`;
+          const targetFileUri = `${targetDir}${filename}`;
+          const b64 = rustDataUri.substring("data:image/png;base64,".length);
+          const bytes = base64ToUint8(b64);
+          const writtenSize = await writeBinaryFileSafely(targetFileUri, bytes);
+          if (onProgress) onProgress(100, currentTime, duration);
+          return {
+            blob: createSafeBlob([]),
+            videoUrl: targetFileUri,
+            mimeType: "image/png",
+            format: "png",
+            extension: "png",
+            fileSize: writtenSize,
+          };
+        }
+      }
+    } catch (rustErr) {
+      console.warn("[mobileExporter] Rust snapshot fallback:", rustErr);
+    }
 
     if (onProgress) onProgress(30, currentTime, duration);
     const frame = renderMobileProjectFrame(project, currentTime, pngW, pngH, undefined, clipImageMap);

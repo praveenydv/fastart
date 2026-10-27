@@ -123,6 +123,7 @@ export interface VideoClip {
   keyframes?: KeyframePoint[];
   motionTrack?: MotionTrackConfig;
   trackIndex?: number;
+  layer?: number;
   isEnding?: boolean;
   peaks?: number[];
 }
@@ -185,6 +186,7 @@ export interface TextClip {
   style?: TextStyle;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
+  layer?: number;
   motionTrack?: MotionTrackConfig;
 }
 
@@ -200,6 +202,7 @@ export interface CaptionClip {
   style?: TextStyle;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
+  layer?: number;
   motionTrack?: MotionTrackConfig;
   presetId?: string;
   words?: { word: string; start: number; end: number }[];
@@ -220,6 +223,7 @@ export interface StickerClip {
   animation?: 'none' | 'bounce' | 'pulse' | 'wave' | 'fade' | 'pop' | string;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
+  layer?: number;
   motionTrack?: MotionTrackConfig;
 }
 
@@ -232,6 +236,7 @@ export interface EffectClip {
   intensity?: number;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
+  layer?: number;
 }
 
 export interface ProjectTracks {

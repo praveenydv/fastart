@@ -11,6 +11,8 @@ export const cropStyles = {
     zIndex: 25,
     boxShadow: "0 0 8px rgba(0, 0, 0, 0.5)" as any,
     touchAction: "none",
+    willChange: "left, top, width, height" as any,
+    transition: "none",
   } as any,
   cropGridLine: {
     position: "absolute" as any,

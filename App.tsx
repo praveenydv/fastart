@@ -55,7 +55,9 @@ export default function App() {
   const [transitionTargetClipId, setTransitionTargetClipId] = useState<string | null>(null);
   const [isCroppingPreview, setIsCroppingPreview] = useState(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
-  const [cutoutInitialMode, setCutoutInitialMode] = useState<'auto' | 'chroma'>('auto');
+  // Undefined means reopen the clip using its saved cutout mode. Explicit
+  // toolbar shortcuts still select Auto or Chroma Key deliberately.
+  const [cutoutInitialMode, setCutoutInitialMode] = useState<'auto' | 'chroma' | undefined>(undefined);
   const [transformInitialTab, setTransformInitialTab] = useState<'crop' | 'flip' | 'rotate' | 'stretch' | 'angle'>('crop');
 
   // Snapshot refs for rolling back unapplied preview changes
@@ -81,6 +83,31 @@ export default function App() {
 
   // Modal helpers synced with URL
   const openModal = useCallback((modalName: string) => {
+    const CLIP_DEPENDENT_TOOLS = new Set([
+      "filters",
+      "effects",
+      "transitions",
+      "speed",
+      "volume",
+      "mask",
+      "cutout",
+      "enhance",
+      "keyframe",
+      "tracking",
+      "transform",
+    ]);
+    if (CLIP_DEPENDENT_TOOLS.has(modalName) && !selectedClipId && projectRef.current) {
+      const curTime = currentTimeRef.current || 0;
+      const target =
+        projectRef.current.tracks?.video?.find(
+          (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
+        ) || projectRef.current.tracks?.video?.[0];
+      if (target) {
+        setSelectedClipId(target.id);
+        setSelectedClipType("video");
+      }
+    }
+
     if (PREVIEW_MODALS.has(modalName) && projectRef.current) {
       modalInitialSnapshotRef.current = JSON.parse(JSON.stringify(projectRef.current));
       initialHistoryLengthRef.current = historyStackRef.current.length;
@@ -91,7 +118,7 @@ export default function App() {
     if (route.screen === "editor" && projectRef.current) {
       navigate(`/project/${projectRef.current.id}?tool=${modalName}`, { replace: true });
     }
-  }, [route.screen, navigate]);
+  }, [route.screen, navigate, selectedClipId]);
 
   const closeModal = useCallback(() => {
     setActiveModal(null);
@@ -174,18 +201,21 @@ export default function App() {
     [updateProjectPreview, updateProjectWithHistory],
   );
 
-  // Discard all unapplied preview changes and restore pristine state before modal was opened
-  const handleCancelModal = useCallback(() => {
-    if (modalInitialSnapshotRef.current) {
-      discardPreview(modalInitialSnapshotRef.current);
-      setHistoryStack((prev) => prev.slice(0, initialHistoryLengthRef.current));
-      modalInitialSnapshotRef.current = null;
-    }
-    closeModal();
-  }, [closeModal, discardPreview, setHistoryStack]);
-
-  // Commit preview changes with a single atomic undo entry
+  // Intelligent Apply: Commits preview changes into undo stack, updates baseline snapshot, and KEEPS modal open!
   const handleApplyModal = useCallback(() => {
+    if (modalInitialSnapshotRef.current) {
+      commitPreview(modalInitialSnapshotRef.current);
+      // Advance snapshot to current state so further tweaks can also be previewed / committed
+      if (projectRef.current) {
+        modalInitialSnapshotRef.current = JSON.parse(JSON.stringify(projectRef.current));
+      }
+    }
+    soundEngine.playSfx("whoosh");
+    // Modal stays open so user can keep editing or viewing results
+  }, [commitPreview]);
+
+  // Close modal intelligently keeping live adjustments
+  const handleCancelModal = useCallback(() => {
     if (modalInitialSnapshotRef.current) {
       commitPreview(modalInitialSnapshotRef.current);
       modalInitialSnapshotRef.current = null;
@@ -711,7 +741,7 @@ export default function App() {
                   handleOpenBackgroundModal={() => openModal("background")}
                   handleOpenCutoutModal={(mode?: 'auto' | 'chroma') => {
                     ensureSelectedVideoClip();
-                    setCutoutInitialMode(mode || 'auto');
+                    setCutoutInitialMode(mode);
                     openModal("cutout");
                   }}
                   handleOpenMotionTracking={() => {

@@ -1,0 +1,14 @@
+[package]
+name = "fastart_ios"
+version = "1.0.0"
+edition = "2021"
+authors = ["FastArt Team"]
+description = "FastArt iOS C-FFI Bridge for React Native / iOS"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+fastart_core = { path = "../fastart_core" }
+serde_json = "1.0"
+libc = "0.2"

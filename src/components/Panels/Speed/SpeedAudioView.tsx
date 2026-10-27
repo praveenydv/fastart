@@ -179,8 +179,8 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
           <View style={[styles.pitchIconBox, keepPitch && styles.pitchIconBoxActive]}>
             <Ionicons
               name={keepPitch ? 'musical-note' : 'musical-note-outline'}
-              size={18}
-              color={keepPitch ? '#00F2FE' : '#8E95A5'}
+              size={16}
+              color={keepPitch ? '#00F2FE' : '#94A3B8'}
             />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>

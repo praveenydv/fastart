@@ -237,8 +237,8 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           disabled={customPoints.length <= 2}
           activeOpacity={0.7}
         >
-          <Ionicons name="trash-outline" size={16} color="#FF0050" />
-          <Text style={[styles.graphActionText, { color: '#FF0050' }]}>Delete</Text>
+          <Ionicons name="trash-outline" size={14} color="#EF4444" />
+          <Text style={[styles.graphActionText, { color: '#EF4444' }]}>Delete</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -246,7 +246,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           onPress={handleResetCurve}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
+          <Ionicons name="refresh-outline" size={14} color="#94A3B8" />
           <Text style={styles.graphActionText}>Reset</Text>
         </TouchableOpacity>
       </View>

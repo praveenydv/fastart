@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
@@ -116,71 +115,58 @@ export default function SpeedModal({
 
   const isDefaultSpeed = speedVal === 1.0 && (isAudio || (activeTab === 'normal' && smoothSlowMo === 'none'));
 
-  const handleCancel = () => {
-    soundEngine.playSfx('pop');
-    onClose();
-  };
-
-  const handleApply = () => {
-    soundEngine.playSfx('whoosh');
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  };
-
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.sheetHeader}>
+          <View style={styles.titleRow}>
+            <Ionicons
+              name={isAudio ? "musical-notes-outline" : "speedometer-outline"}
+              size={16}
+              color="#00F2FE"
+            />
+            <Text style={styles.sheetTitle}>
+              {isAudio ? "Audio Speed" : "Speed & Curve"}
+            </Text>
+          </View>
 
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel changes"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleResetSpeed}
-                style={[styles.resetBtn, isDefaultSpeed && { opacity: 0.4 }]}
-                disabled={isDefaultSpeed}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resetText}>1.0x</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.titleRow}>
-              <Ionicons
-                name={isAudio ? "musical-notes-outline" : "speedometer-outline"}
-                size={16}
-                color="#00F2FE"
-              />
-              <Text style={styles.sheetTitle}>
-                {isAudio ? "Audio Speed" : "Speed & Curve"}
-              </Text>
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleResetSpeed}
+              style={[styles.resetBtn, isDefaultSpeed && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
+              disabled={isDefaultSpeed}
+              activeOpacity={0.7}
+              accessibilityLabel="Reset speed to 1.0x"
+            >
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]}>1.0x</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleApply}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
+              onPress={onClose}
+              style={styles.closeBtn}
               activeOpacity={0.7}
-              accessibilityLabel="Apply speed changes"
+              accessibilityLabel="Close panel"
             >
-              <Ionicons name="checkmark" size={18} color="#000000" />
+              <Ionicons name="close" size={16} color="#A1A1AA" />
             </TouchableOpacity>
           </View>
+        </View>
+      ) : null}
 
           {/* Sub-Tabs: Normal / Curves / Custom (Only for Video clips) */}
           {!isAudio && (
-            <View style={styles.tabsRow}>
+            <View style={[styles.tabsRow, isInline && { marginTop: 8 }]}>
+              {isInline && !isDefaultSpeed && (
+                <TouchableOpacity
+                  style={[styles.tabBtn, { borderColor: '#00F2FE', backgroundColor: 'rgba(0, 242, 254, 0.12)', maxWidth: 48 }]}
+                  onPress={handleResetSpeed}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.tabText, { color: '#00F2FE', fontWeight: '700' }]}>1.0x</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.tabBtn, activeTab === 'normal' && styles.tabBtnActive]}
                 onPress={() => {
@@ -268,16 +254,6 @@ export default function SpeedModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.modalOverlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }

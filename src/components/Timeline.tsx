@@ -310,55 +310,137 @@ export const Timeline: React.FC<TimelineProps> = ({
     );
   }, [ticks, pxPerSec, project?.beatMarkers]);
 
-  // Left track header cells (stable layout without in-between jumping)
+  // Left track header cells (stable layout with ZERO layout displacement)
   const renderedTrackHeaders = useMemo(() => {
-    const headers: React.ReactNode[] = trackRows.map((_, idx) => (
-      <View
-        key={`track-header-${idx}`}
-        style={styles.trackHeaderCellUniversal}
-      >
-        <View style={styles.trackHeaderLabelBox}>
-          <Text style={styles.trackHeaderLabelUniversal}>
-            {isMobile ? `T${idx + 1}` : `Track ${idx + 1}`}
-          </Text>
-        </View>
-      </View>
-    ));
+    const headers: React.ReactNode[] = [];
 
-    // If dragging to bottom to create a new track (when all tracks are occupied)
-    if (dragState?.isInsertingNewTrack) {
+    trackRows.forEach((rowClips, idx) => {
+      const isEmpty = rowClips.length === 0;
+      const isSeamActive =
+        dragState?.isInsertingNewTrack && dragState?.insertTrackIndex === idx;
+
+      headers.push(
+        <View
+          key={`track-header-${idx}`}
+          style={styles.trackHeaderCellUniversal}
+        >
+          {/* Inter-Track Boundary Seam Indicator between headers */}
+          {isSeamActive && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                top: -7,
+                left: 2,
+                right: 2,
+                height: 14,
+                backgroundColor: "#08090E",
+                borderColor: "#00F2FE",
+                borderWidth: 1.5,
+                borderRadius: 7,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 9999,
+                gap: 2,
+                ...(Platform.OS === "web"
+                  ? {
+                      boxShadow: "0 0 8px rgba(0, 242, 254, 0.6)",
+                    }
+                  : {}),
+              }}
+            >
+              <Ionicons name="add" size={10} color="#00F2FE" />
+              <Text style={{ color: "#00F2FE", fontSize: 9, fontWeight: "800" }}>
+                New
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.trackHeaderLabelBox}>
+            <Text style={styles.trackHeaderLabelUniversal}>
+              {`T${idx + 1}`}
+            </Text>
+          </View>
+          {isEmpty && activeTrackCount > 1 && (
+            <TouchableOpacity
+              style={styles.removeEmptyTrackHeaderBtn}
+              onPress={(e: any) => {
+                if (e?.stopPropagation) e.stopPropagation();
+                soundEngine.playSfx("click");
+                handleRemoveTrack(idx);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="trash-outline" size={11} color="#EF4444" />
+            </TouchableOpacity>
+          )}
+        </View>,
+      );
+    });
+
+    // Bottom new track header preview when dragging clip
+    if (dragState && activeTrackCount < 10) {
+      const isBottomActive =
+        dragState.isInsertingNewTrack &&
+        (dragState.insertTrackIndex === null ||
+          dragState.insertTrackIndex === undefined ||
+          dragState.insertTrackIndex >= trackRows.length);
+
       headers.push(
         <View
           key="insert-header-bottom"
           style={[
             styles.trackHeaderCellUniversal,
             {
-              borderColor: "#00F2FE",
+              borderColor: isBottomActive ? "#00F2FE" : "rgba(0, 242, 254, 0.35)",
               borderWidth: 1.5,
               borderStyle: "dashed",
-              backgroundColor: "rgba(0, 242, 254, 0.15)",
+              backgroundColor: isBottomActive
+                ? "rgba(0, 242, 254, 0.16)"
+                : "rgba(0, 242, 254, 0.03)",
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
               gap: 2,
+              ...(Platform.OS === "web"
+                ? {
+                    transition: "all 0.18s ease",
+                  }
+                : {}),
             },
           ]}
         >
-          <Ionicons name="add" size={12} color="#00F2FE" />
+          <Ionicons
+            name="add"
+            size={12}
+            color={isBottomActive ? "#00F2FE" : "rgba(0, 242, 254, 0.7)"}
+          />
           <Text
             style={[
               styles.trackHeaderLabelUniversal,
-              { color: "#00F2FE", fontWeight: "700" },
+              {
+                color: isBottomActive ? "#00F2FE" : "rgba(0, 242, 254, 0.7)",
+                fontWeight: "700",
+              },
             ]}
           >
-            {isMobile ? `T${trackRows.length + 1}` : "New"}
+            {isMobile ? `+T` : "New"}
           </Text>
         </View>,
       );
     }
 
     return headers;
-  }, [trackRows, isMobile, dragState?.isInsertingNewTrack]);
+  }, [
+    trackRows,
+    isMobile,
+    dragState?.isInsertingNewTrack,
+    dragState?.insertTrackIndex,
+    !!dragState,
+    activeTrackCount,
+    handleRemoveTrack,
+  ]);
 
   return (
     <View

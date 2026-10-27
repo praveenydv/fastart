@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TextInput,
   TouchableOpacity,
   ScrollView,
@@ -106,34 +105,51 @@ export default function TextToSpeechModal({
 
   const sheetContent = (
     <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Cancel changes"
-            >
-              <Ionicons name="close" size={17} color="#EF4444" />
-            </TouchableOpacity>
+      {/* Unified Live Header */}
+      <View style={styles.sheetHeader}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="mic" size={16} color="#00F2FE" />
+          <Text style={styles.sheetTitle}>AI Voice Generator</Text>
+        </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="mic" size={17} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>AI Voice Generator</Text>
-            </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            onPress={handleUseVoiceover}
+            style={[
+              {
+                paddingHorizontal: 10,
+                height: 24,
+                borderRadius: 6,
+                backgroundColor: '#00F2FE',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+              },
+              !script.trim() && { opacity: 0.4 },
+            ]}
+            disabled={!script.trim()}
+            activeOpacity={0.7}
+            accessibilityLabel="Add Voice to Track"
+          >
+            <Ionicons name="add" size={13} color="#08090E" />
+            <Text style={{ color: '#08090E', fontSize: 10.5, fontWeight: '700' }}>
+              Add to Track
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleUseVoiceover}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Add Voice"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            activeOpacity={0.7}
+            accessibilityLabel="Close panel"
+          >
+            <Ionicons name="close" size={14} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             <Text style={styles.sectionTitle}>Script</Text>
@@ -217,18 +233,8 @@ export default function TextToSpeechModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -255,140 +261,146 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#0F131D',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     borderTopWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: '#1F2637',
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    width: 32,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2234',
+    borderBottomColor: '#1F2637',
+    backgroundColor: '#08090E',
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#1E2638',
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetBody: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   sectionTitle: {
-    color: '#8E95A5',
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    marginBottom: 6,
+    color: '#94A3B8',
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 4,
   },
   scriptInput: {
-    backgroundColor: '#0A0D14',
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: '#08090E',
+    borderRadius: 8,
+    padding: 8,
     color: '#FFFFFF',
-    fontSize: 13,
-    minHeight: 70,
+    fontSize: 11.5,
+    minHeight: 52,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: '#1E2638',
-    marginBottom: 10,
+    borderColor: '#1F2637',
+    marginBottom: 8,
   },
   voicePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10131A',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: '#08090E',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1E2333',
-    marginRight: 8,
-    gap: 6,
+    borderColor: '#1F2637',
+    marginRight: 6,
+    gap: 4,
   },
   voicePillActive: {
     borderColor: '#00F2FE',
-    backgroundColor: '#1E2333',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
   },
   voiceName: {
-    color: '#8E95A5',
-    fontSize: 12,
+    color: '#94A3B8',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   voiceNameActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+    color: '#00F2FE',
+    fontWeight: '700',
   },
   rateRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
+    gap: 6,
+    marginBottom: 12,
   },
   choicePill: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#10131A',
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#08090E',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1E2333',
+    borderColor: '#1F2637',
   },
   choicePillActive: {
     borderColor: '#00F2FE',
-    backgroundColor: '#1E2333',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
   },
   choiceText: {
-    color: '#8E95A5',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#94A3B8',
+    fontSize: 10.5,
+    fontWeight: '600',
   },
   choiceTextActive: {
     color: '#00F2FE',
+    fontWeight: '700',
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 14,
   },
   previewBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E2333',
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 6,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 5,
   },
   previewBtnActive: {
-    backgroundColor: 'rgba(255, 0, 80, 0.15)',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderWidth: 1,
-    borderColor: '#FF0050',
+    borderColor: '#EF4444',
   },
   previewBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   useBtn: {
@@ -397,13 +409,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#00F2FE',
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 5,
   },
   useBtnText: {
-    color: '#000000',
-    fontSize: 13,
-    fontWeight: '800',
+    color: '#08090E',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
+import React, { useRef, useEffect } from "react";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import MediaPickerModal from "../Panels/MediaPickerModal";
@@ -14,7 +14,6 @@ import ExportModal from "../Panels/ExportModal";
 import SettingsModal from "../Panels/SettingsModal";
 import NotificationsModal from "../Panels/NotificationsModal";
 import VolumeModal from "../Panels/VolumeModal";
-import MaskModal from "../Panels/MaskModal";
 import TransformModal from "../Panels/TransformModal";
 import AutoCutModal from "../Panels/AutoCutModal";
 import CanvasModal from "../Panels/CanvasModal";
@@ -104,6 +103,7 @@ interface EditorModalsProps {
 }
 
 export const INLINE_MODAL_KEYS = new Set([
+  'audio',
   'filters',
   'transform',
   'mask',
@@ -188,6 +188,20 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
 
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (activeModal && isInline && Platform.OS !== "web") {
+      fadeAnim.setValue(0.85);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 150,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [activeModal, isInline]);
+
   // When isInline is true, only render if activeModal is an inline modal tool
   if (isInline && (!activeModal || !INLINE_MODAL_KEYS.has(activeModal))) {
     return null;
@@ -197,7 +211,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
     return null;
   }
 
-  return (
+  const renderedContent = (
     <>
       {/* LAZY LOADED MODALS ON MOBILE (Only mounted when active to save CPU and RAM) */}
       {activeModal === "media" && (
@@ -214,7 +228,11 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onClose={handleCancel}
           onApply={handleApply}
           currentCutout={selectedClip?.cutout}
+          currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
           onApplyCutout={handleApplyCutout}
+          onApplyMask={(newMask) =>
+            handleApplyTransform(selectedClip?.transform || {}, undefined, newMask)
+          }
           initialMode={cutoutInitialMode}
           isInline={isInline}
         />
@@ -407,14 +425,17 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       )}
 
       {activeModal === "mask" && (
-        <MaskModal
+        <CutoutModal
           visible={true}
           onClose={handleCancel}
           onApply={handleApply}
+          currentCutout={selectedClip?.cutout}
           currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
+          onApplyCutout={handleApplyCutout}
           onApplyMask={(newMask) =>
             handleApplyTransform(selectedClip?.transform || {}, undefined, newMask)
           }
+          initialTab="mask"
           isInline={isInline}
         />
       )}
@@ -546,12 +567,13 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       )}
 
       {/* Layer / Track Order Panel */}
+      {/* Layer / Track Order Panel */}
       {activeModal === "layer" && selectedClip && (
         <View style={modalStyles.panelContainer}>
           <Text style={modalStyles.panelSectionTitle}>LAYER ORDER</Text>
           <View style={modalStyles.layerInfoBox}>
-            <MaterialCommunityIcons name="layers-outline" size={24} color="#00F2FE" />
-            <View style={{ flex: 1, marginLeft: 12 }}>
+            <MaterialCommunityIcons name="layers-outline" size={20} color="#00F2FE" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={modalStyles.layerInfoTitle}>
                 Current: Layer {((typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : (selectedClipType === "video" ? 0 : 2))) + 1}
               </Text>
@@ -580,7 +602,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
                 }
               }}
             >
-              <Ionicons name="arrow-down" size={16} color="#00F2FE" />
+              <Ionicons name="arrow-down" size={14} color="#00F2FE" />
               <Text style={modalStyles.actionCardText}>Move Down</Text>
             </TouchableOpacity>
 
@@ -602,12 +624,12 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
                 }
               }}
             >
-              <Ionicons name="arrow-up" size={16} color="#00F2FE" />
+              <Ionicons name="arrow-up" size={14} color="#00F2FE" />
               <Text style={modalStyles.actionCardText}>Move Up</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={[modalStyles.panelSectionTitle, { marginTop: 16 }]}>QUICK LAYER ASSIGN</Text>
+          <Text style={[modalStyles.panelSectionTitle, { marginTop: 10 }]}>QUICK LAYER ASSIGN</Text>
           <View style={modalStyles.chipRow}>
             {[1, 2, 3, 4, 5].map((lvl) => {
               const curLvl = ((typeof selectedClip.trackIndex === "number" ? selectedClip.trackIndex : (selectedClipType === "video" ? 0 : 2))) + 1;
@@ -769,82 +791,104 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       />
     </>
   );
+
+  if (isInline) {
+    return (
+      <Animated.View
+        key={activeModal || "inline-empty"}
+        style={[
+          {
+            flex: 1,
+            width: "100%",
+            opacity: fadeAnim,
+          },
+          Platform.OS === "web" && ({
+            animation: "fastartFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
+          } as any),
+        ]}
+      >
+        {renderedContent}
+      </Animated.View>
+    );
+  }
+
+  return renderedContent;
 };
 
 const modalStyles = StyleSheet.create({
   panelContainer: {
-    padding: 16,
+    padding: 10,
     flex: 1,
-    backgroundColor: "#0E0F14",
+    backgroundColor: "#0F131D",
   },
   panelSectionTitle: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: "700",
-    color: "#71717A",
-    letterSpacing: 0.8,
-    marginBottom: 10,
+    color: "#94A3B8",
+    letterSpacing: 0.6,
+    marginBottom: 6,
   },
   layerInfoBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#16171F",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: "#131826",
+    borderRadius: 8,
+    padding: 8,
     borderWidth: 1,
-    borderColor: "#262838",
-    marginBottom: 16,
+    borderColor: "#1F2637",
+    marginBottom: 10,
   },
   layerInfoTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",
   },
   layerInfoSubtitle: {
-    fontSize: 11,
-    color: "#8E95A5",
-    marginTop: 2,
+    fontSize: 9.5,
+    color: "#94A3B8",
+    marginTop: 1,
   },
   btnGrid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   actionCardBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1A1B24",
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: "#131826",
+    paddingVertical: 7,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#2A2D3C",
-    gap: 6,
+    borderColor: "#1F2637",
+    gap: 5,
   },
   actionCardText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: "#FFFFFF",
   },
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 6,
   },
   chipBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#16171F",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "#272836",
+    borderColor: "#1F2637",
   },
   chipBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   chipText: {
-    fontSize: 12,
-    color: "#A1A1AA",
+    fontSize: 10.5,
+    color: "#94A3B8",
     fontWeight: "600",
   },
   chipTextActive: {
@@ -854,26 +898,26 @@ const modalStyles = StyleSheet.create({
   chipGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
   },
   animCard: {
-    width: "47%",
+    width: "48%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#16171F",
-    paddingVertical: 14,
-    borderRadius: 8,
+    backgroundColor: "#131826",
+    paddingVertical: 10,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#262838",
-    gap: 6,
+    borderColor: "#1F2637",
+    gap: 4,
   },
   animCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   animCardText: {
-    fontSize: 12,
-    color: "#D1D5DB",
+    fontSize: 11,
+    color: "#94A3B8",
     fontWeight: "600",
   },
   animCardTextActive: {

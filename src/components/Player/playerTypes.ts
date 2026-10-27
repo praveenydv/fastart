@@ -58,6 +58,7 @@ export interface TransientTransformState {
   y: number;
   scale: number;
   rotation: number;
+  mask?: MaskConfig;
 }
 
 export interface ActiveTransformItem {

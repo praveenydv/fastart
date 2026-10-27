@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -166,40 +165,29 @@ export default function AudioModal({
     soundEngine.playSfx('pop');
   };
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
-
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Cancel changes"
-            >
-              <Ionicons name="close" size={17} color="#EF4444" />
-            </TouchableOpacity>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="musical-notes" size={17} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Import Audio</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Done"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
+    <View style={styles.inlineWrapper}>
+      <View style={styles.sheetContainer}>
+        {/* Unified Live Panel Header */}
+        <View style={styles.unifiedHeader}>
+          <View style={styles.headerTitleRow}>
+            <Ionicons name="musical-notes" size={16} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>Import Audio</Text>
           </View>
 
-          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtnCircle}
+            activeOpacity={0.7}
+            accessibilityLabel="Close panel"
+          >
+            <Ionicons name="close" size={16} color="#A1A1AA" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             {/* Direct Device Audio Upload Box */}
             <View style={styles.uploadPromptContainer}>
               <View style={styles.uploadIconOuterCircle}>
@@ -271,53 +259,47 @@ export default function AudioModal({
           </ScrollView>
         </View>
       </View>
-    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  inlineWrapper: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#0F131D',
   },
   sheetContainer: {
-    backgroundColor: '#0F131C',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderBottomWidth: 0,
-    overflow: 'hidden',
+    flex: 1,
+    backgroundColor: '#0F131D',
+    width: '100%',
+    height: '100%',
   },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8,
-  },
-  sheetHeader: {
+  unifiedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    borderBottomColor: '#1F2637',
+    backgroundColor: '#0B0D14',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   sheetTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    color: '#F1F5F9',
+    fontSize: 14,
+    fontWeight: '700',
   },
-  closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  closeBtnCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },

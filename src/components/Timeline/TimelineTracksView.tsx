@@ -130,90 +130,141 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
       {/* Track Lanes */}
       {trackRows.map((rowClips, trackIdx) => {
         const isEmptyTrack = rowClips.length === 0;
+        const isSourceOfDrag =
+          dragState && rowClips.some((c) => c.id === dragState.clipId);
+        const isTargetOfDrag =
+          dragState && dragState.currentTrack === trackIdx;
 
         return (
-          <Pressable
-            key={trackIdx}
-            style={styles.universalTrackLane}
-            onPress={() => {
-              if (selectedClipId) {
-                soundEngine.playSfx("click");
-                onSelectClip("", "video");
-              }
-            }}
-          >
-            {/* Subtle track lane guideline */}
-            <View style={styles.trackLaneGuideline} />
+          <React.Fragment key={`track-row-fragment-${trackIdx}`}>
+            <Pressable
+              key={trackIdx}
+              style={[
+                styles.universalTrackLane,
+                {
+                  zIndex: isSourceOfDrag ? 10000 : isTargetOfDrag ? 5000 : 1,
+                  overflow: "visible",
+                },
+              ]}
+              onPress={() => {
+                if (selectedClipId) {
+                  soundEngine.playSfx("click");
+                  onSelectClip("", "video");
+                }
+              }}
+            >
+              {/* Subtle track lane guideline */}
+              <View style={styles.trackLaneGuideline} />
 
-            {/* Target Drop Zone Ghost Indicator when dragging a clip over this track */}
-            {dragState &&
-              !dragState.isInsertingNewTrack &&
-              dragState.currentTrack === trackIdx && (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: "absolute",
-                    left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
-                    width: Math.max(
-                      24,
-                      (draggedClip ? draggedClip.duration : 1) * pxPerSec,
-                    ),
-                    top: 2,
-                    bottom: 2,
-                    borderRadius: 4,
-                    borderWidth: 1.5,
-                    borderStyle: "dashed",
-                    borderColor: "#00F2FE",
-                    backgroundColor: "rgba(0, 242, 254, 0.16)",
-                    zIndex: 10,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingHorizontal: 8,
-                  }}
-                >
-                  <Ionicons
-                    name="arrow-down-circle-outline"
-                    size={12}
-                    color="#00F2FE"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text
+              {/* Inter-Track Laser Seam Line (Clipchamp style - ZERO vertical displacement) */}
+              {dragState?.isInsertingNewTrack &&
+                dragState?.insertTrackIndex === trackIdx && (
+                  <View
+                    pointerEvents="none"
                     style={{
-                      color: "#00F2FE",
-                      fontSize: 10.5,
-                      fontWeight: "700",
-                      letterSpacing: 0.3,
+                      position: "absolute",
+                      top: -2,
+                      left: 0,
+                      right: 0,
+                      height: 4,
+                      backgroundColor: "#00F2FE",
+                      zIndex: 99999,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      ...(Platform.OS === "web"
+                        ? {
+                            boxShadow: "0 0 10px #00F2FE, 0 0 4px #FFFFFF",
+                          }
+                        : {}),
                     }}
-                    numberOfLines={1}
                   >
-                    Drop Position • Track {trackIdx + 1}
-                  </Text>
-                </View>
-              )}
-
-            {/* Empty track lane with delete option */}
-            {isEmptyTrack && (
-              <View style={styles.emptyTrackLaneContainer}>
-                <Text style={styles.emptyTrackLanePrompt}>
-                  Track {trackIdx + 1} is empty
-                </Text>
-                {activeTrackCount > 1 && (
-                  <TouchableOpacity
-                    style={styles.removeEmptyTrackLaneBtn}
-                    onPress={(e: any) => {
-                      if (e?.stopPropagation) e.stopPropagation();
-                      soundEngine.playSfx("click");
-                      handleRemoveTrack(trackIdx);
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="trash-outline" size={10} color="#EF4444" />
-                    <Text style={styles.removeEmptyTrackLaneText}>Delete</Text>
-                  </TouchableOpacity>
+                    <View
+                      style={{
+                        position: "absolute",
+                        left: Math.max(12, (dragState.targetStart ?? dragState.currentStart) * pxPerSec),
+                        backgroundColor: "#08090E",
+                        borderWidth: 1.5,
+                        borderColor: "#00F2FE",
+                        borderRadius: 12,
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                        transform: [{ translateY: -10 }],
+                        ...(Platform.OS === "web"
+                          ? {
+                              boxShadow: "0 0 12px rgba(0, 242, 254, 0.45)",
+                            }
+                          : {}),
+                      }}
+                    >
+                      <Ionicons name="add-circle" size={12} color="#00F2FE" />
+                      <Text
+                        style={{
+                          color: "#00F2FE",
+                          fontSize: 10,
+                          fontWeight: "700",
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        Insert Track {trackIdx + 1}
+                      </Text>
+                    </View>
+                  </View>
                 )}
-              </View>
-            )}
+
+              {/* Target Drop Zone Ghost Indicator when dragging a clip over this track or onto seam */}
+              {dragState &&
+                ((!dragState.isInsertingNewTrack && dragState.currentTrack === trackIdx) ||
+                  (dragState.isInsertingNewTrack && dragState.insertTrackIndex === trackIdx)) && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
+                      width: Math.max(
+                        24,
+                        (draggedClip ? draggedClip.duration : 1) * pxPerSec,
+                      ),
+                      top: 2,
+                      bottom: 2,
+                      borderRadius: 4,
+                      borderWidth: 1.5,
+                      borderStyle: "dashed",
+                      borderColor: "#00F2FE",
+                      backgroundColor: dragState.isInsertingNewTrack
+                        ? "rgba(0, 242, 254, 0.22)"
+                        : "rgba(0, 242, 254, 0.16)",
+                      zIndex: 10,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingHorizontal: 8,
+                    }}
+                  >
+                    <Ionicons
+                      name={dragState.isInsertingNewTrack ? "add-circle" : "arrow-down-circle-outline"}
+                      size={12}
+                      color="#00F2FE"
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={{
+                        color: "#00F2FE",
+                        fontSize: 10.5,
+                        fontWeight: "700",
+                        letterSpacing: 0.3,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {dragState.isInsertingNewTrack
+                        ? `New Track ${trackIdx + 1}`
+                        : `Drop Position • Track ${trackIdx + 1}`}
+                    </Text>
+                  </View>
+                )}
+
 
                     {/* Render all clips in this track */}
                     {rowClips.map((clip, clipIndexInRow) => {
@@ -288,7 +339,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                         ],
                         cursor: isBeingDragged ? "grabbing" : "grab",
                         zIndex: isBeingDragged
-                          ? 9999
+                          ? 99999
                           : isSelected
                             ? 20
                             : 6,
@@ -298,7 +349,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                         shadowOffset: { width: 0, height: isBeingDragged ? 6 : 1 },
                         shadowOpacity: isBeingDragged ? 0.45 : 0.2,
                         shadowRadius: isBeingDragged ? 10 : 2,
-                        elevation: isBeingDragged ? 25 : 2,
+                        elevation: isBeingDragged ? 99 : 2,
                         touchAction: isBeingDragged
                           ? "none"
                           : ("pan-x pan-y" as any),
@@ -307,26 +358,34 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                       } as any,
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.universalClipCard,
-                        {
-                          borderColor:
-                            isSelected || isBeingDragged
-                              ? clip.accentColor
-                              : "rgba(255, 255, 255, 0.08)",
-                          borderWidth: isSelected || isBeingDragged ? 1.5 : 0.5,
-                          backgroundColor: clip.bgColor,
-                        },
-                        (isSelected || isBeingDragged) && [
-                          styles.clipSelectedUniversal,
+                      <View
+                        style={[
+                          styles.universalClipCard,
                           {
-                            borderColor: clip.accentColor,
-                            shadowColor: clip.accentColor,
+                            borderColor:
+                              isBeingDragged && dragState?.isInsertingNewTrack
+                                ? "#00F2FE"
+                                : isSelected || isBeingDragged
+                                  ? clip.accentColor
+                                  : "rgba(255, 255, 255, 0.08)",
+                            borderWidth: isSelected || isBeingDragged ? 1.5 : 0.5,
+                            backgroundColor: clip.bgColor,
                           },
-                        ],
-                      ]}
-                    >
+                          (isSelected || isBeingDragged) && [
+                            styles.clipSelectedUniversal,
+                            {
+                              borderColor:
+                                isBeingDragged && dragState?.isInsertingNewTrack
+                                ? "#00F2FE"
+                                : clip.accentColor,
+                              shadowColor:
+                                isBeingDragged && dragState?.isInsertingNewTrack
+                                ? "#00F2FE"
+                                : clip.accentColor,
+                            },
+                          ],
+                        ]}
+                      >
                       {/* Left Trim Handle */}
                       {isSelected && (
                         <View
@@ -647,63 +706,100 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
               );
             })}
           </Pressable>
-        );
-      })}
+        </React.Fragment>
+      );
+    })}
 
-      {/* Calm Bottom Ghost Lane when dragging below the last track to create a new track (only if NO empty track exists) */}
-      {dragState?.isInsertingNewTrack && (
+      {/* Bottom Drop Target Lane: Always rock-solid below tracks while dragging */}
+      {dragState && activeTrackCount < 10 && (
         <View
-          key="insert-lane-bottom"
+          key="drag-drop-bottom-target"
           pointerEvents="none"
           style={[
             styles.universalTrackLane,
             {
               borderStyle: "dashed",
-              borderColor: "#00F2FE",
+              borderColor:
+                dragState.isInsertingNewTrack &&
+                (dragState.insertTrackIndex === null ||
+                  dragState.insertTrackIndex === undefined ||
+                  dragState.insertTrackIndex >= activeTrackCount)
+                  ? "#00F2FE"
+                  : "rgba(0, 242, 254, 0.35)",
               borderWidth: 1.5,
-              backgroundColor: "rgba(0, 242, 254, 0.08)",
-            },
-          ]}
-        >
-          <View
-            style={{
-              position: "absolute",
-              left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
-              width: Math.max(
-                24,
-                (draggedClip ? draggedClip.duration : 1) * pxPerSec,
-              ),
-              top: 2,
-              bottom: 2,
-              borderRadius: 4,
-              borderWidth: 1.5,
-              borderStyle: "dashed",
-              borderColor: "#00F2FE",
-              backgroundColor: "rgba(0, 242, 254, 0.2)",
+              backgroundColor:
+                dragState.isInsertingNewTrack &&
+                (dragState.insertTrackIndex === null ||
+                  dragState.insertTrackIndex === undefined ||
+                  dragState.insertTrackIndex >= activeTrackCount)
+                  ? "rgba(0, 242, 254, 0.16)"
+                  : "rgba(0, 242, 254, 0.03)",
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
-              paddingHorizontal: 8,
-            }}
-          >
-            <Ionicons
-              name="add-circle-outline"
-              size={12}
-              color="#00F2FE"
-              style={{ marginRight: 4 }}
-            />
-            <Text
+              gap: 6,
+              zIndex: 10,
+              ...(Platform.OS === "web"
+                ? {
+                    transition: "all 0.18s ease",
+                  }
+                : {}),
+            },
+          ]}
+        >
+          {dragState.isInsertingNewTrack &&
+          (dragState.insertTrackIndex === null ||
+            dragState.insertTrackIndex === undefined ||
+            dragState.insertTrackIndex >= activeTrackCount) ? (
+            <View
               style={{
-                color: "#00F2FE",
-                fontSize: 10.5,
-                fontWeight: "700",
-                letterSpacing: 0.3,
+                position: "absolute",
+                left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
+                width: Math.max(
+                  24,
+                  (draggedClip ? draggedClip.duration : 1) * pxPerSec,
+                ),
+                top: 2,
+                bottom: 2,
+                borderRadius: 4,
+                borderWidth: 1.5,
+                borderStyle: "dashed",
+                borderColor: "#00F2FE",
+                backgroundColor: "rgba(0, 242, 254, 0.22)",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 8,
               }}
-              numberOfLines={1}
             >
-              New Track {activeTrackCount + 1}
-            </Text>
-          </View>
+              <Ionicons name="add-circle" size={13} color="#00F2FE" style={{ marginRight: 4 }} />
+              <Text
+                style={{
+                  color: "#00F2FE",
+                  fontSize: 10.5,
+                  fontWeight: "700",
+                  letterSpacing: 0.3,
+                }}
+                numberOfLines={1}
+              >
+                New Track {activeTrackCount + 1}
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Ionicons name="add-circle-outline" size={13} color="#00F2FE" />
+              <Text
+                style={{
+                  color: "#00F2FE",
+                  fontSize: 10.5,
+                  fontWeight: "600",
+                  letterSpacing: 0.3,
+                }}
+              >
+                Drag here to add to new track
+              </Text>
+            </>
+          )}
         </View>
       )}
 

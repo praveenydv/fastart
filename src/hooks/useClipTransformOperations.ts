@@ -70,7 +70,6 @@ export function useClipTransformOperations({
         updateProjectWithHistory(updated);
       } else {
         projectRef.current = updated;
-        setProject(updated);
       }
     },
     [projectRef, setProject, updateProjectWithHistory],
@@ -164,7 +163,6 @@ export function useClipTransformOperations({
           updateProjectWithHistory(updatedProject);
         } else {
           projectRef.current = updatedProject;
-          setProject(updatedProject);
         }
       }
     },
@@ -195,7 +193,6 @@ export function useClipTransformOperations({
           updateProjectWithHistory(updatedProject);
         } else {
           projectRef.current = updatedProject;
-          setProject(updatedProject);
         }
       }
     },

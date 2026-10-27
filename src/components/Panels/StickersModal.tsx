@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   TextInput,
@@ -93,7 +92,7 @@ export default function StickersModal({
       };
       soundEngine.playSfx('pop');
       onUpdateSticker(updated);
-      onClose();
+      if (!isInline) onClose();
       return;
     }
 
@@ -109,41 +108,31 @@ export default function StickersModal({
     };
     soundEngine.playSfx('pop');
     onAddSticker(stickerClip);
-    onClose();
+    if (!isInline) onClose();
   };
 
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
-
-      {/* Standardized Header */}
-      <View style={styles.sheetHeader}>
-        <TouchableOpacity
-          onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Cancel changes"
-            >
-              <Ionicons name="close" size={17} color="#EF4444" />
-            </TouchableOpacity>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="happy-outline" size={17} color="#FFFFFF" />
-              <Text style={styles.sheetTitle}>
-                {editingClip ? 'Edit Sticker' : 'Stickers & Badges'}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: '#FFFFFF' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply sticker"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.sheetHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="happy-outline" size={16} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>
+              {editingClip ? 'Edit Sticker' : 'Stickers & Badges'}
+            </Text>
           </View>
+
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            activeOpacity={0.7}
+            accessibilityLabel="Close panel"
+          >
+            <Ionicons name="close" size={16} color="#A1A1AA" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
           {/* Search Bar */}
           <View style={styles.searchSection}>
@@ -246,18 +235,8 @@ export default function StickersModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({

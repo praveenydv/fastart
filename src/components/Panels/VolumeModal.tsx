@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -104,75 +103,45 @@ export default function VolumeModal({
     onApplyVolume(1.0, 0, 0, false);
   };
 
-  const handleCancel = () => {
-    soundEngine.playSfx("pop");
-    onClose();
-  };
-
-  const handleDone = () => {
-    soundEngine.playSfx("whoosh");
-    onApplyVolume(volume, fadeIn, fadeOut, denoise);
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  };
-
   const sheetContent = (
     <View
-      style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}
+      style={[styles.sheetContainer, styles.inlineSheetContainer]}
     >
-      {/* Top Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
-
-      {/* Standardized Header */}
-      <View style={styles.header}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <TouchableOpacity
-            onPress={handleCancel}
-            style={[
-              styles.doneBtnCircle,
-              {
-                backgroundColor: "rgba(239, 68, 68, 0.15)",
-                borderWidth: 1,
-                borderColor: "rgba(239, 68, 68, 0.3)",
-              },
-            ]}
-            activeOpacity={0.7}
-            accessibilityLabel="Cancel changes"
-          >
-            <Ionicons name="close" size={17} color="#EF4444" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleReset}
-            style={styles.resetBtn}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.resetBtnText}>Reset</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.headerTitleRow}>
-          <View style={styles.titleIconBox}>
-            <Ionicons name="volume-high" size={15} color="#FFFFFF" />
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.header}>
+          <View style={styles.headerTitleRow}>
+            <View style={styles.titleIconBox}>
+              <Ionicons name="volume-high" size={15} color="#FFFFFF" />
+            </View>
+            <Text style={styles.headerTitle}>Volume & Fade</Text>
           </View>
-          <Text style={styles.headerTitle}>Volume & Fade</Text>
-        </View>
 
-        <TouchableOpacity
-          onPress={handleDone}
-          style={styles.doneBtnCircle}
-          activeOpacity={0.7}
-          accessibilityLabel="Apply volume"
-        >
-          <Ionicons name="checkmark" size={18} color="#000000" />
-        </TouchableOpacity>
-      </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Reset volume to 100%"
+            >
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
+              <Text style={[styles.resetBtnText, { fontSize: 11 }]}>100%</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.doneBtnCircle}
+              activeOpacity={0.7}
+              accessibilityLabel="Close panel"
+            >
+              <Ionicons name="close" size={16} color="#A1A1AA" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
 
       <ScrollView
-        style={styles.contentScroll}
+        style={[styles.contentScroll, isInline && { paddingTop: 10 }]}
         showsVerticalScrollIndicator={false}
       >
         {isFromVideo && !hasAudio && (
@@ -445,21 +414,8 @@ export default function VolumeModal({
     </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleCancel}
-    >
-      <View style={styles.overlay}>{sheetContent}</View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -485,47 +441,48 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#121215",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: "#0F131D",
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
     maxHeight: Platform.OS === "web" ? "72%" : "80%",
-    paddingBottom: 16,
+    paddingBottom: 10,
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "#27272F",
-    borderRadius: 2,
+    width: 32,
+    height: 3,
+    backgroundColor: "#2C364D",
+    borderRadius: 1.5,
     alignSelf: "center",
-    marginTop: 8,
+    marginTop: 6,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#27272F",
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#131826",
   },
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   titleIconBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: "#202026",
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.2,
   },
@@ -538,51 +495,51 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 6,
-    backgroundColor: "#18181C",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   resetBtnText: {
-    color: "#A1A1AA",
-    fontSize: 11,
+    color: "#00F2FE",
+    fontSize: 10,
     fontWeight: "600",
   },
   doneBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderRadius: 6,
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
   },
   doneBtnCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
   doneBtnText: {
-    color: "#000000",
-    fontSize: 11.5,
+    color: "#FFFFFF",
+    fontSize: 11,
     fontWeight: "700",
   },
   contentScroll: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingHorizontal: 10,
+    paddingTop: 6,
   },
   compactSection: {
-    backgroundColor: "#18181C",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: "#131826",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -592,82 +549,82 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
   },
   valueBadge: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: "#00F2FE",
+    fontSize: 11,
     fontWeight: "700",
-    backgroundColor: "#202026",
-    paddingHorizontal: 8,
+    backgroundColor: "#0F131D",
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   stepperRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
-    marginVertical: 6,
+    gap: 12,
+    marginVertical: 4,
   },
   stepperVal: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
-    minWidth: 50,
+    minWidth: 44,
     textAlign: "center",
   },
   stepBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#202026",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#0F131D",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   stepBtnSmall: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#202026",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#0F131D",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   presetsGrid: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 8,
+    gap: 4,
+    marginTop: 6,
   },
   presetCard: {
     flex: 1,
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
-    backgroundColor: "#18181C",
-    paddingVertical: 8,
-    borderRadius: 8,
+    gap: 2,
+    backgroundColor: "#131826",
+    paddingVertical: 6,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#27272F",
+    borderColor: "#1F2637",
   },
   presetCardActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#1F2637",
+    borderColor: "#00F2FE",
   },
   presetCardText: {
-    color: "#71717A",
-    fontSize: 10.5,
+    color: "#64748B",
+    fontSize: 9.5,
     fontWeight: "600",
   },
   presetCardTextActive: {
-    color: "#000000",
+    color: "#00F2FE",
     fontWeight: "700",
   },
   fadeRow: {

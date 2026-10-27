@@ -147,14 +147,14 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <View style={styles.propLabelRow}>
           <View style={styles.propLabelLeft}>
-            <Ionicons name="refresh" size={15} color="#38BDF8" />
+            <Ionicons name="refresh" size={14} color="#00F2FE" />
             <Text style={styles.propName}>Rotation</Text>
           </View>
           <Text style={styles.propValue}>{activeRotation}°</Text>
         </View>
 
         {Platform.OS === "web" ? (
-          <WebDiv style={{ margin: "6px 0 10px" }}>
+          <WebDiv style={{ margin: "4px 0 8px" }}>
             <WebInput
               type="range"
               min="-180"
@@ -166,8 +166,8 @@ export default function KeyframePropertyControls({
               }
               style={{
                 width: "100%",
-                accentColor: "#38BDF8",
-                height: 6,
+                accentColor: "#00F2FE",
+                height: 4,
                 cursor: "pointer",
               }}
             />
@@ -180,7 +180,7 @@ export default function KeyframePropertyControls({
                 handleUpdateProperty("rotation", Math.max(-180, activeRotation - 15))
               }
             >
-              <Ionicons name="remove" size={16} color="#FFFFFF" />
+              <Ionicons name="remove" size={14} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.stepperText}>{activeRotation}°</Text>
             <TouchableOpacity
@@ -189,7 +189,7 @@ export default function KeyframePropertyControls({
                 handleUpdateProperty("rotation", Math.min(180, activeRotation + 15))
               }
             >
-              <Ionicons name="add" size={16} color="#FFFFFF" />
+              <Ionicons name="add" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         )}
@@ -222,7 +222,7 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <View style={styles.propLabelRow}>
           <View style={styles.propLabelLeft}>
-            <Ionicons name="move-outline" size={15} color="#F59E0B" />
+            <Ionicons name="move-outline" size={14} color="#00F2FE" />
             <Text style={styles.propName}>Position Offset</Text>
           </View>
           <Text style={styles.propValue}>
@@ -235,7 +235,7 @@ export default function KeyframePropertyControls({
             style={styles.nudgeBtn}
             onPress={() => handleUpdateProperty("y", activeY - 15)}
           >
-            <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+            <Ionicons name="arrow-up" size={14} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.nudgeMiddleRow}>
@@ -243,7 +243,7 @@ export default function KeyframePropertyControls({
               style={styles.nudgeBtn}
               onPress={() => handleUpdateProperty("x", activeX - 15)}
             >
-              <Ionicons name="arrow-back" size={16} color="#FFFFFF" />
+              <Ionicons name="arrow-back" size={14} color="#FFFFFF" />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -266,7 +266,7 @@ export default function KeyframePropertyControls({
               style={styles.nudgeBtn}
               onPress={() => handleUpdateProperty("x", activeX + 15)}
             >
-              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
@@ -274,7 +274,7 @@ export default function KeyframePropertyControls({
             style={styles.nudgeBtn}
             onPress={() => handleUpdateProperty("y", activeY + 15)}
           >
-            <Ionicons name="arrow-down" size={16} color="#FFFFFF" />
+            <Ionicons name="arrow-down" size={14} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -283,7 +283,7 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <View style={styles.propLabelRow}>
           <View style={styles.propLabelLeft}>
-            <Ionicons name="contrast-outline" size={15} color="#10B981" />
+            <Ionicons name="contrast-outline" size={14} color="#00F2FE" />
             <Text style={styles.propName}>Opacity</Text>
           </View>
           <Text style={styles.propValue}>
@@ -292,7 +292,7 @@ export default function KeyframePropertyControls({
         </View>
 
         {Platform.OS === "web" ? (
-          <WebDiv style={{ margin: "6px 0 10px" }}>
+          <WebDiv style={{ margin: "4px 0 8px" }}>
             <WebInput
               type="range"
               min="0"
@@ -304,8 +304,8 @@ export default function KeyframePropertyControls({
               }
               style={{
                 width: "100%",
-                accentColor: "#10B981",
-                height: 6,
+                accentColor: "#00F2FE",
+                height: 4,
                 cursor: "pointer",
               }}
             />

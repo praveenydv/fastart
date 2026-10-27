@@ -27,9 +27,12 @@ interface UseProjectFilterEffectsParams {
   selectedClip: any;
   selectedClipId: string | null;
   selectedClipType: string;
+  currentTime?: number;
   transitionTargetClipId: string | null;
   updateProjectWithHistory: (proj: any) => void;
   setActiveModal: (modal: string | null) => void;
+  setSelectedClipId?: (id: string | null) => void;
+  setSelectedClipType?: (type: string) => void;
 }
 
 export function useProjectFilterEffects({
@@ -38,13 +41,50 @@ export function useProjectFilterEffects({
   selectedClip,
   selectedClipId,
   selectedClipType,
+  currentTime = 0,
   transitionTargetClipId,
   updateProjectWithHistory,
   setActiveModal,
+  setSelectedClipId,
+  setSelectedClipType,
 }: UseProjectFilterEffectsParams) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingMessage, setProcessingMessage] = useState("Processing Edit...");
   const processingTimer = useRef<any>(null);
+
+  // Helper to resolve the active clip at the current playhead or first clip
+  const resolveTargetClipId = useCallback(
+    (preferredType: "video" | "audio" = "video"): string | null => {
+      const current = projectRef.current || project;
+      if (!current) return null;
+      if (selectedClipId) return selectedClipId;
+
+      const curTime = typeof currentTime === "number" ? currentTime : 0;
+      if (preferredType === "audio") {
+        const audioAtTime = current.tracks.audio?.find(
+          (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
+        ) || current.tracks.audio?.[0];
+        if (audioAtTime) {
+          if (setSelectedClipId) setSelectedClipId(audioAtTime.id);
+          if (setSelectedClipType) setSelectedClipType("audio");
+          return audioAtTime.id;
+        }
+      }
+
+      const videoAtTime = current.tracks.video?.find(
+        (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
+      ) || current.tracks.video?.[0];
+
+      if (videoAtTime) {
+        if (setSelectedClipId) setSelectedClipId(videoAtTime.id);
+        if (setSelectedClipType) setSelectedClipType("video");
+        return videoAtTime.id;
+      }
+
+      return null;
+    },
+    [project, projectRef, selectedClipId, currentTime, setSelectedClipId, setSelectedClipType],
+  );
 
   const startProcessing = useCallback((msg: string, durationMs: number = 650) => {
     setProcessingMessage(msg);
@@ -79,13 +119,7 @@ export function useProjectFilterEffects({
     (filterId: string, customLut?: CustomLutConfig) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const curTime = current.currentTime || 0;
-      const targetId =
-        (selectedClip && selectedClipType === "video" ? selectedClipId : null) ||
-        current.tracks.video?.find(
-          (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
-        )?.id ||
-        current.tracks.video?.[0]?.id;
+      const targetId = resolveTargetClipId("video");
 
       if (targetId) {
         const videoClips = [...(current.tracks.video || [])];
@@ -103,93 +137,98 @@ export function useProjectFilterEffects({
         }
       }
     },
-    [project, projectRef, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
-  // Apply Cutout
+  // Apply Cutout — only writes to clip.cutout, never overwrites clip.transform
   const handleApplyCutout = useCallback(
     (cutoutConfig: CutoutConfig) => {
-      if (!project || !selectedClip) return;
-      const videoClips = [...(project.tracks.video || [])];
-      let idx = videoClips.findIndex((c) => c.id === selectedClipId);
-      if (idx === -1 && selectedClip?.id) {
-        idx = videoClips.findIndex((c) => c.id === selectedClip.id);
-      }
+      const current = projectRef.current;
+      if (!current) return;
+      const targetId = resolveTargetClipId("video");
+      if (!targetId) return;
+
+      const videoClips = [...(current.tracks.video || [])];
+      const idx = videoClips.findIndex((c) => c.id === targetId);
       if (idx >= 0) {
         videoClips[idx] = {
           ...videoClips[idx],
           cutout: cutoutConfig,
-          transform: {
-            ...(videoClips[idx].transform || {}),
-            cutout: cutoutConfig,
-          },
         };
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, video: videoClips },
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
         });
       }
     },
-    [project, selectedClip, selectedClipId, updateProjectWithHistory],
+    [projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply AI Motion Tracking
   const handleApplyMotionTracking = useCallback(
     (motionConfig: MotionTrackConfig) => {
-      if (!project || !selectedClip) return;
+      const current = projectRef.current || project;
+      if (!current) return;
+      const targetId = resolveTargetClipId(selectedClipType === "audio" ? "audio" : "video");
+      if (!targetId) return;
+
       if (selectedClipType === "text") {
-        const textClips = [...(project.tracks.text || [])];
-        const idx = textClips.findIndex((t) => t.id === selectedClipId);
+        const textClips = [...(current.tracks.text || [])];
+        const idx = textClips.findIndex((t) => t.id === targetId);
         if (idx >= 0) {
           textClips[idx] = { ...textClips[idx], motionTrack: motionConfig };
           updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, text: textClips },
+            ...current,
+            tracks: { ...current.tracks, text: textClips },
           });
         }
       } else if (
         selectedClipType === "stickers" ||
         selectedClipType === "sticker"
       ) {
-        const stickerClips = [...(project.tracks.stickers || [])];
-        const idx = stickerClips.findIndex((s) => s.id === selectedClipId);
+        const stickerClips = [...(current.tracks.stickers || [])];
+        const idx = stickerClips.findIndex((s) => s.id === targetId);
         if (idx >= 0) {
           stickerClips[idx] = { ...stickerClips[idx], motionTrack: motionConfig };
           updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, stickers: stickerClips },
+            ...current,
+            tracks: { ...current.tracks, stickers: stickerClips },
           });
         }
-      } else if (selectedClipType === "video") {
-        const videoClips = [...(project.tracks.video || [])];
-        const idx = videoClips.findIndex((v) => v.id === selectedClipId);
+      } else {
+        const videoClips = [...(current.tracks.video || [])];
+        const idx = videoClips.findIndex((v) => v.id === targetId);
         if (idx >= 0) {
           videoClips[idx] = { ...videoClips[idx], motionTrack: motionConfig };
           updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, video: videoClips },
+            ...current,
+            tracks: { ...current.tracks, video: videoClips },
           });
         }
       }
     },
-    [project, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipType, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply transition
   const handleApplyTransition = useCallback(
     (trans: any) => {
-      if (!project || !transitionTargetClipId) return;
-      const videoClips = [...(project.tracks.video || [])];
-      const idx = videoClips.findIndex((c) => c.id === transitionTargetClipId);
+      const current = projectRef.current || project;
+      if (!current) return;
+      const targetId = transitionTargetClipId || resolveTargetClipId("video");
+      if (!targetId) return;
+
+      const videoClips = [...(current.tracks.video || [])];
+      const idx = videoClips.findIndex((c) => c.id === targetId);
       if (idx >= 0) {
         videoClips[idx] = { ...videoClips[idx], transition: trans };
         updateProjectWithHistory({
-          ...project,
-          tracks: { ...project.tracks, video: videoClips },
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
         });
       }
     },
-    [project, transitionTargetClipId, updateProjectWithHistory],
+    [project, projectRef, transitionTargetClipId, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply speed change with accurate duration adjustment, track-0 ripple, and audio track support
@@ -200,7 +239,9 @@ export function useProjectFilterEffects({
       smoothSlowMo?: "none" | "blend" | "optical_flow",
     ) => {
       const current = projectRef.current || project;
-      if (!current || !selectedClipId) return;
+      if (!current) return;
+      const targetId = resolveTargetClipId("video");
+      if (!targetId) return;
 
       // Determine effective speed multiplier (from curve points or direct speedVal)
       let effectiveSpeedVal = Math.max(0.1, Math.min(16, speedVal || 1.0));
@@ -229,7 +270,7 @@ export function useProjectFilterEffects({
 
       // Check video tracks
       const videoClips = [...(current.tracks.video || [])];
-      const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+      const vIdx = videoClips.findIndex((c) => c.id === targetId);
       if (vIdx >= 0) {
         const clip = videoClips[vIdx];
         const mediaDur = getMediaDuration(clip, clip.type);
@@ -282,7 +323,7 @@ export function useProjectFilterEffects({
 
       // Check audio tracks
       const audioClips = [...(current.tracks.audio || [])];
-      const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
+      const aIdx = audioClips.findIndex((c) => c.id === targetId);
       if (aIdx >= 0) {
         const clip = audioClips[aIdx];
         const mediaDur = getMediaDuration(clip, "audio");
@@ -319,18 +360,20 @@ export function useProjectFilterEffects({
         return;
       }
     },
-    [project, projectRef, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply Volume & Fades to video or audio clips smoothly without flashing spinners
   const handleApplyVolume = useCallback(
     (vol: number, fadeIn: number, fadeOut: number, denoise?: boolean) => {
       const current = projectRef.current || project;
-      if (!current || !selectedClipId) return;
+      if (!current) return;
+      const targetId = resolveTargetClipId(selectedClipType === "audio" ? "audio" : "video");
+      if (!targetId) return;
 
       // Check video tracks
       const videoClips = [...(current.tracks.video || [])];
-      const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+      const vIdx = videoClips.findIndex((c) => c.id === targetId);
       if (vIdx >= 0) {
         videoClips[vIdx] = {
           ...videoClips[vIdx],
@@ -348,7 +391,7 @@ export function useProjectFilterEffects({
 
       // Check audio tracks
       const audioClips = [...(current.tracks.audio || [])];
-      const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
+      const aIdx = audioClips.findIndex((c) => c.id === targetId);
       if (aIdx >= 0) {
         audioClips[aIdx] = {
           ...audioClips[aIdx],
@@ -364,17 +407,19 @@ export function useProjectFilterEffects({
         return;
       }
     },
-    [project, projectRef, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipType, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Dedicated 1-tap AI Noise Reduction toggle
   const handleToggleDenoise = useCallback(() => {
     const current = projectRef.current || project;
-    if (!current || !selectedClipId) return;
+    if (!current) return;
+    const targetId = resolveTargetClipId(selectedClipType === "audio" ? "audio" : "video");
+    if (!targetId) return;
 
     // Check audio tracks first
     const audioClips = [...(current.tracks.audio || [])];
-    const aIdx = audioClips.findIndex((c) => c.id === selectedClipId);
+    const aIdx = audioClips.findIndex((c) => c.id === targetId);
     if (aIdx >= 0) {
       const nextDenoise = !audioClips[aIdx].denoise;
       audioClips[aIdx] = {
@@ -391,7 +436,7 @@ export function useProjectFilterEffects({
 
     // Check video tracks
     const videoClips = [...(current.tracks.video || [])];
-    const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+    const vIdx = videoClips.findIndex((c) => c.id === targetId);
     if (vIdx >= 0) {
       if (!mediaHasAudioTrack(videoClips[vIdx])) {
         Alert.alert(
@@ -412,14 +457,16 @@ export function useProjectFilterEffects({
       soundEngine.playSfx(nextDenoise ? "pop" : "click");
       return nextDenoise;
     }
-  }, [project, projectRef, selectedClipId, updateProjectWithHistory]);
+  }, [project, projectRef, selectedClipType, resolveTargetClipId, updateProjectWithHistory]);
 
   // Extract Audio from Video Clip to Independent Audio Track
   const handleExtractAudioFromVideo = useCallback(async () => {
     const current = projectRef.current;
-    if (!current || !selectedClipId) return;
+    if (!current) return;
+    const targetId = resolveTargetClipId("video");
+    if (!targetId) return;
     const videoClips = current.tracks.video || [];
-    const targetVideo = videoClips.find((v) => v.id === selectedClipId);
+    const targetVideo = videoClips.find((v) => v.id === targetId);
     if (!targetVideo) return;
 
     if (!mediaHasAudioTrack(targetVideo)) {
@@ -480,7 +527,7 @@ export function useProjectFilterEffects({
 
       // Mute the video clip
       const updatedVideos = videoClips.map((v) =>
-        v.id === selectedClipId ? { ...v, volume: 0 } : v,
+        v.id === targetId ? { ...v, volume: 0 } : v,
       );
 
       const updatedAudio = [...(current.tracks.audio || []), newAudioClip];
@@ -500,7 +547,7 @@ export function useProjectFilterEffects({
       }
       setActiveModal(null);
     });
-  }, [projectRef, selectedClipId, updateProjectWithHistory, setActiveModal, withProcessing]);
+  }, [projectRef, resolveTargetClipId, updateProjectWithHistory, setActiveModal, withProcessing]);
 
   // Apply Transform, Mask & Canvas Ratio
   const handleApplyTransform = useCallback(
@@ -511,13 +558,14 @@ export function useProjectFilterEffects({
     ) => {
       const current = projectRef.current;
       if (!current) return;
+      const targetId = resolveTargetClipId("video");
       let updated: any = { ...current };
       if (newAspectRatio && newAspectRatio !== current.aspectRatio) {
         updated.aspectRatio = newAspectRatio;
       }
-      if (selectedClip && selectedClipType === "video") {
+      if (targetId) {
         const videoClips = [...(current.tracks.video || [])];
-        const idx = videoClips.findIndex((c) => c.id === selectedClipId);
+        const idx = videoClips.findIndex((c) => c.id === targetId);
         if (idx >= 0) {
           const finalMask =
             newMask !== undefined
@@ -545,7 +593,7 @@ export function useProjectFilterEffects({
       }
       updateProjectWithHistory(updated);
     },
-    [projectRef, selectedClip, selectedClipType, selectedClipId, updateProjectWithHistory],
+    [projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply AI Enhance (Beauty, Clarity & HDR)
@@ -560,6 +608,7 @@ export function useProjectFilterEffects({
     }) => {
       const current = projectRef.current || project;
       if (!current) return;
+      const targetId = resolveTargetClipId("video");
       const boostVal = (preset.colorBoost ?? 0) / 100;
       const sharpVal = (preset.sharpness ?? 0) / 100;
       const smoothVal = (preset.skinSmoothing ?? 0) / 100;
@@ -584,7 +633,7 @@ export function useProjectFilterEffects({
         : `contrast(${cont.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})${blurDrop}`;
 
       const videoClips = (current.tracks.video || []).map((c) => {
-        if (!selectedClipId || c.id === selectedClipId) {
+        if (!targetId || c.id === targetId) {
           return {
             ...c,
             ...(preset.filterLut ? { filter: preset.filterLut } : {}),
@@ -611,7 +660,7 @@ export function useProjectFilterEffects({
         tracks: { ...current.tracks, video: videoClips },
       });
     },
-    [project, projectRef, selectedClipId, updateProjectWithHistory],
+    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
   return {

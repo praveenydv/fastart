@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -110,59 +109,42 @@ export default function AIEnhanceModal({
     onClose();
   };
 
-  const handleApply = () => {
-    soundEngine.playSfx('whoosh');
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  };
-
   const sheetContent = (
-    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
-      {/* Sheet Handle */}
-      {!isInline && <View style={styles.sheetHandle} />}
-
-      {/* Compact Space-Optimized Header */}
-      <View style={styles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={[styles.doneBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Cancel changes"
-              >
-                <Ionicons name="close" size={17} color="#EF4444" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleReset}
-                style={[styles.resetBtn, !isModified && { opacity: 0.4 }]}
-                disabled={!isModified}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resetText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.headerTitleRow}>
-              <Ionicons name="sparkles" size={17} color="#D946EF" />
-              <Text style={styles.headerTitle}>AI Enhance</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleApply}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Apply enhance"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
+      {/* Unified Live Header - only shown in standalone modal */}
+      {!isInline ? (
+        <View style={styles.header}>
+          <View style={styles.headerTitleRow}>
+            <Ionicons name="sparkles" size={17} color="#00F2FE" />
+            <Text style={styles.headerTitle}>AI Enhance</Text>
           </View>
 
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleReset}
+              style={[styles.resetBtn, !isModified && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
+              disabled={!isModified}
+              activeOpacity={0.7}
+              accessibilityLabel="Reset enhancements"
+            >
+              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Text style={[styles.resetText, { fontSize: 11 }]}>Reset</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.doneBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Close panel"
+            >
+              <Ionicons name="close" size={16} color="#A1A1AA" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
           {/* Tabs: Beauty vs Clarity */}
-          <View style={styles.tabContainer}>
+          <View style={[styles.tabContainer, isInline && { marginTop: 8 }]}>
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'beauty' && styles.tabBtnActive]}
               onPress={() => {
@@ -468,18 +450,8 @@ export default function AIEnhanceModal({
         </View>
   );
 
-  if (isInline) {
-    if (!visible) return null;
-    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
-      <View style={styles.overlay}>
-        {sheetContent}
-      </View>
-    </Modal>
-  );
+  if (!visible) return null;
+  return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -691,5 +663,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     minWidth: 42,
     textAlign: 'center',
+  },
+  inlineApplyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#00F2FE',
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 6,
+  },
+  inlineAppliedBtn: {
+    backgroundColor: '#10B981',
+  },
+  inlineApplyText: {
+    color: '#000000',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

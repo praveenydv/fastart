@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { Platform } from "react-native";
 import { ActiveTransformItem, TransientTransformState } from "./playerTypes";
 import { FastArtProject } from "../../types/project";
@@ -44,6 +44,7 @@ export function usePlayerTransformGestures({
     clipType: string;
     transform: { x: number; y: number; scale: number; rotation: number };
   } | null>(null);
+  const pendingTransientRef = useRef<TransientTransformState | null>(null);
   const rafIdRef = useRef<number | null>(null);
 
   const activeTransformItemRef = useRef(activeTransformItem);
@@ -54,6 +55,15 @@ export function usePlayerTransformGestures({
 
   const canvasHeightRef = useRef(canvasHeight);
   canvasHeightRef.current = canvasHeight;
+
+  const projectRef = useRef(project);
+  projectRef.current = project;
+
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
 
   const onUpdateClipTransformRef = useRef(onUpdateClipTransform);
   onUpdateClipTransformRef.current = onUpdateClipTransform;
@@ -70,32 +80,51 @@ export function usePlayerTransformGestures({
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
+      pendingTransientRef.current = null;
       setActiveTransient(null);
       onUpdateClipTransformRef.current?.(clipId, clipType, transform, true);
       latestTransformRef.current = null;
       return;
     }
 
-    const transient = {
+    const transient: TransientTransformState = {
       clipId,
       x: transform.x,
       y: transform.y,
       scale: transform.scale,
       rotation: transform.rotation,
     };
-    setActiveTransient(transient);
+    pendingTransientRef.current = transient;
 
-    if (Platform.OS === "web" && rendererRef.current && canvasRef.current) {
-      rendererRef.current.renderFrame(
-        project,
-        currentTime,
-        isPlaying,
-        boxWidth,
-        canvasHeight,
-        transient,
-      );
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        const cur = pendingTransientRef.current;
+        if (!cur) return;
+        setActiveTransient(cur);
+
+        if (Platform.OS === "web" && rendererRef.current && canvasRef.current) {
+          rendererRef.current.renderFrame(
+            projectRef.current,
+            currentTimeRef.current,
+            isPlayingRef.current,
+            boxWidthRef.current,
+            canvasHeightRef.current,
+            cur,
+          );
+        }
+      });
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, []);
 
   const scheduleTransformUpdateRef = useRef(scheduleTransformUpdate);
   scheduleTransformUpdateRef.current = scheduleTransformUpdate;

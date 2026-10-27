@@ -60,8 +60,8 @@ export const SpeedSlowMoSection: React.FC<SpeedSlowMoSectionProps> = ({
             >
               <Ionicons
                 name={opt.icon as any}
-                size={18}
-                color={isSelected ? '#00F2FE' : '#8E95A5'}
+                size={16}
+                color={isSelected ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[

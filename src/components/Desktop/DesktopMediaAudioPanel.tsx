@@ -25,6 +25,10 @@ export interface DesktopMediaAudioPanelProps {
   currentTime: number;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  width?: number;
+  position?: 'left' | 'right';
+  onSwapPosition?: () => void;
+  style?: any;
 }
 
 // Built-in high quality royalty-free BGM and SFX presets
@@ -48,6 +52,10 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   currentTime,
   isCollapsed = false,
   onToggleCollapse,
+  width,
+  position = 'right',
+  onSwapPosition,
+  style,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -188,14 +196,26 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
 
   if (isCollapsed) {
     return (
-      <View style={styles.collapsedBar}>
+      <View
+        style={[
+          styles.collapsedBar,
+          position === 'right'
+            ? { borderLeftWidth: 1, borderLeftColor: 'rgba(255, 255, 255, 0.08)', borderRightWidth: 0 }
+            : { borderRightWidth: 1, borderRightColor: 'rgba(255, 255, 255, 0.08)', borderLeftWidth: 0 },
+          style,
+        ]}
+      >
         <TouchableOpacity
           style={styles.expandBtn}
           onPress={onToggleCollapse}
           activeOpacity={0.7}
           accessibilityLabel="Expand media panel"
         >
-          <Ionicons name="chevron-forward" size={16} color="#00F2FE" />
+          <Ionicons
+            name={position === 'right' ? 'chevron-back' : 'chevron-forward'}
+            size={16}
+            color="#00F2FE"
+          />
         </TouchableOpacity>
       </View>
     );
@@ -205,7 +225,16 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   const audioClips = project?.tracks?.audio || [];
 
   return (
-    <View style={styles.panelContainer}>
+    <View
+      style={[
+        styles.panelContainer,
+        width !== undefined && { width },
+        position === 'right'
+          ? { borderLeftWidth: 1, borderLeftColor: 'rgba(255, 255, 255, 0.08)', borderRightWidth: 0 }
+          : { borderRightWidth: 1, borderRightColor: 'rgba(255, 255, 255, 0.08)', borderLeftWidth: 0 },
+        style,
+      ]}
+    >
       {/* Top Header Tabs */}
       <View style={styles.topTabBar}>
         <View style={styles.tabButtonsRow}>
@@ -256,16 +285,33 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
           </TouchableOpacity>
         </View>
 
-        {onToggleCollapse && (
-          <TouchableOpacity
-            style={styles.collapseToggleBtn}
-            onPress={onToggleCollapse}
-            activeOpacity={0.7}
-            accessibilityLabel="Collapse media panel"
-          >
-            <Ionicons name="chevron-back" size={15} color="#8E95A5" />
-          </TouchableOpacity>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          {onSwapPosition && (
+            <TouchableOpacity
+              style={styles.collapseToggleBtn}
+              onPress={onSwapPosition}
+              activeOpacity={0.7}
+              accessibilityLabel="Swap panels side"
+            >
+              <Ionicons name="swap-horizontal" size={14} color="#8E95A5" />
+            </TouchableOpacity>
+          )}
+
+          {onToggleCollapse && (
+            <TouchableOpacity
+              style={styles.collapseToggleBtn}
+              onPress={onToggleCollapse}
+              activeOpacity={0.7}
+              accessibilityLabel="Collapse media panel"
+            >
+              <Ionicons
+                name={position === 'right' ? 'chevron-forward' : 'chevron-back'}
+                size={15}
+                color="#8E95A5"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Media Tab Body */}
@@ -286,13 +332,8 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
               <ActivityIndicator size="small" color="#00F2FE" />
             ) : (
               <>
-                <View style={styles.importIconCircle}>
-                  <Ionicons name="cloud-upload-outline" size={18} color="#00F2FE" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.importBtnTitle}>+ Import Media</Text>
-                  <Text style={styles.importBtnSubtitle}>Videos, photos from computer</Text>
-                </View>
+                <Ionicons name="cloud-upload-outline" size={15} color="#00F2FE" />
+                <Text style={styles.importBtnTitle}>+ Import Media</Text>
               </>
             )}
           </TouchableOpacity>
@@ -305,7 +346,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
 
           {videoClips.length === 0 ? (
             <View style={styles.emptyStateBox}>
-              <Ionicons name="film-outline" size={32} color="#3F3F46" />
+              <Ionicons name="film-outline" size={28} color="#3F3F46" />
               <Text style={styles.emptyStateText}>No media clips uploaded yet</Text>
               <Text style={styles.emptyStateSubtext}>Click Import above to add video or photo</Text>
             </View>
@@ -340,7 +381,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                       <View style={styles.thumbPlaceholder}>
                         <Ionicons
                           name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
-                          size={20}
+                          size={18}
                           color="#00F2FE"
                         />
                       </View>
@@ -371,9 +412,9 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                           });
                         }}
                         activeOpacity={0.7}
+                        accessibilityLabel="Add to timeline"
                       >
-                        <Ionicons name="add" size={13} color="#000000" />
-                        <Text style={styles.addDirectBtnText}>Add</Text>
+                        <Ionicons name="add" size={14} color="#000000" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -402,13 +443,8 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
               <ActivityIndicator size="small" color="#00F2FE" />
             ) : (
               <>
-                <View style={[styles.importIconCircle, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
-                  <Ionicons name="musical-note-outline" size={18} color="#6366F1" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.importBtnTitle, { color: '#818CF8' }]}>+ Import Audio</Text>
-                  <Text style={styles.importBtnSubtitle}>MP3, WAV, M4A sound files</Text>
-                </View>
+                <Ionicons name="musical-note-outline" size={15} color="#00F2FE" />
+                <Text style={styles.importBtnTitle}>+ Import Audio</Text>
               </>
             )}
           </TouchableOpacity>
@@ -516,9 +552,9 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                   style={styles.addDirectBtn}
                   onPress={() => handleAddPresetAudio(preset)}
                   activeOpacity={0.7}
+                  accessibilityLabel="Add to timeline"
                 >
-                  <Ionicons name="add" size={13} color="#000000" />
-                  <Text style={styles.addDirectBtnText}>Add</Text>
+                  <Ionicons name="add" size={15} color="#000000" />
                 </TouchableOpacity>
               </View>
             );
@@ -531,10 +567,10 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
 
 const styles = StyleSheet.create({
   panelContainer: {
-    width: 270,
-    backgroundColor: '#121215',
+    width: 260,
+    backgroundColor: '#0F131D',
     borderRightWidth: 1,
-    borderRightColor: '#1E2028',
+    borderRightColor: '#1F2637',
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
@@ -542,9 +578,9 @@ const styles = StyleSheet.create({
   },
   collapsedBar: {
     width: 20,
-    backgroundColor: '#0D0E12',
+    backgroundColor: '#08090E',
     borderRightWidth: 1,
-    borderRightColor: '#1E2028',
+    borderRightColor: '#1F2637',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
@@ -554,18 +590,18 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#18181C',
+    backgroundColor: '#131826',
     borderRadius: 4,
   },
   topTabBar: {
-    height: 44,
+    height: 36,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E2028',
+    borderBottomColor: '#1F2637',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    backgroundColor: '#0E0F12',
+    backgroundColor: '#08090E',
   },
   tabButtonsRow: {
     flexDirection: 'row',
@@ -575,17 +611,17 @@ const styles = StyleSheet.create({
   tabBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 5,
+    gap: 4,
   },
   tabBtnActive: {
     backgroundColor: 'rgba(0, 242, 254, 0.12)',
   },
   tabBtnText: {
-    color: '#8E95A5',
-    fontSize: 11,
+    color: '#94A3B8',
+    fontSize: 10,
     fontWeight: '600',
   },
   tabBtnTextActive: {
@@ -608,83 +644,83 @@ const styles = StyleSheet.create({
   importMediaBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181C',
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
     borderStyle: 'dashed',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
-    gap: 10,
+    borderRadius: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+    gap: 6,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.04)',
   },
   importIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(0, 242, 254, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   importBtnTitle: {
     color: '#00F2FE',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   importBtnSubtitle: {
-    color: '#71717A',
-    fontSize: 10,
-    marginTop: 2,
+    display: 'none' as any,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   sectionTitle: {
-    color: '#71717A',
-    fontSize: 9.5,
+    color: '#64748B',
+    fontSize: 8.5,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
   sectionCount: {
-    color: '#52525B',
-    fontSize: 9.5,
+    color: '#64748B',
+    fontSize: 8.5,
     fontWeight: '600',
   },
   emptyStateBox: {
-    paddingVertical: 28,
+    paddingVertical: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyStateText: {
-    color: '#A1A1AA',
-    fontSize: 12,
+    color: '#94A3B8',
+    fontSize: 11,
     fontWeight: '600',
-    marginTop: 8,
+    marginTop: 6,
   },
   emptyStateSubtext: {
-    color: '#52525B',
-    fontSize: 10.5,
-    marginTop: 4,
+    color: '#64748B',
+    fontSize: 9.5,
+    marginTop: 2,
     textAlign: 'center',
   },
   mediaGrid: {
-    gap: 8,
+    gap: 6,
   },
   mediaCard: {
     flexDirection: 'row',
-    backgroundColor: '#18181C',
-    borderRadius: 8,
+    backgroundColor: '#131826',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#27272F',
+    borderColor: '#1F2637',
     overflow: 'hidden',
-    height: 64,
+    height: 48,
   },
   thumbnailBox: {
-    width: 76,
+    width: 58,
     height: '100%',
-    backgroundColor: '#090A0D',
+    backgroundColor: '#08090E',
     position: 'relative',
   },
   thumbnailImg: {
@@ -699,12 +735,12 @@ const styles = StyleSheet.create({
   },
   durationBadge: {
     position: 'absolute',
-    bottom: 3,
-    right: 3,
+    bottom: 2,
+    right: 2,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     paddingVertical: 1,
-    borderRadius: 3,
+    borderRadius: 2,
   },
   durationBadgeText: {
     color: '#FFFFFF',
@@ -750,37 +786,37 @@ const styles = StyleSheet.create({
   audioRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181C',
+    backgroundColor: '#131826',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#27272F',
-    padding: 8,
-    marginBottom: 6,
+    borderColor: '#1F2637',
+    padding: 6,
+    marginBottom: 4,
   },
   audioRowTitle: {
-    color: '#E4E4E7',
-    fontSize: 11,
+    color: '#FFFFFF',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   audioRowSubtitle: {
-    color: '#71717A',
-    fontSize: 9.5,
-    marginTop: 2,
+    color: '#64748B',
+    fontSize: 8.5,
+    marginTop: 1,
   },
   presetAudioCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181C',
+    backgroundColor: '#131826',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#27272F',
-    padding: 8,
-    marginBottom: 6,
+    borderColor: '#1F2637',
+    padding: 6,
+    marginBottom: 4,
   },
   previewPlayCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(0, 242, 254, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -789,13 +825,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#00F2FE',
   },
   presetTitle: {
-    color: '#E4E4E7',
-    fontSize: 11,
+    color: '#FFFFFF',
+    fontSize: 10.5,
     fontWeight: '600',
   },
   presetMeta: {
-    color: '#71717A',
-    fontSize: 9,
-    marginTop: 2,
+    color: '#64748B',
+    fontSize: 8.5,
+    marginTop: 1,
   },
 });

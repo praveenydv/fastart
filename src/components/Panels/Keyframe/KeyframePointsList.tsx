@@ -58,8 +58,8 @@ export default function KeyframePointsList({
               >
                 <Ionicons
                   name="diamond"
-                  size={13}
-                  color={isCurrent ? "#000000" : "#FFE600"}
+                  size={12}
+                  color={isCurrent ? "#08090E" : "#00F2FE"}
                 />
               </View>
               <View>
@@ -90,7 +90,7 @@ export default function KeyframePointsList({
                     onDeleteKeyframeAtTime(kf.time);
                   }}
                 >
-                  <Ionicons name="trash-outline" size={15} color="#FF0050" />
+                  <Ionicons name="trash-outline" size={13} color="#EF4444" />
                 </TouchableOpacity>
               )}
             </View>
@@ -126,7 +126,7 @@ export default function KeyframePointsList({
               style={styles.clearAllBtn}
               onPress={() => setConfirmClear(true)}
             >
-              <Ionicons name="trash-bin-outline" size={15} color="#8E95A5" />
+              <Ionicons name="trash-bin-outline" size={13} color="#94A3B8" />
               <Text style={styles.clearAllBtnText}>
                 Clear All Keyframes on Clip
               </Text>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal } from 'react-native';
+import { Modal, Platform } from 'react-native';
 import NotificationsScreen from '../NotificationsScreen';
 import { AppNotification } from '../../utils/storage';
 
@@ -29,7 +29,7 @@ export default function NotificationsModal({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType={Platform.OS === "web" ? "fade" : "slide"}
       onRequestClose={onClose}
     >
       <NotificationsScreen

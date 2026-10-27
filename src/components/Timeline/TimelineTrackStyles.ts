@@ -1,14 +1,45 @@
+import { Platform } from "react-native";
 import { TRACK_ROW_HEIGHT } from "./timelineTypes";
 
 export const trackStyles = {
+  clipchampNewTrackSlot: {
+    width: "100%",
+    position: "relative" as const,
+    justifyContent: "center" as const,
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderRadius: 6,
+    overflow: "hidden" as const,
+    ...(Platform.OS === "web"
+      ? ({
+          transition: "height 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin 0.2s ease",
+          boxShadow: "0 0 12px rgba(0, 242, 254, 0.15)",
+        } as any)
+      : {}),
+  },
+  clipchampNewTrackHeader: {
+    width: "100%",
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderRadius: 6,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    overflow: "hidden" as const,
+    ...(Platform.OS === "web"
+      ? ({
+          transition: "height 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin 0.2s ease",
+        } as any)
+      : {}),
+  },
   universalTrackLane: {
     height: TRACK_ROW_HEIGHT,
     width: "100%",
     position: "relative" as const,
     justifyContent: "center" as const,
     borderBottomWidth: 1,
-    borderBottomColor: "#27272F",
-    backgroundColor: "#121215",
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#08090E",
   },
   trackLaneGuideline: {
     position: "absolute" as const,
@@ -39,6 +70,8 @@ export const trackStyles = {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    cursor: "pointer" as any,
+    zIndex: 15,
   },
   removeEmptyTrackLaneText: {
     color: "#EF4444",

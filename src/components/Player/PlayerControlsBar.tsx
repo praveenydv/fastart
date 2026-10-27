@@ -137,7 +137,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name="grid-outline"
             size={14}
-            color={showSafeZone ? "#00E5FF" : "#8E8E93"}
+            color={showSafeZone ? "#00F2FE" : "#8E8E93"}
           />
         </TouchableOpacity>
 
@@ -157,7 +157,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name={hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"}
             size={15}
-            color={hasKeyframeAtCurrentTime ? "#00E5FF" : "#8E8E93"}
+            color={hasKeyframeAtCurrentTime ? "#00F2FE" : "#8E8E93"}
           />
           <View
             style={[
@@ -170,7 +170,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
             <Ionicons
               name={hasKeyframeAtCurrentTime ? "remove" : "add"}
               size={6}
-              color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#00E5FF"}
+              color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#00F2FE"}
             />
           </View>
         </TouchableOpacity>
@@ -187,7 +187,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name={fullscreen ? "contract-outline" : "expand-outline"}
             size={14}
-            color={fullscreen ? "#00E5FF" : "#8E8E93"}
+            color={fullscreen ? "#00F2FE" : "#8E8E93"}
           />
         </TouchableOpacity>
       </View>

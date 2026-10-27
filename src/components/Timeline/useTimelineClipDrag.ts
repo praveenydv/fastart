@@ -47,57 +47,17 @@ function computeTargetPosition(
   allClips: UnifiedClipItem[],
   isSnappingEnabled: boolean,
   isHapticEnabled: boolean,
+  wasInsertingNewTrack: boolean = false,
+  previousInsertTrack: number | null = null,
 ) {
   const rawTrackPos = initialTrack + deltaYPixels / TRACK_ROW_HEIGHT;
 
-  // Check if any existing active track is currently empty
-  const usedTracks = new Set(
-    allClips
-      .filter((c) => c.id !== clipId)
-      .map((c) => c.effectiveTrackIndex),
-  );
-  const hasEmptyTrack = Array.from({ length: activeTrackCount }).some(
-    (_, idx) => !usedTracks.has(idx),
-  );
-
-  let isInsertingNewTrack = false;
-  let insertTrackIndex: number | null = null;
-  let targetTrack = Math.max(
-    0,
-    Math.min(activeTrackCount - 1, Math.round(rawTrackPos)),
-  );
-
-  // If there is already an empty track, DO NOT create a new track (use the empty track)!
-  // If NO empty track exists AND user specifically drags below the bottom track, target a new bottom track
-  if (!hasEmptyTrack && activeTrackCount < MAX_TRACKS && rawTrackPos >= activeTrackCount - 0.25) {
-    isInsertingNewTrack = true;
-    insertTrackIndex = activeTrackCount;
-    targetTrack = activeTrackCount;
-  }
+  // Other clips excluding the one being dragged
+  const otherClips = allClips.filter((c) => c.id !== clipId);
 
   let desiredStart = Math.max(0, initialStart + deltaX);
 
-  // If hovering over an insertion slot for a new track, no other clips exist on it yet
-  if (isInsertingNewTrack) {
-    if (isSnappingEnabled) {
-      const snapThresholdSec = 12 / pxPerSec;
-      if (Math.abs(desiredStart) < snapThresholdSec) {
-        desiredStart = 0;
-      }
-    }
-    return {
-      targetTrack,
-      rawStart: desiredStart,
-      clampedStart: desiredStart,
-      isInsertingNewTrack,
-      insertTrackIndex,
-    };
-  }
-
-  const otherClipsOnTarget = allClips.filter(
-    (c) => c.id !== clipId && c.effectiveTrackIndex === targetTrack,
-  );
-
+  // Snapping against all other clips and time 0
   if (isSnappingEnabled) {
     const snapThresholdSec = 12 / pxPerSec;
     let bestSnap = desiredStart;
@@ -108,7 +68,7 @@ function computeTargetPosition(
       snapDist = Math.abs(desiredStart);
     }
 
-    otherClipsOnTarget.forEach((other) => {
+    otherClips.forEach((other) => {
       const otherEnd = other.startTime + other.duration;
       if (Math.abs(desiredStart - otherEnd) < snapDist) {
         bestSnap = otherEnd;
@@ -126,11 +86,84 @@ function computeTargetPosition(
     desiredStart = bestSnap;
   }
 
-  const clampedStart = clampNonOverlapping(
-    desiredStart,
-    duration,
-    otherClipsOnTarget,
+  // Nearest track index based on pointer vertical position
+  const nearestTrack = Math.max(
+    0,
+    Math.min(activeTrackCount - 1, Math.round(rawTrackPos)),
   );
+
+  const otherClipsOnNearest = otherClips.filter(
+    (c) => c.effectiveTrackIndex === nearestTrack,
+  );
+
+  const hasOverlapOnNearest = otherClipsOnNearest.some((other) => {
+    const otherEnd = other.startTime + other.duration;
+    return (
+      desiredStart < otherEnd - 0.05 && desiredStart + duration > other.startTime + 0.05
+    );
+  });
+
+  // Seam detection between tracks (Clipchamp-style deliberate drag between tracks)
+  const baseTrack = Math.floor(rawTrackPos);
+  const fraction = rawTrackPos - baseTrack;
+
+  // The user is deliberately hovering right on the boundary between baseTrack and baseTrack + 1
+  const isHoveringBetweenTracks =
+    baseTrack >= 0 &&
+    baseTrack < activeTrackCount - 1 &&
+    fraction >= 0.38 &&
+    fraction <= 0.62;
+
+  // Dragging into the bottom area below all active tracks
+  const isDraggingPastBottom = rawTrackPos >= activeTrackCount - 0.2;
+
+  let isInsertingNewTrack = false;
+  let insertTrackIndex: number | null = null;
+  let targetTrack = nearestTrack;
+
+  if (activeTrackCount < MAX_TRACKS) {
+    if (isDraggingPastBottom) {
+      isInsertingNewTrack = true;
+      insertTrackIndex = activeTrackCount;
+      targetTrack = activeTrackCount;
+    } else if (isHoveringBetweenTracks) {
+      isInsertingNewTrack = true;
+      insertTrackIndex = baseTrack + 1;
+      targetTrack = baseTrack + 1;
+    } else if (wasInsertingNewTrack) {
+      // Hysteresis: only exit when cursor moves clearly back into the body of a track
+      const isClearlyInsideTrack = fraction < 0.22 || fraction > 0.78;
+      if (isClearlyInsideTrack && rawTrackPos < activeTrackCount - 0.45) {
+        isInsertingNewTrack = false;
+      } else {
+        isInsertingNewTrack = true;
+        insertTrackIndex = previousInsertTrack !== null ? previousInsertTrack : (baseTrack + 1);
+        targetTrack = insertTrackIndex;
+      }
+    }
+  }
+
+  // If inserting new track: clip's horizontal start time is maintained cleanly
+  if (isInsertingNewTrack) {
+    return {
+      targetTrack,
+      rawStart: desiredStart,
+      clampedStart: desiredStart,
+      isInsertingNewTrack: true,
+      insertTrackIndex,
+      hasOverlap: false,
+    };
+  }
+
+  // If not inserting new track and overlap exists: clamp to non-overlapping position
+  let clampedStart = desiredStart;
+  if (hasOverlapOnNearest) {
+    clampedStart = clampNonOverlapping(
+      desiredStart,
+      duration,
+      otherClipsOnNearest,
+    );
+  }
 
   return {
     targetTrack,
@@ -138,6 +171,7 @@ function computeTargetPosition(
     clampedStart,
     isInsertingNewTrack: false,
     insertTrackIndex: null,
+    hasOverlap: hasOverlapOnNearest,
   };
 }
 
@@ -349,10 +383,10 @@ export function useTimelineClipDrag({
 
       const deltaX = deltaXPixels / pxPerSecRef.current;
       const minY = (-state.initialTrack - 1) * TRACK_ROW_HEIGHT;
-      const maxY = (activeTrackCount - state.initialTrack) * TRACK_ROW_HEIGHT;
+      const maxY = (activeTrackCount + 1 - state.initialTrack) * TRACK_ROW_HEIGHT;
       const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
-      const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex } =
+      const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
         computeTargetPosition(
           deltaX,
           deltaYPixels,
@@ -365,6 +399,8 @@ export function useTimelineClipDrag({
           allClipsRef.current,
           isSnappingEnabledRef.current,
           isHapticEnabledRef.current,
+          previousIsInsertingRef.current,
+          previousInsertTrackRef.current,
         );
 
       const hasChangedState =
@@ -388,6 +424,7 @@ export function useTimelineClipDrag({
         dragOffsetY,
         isInsertingNewTrack,
         insertTrackIndex,
+        hasOverlap,
       });
     },
     [activeTrackCount],
@@ -560,10 +597,10 @@ export function useTimelineClipDrag({
 
         const deltaX = deltaXPixels / pxPerSecRef.current;
         const minY = (-initialTrackIndex - 1) * TRACK_ROW_HEIGHT;
-        const maxY = (activeTrackCount - initialTrackIndex) * TRACK_ROW_HEIGHT;
+        const maxY = (activeTrackCount + 1 - initialTrackIndex) * TRACK_ROW_HEIGHT;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
-        const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex } =
+        const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
           computeTargetPosition(
             deltaX,
             deltaYPixels,
@@ -576,6 +613,8 @@ export function useTimelineClipDrag({
             allClipsRef.current,
             isSnappingEnabledRef.current,
             isHapticEnabledRef.current,
+            previousIsInsertingRef.current,
+            previousInsertTrackRef.current,
           );
 
         const hasChangedState =
@@ -606,6 +645,7 @@ export function useTimelineClipDrag({
               dragOffsetY,
               isInsertingNewTrack,
               insertTrackIndex,
+              hasOverlap,
             });
           });
         }
@@ -687,10 +727,10 @@ export function useTimelineClipDrag({
         const deltaX = gestureState.dx / pxPerSecRef.current;
         const deltaYPixels = gestureState.dy;
         const minY = (-info.initialTrack - 1) * TRACK_ROW_HEIGHT;
-        const maxY = (activeTrackCount - info.initialTrack) * TRACK_ROW_HEIGHT;
+        const maxY = (activeTrackCount + 1 - info.initialTrack) * TRACK_ROW_HEIGHT;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
-        const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex } =
+        const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
           computeTargetPosition(
             deltaX,
             deltaYPixels,
@@ -703,6 +743,8 @@ export function useTimelineClipDrag({
             allClipsRef.current,
             isSnappingEnabledRef.current,
             isHapticEnabledRef.current,
+            previousIsInsertingRef.current,
+            previousInsertTrackRef.current,
           );
 
         const hasChangedState =
@@ -726,6 +768,7 @@ export function useTimelineClipDrag({
           dragOffsetY,
           isInsertingNewTrack,
           insertTrackIndex,
+          hasOverlap,
         });
       },
       onPanResponderRelease: () => {

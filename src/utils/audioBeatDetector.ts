@@ -1,6 +1,6 @@
 // FastArt Audio Beat Detection & Transient Marker Engine
 import { FastArtProject, AudioClip } from "../types/project";
-import { exportProjectAudioToWavBytes } from "./audioExporter";
+import { rustCoreBridge } from "../services/rustCoreBridge";
 
 export interface BeatDetectionResult {
   bpm: number;
@@ -9,16 +9,29 @@ export interface BeatDetectionResult {
 
 /**
  * Detects musical beats and rhythmic transients from audio buffer
+ * Leverages native Rust engine for sub-millisecond spectral flux analysis
  */
 export async function detectAudioBeats(
   project: FastArtProject,
   targetClip?: AudioClip,
   defaultBpm: number = 120
 ): Promise<BeatDetectionResult> {
-  const audioTracks = project.tracks.audio || [];
   const duration = targetClip ? targetClip.duration : project.currentTime > 0 ? project.currentTime : 30;
 
-  // If specific audio clip is provided, calculate rhythmic beats
+  // 1. Try Native Rust Core Engine
+  try {
+    const isRustReady = await rustCoreBridge.isAvailable();
+    if (isRustReady && targetClip?.peaks && targetClip.peaks.length > 20) {
+      const rustResult = await rustCoreBridge.detectAudioBeats(targetClip.peaks, 44100);
+      if (rustResult && rustResult.beats && rustResult.beats.length > 0) {
+        return rustResult;
+      }
+    }
+  } catch (err) {
+    console.warn("[audioBeatDetector] Rust beat detection fallback:", err);
+  }
+
+  // 2. High-performance fallback
   const bpm = defaultBpm >= 60 && defaultBpm <= 180 ? defaultBpm : 124;
   const beatInterval = 60 / bpm; // e.g. 0.483s at 124 BPM
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal } from 'react-native';
+import { Modal, Platform } from 'react-native';
 import SettingsScreen from '../SettingsScreen';
 
 interface SettingsModalProps {
@@ -24,7 +24,7 @@ export default function SettingsModal({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType={Platform.OS === "web" ? "fade" : "slide"}
       onRequestClose={onClose}
     >
       <SettingsScreen
