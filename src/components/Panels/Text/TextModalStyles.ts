@@ -75,7 +75,7 @@ export const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 7,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -137,9 +137,9 @@ export const styles = StyleSheet.create({
   tabBtnActive: {
     backgroundColor: "#161E2E",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.15,
+    borderColor: "rgba(0, 242, 254, 0.35)",
+    shadowColor: "#00F2FE",
+    shadowOpacity: 0.2,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
   },
@@ -258,9 +258,9 @@ export const styles = StyleSheet.create({
     padding: 6,
   },
   fontCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
-    borderColor: "#00F2FE",
-    shadowColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: "#FFFFFF",
+    shadowColor: "#000000",
     shadowOpacity: 0.2,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
@@ -272,7 +272,7 @@ export const styles = StyleSheet.create({
     marginBottom: 4,
   },
   fontCardPreviewActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
   },
   fontCardLabel: {
     fontSize: 9.5,
@@ -317,7 +317,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepperValue: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontSize: 12.5,
     fontWeight: "800",
     minWidth: 44,
@@ -340,8 +340,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   presetChipActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   presetChipText: {
     color: "#8E9AA8",
@@ -349,7 +349,7 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   presetChipTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
 
@@ -365,9 +365,9 @@ export const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   colorCircleSelected: {
-    borderColor: "#00F2FE",
+    borderColor: "#FFFFFF",
     borderWidth: 2.5,
-    shadowColor: "#00F2FE",
+    shadowColor: "#000000",
     shadowOpacity: 0.4,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
@@ -387,8 +387,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   bgOptionPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   bgPreviewDot: {
     width: 12,
@@ -401,7 +401,7 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   bgOptionTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
 
@@ -418,8 +418,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   effectPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   effectPillTitle: {
     color: "#94A3B8",
@@ -427,7 +427,7 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   effectPillTitleActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
   effectPillDesc: {
@@ -450,8 +450,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   animPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   animPillText: {
     color: "#94A3B8",
@@ -459,7 +459,7 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   animPillTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
   templatePill: {
@@ -489,8 +489,8 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fontPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   fontPillText: {
     color: "#94A3B8",
@@ -498,7 +498,7 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   fontPillTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
 });

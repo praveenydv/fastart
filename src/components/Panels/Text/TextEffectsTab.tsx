@@ -19,85 +19,92 @@ export default function TextEffectsTab({
   setSelectedBorderColor,
 }: TextEffectsTabProps) {
   return (
-    <>
-      {/* Text Effects */}
-      <Text style={styles.sectionTitle}>TEXT EFFECT STYLES</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.horizontalRow}
-      >
-        {TEXT_EFFECT_OPTIONS.map((eff) => {
-          const isActive = selectedTextEffect === eff.id;
-          return (
-            <TouchableOpacity
-              key={eff.id}
-              style={[styles.effectPill, isActive && styles.effectPillActive]}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                setSelectedTextEffect(eff.id);
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={eff.icon as any}
-                size={16}
-                color={isActive ? "#00F2FE" : "#94A3B8"}
-              />
-              <View style={{ marginLeft: 6 }}>
+    <View style={{ gap: 14 }}>
+      {/* 1. TEXT EFFECTS */}
+      <View>
+        <Text style={styles.sectionTitle}>TEXT EFFECT STYLES</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.horizontalRow}
+          contentContainerStyle={{ paddingVertical: 2 }}
+        >
+          {TEXT_EFFECT_OPTIONS.map((eff) => {
+            const isActive = selectedTextEffect === eff.id;
+            return (
+              <TouchableOpacity
+                key={eff.id}
+                style={[styles.effectPill, isActive && styles.effectPillActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  setSelectedTextEffect(eff.id);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={eff.icon as any}
+                  size={16}
+                  color={isActive ? "#00F2FE" : "#94A3B8"}
+                />
+                <View style={{ marginLeft: 6 }}>
+                  <Text
+                    style={[
+                      styles.effectPillTitle,
+                      isActive && styles.effectPillTitleActive,
+                    ]}
+                  >
+                    {eff.label}
+                  </Text>
+                  <Text style={styles.effectPillDesc}>{eff.desc}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* 2. BORDER & GLOW OUTLINE */}
+      <View>
+        <Text style={styles.sectionTitle}>BORDER & GLOW OUTLINE</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.horizontalRow}
+          contentContainerStyle={{ paddingVertical: 2 }}
+        >
+          {BORDER_OPTIONS.map((b) => {
+            const isSelected = selectedBorderColor === b.color;
+            return (
+              <TouchableOpacity
+                key={b.label}
+                style={[
+                  styles.bgOptionPill,
+                  isSelected && styles.bgOptionPillActive,
+                ]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  setSelectedBorderColor(b.color);
+                }}
+                activeOpacity={0.75}
+              >
+                {b.color && (
+                  <View
+                    style={[styles.bgPreviewDot, { backgroundColor: b.color }]}
+                  />
+                )}
                 <Text
                   style={[
-                    styles.effectPillTitle,
-                    isActive && styles.effectPillTitleActive,
+                    styles.bgOptionText,
+                    isSelected && styles.bgOptionTextActive,
                   ]}
                 >
-                  {eff.label}
+                  {b.label}
                 </Text>
-                <Text style={styles.effectPillDesc}>{eff.desc}</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Border & Outline */}
-      <Text style={styles.sectionTitle}>{"BORDER & GLOW OUTLINE"}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.horizontalRow}
-      >
-        {BORDER_OPTIONS.map((b) => {
-          const isSelected = selectedBorderColor === b.color;
-          return (
-            <TouchableOpacity
-              key={b.label}
-              style={[
-                styles.bgOptionPill,
-                isSelected && styles.bgOptionPillActive,
-              ]}
-              onPress={() => {
-                soundEngine.playSfx("click");
-                setSelectedBorderColor(b.color);
-              }}
-            >
-              {b.color && (
-                <View
-                  style={[styles.bgPreviewDot, { backgroundColor: b.color }]}
-                />
-              )}
-              <Text
-                style={[
-                  styles.bgOptionText,
-                  isSelected && styles.bgOptionTextActive,
-                ]}
-              >
-                {b.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </View>
   );
 }

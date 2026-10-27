@@ -332,7 +332,7 @@ export default function TextModal({
       {!isInline ? (
         <View style={styles.sheetHeader}>
           <View style={styles.headerTitleRow}>
-            <Ionicons name="text" size={16} color="#00F2FE" />
+            <Ionicons name="text" size={16} color="#FFFFFF" />
             <Text style={styles.sheetTitle}>
               {editingClip ? "Edit Text" : "Add Text"}
             </Text>
@@ -347,7 +347,7 @@ export default function TextModal({
                     paddingHorizontal: 10,
                     height: 24,
                     borderRadius: 6,
-                    backgroundColor: '#00F2FE',
+                    backgroundColor: '#FFFFFF',
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 4,
@@ -461,7 +461,12 @@ export default function TextModal({
             </View>
 
             {/* Category Tab Bar for Modern Ergonomic Text Configuration */}
-            <View style={styles.tabBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 12, flexGrow: 0 }}
+              contentContainerStyle={[styles.tabBar, { marginBottom: 0, minWidth: "100%" }]}
+            >
               <TouchableOpacity
                 style={[
                   styles.tabBtn,
@@ -565,7 +570,7 @@ export default function TextModal({
                   Motion
                 </Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
 
             {activeTab === "font" && (
               <TextFontTab

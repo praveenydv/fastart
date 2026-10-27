@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../../utils/audioEngine";
 import { FONT_OPTIONS } from "./textModalConstants";
-import { FONT_CATEGORIES, FontDefinition, loadGoogleFont, registerCustomFont } from "../../../utils/fontCatalog";
+import { FontDefinition, loadGoogleFont, registerCustomFont } from "../../../utils/fontCatalog";
 import { styles } from "./TextModalStyles";
 
 interface TextFontTabProps {
@@ -21,13 +21,7 @@ export default function TextFontTab({
   selectedFontSize,
   setSelectedFontSize,
 }: TextFontTabProps) {
-  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [fontsList, setFontsList] = useState<FontDefinition[]>(FONT_OPTIONS);
-
-  const filteredFonts = fontsList.filter((f) => {
-    if (activeCategory === "all") return true;
-    return f.category === activeCategory;
-  });
 
   const handleSelectFont = (font: FontDefinition) => {
     soundEngine.playSfx("click");
@@ -56,87 +50,72 @@ export default function TextFontTab({
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Category Filter Pills & Upload Button */}
-      <View style={styles.tabSectionHeader}>
+    <View style={{ gap: 14 }}>
+      {/* 1. FONT SELECTION */}
+      <View>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <Text style={styles.sectionTitle}>TYPOGRAPHY & FONTS</Text>
+          {Platform.OS === "web" && (
+            <TouchableOpacity
+              style={styles.uploadFontBtn}
+              onPress={handleCustomFontUpload}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="cloud-upload-outline" size={12} color="#00F2FE" />
+              <Text style={styles.uploadFontBtnText}>Upload Font</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Linear Horizontal Scroll of Font Family Cards */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6, alignItems: "center" }}
+          style={styles.horizontalRow}
+          contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
         >
-          {FONT_CATEGORIES.map((cat) => {
-            const isActive = activeCategory === cat.id;
+          {fontsList.map((f) => {
+            const isActive = selectedFont === f.id || selectedFont === f.fontFamily;
             return (
               <TouchableOpacity
-                key={cat.id}
-                style={[styles.categoryChip, isActive && styles.categoryChipActive]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  setActiveCategory(cat.id);
-                }}
+                key={f.id}
+                style={[styles.fontCard, isActive && styles.fontCardActive]}
+                onPress={() => handleSelectFont(f)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
-                  {cat.label}
+                <Text
+                  style={[
+                    styles.fontCardPreview,
+                    { fontFamily: f.fontFamily as any },
+                    isActive && styles.fontCardPreviewActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  Aa
+                </Text>
+                <Text
+                  style={[
+                    styles.fontCardLabel,
+                    isActive && styles.fontCardLabelActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {f.label}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
-
-        {Platform.OS === "web" && (
-          <TouchableOpacity
-            style={styles.uploadFontBtn}
-            onPress={handleCustomFontUpload}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="cloud-upload-outline" size={12} color="#00F2FE" />
-            <Text style={styles.uploadFontBtnText}>Upload</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* Font Family Cards Carousel */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.horizontalRow}
-        contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-      >
-        {filteredFonts.map((f) => {
-          const isActive = selectedFont === f.id || selectedFont === f.fontFamily;
-          return (
-            <TouchableOpacity
-              key={f.id}
-              style={[styles.fontCard, isActive && styles.fontCardActive]}
-              onPress={() => handleSelectFont(f)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.fontCardPreview,
-                  { fontFamily: f.fontFamily as any },
-                  isActive && styles.fontCardPreviewActive,
-                ]}
-                numberOfLines={1}
-              >
-                Aa
-              </Text>
-              <Text
-                style={[
-                  styles.fontCardLabel,
-                  isActive && styles.fontCardLabelActive,
-                ]}
-                numberOfLines={1}
-              >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Font Size Stepper & Quick Presets */}
+      {/* 2. FONT SIZE & QUICK PRESETS */}
       <View style={styles.sizeSection}>
         <Text style={styles.sectionTitle}>FONT SIZE</Text>
         <View style={styles.sizeRow}>
@@ -177,7 +156,12 @@ export default function TextFontTab({
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.presetChipText, isSelected && styles.presetChipTextActive]}>
+                  <Text
+                    style={[
+                      styles.presetChipText,
+                      isSelected && styles.presetChipTextActive,
+                    ]}
+                  >
                     {sz}
                   </Text>
                 </TouchableOpacity>
