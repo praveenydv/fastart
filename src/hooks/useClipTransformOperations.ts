@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { FastArtProject, CustomCrop, MaskConfig } from "../types/project";
 import { clampClipTrimUpdates } from "../utils/mediaDuration";
+import { requestMediaThumbnail } from "../utils/mediaThumbnailGenerator";
 import {
   applyTransformUpdateToClip,
   getInterpolatedTransform,
@@ -232,7 +233,19 @@ export function useClipTransformOperations({
             updates,
             tracks.video[idx].type,
           );
+          const oldTrimIn = tracks.video[idx].trimIn || 0;
+          const newTrimIn =
+            typeof clampedUpdates.trimIn === "number"
+              ? clampedUpdates.trimIn
+              : oldTrimIn;
+
           tracks.video[idx] = { ...tracks.video[idx], ...clampedUpdates };
+
+          if (isFinal && Math.abs(newTrimIn - oldTrimIn) > 0.15) {
+            tracks.video[idx].thumbnail = undefined;
+            tracks.video[idx].thumbnailTrimIn = newTrimIn;
+            requestMediaThumbnail(tracks.video[idx], true);
+          }
           found = true;
         }
       }

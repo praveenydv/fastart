@@ -1,26 +1,27 @@
 import { Platform } from "react-native";
 import { TRACK_ROW_HEIGHT } from "./timelineTypes";
+import { THEME_COLORS } from "../../constants/designConstants";
 
 export const trackStyles = {
   clipchampNewTrackSlot: {
     width: "100%",
     position: "relative" as const,
     justifyContent: "center" as const,
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.cyanBg,
     borderRadius: 6,
     overflow: "hidden" as const,
     ...(Platform.OS === "web"
       ? ({
           transition: "height 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin 0.2s ease",
-          boxShadow: "0 0 12px rgba(0, 242, 254, 0.15)",
+          boxShadow: `0 0 12px ${THEME_COLORS.cyanBorder}`,
         } as any)
       : {}),
   },
   clipchampNewTrackHeader: {
     width: "100%",
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.cyanBg,
     borderRadius: 6,
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -38,8 +39,8 @@ export const trackStyles = {
     position: "relative" as const,
     justifyContent: "center" as const,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#08090E",
+    borderBottomColor: THEME_COLORS.borderSubtle,
+    backgroundColor: THEME_COLORS.background,
   },
   trackLaneGuideline: {
     position: "absolute" as const,

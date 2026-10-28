@@ -210,9 +210,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderGlow,
     backgroundColor: theme.colors.cardElevated,
     transform: [{ translateY: -2 }],
-    shadowColor: '#00F2FE',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.35,
     shadowRadius: 16,
   },
   gridThumbContainer: {
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   gridResolutionText: {
-    color: '#00F2FE',
+    color: theme.colors.textSecondary,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
   },
   listAspectText: {
     fontSize: 9,
-    color: '#00F2FE',
+    color: '#E2E8F0',
     fontWeight: '700',
   },
   listMetaText: {

@@ -24,6 +24,7 @@ import { useTimelineDragTrim } from "./Timeline/useTimelineDragTrim";
 import { TimelineHeaderBar } from "./Timeline/TimelineHeaderBar";
 import { TimelineTracksView } from "./Timeline/TimelineTracksView";
 import TimelinePlayhead from "./Timeline/TimelinePlayhead";
+import { THEME_COLORS } from "../constants/designConstants";
 
 // Re-export constants and helpers for backwards-compatibility
 export {
@@ -47,6 +48,17 @@ export const Timeline: React.FC<TimelineProps> = ({
   onOpenTransitions,
   zoom,
   onZoomChange,
+  selectedClipType,
+  onSplitClip,
+  onDuplicateClip,
+  onDeleteClip,
+  onFreezeFrame,
+  onToggleReverse,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  onTimelineHeightChange,
   onOpenEditModal,
   onUpdateProject,
   onAddMedia,
@@ -87,6 +99,12 @@ export const Timeline: React.FC<TimelineProps> = ({
     activeTrackCount,
     isMobile,
   });
+
+  useEffect(() => {
+    if (onTimelineHeightChange) {
+      onTimelineHeightChange(timelineHeight);
+    }
+  }, [timelineHeight, onTimelineHeightChange]);
 
   // Settings
   const isSnappingEnabled = (project as any)?.settings?.snapping !== false;
@@ -333,8 +351,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                 left: 2,
                 right: 2,
                 height: 14,
-                backgroundColor: "#08090E",
-                borderColor: "#00F2FE",
+                backgroundColor: THEME_COLORS.background,
+                borderColor: THEME_COLORS.accent,
                 borderWidth: 1.5,
                 borderRadius: 7,
                 flexDirection: "row",
@@ -344,13 +362,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                 gap: 2,
                 ...(Platform.OS === "web"
                   ? {
-                      boxShadow: "0 0 8px rgba(0, 242, 254, 0.6)",
+                      boxShadow: `0 0 8px ${THEME_COLORS.cyanBorder}`,
                     }
                   : {}),
               }}
             >
-              <Ionicons name="add" size={10} color="#00F2FE" />
-              <Text style={{ color: "#00F2FE", fontSize: 9, fontWeight: "800" }}>
+              <Ionicons name="add" size={10} color={THEME_COLORS.accent} />
+              <Text style={{ color: THEME_COLORS.accent, fontSize: 9, fontWeight: "800" }}>
                 New
               </Text>
             </View>
@@ -385,12 +403,12 @@ export const Timeline: React.FC<TimelineProps> = ({
           style={[
             styles.trackHeaderCellUniversal,
             {
-              borderColor: isBottomActive ? "#00F2FE" : "rgba(0, 242, 254, 0.35)",
+              borderColor: isBottomActive ? THEME_COLORS.accent : THEME_COLORS.cyanBorder,
               borderWidth: 1.5,
               borderStyle: "dashed",
               backgroundColor: isBottomActive
-                ? "rgba(0, 242, 254, 0.16)"
-                : "rgba(0, 242, 254, 0.03)",
+                ? THEME_COLORS.cyanBg
+                : "transparent",
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
@@ -406,13 +424,13 @@ export const Timeline: React.FC<TimelineProps> = ({
           <Ionicons
             name="add"
             size={12}
-            color={isBottomActive ? "#00F2FE" : "rgba(0, 242, 254, 0.7)"}
+            color={isBottomActive ? THEME_COLORS.accent : THEME_COLORS.textMuted}
           />
           <Text
             style={[
               styles.trackHeaderLabelUniversal,
               {
-                color: isBottomActive ? "#00F2FE" : "rgba(0, 242, 254, 0.7)",
+                color: isBottomActive ? THEME_COLORS.accent : THEME_COLORS.textMuted,
                 fontWeight: "700",
               },
             ]}
@@ -459,6 +477,16 @@ export const Timeline: React.FC<TimelineProps> = ({
         pxPerSec={pxPerSec}
         onZoomChange={onZoomChange}
         onDeselectClip={() => onSelectClip("", "video")}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onSplitClip={onSplitClip}
+        onDeleteClip={onDeleteClip}
+        onFreezeFrame={onFreezeFrame}
+        onToggleReverse={onToggleReverse}
+        hasSelectedClip={Boolean(selectedClipId)}
+        selectedClipType={selectedClipType}
       />
 
       {/* Synchronized Vertical Scroll for all tracks */}
@@ -494,7 +522,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 onPress={handleAddTrack}
                 activeOpacity={0.7}
               >
-                <Ionicons name="add" size={12} color="#00F2FE" />
+                <Ionicons name="add" size={12} color={THEME_COLORS.accent} />
                 {!isMobile && (
                   <Text style={styles.addTrackLeftColumnText}>Track</Text>
                 )}

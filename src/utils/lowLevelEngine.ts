@@ -4,7 +4,11 @@
 // 2. WebAssembly (WASM) Linear Memory Vectorized Pixel Processing
 // 3. 32-Bit SIMD-Style TypedArray Integer Kernel for Zero-Allocation Fallback
 
-import { getHumanSegmentationMask, requestHumanSegmentation } from "../services/selfieSegmentationService";
+import {
+  getHumanSegmentationMask,
+  requestHumanSegmentation,
+  getFrameMask,
+} from "../services/selfieSegmentationService";
 
 export interface CutoutOptions {
   keyColor?: string;
@@ -14,6 +18,8 @@ export interface CutoutOptions {
   strokeColor?: string;
   strokeWidth?: number;
   bgColor?: string;
+  clipId?: string;
+  clipTime?: number;
 }
 
 export interface EffectShaderOptions {
@@ -541,80 +547,101 @@ export class LowLevelPixelEngine {
 
       if (isAuto) {
         requestHumanSegmentation(media);
-        const humanMask = getHumanSegmentationMask();
+        const cachedMask =
+          options.clipId && options.clipTime !== undefined
+            ? getFrameMask(options.clipId, options.clipTime)
+            : null;
+        const humanMask = cachedMask || getHumanSegmentationMask();
         if (humanMask) {
-          // High-accuracy AI Neural Human Segmentation Mask. Draw the matte with
-          // the same sensitivity and feather controls used by the fallback path.
-          // A blurred matte creates a real soft edge instead of only changing UI.
-          const sensitivity = Math.max(1, Math.min(100, options.intensity ?? 45));
-          const featherPx = Math.max(0, ((options.shadow ?? 25) / 100) * Math.min(procW, procH) * 0.08);
+          // High-accuracy AI Neural Human Segmentation Mask
+          const featherPx = Math.max(0, ((options.shadow ?? 20) / 100) * Math.min(procW, procH) * 0.04);
+          
+          offCtx.save();
           offCtx.globalCompositeOperation = "destination-in";
-          offCtx.globalAlpha = 0.35 + (sensitivity / 100) * 0.65;
-          offCtx.filter = featherPx > 0 ? `blur(${featherPx.toFixed(1)}px)` : "none";
+          offCtx.globalAlpha = 1.0; // Keep subject 100% opaque and sharp
+          if (featherPx > 0) {
+            offCtx.filter = `blur(${featherPx.toFixed(1)}px)`;
+          } else {
+            offCtx.filter = "none";
+          }
           offCtx.drawImage(humanMask, 0, 0, procW, procH);
-          offCtx.globalCompositeOperation = "source-over";
-          offCtx.globalAlpha = 1;
-          offCtx.filter = "none";
+          offCtx.restore();
         } else {
-          // Intelligent Human Saliency & Skin/Torso Computer Vision Fallback
+          // Robust Multi-Zone Computer Vision Video Foreground Segmentation Fallback
           const imgData = offCtx.getImageData(0, 0, procW, procH);
           const u32 = new Uint32Array(imgData.data.buffer);
 
-          // 1. Perimeter background sampling (top edge and side borders)
-          let bgRSum = 0, bgGSum = 0, bgBSum = 0, bgCount = 0;
-          for (let x = 0; x < procW; x += 4) {
-            const pTop = u32[x];
-            bgRSum += pTop & 0xff;
-            bgGSum += (pTop >> 8) & 0xff;
-            bgBSum += (pTop >> 16) & 0xff;
-            bgCount++;
-          }
-          for (let y = 0; y < procH; y += 4) {
-            const pLeft = u32[y * procW];
-            const pRight = u32[y * procW + (procW - 1)];
-            bgRSum += (pLeft & 0xff) + (pRight & 0xff);
-            bgGSum += ((pLeft >> 8) & 0xff) + ((pRight >> 8) & 0xff);
-            bgBSum += ((pLeft >> 16) & 0xff) + ((pRight >> 16) & 0xff);
-            bgCount += 2;
-          }
-          const bgR = Math.round(bgRSum / Math.max(1, bgCount));
-          const bgG = Math.round(bgGSum / Math.max(1, bgCount));
-          const bgB = Math.round(bgBSum / Math.max(1, bgCount));
+          // 1. Multi-zone background sampling: sample perimeter zones (top, left, right)
+          let rTop = 0, gTop = 0, bTop = 0, cTop = 0;
+          let rLeft = 0, gLeft = 0, bLeft = 0, cLeft = 0;
+          let rRight = 0, gRight = 0, bRight = 0, cRight = 0;
 
-          // 2. Identify human skin-tone centroid to anchor human subject
+          const step = Math.max(2, Math.floor(procW / 60));
+          for (let x = 0; x < procW; x += step) {
+            const p = u32[x];
+            rTop += p & 0xff;
+            gTop += (p >> 8) & 0xff;
+            bTop += (p >> 16) & 0xff;
+            cTop++;
+          }
+          for (let y = 0; y < procH; y += step) {
+            const pL = u32[y * procW];
+            rLeft += pL & 0xff;
+            gLeft += (pL >> 8) & 0xff;
+            bLeft += (pL >> 16) & 0xff;
+            cLeft++;
+
+            const pR = u32[y * procW + (procW - 1)];
+            rRight += pR & 0xff;
+            gRight += (pR >> 8) & 0xff;
+            bRight += (pR >> 16) & 0xff;
+            cRight++;
+          }
+
+          const bgTR = rTop / Math.max(1, cTop);
+          const bgTG = gTop / Math.max(1, cTop);
+          const bgTB = bTop / Math.max(1, cTop);
+
+          const bgLR = rLeft / Math.max(1, cLeft);
+          const bgLG = gLeft / Math.max(1, cLeft);
+          const bgLB = bLeft / Math.max(1, cLeft);
+
+          const bgRR = rRight / Math.max(1, cRight);
+          const bgRG = gRight / Math.max(1, cRight);
+          const bgRB = bRight / Math.max(1, cRight);
+
+          // 2. Identify human skin-tone centroid to protect human subject
           let skinXSum = 0;
           let skinYSum = 0;
           let skinCount = 0;
-          for (let y = Math.floor(procH * 0.1); y < Math.floor(procH * 0.7); y += 3) {
+          for (let y = Math.floor(procH * 0.1); y < Math.floor(procH * 0.85); y += 3) {
             const rowOffset = y * procW;
-            for (let x = Math.floor(procW * 0.15); x < Math.floor(procW * 0.85); x += 3) {
+            for (let x = Math.floor(procW * 0.1); x < Math.floor(procW * 0.9); x += 3) {
               const p = u32[rowOffset + x];
               const r = p & 0xff;
               const g = (p >> 8) & 0xff;
               const b = (p >> 16) & 0xff;
-              if (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) >= 10 && (r - b) >= 14) {
+              if (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) >= 8 && (r - b) >= 12) {
                 skinXSum += x;
                 skinYSum += y;
                 skinCount++;
               }
             }
           }
-          const humanCenterX = skinCount > 20 ? (skinXSum / skinCount) : (procW * 0.5);
-          const humanCenterY = skinCount > 20 ? (skinYSum / skinCount) : (procH * 0.35);
+          const humanCenterX = skinCount > 15 ? (skinXSum / skinCount) : (procW * 0.5);
+          const humanCenterY = skinCount > 15 ? (skinYSum / skinCount) : (procH * 0.42);
 
-          const autoThresh = Math.max(15, ((options.intensity ?? 45) / 100) * 160);
+          const sensitivity = Math.max(1, Math.min(100, options.intensity ?? 45));
+          const autoThresh = Math.max(18, 25 + (sensitivity / 100) * 110);
           const autoThreshSq = autoThresh * autoThresh;
-          const autoFeather = Math.max(2, ((options.shadow ?? 25) / 100) * 60);
+          const autoFeather = Math.max(4, ((options.shadow ?? 25) / 100) * 60);
           const autoOuterDist = autoThresh + autoFeather;
           const autoOuterSq = autoOuterDist * autoOuterDist;
           const autoInvFeather = 1.0 / autoFeather;
 
           for (let y = 0; y < procH; y++) {
             const rowOffset = y * procW;
-            const dyFromCenter = y - humanCenterY;
-            const allowedRadius = dyFromCenter > 0
-              ? procW * (0.35 + (dyFromCenter / procH) * 0.30)
-              : procW * 0.32;
+            const dyNorm = (y - humanCenterY) / procH;
 
             for (let x = 0; x < procW; x++) {
               const i = rowOffset + x;
@@ -623,24 +650,33 @@ export class LowLevelPixelEngine {
               const g = (pixel >> 8) & 0xff;
               const b = (pixel >> 16) & 0xff;
 
-              const dxFromCenter = Math.abs(x - humanCenterX);
-              const isSkin = (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) >= 8 && (r - b) >= 12);
+              // Distance to closest background zone
+              const drT = r - bgTR, dgT = g - bgTG, dbT = b - bgTB;
+              const distTSq = drT * drT + dgT * dgT + dbT * dbT;
 
-              if (isSkin || (dxFromCenter < allowedRadius * 0.7 && dyFromCenter > -procH * 0.25)) {
+              const drL = r - bgLR, dgL = g - bgLG, dbL = b - bgLB;
+              const distLSq = drL * drL + dgL * dgL + dbL * dbL;
+
+              const drR = r - bgRR, dgR = g - bgRG, dbR = b - bgRB;
+              const distRSq = drR * drR + dgR * dgR + dbR * dbR;
+
+              const minDistSq = Math.min(distTSq, Math.min(distLSq, distRSq));
+
+              // Protect skin tones and central person body
+              const isSkin = (r > 60 && g > 40 && b > 20 && r > g && g > b && (r - g) >= 8 && (r - b) >= 12);
+              const dxNorm = (x - humanCenterX) / procW;
+              const centerDistSq = dxNorm * dxNorm * 1.4 + dyNorm * dyNorm;
+
+              if (isSkin || (centerDistSq < 0.09 && minDistSq > autoThreshSq * 0.45)) {
                 continue;
               }
 
-              const dr = r - bgR;
-              const dg = g - bgG;
-              const db = b - bgB;
-              const distSq = dr * dr + dg * dg + db * db;
-
-              if (distSq < autoThreshSq || dxFromCenter > allowedRadius) {
-                u32[i] = pixel & 0x00ffffff; // Zero alpha
-              } else if (distSq < autoOuterSq) {
-                const dist = Math.sqrt(distSq);
+              if (minDistSq < autoThreshSq) {
+                u32[i] = pixel & 0x00ffffff; // Zero alpha (transparent background)
+              } else if (minDistSq < autoOuterSq) {
+                const dist = Math.sqrt(minDistSq);
                 const alpha = Math.floor(((dist - autoThresh) * autoInvFeather) * 255);
-                u32[i] = (((alpha << 24) >>> 0) | (pixel & 0x00ffffff)) >>> 0;
+                u32[i] = (((Math.max(0, Math.min(255, alpha)) << 24) >>> 0) | (pixel & 0x00ffffff)) >>> 0;
               }
             }
           }

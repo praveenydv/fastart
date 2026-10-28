@@ -19,6 +19,7 @@ interface PlayerTransformOverlayProps {
   onSelectClip?: (id: string | null, type?: string) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   onOpenMaskModal?: (clipId: string) => void;
+  onOpenAnimationModal?: () => void;
   onDeleteClip?: (clipId: string, clipType: string) => void;
   handleEnterCropMode: (clipId?: string) => void;
   handleStartDrag: (
@@ -58,6 +59,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   onSelectClip,
   onOpenEditModal,
   onOpenMaskModal,
+  onOpenAnimationModal,
   onDeleteClip,
   handleEnterCropMode,
   handleStartDrag,
@@ -87,15 +89,15 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           let motionY = 0;
           let motionScale = 1.0;
           let motionRot = 0;
-          if (vid.motionTrack && vid.motionTrack.enabled) {
+          if (vid.motionTrack && vid.motionTrack.enabled && vid.motionTrack.actionType === 'camera_center') {
             const motion = applyMotionTracking(
               currentTime,
               vid.startTime,
               vid.duration,
               vid.motionTrack,
             );
-            motionX = motion.dx;
-            motionY = motion.dy;
+            motionX = (motion.dx / 100) * boxWidth;
+            motionY = (motion.dy / 100) * canvasHeight;
             motionScale = motion.dScale;
             motionRot = motion.dRot;
           }
@@ -276,8 +278,8 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
               txt.duration,
               txt.motionTrack,
             );
-            motionX = motion.dx;
-            motionY = motion.dy;
+            motionX = (motion.dx / 100) * boxWidth;
+            motionY = (motion.dy / 100) * canvasHeight;
             motionScale = motion.dScale;
             motionRot = motion.dRot;
           }
@@ -366,8 +368,8 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
               stk.duration,
               stk.motionTrack,
             );
-            motionX = motion.dx;
-            motionY = motion.dy;
+            motionX = (motion.dx / 100) * boxWidth;
+            motionY = (motion.dy / 100) * canvasHeight;
             motionScale = motion.dScale;
             motionRot = motion.dRot;
           }
@@ -469,15 +471,23 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
               styles.activeTransformBox,
               {
                 zIndex: 10000,
-                left:
-                  (activeTransformItem.pos.x / 100) * boxWidth -
-                  activeTransformItem.width / 2,
-                top:
-                  (activeTransformItem.pos.y / 100) * canvasHeight -
-                  activeTransformItem.height / 2,
+                left: 0,
+                top: 0,
                 width: activeTransformItem.width,
                 height: activeTransformItem.height,
-                transform: [{ rotate: `${activeTransformItem.rotation}deg` }],
+                transform: [
+                  {
+                    translateX:
+                      (activeTransformItem.pos.x / 100) * boxWidth -
+                      activeTransformItem.width / 2,
+                  },
+                  {
+                    translateY:
+                      (activeTransformItem.pos.y / 100) * canvasHeight -
+                      activeTransformItem.height / 2,
+                  },
+                  { rotate: `${activeTransformItem.rotation}deg` },
+                ],
               },
             ]}
             {...(Platform.OS === "web"
@@ -563,6 +573,179 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           </View>
         )}
       </View>
+
+      {/* Quick Action HUD Bar for Selected Item */}
+      {activeTransformItem && (
+        <View style={styles.floatingHudContainer} pointerEvents="box-none">
+          <View style={styles.floatingHudContentCompact} pointerEvents="auto">
+            {/* Edit Action (for text, captions and stickers only; videos use Crop) */}
+            {(activeTransformItem.type === "text" ||
+              activeTransformItem.type === "caption" ||
+              activeTransformItem.type === "sticker") && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  onOpenEditModal?.(
+                    activeTransformItem.id,
+                    activeTransformItem.type,
+                  );
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        onOpenEditModal?.(
+                          activeTransformItem.id,
+                          activeTransformItem.type,
+                        );
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="pencil" size={13} color="#FFFFFF" />
+                <Text style={styles.floatingBtnText}>Edit</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Video Crop Action */}
+            {activeTransformItem.type === "video" && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  handleEnterCropMode(activeTransformItem.id);
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        handleEnterCropMode(activeTransformItem.id);
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="crop" size={13} color="#FFFFFF" />
+                <Text style={styles.floatingBtnText}>Crop</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Video Mask Action */}
+            {activeTransformItem.type === "video" && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  onOpenMaskModal?.(activeTransformItem.id);
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        onOpenMaskModal?.(activeTransformItem.id);
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="shapes-outline" size={13} color="#00F2FE" />
+                <Text style={[styles.floatingBtnText, { color: "#00F2FE" }]}>
+                  Mask
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Animation Action */}
+            {onOpenAnimationModal && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  onOpenAnimationModal();
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("click");
+                        onOpenAnimationModal();
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="play-circle-outline" size={13} color="#A78BFA" />
+                <Text style={[styles.floatingBtnText, { color: "#A78BFA" }]}>
+                  Anim
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Delete */}
+            <TouchableOpacity
+              style={[styles.floatingActionBtn, styles.floatingDeleteBtn]}
+              onPress={() => {
+                soundEngine.playSfx("click");
+                onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
+              }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onClick: (e: any) => {
+                      e.stopPropagation?.();
+                      soundEngine.playSfx("click");
+                      onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
+                    },
+                    onMouseDown: (e: any) => e.stopPropagation?.(),
+                  } as any)
+                : {})}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="trash-outline" size={13} color="#FB7185" />
+              <Text style={[styles.floatingBtnText, { color: "#FB7185" }]}>
+                Delete
+              </Text>
+            </TouchableOpacity>
+
+            {/* Done */}
+            <TouchableOpacity
+              style={[styles.floatingActionBtn, styles.floatingDoneBtn]}
+              onPress={() => {
+                soundEngine.playSfx("pop");
+                onSelectClip?.(null);
+              }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onClick: (e: any) => {
+                      e.stopPropagation?.();
+                      soundEngine.playSfx("pop");
+                      onSelectClip?.(null);
+                    },
+                    onMouseDown: (e: any) => e.stopPropagation?.(),
+                  } as any)
+                : {})}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={14}
+                color="#10B981"
+              />
+              <Text style={[styles.floatingBtnText, { color: "#10B981" }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </>
   );
 };

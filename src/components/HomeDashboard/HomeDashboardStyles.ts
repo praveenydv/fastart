@@ -45,15 +45,15 @@ export const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   studioBadge: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
     paddingHorizontal: 7,
     paddingVertical: 2.5,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "rgba(255, 255, 255, 0.25)",
   },
   studioBadgeText: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontSize: 9.5,
     fontWeight: "800",
     letterSpacing: 0.8,
@@ -155,8 +155,8 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.12)",
-    shadowColor: "#00F2FE",
-    shadowOpacity: 0.08,
+    shadowColor: "#000000",
+    shadowOpacity: 0.15,
     shadowRadius: 12,
   },
   mobilePlusCircle: {
@@ -280,8 +280,8 @@ export const styles = StyleSheet.create({
     aspectRatio: 16 / 12,
   },
   desktopNewProjectTileHovered: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.03)",
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
   },
   desktopPlusRing: {
     width: 52,

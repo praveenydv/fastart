@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './CutoutModalStyles';
 import { soundEngine } from '../../../utils/audioEngine';
+import { CompactSliderInput } from '../../Common/CompactSliderInput';
 
 const WebInput: any = Platform.OS === 'web' ? 'input' : View;
 
@@ -13,8 +14,17 @@ interface ChromaControlsProps {
   setIntensity: (val: number) => void;
   shadow: number;
   setShadow: (val: number) => void;
-  colorPresets: { label: string; color: string }[];
+  colorPresets?: { label: string; color: string }[];
   onEnable: () => void;
+}
+
+function isLightColor(hex: string): boolean {
+  if (!hex || hex === 'none' || hex === 'transparent') return false;
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) || 0;
+  const g = parseInt(clean.substring(2, 4), 16) || 0;
+  const b = parseInt(clean.substring(4, 6), 16) || 0;
+  return (r * 299 + g * 587 + b * 114) / 1000 > 140;
 }
 
 export const ChromaControls: React.FC<ChromaControlsProps> = ({
@@ -24,137 +34,109 @@ export const ChromaControls: React.FC<ChromaControlsProps> = ({
   setIntensity,
   shadow,
   setShadow,
-  colorPresets,
   onEnable,
 }) => {
+  const colorInputRef = React.useRef<any>(null);
+
+  const handleOpenEyeDropper = async () => {
+    soundEngine.playSfx('click');
+    if (typeof window !== 'undefined' && (window as any).EyeDropper) {
+      try {
+        const eyeDropper = new (window as any).EyeDropper();
+        const result = await eyeDropper.open();
+        if (result && result.sRGBHex) {
+          setKeyColor(result.sRGBHex);
+          onEnable();
+        }
+      } catch {
+        // User cancelled eyedropper
+      }
+    } else if (Platform.OS === 'web' && colorInputRef.current) {
+      colorInputRef.current.click();
+    }
+  };
+
   return (
     <View style={styles.sectionBox}>
-      <Text style={styles.sectionHeader}>KEY COLOR</Text>
-      <View style={styles.presetsGrid}>
-        {colorPresets.map((preset) => {
-          const isSelected = keyColor.toUpperCase() === preset.color.toUpperCase();
-          return (
-            <TouchableOpacity
-              key={preset.color}
-              style={[styles.colorChip, isSelected && styles.colorChipSelected]}
-              onPress={() => {
-                soundEngine.playSfx('click');
-                setKeyColor(preset.color);
-                onEnable();
-              }}
-              activeOpacity={0.8}
-            >
-              <View
-                style={[
-                  styles.colorDot,
-                  { backgroundColor: preset.color },
-                  preset.color === '#000000' && { borderWidth: 1, borderColor: '#333' },
-                ]}
-              />
-              <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                {preset.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={styles.dropperHeaderRow}>
+        <Text style={styles.sectionHeader}>CHROMA KEY COLOR</Text>
+        <TouchableOpacity
+          style={styles.dropperIconBtn}
+          onPress={handleOpenEyeDropper}
+          activeOpacity={0.8}
+          accessibilityLabel="Pick color with dropper"
+        >
+          <Ionicons name="eyedrop" size={17} color="#00F2FE" />
+        </TouchableOpacity>
       </View>
 
-      {/* Custom Color Eyedropper / Hex */}
-      <View style={styles.customColorRow}>
-        <Text style={styles.sliderLabel}>Selected Color Code:</Text>
-        <View style={styles.colorInputBox}>
-          <View style={[styles.sampleSquare, { backgroundColor: keyColor }]} />
-          {Platform.OS === 'web' ? (
-            <WebInput
-              type="color"
-              value={keyColor}
-              onChange={(e: any) => {
-                setKeyColor(e.target.value);
-                onEnable();
-              }}
-              style={{
-                width: 44,
-                height: 28,
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            />
-          ) : null}
-          <Text style={styles.hexCodeText}>{keyColor.toUpperCase()}</Text>
-        </View>
+      <View style={styles.dropperCard}>
+        <TouchableOpacity
+          style={styles.dropperCardTouch}
+          onPress={handleOpenEyeDropper}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.dropperSwatchLarge, { backgroundColor: keyColor }]} />
+          <View style={styles.dropperInfo}>
+            <Text style={styles.dropperCardTitle}>Key Color</Text>
+            <Text style={styles.dropperCardHex}>{keyColor.toUpperCase()}</Text>
+          </View>
+          <View style={styles.dropperIconPill}>
+            <Ionicons name="eyedrop" size={18} color="#00F2FE" />
+          </View>
+        </TouchableOpacity>
+
+        {Platform.OS === 'web' && (
+          <WebInput
+            ref={colorInputRef}
+            type="color"
+            value={keyColor}
+            onChange={(e: any) => {
+              setKeyColor(e.target.value);
+              onEnable();
+            }}
+            style={{
+              position: 'absolute',
+              opacity: 0,
+              width: 1,
+              height: 1,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
       </View>
+      <Text style={styles.dropperHint}>
+        Tap the eyedropper to sample any green screen or background color directly from the video.
+      </Text>
 
       {/* Intensity Slider */}
       <View style={styles.sliderGroup}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>Intensity / Similarity Tolerance</Text>
-          <Text style={styles.sliderVal}>{intensity}%</Text>
-        </View>
-        <View style={styles.sliderContainer}>
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => setIntensity(Math.max(1, intensity - 5))}
-          >
-            <Ionicons name="remove" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-          {Platform.OS === 'web' ? (
-            <WebInput
-              type="range"
-              min="1"
-              max="100"
-              value={intensity}
-              onChange={(e: any) => setIntensity(Number(e.target.value))}
-              style={{ flex: 1, accentColor: '#00F2FE' }}
-            />
-          ) : (
-            <View style={styles.trackFallback}>
-              <View style={[styles.fillFallback, { width: `${intensity}%` }]} />
-            </View>
-          )}
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => setIntensity(Math.min(100, intensity + 5))}
-          >
-            <Ionicons name="add" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        <CompactSliderInput
+          label="Intensity / Similarity Tolerance"
+          value={intensity}
+          min={1}
+          max={100}
+          step={1}
+          unit="%"
+          defaultValue={40}
+          accentColor="#00F2FE"
+          onChange={setIntensity}
+        />
       </View>
 
       {/* Shadow / Smoothness Slider */}
       <View style={styles.sliderGroup}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>Shadow / Edge Softness</Text>
-          <Text style={styles.sliderVal}>{shadow}%</Text>
-        </View>
-        <View style={styles.sliderContainer}>
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => setShadow(Math.max(0, shadow - 5))}
-          >
-            <Ionicons name="remove" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-          {Platform.OS === 'web' ? (
-            <WebInput
-              type="range"
-              min="0"
-              max="100"
-              value={shadow}
-              onChange={(e: any) => setShadow(Number(e.target.value))}
-              style={{ flex: 1, accentColor: '#00F2FE' }}
-            />
-          ) : (
-            <View style={styles.trackFallback}>
-              <View style={[styles.fillFallback, { width: `${shadow}%` }]} />
-            </View>
-          )}
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => setShadow(Math.min(100, shadow + 5))}
-          >
-            <Ionicons name="add" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        <CompactSliderInput
+          label="Shadow / Edge Softness"
+          value={shadow}
+          min={0}
+          max={100}
+          step={1}
+          unit="%"
+          defaultValue={20}
+          accentColor="#00F2FE"
+          onChange={setShadow}
+        />
       </View>
     </View>
   );

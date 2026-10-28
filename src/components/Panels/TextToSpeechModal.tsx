@@ -109,47 +109,49 @@ export default function TextToSpeechModal({
       {!isInline && <View style={styles.sheetHandle} />}
 
       {/* Unified Live Header */}
-      <View style={styles.sheetHeader}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Ionicons name="mic" size={16} color="#00F2FE" />
-          <Text style={styles.sheetTitle}>AI Voice Generator</Text>
-        </View>
+      {!isInline && (
+        <View style={styles.sheetHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="mic" size={16} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>AI Voice Generator</Text>
+          </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <TouchableOpacity
-            onPress={handleUseVoiceover}
-            style={[
-              {
-                paddingHorizontal: 10,
-                height: 24,
-                borderRadius: 6,
-                backgroundColor: '#00F2FE',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-              },
-              !script.trim() && { opacity: 0.4 },
-            ]}
-            disabled={!script.trim()}
-            activeOpacity={0.7}
-            accessibilityLabel="Add Voice to Track"
-          >
-            <Ionicons name="add" size={13} color="#08090E" />
-            <Text style={{ color: '#08090E', fontSize: 10.5, fontWeight: '700' }}>
-              Add to Track
-            </Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              onPress={handleUseVoiceover}
+              style={[
+                {
+                  paddingHorizontal: 10,
+                  height: 24,
+                  borderRadius: 6,
+                  backgroundColor: '#00F2FE',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                },
+                !script.trim() && { opacity: 0.4 },
+              ]}
+              disabled={!script.trim()}
+              activeOpacity={0.7}
+              accessibilityLabel="Add Voice to Track"
+            >
+              <Ionicons name="add" size={13} color="#08090E" />
+              <Text style={{ color: '#08090E', fontSize: 10.5, fontWeight: '700' }}>
+                Add to Track
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.closeBtn}
-            activeOpacity={0.7}
-            accessibilityLabel="Close panel"
-          >
-            <Ionicons name="close" size={14} color="#94A3B8" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Close panel"
+            >
+              <Ionicons name="close" size={14} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             <Text style={styles.sectionTitle}>Script</Text>

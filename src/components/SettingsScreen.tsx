@@ -156,7 +156,7 @@ export default function SettingsScreen({
                     <Ionicons
                       name="videocam-outline"
                       size={14}
-                      color="#00F2FE"
+                      color="#FFFFFF"
                     />
                   </View>
                   <Text style={styles.itemTitle}>Default Resolution</Text>
@@ -203,7 +203,7 @@ export default function SettingsScreen({
                     <Ionicons
                       name="speedometer-outline"
                       size={14}
-                      color="#00F2FE"
+                      color="#FFFFFF"
                     />
                   </View>
                   <Text style={styles.itemTitle}>Default Frame Rate</Text>
@@ -246,7 +246,7 @@ export default function SettingsScreen({
               <View style={styles.selectorHeader}>
                 <View style={styles.itemTitleRow}>
                   <View style={styles.iconCircle}>
-                    <Ionicons name="crop-outline" size={14} color="#00F2FE" />
+                    <Ionicons name="crop-outline" size={14} color="#FFFFFF" />
                   </View>
                   <Text style={styles.itemTitle}>Default Aspect Ratio</Text>
                 </View>
@@ -290,7 +290,7 @@ export default function SettingsScreen({
             <View style={styles.toggleItem}>
               <View style={styles.toggleLeft}>
                 <View style={styles.iconCircle}>
-                  <Ionicons name="magnet-outline" size={14} color="#00F2FE" />
+                  <Ionicons name="magnet-outline" size={14} color="#FFFFFF" />
                 </View>
                 <View style={styles.toggleTextGroup}>
                   <Text style={styles.toggleTitle}>Timeline Snapping</Text>
@@ -302,8 +302,8 @@ export default function SettingsScreen({
               <Switch
                 value={localSettings.magneticSnapping !== false}
                 onValueChange={() => toggleSwitch("magneticSnapping")}
-                trackColor={{ false: "#1B2234", true: "#00F2FE" }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: "#1B2234", true: "#FFFFFF" }}
+                thumbColor={localSettings.magneticSnapping !== false ? "#000000" : "#94A3B8"}
               />
             </View>
 
@@ -316,7 +316,7 @@ export default function SettingsScreen({
                   <Ionicons
                     name="finger-print-outline"
                     size={14}
-                    color="#00F2FE"
+                    color="#FFFFFF"
                   />
                 </View>
                 <View style={styles.toggleTextGroup}>
@@ -329,8 +329,8 @@ export default function SettingsScreen({
               <Switch
                 value={localSettings.hapticFeedback !== false}
                 onValueChange={() => toggleSwitch("hapticFeedback")}
-                trackColor={{ false: "#1B2234", true: "#00F2FE" }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: "#1B2234", true: "#FFFFFF" }}
+                thumbColor={localSettings.hapticFeedback !== false ? "#000000" : "#94A3B8"}
               />
             </View>
 
@@ -343,7 +343,7 @@ export default function SettingsScreen({
                   <Ionicons
                     name="volume-medium-outline"
                     size={14}
-                    color="#00F2FE"
+                    color="#FFFFFF"
                   />
                 </View>
                 <View style={styles.toggleTextGroup}>
@@ -356,8 +356,8 @@ export default function SettingsScreen({
               <Switch
                 value={localSettings.soundEffects === true}
                 onValueChange={() => toggleSwitch("soundEffects")}
-                trackColor={{ false: "#1B2234", true: "#00F2FE" }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: "#1B2234", true: "#FFFFFF" }}
+                thumbColor={localSettings.soundEffects === true ? "#000000" : "#94A3B8"}
               />
             </View>
 
@@ -367,7 +367,7 @@ export default function SettingsScreen({
             <View style={styles.toggleItem}>
               <View style={styles.toggleLeft}>
                 <View style={styles.iconCircle}>
-                  <Ionicons name="film-outline" size={14} color="#00F2FE" />
+                  <Ionicons name="film-outline" size={14} color="#FFFFFF" />
                 </View>
                 <View style={styles.toggleTextGroup}>
                   <Text style={styles.toggleTitle}>Auto Add Outro</Text>
@@ -379,8 +379,8 @@ export default function SettingsScreen({
               <Switch
                 value={localSettings.autoAddEnding === true}
                 onValueChange={() => toggleSwitch("autoAddEnding")}
-                trackColor={{ false: "#1B2234", true: "#00F2FE" }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: "#1B2234", true: "#FFFFFF" }}
+                thumbColor={localSettings.autoAddEnding === true ? "#000000" : "#94A3B8"}
               />
             </View>
           </View>
@@ -548,21 +548,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.22)",
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   pulseDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
   },
   accelText: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   activeValueText: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "700",
   },

@@ -5,7 +5,7 @@
 // Keeps Expo UI at 60fps with zero UI-thread stalls
 
 import { NativeModules, Platform } from "react-native";
-import { FastArtProject } from "../types/project";
+import { FastArtProject, TrajectoryPoint } from "../types/project";
 
 let FastArtRust: any = NativeModules.FastArtRust;
 try {
@@ -376,6 +376,57 @@ class RustCoreBridgeService {
     }
 
     return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+  }
+
+  public evaluateObjectTrackTrajectory(
+    time: number,
+    trajectory: TrajectoryPoint[],
+    trackScale = true,
+    trackRotation = false,
+    cameraCenter = false,
+  ): { dx: number; dy: number; dScale: number; dRot: number } {
+    if (!trajectory || trajectory.length === 0) {
+      return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+    }
+    const origin = trajectory[0];
+    if (trajectory.length === 1 || time <= origin.time) {
+      return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+    }
+    const last = trajectory[trajectory.length - 1];
+    let pt: TrajectoryPoint;
+    if (time >= last.time) {
+      pt = last;
+    } else {
+      let low = 0;
+      let high = trajectory.length - 1;
+      while (low + 1 < high) {
+        const mid = (low + high) >> 1;
+        if (trajectory[mid].time <= time) low = mid;
+        else high = mid;
+      }
+      const p0 = trajectory[low];
+      const p1 = trajectory[high];
+      const dt = Math.max(0.0001, p1.time - p0.time);
+      const t = Math.min(1, Math.max(0, (time - p0.time) / dt));
+      pt = {
+        time,
+        x: p0.x + (p1.x - p0.x) * t,
+        y: p0.y + (p1.y - p0.y) * t,
+        scale: p0.scale + (p1.scale - p0.scale) * t,
+        rotation: p0.rotation + (p1.rotation - p0.rotation) * t,
+        confidence: p0.confidence + (p1.confidence - p0.confidence) * t,
+      };
+    }
+    let dx = pt.x - origin.x;
+    let dy = pt.y - origin.y;
+    const dScale = trackScale ? (pt.scale || 1.0) : 1.0;
+    const rawRot = (pt.rotation || 0) - (origin.rotation || 0);
+    const dRot = trackRotation ? Math.max(-15, Math.min(15, rawRot)) : 0;
+    if (cameraCenter) {
+      dx = -dx;
+      dy = -dy;
+    }
+    return { dx, dy, dScale: Math.max(0.1, Math.min(10, dScale)), dRot };
   }
 }
 

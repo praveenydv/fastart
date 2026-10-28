@@ -7,6 +7,7 @@ import { TransientTransformState } from "./playerTypes";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
+import { evaluateClipAnimation } from "../../utils/animationEngine";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
@@ -33,7 +34,7 @@ interface PlayerNativeCompositorProps {
   ) => any;
 }
 
-export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
+const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = ({
   activeVideos,
   activeAudios = [],
   activeCaptions = [],
@@ -157,6 +158,56 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           );
         };
 
+        const renderMosaicCensor = (clip: any, clipW: number, clipH: number) => {
+          if (!clip.motionTrack || !clip.motionTrack.enabled || clip.motionTrack.actionType !== 'mosaic_censor') {
+            return null;
+          }
+          const track = clip.motionTrack;
+          const rect = track.targetRect || { x: 35, y: 30, width: 30, height: 30 };
+          const motion = applyMotionTracking(currentTime, clip.startTime, clip.duration, track);
+
+          // rect.x, rect.width and motion.dx are in percent (0..100)
+          const centerNormX = Math.max(0, Math.min(1, (rect.x + rect.width / 2 + motion.dx) / 100));
+          const centerNormY = Math.max(0, Math.min(1, (rect.y + rect.height / 2 + motion.dy) / 100));
+          const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * motion.dScale));
+          const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * motion.dScale));
+
+          const boxPixelW = Math.max(20, Math.round(clipW * boxNormW));
+          const boxPixelH = Math.max(20, Math.round(clipH * boxNormH));
+          const boxLeft = Math.round(clipW * centerNormX - boxPixelW / 2);
+          const boxTop = Math.round(clipH * centerNormY - boxPixelH / 2);
+
+          const radius = track.mosaicRadius ?? 16;
+          const isPixelate = track.mosaicStyle !== 'blur';
+
+          const webBackdropStyle: any = Platform.OS === 'web' ? {
+            backdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
+            WebkitBackdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
+          } : {};
+
+          return (
+            <View
+              pointerEvents="none"
+              style={[
+                {
+                  position: 'absolute',
+                  left: boxLeft,
+                  top: boxTop,
+                  width: boxPixelW,
+                  height: boxPixelH,
+                  borderRadius: isPixelate ? 4 : Math.round(Math.min(boxPixelW, boxPixelH) / 4),
+                  backgroundColor: isPixelate ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.12)',
+                  overflow: 'hidden',
+                  borderWidth: 1.5,
+                  borderColor: 'rgba(0, 242, 254, 0.4)',
+                  zIndex: 99,
+                },
+                webBackdropStyle,
+              ]}
+            />
+          );
+        };
+
         return activeVideos.map((vid) => {
         const isTrans = activeTransient && activeTransient.clipId === vid.id;
         const kfT = getInterpolatedTransform(vid, currentTime);
@@ -179,10 +230,12 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         let motionY = 0;
         let motionScale = 1.0;
         let motionRot = 0;
-        if (vid.motionTrack && vid.motionTrack.enabled) {
+        // In CapCut, video layers NEVER slide or rotate when tracking an object for censor blur or pinning elements!
+        // The video ONLY moves if actionType is explicitly 'camera_center'.
+        if (vid.motionTrack && vid.motionTrack.enabled && vid.motionTrack.actionType === 'camera_center') {
           const motion = applyMotionTracking(currentTime, vid.startTime, vid.duration, vid.motionTrack);
-          motionX = motion.dx;
-          motionY = motion.dy;
+          motionX = (motion.dx / 100) * boxWidth;
+          motionY = (motion.dy / 100) * canvasHeight;
           motionScale = motion.dScale;
           motionRot = motion.dRot;
         }
@@ -201,66 +254,102 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         let webMaskStyle: any = undefined;
         if (mask && mask.shape && mask.shape !== "none") {
           hasMaskShape = true;
-          if (mask.shape === "circle") {
-            maskBorderRadius = Math.round(Math.min(w, h) / 2);
-          } else if (mask.shape === "rectangle") {
-            maskBorderRadius = Math.max(0, mask.roundness ?? 16);
-          }
+          const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
+          const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
+          const rawFeather = Math.max(0, Math.min(80, mask.feather ?? 0));
+          const posX = 50 + (mask.x || 0);
+          const posY = 50 + (mask.y || 0);
+          const rotDeg = mask.rotation || 0;
 
           if (Platform.OS === "web") {
-            const rawFeather = Math.max(0, Math.min(80, mask.feather ?? 0));
-            if (rawFeather > 0) {
-              if (mask.shape === "circle") {
-                const radPct = (mask.size ?? 50) / 2;
-                const stop1 = Math.max(0, radPct - (rawFeather * 0.35));
-                const stop2 = Math.min(100, radPct + (rawFeather * 0.35));
+            if (mask.shape === "circle") {
+              const radX = effW / 2;
+              const radY = effH / 2;
+              if (rawFeather === 0 && !mask.inverted && rotDeg === 0) {
+                const clipPath = `ellipse(${radX}% ${radY}% at ${posX}% ${posY}%)`;
+                webMaskStyle = {
+                  clipPath,
+                  WebkitClipPath: clipPath,
+                };
+              } else {
+                const stop1X = Math.max(0, radX - (rawFeather * 0.35));
+                const stop2X = Math.min(100, radX + (rawFeather * 0.35));
                 const grad = mask.inverted
-                  ? `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) ${stop1}%, black ${stop2}%)`
-                  : `radial-gradient(circle at 50% 50%, black ${stop1}%, rgba(0,0,0,0) ${stop2}%)`;
+                  ? `radial-gradient(${radX}% ${radY}% at ${posX}% ${posY}%, rgba(0,0,0,0) ${stop1X}%, black ${stop2X}%)`
+                  : `radial-gradient(${radX}% ${radY}% at ${posX}% ${posY}%, black ${stop1X}%, rgba(0,0,0,0) ${stop2X}%)`;
                 webMaskStyle = {
                   WebkitMaskImage: grad,
                   maskImage: grad,
-                };
-              } else if (mask.shape === "linear") {
-                const splitPct = 50 - (mask.size ?? 50) / 2;
-                const stop1 = Math.max(0, splitPct - (rawFeather * 0.35));
-                const stop2 = Math.min(100, splitPct + (rawFeather * 0.35));
-                const grad = mask.inverted
-                  ? `linear-gradient(to bottom, black ${stop1}%, rgba(0,0,0,0) ${stop2}%)`
-                  : `linear-gradient(to bottom, rgba(0,0,0,0) ${stop1}%, black ${stop2}%)`;
-                webMaskStyle = {
-                  WebkitMaskImage: grad,
-                  maskImage: grad,
-                };
-              } else if (mask.shape === "mirror") {
-                const bandHalf = (mask.size ?? 50) / 2;
-                const topSplit = 50 - bandHalf;
-                const btmSplit = 50 + bandHalf;
-                const f = rawFeather * 0.3;
-                const grad = mask.inverted
-                  ? `linear-gradient(${180 + (mask.rotation || 0)}deg, black 0%, black ${topSplit - f}%, rgba(0,0,0,0) ${topSplit + f}%, rgba(0,0,0,0) ${btmSplit - f}%, black ${btmSplit + f}%, black 100%)`
-                  : `linear-gradient(${180 + (mask.rotation || 0)}deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) ${topSplit - f}%, black ${topSplit + f}%, black ${btmSplit - f}%, rgba(0,0,0,0) ${btmSplit + f}%, rgba(0,0,0,0) 100%)`;
-                webMaskStyle = {
-                  WebkitMaskImage: grad,
-                  maskImage: grad,
-                };
-              } else if (mask.shape === "heart") {
-                const heartSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="black"/></svg>`;
-                const heartUri = `url("data:image/svg+xml;utf8,${encodeURIComponent(heartSvg)}")`;
-                const posX = 50 + (mask.x || 0);
-                const posY = 50 + (mask.y || 0);
-                webMaskStyle = {
-                  WebkitMaskImage: heartUri,
-                  maskImage: heartUri,
-                  WebkitMaskRepeat: "no-repeat",
-                  maskRepeat: "no-repeat",
-                  WebkitMaskPosition: `${posX}% ${posY}%`,
-                  maskPosition: `${posX}% ${posY}%`,
-                  WebkitMaskSize: `${mask.size ?? 60}%`,
-                  maskSize: `${mask.size ?? 60}%`,
-                  transform: [{ rotate: `${mask.rotation || 0}deg` }],
                 };
               }
+            } else if (mask.shape === "rectangle") {
+              const rectHalfW = effW / 2;
+              const rectHalfH = effH / 2;
+              const left = Math.max(0, posX - rectHalfW);
+              const right = Math.max(0, 100 - (posX + rectHalfW));
+              const top = Math.max(0, posY - rectHalfH);
+              const btm = Math.max(0, 100 - (posY + rectHalfH));
+              const rad = Math.max(0, mask.roundness ?? 16);
+
+              if (rawFeather === 0 && !mask.inverted && rotDeg === 0) {
+                const clipPath = `inset(${top}% ${right}% ${btm}% ${left}% round ${rad}px)`;
+                webMaskStyle = {
+                  clipPath,
+                  WebkitClipPath: clipPath,
+                };
+              } else {
+                const f = Math.max(0.1, rawFeather * 0.35);
+                const l1 = posX - rectHalfW;
+                const r1 = posX + rectHalfW;
+                const t1 = posY - rectHalfH;
+                const b1 = posY + rectHalfH;
+                const grad = mask.inverted
+                  ? `linear-gradient(${rotDeg}deg, black, black)`
+                  : `linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,0) ${l1 - f}%, black ${l1 + f}%, black ${r1 - f}%, rgba(0,0,0,0) ${r1 + f}%, rgba(0,0,0,0) 100%)`;
+                webMaskStyle = {
+                  WebkitMaskImage: grad,
+                  maskImage: grad,
+                };
+              }
+            } else if (mask.shape === "linear") {
+              const splitPct = 50 - effH / 2;
+              const stop1 = Math.max(0, splitPct - (rawFeather * 0.35));
+              const stop2 = Math.min(100, splitPct + (rawFeather * 0.35));
+              const grad = mask.inverted
+                ? `linear-gradient(${180 + rotDeg}deg, black ${stop1}%, rgba(0,0,0,0) ${stop2}%)`
+                : `linear-gradient(${180 + rotDeg}deg, rgba(0,0,0,0) ${stop1}%, black ${stop2}%)`;
+              webMaskStyle = {
+                WebkitMaskImage: grad,
+                maskImage: grad,
+              };
+            } else if (mask.shape === "mirror") {
+              const bandHalf = effH / 2;
+              const topSplit = 50 - bandHalf;
+              const btmSplit = 50 + bandHalf;
+              const f = rawFeather * 0.3;
+              const grad = mask.inverted
+                ? `linear-gradient(${180 + rotDeg}deg, black 0%, black ${topSplit - f}%, rgba(0,0,0,0) ${topSplit + f}%, rgba(0,0,0,0) ${btmSplit - f}%, black ${btmSplit + f}%, black 100%)`
+                : `linear-gradient(${180 + rotDeg}deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) ${topSplit - f}%, black ${topSplit + f}%, black ${btmSplit - f}%, rgba(0,0,0,0) ${btmSplit + f}%, rgba(0,0,0,0) 100%)`;
+              webMaskStyle = {
+                WebkitMaskImage: grad,
+                maskImage: grad,
+              };
+            } else if (mask.shape === "heart" || mask.shape === "star") {
+              const svgData = mask.shape === "heart"
+                ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="black"/></svg>`
+                : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38" fill="black"/></svg>`;
+              const uri = `url("data:image/svg+xml;utf8,${encodeURIComponent(svgData)}")`;
+              webMaskStyle = {
+                WebkitMaskImage: uri,
+                maskImage: uri,
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: `${posX}% ${posY}%`,
+                maskPosition: `${posX}% ${posY}%`,
+                WebkitMaskSize: `${effW}% ${effH}%`,
+                maskSize: `${effW}% ${effH}%`,
+                transform: [{ rotate: `${rotDeg}deg` }],
+              };
             }
           }
         }
@@ -327,19 +416,43 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             }
           }
         } else if (isRecent) {
-          // Hold final frame for up to 0.25s after cut at zIndex: 4 beneath the new active clip (zIndex: 10)
-          // so there is never a blank gap or black flicker during hardware cut handoff
-          const recentProgress = Math.max(0, Math.min(1, (currentTime - (vid.startTime + vid.duration)) / 0.25));
-          effectiveOpacity = opacity * (1 - recentProgress);
+          // A clip that has finished must not render beyond its duration
+          effectiveOpacity = 0;
           isInteractive = false;
+        }
+
+        let vidAnimAlpha = 1.0;
+        let vidAnimScaleX = 1.0;
+        let vidAnimScaleY = 1.0;
+        let vidAnimOffsetX = 0;
+        let vidAnimOffsetY = 0;
+        let vidAnimRot = 0;
+        if (vid.animation && vid.animation !== "none") {
+          const vElapsed = Math.max(0, currentTime - (vid.startTime || 0));
+          const vDur = Math.max(0.1, vid.duration || 3.0);
+          const vEval = evaluateClipAnimation(
+            vid.animation,
+            vElapsed,
+            vDur,
+            w,
+            h,
+            1.0
+          );
+          vidAnimAlpha = vEval.alpha;
+          vidAnimScaleX = vEval.scaleX;
+          vidAnimScaleY = vEval.scaleY;
+          vidAnimOffsetX = vEval.offsetX;
+          vidAnimOffsetY = vEval.offsetY;
+          vidAnimRot = vEval.rotation;
         }
 
         const vidTrk = typeof vid.trackIndex === "number" ? vid.trackIndex : 0;
         const vidZ = vidTrk * 100 + (isInside ? 10 : isUpcoming ? 1 : 4);
         const vidElevation = Math.max(1, Math.floor(vidZ / 10));
 
-        const effScaleX = (vid.transform?.flipX ? -1 : 1) * (vid.transform?.scaleX ?? kfT?.scaleX ?? 1.0) * transScaleModifier;
-        const effScaleY = (vid.transform?.flipY ? -1 : 1) * (vid.transform?.scaleY ?? kfT?.scaleY ?? 1.0) * transScaleModifier;
+        effectiveOpacity *= vidAnimAlpha;
+        const effScaleX = (vid.transform?.flipX ? -1 : 1) * (vid.transform?.scaleX ?? kfT?.scaleX ?? 1.0) * transScaleModifier * vidAnimScaleX;
+        const effScaleY = (vid.transform?.flipY ? -1 : 1) * (vid.transform?.scaleY ?? kfT?.scaleY ?? 1.0) * transScaleModifier * vidAnimScaleY;
         const rotX = vid.transform?.rotateX ?? kfT?.rotateX ?? 0;
         const rotY = vid.transform?.rotateY ?? kfT?.rotateY ?? 0;
         const skewX = vid.transform?.skewX ?? kfT?.skewX ?? 0;
@@ -349,7 +462,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           { perspective: persp },
           { rotateX: `${rotX}deg` },
           { rotateY: `${rotY}deg` },
-          { rotate: `${effRot}deg` },
+          { rotate: `${effRot + vidAnimRot}deg` },
           ...(skewX !== 0 ? [{ skewX: `${skewX}deg` }] : []),
           { scaleX: effScaleX },
           { scaleY: effScaleY },
@@ -363,6 +476,18 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
           const croppedContainerW = Math.round(w * cropW);
           const croppedContainerH = Math.round(h * cropH);
 
+          const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
+          const webBlendStyle =
+            Platform.OS === "web" && blendMode !== "normal"
+              ? ({ mixBlendMode: blendMode } as any)
+              : undefined;
+
+          const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
+          const webBlurStyle =
+            Platform.OS === "web" && clipBlur > 0
+              ? ({ filter: `blur(${clipBlur}px)` } as any)
+              : undefined;
+
           return (
             <TouchableOpacity
               key={vid.id}
@@ -372,8 +497,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               style={[
                 {
                   position: "absolute",
-                  left: cx - croppedContainerW / 2 + transX,
-                  top: cy - croppedContainerH / 2 + transY,
+                  left: cx - croppedContainerW / 2 + transX + vidAnimOffsetX,
+                  top: cy - croppedContainerH / 2 + transY + vidAnimOffsetY,
                   width: croppedContainerW,
                   height: croppedContainerH,
                   overflow: "hidden",
@@ -384,6 +509,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                   transform: clipTransformArray,
                 },
                 webMaskStyle,
+                webBlendStyle,
+                webBlurStyle,
               ]}
             >
               <View
@@ -404,10 +531,23 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                   onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
                 />
                 {renderClipEnhanceOverlay(vid)}
+                {renderMosaicCensor(vid, w, h)}
               </View>
             </TouchableOpacity>
           );
         }
+
+        const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
+        const webBlendStyle =
+          Platform.OS === "web" && blendMode !== "normal"
+            ? ({ mixBlendMode: blendMode } as any)
+            : undefined;
+
+        const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
+        const webBlurStyle =
+          Platform.OS === "web" && clipBlur > 0
+            ? ({ filter: `blur(${clipBlur}px)` } as any)
+            : undefined;
 
         return (
           <TouchableOpacity
@@ -418,8 +558,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             style={[
               {
                 position: "absolute",
-                left: cx - w / 2 + transX,
-                top: cy - h / 2 + transY,
+                left: cx - w / 2 + transX + vidAnimOffsetX,
+                top: cy - h / 2 + transY + vidAnimOffsetY,
                 width: w,
                 height: h,
                 justifyContent: "center",
@@ -432,6 +572,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                 transform: clipTransformArray,
               },
               webMaskStyle,
+              webBlendStyle,
+              webBlurStyle,
             ]}
           >
             <NativeVideoClipPlayer
@@ -441,6 +583,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
             />
             {renderClipEnhanceOverlay(vid)}
+            {renderMosaicCensor(vid, w, h)}
           </TouchableOpacity>
         );
       });
@@ -459,104 +602,36 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
 
         const elapsed = Math.max(0, currentTime - (txt.startTime || 0));
         const duration = Math.max(0.5, txt.duration || 3.0);
-        const timeLeft = Math.max(0, duration - elapsed);
-        let animScale = 1.0;
-        let animAlpha = 1.0;
-        let animOffsetX = 0;
-        let animOffsetY = 0;
-        let displayText = txt.text || "";
-        const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
-        const introDur = Math.min(0.5, duration * 0.35);
-        const exitDur = Math.min(0.35, duration * 0.25);
+        const { baseW, baseH } = getItemBaseDimensions("text", txt);
+        const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
 
-        if (anim === "typewriter") {
-          const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
-          displayText = displayText.slice(0, chars);
-        } else if (anim === "bounce") {
-          if (elapsed < introDur) {
-            const p = elapsed / introDur;
-            animScale = 0.45 + Math.sin(p * Math.PI) * 0.75;
-            animAlpha = Math.min(1, p * 2);
-          }
-        } else if (anim === "fade" || anim === "fadein") {
-          if (elapsed < introDur) {
-            animAlpha = elapsed / introDur;
-          } else if (timeLeft < exitDur) {
-            animAlpha = timeLeft / exitDur;
-          }
-        } else if (anim === "slideup" || anim === "up") {
-          if (elapsed < introDur) {
-            const p = elapsed / introDur;
-            const easeOut = Math.sin((p * Math.PI) / 2);
-            animOffsetY = (1 - easeOut) * 45;
-            animAlpha = p;
-          } else if (timeLeft < exitDur) {
-            const p = 1 - (timeLeft / exitDur);
-            animOffsetY = -p * 25;
-            animAlpha = 1 - p;
-          }
-        } else if (anim === "slidedown" || anim === "down") {
-          if (elapsed < introDur) {
-            const p = elapsed / introDur;
-            const easeOut = Math.sin((p * Math.PI) / 2);
-            animOffsetY = -(1 - easeOut) * 45;
-            animAlpha = p;
-          } else if (timeLeft < exitDur) {
-            const p = 1 - (timeLeft / exitDur);
-            animOffsetY = p * 25;
-            animAlpha = 1 - p;
-          }
-        } else if (anim === "slide" || anim === "slideleft") {
-          if (elapsed < introDur) {
-            const p = elapsed / introDur;
-            const easeOut = Math.sin((p * Math.PI) / 2);
-            animOffsetX = (1 - easeOut) * 60;
-            animAlpha = p;
-          } else if (timeLeft < exitDur) {
-            const p = 1 - (timeLeft / exitDur);
-            animOffsetX = -p * 35;
-            animAlpha = 1 - p;
-          }
-        } else if (anim === "slideright") {
-          if (elapsed < introDur) {
-            const p = elapsed / introDur;
-            const easeOut = Math.sin((p * Math.PI) / 2);
-            animOffsetX = -(1 - easeOut) * 60;
-            animAlpha = p;
-          } else if (timeLeft < exitDur) {
-            const p = 1 - (timeLeft / exitDur);
-            animOffsetX = p * 35;
-            animAlpha = 1 - p;
-          }
-        } else if (anim === "zoomin" || anim === "zoom") {
-          if (elapsed < introDur) {
-            const p = elapsed / introDur;
-            const easeOut = Math.sin((p * Math.PI) / 2);
-            animScale = 0.35 + easeOut * 0.75;
-            animAlpha = p;
-          } else if (timeLeft < exitDur) {
-            const p = 1 - (timeLeft / exitDur);
-            animScale = 1.0 + p * 0.25;
-            animAlpha = 1 - p;
-          }
-        } else if (anim === "pulse") {
-          animScale = 1.0 + Math.sin(elapsed * 6) * 0.08;
-        } else if (anim === "shake") {
-          if (elapsed < 0.8) {
-            animOffsetX = Math.sin(elapsed * 40) * 4;
-          }
-        } else if (anim === "wave") {
-          animOffsetY = Math.sin(elapsed * 4) * 6;
-        }
+        const animEval = evaluateClipAnimation(
+          txt.animation,
+          elapsed,
+          duration,
+          baseW,
+          baseH,
+          previewScale,
+          txt.text || ""
+        );
+        const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+        const animAlpha = animEval.alpha;
+        const animOffsetX = animEval.offsetX;
+        const animOffsetY = animEval.offsetY;
+        const animRot = animEval.rotation;
+        const displayText = animEval.displayText ?? (txt.text || "");
 
         let motionX = 0;
         let motionY = 0;
         let motionScale = 1.0;
         let motionRot = 0;
-        if (txt.motionTrack && txt.motionTrack.enabled) {
-          const motion = applyMotionTracking(currentTime, txt.startTime, txt.duration, txt.motionTrack);
-          motionX = motion.dx;
-          motionY = motion.dy;
+        const effectiveTrack = (txt.motionTrack && txt.motionTrack.enabled)
+          ? txt.motionTrack
+          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === txt.id)?.motionTrack;
+        if (effectiveTrack && effectiveTrack.enabled) {
+          const motion = applyMotionTracking(currentTime, txt.startTime, txt.duration, effectiveTrack);
+          motionX = (motion.dx / 100) * boxWidth;
+          motionY = (motion.dy / 100) * canvasHeight;
           motionScale = motion.dScale;
           motionRot = motion.dRot;
         }
@@ -565,9 +640,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
         const cx = (effX / 100) * boxWidth + animOffsetX + motionX;
         const cy = (effY / 100) * canvasHeight + animOffsetY + motionY;
-        const effRot = rot + motionRot;
-        const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
-        const { baseW, baseH } = getItemBaseDimensions("text", txt);
+        const effRot = rot + motionRot + animRot;
         const w = Math.round(baseW * s);
         const h = Math.round(baseH * s);
         const fontSize = txt.style?.fontSize || 22;
@@ -592,17 +665,22 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             onPress={() => onSelectClip?.(txt.id, "text")}
             style={{
               position: "absolute",
-              left: cx - w / 2,
-              top: cy - h / 2,
+              left: 0,
+              top: 0,
               width: w,
-              minHeight: h,
+              height: h,
               maxWidth: boxWidth * 0.9,
               alignItems: "center",
               justifyContent: "center",
+              overflow: "hidden",
               opacity,
               zIndex: txtZ,
               elevation: txtElevation,
-              transform: [{ rotate: `${effRot}deg` }],
+              transform: [
+                { translateX: cx - w / 2 },
+                { translateY: cy - h / 2 },
+                { rotate: `${effRot}deg` },
+              ],
             }}
           >
             <Text
@@ -653,17 +731,24 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
 
         const elapsed = Math.max(0, currentTime - cap.startTime);
         const duration = Math.max(0.5, cap.duration || 2.0);
-        const anim = (cap.animation || "none").toLowerCase();
+        const { baseW, baseH } = getItemBaseDimensions("caption", cap);
+        const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
 
-        let animScale = 1.0;
-        let animAlpha = 1.0;
-        if (anim === "bounce" && elapsed < 0.35) {
-          const p = elapsed / 0.35;
-          animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
-        } else if (anim === "zoomin" && elapsed < 0.3) {
-          const p = elapsed / 0.3;
-          animScale = 0.4 + p * 0.6;
-        }
+        const animEval = evaluateClipAnimation(
+          cap.animation,
+          elapsed,
+          duration,
+          baseW,
+          baseH,
+          previewScale,
+          cap.text || ""
+        );
+        const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+        const animAlpha = animEval.alpha;
+        const animOffsetX = animEval.offsetX;
+        const animOffsetY = animEval.offsetY;
+        const animRot = animEval.rotation;
+        const displayCapText = animEval.displayText ?? (cap.text || "");
 
         let motionX = 0;
         let motionY = 0;
@@ -684,11 +769,9 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
 
         const s = baseS * animScale * motionScale;
         const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
-        const cx = (effX / 100) * boxWidth + motionX;
-        const cy = (effY / 100) * canvasHeight + motionY;
-        const effRot = rot + motionRot;
-        const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
-        const { baseW, baseH } = getItemBaseDimensions("caption", cap);
+        const cx = (effX / 100) * boxWidth + animOffsetX + motionX;
+        const cy = (effY / 100) * canvasHeight + animOffsetY + motionY;
+        const effRot = rot + motionRot + animRot;
         const w = Math.round(baseW * s);
         const h = Math.round(baseH * s);
         const fontSize = cap.style?.fontSize || 24;
@@ -713,17 +796,22 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             onPress={() => onSelectClip?.(cap.id, "caption")}
             style={{
               position: "absolute",
-              left: cx - w / 2,
-              top: cy - h / 2,
+              left: 0,
+              top: 0,
               width: w,
-              minHeight: h,
+              height: h,
               maxWidth: boxWidth * 0.9,
               alignItems: "center",
               justifyContent: "center",
+              overflow: "hidden",
               opacity,
               zIndex: capZ,
               elevation: capElevation,
-              transform: [{ rotate: `${effRot}deg` }],
+              transform: [
+                { translateX: cx - w / 2 },
+                { translateY: cy - h / 2 },
+                { rotate: `${effRot}deg` },
+              ],
             }}
           >
             <Text
@@ -755,7 +843,7 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
                 },
               ]}
             >
-              {cap.text}
+              {displayCapText}
             </Text>
           </TouchableOpacity>
         );
@@ -776,42 +864,41 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         let motionY = 0;
         let motionScale = 1.0;
         let motionRot = 0;
-        if (stk.motionTrack && stk.motionTrack.enabled) {
-          const motion = applyMotionTracking(currentTime, stk.startTime, stk.duration, stk.motionTrack);
-          motionX = motion.dx;
-          motionY = motion.dy;
+        const effectiveTrack = (stk.motionTrack && stk.motionTrack.enabled)
+          ? stk.motionTrack
+          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === stk.id)?.motionTrack;
+        if (effectiveTrack && effectiveTrack.enabled) {
+          const motion = applyMotionTracking(currentTime, stk.startTime, stk.duration, effectiveTrack);
+          motionX = (motion.dx / 100) * boxWidth;
+          motionY = (motion.dy / 100) * canvasHeight;
           motionScale = motion.dScale;
           motionRot = motion.dRot;
         }
 
         const elapsed = Math.max(0, currentTime - (stk.startTime || 0));
-        let animScale = 1.0;
-        let animAlpha = 1.0;
-        let animOffsetY = 0;
-        const anim = stk.animation || "none";
+        const duration = Math.max(0.5, stk.duration || 3.0);
+        const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
+        const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
 
-        if (anim === "bounce") {
-          animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;
-        } else if (anim === "pulse") {
-          animScale = 1.0 + Math.sin(elapsed * 6) * 0.1;
-        } else if (anim === "wave") {
-          animOffsetY = Math.sin(elapsed * 4) * 8;
-        } else if (anim === "fade") {
-          if (elapsed < 0.35) animAlpha = elapsed / 0.35;
-        } else if (anim === "pop") {
-          if (elapsed < 0.3) {
-            const p = elapsed / 0.3;
-            animScale = 0.3 + p * 0.85;
-            animAlpha = p;
-          }
-        } // if "none", animScale stays 1.0 without bounce
+        const animEval = evaluateClipAnimation(
+          stk.animation,
+          elapsed,
+          duration,
+          baseW,
+          baseH,
+          previewScale
+        );
+        const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+        const animAlpha = animEval.alpha;
+        const animOffsetX = animEval.offsetX;
+        const animOffsetY = animEval.offsetY;
+        const animRot = animEval.rotation;
 
         const s = baseS * animScale * motionScale;
         const opacity = Math.max(0, Math.min(1, baseOpacity * animAlpha));
-        const cx = (effX / 100) * boxWidth + motionX;
+        const cx = (effX / 100) * boxWidth + animOffsetX + motionX;
         const cy = (effY / 100) * canvasHeight + animOffsetY + motionY;
-        const effRot = rot + motionRot;
-        const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
+        const effRot = rot + motionRot + animRot;
         const w = Math.round(baseW * s);
         const h = Math.round(baseH * s);
         const isBadge = (stk.char || "").length > 2;
@@ -819,7 +906,6 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
         const stkZ = stkTrk * 100 + 25;
         const stkElevation = Math.max(1, Math.floor(stkZ / 10));
 
-        const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
         return (
           <TouchableOpacity
             key={stk.id}
@@ -827,8 +913,8 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
             onPress={() => onSelectClip?.(stk.id, "sticker")}
             style={{
               position: "absolute",
-              left: cx - w / 2,
-              top: cy - h / 2,
+              left: 0,
+              top: 0,
               width: w,
               height: h,
               alignItems: "center",
@@ -836,7 +922,11 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
               opacity,
               zIndex: stkZ,
               elevation: stkElevation,
-              transform: [{ rotate: `${effRot}deg` }],
+              transform: [
+                { translateX: cx - w / 2 },
+                { translateY: cy - h / 2 },
+                { rotate: `${effRot}deg` },
+              ],
             }}
           >
             <Text
@@ -1449,4 +1539,5 @@ export const PlayerNativeCompositor: React.FC<PlayerNativeCompositorProps> = ({
   );
 };
 
-export default React.memo(PlayerNativeCompositor);
+export const PlayerNativeCompositor = React.memo(PlayerNativeCompositorComponent);
+export default PlayerNativeCompositor;

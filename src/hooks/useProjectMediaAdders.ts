@@ -12,6 +12,7 @@ import { addNotification } from "../utils/storage";
 import { allocateClipPlacement, doesClipOverlap, allocateNewTrackForClip } from "../utils/trackPlacement";
 import { useProjectFilterEffects } from "./useProjectFilterEffects";
 import { extractRealMediaAudioPeaks } from "../utils/mediaAudioDetector";
+import { requestMediaThumbnail } from "../utils/mediaThumbnailGenerator";
 
 interface UseProjectMediaAddersParams {
   project: FastArtProject | null;
@@ -52,6 +53,9 @@ export function useProjectMediaAdders({
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    handleApplyBlendMode,
+    handleApplyHSL,
+    handleApplyVoiceEffect,
     isProcessing,
     processingMessage,
     startProcessing,
@@ -158,17 +162,52 @@ export function useProjectMediaAdders({
     (updatedClip: EffectClip) => {
       const current = projectRef.current || project;
       if (!current) return;
+      const isNone = !updatedClip.type || updatedClip.type === "none" || updatedClip.type === "None";
+
       const list = [...(current.tracks.effects || [])];
       const idx = list.findIndex((c) => c.id === updatedClip.id);
       if (idx >= 0) {
-        list[idx] = { ...list[idx], ...updatedClip };
+        if (isNone) {
+          list.splice(idx, 1);
+        } else {
+          list[idx] = { ...list[idx], ...updatedClip };
+        }
         updateProjectWithHistory({
           ...current,
           tracks: { ...current.tracks, effects: list },
         });
+        if (isNone && selectedClipId === updatedClip.id) {
+          setSelectedClipId(null);
+          setSelectedClipType("");
+        }
+        return;
+      }
+
+      // Also if a video clip is currently selected, update or remove its effect
+      if (selectedClipId && selectedClipType === "video") {
+        const videoClips = [...(current.tracks.video || [])];
+        const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
+        if (vIdx >= 0) {
+          if (isNone) {
+            const clean = { ...videoClips[vIdx] };
+            delete (clean as any).effect;
+            delete (clean as any).effectIntensity;
+            videoClips[vIdx] = clean;
+          } else {
+            videoClips[vIdx] = {
+              ...videoClips[vIdx],
+              effect: updatedClip.type,
+              effectIntensity: updatedClip.intensity ?? 0.8,
+            };
+          }
+          updateProjectWithHistory({
+            ...current,
+            tracks: { ...current.tracks, video: videoClips },
+          });
+        }
       }
     },
-    [project, projectRef, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
   );
 
   // Add new media clip
@@ -232,6 +271,7 @@ export function useProjectMediaAdders({
 
       if (newClip.url && newClip.type !== "photo") {
         extractRealMediaAudioPeaks(newClip.url, newClip.id);
+        requestMediaThumbnail(newClip);
       }
     },
     [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
@@ -405,20 +445,27 @@ export function useProjectMediaAdders({
       const current = projectRef.current || project;
       if (!current) return;
 
-      const effType = typeof preset === "string" ? preset : (preset.type || preset.id);
-      const effInt = typeof preset === "object" && preset.intensity !== undefined ? preset.intensity : 0.8;
+      const effType = typeof preset === "string" ? preset : (preset?.type || preset?.id);
+      const isNone = !effType || effType === "none" || effType === "None";
+      const effInt = typeof preset === "object" && preset?.intensity !== undefined ? preset.intensity : 0.8;
 
       // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the effect to that clip!
       if (selectedClipId && selectedClipType === "video") {
         const videoClips = [...(current.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
-          const isNone = effType === "none";
-          videoClips[idx] = {
-            ...videoClips[idx],
-            effect: isNone ? undefined : effType,
-            effectIntensity: isNone ? undefined : effInt,
-          };
+          if (isNone) {
+            const clean = { ...videoClips[idx] };
+            delete (clean as any).effect;
+            delete (clean as any).effectIntensity;
+            videoClips[idx] = clean;
+          } else {
+            videoClips[idx] = {
+              ...videoClips[idx],
+              effect: effType,
+              effectIntensity: effInt,
+            };
+          }
           updateProjectWithHistory({
             ...current,
             tracks: { ...current.tracks, video: videoClips },
@@ -437,7 +484,7 @@ export function useProjectMediaAdders({
         const effectClips = [...(current.tracks.effects || [])];
         const idx = effectClips.findIndex((e) => e.id === selectedClipId);
         if (idx >= 0) {
-          if (effType === "none") {
+          if (isNone) {
             effectClips.splice(idx, 1);
             updateProjectWithHistory({
               ...current,
@@ -449,7 +496,7 @@ export function useProjectMediaAdders({
             effectClips[idx] = {
               ...effectClips[idx],
               type: effType,
-              name: preset.name || "Effect",
+              name: preset?.name || effType || "Effect",
               intensity: effInt,
             };
             updateProjectWithHistory({
@@ -462,7 +509,7 @@ export function useProjectMediaAdders({
       }
 
       // 3. GLOBAL: Create timeline effect clip!
-      if (effType === "none") return;
+      if (isNone) return;
 
       const dur = preset.duration || 3.0;
       const desiredStart = currentTime || 0;
@@ -523,6 +570,9 @@ export function useProjectMediaAdders({
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    handleApplyBlendMode,
+    handleApplyHSL,
+    handleApplyVoiceEffect,
     handleAddCaptions,
     isProcessing,
     processingMessage,

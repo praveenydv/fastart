@@ -12,22 +12,27 @@ export function setCachedMediaDuration(key: string, duration: number): void {
   globalMediaDurationCache.set(key, duration);
 }
 
+const inFlightProbes = new Set<string>();
+
 // Probe video/audio metadata asynchronously in Web environment and cache it
 export function probeAndCacheMediaDuration(url: string, id?: string, isAudio = false): void {
   if (typeof window === "undefined" || !url) return;
-  if (globalMediaDurationCache.has(url)) return;
+  if (globalMediaDurationCache.has(url) || inFlightProbes.has(url)) return;
+  inFlightProbes.add(url);
 
   try {
     if (isAudio) {
       const audio = new Audio();
       audio.preload = "metadata";
       const onMeta = () => {
+        inFlightProbes.delete(url);
         if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
           globalMediaDurationCache.set(url, audio.duration);
           if (id) globalMediaDurationCache.set(id, audio.duration);
         }
       };
       audio.onloadedmetadata = onMeta;
+      audio.onerror = () => inFlightProbes.delete(url);
       audio.src = url;
       if (audio.readyState >= 1 && audio.duration) {
         onMeta();
@@ -38,18 +43,21 @@ export function probeAndCacheMediaDuration(url: string, id?: string, isAudio = f
       video.muted = true;
       video.playsInline = true;
       const onMeta = () => {
+        inFlightProbes.delete(url);
         if (video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 0) {
           globalMediaDurationCache.set(url, video.duration);
           if (id) globalMediaDurationCache.set(id, video.duration);
         }
       };
       video.onloadedmetadata = onMeta;
+      video.onerror = () => inFlightProbes.delete(url);
       video.src = url;
       if (video.readyState >= 1 && video.duration) {
         onMeta();
       }
     }
   } catch (e) {
+    inFlightProbes.delete(url);
     // Probing errors are non-fatal
   }
 }
@@ -325,10 +333,14 @@ export function clampClipTrimUpdates(
     clamped.startTime = Math.max(0, clamped.startTime);
   }
 
+  const rawClip = clip.rawClip || clip;
+  const minAllowedTrimIn = typeof rawClip.minTrimIn === "number" ? rawClip.minTrimIn : 0;
+
   // Photos, images, text, stickers, captions, effects have NO native media limit - allow extending freely!
   if (isExtendableClip(clip, clipType)) {
+    const maxDur = typeof rawClip.maxDuration === "number" ? rawClip.maxDuration : Infinity;
     if (typeof clamped.duration === "number") {
-      clamped.duration = Math.max(minDuration, clamped.duration);
+      clamped.duration = Math.max(minDuration, Math.min(maxDur, clamped.duration));
     }
     if (typeof clamped.trimOut === "number") {
       clamped.trimOut = Math.max(minDuration, clamped.trimOut);
@@ -337,26 +349,35 @@ export function clampClipTrimUpdates(
   }
 
   const mediaDur = getMediaDuration(clip, clipType);
+  const maxAllowedTrimOut = typeof rawClip.maxTrimOut === "number"
+    ? (mediaDur !== null && mediaDur > 0 ? Math.min(mediaDur, rawClip.maxTrimOut) : rawClip.maxTrimOut)
+    : (mediaDur ?? Infinity);
 
-  // If photo or text, only clamp min duration
+  // If photo or text without media duration, only clamp min and max duration
   if (!mediaDur || mediaDur <= 0) {
+    const maxDur = typeof rawClip.maxDuration === "number" ? rawClip.maxDuration : Infinity;
     if (typeof clamped.duration === "number") {
-      clamped.duration = Math.max(minDuration, clamped.duration);
+      clamped.duration = Math.max(minDuration, Math.min(maxDur, clamped.duration));
     }
     return clamped;
   }
 
-  const rawClip = clip.rawClip || clip;
   const speed = Math.max(0.1, Math.min(16, rawClip.speed || clip.speed || 1.0));
-  const currentTrimIn = typeof clamped.trimIn === "number" ? clamped.trimIn : Math.max(0, rawClip.trimIn || clip.trimIn || 0);
+  const currentTrimIn = typeof clamped.trimIn === "number"
+    ? clamped.trimIn
+    : Math.max(minAllowedTrimIn, rawClip.trimIn || clip.trimIn || 0);
 
-  // 1. Clamp trimIn to never go before start of media (>= 0)
+  // 1. Clamp trimIn to never go before minAllowedTrimIn (>= minAllowedTrimIn)
   if (typeof clamped.trimIn === "number") {
-    clamped.trimIn = Math.max(0, Math.min(mediaDur - minDuration * speed, clamped.trimIn));
+    clamped.trimIn = Math.max(minAllowedTrimIn, Math.min(maxAllowedTrimOut - minDuration * speed, clamped.trimIn));
   }
 
   // 2. Maximum timeline duration possible from currentTrimIn
-  const maxAllowedTimelineDur = Math.max(minDuration, (mediaDur - currentTrimIn) / speed);
+  const maxDurationFromLimits = typeof rawClip.maxDuration === "number" ? rawClip.maxDuration : Infinity;
+  const maxAllowedTimelineDur = Math.min(
+    maxDurationFromLimits,
+    Math.max(minDuration, (maxAllowedTrimOut - currentTrimIn) / speed),
+  );
 
   // 3. Clamp duration
   if (typeof clamped.duration === "number") {
@@ -365,9 +386,9 @@ export function clampClipTrimUpdates(
 
   // 4. Clamp trimOut
   if (typeof clamped.trimOut === "number") {
-    clamped.trimOut = Math.max(currentTrimIn + minDuration * speed, Math.min(mediaDur, clamped.trimOut));
+    clamped.trimOut = Math.max(currentTrimIn + minDuration * speed, Math.min(maxAllowedTrimOut, clamped.trimOut));
   } else if (typeof clamped.duration === "number") {
-    clamped.trimOut = Math.min(mediaDur, currentTrimIn + clamped.duration * speed);
+    clamped.trimOut = Math.min(maxAllowedTrimOut, currentTrimIn + clamped.duration * speed);
   }
 
   return clamped;

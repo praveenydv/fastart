@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
+import { THEME_COLORS, DESIGN_CONSTANTS } from '../../constants/designConstants';
 
 export interface DesktopLeftSidebarProps {
   activeTab: string; // 'media' | 'audio' | activeModal
@@ -63,7 +64,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               <Ionicons
                 name={item.icon as any}
                 size={20}
-                color={isActive ? '#00F2FE' : '#8E95A5'}
+                color={isActive ? THEME_COLORS.accent : THEME_COLORS.textMuted}
               />
               <Text
                 style={[styles.btnLabel, isActive && styles.btnLabelActive]}
@@ -91,7 +92,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
                 activeOpacity={0.7}
                 accessibilityLabel="Split clip"
               >
-                <Ionicons name="cut-outline" size={18} color="#E4E4E7" />
+                <Ionicons name="cut-outline" size={18} color={THEME_COLORS.textPrimary} />
                 <Text style={styles.clipActionText}>Split</Text>
               </TouchableOpacity>
             )}
@@ -106,7 +107,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
                 activeOpacity={0.7}
                 accessibilityLabel="Copy clip"
               >
-                <Ionicons name="copy-outline" size={18} color="#E4E4E7" />
+                <Ionicons name="copy-outline" size={18} color={THEME_COLORS.textPrimary} />
                 <Text style={styles.clipActionText}>Copy</Text>
               </TouchableOpacity>
             )}
@@ -121,7 +122,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
                 activeOpacity={0.7}
                 accessibilityLabel="Rotate clip"
               >
-                <Ionicons name="reload-outline" size={18} color="#E4E4E7" />
+                <Ionicons name="reload-outline" size={18} color={THEME_COLORS.textPrimary} />
                 <Text style={styles.clipActionText}>Rotate</Text>
               </TouchableOpacity>
             )}
@@ -136,8 +137,8 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
                 activeOpacity={0.7}
                 accessibilityLabel="Delete clip"
               >
-                <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                <Text style={[styles.clipActionText, { color: '#EF4444' }]}>Delete</Text>
+                <Ionicons name="trash-outline" size={18} color={THEME_COLORS.error} />
+                <Text style={[styles.clipActionText, { color: THEME_COLORS.error }]}>Delete</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -149,21 +150,21 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    width: 50,
-    backgroundColor: '#08090E',
+    width: DESIGN_CONSTANTS.DIMENSIONS.desktopSidebarWidth,
+    backgroundColor: THEME_COLORS.surface,
     borderRightWidth: 1,
-    borderRightColor: '#1F2637',
+    borderRightColor: THEME_COLORS.borderSubtle,
     height: '100%',
     zIndex: 20,
   },
   scrollContent: {
-    paddingVertical: 4,
+    paddingVertical: 6,
     alignItems: 'center',
     gap: 2,
   },
   sidebarBtn: {
-    width: 44,
-    height: 38,
+    width: 52,
+    height: 42,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
@@ -171,26 +172,26 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   sidebarBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    backgroundColor: THEME_COLORS.cyanBg,
   },
   activeBar: {
     position: 'absolute',
     left: 2,
-    top: 6,
-    bottom: 6,
+    top: 8,
+    bottom: 8,
     width: 2.5,
     borderRadius: 1.5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: THEME_COLORS.accent,
   },
   btnLabel: {
-    color: '#64748B',
-    fontSize: 8,
+    color: THEME_COLORS.textMuted,
+    fontSize: 9,
     fontWeight: '600',
-    marginTop: 1,
+    marginTop: 2,
     letterSpacing: 0.1,
   },
   btnLabelActive: {
-    color: '#00F2FE',
+    color: THEME_COLORS.accent,
     fontWeight: '700',
   },
   clipSection: {
@@ -200,33 +201,33 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   divider: {
-    width: 32,
+    width: 36,
     height: 1,
-    backgroundColor: '#1F2637',
+    backgroundColor: THEME_COLORS.borderSubtle,
     marginBottom: 4,
   },
   sectionHeader: {
-    color: '#64748B',
+    color: THEME_COLORS.textMuted,
     fontSize: 7.5,
     fontWeight: '800',
     letterSpacing: 1,
     marginBottom: 2,
   },
   clipActionBtn: {
-    width: 44,
-    height: 34,
+    width: 50,
+    height: 36,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
   },
   clipActionText: {
-    color: '#94A3B8',
+    color: THEME_COLORS.textMuted,
     fontSize: 8,
     fontWeight: '600',
     marginTop: 1,
   },
   deleteBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
   },
 });

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
+import { CompactSliderInput } from "../Common/CompactSliderInput";
 
 interface VolumeModalProps {
   visible: boolean;
@@ -176,44 +177,20 @@ export default function VolumeModal({
             <Text style={styles.valueBadge}>{Math.round(volume * 100)}%</Text>
           </View>
 
-          {/* Slider for Web / Mobile */}
-          {Platform.OS === "web" ? (
-            <WebDiv style={{ margin: "10px 0 8px" }}>
-              <WebInput
-                type="range"
-                min="0"
-                max="2"
-                step="0.05"
-                value={volume}
-                onChange={(e: any) =>
-                  handleVolumeChange(parseFloat(e.target.value))
-                }
-                style={{
-                  width: "100%",
-                  accentColor: "#FFFFFF",
-                  height: 6,
-                  borderRadius: 3,
-                  cursor: "pointer",
-                }}
-              />
-            </WebDiv>
-          ) : (
-            <View style={styles.stepperRow}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => handleVolumeChange(volume - 0.1)}
-              >
-                <Ionicons name="remove" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.stepperVal}>{Math.round(volume * 100)}%</Text>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => handleVolumeChange(volume + 0.1)}
-              >
-                <Ionicons name="add" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          )}
+          {/* Slider for Web / Mobile with Small Text Input */}
+          <View style={{ marginVertical: 8 }}>
+            <CompactSliderInput
+              label="Audio Level"
+              value={Math.round(volume * 100)}
+              min={0}
+              max={200}
+              step={1}
+              unit="%"
+              defaultValue={100}
+              accentColor="#00E5C9"
+              onChange={(val) => handleVolumeChange(val / 100)}
+            />
+          </View>
 
           {/* Preset Buttons */}
           <View style={styles.presetsGrid}>
@@ -255,93 +232,37 @@ export default function VolumeModal({
           <Text style={styles.sectionTitle}>Fades</Text>
 
           {/* Fade In */}
-          <View style={styles.fadeRow}>
-            <View style={styles.fadeLabelBox}>
-              <Ionicons name="trending-up" size={15} color="#10B981" />
-              <Text style={styles.fadeLabel}>Fade In</Text>
-            </View>
-            <Text style={styles.fadeValText}>{fadeIn.toFixed(1)}s</Text>
-            {Platform.OS === "web" ? (
-              <WebDiv style={{ flex: 1, margin: "0 10px" }}>
-                <WebInput
-                  type="range"
-                  min="0"
-                  max="5"
-                  step="0.2"
-                  value={fadeIn}
-                  onChange={(e: any) =>
-                    handleFadeInChange(parseFloat(e.target.value))
-                  }
-                  style={{
-                    width: "100%",
-                    accentColor: "#10B981",
-                    height: 5,
-                    borderRadius: 3,
-                    cursor: "pointer",
-                  }}
-                />
-              </WebDiv>
-            ) : (
-              <View style={styles.fadeStepperRow}>
-                <TouchableOpacity
-                  style={styles.stepBtnSmall}
-                  onPress={() => handleFadeInChange(fadeIn - 0.2)}
-                >
-                  <Ionicons name="remove" size={13} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtnSmall}
-                  onPress={() => handleFadeInChange(fadeIn + 0.2)}
-                >
-                  <Ionicons name="add" size={13} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            )}
+          <View style={{ marginVertical: 4 }}>
+            <CompactSliderInput
+              label="Fade In"
+              icon={<Ionicons name="trending-up" size={14} color="#10B981" />}
+              value={parseFloat(fadeIn.toFixed(1))}
+              min={0}
+              max={5}
+              step={0.1}
+              unit="s"
+              decimals={1}
+              defaultValue={0}
+              accentColor="#10B981"
+              onChange={(val) => handleFadeInChange(val)}
+            />
           </View>
 
           {/* Fade Out */}
-          <View style={styles.fadeRow}>
-            <View style={styles.fadeLabelBox}>
-              <Ionicons name="trending-down" size={15} color="#F59E0B" />
-              <Text style={styles.fadeLabel}>Fade Out</Text>
-            </View>
-            <Text style={styles.fadeValText}>{fadeOut.toFixed(1)}s</Text>
-            {Platform.OS === "web" ? (
-              <WebDiv style={{ flex: 1, margin: "0 10px" }}>
-                <WebInput
-                  type="range"
-                  min="0"
-                  max="5"
-                  step="0.2"
-                  value={fadeOut}
-                  onChange={(e: any) =>
-                    handleFadeOutChange(parseFloat(e.target.value))
-                  }
-                  style={{
-                    width: "100%",
-                    accentColor: "#F59E0B",
-                    height: 5,
-                    borderRadius: 3,
-                    cursor: "pointer",
-                  }}
-                />
-              </WebDiv>
-            ) : (
-              <View style={styles.fadeStepperRow}>
-                <TouchableOpacity
-                  style={styles.stepBtnSmall}
-                  onPress={() => handleFadeOutChange(fadeOut - 0.2)}
-                >
-                  <Ionicons name="remove" size={13} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtnSmall}
-                  onPress={() => handleFadeOutChange(fadeOut + 0.2)}
-                >
-                  <Ionicons name="add" size={13} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            )}
+          <View style={{ marginVertical: 4 }}>
+            <CompactSliderInput
+              label="Fade Out"
+              icon={<Ionicons name="trending-down" size={14} color="#F59E0B" />}
+              value={parseFloat(fadeOut.toFixed(1))}
+              min={0}
+              max={5}
+              step={0.1}
+              unit="s"
+              decimals={1}
+              defaultValue={0}
+              accentColor="#F59E0B"
+              onChange={(val) => handleFadeOutChange(val)}
+            />
           </View>
 
           {/* AI Audio Denoise Card */}

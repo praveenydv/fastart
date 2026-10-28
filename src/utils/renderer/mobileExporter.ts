@@ -2158,7 +2158,10 @@ export function getMobileFrameStateKey(project: FastArtProject, time: number): s
       const elapsed = time - txt.startTime;
       const duration = Math.max(0.5, txt.duration || 3.0);
       const introDur = Math.min(0.5, duration * 0.35);
-      const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
+      const animStr = typeof txt.animation === "string"
+        ? txt.animation
+        : (txt.animation?.preset || txt.animation?.inPreset || "none");
+      const anim = animStr.toLowerCase().replace(/[-_]/g, "");
       if (anim !== "none" && elapsed < introDur) {
         key += `t:${txt.id}_${Math.floor(elapsed * 12)}`;
       } else {
@@ -2330,10 +2333,10 @@ export function renderMobileProjectFrame(
       let motionX = 0;
       let motionY = 0;
       let motionScale = 1.0;
-      if (vid.motionTrack && vid.motionTrack.enabled) {
+      if (vid.motionTrack && vid.motionTrack.enabled && vid.motionTrack.actionType === 'camera_center') {
         const motion = applyMotionTracking(time, vid.startTime, vid.duration, vid.motionTrack);
-        motionX = motion.dx;
-        motionY = motion.dy;
+        motionX = (motion.dx / 100) * canvasW;
+        motionY = (motion.dy / 100) * canvasH;
         motionScale = motion.dScale;
       }
 
@@ -2451,7 +2454,10 @@ export function renderMobileProjectFrame(
       let animScale = 1.0;
       let animOffsetY = 0;
       let animOffsetX = 0;
-      const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
+      const animStr = typeof txt.animation === "string"
+        ? txt.animation
+        : (txt.animation?.preset || txt.animation?.inPreset || "none");
+      const anim = animStr.toLowerCase().replace(/[-_]/g, "");
       const introDur = Math.min(0.5, duration * 0.35);
 
       if (anim === "bounce" && elapsed < introDur) {

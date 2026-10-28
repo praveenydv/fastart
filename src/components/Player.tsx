@@ -17,6 +17,7 @@ import { PlayerControlsBar } from "./Player/PlayerControlsBar";
 import { PlayerCropBar } from "./Player/PlayerCropBar";
 import { PlayerCropOverlay } from "./Player/PlayerCropOverlay";
 import { PlayerMaskOverlay } from "./Player/PlayerMaskOverlay";
+import { PlayerTrackingReticle } from "./Player/PlayerTrackingReticle";
 import { PlayerNativeCompositor } from "./Player/PlayerNativeCompositor";
 import { PlayerTransformOverlay } from "./Player/PlayerTransformOverlay";
 import { usePlayerCropGestures } from "./Player/usePlayerCropGestures";
@@ -25,6 +26,7 @@ import { usePlayerViewport } from "./Player/usePlayerViewport";
 import { usePlayerWebRenderer } from "./Player/usePlayerWebRenderer";
 import { usePlayerAudioSync } from "./Player/usePlayerAudioSync";
 import { useActiveTransformItem } from "./Player/useActiveTransformItem";
+import { THEME_COLORS } from "../constants/designConstants";
 
 function Player({
   project,
@@ -44,6 +46,7 @@ function Player({
   onOpenEditModal,
   onOpenCropModal,
   onOpenMaskModal,
+  onOpenAnimationModal,
   onDeleteClip,
   onDuplicateClip,
   onSplitClip,
@@ -57,6 +60,8 @@ function Player({
   onUpdateClipMask,
   isProcessing,
   processingMessage,
+  activeModal,
+  onUpdateClipMotionTrack,
 }: PlayerProps) {
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const [internalMaskingMode, setInternalMaskingMode] = useState(false);
@@ -180,28 +185,44 @@ function Player({
     [project.tracks.stickers, currentTime],
   );
   // Visible active videos (strictly within active playback interval, used for transform & overlays)
-  const activeVideos = useMemo(
-    () =>
-      (project.tracks.video || []).filter(
-        (v) =>
-          currentTime >= v.startTime && currentTime <= v.startTime + v.duration,
-      ),
-    [project.tracks.video, currentTime],
-  );
+  const activeVideos = useMemo(() => {
+    const vids = project.tracks.video || [];
+    return vids.filter((v) => {
+      const start = v.startTime;
+      const end = v.startTime + v.duration;
+      // If another clip on the same track begins at this clip's end, make end boundary exclusive
+      const hasAdjacentNext = vids.some(
+        (other) =>
+          other.id !== v.id &&
+          (other.trackIndex || 0) === (v.trackIndex || 0) &&
+          Math.abs(other.startTime - end) < 0.01,
+      );
+      if (hasAdjacentNext) {
+        return currentTime >= start && currentTime < end;
+      }
+      return currentTime >= start && currentTime <= end;
+    });
+  }, [project.tracks.video, currentTime]);
 
-  // Buffered native videos: includes 1.5s lookahead pre-warming and 0.25s tail-hold for seamless cuts
+  // Buffered native videos: includes 1.5s lookahead pre-warming without overlapping adjacent cut clips
   const bufferedNativeVideos = useMemo(() => {
     const list = project.tracks.video || [];
     if (list.length === 0) return [];
     const filtered = list.filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
+      const hasAdjacentNext = list.some(
+        (other) =>
+          other.id !== v.id &&
+          (other.trackIndex || 0) === (v.trackIndex || 0) &&
+          Math.abs(other.startTime - end) < 0.01,
+      );
       // 1. Actively inside playback
-      if (currentTime >= start && currentTime <= end) return true;
+      if (hasAdjacentNext ? (currentTime >= start && currentTime < end) : (currentTime >= start && currentTime <= end)) return true;
       // 2. Pre-warm upcoming clip within 1.5s before its cut
       if (currentTime < start && start - currentTime <= 1.5) return true;
-      // 3. Tail-hold recently finished clip for 0.25s after cut to prevent black frames
-      if (currentTime > end && currentTime - end <= 0.25) return true;
+      // 3. Tail-hold recently finished clip ONLY if there is no adjacent next clip on this track
+      if (!hasAdjacentNext && currentTime > end && currentTime - end <= 0.25) return true;
       return false;
     });
     return filtered.sort((a, b) => (a.trackIndex || 0) - (b.trackIndex || 0));
@@ -288,6 +309,17 @@ function Player({
     }
     return activeVideos[0] || (project.tracks.video || [])[0] || null;
   }, [selectedClipId, project.tracks.video, activeVideos]);
+
+  const targetTrackingClip = useMemo(() => {
+    if (selectedClipId) {
+      const match =
+        (project.tracks.video || []).find((v) => v.id === selectedClipId) ||
+        (project.tracks.text || []).find((t) => t.id === selectedClipId) ||
+        (project.tracks.stickers || []).find((s) => s.id === selectedClipId);
+      if (match) return match as any;
+    }
+    return activeVideos[0] || (project.tracks.video || [])[0] || null;
+  }, [selectedClipId, project.tracks, activeVideos]);
 
   // Resolved Active Selected Transform Item
   const activeTransformItem = useActiveTransformItem({
@@ -405,6 +437,25 @@ function Player({
         </TouchableOpacity>
       )}
 
+      {/* CapCut Desktop Player Header Bar */}
+      {!fullscreen && (
+        <View style={styles.playerHeaderBar}>
+          <View style={styles.playerHeaderTitleRow}>
+            <Ionicons name="tv-outline" size={13} color={THEME_COLORS.textSecondary} />
+            <Text style={styles.playerHeaderTitle}>Player</Text>
+          </View>
+          <Text style={styles.playerHeaderResolution}>
+            {project.aspectRatio === "9:16"
+              ? "1080 × 1920"
+              : project.aspectRatio === "1:1"
+                ? "1080 × 1080"
+                : project.aspectRatio === "4:5"
+                  ? "1080 × 1350"
+                  : "1920 × 1080"} · 30 fps
+          </Text>
+        </View>
+      )}
+
       {/* Canvas Viewport Area */}
       <View
         ref={viewportWrapperRef}
@@ -498,10 +549,37 @@ function Player({
                 onUpdateClipMask={onUpdateClipMask}
                 onCloseMaskPreview={() => {
                   if (onToggleMaskPreview) onToggleMaskPreview(false);
-                  else setInternalMaskingMode(false);
+                  setInternalMaskingMode(false);
                 }}
                 getInterpolatedTransform={getInterpolatedTransform}
                 rendererRef={rendererRef}
+              />
+            ) : activeModal === "tracking" && targetTrackingClip ? (
+              <PlayerTrackingReticle
+                targetRect={
+                  targetTrackingClip.motionTrack?.targetRect || {
+                    x: 35,
+                    y: 30,
+                    width: 30,
+                    height: 30,
+                  }
+                }
+                onChangeTargetRect={(rect) => {
+                  if (onUpdateClipMotionTrack) {
+                    onUpdateClipMotionTrack({
+                      enabled: targetTrackingClip.motionTrack?.enabled || false,
+                      mode: "object_track",
+                      ...(targetTrackingClip.motionTrack || {}),
+                      targetRect: rect,
+                    });
+                  }
+                }}
+                boxWidth={boxWidth}
+                canvasHeight={canvasHeight}
+                isCompleted={
+                  !!targetTrackingClip.motionTrack?.trajectory &&
+                  targetTrackingClip.motionTrack.trajectory.length > 0
+                }
               />
             ) : !isPlaying ? (
               <PlayerTransformOverlay
@@ -517,6 +595,7 @@ function Player({
                 onSelectClip={onSelectClip}
                 onOpenEditModal={onOpenEditModal}
                 onOpenMaskModal={onOpenMaskModal}
+                onOpenAnimationModal={onOpenAnimationModal}
                 onDeleteClip={onDeleteClip}
                 handleEnterCropMode={handleEnterCropMode}
                 handleStartDrag={handleStartDrag}
@@ -548,7 +627,7 @@ function Player({
                 ) : processingMessage?.includes("Noise Reduction Off") ? (
                   <Ionicons name="volume-medium" size={13} color="#94A3B8" />
                 ) : (
-                  <ActivityIndicator size="small" color="#00F2FE" />
+                  <ActivityIndicator size="small" color={THEME_COLORS.accent} />
                 )}
                 <Text
                   style={[
@@ -564,11 +643,125 @@ function Player({
             </View>
           )}
 
-          {/* Safe Zone Grid Overlay */}
+          {/* Safe Zone Grid & Social UI Overlay */}
           {showSafeZone && (
             <View style={styles.safeZoneBox} pointerEvents="none">
+              {/* 3x3 Rule of Thirds Grid */}
               <View style={styles.safeZoneLineHoriz} />
               <View style={styles.safeZoneLineVert} />
+
+              {/* Center Magnetic Crosshairs */}
+              <View
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: 0,
+                  right: 0,
+                  height: 1,
+                  backgroundColor: "rgba(0, 242, 254, 0.5)",
+                }}
+              />
+              <View
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: 0,
+                  bottom: 0,
+                  width: 1,
+                  backgroundColor: "rgba(0, 242, 254, 0.5)",
+                }}
+              />
+              <View
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  width: 8,
+                  height: 8,
+                  marginLeft: -4,
+                  marginTop: -4,
+                  borderRadius: 4,
+                  backgroundColor: "#00F2FE",
+                }}
+              />
+
+              {/* Social Safe Zones: Header, Actions, Captions */}
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "12%",
+                  borderBottomWidth: 1,
+                  borderBottomColor: "rgba(239, 68, 68, 0.4)",
+                  backgroundColor: "rgba(239, 68, 68, 0.05)",
+                  padding: 4,
+                }}
+              >
+                <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 8, fontWeight: "700" }}>
+                  TOP HEADER DANGER
+                </Text>
+              </View>
+
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: "20%",
+                  borderTopWidth: 1,
+                  borderTopColor: "rgba(239, 68, 68, 0.4)",
+                  backgroundColor: "rgba(239, 68, 68, 0.05)",
+                  padding: 4,
+                }}
+              >
+                <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 8, fontWeight: "700" }}>
+                  REELS / TIKTOK CAPTIONS DANGER
+                </Text>
+              </View>
+
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: "20%",
+                  right: 0,
+                  width: "16%",
+                  height: "45%",
+                  borderLeftWidth: 1,
+                  borderLeftColor: "rgba(239, 68, 68, 0.4)",
+                  backgroundColor: "rgba(239, 68, 68, 0.04)",
+                  padding: 4,
+                }}
+              >
+                <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 7, fontWeight: "700" }}>
+                  LIKE / SHARE
+                </Text>
+              </View>
+
+              {/* HUD Badge */}
+              <View
+                style={{
+                  position: "absolute",
+                  top: 6,
+                  right: 6,
+                  backgroundColor: "rgba(13, 14, 21, 0.9)",
+                  paddingHorizontal: 6,
+                  paddingVertical: 3,
+                  borderRadius: 4,
+                  borderWidth: 1,
+                  borderColor: "rgba(0, 242, 254, 0.4)",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <Ionicons name="shield-checkmark" size={10} color="#00F2FE" />
+                <Text style={{ color: "#00F2FE", fontSize: 8, fontWeight: "800" }}>
+                  SAFE ZONE HUD
+                </Text>
+              </View>
             </View>
           )}
 
@@ -591,7 +784,7 @@ function Player({
                 <Ionicons
                   name="film-outline"
                   size={32}
-                  color={isLightBg ? "#00A3BF" : "#00F2FE"}
+                  color={isLightBg ? THEME_COLORS.primaryDark : THEME_COLORS.accent}
                 />
               </View>
               <Text
@@ -633,7 +826,7 @@ function Player({
       </View>
 
       {/* Control Bar beneath player OR on-preview crop bar card */}
-      {isCroppingMode ? (
+      {isCroppingMode && activeModal !== "transform" ? (
         <PlayerCropBar
           cropPreset={cropPreset}
           isMobile={isMobile}

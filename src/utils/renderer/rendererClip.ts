@@ -139,19 +139,145 @@ export function drawClip(
     }
   }
 
+  // ─── CLIP ANIMATION (IN / OUT / COMBO) ───
+  const anim = (clip as any).animation;
+  if (anim) {
+    const inPreset = anim.inPreset || (anim.type === 'in' ? anim.preset : (typeof anim.preset === 'string' && anim.preset.endsWith('_in') ? anim.preset : null));
+    const inDur = Math.max(0.05, anim.inDuration || anim.duration || 0.5);
+
+    const outPreset = anim.outPreset || (anim.type === 'out' ? anim.preset : (typeof anim.preset === 'string' && anim.preset.endsWith('_out') ? anim.preset : null));
+    const outDur = Math.max(0.05, anim.outDuration || anim.duration || 0.5);
+
+    const comboPreset = anim.comboPreset || (anim.type === 'combo' ? anim.preset : null);
+
+    // 1. IN Animation
+    if (inPreset && inPreset !== 'none' && clipLocalTime < inDur) {
+      const p = Math.max(0, Math.min(1, clipLocalTime / inDur));
+      const easeOutQuad = 1 - (1 - p) * (1 - p);
+      const easeOutBack = 1 + 2.70158 * Math.pow(p - 1, 3) + 1.70158 * Math.pow(p - 1, 2);
+
+      if (inPreset === 'fade_in') {
+        alpha *= p;
+      } else if (inPreset === 'zoom_in') {
+        scaleModifier *= (0.2 + 0.8 * easeOutQuad);
+        alpha *= p;
+      } else if (inPreset === 'zoom_in_2') {
+        scaleModifier *= Math.max(0.01, easeOutBack);
+        alpha *= p;
+      } else if (inPreset === 'slide_right') {
+        xOffset -= (1 - easeOutQuad) * w;
+      } else if (inPreset === 'slide_left') {
+        xOffset += (1 - easeOutQuad) * w;
+      } else if (inPreset === 'slide_up') {
+        yOffset += (1 - easeOutQuad) * h;
+      } else if (inPreset === 'slide_down') {
+        yOffset -= (1 - easeOutQuad) * h;
+      } else if (inPreset === 'spin_in') {
+        motionRot += (1 - easeOutQuad) * 360;
+        scaleModifier *= (0.3 + 0.7 * easeOutQuad);
+        alpha *= p;
+      } else if (inPreset === 'bounce_in') {
+        scaleModifier *= Math.max(0.01, easeOutBack);
+      } else if (inPreset === 'wipe_right') {
+        xOffset -= (1 - p) * (w * 0.5);
+        alpha *= p;
+      } else if (inPreset === 'shake_in') {
+        if (p < 0.8) xOffset += (Math.random() - 0.5) * (1 - p) * 30;
+        alpha *= p;
+      } else if (inPreset === 'blur_in') {
+        alpha *= p;
+        scaleModifier *= (0.9 + 0.1 * p);
+      }
+    }
+
+    // 2. OUT Animation
+    if (outPreset && outPreset !== 'none' && timeLeft < outDur) {
+      const p = Math.max(0, Math.min(1, timeLeft / outDur));
+      const easeInQuad = p * p;
+
+      if (outPreset === 'fade_out') {
+        alpha *= p;
+      } else if (outPreset === 'zoom_out') {
+        scaleModifier *= (0.3 + 0.7 * easeInQuad);
+        alpha *= p;
+      } else if (outPreset === 'slide_left') {
+        xOffset -= (1 - easeInQuad) * w;
+      } else if (outPreset === 'slide_right') {
+        xOffset += (1 - easeInQuad) * w;
+      } else if (outPreset === 'slide_down') {
+        yOffset += (1 - easeInQuad) * h;
+      } else if (outPreset === 'slide_up') {
+        yOffset -= (1 - easeInQuad) * h;
+      } else if (outPreset === 'spin_out') {
+        motionRot -= (1 - easeInQuad) * 360;
+        scaleModifier *= (0.3 + 0.7 * easeInQuad);
+        alpha *= p;
+      } else if (outPreset === 'shrink_out') {
+        scaleModifier *= easeInQuad;
+      } else if (outPreset === 'wipe_left') {
+        xOffset += (1 - p) * (w * 0.5);
+        alpha *= p;
+      } else if (outPreset === 'shake_out') {
+        if (p > 0.2) xOffset += (Math.random() - 0.5) * (1 - p) * 30;
+        alpha *= p;
+      } else if (outPreset === 'dissolve') {
+        alpha *= p;
+      }
+    }
+
+    // 3. COMBO Animation (continuous motion loop)
+    if (comboPreset && comboPreset !== 'none') {
+      if (comboPreset === 'pulse' || comboPreset === 'zoom_pulse') {
+        scaleModifier *= (1.0 + 0.06 * Math.sin(clipLocalTime * 5));
+      } else if (comboPreset === 'wobble') {
+        motionRot += Math.sin(clipLocalTime * 7) * 4;
+      } else if (comboPreset === 'heartbeat') {
+        const beat = (clipLocalTime * 2) % 1;
+        const bScale = beat < 0.2 ? Math.sin(beat * Math.PI * 5) * 0.08 : 0;
+        scaleModifier *= (1.0 + bScale);
+      } else if (comboPreset === 'pendulum' || comboPreset === 'swing') {
+        motionRot += Math.sin(clipLocalTime * 4) * 6;
+      } else if (comboPreset === 'float') {
+        yOffset += Math.sin(clipLocalTime * 3) * 12;
+      } else if (comboPreset === 'wave') {
+        xOffset += Math.sin(clipLocalTime * 4) * 10;
+        yOffset += Math.cos(clipLocalTime * 4) * 8;
+      } else if (comboPreset === 'jitter') {
+        xOffset += (Math.random() - 0.5) * 4;
+        yOffset += (Math.random() - 0.5) * 4;
+      }
+    }
+  }
+
   const t = getInterpolatedTransform(clip, time, "video");
   const keyframeOpacity = t.opacity;
 
-  if (clip.motionTrack && clip.motionTrack.enabled) {
+  if (clip.motionTrack && clip.motionTrack.enabled && clip.motionTrack.actionType === 'camera_center') {
     const motion = applyMotionTracking(time, clip.startTime, clip.duration, clip.motionTrack);
-    xOffset += motion.dx;
-    yOffset += motion.dy;
+    xOffset += (motion.dx / 100) * w;
+    yOffset += (motion.dy / 100) * h;
     scaleModifier *= motion.dScale;
     motionRot += motion.dRot || 0;
   }
 
   const clipOpacity = (t?.opacity !== undefined ? t.opacity : 1.0) * keyframeOpacity;
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha * clipOpacity));
+
+  const rawBlend = (clip as any).blendMode || (t as any)?.blendMode || "normal";
+  const blendMap: Record<string, GlobalCompositeOperation> = {
+    normal: "source-over",
+    screen: "screen",
+    multiply: "multiply",
+    overlay: "overlay",
+    darken: "darken",
+    lighten: "lighten",
+    "color-dodge": "color-dodge",
+    "color-burn": "color-burn",
+    "soft-light": "soft-light",
+    difference: "difference",
+    exclusion: "exclusion",
+  };
+  ctx.globalCompositeOperation = blendMap[rawBlend] || "source-over";
 
   ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y + yOffset);
   ctx.rotate((((t.rotation || 0) + motionRot) * Math.PI) / 180);
@@ -254,7 +380,14 @@ export function drawClip(
     }
 
     const mask = clip.mask || clip.transform?.mask;
-    const cutout = clip.cutout || clip.transform?.cutout;
+    const rawCutout = clip.cutout || clip.transform?.cutout;
+    const cutout = rawCutout
+      ? {
+          ...rawCutout,
+          clipId: clip.id,
+          clipTime: Math.max(0, time - clip.startTime),
+        }
+      : rawCutout;
 
     if (mask && mask.shape && mask.shape !== "none") {
       drawClipWithMask(
@@ -333,13 +466,15 @@ export function drawClip(
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = 1.0;
 
-  if (clip.effect && clip.effect !== "none") {
+  const rawEff = (clip as any).effect;
+  const effType = typeof rawEff === "string" ? rawEff : (rawEff?.type || rawEff?.id);
+  if (effType && effType !== "none" && effType !== "None") {
     applyEffectOverlay(
       ctx,
       {
         id: "clip-eff-" + clip.id,
-        type: clip.effect,
-        name: clip.effect,
+        type: effType,
+        name: typeof rawEff === "object" && rawEff?.name ? rawEff.name : effType,
         startTime: clip.startTime,
         duration: clip.duration,
         intensity: (clip as any).effectIntensity !== undefined ? (clip as any).effectIntensity : 0.8,

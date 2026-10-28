@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, Image, StyleSheet } from "react-native";
+import { View, Image, StyleSheet, Platform } from "react-native";
 import { UnifiedClipItem } from "./timelineTypes";
 import {
   getMediaThumbnail,
@@ -49,7 +49,13 @@ export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
     });
 
     return unsubscribe;
-  }, [clip.id, clip.rawClip?.thumbnail, clip.rawClip?.url, clip.rawClip?.trimIn]);
+  }, [
+    clip.id,
+    clip.rawClip?.thumbnail,
+    clip.rawClip?.url,
+    clip.rawClip?.trimIn,
+    clip.rawClip?.thumbnailTrimIn,
+  ]);
 
   const handleImageError = useCallback(() => {
     globalThumbnailCache.delete(clip.id);
@@ -63,11 +69,32 @@ export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
   // Compute number of filmstrip frames that fit in this clip
   const frameCount = useMemo(() => {
     if (width <= 0) return 0;
-    return Math.max(1, Math.ceil(width / FRAME_WIDTH));
+    const count = Math.max(1, Math.ceil(width / FRAME_WIDTH));
+    return Platform.OS === "web" ? count : Math.min(count, 20);
   }, [width]);
 
   if (!thumbUri || frameCount <= 0) {
     return null;
+  }
+
+  // 100% Optimized Web Fast-Path: 1 single DOM node with GPU CSS background-repeat
+  if (Platform.OS === "web") {
+    return (
+      <View style={previewStyles.container} pointerEvents="none">
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundImage: `url(${thumbUri})`,
+              backgroundRepeat: "repeat-x",
+              backgroundSize: `${FRAME_WIDTH}px 100%`,
+              backgroundPosition: "left center",
+            } as any,
+          ]}
+        />
+        <View style={previewStyles.contrastWash} />
+      </View>
+    );
   }
 
   return (

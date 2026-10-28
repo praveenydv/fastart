@@ -11,6 +11,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
 import { theme } from "../constants/theme";
 import { mediaHasAudioTrack } from "../utils/mediaAudioDetector";
+import FastArtLogo from "./FastArtLogo";
 
 export interface ToolbarProps {
   selectedClip: any | null;
@@ -29,6 +30,7 @@ export interface ToolbarProps {
   onOpenTransformModal?: (
     tab?: "crop" | "flip" | "rotate" | "stretch" | "angle",
   ) => void;
+  onOpenMaskModal?: () => void;
   onOpenAudioModal: () => void;
   onOpenTextModal: () => void;
   onOpenFiltersModal: () => void;
@@ -46,6 +48,7 @@ export interface ToolbarProps {
   onOpenTransitionsModal?: () => void;
   onToggleDenoise?: () => void;
   onExtractAudio?: () => void;
+  onFreezeFrame?: () => void;
   onMoveClip?: (
     clipId: string,
     trackType: "text" | "video" | "audio" | "sticker" | "effects" | "caption",
@@ -66,6 +69,12 @@ export interface ToolbarProps {
   onOpenOpacityModal?: () => void;
   onOpenAnimationModal?: () => void;
   onOpenAudioEffectsModal?: () => void;
+  onOpenBlendModal?: () => void;
+  onOpenHSLModal?: () => void;
+  /** ID of the currently-open modal/panel — used to highlight the active toolbar button */
+  activeToolId?: string;
+  onCloseModal?: () => void;
+  onBackToHome?: () => void;
 }
 
 // Global tools for whole video (when no clip is selected)
@@ -81,9 +90,10 @@ const ROOT_TOOLS = [
   { id: "background", title: "BG", icon: "image-outline" as const },
 ];
 
-// Clip-specific tools (when clip is selected)
+// Clip-specific tools (when video clip is selected)
 const VIDEO_CLIP_TOOLS = [
   { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "freeze", title: "Freeze", icon: "snowflake" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
   {
     id: "volume",
@@ -91,14 +101,25 @@ const VIDEO_CLIP_TOOLS = [
     icon: "volume-high" as const,
     requiresAudio: true,
   },
+  {
+    id: "audio_effects",
+    title: "Voice FX",
+    icon: "microphone-outline" as const,
+    requiresAudio: true,
+  },
+  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "transform", title: "Transform", icon: "crop" as const },
+  { id: "blend", title: "Blend", icon: "layers-outline" as const },
+  { id: "mask", title: "Mask", icon: "shape-outline" as const },
   { id: "cutout", title: "Cutout", icon: "account-outline" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
+  { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
+  { id: "adjust", title: "Enhance", icon: "tune" as const },
   { id: "effects", title: "Effect", icon: "auto-fix" as const },
   { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
-  { id: "adjust", title: "Enhance", icon: "tune" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
-  { id: "tracking", title: "Tracking", icon: "crosshairs-gps" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
+  { id: "tracking", title: "Track & Blur", icon: "crosshairs-gps" as const },
   {
     id: "extract_audio",
     title: "Extract",
@@ -116,15 +137,51 @@ const VIDEO_CLIP_TOOLS = [
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
+// Photo/Image-specific tools (tailored for still graphics, removing audio/speed)
+const PHOTO_CLIP_TOOLS = [
+  { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
+  { id: "transform", title: "Transform", icon: "crop" as const },
+  { id: "blend", title: "Blend", icon: "layers-outline" as const },
+  { id: "mask", title: "Mask", icon: "shape-outline" as const },
+  { id: "cutout", title: "Cutout", icon: "account-outline" as const },
+  { id: "filters", title: "Filters", icon: "palette-outline" as const },
+  { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
+  { id: "adjust", title: "Enhance", icon: "tune" as const },
+  { id: "effects", title: "Effect", icon: "auto-fix" as const },
+  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
+  { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
+  { id: "background", title: "BG", icon: "image-outline" as const },
+  { id: "copy", title: "Copy", icon: "content-copy" as const },
+  { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
+];
+
 const TEXT_CLIP_TOOLS = [
-  { id: "edit", title: "Edit", icon: "format-text" as const },
+  { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "text", title: "Text", icon: "format-text" as const },
+  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
+  { id: "tracking", title: "Track", icon: "crosshairs-gps" as const },
+  { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
+  { id: "copy", title: "Copy", icon: "content-copy" as const },
+  { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
+];
+
+const CAPTION_CLIP_TOOLS = [
+  { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "captions", title: "Captions", icon: "subtitles-outline" as const },
+  { id: "text", title: "Style", icon: "format-text" as const },
+  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
 const STICKER_CLIP_TOOLS = [
-  { id: "edit", title: "Change", icon: "emoticon-happy-outline" as const },
+  { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "stickers", title: "Stickers", icon: "emoticon-happy-outline" as const },
+  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
+  { id: "tracking", title: "Track", icon: "crosshairs-gps" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
@@ -133,6 +190,7 @@ const STICKER_CLIP_TOOLS = [
 const AUDIO_CLIP_TOOLS = [
   { id: "volume", title: "Volume", icon: "volume-high" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
+  { id: "audio_effects", title: "Voice FX", icon: "microphone-outline" as const },
   { id: "denoise", title: "Denoise", icon: "ear-hearing" as const },
   { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
@@ -140,7 +198,7 @@ const AUDIO_CLIP_TOOLS = [
 ];
 
 const EFFECT_CLIP_TOOLS = [
-  { id: "effects", title: "Change", icon: "auto-fix" as const },
+  { id: "effects", title: "Effects", icon: "auto-fix" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -160,6 +218,7 @@ export default function Toolbar({
   onOpenVolumeModal,
   onOpenCropModal,
   onOpenTransformModal,
+  onOpenMaskModal,
   onOpenAudioModal,
   onOpenTextModal,
   onOpenFiltersModal,
@@ -176,9 +235,17 @@ export default function Toolbar({
   onOpenTransitionsModal,
   onToggleDenoise,
   onExtractAudio,
+  onFreezeFrame,
   orientation = "horizontal",
   onSelectDesktopTab,
   onOpenOpacityModal,
+  onOpenAnimationModal,
+  onOpenAudioEffectsModal,
+  onOpenBlendModal,
+  onOpenHSLModal,
+  activeToolId,
+  onCloseModal,
+  onBackToHome,
 }: ToolbarProps) {
   const isVertical = orientation === "vertical";
   const hasAudio = selectedClip ? mediaHasAudioTrack(selectedClip) : false;
@@ -207,6 +274,11 @@ export default function Toolbar({
 
   const handleToolAction = (toolId: string) => {
     soundEngine.playSfx("click");
+    // If user clicks the currently active tool, toggle it closed to make timeline visible again
+    if (activeToolId === toolId && onCloseModal) {
+      onCloseModal();
+      return;
+    }
     switch (toolId) {
       case "media":
         if (isVertical && onSelectDesktopTab) {
@@ -223,21 +295,39 @@ export default function Toolbar({
         }
         break;
       case "text":
+        onOpenTextModal();
+        break;
       case "edit":
         if (selectedClipType === "sticker" || selectedClipType === "stickers") {
           onOpenStickersModal();
+        } else if (selectedClipType === "caption" || selectedClipType === "captions") {
+          if (onOpenAutoCaptions) onOpenAutoCaptions();
+          else onOpenTextModal();
         } else {
           onOpenTextModal();
         }
         break;
       case "captions":
         if (onOpenAutoCaptions) onOpenAutoCaptions();
+        else onOpenTextModal();
         break;
       case "stickers":
         onOpenStickersModal();
         break;
       case "effects":
         onOpenEffectsModal();
+        break;
+      case "animation":
+        if (onOpenAnimationModal) onOpenAnimationModal();
+        break;
+      case "audio_effects":
+        if (onOpenAudioEffectsModal) onOpenAudioEffectsModal();
+        break;
+      case "blend":
+        if (onOpenBlendModal) onOpenBlendModal();
+        break;
+      case "hsl":
+        if (onOpenHSLModal) onOpenHSLModal();
         break;
       case "transitions":
         if (onOpenTransitionsModal) onOpenTransitionsModal();
@@ -249,6 +339,9 @@ export default function Toolbar({
       case "crop":
         if (onOpenTransformModal) onOpenTransformModal("crop");
         else if (onOpenCropModal) onOpenCropModal();
+        break;
+      case "mask":
+        if (onOpenMaskModal) onOpenMaskModal();
         break;
       case "speed":
         onOpenSpeedModal();
@@ -281,6 +374,9 @@ export default function Toolbar({
         soundEngine.playSfx("split");
         onSplitClip();
         break;
+      case "freeze":
+        if (onFreezeFrame) onFreezeFrame();
+        break;
       case "copy":
         onDuplicateClip();
         break;
@@ -306,11 +402,10 @@ export default function Toolbar({
 
   const activeTools = React.useMemo(() => {
     if (!selectedClip) return ROOT_TOOLS;
-    if (
-      selectedClipType === "text" ||
-      selectedClipType === "caption" ||
-      selectedClipType === "captions"
-    ) {
+    if (selectedClipType === "caption" || selectedClipType === "captions") {
+      return CAPTION_CLIP_TOOLS;
+    }
+    if (selectedClipType === "text") {
       return TEXT_CLIP_TOOLS;
     }
     if (selectedClipType === "sticker" || selectedClipType === "stickers") {
@@ -322,6 +417,9 @@ export default function Toolbar({
     if (selectedClipType === "effects" || selectedClipType === "effect") {
       return EFFECT_CLIP_TOOLS;
     }
+    if (selectedClipType === "photo" || selectedClip?.type === "photo") {
+      return PHOTO_CLIP_TOOLS;
+    }
     return VIDEO_CLIP_TOOLS.filter((t) => !t.requiresAudio || hasAudio);
   }, [selectedClip, selectedClipType, hasAudio]);
 
@@ -329,6 +427,19 @@ export default function Toolbar({
   if (isVertical) {
     return (
       <View style={styles.verticalContainer}>
+        {/* Top of vertical toolbar: App icon on laptop */}
+        <View style={styles.verticalTopBrand}>
+          <TouchableOpacity
+            activeOpacity={onBackToHome ? 0.7 : 1}
+            onPress={onBackToHome}
+            disabled={!onBackToHome}
+            accessibilityLabel="FastArt Home"
+            style={styles.verticalLogoBtn}
+          >
+            <FastArtLogo size={26} />
+          </TouchableOpacity>
+        </View>
+
         {/* If a clip is selected, show back button and category indicator at top */}
         {selectedClip ? (
           <View style={styles.verticalHeader}>
@@ -338,7 +449,7 @@ export default function Toolbar({
               activeOpacity={0.7}
               accessibilityLabel="Back to root tools"
             >
-              <Ionicons name="chevron-back" size={16} color="#FFFFFF" />
+              <Ionicons name="chevron-back" size={15} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.verticalClipBadge}>
               <Text style={styles.verticalClipBadgeText} numberOfLines={1}>
@@ -363,12 +474,14 @@ export default function Toolbar({
         >
           {activeTools.map((item) => {
             const isDelete = item.id === "delete";
+            const isActive = activeToolId === item.id;
             return (
               <TouchableOpacity
                 key={item.id}
                 style={[
                   styles.verticalToolBtn,
                   isDelete && styles.verticalDeleteBtn,
+                  isActive && styles.verticalToolBtnActive,
                 ]}
                 onPress={() => handleToolAction(item.id)}
                 activeOpacity={0.7}
@@ -377,12 +490,13 @@ export default function Toolbar({
                 <MaterialCommunityIcons
                   name={item.icon}
                   size={20}
-                  color={isDelete ? "#EF4444" : "#FFFFFF"}
+                  color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"}
                 />
                 <Text
                   style={[
                     styles.verticalToolLabel,
                     isDelete && { color: "#EF4444" },
+                    isActive && { color: "#00E5FF" },
                   ]}
                   numberOfLines={1}
                 >
@@ -423,12 +537,14 @@ export default function Toolbar({
       >
         {activeTools.map((tool) => {
           const isDelete = tool.id === "delete";
+          const isActive = activeToolId === tool.id;
           return (
             <TouchableOpacity
               key={tool.id}
               style={[
                 styles.horizontalToolBtn,
-                isDelete && { backgroundColor: "rgba(239, 68, 68, 0.08)" },
+                isDelete && styles.horizontalToolBtnDelete,
+                isActive && styles.horizontalToolBtnActive,
               ]}
               onPress={() => handleToolAction(tool.id)}
               activeOpacity={0.7}
@@ -436,12 +552,13 @@ export default function Toolbar({
               <MaterialCommunityIcons
                 name={tool.icon}
                 size={20}
-                color={isDelete ? "#EF4444" : "#FFFFFF"}
+                color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"}
               />
               <Text
                 style={[
                   styles.horizontalToolLabel,
                   isDelete && { color: "#EF4444" },
+                  isActive && { color: "#00E5FF" },
                 ]}
                 numberOfLines={1}
               >
@@ -478,6 +595,9 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     paddingHorizontal: 2,
     marginVertical: 1,
+  },
+  verticalToolBtnActive: {
+    backgroundColor: "rgba(0, 229, 255, 0.12)",
   },
   verticalToolLabel: {
     color: "#94A3B8",
@@ -526,8 +646,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
   },
+  verticalTopBrand: {
+    paddingTop: 8,
+    paddingBottom: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verticalLogoBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
   verticalRootHeader: {
-    paddingVertical: 8,
+    paddingVertical: 6,
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
@@ -577,6 +713,13 @@ const styles = StyleSheet.create({
     borderTopColor: "#1F2637",
     height: 52,
     paddingHorizontal: 6,
+  },
+  horizontalToolBtnActive: {
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
+    borderRadius: 8,
+  },
+  horizontalToolBtnDelete: {
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   mobileBackBtn: {
     width: 32,

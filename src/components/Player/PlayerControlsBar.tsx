@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
 import { formatTime } from "./playerUtils";
+import { THEME_COLORS } from "../../constants/designConstants";
 
 interface PlayerControlsBarProps {
   currentTime: number;
@@ -79,7 +80,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name="play-skip-back"
             size={isMobile ? 13 : 14}
-            color="#94A3B8"
+            color={THEME_COLORS.textMuted}
           />
         </TouchableOpacity>
 
@@ -120,7 +121,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name="play-skip-forward"
             size={isMobile ? 13 : 14}
-            color="#94A3B8"
+            color={THEME_COLORS.textMuted}
           />
         </TouchableOpacity>
       </View>
@@ -137,7 +138,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name="grid-outline"
             size={15}
-            color={showSafeZone ? "#FFFFFF" : "#94A3B8"}
+            color={showSafeZone ? THEME_COLORS.accent : THEME_COLORS.textMuted}
           />
         </TouchableOpacity>
 
@@ -157,7 +158,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name={hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"}
             size={15}
-            color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#8E8E93"}
+            color={hasKeyframeAtCurrentTime ? THEME_COLORS.accent : THEME_COLORS.textMuted}
           />
           <View
             style={[
@@ -170,7 +171,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
             <Ionicons
               name={hasKeyframeAtCurrentTime ? "remove" : "add"}
               size={6}
-              color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#FFFFFF"}
+              color={hasKeyframeAtCurrentTime ? "#FFFFFF" : THEME_COLORS.accent}
             />
           </View>
         </TouchableOpacity>
@@ -187,7 +188,7 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           <Ionicons
             name={fullscreen ? "contract-outline" : "expand-outline"}
             size={14}
-            color={fullscreen ? "#FFFFFF" : "#8E8E93"}
+            color={fullscreen ? THEME_COLORS.accent : THEME_COLORS.textMuted}
           />
         </TouchableOpacity>
       </View>

@@ -79,6 +79,12 @@ export default function App() {
     "keyframe",
     "tracking",
     "transform",
+    "animation",
+    "blend",
+    "hsl",
+    "audio_effects",
+    "voice_effects",
+    "opacity",
   ]);
 
   // Modal helpers synced with URL
@@ -93,6 +99,12 @@ export default function App() {
       "keyframe",
       "tracking",
       "transform",
+      "animation",
+      "blend",
+      "hsl",
+      "audio_effects",
+      "voice_effects",
+      "opacity",
     ]);
     if (CLIP_DEPENDENT_TOOLS.has(modalName) && !selectedClipId && projectRef.current) {
       const curTime = currentTimeRef.current || 0;
@@ -231,7 +243,9 @@ export default function App() {
           ? "stickers"
           : selectedClipType === "effect" || selectedClipType === "effects"
             ? "effects"
-            : selectedClipType
+            : selectedClipType === "photo"
+              ? "video"
+              : selectedClipType
     ) as keyof typeof project.tracks;
 
     const list = (project.tracks[key] as any[]) || [];
@@ -247,7 +261,7 @@ export default function App() {
     return null;
   }, [selectedClipId, selectedClipType, project]);
 
-  // Auto-target active video clip at playhead if none is explicitly selected
+  // Auto-target active video or photo clip at playhead if none is explicitly selected
   const ensureSelectedVideoClip = useCallback(() => {
     if (!selectedClipId && projectRef.current) {
       const curTime = currentTimeRef.current || 0;
@@ -257,7 +271,7 @@ export default function App() {
         ) || projectRef.current.tracks?.video?.[0];
       if (target) {
         setSelectedClipId(target.id);
-        setSelectedClipType("video");
+        setSelectedClipType(target.type === "photo" ? "photo" : "video");
         return target;
       }
     }
@@ -285,6 +299,9 @@ export default function App() {
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    handleApplyBlendMode,
+    handleApplyHSL,
+    handleApplyVoiceEffect,
     handleAddCaptions,
     isProcessing,
     processingMessage,
@@ -306,6 +323,7 @@ export default function App() {
   // Clip mutations hook
   const {
     handleSplitClip,
+    handleFreezeFrame,
     handleDeleteClip,
     handleConfirmDeleteClip,
     handleDuplicateClip,
@@ -395,9 +413,11 @@ export default function App() {
     }
   }, [totalDuration, isPlaying, currentTime, setIsPlaying, setCurrentTime]);
 
-  // Persist last active editing session
+  // Persist last active editing session (debounced by 1500ms to eliminate synchronous disk I/O while scrubbing)
   useEffect(() => {
-    if (project && route.screen === "editor" && !isPlaying) {
+    if (!project || route.screen !== "editor" || isPlaying) return;
+
+    const timer = setTimeout(() => {
       const session: LastEditSession = {
         projectId: project.id,
         currentTime,
@@ -406,9 +426,10 @@ export default function App() {
         updatedAt: Date.now(),
       };
       saveLastSession(session);
-      setLastSession(session);
-    }
-  }, [project?.id, currentTime, zoom, selectedClipId, route.screen, isPlaying, setLastSession]);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [project?.id, currentTime, zoom, selectedClipId, route.screen, isPlaying]);
 
   const handleOpenTransitionsModal = useCallback((clipId: string) => {
     setTransitionTargetClipId(clipId);
@@ -590,6 +611,7 @@ export default function App() {
               handleApplyCutout={handleApplyCutout}
               cutoutInitialMode={cutoutInitialMode}
               transformInitialTab={transformInitialTab}
+              setIsCroppingPreview={setIsCroppingPreview}
               onOpenScreenCrop={() => {
                 soundEngine.playSfx("click");
                 closeModal();
@@ -618,6 +640,9 @@ export default function App() {
               handleAutoCutGenerated={handleAutoCutGenerated}
               updateProjectWithHistory={updateProjectDispatcher}
               handleApplyEnhance={handleApplyEnhance}
+              handleApplyBlendMode={handleApplyBlendMode}
+              handleApplyHSL={handleApplyHSL}
+              handleApplyVoiceEffect={handleApplyVoiceEffect}
               handleAddKeyframe={handleAddKeyframe}
               isKeyframeAtPlayhead={isKeyframeAtPlayhead}
               handleUpdateKeyframeTransform={handleUpdateKeyframeTransform}
@@ -681,11 +706,14 @@ export default function App() {
                   isKeyframeAtPlayhead={isKeyframeAtPlayhead}
                   activeModal={activeModal}
                   openModal={openModal}
+                  closeModal={closeModal}
+                  onCloseModal={handleCancelModal}
                   updateProjectWithHistory={updateProjectDispatcher}
                   handleUpdateClipTransform={handleUpdateClipTransform}
                   handleUpdateClipCrop={handleUpdateClipCrop}
                   handleUpdateClipMask={handleUpdateClipMask}
                   handleSplitClip={handleSplitClip}
+                  handleFreezeFrame={handleFreezeFrame}
                   handleDuplicateClip={handleDuplicateClip}
                   handleDeleteClip={handleDeleteClip}
                   handleMoveClip={handleMoveClip}

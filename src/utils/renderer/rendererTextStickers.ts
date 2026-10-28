@@ -1,6 +1,7 @@
 import { StickerClip, TextClip, CaptionClip } from "../../types/project";
 import { applyMotionTracking } from "./rendererEffects";
 import { generateWordTimings } from "../srtParser";
+import { evaluateClipAnimation } from "../animationEngine";
 
 export function drawSticker(
   ctx: CanvasRenderingContext2D,
@@ -20,30 +21,25 @@ export function drawSticker(
   const px = (stk.position?.x ?? 50) * (w / 100) + motion.dx;
   const py = (stk.position?.y ?? 50) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - stk.startTime);
-  let scale = (stk.scale || 1.0) * motion.dScale;
-  const rot = (stk.rotation || 0) + motion.dRot;
-  let alpha = 1.0;
-  let offsetY = 0;
+  const duration = Math.max(0.5, stk.duration || 3.0);
 
-  const anim = stk.animation || "none";
-  if (anim === "bounce") {
-    const bounce = Math.sin(elapsed * 4) * 0.08;
-    scale += bounce;
-  } else if (anim === "pulse") {
-    scale *= 1.0 + Math.sin(elapsed * 6) * 0.1;
-  } else if (anim === "wave") {
-    offsetY = Math.sin(elapsed * 4) * (8 * previewScale);
-  } else if (anim === "fade") {
-    if (elapsed < 0.35) alpha = elapsed / 0.35;
-  } else if (anim === "pop") {
-    if (elapsed < 0.3) {
-      const p = elapsed / 0.3;
-      scale *= 0.3 + p * 0.85;
-      alpha = p;
-    }
-  } // if anim === 'none', static without bounce
+  const animEval = evaluateClipAnimation(
+    stk.animation,
+    elapsed,
+    duration,
+    60 * previewScale,
+    60 * previewScale,
+    previewScale
+  );
 
-  ctx.translate(px, py + offsetY);
+  const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+  const scale = (stk.scale || 1.0) * motion.dScale * animScale;
+  const rot = (stk.rotation || 0) + motion.dRot + animEval.rotation;
+  const alpha = animEval.alpha;
+  const offsetX = animEval.offsetX;
+  const offsetY = animEval.offsetY;
+
+  ctx.translate(px + offsetX, py + offsetY);
   ctx.rotate((rot * Math.PI) / 180);
   ctx.scale(scale, scale);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
@@ -111,148 +107,30 @@ export function drawTextOverlay(
   const elapsed = Math.max(0, time - txt.startTime);
   const duration = Math.max(0.5, txt.duration || 3.0);
   const timeLeft = Math.max(0, duration - elapsed);
-  let displayText = txt.text || "";
-  let scale = (txt.scale || 1.0) * motion.dScale;
-  let alpha = 1.0;
-  let xOffset = 0;
-  let yOffset = 0;
+  const animEval = evaluateClipAnimation(
+    txt.animation,
+    elapsed,
+    duration,
+    150 * previewScale,
+    50 * previewScale,
+    previewScale,
+    txt.text || ""
+  );
 
-  const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
-  const introDur = Math.min(0.5, duration * 0.35);
-  const exitDur = Math.min(0.35, duration * 0.25);
-
-  if (anim === "typewriter") {
-    const chars = Math.min(displayText.length, Math.floor(elapsed * 14));
-    displayText = displayText.slice(0, chars);
-  } else if (anim === "bounce") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      scale = (0.45 + Math.sin(p * Math.PI) * 0.75) * (txt.scale || 1.0);
-      alpha = Math.min(1, p * 2);
-    }
-  } else if (anim === "fade" || anim === "fadein") {
-    if (elapsed < introDur) {
-      alpha = elapsed / introDur;
-    } else if (timeLeft < exitDur) {
-      alpha = timeLeft / exitDur;
-    }
-  } else if (anim === "slideup" || anim === "up") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      const easeOut = Math.sin((p * Math.PI) / 2);
-      yOffset = (1 - easeOut) * (50 * previewScale);
-      alpha = p;
-    } else if (timeLeft < exitDur) {
-      const p = 1 - timeLeft / exitDur;
-      yOffset = -p * (30 * previewScale);
-      alpha = 1 - p;
-    }
-  } else if (anim === "slidedown" || anim === "down") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      const easeOut = Math.sin((p * Math.PI) / 2);
-      yOffset = -(1 - easeOut) * (50 * previewScale);
-      alpha = p;
-    } else if (timeLeft < exitDur) {
-      const p = 1 - timeLeft / exitDur;
-      yOffset = p * (30 * previewScale);
-      alpha = 1 - p;
-    }
-  } else if (anim === "slide" || anim === "slideleft") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      const easeOut = Math.sin((p * Math.PI) / 2);
-      xOffset = (1 - easeOut) * (70 * previewScale);
-      alpha = p;
-    } else if (timeLeft < exitDur) {
-      const p = 1 - timeLeft / exitDur;
-      xOffset = -p * (40 * previewScale);
-      alpha = 1 - p;
-    }
-  } else if (anim === "slideright") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      const easeOut = Math.sin((p * Math.PI) / 2);
-      xOffset = -(1 - easeOut) * (70 * previewScale);
-      alpha = p;
-    } else if (timeLeft < exitDur) {
-      const p = 1 - timeLeft / exitDur;
-      xOffset = p * (40 * previewScale);
-      alpha = 1 - p;
-    }
-  } else if (anim === "zoomin" || anim === "zoom") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      const easeOut = Math.sin((p * Math.PI) / 2);
-      scale = (0.35 + easeOut * 0.75) * (txt.scale || 1.0);
-      alpha = p;
-    } else if (timeLeft < exitDur) {
-      const p = 1 - timeLeft / exitDur;
-      scale = (1.0 + p * 0.25) * (txt.scale || 1.0);
-      alpha = 1 - p;
-    }
-  } else if (anim === "pulse") {
-    scale = (1.0 + Math.sin(elapsed * 6) * 0.08) * (txt.scale || 1.0);
-  } else if (anim === "glitch") {
-    if (isPlaying && Math.random() > 0.7) {
-      xOffset = (Math.random() - 0.5) * (8 * previewScale);
-      yOffset = (Math.random() - 0.5) * (4 * previewScale);
-    }
-  } else if (anim === "shake") {
-    if (elapsed < 0.8) {
-      xOffset = Math.sin(elapsed * 40) * (4 * previewScale);
-    }
-  } else if (anim === "wave") {
-    yOffset = Math.sin(elapsed * 4) * (8 * previewScale);
-  } else if (anim === "stamp") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      scale = (2.2 - p * 1.2) * (txt.scale || 1.0);
-      alpha = Math.min(1, p * 3);
-    }
-  } else if (anim === "roll") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      scale = (0.2 + p * 0.8) * (txt.scale || 1.0);
-      alpha = p;
-    }
-  } else if (anim === "flip") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      scale = Math.abs(Math.cos(p * Math.PI)) * (txt.scale || 1.0);
-      alpha = p;
-    }
-  } else if (anim === "blurin" || anim === "blur") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      alpha = p * p;
-      scale = (1.15 - p * 0.15) * (txt.scale || 1.0);
-    }
-  } else if (anim === "wiggle") {
-    xOffset = Math.sin(elapsed * 12) * (5 * previewScale);
-  } else if (anim === "flicker") {
-    const flick = Math.sin(elapsed * 25);
-    alpha = flick > 0.3 ? 1.0 : 0.45;
-  } else if (anim === "karaoke") {
-    scale = (1.0 + Math.abs(Math.sin(elapsed * 8)) * 0.14) * (txt.scale || 1.0);
-  }
+  let displayText = animEval.displayText ?? (txt.text || "");
+  const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+  let scale = (txt.scale || 1.0) * motion.dScale * animScale;
+  let alpha = animEval.alpha;
+  let xOffset = animEval.offsetX;
+  let yOffset = animEval.offsetY;
+  let rot = (txt.rotation || 0) + (motion ? motion.dRot : 0) + animEval.rotation;
 
   // When paused in editor, guarantee full visibility and clean frame alignment
-  if (!isPlaying) {
+  if (!isPlaying && (!txt.animation || txt.animation === "none")) {
     alpha = 1.0;
-    if (elapsed < introDur) {
-      scale = txt.scale || 1.0;
-      xOffset = 0;
-      yOffset = 0;
-    }
   }
 
   ctx.translate(px + xOffset, py + yOffset);
-  let rot = (txt.rotation || 0) + (motion ? motion.dRot : 0);
-  if (anim === "roll" && elapsed < introDur) {
-    const p = elapsed / introDur;
-    rot += (1 - p) * -180;
-  }
   ctx.rotate((rot * Math.PI) / 180);
   ctx.scale(scale, scale);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
@@ -467,37 +345,24 @@ export function drawCaptionOverlay(
   const duration = Math.max(0.5, cap.duration || 3.0);
   const timeLeft = Math.max(0, duration - elapsed);
 
-  let scale = (cap.scale || 1.0) * motion.dScale;
-  let alpha = 1.0;
-  let xOffset = 0;
-  let yOffset = 0;
+  const animEval = evaluateClipAnimation(
+    cap.animation,
+    elapsed,
+    duration,
+    150 * previewScale,
+    40 * previewScale,
+    previewScale,
+    cap.text || ""
+  );
 
-  const anim = (cap.animation || "karaoke").toLowerCase().replace(/[-_]/g, "");
-  const introDur = Math.min(0.3, duration * 0.25);
-  const exitDur = Math.min(0.2, duration * 0.15);
-
-  if (anim === "bounce") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      scale = (0.65 + Math.sin(p * Math.PI) * 0.5) * (cap.scale || 1.0);
-      alpha = Math.min(1, p * 2);
-    }
-  } else if (anim === "fade" || anim === "fadein") {
-    if (elapsed < introDur) {
-      alpha = elapsed / introDur;
-    } else if (timeLeft < exitDur) {
-      alpha = timeLeft / exitDur;
-    }
-  } else if (anim === "zoomin" || anim === "zoom") {
-    if (elapsed < introDur) {
-      const p = elapsed / introDur;
-      scale = (0.5 + p * 0.5) * (cap.scale || 1.0);
-      alpha = p;
-    }
-  }
+  const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+  const scale = (cap.scale || 1.0) * motion.dScale * animScale;
+  const alpha = animEval.alpha;
+  const xOffset = animEval.offsetX;
+  const yOffset = animEval.offsetY;
 
   ctx.translate(px + xOffset, py + yOffset);
-  const rot = (cap.rotation || 0) + motion.dRot;
+  const rot = (cap.rotation || 0) + motion.dRot + animEval.rotation;
   ctx.rotate((rot * Math.PI) / 180);
   ctx.scale(scale, scale);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));

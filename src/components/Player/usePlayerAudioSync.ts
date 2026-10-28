@@ -205,7 +205,15 @@ export function usePlayerAudioSync({
 
       const clipStart = clip.startTime || 0;
       const clipEnd = clipStart + (clip.duration || 0);
-      const isInside = currentTime >= clipStart && currentTime <= clipEnd;
+      const hasAdjacentAudio = allSoundSources.some(
+        (other) =>
+          other.id !== clip.id &&
+          other.url === clip.url &&
+          Math.abs(other.startTime - clipEnd) < 0.01,
+      );
+      const isInside = hasAdjacentAudio
+        ? currentTime >= clipStart && currentTime < clipEnd
+        : currentTime >= clipStart && currentTime <= clipEnd;
 
       const effSpeed = Math.max(0.1, clip.speed || 1.0);
 

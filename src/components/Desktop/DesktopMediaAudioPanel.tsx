@@ -15,13 +15,26 @@ import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject, AudioClip } from '../../types/project';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
 import { addNotification } from '../../utils/storage';
+import { THEME_COLORS } from '../../constants/designConstants';
+
+export type DesktopResourceTab =
+  | 'media'
+  | 'audio'
+  | 'text'
+  | 'stickers'
+  | 'effects'
+  | 'transitions';
 
 export interface DesktopMediaAudioPanelProps {
   project: FastArtProject;
-  activeTab: 'media' | 'audio';
-  onSelectTab: (tab: 'media' | 'audio') => void;
+  activeTab: DesktopResourceTab;
+  onSelectTab: (tab: DesktopResourceTab) => void;
   onAddMedia: (clip: any) => void;
   onAddAudio: (clip: AudioClip) => void;
+  onAddText?: (text: string, color?: string) => void;
+  onAddSticker?: (sticker: string) => void;
+  onAddEffect?: (effectName: string) => void;
+  onAddTransition?: (transitionId: string) => void;
   currentTime: number;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -31,7 +44,7 @@ export interface DesktopMediaAudioPanelProps {
   style?: any;
 }
 
-// Built-in high quality royalty-free BGM and SFX presets
+// Royalty-free BGM and SFX presets
 const AUDIO_PRESETS = [
   { id: 'bgm-1', title: 'Upbeat Vlog Beat', duration: 18.5, category: 'Music', tone: 'Energetic' },
   { id: 'bgm-2', title: 'Cinematic Ambient', duration: 24.0, category: 'Music', tone: 'Epic' },
@@ -43,17 +56,59 @@ const AUDIO_PRESETS = [
   { id: 'sfx-4', title: 'Digital Pop & Click', duration: 0.5, category: 'SFX', tone: 'Minimal' },
 ];
 
+// CapCut style text title templates
+const TEXT_TEMPLATES = [
+  { id: 'text-default', title: 'Default Text', text: 'Add Headline', color: '#FFFFFF', bg: '#1E2024' },
+  { id: 'text-cyan', title: 'Cyan Neon', text: 'GLOW UP', color: '#00E5C9', bg: '#082928' },
+  { id: 'text-gold', title: 'Cinematic Gold', text: 'CHAPTER ONE', color: '#F59E0B', bg: '#291F09' },
+  { id: 'text-bold-red', title: 'Bold Red', text: 'DON’T MISS', color: '#EF4444', bg: '#2B0E0E' },
+  { id: 'text-purple', title: 'Vlog Daily', text: 'Daily Vlog', color: '#A855F7', bg: '#250E36' },
+  { id: 'text-subtitle', title: 'Clean Subtitle', text: 'Subtitle text goes here', color: '#E2E8F0', bg: '#1B2230' },
+];
+
+// Curated stickers/emojis
+const STICKER_CATEGORIES = [
+  { name: 'Trending', items: ['🔥', '✨', '⚡', '💯', '❤️', '🎉', '🚀', '🌟'] },
+  { name: 'Reactions', items: ['😂', '😍', '🤯', '😎', '👏', '🙌', '👀', '🤫'] },
+  { name: 'Vlog & Social', items: ['🔔', '👍', '📌', '🎬', '📸', '🎵', '💡', '🏆'] },
+];
+
+// Video effect presets
+const EFFECT_TEMPLATES = [
+  { id: 'glow', label: 'Cyan Glow', desc: 'Futuristic neon radiance', icon: 'sunny-outline' },
+  { id: 'vintage', label: 'Vintage Film', desc: 'Classic 35mm warmth & grain', icon: 'film-outline' },
+  { id: 'vhs', label: 'VHS Glitch', desc: 'Retro 80s tape distortion', icon: 'tv-outline' },
+  { id: 'blur', label: 'Soft Blur', desc: 'Atmospheric depth of field', icon: 'water-outline' },
+  { id: 'zoom', label: 'Pulse Zoom', desc: 'Rhythmic bass impact scale', icon: 'contract-outline' },
+  { id: 'rgb', label: 'RGB Split', desc: 'Chromatic aberration twitch', icon: 'color-filter-outline' },
+  { id: 'bw', label: 'Noir B&W', desc: 'High contrast monochrome', icon: 'contrast-outline' },
+];
+
+// Video transition presets
+const TRANSITION_TEMPLATES = [
+  { id: 'dissolve', label: 'Dissolve', desc: 'Smooth cross-fade', icon: 'git-merge-outline' },
+  { id: 'fade-black', label: 'Fade to Black', desc: 'Cinematic dip to dark', icon: 'moon-outline' },
+  { id: 'slide-left', label: 'Slide Left', desc: 'Horizontal wipe left', icon: 'arrow-forward-outline' },
+  { id: 'slide-right', label: 'Slide Right', desc: 'Horizontal wipe right', icon: 'arrow-back-outline' },
+  { id: 'zoom-in', label: 'Zoom In', desc: 'Dynamic scale punch through', icon: 'expand-outline' },
+  { id: 'whip-pan', label: 'Whip Pan', desc: 'Fast directional motion blur', icon: 'swap-horizontal-outline' },
+];
+
 export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   project,
   activeTab,
   onSelectTab,
   onAddMedia,
   onAddAudio,
+  onAddText,
+  onAddSticker,
+  onAddEffect,
+  onAddTransition,
   currentTime,
   isCollapsed = false,
   onToggleCollapse,
   width,
-  position = 'right',
+  position = 'left',
   onSwapPosition,
   style,
 }) => {
@@ -98,15 +153,20 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                 transform: { scale: 1, rotation: 0, x: 0, y: 0 },
               };
 
-              soundEngine.playSfx('whoosh');
+              soundEngine.playSfx('pop');
               onAddMedia(clip);
               addNotification({
-                title: 'Media Imported',
-                message: `Added "${clip.title}" to project timeline.`,
-                icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
+                title: isVideo ? 'Video Imported' : 'Photo Imported',
+                message: `Added "${title}" to project at ${currentTime.toFixed(1)}s`,
+                type: 'success',
               });
-            } catch (err) {
-              console.error('Failed to import media:', err);
+            } catch (err: any) {
+              console.error('Failed to import media file:', err);
+              addNotification({
+                title: 'Import Failed',
+                message: err?.message || 'Could not load media file',
+                type: 'error',
+              });
             } finally {
               setIsLoading(false);
             }
@@ -115,84 +175,83 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         input.click();
       }
     } catch (e) {
+      console.error(e);
       setIsLoading(false);
     }
   };
 
-  // Handle local device audio upload (MP3, WAV, M4A, etc.)
+  // Handle local device audio file upload
   const handleDeviceAudioUpload = async () => {
     try {
       if (Platform.OS === 'web') {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac';
+        input.accept = 'audio/*';
         input.onchange = async (e: any) => {
           const file = e.target.files?.[0];
-          if (!file) return;
-
-          setIsLoading(true);
-          const fileName = file.name.replace(/\.[^/.]+$/, '');
-          const trackId = 'user-audio-' + Date.now();
-
-          const probe = new Audio(URL.createObjectURL(file));
-          let handled = false;
-
-          const commitAudio = async (dur: number) => {
-            if (handled) return;
-            handled = true;
+          if (file) {
+            setIsLoading(true);
             try {
-              const validDuration =
-                dur && !isNaN(dur) && isFinite(dur) && dur > 0
-                  ? Math.round(dur * 10) / 10
-                  : 15.0;
+              const audioId = 'audio-' + Date.now();
+              const title = file.name.replace(/\.[^/.]+$/, '');
+              const url = URL.createObjectURL(file);
 
-              const saved = await persistLargeMedia(file, trackId, fileName, 'audio', {
-                duration: validDuration,
-              });
-
-              const audioClip: AudioClip = {
-                id: 'clip-a-' + Date.now(),
-                title: fileName,
-                url: saved.url,
+              const clip: AudioClip = {
+                id: audioId,
+                title,
+                url,
+                duration: 10.0,
                 startTime: currentTime || 0,
-                duration: validDuration,
-                volume: 1.0,
                 trackIndex: 1,
+                volume: 1.0,
+                fadeIn: 0,
+                fadeOut: 0,
               };
 
               soundEngine.playSfx('pop');
-              onAddAudio(audioClip);
-            } catch (err) {
-              console.error('Failed to persist audio:', err);
+              onAddAudio(clip);
+              addNotification({
+                title: 'Audio Imported',
+                message: `Added "${title}" to project at ${currentTime.toFixed(1)}s`,
+                type: 'success',
+              });
+            } catch (err: any) {
+              console.error('Failed to import audio:', err);
             } finally {
               setIsLoading(false);
             }
-          };
-
-          probe.onloadedmetadata = () => commitAudio(probe.duration);
-          probe.onerror = () => commitAudio(15.0);
-          setTimeout(() => commitAudio(15.0), 3000);
+          }
         };
         input.click();
       }
     } catch (e) {
+      console.error(e);
       setIsLoading(false);
     }
   };
 
+  // Add preset audio directly to timeline
   const handleAddPresetAudio = (preset: typeof AUDIO_PRESETS[0]) => {
     soundEngine.playSfx('pop');
-    const newAudioClip: AudioClip = {
-      id: 'bgm-' + Date.now(),
+    const clip: AudioClip = {
+      id: `audio-${Date.now()}`,
       title: preset.title,
-      url: '',
+      duration: preset.duration || 10.0,
       startTime: currentTime || 0,
-      duration: preset.duration,
-      volume: 1.0,
       trackIndex: 1,
+      volume: 1.0,
+      url: 'https://actions.google.com/sounds/v1/ambiences/outdoor_ambience.ogg',
     };
-    onAddAudio(newAudioClip);
+    onAddAudio(clip);
+    addNotification({
+      title: 'Audio Added',
+      message: `Added "${preset.title}" at ${currentTime.toFixed(1)}s`,
+      type: 'success',
+    });
   };
+
+  const videoClips = project.tracks?.video || [];
+  const audioClips = project.tracks?.audio || [];
 
   if (isCollapsed) {
     return (
@@ -200,9 +259,8 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         style={[
           styles.collapsedBar,
           position === 'right'
-            ? { borderLeftWidth: 1, borderLeftColor: 'rgba(255, 255, 255, 0.08)', borderRightWidth: 0 }
-            : { borderRightWidth: 1, borderRightColor: 'rgba(255, 255, 255, 0.08)', borderLeftWidth: 0 },
-          style,
+            ? { borderLeftWidth: 1, borderLeftColor: THEME_COLORS.borderSubtle, borderRightWidth: 0 }
+            : {},
         ]}
       >
         <TouchableOpacity
@@ -213,16 +271,22 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         >
           <Ionicons
             name={position === 'right' ? 'chevron-back' : 'chevron-forward'}
-            size={16}
-            color="#00F2FE"
+            size={14}
+            color={THEME_COLORS.accent}
           />
         </TouchableOpacity>
       </View>
     );
   }
 
-  const videoClips = project?.tracks?.video || [];
-  const audioClips = project?.tracks?.audio || [];
+  const tabs: { id: DesktopResourceTab; label: string; icon: any }[] = [
+    { id: 'media', label: 'Media', icon: 'folder-outline' },
+    { id: 'audio', label: 'Audio', icon: 'musical-notes-outline' },
+    { id: 'text', label: 'Text', icon: 'text-outline' },
+    { id: 'stickers', label: 'Stickers', icon: 'happy-outline' },
+    { id: 'effects', label: 'Effects', icon: 'sparkles-outline' },
+    { id: 'transitions', label: 'Transitions', icon: 'swap-horizontal-outline' },
+  ];
 
   return (
     <View
@@ -230,62 +294,45 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         styles.panelContainer,
         width !== undefined && { width },
         position === 'right'
-          ? { borderLeftWidth: 1, borderLeftColor: 'rgba(255, 255, 255, 0.08)', borderRightWidth: 0 }
-          : { borderRightWidth: 1, borderRightColor: 'rgba(255, 255, 255, 0.08)', borderLeftWidth: 0 },
+          ? { borderLeftWidth: 1, borderLeftColor: THEME_COLORS.borderSubtle, borderRightWidth: 0 }
+          : {},
         style,
       ]}
     >
-      {/* Top Header Tabs */}
+      {/* Top Tab Bar: CapCut categories */}
       <View style={styles.topTabBar}>
-        <View style={styles.tabButtonsRow}>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'media' && styles.tabBtnActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onSelectTab('media');
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="images-outline"
-              size={14}
-              color={activeTab === 'media' ? '#00F2FE' : '#8E95A5'}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === 'media' && styles.tabBtnTextActive,
-              ]}
-            >
-              Media ({videoClips.length})
-            </Text>
-          </TouchableOpacity>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsScrollView}
+          contentContainerStyle={styles.tabButtonsRow}
+        >
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tabBtn, isActive && styles.tabBtnActive]}
+                onPress={() => {
+                  soundEngine.playSfx('click');
+                  onSelectTab(tab.id);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={tab.icon}
+                  size={12}
+                  color={isActive ? THEME_COLORS.accent : THEME_COLORS.textMuted}
+                />
+                <Text style={[styles.tabBtnText, isActive && styles.tabBtnTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'audio' && styles.tabBtnActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              onSelectTab('audio');
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="musical-notes-outline"
-              size={14}
-              color={activeTab === 'audio' ? '#00F2FE' : '#8E95A5'}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === 'audio' && styles.tabBtnTextActive,
-              ]}
-            >
-              Audio ({audioClips.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <View style={styles.tabActionsRow}>
           {onSwapPosition && (
             <TouchableOpacity
               style={styles.collapseToggleBtn}
@@ -293,7 +340,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
               activeOpacity={0.7}
               accessibilityLabel="Swap panels side"
             >
-              <Ionicons name="swap-horizontal" size={14} color="#8E95A5" />
+              <Ionicons name="swap-horizontal" size={13} color="#8E95A5" />
             </TouchableOpacity>
           )}
 
@@ -306,7 +353,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             >
               <Ionicons
                 name={position === 'right' ? 'chevron-forward' : 'chevron-back'}
-                size={15}
+                size={14}
                 color="#8E95A5"
               />
             </TouchableOpacity>
@@ -314,7 +361,9 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         </View>
       </View>
 
-      {/* Media Tab Body */}
+      {/* ─────────────────────────────────────────────
+          1. MEDIA TAB BODY
+          ───────────────────────────────────────────── */}
       {activeTab === 'media' && (
         <ScrollView
           style={styles.contentScroll}
@@ -329,16 +378,16 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             activeOpacity={0.8}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color="#00F2FE" />
+              <ActivityIndicator size="small" color={THEME_COLORS.accent} />
             ) : (
               <>
-                <Ionicons name="cloud-upload-outline" size={15} color="#00F2FE" />
-                <Text style={styles.importBtnTitle}>+ Import Media</Text>
+                <Ionicons name="cloud-upload-outline" size={15} color={THEME_COLORS.accent} />
+                <Text style={styles.importBtnTitle}>+ Import Video / Photo</Text>
               </>
             )}
           </TouchableOpacity>
 
-          {/* Section: Project Clips */}
+          {/* Section: Project Assets */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>PROJECT ASSETS</Text>
             <Text style={styles.sectionCount}>{videoClips.length} items</Text>
@@ -346,7 +395,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
 
           {videoClips.length === 0 ? (
             <View style={styles.emptyStateBox}>
-              <Ionicons name="film-outline" size={28} color="#3F3F46" />
+              <Ionicons name="film-outline" size={28} color={THEME_COLORS.textMuted} />
               <Text style={styles.emptyStateText}>No media clips uploaded yet</Text>
               <Text style={styles.emptyStateSubtext}>Click Import above to add video or photo</Text>
             </View>
@@ -382,7 +431,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                         <Ionicons
                           name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
                           size={18}
-                          color="#00F2FE"
+                          color={THEME_COLORS.accent}
                         />
                       </View>
                     )}
@@ -425,7 +474,9 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         </ScrollView>
       )}
 
-      {/* Audio Tab Body */}
+      {/* ─────────────────────────────────────────────
+          2. AUDIO TAB BODY
+          ───────────────────────────────────────────── */}
       {activeTab === 'audio' && (
         <ScrollView
           style={styles.contentScroll}
@@ -440,60 +491,18 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             activeOpacity={0.8}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color="#00F2FE" />
+              <ActivityIndicator size="small" color={THEME_COLORS.accent} />
             ) : (
               <>
-                <Ionicons name="musical-note-outline" size={15} color="#00F2FE" />
+                <Ionicons name="musical-note-outline" size={15} color={THEME_COLORS.accent} />
                 <Text style={styles.importBtnTitle}>+ Import Audio</Text>
               </>
             )}
           </TouchableOpacity>
 
-          {/* Section: Project Audio */}
-          {audioClips.length > 0 && (
-            <View style={{ marginBottom: 12 }}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>TIMELINE AUDIO</Text>
-                <Text style={styles.sectionCount}>{audioClips.length} tracks</Text>
-              </View>
-              {audioClips.map((a, i) => (
-                <View
-                  key={a.id || i}
-                  style={[styles.audioRowItem, Platform.OS === 'web' && ({ cursor: 'grab' } as any)]}
-                  {...(Platform.OS === 'web'
-                    ? {
-                        draggable: true,
-                        onDragStart: (e: any) => {
-                          const payload = {
-                            type: 'audio',
-                            clip: {
-                              ...a,
-                              id: `audio-copy-${Date.now()}`,
-                            },
-                          };
-                          e.dataTransfer.setData('application/fastart-clip', JSON.stringify(payload));
-                          e.dataTransfer.effectAllowed = 'copy';
-                        },
-                      }
-                    : {})}
-                >
-                  <Ionicons name="musical-notes" size={15} color="#00F2FE" />
-                  <View style={{ flex: 1, paddingHorizontal: 8 }}>
-                    <Text style={styles.audioRowTitle} numberOfLines={1}>
-                      {a.title || `Audio ${i + 1}`}
-                    </Text>
-                    <Text style={styles.audioRowSubtitle}>
-                      {a.duration?.toFixed(1)}s • Track {(a.trackIndex ?? 1) + 1}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* Section: Royalty Free Music & Sound Effects */}
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>STOCK MUSIC & SFX</Text>
+            <Text style={styles.sectionTitle}>SOUNDTRACKS & SFX</Text>
+            <Text style={styles.sectionCount}>{AUDIO_PRESETS.length} tracks</Text>
           </View>
 
           {AUDIO_PRESETS.map((preset) => {
@@ -534,8 +543,8 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                 >
                   <Ionicons
                     name={isPlaying ? 'pause' : 'play'}
-                    size={12}
-                    color={isPlaying ? '#000000' : '#00F2FE'}
+                    size={11}
+                    color={isPlaying ? '#000000' : THEME_COLORS.accent}
                   />
                 </TouchableOpacity>
 
@@ -554,11 +563,189 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                   activeOpacity={0.7}
                   accessibilityLabel="Add to timeline"
                 >
-                  <Ionicons name="add" size={15} color="#000000" />
+                  <Ionicons name="add" size={14} color="#000000" />
                 </TouchableOpacity>
               </View>
             );
           })}
+        </ScrollView>
+      )}
+
+      {/* ─────────────────────────────────────────────
+          3. TEXT TAB BODY
+          ───────────────────────────────────────────── */}
+      {activeTab === 'text' && (
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={styles.scrollInner}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>TEXT TEMPLATES</Text>
+            <Text style={styles.sectionCount}>{TEXT_TEMPLATES.length} presets</Text>
+          </View>
+
+          <View style={styles.textTemplatesGrid}>
+            {TEXT_TEMPLATES.map((tmpl) => (
+              <TouchableOpacity
+                key={tmpl.id}
+                style={[styles.textTemplateCard, { backgroundColor: tmpl.bg }]}
+                onPress={() => {
+                  soundEngine.playSfx('pop');
+                  if (onAddText) {
+                    onAddText(tmpl.text, tmpl.color);
+                    addNotification({
+                      title: 'Text Added',
+                      message: `Added "${tmpl.text}" at ${currentTime.toFixed(1)}s`,
+                      type: 'success',
+                    });
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.textTemplatePreview, { color: tmpl.color }]} numberOfLines={1}>
+                  {tmpl.text}
+                </Text>
+                <View style={styles.textTemplateFooter}>
+                  <Text style={styles.textTemplateTitle}>{tmpl.title}</Text>
+                  <View style={styles.textAddPill}>
+                    <Ionicons name="add" size={11} color="#000000" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ─────────────────────────────────────────────
+          4. STICKERS TAB BODY
+          ───────────────────────────────────────────── */}
+      {activeTab === 'stickers' && (
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={styles.scrollInner}
+          showsVerticalScrollIndicator={false}
+        >
+          {STICKER_CATEGORIES.map((cat) => (
+            <View key={cat.name} style={{ marginBottom: 14 }}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>{cat.name.toUpperCase()}</Text>
+              </View>
+              <View style={styles.stickersGrid}>
+                {cat.items.map((emoji, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.stickerItem}
+                    onPress={() => {
+                      soundEngine.playSfx('pop');
+                      if (onAddSticker) {
+                        onAddSticker(emoji);
+                        addNotification({
+                          title: 'Sticker Added',
+                          message: `Added ${emoji} at ${currentTime.toFixed(1)}s`,
+                          type: 'success',
+                        });
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.stickerEmoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* ─────────────────────────────────────────────
+          5. EFFECTS TAB BODY
+          ───────────────────────────────────────────── */}
+      {activeTab === 'effects' && (
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={styles.scrollInner}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>VIDEO EFFECTS</Text>
+            <Text style={styles.sectionCount}>{EFFECT_TEMPLATES.length} effects</Text>
+          </View>
+
+          {EFFECT_TEMPLATES.map((eff) => (
+            <View key={eff.id} style={styles.effectCard}>
+              <View style={styles.effectIconCircle}>
+                <Ionicons name={eff.icon as any} size={15} color={THEME_COLORS.accent} />
+              </View>
+              <View style={{ flex: 1, paddingHorizontal: 8 }}>
+                <Text style={styles.effectTitle}>{eff.label}</Text>
+                <Text style={styles.effectDesc}>{eff.desc}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.addDirectBtn}
+                onPress={() => {
+                  soundEngine.playSfx('whoosh');
+                  if (onAddEffect) {
+                    onAddEffect(eff.id);
+                    addNotification({
+                      title: 'Effect Applied',
+                      message: `Applied ${eff.label}`,
+                      type: 'success',
+                    });
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={14} color="#000000" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* ─────────────────────────────────────────────
+          6. TRANSITIONS TAB BODY
+          ───────────────────────────────────────────── */}
+      {activeTab === 'transitions' && (
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={styles.scrollInner}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>TRANSITIONS</Text>
+            <Text style={styles.sectionCount}>{TRANSITION_TEMPLATES.length} transitions</Text>
+          </View>
+
+          {TRANSITION_TEMPLATES.map((tr) => (
+            <View key={tr.id} style={styles.effectCard}>
+              <View style={styles.effectIconCircle}>
+                <Ionicons name={tr.icon as any} size={15} color={THEME_COLORS.accent} />
+              </View>
+              <View style={{ flex: 1, paddingHorizontal: 8 }}>
+                <Text style={styles.effectTitle}>{tr.label}</Text>
+                <Text style={styles.effectDesc}>{tr.desc}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.addDirectBtn}
+                onPress={() => {
+                  soundEngine.playSfx('whoosh');
+                  if (onAddTransition) {
+                    onAddTransition(tr.id);
+                    addNotification({
+                      title: 'Transition Applied',
+                      message: `Applied ${tr.label}`,
+                      type: 'success',
+                    });
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={14} color="#000000" />
+              </TouchableOpacity>
+            </View>
+          ))}
         </ScrollView>
       )}
     </View>
@@ -567,10 +754,10 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
 
 const styles = StyleSheet.create({
   panelContainer: {
-    width: 260,
-    backgroundColor: '#0F131D',
+    width: 270,
+    backgroundColor: THEME_COLORS.surface,
     borderRightWidth: 1,
-    borderRightColor: '#1F2637',
+    borderRightColor: THEME_COLORS.borderSubtle,
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
@@ -578,9 +765,9 @@ const styles = StyleSheet.create({
   },
   collapsedBar: {
     width: 20,
-    backgroundColor: '#08090E',
+    backgroundColor: THEME_COLORS.background,
     borderRightWidth: 1,
-    borderRightColor: '#1F2637',
+    borderRightColor: THEME_COLORS.borderSubtle,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
@@ -590,48 +777,73 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#131826',
+    backgroundColor: THEME_COLORS.card,
     borderRadius: 4,
   },
   topTabBar: {
-    height: 36,
+    height: 40,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    backgroundColor: '#08090E',
+    paddingLeft: 6,
+    paddingRight: 6,
+    backgroundColor: '#12151E',
+  },
+  tabsScrollView: {
+    flex: 1,
+    height: 40,
   },
   tabButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 40,
+    gap: 3,
+    paddingRight: 8,
+  },
+  tabActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    paddingLeft: 6,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#12151E',
     gap: 4,
+    zIndex: 2,
   },
   tabBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 28,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
+    borderRadius: 6,
     gap: 4,
+    backgroundColor: 'transparent',
   },
   tabBtnActive: {
     backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.3)',
   },
   tabBtnText: {
-    color: '#94A3B8',
-    fontSize: 10,
+    color: '#8E95A5',
+    fontSize: 11,
     fontWeight: '600',
+    letterSpacing: 0.1,
   },
   tabBtnTextActive: {
     color: '#00F2FE',
     fontWeight: '700',
   },
   collapseToggleBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -639,37 +851,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollInner: {
-    padding: 12,
+    padding: 10,
   },
   importMediaBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: THEME_COLORS.cyanBorder,
     borderStyle: 'dashed',
     borderRadius: 6,
     paddingVertical: 7,
     paddingHorizontal: 10,
-    marginBottom: 8,
+    marginBottom: 10,
     gap: 6,
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.04)',
-  },
-  importIconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: THEME_COLORS.cyanBg,
   },
   importBtnTitle: {
-    color: '#00F2FE',
+    color: THEME_COLORS.accent,
     fontSize: 11,
     fontWeight: '700',
-  },
-  importBtnSubtitle: {
-    display: 'none' as any,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -678,13 +879,13 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sectionTitle: {
-    color: '#64748B',
+    color: THEME_COLORS.textMuted,
     fontSize: 8.5,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
   sectionCount: {
-    color: '#64748B',
+    color: THEME_COLORS.textMuted,
     fontSize: 8.5,
     fontWeight: '600',
   },
@@ -694,13 +895,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyStateText: {
-    color: '#94A3B8',
+    color: THEME_COLORS.textMuted,
     fontSize: 11,
     fontWeight: '600',
     marginTop: 6,
   },
   emptyStateSubtext: {
-    color: '#64748B',
+    color: THEME_COLORS.textMuted,
     fontSize: 9.5,
     marginTop: 2,
     textAlign: 'center',
@@ -710,17 +911,17 @@ const styles = StyleSheet.create({
   },
   mediaCard: {
     flexDirection: 'row',
-    backgroundColor: '#131826',
+    backgroundColor: THEME_COLORS.card,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: THEME_COLORS.borderSubtle,
     overflow: 'hidden',
     height: 48,
   },
   thumbnailBox: {
     width: 58,
     height: '100%',
-    backgroundColor: '#08090E',
+    backgroundColor: THEME_COLORS.background,
     position: 'relative',
   },
   thumbnailImg: {
@@ -750,11 +951,10 @@ const styles = StyleSheet.create({
   mediaCardInfo: {
     flex: 1,
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   mediaCardTitle: {
-    color: '#E4E4E7',
+    color: THEME_COLORS.textPrimary,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -762,76 +962,131 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 3,
   },
   mediaTypeTag: {
-    color: '#71717A',
-    fontSize: 9,
+    color: THEME_COLORS.textSecondary,
+    fontSize: 8.5,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   addDirectBtn: {
-    flexDirection: 'row',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: THEME_COLORS.accent,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#00F2FE',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 4,
-    gap: 2,
-  },
-  addDirectBtnText: {
-    color: '#000000',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  audioRowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#131826',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#1F2637',
-    padding: 6,
-    marginBottom: 4,
-  },
-  audioRowTitle: {
-    color: '#FFFFFF',
-    fontSize: 10.5,
-    fontWeight: '600',
-  },
-  audioRowSubtitle: {
-    color: '#64748B',
-    fontSize: 8.5,
-    marginTop: 1,
   },
   presetAudioCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
+    backgroundColor: THEME_COLORS.card,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
-    padding: 6,
-    marginBottom: 4,
+    borderColor: THEME_COLORS.borderSubtle,
+    padding: 7,
+    marginBottom: 6,
   },
   previewPlayCircle: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    backgroundColor: THEME_COLORS.surfaceElevated,
     justifyContent: 'center',
     alignItems: 'center',
   },
   previewPlayCircleActive: {
-    backgroundColor: '#00F2FE',
+    backgroundColor: THEME_COLORS.accent,
   },
   presetTitle: {
-    color: '#FFFFFF',
+    color: THEME_COLORS.textPrimary,
     fontSize: 10.5,
     fontWeight: '600',
   },
   presetMeta: {
-    color: '#64748B',
+    color: THEME_COLORS.textMuted,
     fontSize: 8.5,
+    marginTop: 1,
+  },
+  textTemplatesGrid: {
+    gap: 8,
+  },
+  textTemplateCard: {
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    padding: 10,
+    justifyContent: 'center',
+  },
+  textTemplatePreview: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  textTemplateFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  textTemplateTitle: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9.5,
+    fontWeight: '600',
+  },
+  textAddPill: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: THEME_COLORS.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stickersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  stickerItem: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: THEME_COLORS.card,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stickerEmoji: {
+    fontSize: 18,
+  },
+  effectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME_COLORS.card,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    padding: 8,
+    marginBottom: 6,
+  },
+  effectIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: THEME_COLORS.cyanBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  effectTitle: {
+    color: THEME_COLORS.textPrimary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  effectDesc: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9,
     marginTop: 1,
   },
 });

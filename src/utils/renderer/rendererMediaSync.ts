@@ -11,6 +11,9 @@ export interface MediaSyncContext {
   onFrameNeeded?: () => void;
 }
 
+// Global registry of active player video elements for 0ms frame extraction and split snapshots
+export const globalActiveVideoElements = new Map<string, HTMLVideoElement>();
+
 export function cleanupMedia(
   ctx: MediaSyncContext,
   offscreenCanvas?: HTMLCanvasElement | null,
@@ -25,6 +28,7 @@ export function cleanupMedia(
     }
   });
   ctx.videoElements.clear();
+  globalActiveVideoElements.clear();
   ctx.thumbnailElements.clear();
   ctx.lastUsedTimestamp.clear();
   if (offscreenCanvas) {
@@ -47,6 +51,7 @@ export function pruneUnusedMedia(
         } catch (e) {}
       }
       ctx.videoElements.delete(url);
+      globalActiveVideoElements.delete(url);
       ctx.lastUsedTimestamp.delete(url);
     }
   });
@@ -136,11 +141,13 @@ export async function preloadClip(
     vid.addEventListener("error", async () => {
       try {
         const lookupId = clip.sourceMediaId || clip.id;
-        const freshUrl = await getLiveMediaUrl(lookupId);
+        const freshUrl = await getLiveMediaUrl(lookupId, clip.title || (clip as any).name);
         if (freshUrl && freshUrl !== clip.url) {
           ctx.videoElements.delete(clip.url);
+          globalActiveVideoElements.delete(clip.url);
           clip.url = freshUrl;
           ctx.videoElements.set(freshUrl, vid);
+          globalActiveVideoElements.set(freshUrl, vid);
           vid.src = freshUrl;
           vid.load();
           return;
@@ -151,6 +158,7 @@ export async function preloadClip(
     vid.load();
 
     ctx.videoElements.set(clip.url, vid);
+    globalActiveVideoElements.set(clip.url, vid);
     return vid;
   } else {
     const img = new Image();

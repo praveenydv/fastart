@@ -32,6 +32,7 @@ export interface KeyframeModalProps {
     time: number,
     transform: Partial<ClipTransform>,
     opacity?: number,
+    easing?: any,
   ) => void;
   onDeleteKeyframeAtTime?: (time: number) => void;
   onClearAllKeyframes?: () => void;
@@ -278,6 +279,7 @@ export default function KeyframeModal({
                   activeX={activeX}
                   activeY={activeY}
                   activeOpacity={activeOpacity}
+                  activeEasing={currentKeyframe?.easing || "easeInOut"}
                   activeTransform={activeTransform}
                   localTime={localTime}
                   onUpdateKeyframeTransform={onUpdateKeyframeTransform}

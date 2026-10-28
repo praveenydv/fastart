@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { UnifiedClipItem } from "./timelineTypes";
 import {
@@ -114,7 +114,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
           <View style={styles.loadingPulseRow}>
             <ActivityIndicator
               size="small"
-              color={isDenoised ? "#10B981" : isAudio ? "#34D399" : "#00F2FE"}
+              color={isDenoised ? "#10B981" : isAudio ? "#34D399" : "#FFFFFF"}
             />
             {availableWidth > 80 && (
               <Text
@@ -125,7 +125,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
                       ? "#10B981"
                       : isAudio
                         ? "#34D399"
-                        : "#00F2FE",
+                        : "#FFFFFF",
                   },
                 ]}
                 numberOfLines={1}
@@ -145,7 +145,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
                         ? "#10B981"
                         : isAudio
                           ? "#34D399"
-                          : "#00F2FE",
+                          : "#FFFFFF",
                       opacity: 0.35 + (i % 3) * 0.25,
                     },
                   ]}
@@ -169,6 +169,60 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   const maxBarHeight = 28;
   const minBarHeight = 3;
 
+interface WebWaveformCanvasProps {
+  peaks: number[];
+  availableWidth: number;
+  height: number;
+  barColor: string;
+  isBottomAnchored?: boolean;
+}
+
+const WebWaveformCanvas: React.FC<WebWaveformCanvasProps> = ({
+  peaks,
+  availableWidth,
+  height,
+  barColor,
+  isBottomAnchored = false,
+}) => {
+  const canvasRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext ? canvas.getContext("2d") : null;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, availableWidth, height);
+    ctx.fillStyle = barColor;
+
+    const numBars = peaks.length;
+    const barWidth = 2.0;
+    const dynamicGap =
+      numBars > 1 ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1)) : 0;
+    const minH = 2;
+
+    for (let i = 0; i < numBars; i++) {
+      const h = Math.max(minH, Math.min(height, Math.round(peaks[i] * height)));
+      const x = i * (barWidth + dynamicGap);
+      const y = isBottomAnchored ? height - h : (height - h) / 2;
+      ctx.fillRect(x, y, barWidth, h);
+    }
+  }, [peaks, availableWidth, height, barColor, isBottomAnchored]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={availableWidth}
+      height={height}
+      style={{
+        width: availableWidth,
+        height,
+        display: "block",
+        pointerEvents: "none",
+      }}
+    />
+  );
+};
+
   // Audio clip: full-height centered waveform across the whole clip
   if (isAudio) {
     const barColor = isDenoised
@@ -189,28 +243,39 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
           </View>
         )}
 
-        <View style={styles.barsRow}>
-          {peaks.map((peak, idx) => (
-            <View
-              key={idx}
-              style={[
-                styles.waveBar,
-                {
-                  height: Math.max(
-                    minBarHeight,
-                    Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
-                  ),
-                  backgroundColor: barColor,
-                  marginRight: idx === numBars - 1 ? 0 : dynamicGap,
-                  shadowColor: isDenoised ? "#10B981" : "transparent",
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: isDenoised ? 0.6 : 0,
-                  shadowRadius: 2,
-                },
-              ]}
+        {Platform.OS === "web" ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <WebWaveformCanvas
+              peaks={peaks}
+              availableWidth={availableWidth}
+              height={maxBarHeight}
+              barColor={barColor}
             />
-          ))}
-        </View>
+          </View>
+        ) : (
+          <View style={styles.barsRow}>
+            {peaks.map((peak, idx) => (
+              <View
+                key={idx}
+                style={[
+                  styles.waveBar,
+                  {
+                    height: Math.max(
+                      minBarHeight,
+                      Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
+                    ),
+                    backgroundColor: barColor,
+                    marginRight: idx === numBars - 1 ? 0 : dynamicGap,
+                    shadowColor: isDenoised ? "#10B981" : "transparent",
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: isDenoised ? 0.6 : 0,
+                    shadowRadius: 2,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        )}
       </View>
     );
   }
@@ -247,25 +312,37 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
             </View>
           )}
 
-          <View style={styles.barsRowBottom}>
-            {peaks.map((peak, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.waveBar,
-                  {
-                    height: Math.max(
-                      minBarHeight,
-                      Math.min(10, Math.round(peak * 10)),
-                    ),
-                    backgroundColor: videoBarColor,
-                    marginRight: idx === numBars - 1 ? 0 : dynamicGap,
-                    opacity: isMuted ? 0.6 : 0.95,
-                  },
-                ]}
+          {Platform.OS === "web" ? (
+            <View style={{ height: 10, justifyContent: "flex-end", alignItems: "center" }}>
+              <WebWaveformCanvas
+                peaks={peaks}
+                availableWidth={availableWidth}
+                height={10}
+                barColor={videoBarColor}
+                isBottomAnchored={true}
               />
-            ))}
-          </View>
+            </View>
+          ) : (
+            <View style={styles.barsRowBottom}>
+              {peaks.map((peak, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.waveBar,
+                    {
+                      height: Math.max(
+                        minBarHeight,
+                        Math.min(10, Math.round(peak * 10)),
+                      ),
+                      backgroundColor: videoBarColor,
+                      marginRight: idx === numBars - 1 ? 0 : dynamicGap,
+                      opacity: isMuted ? 0.6 : 0.95,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          )}
         </View>
       </View>
     );

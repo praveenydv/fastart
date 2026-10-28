@@ -49,6 +49,15 @@ export function applyMotionTracking(
   if (!motionTrack || !motionTrack.enabled) {
     return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
   }
+  if (motionTrack.trajectory && Array.isArray(motionTrack.trajectory) && motionTrack.trajectory.length > 0) {
+    return rustCoreBridge.evaluateObjectTrackTrajectory(
+      time,
+      motionTrack.trajectory,
+      motionTrack.trackScale !== false,
+      motionTrack.trackRotation === true,
+      motionTrack.actionType === 'camera_center'
+    );
+  }
   return rustCoreBridge.evaluateMotionTrack(
     time,
     clipStartTime,
@@ -70,13 +79,26 @@ export function buildMaskPath(
   dw: number,
   dh: number,
   roundness?: number,
+  width?: number,
+  height?: number,
 ) {
+  const effW = width !== undefined ? width : size;
+  const effH = height !== undefined ? height : size;
+
   if (shape === "circle") {
-    const radius = Math.max(1, (Math.min(dw, dh) * size) / 200);
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    const rx = Math.max(1, (dw * effW) / 200);
+    const ry = Math.max(1, (dh * effH) / 200);
+    if ((ctx as any).ellipse) {
+      (ctx as any).ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    } else {
+      ctx.save();
+      ctx.scale(rx, ry);
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.restore();
+    }
   } else if (shape === "rectangle") {
-    const rw = (dw * size) / 100;
-    const rh = (dh * size) / 100;
+    const rw = (dw * effW) / 100;
+    const rh = (dh * effH) / 100;
     const maxRad = Math.min(rw, rh) / 2;
     const rad = Math.max(0, Math.min(roundness ?? 16, maxRad));
     if ((ctx as any).roundRect) {
@@ -85,17 +107,21 @@ export function buildMaskPath(
       ctx.rect(-rw / 2, -rh / 2, rw, rh);
     }
   } else if (shape === "linear") {
-    // Sweep split line across the frame based on size (50% is center)
-    const splitY = ((50 - size) / 100) * dh;
+    // Sweep split line across the frame based on height (50% is center)
+    const splitY = ((50 - effH) / 100) * dh;
     const outerExtent = Math.max(dw, dh) * 4;
     ctx.rect(-outerExtent, splitY, outerExtent * 2, outerExtent * 2);
   } else if (shape === "mirror") {
     // Central horizontal slot/band of height bandH
-    const bandH = Math.max(2, (dh * size) / 100);
+    const bandH = Math.max(2, (dh * effH) / 100);
     const outerExtent = Math.max(dw, dh) * 4;
     ctx.rect(-outerExtent, -bandH / 2, outerExtent * 2, bandH);
   } else if (shape === "heart") {
-    const s = Math.max(2, (Math.min(dw, dh) * size) / 100);
+    const scaleX = Math.max(0.01, (dw * effW) / 10000);
+    const scaleY = Math.max(0.01, (dh * effH) / 10000);
+    ctx.save();
+    ctx.scale(scaleX, scaleY);
+    const s = 100;
     const r = s * 0.25;
     const cy = -s * 0.10;
     const bottomY = s * 0.46;
@@ -111,15 +137,16 @@ export function buildMaskPath(
     // Right flank curving down from outer tangent point to bottom tip
     ctx.bezierCurveTo(s * 0.50, s * 0.06, s * 0.28, s * 0.22, 0, bottomY);
     ctx.closePath();
+    ctx.restore();
   } else if (shape === "star") {
-    const outerR = Math.max(2, (Math.min(dw, dh) * size) / 200);
-    const innerR = outerR * 0.42;
+    const scaleX = Math.max(0.01, (dw * effW) / 200);
+    const scaleY = Math.max(0.01, (dh * effH) / 200);
     const points = 5;
     for (let i = 0; i < points * 2; i++) {
-      const r = i % 2 === 0 ? outerR : innerR;
+      const radiusFactor = i % 2 === 0 ? 1.0 : 0.42;
       const a = (i * Math.PI) / points - Math.PI / 2;
-      const x = r * Math.cos(a);
-      const y = r * Math.sin(a);
+      const x = scaleX * radiusFactor * Math.cos(a);
+      const y = scaleY * radiusFactor * Math.sin(a);
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -253,7 +280,7 @@ export function drawClipWithMask(
     maskShapeCtx.rect(-outerExtent, -outerExtent, outerExtent * 2, outerExtent * 2);
   }
 
-  buildMaskPath(maskShapeCtx, mask.shape, size, dw, dh, mask.roundness);
+  buildMaskPath(maskShapeCtx, mask.shape, size, dw, dh, mask.roundness, mask.width, mask.height);
 
   maskShapeCtx.fillStyle = "#ffffff";
   maskShapeCtx.fill(mask.inverted ? "evenodd" : "nonzero");
@@ -296,7 +323,7 @@ export function applyMaskPath(
     ctx.rect(-outerExtent, -outerExtent, outerExtent * 2, outerExtent * 2);
   }
 
-  buildMaskPath(ctx, mask.shape, size, dw, dh, mask.roundness);
+  buildMaskPath(ctx, mask.shape, size, dw, dh, mask.roundness, mask.width, mask.height);
 
   // Clip the canvas using the mask path
   ctx.clip(mask.inverted ? "evenodd" : "nonzero");
@@ -509,7 +536,7 @@ export function applyEffectOverlay(
   canvas: HTMLCanvasElement | null,
   ensureOffscreen: (cw: number, ch: number) => HTMLCanvasElement | null,
 ) {
-  if (!canvas) return;
+  if (!canvas || !eff || !eff.type || eff.type === "none" || eff.type === "None") return;
   ctx.save();
   ctx.filter = "none";
   ctx.globalCompositeOperation = "source-over";
@@ -522,6 +549,10 @@ export function applyEffectOverlay(
     eff.type === "shake" ||
     eff.type === "blur" ||
     eff.type === "blur_cinematic" ||
+    eff.type === "gaussian_blur" ||
+    eff.type === "motion_blur" ||
+    eff.type === "radial_blur" ||
+    eff.type === "mosaic_blur" ||
     eff.type === "water_ripple" ||
     eff.type === "tilt_shift" ||
     eff.type === "kaleidoscope" ||
@@ -717,6 +748,47 @@ export function applyEffectOverlay(
       ctx.filter = `blur(${Math.max(2, Math.round(intensity * 6))}px)`;
       ctx.drawImage(sourceCanvas, 0, 0, cw, ch * 0.25, 0, 0, w, h * 0.25);
       ctx.drawImage(sourceCanvas, 0, ch * 0.75, cw, ch * 0.25, 0, h * 0.75, w, h * 0.25);
+      ctx.restore();
+    }
+  } else if (eff.type === "gaussian_blur" || eff.type === "blur" || eff.type === "blur_cinematic") {
+    if (sourceCanvas && sourceCanvas !== canvas) {
+      ctx.save();
+      const blurPx = Math.max(2, Math.round(intensity * 24));
+      ctx.filter = `blur(${blurPx}px)`;
+      ctx.drawImage(sourceCanvas, 0, 0, cw, ch, 0, 0, w, h);
+      ctx.restore();
+    }
+  } else if (eff.type === "motion_blur") {
+    if (sourceCanvas && sourceCanvas !== canvas) {
+      ctx.save();
+      const passCount = 4;
+      const maxOffset = Math.max(4, Math.round(intensity * 22));
+      ctx.globalAlpha = 1.0 / passCount;
+      for (let i = -passCount / 2; i <= passCount / 2; i++) {
+        ctx.drawImage(sourceCanvas, 0, 0, cw, ch, i * (maxOffset / passCount), 0, w, h);
+      }
+      ctx.restore();
+    }
+  } else if (eff.type === "radial_blur") {
+    if (sourceCanvas && sourceCanvas !== canvas) {
+      ctx.save();
+      const passes = 4;
+      ctx.globalAlpha = 1.0 / passes;
+      for (let p = 0; p < passes; p++) {
+        const scale = 1.0 + p * 0.04 * intensity;
+        ctx.drawImage(sourceCanvas, 0, 0, cw, ch, (w * (1 - scale)) / 2, (h * (1 - scale)) / 2, w * scale, h * scale);
+      }
+      ctx.restore();
+    }
+  } else if (eff.type === "mosaic_blur") {
+    if (sourceCanvas && sourceCanvas !== canvas) {
+      ctx.save();
+      const blockSize = Math.max(4, Math.round(intensity * 24));
+      const smallW = Math.max(4, Math.floor(w / blockSize));
+      const smallH = Math.max(4, Math.floor(h / blockSize));
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sourceCanvas, 0, 0, cw, ch, 0, 0, smallW, smallH);
+      ctx.drawImage(canvas, 0, 0, smallW, smallH, 0, 0, w, h);
       ctx.restore();
     }
   } else if (eff.type === "kaleidoscope") {

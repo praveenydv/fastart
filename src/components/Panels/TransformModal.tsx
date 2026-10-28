@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { ClipTransform, CustomCrop } from "../../types/project";
+import { CompactSliderInput } from "../Common/CompactSliderInput";
 
 interface TransformModalProps {
   visible: boolean;
@@ -20,6 +21,7 @@ interface TransformModalProps {
   initialTab?: "crop" | "flip" | "rotate" | "stretch" | "angle";
   onApplyTransform: (transform: ClipTransform, newAspectRatio?: any) => void;
   onOpenScreenCrop?: () => void;
+  setIsCroppingPreview?: (active: boolean) => void;
   isInline?: boolean;
 }
 
@@ -123,11 +125,24 @@ export default function TransformModal({
   initialTab = "crop",
   onApplyTransform,
   onOpenScreenCrop,
+  setIsCroppingPreview,
   isInline = false,
 }: TransformModalProps) {
   const [activeTab, setActiveTab] = useState<
     "crop" | "flip" | "rotate" | "stretch" | "angle"
   >(initialTab);
+
+  // Automatically activate interactive crop on player when crop tab is open
+  useEffect(() => {
+    if (visible && activeTab === "crop") {
+      setIsCroppingPreview?.(true);
+    } else {
+      setIsCroppingPreview?.(false);
+    }
+    return () => {
+      setIsCroppingPreview?.(false);
+    };
+  }, [visible, activeTab, setIsCroppingPreview]);
 
   // Crop states
   const [cropWidth, setCropWidth] = useState<number>(currentCrop?.width ?? 100);
@@ -164,9 +179,19 @@ export default function TransformModal({
     currentTransform?.perspective ?? 800,
   ); // 3D depth
 
+  const prevVisibleRef = useRef<boolean>(false);
+  const prevInitialTabRef = useRef<string>(initialTab);
+
   useEffect(() => {
-    if (visible) {
+    const justOpened = !prevVisibleRef.current && visible;
+    const initialTabChanged = prevInitialTabRef.current !== initialTab;
+
+    if (visible && (justOpened || initialTabChanged)) {
       setActiveTab(initialTab);
+      prevInitialTabRef.current = initialTab;
+    }
+
+    if (justOpened) {
       setFlipX(currentTransform?.flipX || false);
       setFlipY(currentTransform?.flipY || false);
       setRotation(currentTransform?.rotation ?? 0);
@@ -184,7 +209,9 @@ export default function TransformModal({
       setCropY(c?.y ?? 0);
       setSelectedRatio("free");
     }
-  }, [visible, currentTransform, currentCrop, initialTab]);
+
+    prevVisibleRef.current = visible;
+  }, [visible, initialTab]);
 
   const syncTransform = (overrides?: {
     crop?: CustomCrop | null;
@@ -425,9 +452,7 @@ export default function TransformModal({
   };
 
   const sheetContent = (
-    <View
-      style={[styles.sheetContainer, styles.inlineSheetContainer]}
-    >
+    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
         <View style={styles.header}>
@@ -440,7 +465,7 @@ export default function TransformModal({
             <Text style={styles.headerTitle}>Transform</Text>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <TouchableOpacity
               onPress={() => {
                 if (activeTab === "crop") handleResetCrop();
@@ -449,12 +474,27 @@ export default function TransformModal({
                 else if (activeTab === "stretch") handleResetStretch();
                 else handleResetAngle();
               }}
-              style={[styles.resetBtn, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
+              style={[
+                styles.resetBtn,
+                {
+                  paddingHorizontal: 10,
+                  height: 26,
+                  flexDirection: "row",
+                  alignItems: "center",
+                },
+              ]}
               activeOpacity={0.7}
               accessibilityLabel={`Reset ${activeTab}`}
             >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
-              <Text style={[styles.resetBtnText, { fontSize: 11 }]}>Reset {activeTab.toUpperCase()}</Text>
+              <Ionicons
+                name="refresh-outline"
+                size={12}
+                color="#00F2FE"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={[styles.resetBtnText, { fontSize: 11 }]}>
+                Reset {activeTab.toUpperCase()}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -645,96 +685,54 @@ export default function TransformModal({
               })}
             </ScrollView>
 
-            {/* Open Interactive Visual Cropper Button */}
-            {onOpenScreenCrop ? (
-              <TouchableOpacity
-                style={styles.screenCropBtn}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  onOpenScreenCrop();
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="scan-outline" size={17} color="#00F2FE" />
-                <Text style={styles.screenCropBtnText}>
-                  Open Interactive Visual Crop Tool
-                </Text>
-              </TouchableOpacity>
-            ) : null}
 
             {/* Custom Crop Sliders */}
             <View style={styles.card}>
-              <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <Text style={styles.sliderLabel}>Width</Text>
-                  <Text style={styles.badge}>{cropWidth}%</Text>
-                </View>
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "4px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="10"
-                      max="100"
-                      value={cropWidth}
-                      onChange={(e: any) => {
-                        const val = parseInt(e.target.value) || 10;
-                        setCropWidth(val);
-                        setSelectedRatio("custom");
-                        syncTransform({
-                          crop: {
-                            x: cropX,
-                            y: cropY,
-                            width: val,
-                            height: cropHeight,
-                          },
-                        });
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
-              </View>
+              <CompactSliderInput
+                label="Width"
+                value={cropWidth}
+                min={10}
+                max={100}
+                step={1}
+                unit="%"
+                defaultValue={100}
+                accentColor="#00F2FE"
+                onChange={(val) => {
+                  setCropWidth(val);
+                  setSelectedRatio("custom");
+                  syncTransform({
+                    crop: {
+                      x: cropX,
+                      y: cropY,
+                      width: val,
+                      height: cropHeight,
+                    },
+                  });
+                }}
+              />
 
-              <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <Text style={styles.sliderLabel}>Height</Text>
-                  <Text style={styles.badge}>{cropHeight}%</Text>
-                </View>
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "4px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="10"
-                      max="100"
-                      value={cropHeight}
-                      onChange={(e: any) => {
-                        const val = parseInt(e.target.value) || 10;
-                        setCropHeight(val);
-                        setSelectedRatio("custom");
-                        syncTransform({
-                          crop: {
-                            x: cropX,
-                            y: cropY,
-                            width: cropWidth,
-                            height: val,
-                          },
-                        });
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
-              </View>
+              <CompactSliderInput
+                label="Height"
+                value={cropHeight}
+                min={10}
+                max={100}
+                step={1}
+                unit="%"
+                defaultValue={100}
+                accentColor="#00F2FE"
+                onChange={(val) => {
+                  setCropHeight(val);
+                  setSelectedRatio("custom");
+                  syncTransform({
+                    crop: {
+                      x: cropX,
+                      y: cropY,
+                      width: cropWidth,
+                      height: val,
+                    },
+                  });
+                }}
+              />
             </View>
 
             {/* Separate Apply & Reset for Crop */}
@@ -805,33 +803,23 @@ export default function TransformModal({
 
             {/* Fine Angle Slider */}
             <View style={styles.card}>
-              <View style={styles.labelValueRow}>
-                <Text style={styles.sliderLabel}>Fine Rotation Angle</Text>
-                <Text style={styles.badge}>{Math.round(rotation)}°</Text>
-              </View>
-
-              {Platform.OS === "web" ? (
-                <WebDiv style={{ margin: "8px 0" }}>
-                  <WebInput
-                    type="range"
-                    min="-180"
-                    max="180"
-                    value={((Math.round(rotation) + 180) % 360) - 180}
-                    onChange={(e: any) => {
-                      const val = parseInt(e.target.value) || 0;
-                      const normalized = (val + 360) % 360;
-                      setRotation(normalized);
-                      syncTransform({ rotation: normalized });
-                    }}
-                    style={{
-                      width: "100%",
-                      accentColor: "#00F2FE",
-                      height: 4,
-                      cursor: "pointer",
-                    }}
-                  />
-                </WebDiv>
-              ) : null}
+              <CompactSliderInput
+                label="Fine Rotation Angle"
+                value={((Math.round(rotation) + 180) % 360) - 180}
+                min={-180}
+                max={180}
+                step={1}
+                unit="°"
+                defaultValue={0}
+                showReset={true}
+                accentColor="#00F2FE"
+                onChange={(val) => {
+                  const normalized = (Math.round(val) + 360) % 360;
+                  setRotation(normalized);
+                  syncTransform({ rotation: normalized });
+                }}
+                onReset={handleResetRotation}
+              />
 
               {/* Steppers for precise adjustment */}
               <View style={styles.fineTuneRow}>
@@ -1078,41 +1066,25 @@ export default function TransformModal({
 
               {/* Horizontal Stretch (Width) */}
               <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <View style={styles.sliderTitleWithIcon}>
+                <CompactSliderInput
+                  label="Horizontal Stretch (Width)"
+                  icon={
                     <MaterialCommunityIcons
                       name="arrow-expand-horizontal"
-                      size={16}
+                      size={15}
                       color="#00F2FE"
                     />
-                    <Text style={styles.sliderLabel}>
-                      Horizontal Stretch (Width)
-                    </Text>
-                  </View>
-                  <Text style={styles.badge}>{scaleX.toFixed(2)}x</Text>
-                </View>
-
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "6px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="0.2"
-                      max="3.0"
-                      step="0.01"
-                      value={scaleX}
-                      onChange={(e: any) => {
-                        const val = parseFloat(e.target.value) || 1.0;
-                        handleUpdateScaleX(val);
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
+                  }
+                  value={scaleX}
+                  min={0.2}
+                  max={3.0}
+                  step={0.01}
+                  unit="x"
+                  decimals={2}
+                  defaultValue={1.0}
+                  accentColor="#00F2FE"
+                  onChange={(val) => handleUpdateScaleX(val)}
+                />
 
                 {/* Steppers */}
                 <View style={styles.fineTuneRow}>
@@ -1151,41 +1123,25 @@ export default function TransformModal({
 
               {/* Vertical Stretch (Height) */}
               <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <View style={styles.sliderTitleWithIcon}>
+                <CompactSliderInput
+                  label="Vertical Stretch (Height)"
+                  icon={
                     <MaterialCommunityIcons
                       name="arrow-expand-vertical"
-                      size={16}
+                      size={15}
                       color="#00F2FE"
                     />
-                    <Text style={styles.sliderLabel}>
-                      Vertical Stretch (Height)
-                    </Text>
-                  </View>
-                  <Text style={styles.badge}>{scaleY.toFixed(2)}x</Text>
-                </View>
-
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "6px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="0.2"
-                      max="3.0"
-                      step="0.01"
-                      value={scaleY}
-                      onChange={(e: any) => {
-                        const val = parseFloat(e.target.value) || 1.0;
-                        handleUpdateScaleY(val);
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
+                  }
+                  value={scaleY}
+                  min={0.2}
+                  max={3.0}
+                  step={0.01}
+                  unit="x"
+                  decimals={2}
+                  defaultValue={1.0}
+                  accentColor="#00F2FE"
+                  onChange={(val) => handleUpdateScaleY(val)}
+                />
 
                 {/* Steppers */}
                 <View style={styles.fineTuneRow}>
@@ -1287,49 +1243,32 @@ export default function TransformModal({
               })}
             </ScrollView>
 
-            {/* Distance View (Pitch / Tilt X) */}
+            {/* 3D Angle Controls Card */}
             <View style={styles.card}>
+              {/* Distance View (Pitch / Tilt X) */}
               <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <View style={styles.sliderTitleWithIcon}>
+                <CompactSliderInput
+                  label="Distance View (Tilt X / Pitch)"
+                  icon={
                     <MaterialCommunityIcons
                       name="road-variant"
-                      size={16}
+                      size={15}
                       color="#00F2FE"
                     />
-                    <Text style={styles.sliderLabel}>
-                      Distance View (Tilt X / Pitch)
-                    </Text>
-                  </View>
-                  <Text style={styles.badge}>{Math.round(rotateX)}°</Text>
-                </View>
-                <Text style={styles.hintText}>
-                  Tilts backward to create a receding distance view (ground /
-                  horizon perspective).
-                </Text>
-
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "6px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="-65"
-                      max="65"
-                      step="1"
-                      value={rotateX}
-                      onChange={(e: any) => {
-                        const val = parseInt(e.target.value) || 0;
-                        setRotateX(val);
-                        syncTransform({ rotateX: val });
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
+                  }
+                  value={rotateX}
+                  min={-65}
+                  max={65}
+                  step={1}
+                  unit="°"
+                  defaultValue={0}
+                  accentColor="#00F2FE"
+                  hint="Tilts backward to create a receding distance view (ground / horizon perspective)."
+                  onChange={(val) => {
+                    setRotateX(val);
+                    syncTransform({ rotateX: val });
+                  }}
+                />
 
                 {/* Steppers */}
                 <View style={styles.fineTuneRow}>
@@ -1387,45 +1326,28 @@ export default function TransformModal({
 
               {/* Angle View (Yaw / Tilt Y) */}
               <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <View style={styles.sliderTitleWithIcon}>
+                <CompactSliderInput
+                  label="Angle View (Tilt Y / Yaw)"
+                  icon={
                     <MaterialCommunityIcons
                       name="axis-z-rotate-clockwise"
-                      size={16}
+                      size={15}
                       color="#00F2FE"
                     />
-                    <Text style={styles.sliderLabel}>
-                      Angle View (Tilt Y / Yaw)
-                    </Text>
-                  </View>
-                  <Text style={styles.badge}>{Math.round(rotateY)}°</Text>
-                </View>
-                <Text style={styles.hintText}>
-                  Angles the clip from the left or right side in 3D space.
-                </Text>
-
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "6px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="-65"
-                      max="65"
-                      step="1"
-                      value={rotateY}
-                      onChange={(e: any) => {
-                        const val = parseInt(e.target.value) || 0;
-                        setRotateY(val);
-                        syncTransform({ rotateY: val });
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
+                  }
+                  value={rotateY}
+                  min={-65}
+                  max={65}
+                  step={1}
+                  unit="°"
+                  defaultValue={0}
+                  accentColor="#00F2FE"
+                  hint="Angles the clip from the left or right side in 3D space."
+                  onChange={(val) => {
+                    setRotateY(val);
+                    syncTransform({ rotateY: val });
+                  }}
+                />
 
                 {/* Steppers */}
                 <View style={styles.fineTuneRow}>
@@ -1456,7 +1378,7 @@ export default function TransformModal({
                       syncTransform({ rotateY: 0 });
                     }}
                   >
-                    <Text style={styles.fineBtnText}>0° (Front)</Text>
+                    <Text style={styles.fineBtnText}>0° (Flat)</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.fineBtn}
@@ -1483,40 +1405,27 @@ export default function TransformModal({
 
               {/* Skew Angle X */}
               <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <View style={styles.sliderTitleWithIcon}>
+                <CompactSliderInput
+                  label="Angle Shear (Skew X)"
+                  icon={
                     <MaterialCommunityIcons
                       name="skew-more"
-                      size={16}
+                      size={15}
                       color="#00F2FE"
                     />
-                    <Text style={styles.sliderLabel}>Angle Shear (Skew X)</Text>
-                  </View>
-                  <Text style={styles.badge}>{Math.round(skewX)}°</Text>
-                </View>
-
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "6px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="-45"
-                      max="45"
-                      step="1"
-                      value={skewX}
-                      onChange={(e: any) => {
-                        const val = parseInt(e.target.value) || 0;
-                        setSkewX(val);
-                        syncTransform({ skewX: val });
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
+                  }
+                  value={skewX}
+                  min={-45}
+                  max={45}
+                  step={1}
+                  unit="°"
+                  defaultValue={0}
+                  accentColor="#00F2FE"
+                  onChange={(val) => {
+                    setSkewX(val);
+                    syncTransform({ skewX: val });
+                  }}
+                />
 
                 {/* Steppers */}
                 <View style={styles.fineTuneRow}>
@@ -1524,7 +1433,7 @@ export default function TransformModal({
                     style={styles.fineBtn}
                     onPress={() => {
                       const next = Math.max(-45, skewX - 5);
-                      setSkewX(next);
+                      setRotateX(next);
                       syncTransform({ skewX: next });
                     }}
                   >
@@ -1554,42 +1463,27 @@ export default function TransformModal({
 
               {/* Perspective Depth / Camera Distance */}
               <View style={styles.sliderRow}>
-                <View style={styles.labelValueRow}>
-                  <View style={styles.sliderTitleWithIcon}>
+                <CompactSliderInput
+                  label="Camera Distance (Perspective Depth)"
+                  icon={
                     <MaterialCommunityIcons
                       name="camera-iris"
-                      size={16}
+                      size={15}
                       color="#00F2FE"
                     />
-                    <Text style={styles.sliderLabel}>
-                      Camera Distance (Perspective Depth)
-                    </Text>
-                  </View>
-                  <Text style={styles.badge}>{Math.round(perspective)}px</Text>
-                </View>
-
-                {Platform.OS === "web" ? (
-                  <WebDiv style={{ margin: "6px 0" }}>
-                    <WebInput
-                      type="range"
-                      min="400"
-                      max="1600"
-                      step="50"
-                      value={perspective}
-                      onChange={(e: any) => {
-                        const val = parseInt(e.target.value) || 800;
-                        setPerspective(val);
-                        syncTransform({ perspective: val });
-                      }}
-                      style={{
-                        width: "100%",
-                        accentColor: "#00F2FE",
-                        height: 4,
-                        cursor: "pointer",
-                      }}
-                    />
-                  </WebDiv>
-                ) : null}
+                  }
+                  value={perspective}
+                  min={400}
+                  max={1600}
+                  step={50}
+                  unit="px"
+                  defaultValue={800}
+                  accentColor="#00F2FE"
+                  onChange={(val) => {
+                    setPerspective(val);
+                    syncTransform({ perspective: val });
+                  }}
+                />
               </View>
             </View>
 
@@ -1647,16 +1541,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#131826',
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: '#1F2637',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#1F2637",
+    alignItems: "center",
+    justifyContent: "center",
   },
   resetBtnText: {
-    color: '#00F2FE',
+    color: "#00F2FE",
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   overlay: {
     flex: 1,

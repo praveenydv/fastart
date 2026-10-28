@@ -21,16 +21,24 @@ import BackgroundModal from "../Panels/BackgroundModal";
 import AIEnhanceModal from "../Panels/AIEnhanceModal";
 import TextToSpeechModal from "../Panels/TextToSpeechModal";
 import CutoutModal from "../Panels/CutoutModal";
+import MaskModal from "../Panels/MaskModal";
 import MotionTrackingModal from "../Panels/MotionTrackingModal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import KeyframeModal from "../Panels/KeyframeModal";
 import AutoCaptionModal from "../Panels/AutoCaptionModal";
+import AnimationModal from "../Panels/AnimationModal";
+import BlendModeModal from "../Panels/BlendModeModal";
+import HSLAdjustModal from "../Panels/HSLAdjustModal";
+import VoiceEffectsModal from "../Panels/VoiceEffectsModal";
 import {
   FastArtProject,
   VideoClip,
   TextClip,
   StickerClip,
   EffectClip,
+  BlendMode,
+  HSLAdjustments,
+  VoiceEffectId,
 } from "../../types/project";
 import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
@@ -83,9 +91,12 @@ interface EditorModalsProps {
   handleAutoCutGenerated: (proj: any) => void;
   updateProjectWithHistory: (proj: any) => void;
   handleApplyEnhance: (preset: any) => void;
+  handleApplyBlendMode?: (mode: BlendMode, opacity?: number) => void;
+  handleApplyHSL?: (adjustments: HSLAdjustments) => void;
+  handleApplyVoiceEffect?: (effectId: VoiceEffectId) => void;
   handleAddKeyframe: () => void;
   isKeyframeAtPlayhead: boolean;
-  handleUpdateKeyframeTransform: (time: number, transform: any, opacity?: number) => void;
+  handleUpdateKeyframeTransform: (time: number, transform: any, opacity?: number, easing?: any) => void;
   handleDeleteKeyframeAtTime: (time?: number) => void;
   handleClearAllKeyframes: () => void;
   handleConfirmDeleteClip: () => void;
@@ -93,7 +104,9 @@ interface EditorModalsProps {
   handleUpdateCaption?: (clip: any) => void;
   transformInitialTab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle';
   onOpenScreenCrop?: () => void;
+  setIsCroppingPreview?: (c: boolean) => void;
   isInline?: boolean;
+  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean) => void;
   handleMoveClip?: (
     clipId: string,
     trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
@@ -126,6 +139,9 @@ export const INLINE_MODAL_KEYS = new Set([
   'opacity',
   'animation',
   'audio_effects',
+  'voice_effects',
+  'blend',
+  'hsl',
 ]);
 
 export const EditorModals: React.FC<EditorModalsProps> = ({
@@ -174,6 +190,9 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleAutoCutGenerated,
   updateProjectWithHistory,
   handleApplyEnhance,
+  handleApplyBlendMode,
+  handleApplyHSL,
+  handleApplyVoiceEffect,
   handleAddKeyframe,
   isKeyframeAtPlayhead,
   handleUpdateKeyframeTransform,
@@ -182,7 +201,9 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleConfirmDeleteClip,
   transformInitialTab,
   onOpenScreenCrop,
+  setIsCroppingPreview,
   isInline = false,
+  handleUpdateClipMask,
   handleMoveClip,
 }) => {
   const handleCancel = onCancelModal || closeModal;
@@ -228,13 +249,10 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onClose={handleCancel}
           onApply={handleApply}
           currentCutout={selectedClip?.cutout}
-          currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
           onApplyCutout={handleApplyCutout}
-          onApplyMask={(newMask) =>
-            handleApplyTransform(selectedClip?.transform || {}, undefined, newMask)
-          }
           initialMode={cutoutInitialMode}
           isInline={isInline}
+          selectedClip={selectedClip}
         />
       )}
 
@@ -254,6 +272,9 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentTrack={selectedClip?.motionTrack}
           onApplyTracking={handleApplyMotionTracking}
           isInline={isInline}
+          project={project}
+          selectedClip={selectedClip}
+          updateProjectWithHistory={updateProjectWithHistory}
         />
       )}
 
@@ -298,6 +319,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onAddAudio={handleAddAudio}
           project={project}
           onUpdateProject={updateProjectWithHistory}
+          isInline={isInline}
         />
       )}
 
@@ -327,8 +349,17 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
             selectedClipType === "effects" || selectedClipType === "effect"
               ? (selectedClip as EffectClip)?.type
               : selectedClipType === "video"
-              ? (selectedClip as VideoClip)?.effect || "none"
+              ? (typeof (selectedClip as VideoClip)?.effect === "string"
+                  ? (selectedClip as VideoClip)?.effect
+                  : (selectedClip as any)?.effect?.type || (selectedClip as any)?.effect?.id || "none")
               : "none"
+          }
+          activeIntensity={
+            selectedClipType === "effects" || selectedClipType === "effect"
+              ? (selectedClip as EffectClip)?.intensity
+              : selectedClipType === "video"
+              ? (selectedClip as any)?.effectIntensity
+              : undefined
           }
           onAddEffect={handleAddEffect}
           editingClip={
@@ -418,7 +449,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "volume" && mediaHasAudioTrack(selectedClip) && (
+      {activeModal === "volume" && (selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)) && (
         <VolumeModal
           visible={true}
           onClose={handleCancel}
@@ -428,7 +459,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentFadeOut={selectedClip?.fadeOut ?? 0}
           currentDenoise={Boolean(selectedClip?.denoise)}
           isFromVideo={selectedClipType === "video"}
-          hasAudio={mediaHasAudioTrack(selectedClip)}
+          hasAudio={selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)}
           onApplyVolume={handleApplyVolume}
           onExtractAudio={handleExtractAudioFromVideo}
           isInline={isInline}
@@ -436,17 +467,17 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       )}
 
       {activeModal === "mask" && (
-        <CutoutModal
+        <MaskModal
           visible={true}
           onClose={handleCancel}
           onApply={handleApply}
-          currentCutout={selectedClip?.cutout}
           currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
-          onApplyCutout={handleApplyCutout}
-          onApplyMask={(newMask) =>
-            handleApplyTransform(selectedClip?.transform || {}, undefined, newMask)
-          }
-          initialTab="mask"
+          onApplyMask={(newMask) => {
+            handleApplyTransform(selectedClip?.transform || {}, undefined, newMask);
+            if (handleUpdateClipMask && selectedClip?.id) {
+              handleUpdateClipMask(selectedClip.id, newMask, true);
+            }
+          }}
           isInline={isInline}
         />
       )}
@@ -461,6 +492,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           initialTab={transformInitialTab || "crop"}
           onApplyTransform={handleApplyTransform}
           onOpenScreenCrop={onOpenScreenCrop}
+          setIsCroppingPreview={setIsCroppingPreview}
           isInline={isInline}
         />
       )}
@@ -616,76 +648,61 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
 
       {/* Animation Presets Panel */}
       {activeModal === "animation" && selectedClip && (
-        <ScrollView style={modalStyles.panelContainer} showsVerticalScrollIndicator={false}>
-          <Text style={modalStyles.panelSectionTitle}>ENTRANCE & MOTION</Text>
-          <View style={modalStyles.chipGrid}>
-            {[
-              { id: "none", name: "None", icon: "close-circle-outline" },
-              { id: "fade_in", name: "Fade In", icon: "arrow-up-right" },
-              { id: "slide_left", name: "Slide Left", icon: "arrow-back-outline" },
-              { id: "slide_right", name: "Slide Right", icon: "arrow-forward-outline" },
-              { id: "zoom_in", name: "Zoom In", icon: "expand-outline" },
-              { id: "zoom_out", name: "Zoom Out", icon: "contract-outline" },
-              { id: "bounce", name: "Bounce", icon: "flash-outline" },
-            ].map((anim) => {
-              const isSel = (selectedClip?.animation?.preset || "none") === anim.id;
-              return (
-                <TouchableOpacity
-                  key={anim.id}
-                  style={[modalStyles.animCard, isSel && modalStyles.animCardActive]}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    if (project) {
-                      const tracks = { ...project.tracks };
-                      const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                      const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                      if (idx >= 0) {
-                        targetList[idx] = {
-                          ...targetList[idx],
-                          animation: anim.id === "none" ? undefined : { preset: anim.id, duration: 0.5 },
-                        };
-                        updateProjectWithHistory({ ...project, tracks });
-                      }
-                    }
-                  }}
-                >
-                  <Ionicons name={anim.icon as any} size={20} color={isSel ? "#00F2FE" : "#A1A1AA"} />
-                  <Text style={[modalStyles.animCardText, isSel && modalStyles.animCardTextActive]}>
-                    {anim.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
+        <AnimationModal
+          visible={true}
+          onClose={handleCancel}
+          selectedClip={selectedClip}
+          selectedClipType={selectedClipType}
+          project={project}
+          updateProjectWithHistory={updateProjectWithHistory}
+          isInline={isInline}
+        />
       )}
 
-      {/* Audio Effects Panel */}
-      {activeModal === "audio_effects" && (
-        <ScrollView style={modalStyles.panelContainer} showsVerticalScrollIndicator={false}>
-          <Text style={modalStyles.panelSectionTitle}>VOICE & AUDIO EFFECTS</Text>
-          <View style={modalStyles.chipGrid}>
-            {[
-              { id: "deep", name: "Deep Voice", icon: "waveform" },
-              { id: "echo", name: "Echo Chamber", icon: "ear-hearing" },
-              { id: "robot", name: "Robot Synth", icon: "robot-outline" },
-              { id: "reverb", name: "Mic Reverb", icon: "surround-sound" },
-              { id: "lofi", name: "Lo-Fi Vinyl", icon: "disc" },
-              { id: "high", name: "High Pitch", icon: "arrow-up-circle-outline" },
-            ].map((eff) => (
-              <TouchableOpacity
-                key={eff.id}
-                style={modalStyles.animCard}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                }}
-              >
-                <MaterialCommunityIcons name={eff.icon as any} size={20} color="#00F2FE" />
-                <Text style={modalStyles.animCardText}>{eff.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
+      {/* Layer Blend Mode Modal */}
+      {activeModal === "blend" && (
+        <BlendModeModal
+          visible={true}
+          onClose={handleCancel}
+          isInline={isInline}
+          currentMode={selectedClip?.transform?.blendMode || "normal"}
+          currentOpacity={selectedClip?.opacity !== undefined ? selectedClip.opacity : 1.0}
+          onApply={(mode, op) => {
+            if (handleApplyBlendMode) {
+              handleApplyBlendMode(mode, op);
+            }
+          }}
+        />
+      )}
+
+      {/* 8-Channel Selective HSL Color Grading Modal */}
+      {activeModal === "hsl" && (
+        <HSLAdjustModal
+          visible={true}
+          onClose={handleCancel}
+          isInline={isInline}
+          initialAdjustments={selectedClip?.hslAdjustments}
+          onApply={(adj) => {
+            if (handleApplyHSL) {
+              handleApplyHSL(adj);
+            }
+          }}
+        />
+      )}
+
+      {/* CapCut Character Voice Changer & Audio FX Modal */}
+      {(activeModal === "audio_effects" || activeModal === "voice_effects") && (
+        <VoiceEffectsModal
+          visible={true}
+          onClose={handleCancel}
+          isInline={isInline}
+          currentEffect={selectedClip?.voiceEffect || "none"}
+          onApply={(effectId) => {
+            if (handleApplyVoiceEffect) {
+              handleApplyVoiceEffect(effectId);
+            }
+          }}
+        />
       )}
 
       {/* Clip Deletion Confirmation Modal */}

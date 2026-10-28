@@ -37,6 +37,7 @@ import {
   MediaSyncContext,
 } from "./renderer/rendererMediaSync";
 import { drawClip as renderClipItem, TransitionRenderState } from "./renderer/rendererClip";
+import { setOnMaskUpdated } from "../services/selfieSegmentationService";
 
 export type { ExportFormat, ExportOptions, ExportResult };
 
@@ -69,6 +70,10 @@ export class VideoRenderer {
       this.ctx.imageSmoothingQuality = "high";
     }
     this.videoElements = new Map();
+
+    setOnMaskUpdated(() => {
+      if (this.onFrameNeeded) this.onFrameNeeded();
+    });
   }
 
   setCanvas(canvas: HTMLCanvasElement | null) {
@@ -330,8 +335,18 @@ export class VideoRenderer {
           }
         }
 
-        // Standard active video playback window
-        if (!handledVideoIds.has(c.id) && time >= c.startTime - 0.02 && time <= cEnd + 0.02) {
+        // Standard active video playback window (exclusive end boundary when adjacent next clip exists to prevent cut bleed)
+        const hasAdjacentNext = videoClips.some(
+          (other) =>
+            other.id !== c.id &&
+            (other.trackIndex || 0) === (c.trackIndex || 0) &&
+            Math.abs(other.startTime - cEnd) < 0.01,
+        );
+        const isActiveAtTime = hasAdjacentNext
+          ? time >= c.startTime && time < cEnd
+          : time >= c.startTime && time <= cEnd;
+
+        if (!handledVideoIds.has(c.id) && isActiveAtTime) {
           activeVideoItems.push({
             clip: c,
             trackIndex: (c.trackIndex || 0) * 100,
@@ -600,7 +615,9 @@ export class VideoRenderer {
           : item.clip;
         this.drawSticker(ctx, clipToDraw, time, w, h);
       } else if (item.kind === "effect") {
-        this.applyEffectOverlay(ctx, item.clip, time, w, h);
+        if (item.clip && item.clip.type && item.clip.type !== "none" && item.clip.type !== "None") {
+          this.applyEffectOverlay(ctx, item.clip, time, w, h);
+        }
       }
     });
 

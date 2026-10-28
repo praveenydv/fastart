@@ -1,4 +1,4 @@
-import { FastArtProject, CustomCrop, MaskConfig } from "../../types/project";
+import { FastArtProject, CustomCrop, MaskConfig, MotionTrackConfig } from "../../types/project";
 
 export interface PlayerProps {
   project: FastArtProject;
@@ -23,6 +23,7 @@ export interface PlayerProps {
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   onOpenCropModal?: (clipId: string) => void;
   onOpenMaskModal?: (clipId: string) => void;
+  onOpenAnimationModal?: () => void;
   onDeleteClip?: (clipId: string, clipType: string) => void;
   onDuplicateClip?: (clipId: string, clipType: string) => void;
   onSplitClip?: () => void;
@@ -44,6 +45,8 @@ export interface PlayerProps {
   ) => void;
   isProcessing?: boolean;
   processingMessage?: string;
+  activeModal?: string | null;
+  onUpdateClipMotionTrack?: (track: MotionTrackConfig) => void;
 }
 
 export interface CropPreset {

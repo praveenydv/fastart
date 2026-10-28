@@ -21,6 +21,16 @@ interface TimelineHeaderBarProps {
   pxPerSec: number;
   onZoomChange: (zoom: number) => void;
   onDeselectClip?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onSplitClip?: () => void;
+  onDeleteClip?: () => void;
+  onFreezeFrame?: () => void;
+  onToggleReverse?: () => void;
+  hasSelectedClip?: boolean;
+  selectedClipType?: string;
 }
 
 export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
@@ -35,7 +45,19 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
   pxPerSec,
   onZoomChange,
   onDeselectClip,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  onSplitClip,
+  onDeleteClip,
+  onFreezeFrame,
+  onToggleReverse,
+  hasSelectedClip = false,
+  selectedClipType,
 }) => {
+  const isVideoSelected = selectedClipType === "video" || (!selectedClipType && hasSelectedClip);
+
   return (
     <>
       {/* Interactive Top Drag-to-Resize Handle */}
@@ -68,12 +90,89 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
         <View style={styles.timelineBarLeft}>
           <View style={styles.trackPreferenceGroup}>
             <View style={styles.trackTitleBadge}>
-              <Ionicons name="layers-outline" size={12} color="#A1A1AA" />
+              <Ionicons name="layers-outline" size={12} color="#00F2FE" />
               <Text style={styles.trackLabelTitle}>
                 {isMobile ? "TRACKS" : "MULTI-TRACK"}
               </Text>
             </View>
           </View>
+
+          {/* Undo / Redo Quick Actions */}
+          {(onUndo || onRedo) && (
+            <View style={styles.actionBtnGroup}>
+              {onUndo && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, !canUndo && styles.actionBtnDisabled]}
+                  onPress={canUndo ? onUndo : undefined}
+                  disabled={!canUndo}
+                  accessibilityLabel="Undo"
+                >
+                  <Ionicons name="arrow-undo-outline" size={12} color={canUndo ? "#E2E8F0" : "#64748B"} />
+                </TouchableOpacity>
+              )}
+              {onRedo && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, !canRedo && styles.actionBtnDisabled]}
+                  onPress={canRedo ? onRedo : undefined}
+                  disabled={!canRedo}
+                  accessibilityLabel="Redo"
+                >
+                  <Ionicons name="arrow-redo-outline" size={12} color={canRedo ? "#E2E8F0" : "#64748B"} />
+                </TouchableOpacity>
+              )}
+              <View style={styles.actionDivider} />
+            </View>
+          )}
+
+          {/* Quick Editing Actions: Split, Freeze, Reverse, Delete */}
+          {!isMobile && (
+            <View style={styles.actionBtnGroup}>
+              {onSplitClip && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, !hasSelectedClip && styles.actionBtnDisabled]}
+                  onPress={hasSelectedClip ? onSplitClip : undefined}
+                  disabled={!hasSelectedClip}
+                  accessibilityLabel="Split clip at playhead"
+                >
+                  <Ionicons name="cut-outline" size={12} color={hasSelectedClip ? "#00F2FE" : "#64748B"} />
+                  <Text style={styles.actionBtnText}>Split</Text>
+                </TouchableOpacity>
+              )}
+              {onFreezeFrame && isVideoSelected && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, !hasSelectedClip && styles.actionBtnDisabled]}
+                  onPress={hasSelectedClip ? onFreezeFrame : undefined}
+                  disabled={!hasSelectedClip}
+                  accessibilityLabel="Freeze frame at playhead"
+                >
+                  <Ionicons name="snow-outline" size={12} color={hasSelectedClip ? "#38BDF8" : "#64748B"} />
+                  <Text style={styles.actionBtnText}>Freeze</Text>
+                </TouchableOpacity>
+              )}
+              {onToggleReverse && isVideoSelected && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, !hasSelectedClip && styles.actionBtnDisabled]}
+                  onPress={hasSelectedClip ? onToggleReverse : undefined}
+                  disabled={!hasSelectedClip}
+                  accessibilityLabel="Reverse clip"
+                >
+                  <Ionicons name="swap-horizontal-outline" size={12} color={hasSelectedClip ? "#A78BFA" : "#64748B"} />
+                  <Text style={styles.actionBtnText}>Reverse</Text>
+                </TouchableOpacity>
+              )}
+              {onDeleteClip && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, !hasSelectedClip && styles.actionBtnDisabled]}
+                  onPress={hasSelectedClip ? onDeleteClip : undefined}
+                  disabled={!hasSelectedClip}
+                  accessibilityLabel="Delete selected clip"
+                >
+                  <Ionicons name="trash-outline" size={12} color={hasSelectedClip ? "#EF4444" : "#64748B"} />
+                  <Text style={[styles.actionBtnText, hasSelectedClip && { color: "#FCA5A5" }]}>Delete</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* Selected Clip Time Details */}
           {activeClipInfo ? (

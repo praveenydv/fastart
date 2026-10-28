@@ -126,13 +126,15 @@ export function useTimelineClipTrim({
           const targetClip = allClipsRef.current.find(
             (c) => c.id === info.clipId,
           );
+          const rawClip = targetClip?.rawClip || targetClip;
+          const minAllowedTrimIn = typeof rawClip?.minTrimIn === "number" ? rawClip.minTrimIn : 0;
           const speed = Math.max(
             0.1,
             Math.min(16, targetClip?.rawClip?.speed || 1.0),
           );
           const deltaStart = activeDelta.startTime - info.initialStart;
           const newTrimIn = Math.max(
-            0,
+            minAllowedTrimIn,
             info.initialTrimIn + deltaStart * speed,
           );
           onTrimClipRef.current(
@@ -234,9 +236,13 @@ export function useTimelineClipTrim({
             0.1,
             Math.min(16, targetClip?.rawClip?.speed || 1.0),
           );
-          const currentTrimIn = Math.max(0, targetClip?.rawClip?.trimIn || 0);
-          const newTrimOut = mediaDur
-            ? Math.min(mediaDur, currentTrimIn + activeDelta.duration * speed)
+          const rawClip = targetClip?.rawClip || targetClip;
+          const currentTrimIn = Math.max(0, rawClip?.trimIn || 0);
+          const maxAllowedTrimOut = typeof rawClip?.maxTrimOut === "number"
+            ? (mediaDur !== null ? Math.min(mediaDur, rawClip.maxTrimOut) : rawClip.maxTrimOut)
+            : mediaDur;
+          const newTrimOut = maxAllowedTrimOut
+            ? Math.min(maxAllowedTrimOut, currentTrimIn + activeDelta.duration * speed)
             : activeDelta.duration;
           onTrimClipRef.current(
             info.clipId,

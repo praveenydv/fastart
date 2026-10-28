@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { isImageClip } from "./mediaDuration";
 import { getLiveMediaUrl } from "./largeMediaStorage";
+import { globalActiveVideoElements } from "./renderer/rendererMediaSync";
 
 // In-memory thumbnail cache keyed by clipId or mediaUrl
 export const globalThumbnailCache = new Map<string, string>();
@@ -23,6 +24,72 @@ function notifyThumbnailListeners(clipId: string, thumbUrl: string): void {
       // Ignore listener error
     }
   });
+}
+
+/**
+ * Synchronously or near-instantaneously snapshots the current frame of an active video or canvas at the split point
+ */
+export function captureActiveFrameNow(mediaUrl?: string, seekSec?: number): string | null {
+  if (Platform.OS !== "web" || typeof document === "undefined") return null;
+
+  try {
+    // 1. Check global active video elements
+    if (mediaUrl && globalActiveVideoElements.has(mediaUrl)) {
+      const vid = globalActiveVideoElements.get(mediaUrl);
+      if (vid && vid.videoWidth > 0 && vid.readyState >= 2) {
+        if (seekSec === undefined || Math.abs(vid.currentTime - seekSec) <= 0.35) {
+          const canvas = document.createElement("canvas");
+          const aspect = (vid.videoWidth || 16) / (vid.videoHeight || 9);
+          const tw = 240;
+          const th = Math.round(tw / aspect);
+          canvas.width = tw;
+          canvas.height = th;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(vid, 0, 0, tw, th);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            if (dataUrl && dataUrl.length > 200) {
+              return dataUrl;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Check any video elements in DOM
+    const vids = document.querySelectorAll("video");
+    for (let i = 0; i < vids.length; i++) {
+      const vid = vids[i];
+      if (
+        (!mediaUrl || vid.src === mediaUrl || vid.currentSrc === mediaUrl) &&
+        vid.videoWidth > 0 &&
+        vid.readyState >= 2
+      ) {
+        if (seekSec === undefined || Math.abs(vid.currentTime - seekSec) <= 0.35) {
+          const canvas = document.createElement("canvas");
+          const aspect = (vid.videoWidth || 16) / (vid.videoHeight || 9);
+          const tw = 240;
+          const th = Math.round(tw / aspect);
+          canvas.width = tw;
+          canvas.height = th;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(vid, 0, 0, tw, th);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            if (dataUrl && dataUrl.length > 200) {
+              return dataUrl;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
+
+  return null;
 }
 
 const inFlightRequests = new Set<string>();
@@ -66,22 +133,29 @@ export function isCanvasBlackOrEmpty(canvas: HTMLCanvasElement): boolean {
 
 /**
  * Returns thumbnail URL if immediately available, otherwise returns null and triggers background extraction.
+ * For splitted clips (trimIn > 0), verifies that the thumbnail matches the split trimIn point.
  */
 export function getMediaThumbnail(clip: any): string | null {
   if (!clip) return null;
   const raw = clip.rawClip || clip;
+  const trimIn = typeof raw.trimIn === "number" ? raw.trimIn : 0;
+  const isSplitted = trimIn > 0.05;
 
   // 1. If explicit thumbnail property is present on rawClip
   if (raw.thumbnail && typeof raw.thumbnail === "string" && raw.thumbnail.length > 0) {
-    // If on web and it's a blob: URL, verify it's still alive, otherwise trigger extraction
-    if (Platform.OS === "web" && raw.thumbnail.startsWith("blob:")) {
+    if (isSplitted) {
+      if (typeof raw.thumbnailTrimIn === "number" && Math.abs(raw.thumbnailTrimIn - trimIn) <= 0.25) {
+        globalThumbnailCache.set(clip.id, raw.thumbnail);
+        return raw.thumbnail;
+      }
+      // Stale or inherited thumbnail detected: clear and request fresh frame at split point
+      raw.thumbnail = undefined;
+      requestMediaThumbnail(clip, true);
+      return null;
+    } else {
       globalThumbnailCache.set(clip.id, raw.thumbnail);
-      requestMediaThumbnail(clip);
       return raw.thumbnail;
     }
-    globalThumbnailCache.set(clip.id, raw.thumbnail);
-    if (raw.url) globalThumbnailCache.set(raw.url, raw.thumbnail);
-    return raw.thumbnail;
   }
 
   // 2. If it's an image/photo clip, the image URL IS the preview thumbnail
@@ -93,20 +167,33 @@ export function getMediaThumbnail(clip: any): string | null {
     }
   }
 
-  // 3. Check memory cache by clipId
-  if (globalThumbnailCache.has(clip.id)) {
+  // 3. Check memory cache by clipId + trimIn or clipId
+  const trimKey = `${clip.id}_t${trimIn.toFixed(2)}`;
+  if (globalThumbnailCache.has(trimKey)) {
+    return globalThumbnailCache.get(trimKey)!;
+  }
+  if (!isSplitted && globalThumbnailCache.has(clip.id)) {
     return globalThumbnailCache.get(clip.id)!;
   }
 
-  // 4. Check memory cache by url
+  // 4. Check memory cache by url + trimIn
   const mediaUrl = raw.url || clip.url;
-  if (mediaUrl && globalThumbnailCache.has(mediaUrl)) {
-    const cached = globalThumbnailCache.get(mediaUrl)!;
-    globalThumbnailCache.set(clip.id, cached);
-    return cached;
+  if (mediaUrl) {
+    const urlTimeKey = `${mediaUrl}_t${trimIn.toFixed(2)}`;
+    if (globalThumbnailCache.has(urlTimeKey)) {
+      const cached = globalThumbnailCache.get(urlTimeKey)!;
+      globalThumbnailCache.set(clip.id, cached);
+      globalThumbnailCache.set(trimKey, cached);
+      return cached;
+    }
+    if (!isSplitted && globalThumbnailCache.has(mediaUrl)) {
+      const cached = globalThumbnailCache.get(mediaUrl)!;
+      globalThumbnailCache.set(clip.id, cached);
+      return cached;
+    }
   }
 
-  // 5. Trigger async extraction if media URL is present
+  // 5. Trigger instant capture or async extraction
   if (mediaUrl) {
     requestMediaThumbnail(clip);
   }
@@ -115,19 +202,21 @@ export function getMediaThumbnail(clip: any): string | null {
 }
 
 /**
- * Asynchronously generates/extracts a video thumbnail and caches it
+ * Asynchronously generates/extracts a video thumbnail for a clip at its exact split/trim position and caches it
  */
-export async function requestMediaThumbnail(clip: any): Promise<string | null> {
+export async function requestMediaThumbnail(clip: any, forceRefresh = false): Promise<string | null> {
   if (!clip) return null;
   const raw = clip.rawClip || clip;
   const clipId = clip.id || raw.id;
   let mediaUrl = raw.url || clip.url;
+  const trimIn = typeof raw.trimIn === "number" ? Math.max(0, raw.trimIn) : 0;
+  const isSplitted = trimIn > 0.05;
 
   if (!clipId || !mediaUrl) return null;
 
   // Rehydrate dead blob URL on web if needed
   if (Platform.OS === "web" && typeof mediaUrl === "string" && mediaUrl.startsWith("blob:")) {
-    const live = await getLiveMediaUrl(raw.sourceMediaId || clipId);
+    const live = await getLiveMediaUrl(raw.sourceMediaId || clipId, raw.title || clip.title);
     if (live) {
       mediaUrl = live;
       if (raw) raw.url = live;
@@ -135,18 +224,42 @@ export async function requestMediaThumbnail(clip: any): Promise<string | null> {
     }
   }
 
-  // Check cache
-  if (globalThumbnailCache.has(clipId)) {
-    return globalThumbnailCache.get(clipId)!;
-  }
-  if (globalThumbnailCache.has(mediaUrl)) {
-    const cached = globalThumbnailCache.get(mediaUrl)!;
-    globalThumbnailCache.set(clipId, cached);
-    return cached;
+  const trimKey = `${clipId}_t${trimIn.toFixed(2)}`;
+  const urlTimeKey = `${mediaUrl}_t${trimIn.toFixed(2)}`;
+
+  // Check cache unless forced refresh
+  if (!forceRefresh) {
+    if (globalThumbnailCache.has(trimKey)) {
+      return globalThumbnailCache.get(trimKey)!;
+    }
+    if (globalThumbnailCache.has(urlTimeKey)) {
+      const cached = globalThumbnailCache.get(urlTimeKey)!;
+      globalThumbnailCache.set(clipId, cached);
+      return cached;
+    }
   }
 
-  // If already in flight, don't spawn duplicate extraction tasks
-  const flightKey = `${clipId}_${mediaUrl}`;
+  // 1. Try immediate synchronous capture from active player video element or DOM
+  if (Platform.OS === "web") {
+    const instantThumb = captureActiveFrameNow(mediaUrl, trimIn);
+    if (instantThumb) {
+      globalThumbnailCache.set(clipId, instantThumb);
+      globalThumbnailCache.set(trimKey, instantThumb);
+      globalThumbnailCache.set(urlTimeKey, instantThumb);
+      if (!isSplitted) {
+        globalThumbnailCache.set(mediaUrl, instantThumb);
+      }
+      if (raw) {
+        raw.thumbnail = instantThumb;
+        raw.thumbnailTrimIn = trimIn;
+      }
+      notifyThumbnailListeners(clipId, instantThumb);
+      return instantThumb;
+    }
+  }
+
+  // If already in flight for this exact clip and time, don't spawn duplicate extraction tasks
+  const flightKey = `${clipId}_${trimIn.toFixed(2)}`;
   if (inFlightRequests.has(flightKey)) {
     return null;
   }
@@ -156,21 +269,28 @@ export async function requestMediaThumbnail(clip: any): Promise<string | null> {
     // If it's an image
     if (isImageClip(clip)) {
       globalThumbnailCache.set(clipId, mediaUrl);
-      globalThumbnailCache.set(mediaUrl, mediaUrl);
+      globalThumbnailCache.set(trimKey, mediaUrl);
       if (raw && !raw.thumbnail) raw.thumbnail = mediaUrl;
       inFlightRequests.delete(flightKey);
       notifyThumbnailListeners(clipId, mediaUrl);
       return mediaUrl;
     }
 
-    // WEB: Extract thumbnail via offscreen video + canvas
+    // WEB: Extract thumbnail via offscreen video + canvas at clip's exact trimIn point
     if (Platform.OS === "web" && typeof document !== "undefined") {
-      const seekTarget = raw.trimIn || 0.1;
+      const seekTarget = trimIn;
       const thumb = await extractWebVideoThumbnail(mediaUrl, seekTarget);
       if (thumb) {
         globalThumbnailCache.set(clipId, thumb);
-        globalThumbnailCache.set(mediaUrl, thumb);
-        if (raw) raw.thumbnail = thumb;
+        globalThumbnailCache.set(trimKey, thumb);
+        globalThumbnailCache.set(urlTimeKey, thumb);
+        if (!isSplitted) {
+          globalThumbnailCache.set(mediaUrl, thumb);
+        }
+        if (raw) {
+          raw.thumbnail = thumb;
+          raw.thumbnailTrimIn = seekTarget;
+        }
         notifyThumbnailListeners(clipId, thumb);
         return thumb;
       }
@@ -180,23 +300,28 @@ export async function requestMediaThumbnail(clip: any): Promise<string | null> {
     if (Platform.OS !== "web") {
       try {
         const { getThumbnailAsync } = await import("expo-video-thumbnails");
+        const seekMs = Math.max(100, Math.round((trimIn + 0.1) * 1000));
         const result = await getThumbnailAsync(mediaUrl, {
-          time: Math.max(100, Math.round(((raw.trimIn || 0) + 0.25) * 1000)),
+          time: seekMs,
           quality: 0.85,
         });
         if (result && result.uri) {
           globalThumbnailCache.set(clipId, result.uri);
-          globalThumbnailCache.set(mediaUrl, result.uri);
-          if (raw) raw.thumbnail = result.uri;
+          globalThumbnailCache.set(trimKey, result.uri);
+          globalThumbnailCache.set(urlTimeKey, result.uri);
+          if (!isSplitted) {
+            globalThumbnailCache.set(mediaUrl, result.uri);
+          }
+          if (raw) {
+            raw.thumbnail = result.uri;
+            raw.thumbnailTrimIn = trimIn;
+          }
           notifyThumbnailListeners(clipId, result.uri);
           return result.uri;
         }
-      } catch (err) {
-        // Native thumbnail extraction fallback
-      }
+      } catch (err) {}
     }
   } catch (err) {
-    // Non-fatal error during thumbnail generation
   } finally {
     inFlightRequests.delete(flightKey);
   }
@@ -211,42 +336,35 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
     }
 
     try {
-      // 1. Fast path: check if DOM already has an active video element matching this URL and close to seek time
-      const existingVids = document.querySelectorAll("video");
-      for (let i = 0; i < existingVids.length; i++) {
-        const v = existingVids[i];
-        if (
-          (v.src === url || v.currentSrc === url) &&
-          v.videoWidth > 0 &&
-          v.readyState >= 2 && // MUST have current frame data
-          Math.abs(v.currentTime - (seekSec || 0)) <= 1.5 // MUST be near the clip's time
-        ) {
-          try {
-            const canvas = document.createElement("canvas");
-            const aspect = (v.videoWidth || 16) / (v.videoHeight || 9);
-            const tw = 240;
-            const th = Math.round(tw / aspect);
-            canvas.width = tw;
-            canvas.height = th;
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = "high";
-              ctx.drawImage(v, 0, 0, tw, th);
-              if (!isCanvasBlackOrEmpty(canvas)) {
-                const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-                if (dataUrl && dataUrl.length > 500) {
-                  return resolve(dataUrl);
-                }
-              }
+      // 1. Fast path: check active video elements
+      const activeEl = globalActiveVideoElements.get(url);
+      if (
+        activeEl instanceof HTMLVideoElement &&
+        activeEl.videoWidth > 0 &&
+        activeEl.readyState >= 2 &&
+        Math.abs(activeEl.currentTime - (seekSec || 0)) <= 0.3
+      ) {
+        try {
+          const canvas = document.createElement("canvas");
+          const aspect = (activeEl.videoWidth || 16) / (activeEl.videoHeight || 9);
+          const tw = 240;
+          const th = Math.round(tw / aspect);
+          canvas.width = tw;
+          canvas.height = th;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(activeEl, 0, 0, tw, th);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            if (dataUrl && dataUrl.length > 200) {
+              return resolve(dataUrl);
             }
-          } catch (e) {
-            // Continue to offscreen loader
           }
-        }
+        } catch (e) {}
       }
 
-      // 2. Offscreen video element loader attached to DOM (required for WebKit/Blink frame decoding)
+      // 2. Offscreen video element attached to DOM
       const vid = document.createElement("video");
       vid.muted = true;
       vid.playsInline = true;
@@ -254,9 +372,9 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
       vid.style.position = "fixed";
       vid.style.top = "-9999px";
       vid.style.left = "-9999px";
-      vid.style.width = "1px";
-      vid.style.height = "1px";
-      vid.style.opacity = "0";
+      vid.style.width = "320px";
+      vid.style.height = "180px";
+      vid.style.opacity = "0.01";
       vid.style.pointerEvents = "none";
 
       if (!url.startsWith("blob:") && !url.startsWith("data:")) {
@@ -282,7 +400,7 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
 
       const timer = setTimeout(() => {
         finish(null);
-      }, 5000);
+      }, 6000);
 
       const captureFrame = () => {
         try {
@@ -303,13 +421,11 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
             ctx.drawImage(vid, 0, 0, targetW, targetH);
 
             const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? vid.duration : 5;
-            // If frame is pure black and we haven't retried yet, seek further to find visual frame
-            if (isCanvasBlackOrEmpty(canvas) && seekAttempt < 2 && dur > 0.8) {
+            // ONLY retry black frames if seekSec <= 0.05 (initial file start)!
+            // For splitted clips (seekSec > 0.05), the frame at seekSec IS the user's split point!
+            if (seekSec <= 0.05 && isCanvasBlackOrEmpty(canvas) && seekAttempt < 2 && dur > 0.5) {
               seekAttempt++;
-              const nextSeek = seekAttempt === 1
-                ? Math.min(dur * 0.25, Math.max(0.5, (seekSec || 0) + 0.8))
-                : Math.min(dur * 0.5, Math.max(1.0, (seekSec || 0) + 1.8));
-              vid.currentTime = nextSeek;
+              vid.currentTime = Math.min(dur - 0.05, 0.15 * (seekAttempt + 1));
               return;
             }
 
@@ -318,19 +434,16 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
             finish(dataUrl);
             return;
           }
-        } catch (e) {
-          // Fallback
-        }
+        } catch (e) {}
       };
 
       const doSeek = () => {
         const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? vid.duration : 5;
-        // Never seek to 0.0 or 0.05 which is almost always a black frame on MP4s
-        const safeSeek = Math.min(
-          Math.max(0.25, (seekSec || 0) + 0.15),
-          Math.max(0.2, dur - 0.2)
-        );
-        if (Math.abs(vid.currentTime - safeSeek) < 0.05 && vid.readyState >= 2) {
+        const safeSeek = seekSec > 0.05
+          ? Math.min(seekSec, Math.max(0, dur - 0.03))
+          : Math.min(0.15, Math.max(0.05, dur - 0.05));
+
+        if (Math.abs(vid.currentTime - safeSeek) < 0.02 && vid.readyState >= 2) {
           captureFrame();
         } else {
           vid.currentTime = safeSeek;
@@ -352,7 +465,6 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
       };
 
       vid.onseeked = () => {
-        // Wait one RAF tick so the video frame is completely decoded into buffer
         if (typeof requestAnimationFrame !== "undefined") {
           requestAnimationFrame(() => captureFrame());
         } else {
@@ -371,7 +483,6 @@ function extractWebVideoThumbnail(url: string, seekSec: number): Promise<string 
         finish(null);
       };
 
-      // Attach to body so browser actively decodes video frames
       document.body.appendChild(vid);
       vid.src = url;
       vid.load();

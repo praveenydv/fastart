@@ -36,28 +36,16 @@ export default function StickersModal({
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [duration, setDuration] = useState(3.0);
-  const [selectedAnim, setSelectedAnim] = useState<string>('none');
 
   React.useEffect(() => {
     if (visible) {
       if (editingClip) {
         setDuration(editingClip.duration || 3.0);
-        setSelectedAnim(editingClip.animation || 'none');
       } else {
         setDuration(3.0);
-        setSelectedAnim('none');
       }
     }
   }, [visible, editingClip]);
-
-  const STICKER_ANIMATIONS = [
-    { id: 'none', label: 'None', icon: 'remove-circle-outline' },
-    { id: 'bounce', label: 'Bounce', icon: 'trending-up' },
-    { id: 'pulse', label: 'Pulse', icon: 'heart-outline' },
-    { id: 'wave', label: 'Wave', icon: 'water-outline' },
-    { id: 'fade', label: 'Fade In', icon: 'eye-outline' },
-    { id: 'pop', label: 'Pop In', icon: 'expand-outline' },
-  ];
 
   const categories = [
     { id: 'All', label: 'All (' + STICKER_LIBRARY.length + ')' },
@@ -87,7 +75,7 @@ export default function StickersModal({
         ...editingClip,
         char: item.char,
         duration,
-        animation: (selectedAnim || 'none') as any,
+        animation: editingClip.animation,
         scale: isBadge ? 1.0 : (editingClip.scale || 1.2),
       };
       soundEngine.playSfx('pop');
@@ -104,7 +92,7 @@ export default function StickersModal({
       position: { x: 50, y: isBadge ? 45 : 50 },
       scale: isBadge ? 1.0 : 1.2,
       rotation: 0,
-      animation: (selectedAnim || 'none') as any,
+      animation: undefined,
     };
     soundEngine.playSfx('pop');
     onAddSticker(stickerClip);
@@ -173,40 +161,6 @@ export default function StickersModal({
               })}
             </ScrollView>
 
-            {/* Animation Selector */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.categoryScroll, { marginTop: 6 }]}>
-              {STICKER_ANIMATIONS.map((anim) => {
-                const isActive = selectedAnim === anim.id;
-                return (
-                  <TouchableOpacity
-                    key={anim.id}
-                    style={[
-                      styles.categoryPill,
-                      isActive && { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
-                    ]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      setSelectedAnim(anim.id);
-                    }}
-                  >
-                    <Ionicons
-                      name={anim.icon as any}
-                      size={12}
-                      color={isActive ? '#00F2FE' : '#94A3B8'}
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        isActive && { color: '#00F2FE', fontWeight: '700' },
-                      ]}
-                    >
-                      {anim.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
           </View>
 
           <ScrollView style={styles.sheetBody}>

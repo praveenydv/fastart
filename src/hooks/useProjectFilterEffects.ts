@@ -10,6 +10,9 @@ import {
   AspectRatio,
   MaskConfig,
   EffectClip,
+  BlendMode,
+  HSLAdjustments,
+  VoiceEffectId,
 } from "../types/project";
 import { getMediaDuration } from "../utils/mediaDuration";
 import { soundEngine } from "../utils/audioEngine";
@@ -729,6 +732,107 @@ export function useProjectFilterEffects({
     [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
+  // Apply layer blend mode and opacity to active video / photo clip
+  const handleApplyBlendMode = useCallback(
+    (mode: BlendMode, opacity?: number) => {
+      const current = projectRef.current || project;
+      if (!current) return;
+      const targetId = resolveTargetClipId("video");
+      if (!targetId) return;
+
+      const videoClips = (current.tracks.video || []).map((c) => {
+        if (c.id === targetId) {
+          const prevTransform = c.transform || { scale: 1, rotation: 0, x: 0, y: 0 };
+          return {
+            ...c,
+            opacity: opacity !== undefined ? opacity : (c.opacity ?? 1.0),
+            transform: {
+              ...prevTransform,
+              blendMode: mode,
+            },
+          };
+        }
+        return c;
+      });
+
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
+      });
+    },
+    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
+  );
+
+  // Apply 8-channel selective HSL adjustments to active clip
+  const handleApplyHSL = useCallback(
+    (adjustments: HSLAdjustments) => {
+      const current = projectRef.current || project;
+      if (!current) return;
+      const targetId = resolveTargetClipId("video");
+      if (!targetId) return;
+
+      const videoClips = (current.tracks.video || []).map((c) => {
+        if (c.id === targetId) {
+          return {
+            ...c,
+            hslAdjustments: adjustments,
+          };
+        }
+        return c;
+      });
+
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
+      });
+    },
+    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
+  );
+
+  // Apply character voice changer profile
+  const handleApplyVoiceEffect = useCallback(
+    (voiceEffect: VoiceEffectId) => {
+      const current = projectRef.current || project;
+      if (!current) return;
+      const targetAudioId = resolveTargetClipId("audio");
+      const targetVideoId = resolveTargetClipId("video");
+
+      if (selectedClipType === "audio" && targetAudioId) {
+        const audioClips = (current.tracks.audio || []).map((c) => {
+          if (c.id === targetAudioId) {
+            return {
+              ...c,
+              voiceEffect: voiceEffect === "none" ? undefined : voiceEffect,
+            };
+          }
+          return c;
+        });
+        updateProjectWithHistory({
+          ...current,
+          tracks: { ...current.tracks, audio: audioClips },
+        });
+        return;
+      }
+
+      if (targetVideoId) {
+        const videoClips = (current.tracks.video || []).map((c) => {
+          if (c.id === targetVideoId) {
+            return {
+              ...c,
+              voiceEffect: voiceEffect === "none" ? undefined : voiceEffect,
+            };
+          }
+          return c;
+        });
+        updateProjectWithHistory({
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
+        });
+      }
+    },
+    [project, projectRef, resolveTargetClipId, selectedClipType, updateProjectWithHistory],
+  );
+
   return {
     handleApplyFilter,
     handleApplyCutout,
@@ -740,6 +844,9 @@ export function useProjectFilterEffects({
     handleExtractAudioFromVideo,
     handleApplyTransform,
     handleApplyEnhance,
+    handleApplyBlendMode,
+    handleApplyHSL,
+    handleApplyVoiceEffect,
     isProcessing,
     processingMessage,
     startProcessing,

@@ -8,12 +8,16 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { FastArtProject, CaptionClip } from "../../types/project";
-import { generateAutoCaptions, WHISPER_API_KEY_STORAGE_KEY } from "../../services/aiCaptionEngine";
+import {
+  generateAutoCaptions,
+  WHISPER_API_KEY_STORAGE_KEY,
+  CAPTION_STYLE_PRESETS,
+  CaptionStylePreset,
+} from "../../services/aiCaptionEngine";
 import MobileWhisperTranscriberView from "./MobileWhisperTranscriberView";
 import {
   parseSrtOrVttContent,
@@ -22,13 +26,12 @@ import {
 } from "../../utils/srtParser";
 import {
   loadAllProjects,
-  loadCaptionSettings,
-  saveCaptionSettings,
   CaptionSettings,
   defaultCaptionSettings,
   getStorageItem,
   setStorageItem,
 } from "../../utils/storage";
+import { THEME_COLORS, DESIGN_CONSTANTS } from "../../constants/designConstants";
 
 interface AutoCaptionModalProps {
   visible: boolean;
@@ -48,11 +51,11 @@ const HIGHLIGHT_STYLE_OPTIONS: {
   value: "color" | "box" | "scale" | "glow" | "underline";
   icon: string;
 }[] = [
-  { label: "Classic Color", value: "color", icon: "color-palette-outline" },
+  { label: "Classic", value: "color", icon: "color-palette-outline" },
   { label: "Pop Badge", value: "box", icon: "tablet-portrait-outline" },
   { label: "Scale Pop", value: "scale", icon: "expand-outline" },
   { label: "Neon Glow", value: "glow", icon: "flashlight-outline" },
-  { label: "Accent Bar", value: "underline", icon: "remove-outline" },
+  { label: "Underline", value: "underline", icon: "remove-outline" },
 ];
 
 const HIGHLIGHT_COLOR_SWATCHES = [
@@ -62,8 +65,6 @@ const HIGHLIGHT_COLOR_SWATCHES = [
   { label: "Hot Pink", value: "#FF007F" },
   { label: "Electric Orange", value: "#FF6600" },
   { label: "Cyber Violet", value: "#A855F7" },
-  { label: "Gold", value: "#EAB308" },
-  { label: "Fire Red", value: "#EF4444" },
   { label: "Crisp White", value: "#FFFFFF" },
   { label: "Pure Black", value: "#000000" },
 ];
@@ -75,7 +76,7 @@ const TEXT_COLOR_SWATCHES = [
   { label: "Mint Green", value: "#34D399" },
   { label: "Hot Pink", value: "#FF007F" },
   { label: "Electric Orange", value: "#FF6600" },
-  { label: "Lavender", value: "#C084FC" },
+  { label: "Cyber Violet", value: "#C084FC" },
   { label: "Pure Black", value: "#000000" },
 ];
 
@@ -86,7 +87,6 @@ const STROKE_COLOR_SWATCHES = [
   { label: "Neon Cyan", value: "#00F2FE" },
   { label: "Viral Yellow", value: "#FFE600" },
   { label: "Deep Crimson", value: "#DC2626" },
-  { label: "Deep Purple", value: "#7E22CE" },
   { label: "None", value: "transparent" },
 ];
 
@@ -102,9 +102,9 @@ const BG_BOX_PRESETS = [
   { label: "None", value: "transparent" },
   { label: "Studio Dark", value: "rgba(11, 13, 19, 0.85)" },
   { label: "Solid Black", value: "#000000" },
-  { label: "Translucent White", value: "rgba(255, 255, 255, 0.2)" },
-  { label: "Accent Yellow", value: "rgba(255, 230, 0, 0.25)" },
-  { label: "Accent Cyan", value: "rgba(0, 242, 254, 0.25)" },
+  { label: "Glass White", value: "rgba(255, 255, 255, 0.2)" },
+  { label: "Neon Cyan", value: "rgba(0, 242, 254, 0.25)" },
+  { label: "Viral Yellow", value: "rgba(255, 230, 0, 0.25)" },
 ];
 
 const FONT_FAMILY_OPTIONS = [
@@ -115,30 +115,21 @@ const FONT_FAMILY_OPTIONS = [
   },
   { label: "Montserrat", value: "'Montserrat', 'Arial Black', sans-serif" },
   { label: "Bebas", value: "'Bebas Neue', 'Oswald', sans-serif" },
-  { label: "Georgia", value: "Georgia, 'Times New Roman', serif" },
   { label: "Typewriter", value: "'Courier New', Courier, monospace" },
 ];
 
 const FONT_WEIGHT_OPTIONS = [
-  { label: "Heavy (900)", value: "900" },
-  { label: "Extra Bold (800)", value: "800" },
-  { label: "Bold (700)", value: "700" },
-  { label: "SemiBold (600)", value: "600" },
+  { label: "Heavy", value: "900" },
+  { label: "Extra", value: "800" },
+  { label: "Bold", value: "700" },
+  { label: "Semi", value: "600" },
 ];
 
 const TEXT_EFFECT_OPTIONS = [
   { label: "None", value: "none", icon: "ban-outline" },
-  { label: "3D Shadow", value: "3d", icon: "layers-outline" },
-  { label: "Neon Glow", value: "neon", icon: "flashlight-outline" },
-  { label: "Soft Shadow", value: "shadow", icon: "cloudy-night-outline" },
-];
-
-const ANIMATION_OPTIONS = [
-  { label: "Karaoke", value: "karaoke", icon: "mic-outline" },
-  { label: "Bounce", value: "bounce", icon: "trending-up-outline" },
-  { label: "Zoom Punch", value: "zoomIn", icon: "scan-outline" },
-  { label: "Smooth Fade", value: "fade", icon: "eye-outline" },
-  { label: "Static", value: "none", icon: "pause-outline" },
+  { label: "3D", value: "3d", icon: "layers-outline" },
+  { label: "Neon", value: "neon", icon: "flashlight-outline" },
+  { label: "Dark", value: "shadow", icon: "cloudy-night-outline" },
 ];
 
 const POSITION_PRESETS = [
@@ -155,9 +146,9 @@ const ALIGNMENT_OPTIONS = [
 ];
 
 export const CHUNK_MODE_OPTIONS = [
-  { label: "Punchy (2-3 words)", value: "punchy", maxWords: 3 },
-  { label: "Balanced (4-5 words)", value: "balanced", maxWords: 5 },
-  { label: "Sentence (6+ words)", value: "sentence", maxWords: 8 },
+  { label: "Punchy (2-3w)", value: "punchy", maxWords: 3 },
+  { label: "Balanced (4-5w)", value: "balanced", maxWords: 5 },
+  { label: "Sentence (6+w)", value: "sentence", maxWords: 8 },
 ];
 
 export default function AutoCaptionModal({
@@ -250,37 +241,34 @@ export default function AutoCaptionModal({
 
     if (targetClip) {
       if (targetClip.presetId) setSelectedPresetId(targetClip.presetId);
-      if (targetClip.enableWordHighlight !== undefined)
+      if (targetClip.style?.color) setTextColor(targetClip.style.color);
+      if (targetClip.style?.fontSize) setFontSize(targetClip.style.fontSize);
+      if (targetClip.style?.fontFamily) setFontFamily(targetClip.style.fontFamily);
+      if (targetClip.style?.fontWeight)
+        setFontWeight(String(targetClip.style.fontWeight));
+      if (targetClip.style?.strokeColor !== undefined)
+        setStrokeColor(targetClip.style.strokeColor);
+      if (targetClip.style?.strokeWidth !== undefined)
+        setStrokeWidth(targetClip.style.strokeWidth);
+      if (targetClip.style?.backgroundColor !== undefined)
+        setBackgroundColor(targetClip.style.backgroundColor);
+      if (targetClip.style?.textEffect !== undefined)
+        setTextEffect(targetClip.style.textEffect);
+      if (targetClip.animation) {
+        const animStr = typeof targetClip.animation === 'string'
+          ? targetClip.animation
+          : targetClip.animation.preset || targetClip.animation.inPreset || 'karaoke';
+        setAnimation(animStr);
+      }
         setEnableHighlight(targetClip.enableWordHighlight);
       if (targetClip.highlightColor)
         setHighlightColor(targetClip.highlightColor);
       if (targetClip.highlightStyle)
         setHighlightStyle(targetClip.highlightStyle);
-      else if (targetClip.style?.highlightStyle)
-        setHighlightStyle(targetClip.style.highlightStyle);
-      if (targetClip.style?.fontSize) setFontSize(targetClip.style.fontSize);
-      if (targetClip.style?.fontFamily)
-        setFontFamily(targetClip.style.fontFamily);
-      if (targetClip.style?.fontWeight)
-        setFontWeight(targetClip.style.fontWeight);
-      if (targetClip.style?.color) setTextColor(targetClip.style.color);
-      if (targetClip.style?.strokeColor)
-        setStrokeColor(targetClip.style.strokeColor);
-      if (targetClip.style?.strokeWidth !== undefined)
-        setStrokeWidth(targetClip.style.strokeWidth);
-      if (targetClip.style?.backgroundColor)
-        setBackgroundColor(targetClip.style.backgroundColor);
-      if (targetClip.style?.textEffect)
-        setTextEffect(targetClip.style.textEffect);
-      if (targetClip.animation) setAnimation(targetClip.animation);
-      if (targetClip.position?.y !== undefined)
-        setCaptionPositionY(targetClip.position.y);
-      if (targetClip.style?.textAlign)
-        setTextAlign(targetClip.style.textAlign as any);
       if (targetClip.uppercase !== undefined)
         setUppercase(targetClip.uppercase);
-      else if (targetClip.style?.uppercase !== undefined)
-        setUppercase(targetClip.style.uppercase);
+      if (targetClip.position?.y !== undefined)
+        setCaptionPositionY(targetClip.position.y);
     } else {
       const saved = currentProject?.captionSettings || defaultCaptionSettings;
       setSelectedPresetId(saved.presetId);
@@ -299,12 +287,11 @@ export default function AutoCaptionModal({
       setCaptionPositionY(saved.positionY);
       setTextAlign(saved.textAlign);
       setUppercase(saved.uppercase);
-      setChunkMode(saved.chunkMode || "punchy");
-      setMaxWordsPerCue(saved.maxWordsPerCue || 3);
+      setChunkMode(saved.chunkMode);
+      setMaxWordsPerCue(saved.maxWordsPerCue);
     }
   }, [visible, selectedClipId]);
 
-  // Persist current settings to the project (not global)
   const persistSettings = (overrides?: Partial<CaptionSettings>) => {
     const updatedSettings: CaptionSettings = {
       presetId: overrides?.presetId ?? selectedPresetId,
@@ -325,16 +312,15 @@ export default function AutoCaptionModal({
       uppercase: overrides?.uppercase ?? uppercase,
       maxWordsPerCue: overrides?.maxWordsPerCue ?? maxWordsPerCue,
       chunkMode: overrides?.chunkMode ?? chunkMode,
-      ...overrides,
     };
 
-    if (onUpdateProject) {
+    if (currentProject && onUpdateProject) {
       onUpdateProject({ captionSettings: updatedSettings });
     }
   };
 
   const getActiveStyleOverrides = (): Partial<CaptionClip> & {
-    maxWordsPerCue?: number;
+    style?: CaptionClip["style"];
   } => ({
     presetId: selectedPresetId,
     position: { x: 50, y: captionPositionY },
@@ -343,7 +329,6 @@ export default function AutoCaptionModal({
     highlightStyle,
     animation: enableHighlight ? "karaoke" : animation,
     uppercase,
-    maxWordsPerCue,
     style: {
       color: textColor,
       fontSize,
@@ -441,7 +426,6 @@ export default function AutoCaptionModal({
       return;
     }
 
-    // If not standard SRT/VTT format, treat as dialogue sentences and align to audio cadence
     const lines = pastedSrtText
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -555,7 +539,6 @@ export default function AutoCaptionModal({
     });
   };
 
-  // =================== APPLY STYLING ===================
   const handleResetToDefaults = () => {
     soundEngine.playSfx("click");
     setSelectedPresetId(defaultCaptionSettings.presetId);
@@ -592,8 +575,37 @@ export default function AutoCaptionModal({
       tracks: { ...currentProject.tracks, captions: rechunked },
     });
     setStatusText(
-      `Re-chunked ${existingCaptions.length} captions into ${rechunked.length} short punchy phrases!`,
+      `Re-chunked ${existingCaptions.length} captions into ${rechunked.length} short phrases!`,
     );
+  };
+
+  const handleApplyPreset = (preset: CaptionStylePreset) => {
+    soundEngine.playSfx("click");
+    setSelectedPresetId(preset.id);
+    setTextColor(preset.color);
+    setBackgroundColor(preset.bgColor || "transparent");
+    setFontFamily(preset.fontFamily);
+    setFontSize(preset.fontSize);
+    setFontWeight(preset.fontWeight || "800");
+    setStrokeColor(preset.strokeColor || "transparent");
+    setStrokeWidth(preset.strokeWidth || 0);
+    setTextEffect(preset.textEffect || "none");
+    setAnimation(preset.animation || "karaoke");
+    if (preset.color) {
+      setHighlightColor(preset.color === "#FFE600" ? "#00F2FE" : "#FFE600");
+    }
+    persistSettings({
+      presetId: preset.id,
+      textColor: preset.color,
+      backgroundColor: preset.bgColor || "transparent",
+      fontFamily: preset.fontFamily,
+      fontSize: preset.fontSize,
+      fontWeight: preset.fontWeight || "800",
+      strokeColor: preset.strokeColor || "transparent",
+      strokeWidth: preset.strokeWidth || 0,
+      textEffect: preset.textEffect || "none",
+      animation: preset.animation || "karaoke",
+    });
   };
 
   const handleApplyStyleToAll = () => {
@@ -716,24 +728,7 @@ export default function AutoCaptionModal({
     onClose();
   };
 
-  const handleCancel = () => {
-    soundEngine.playSfx("pop");
-    onClose();
-  };
-
-  const handleApply = () => {
-    soundEngine.playSfx("whoosh");
-    if (selectedClipId) {
-      handleApplyStyleToSelected();
-    } else {
-      handleApplyStyleToAll();
-    }
-    if (onApply) {
-      onApply();
-    }
-  };
-
-  // =================== AI TRANSCRIPTION (ENGLISH ONLY) ===================
+  // =================== AI TRANSCRIPTION ===================
   const handleGenerate = async () => {
     if (!currentProject) {
       setErrorMessage("Please open or create a project first.");
@@ -763,15 +758,13 @@ export default function AutoCaptionModal({
 
       if (!generated || generated.length === 0) {
         throw new Error(
-          "Could not detect clear spoken English in this video's audio.",
+          "Could not detect clear spoken audio in this project.",
         );
       }
 
       soundEngine.playSfx("pop");
       onAddCaptions(generated);
-      setStatusText(
-        `Generated ${generated.length} English subtitle cues! Tap any cue below to edit dialogue.`,
-      );
+      setStatusText(`Generated ${generated.length} caption cues!`);
     } catch (err: any) {
       console.error("FastArt: AutoCaption error", err);
       const msg = err?.message || "Failed to generate captions.";
@@ -784,793 +777,610 @@ export default function AutoCaptionModal({
   };
 
   const sheetContent = (
-    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
-      {/* Unified Live Panel Header */}
-      <View style={styles.unifiedHeader}>
-        <View style={styles.headerTitleRow}>
-          <Ionicons name="chatbox-ellipses-outline" size={16} color="#00F2FE" />
-          <Text style={styles.sheetTitle}>Captions</Text>
-        </View>
+    <View style={styles.sheetContainer}>
+      {/* Top Header - Rendered only in Standalone Modal Mode (Hidden in Inline Mobile Sheet) */}
+      {!isInline && (
+        <View style={styles.header}>
+          <View style={styles.headerTitleRow}>
+            <Ionicons name="chatbox-ellipses-outline" size={15} color={THEME_COLORS.accent} />
+            <Text style={styles.headerTitle}>Auto Captions</Text>
+          </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <TouchableOpacity
+              onPress={handleResetToDefaults}
+              style={styles.headerActionBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Reset defaults"
+            >
+              <Ionicons name="refresh-outline" size={11} color={THEME_COLORS.accent} />
+              <Text style={styles.headerActionText}>Reset</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Close panel"
+            >
+              <Ionicons name="close" size={14} color={THEME_COLORS.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Modern Clean Segmented Navigation Bar */}
+      <View style={styles.navBar}>
+        <View style={styles.segmentedRow}>
           <TouchableOpacity
-            onPress={handleResetToDefaults}
-            style={[styles.resetBtn, { paddingHorizontal: 10, height: 26 }]}
-            activeOpacity={0.7}
-            accessibilityLabel="Reset to defaults"
+            style={[
+              styles.segmentBtn,
+              activeTab === "captions" && styles.segmentBtnActive,
+            ]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              setActiveTab("captions");
+            }}
           >
-            <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-            <Text style={styles.resetText}>Reset Defaults</Text>
+            <Ionicons
+              name="chatbox-ellipses-outline"
+              size={13}
+              color={activeTab === "captions" ? "#000000" : THEME_COLORS.textSecondary}
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                activeTab === "captions" && styles.segmentTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              Captions ({existingCaptions.length})
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={onClose}
-            style={styles.closeBtnCircle}
-            activeOpacity={0.7}
-            accessibilityLabel="Close panel"
+            style={[
+              styles.segmentBtn,
+              activeTab === "style" && styles.segmentBtnActive,
+            ]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              setActiveTab("style");
+            }}
           >
-            <Ionicons name="close" size={16} color="#A1A1AA" />
+            <Ionicons
+              name="sparkles-outline"
+              size={13}
+              color={activeTab === "style" ? "#000000" : THEME_COLORS.textSecondary}
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                activeTab === "style" && styles.segmentTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              Style & Presets
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-          {/* Top Category Tabs & SRT Actions */}
-          <View style={styles.topControlRow}>
-            <View style={styles.tabsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.tabButton,
-                  activeTab === "captions" && styles.tabButtonActive,
-                ]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  setActiveTab("captions");
-                }}
-              >
-                <Ionicons
-                  name="chatbox-ellipses-outline"
-                  size={13}
-                  color={activeTab === "captions" ? "#00F2FE" : "#8E95A5"}
-                />
-                <Text
-                  style={[
-                    styles.tabButtonText,
-                    activeTab === "captions" && styles.tabButtonTextActive,
-                  ]}
-                >
-                  Captions ({existingCaptions.length})
-                </Text>
-              </TouchableOpacity>
+      {/* Error Banner */}
+      {errorMessage && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="alert-circle" size={14} color="#EF4444" />
+          <Text style={styles.errorText} numberOfLines={2}>
+            {errorMessage}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setErrorMessage(null)}
+            style={{ padding: 2 }}
+          >
+            <Ionicons name="close" size={13} color="#FCA5A5" />
+          </TouchableOpacity>
+        </View>
+      )}
 
-              <TouchableOpacity
-                style={[
-                  styles.tabButton,
-                  activeTab === "style" && styles.tabButtonActive,
-                ]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  setActiveTab("style");
-                }}
-              >
-                <Ionicons
-                  name="sparkles-outline"
-                  size={13}
-                  color={activeTab === "style" ? "#00F2FE" : "#8E95A5"}
-                />
-                <Text
-                  style={[
-                    styles.tabButtonText,
-                    activeTab === "style" && styles.tabButtonTextActive,
-                  ]}
-                >
-                  Style & Highlight
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.srtActionGroup}>
-              <TouchableOpacity
-                style={styles.srtBtn}
-                onPress={handleImportSrtFile}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="cloud-upload-outline"
-                  size={13}
-                  color="#00F2FE"
-                />
-                <Text style={styles.srtBtnText}>Import</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Error Banner */}
-          {errorMessage && (
-            <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle" size={18} color="#EF4444" />
-              <Text style={styles.errorText}>{errorMessage}</Text>
-              <TouchableOpacity
-                onPress={() => setErrorMessage(null)}
-                style={styles.errorDismissBtn}
-              >
-                <Ionicons name="close" size={14} color="#FCA5A5" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ================= TAB 1: CAPTIONS (AUTO TRANSCRIBE + LIVE CUES TRACK) ================= */}
-          {activeTab === "captions" && (
-            <ScrollView
-              style={styles.bodyScroll}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Top Auto Transcribe & Audio Tools Box */}
-              <View style={styles.generateCardBox}>
-                {isGenerating ? (
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBarBg}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${progressPct}%` },
-                        ]}
-                      />
-                    </View>
-                    <View style={styles.progressStatusRow}>
-                      <ActivityIndicator size="small" color="#00F2FE" />
-                      <Text style={styles.statusText}>{statusText}</Text>
-                      <Text style={styles.pctText}>{progressPct}%</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.primaryTranscribeBtn}
-                      onPress={handleGenerate}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="sparkles" size={16} color="#000000" />
-                      <Text style={styles.primaryTranscribeBtnText}>
-                        Auto Transcribe to English
-                      </Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.englishNoticeRow}>
-                      <View style={styles.englishBadge}>
-                        <Text style={styles.englishBadgeText}>
-                          ENGLISH ONLY
-                        </Text>
-                      </View>
-                      <Text style={styles.englishNoticeText}>
-                        Speech is automatically transcribed & translated to
-                        English subtitles
-                      </Text>
-                    </View>
-                  </>
-                )}
-              </View>
-
-              {/* Caption Section Length / Chunking Box */}
-              <View style={styles.chunkSectionBox}>
-                <View style={styles.chunkSectionHeader}>
-                  <View
-                    style={{
-                      flex: 1,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <Ionicons
-                      name="options-outline"
-                      size={13}
-                      color="#00F2FE"
-                    />
-                    <Text style={styles.chunkSectionTitle}>
-                      PHRASE LENGTH PER FRAME
-                    </Text>
-                  </View>
-                  {existingCaptions.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.rechunkBtn}
-                      onPress={handleRechunkTimelineCaptions}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="cut-outline" size={12} color="#00F2FE" />
-                      <Text style={styles.rechunkBtnText}>
-                        Re-chunk Phrases
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <View style={styles.chunkModeRow}>
-                  {CHUNK_MODE_OPTIONS.map((opt) => {
-                    const isSelected = chunkMode === opt.value;
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[
-                          styles.chunkModePill,
-                          isSelected && styles.chunkModePillActive,
-                        ]}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          setChunkMode(opt.value as any);
-                          setMaxWordsPerCue(opt.maxWords);
-                          persistSettings({
-                            chunkMode: opt.value as any,
-                            maxWordsPerCue: opt.maxWords,
-                          });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.chunkModePillText,
-                            isSelected && styles.chunkModePillTextActive,
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Captions Cues Track Header */}
-              <View style={styles.cuesHeaderRow}>
-                <Text style={styles.cuesSectionTitle}>
-                  CAPTIONS TRACK ({existingCaptions.length} CUES)
-                </Text>
-                {existingCaptions.length > 0 && (
-                  <TouchableOpacity
-                    style={[styles.cueActionBtn, { borderColor: "#EF4444" }]}
-                    onPress={handleClearAllCaptions}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="trash-outline" size={12} color="#EF4444" />
-                    <Text style={[styles.cueActionText, { color: "#EF4444" }]}>
-                      Clear
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {existingCaptions.length === 0 ? (
-                <View style={styles.emptyCuesContainer}>
-                  <Ionicons
-                    name="chatbubble-ellipses-outline"
-                    size={38}
-                    color="#2D3748"
-                  />
-                  <Text style={styles.emptyCuesTitle}>
-                    No captions on this timeline
+      {/* ========================================================
+          TAB 1: CAPTIONS CUE EDITOR & AUTO TRANSCRIBE
+          ======================================================== */}
+      {activeTab === "captions" && (
+        <ScrollView
+          style={styles.bodyScroll}
+          contentContainerStyle={{ paddingBottom: 28 }}
+          showsVerticalScrollIndicator={true}
+        >
+          {/* Action Card: Auto Transcribe + Import SRT */}
+          <View style={styles.compactActionCard}>
+            {isGenerating ? (
+              <View style={styles.generatingRow}>
+                <ActivityIndicator size="small" color={THEME_COLORS.accent} />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={styles.statusText} numberOfLines={1}>
+                    {statusText || "Generating captions..."}
                   </Text>
-                  <Text style={styles.emptyCuesSubtitle}>
-                    Tap "Auto Transcribe to English" above to generate
-                    synchronized captions, or use Import SRT at the top.
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.cuesList}>
-                  {existingCaptions.map((cap, idx) => {
-                    const isSelected = selectedClipId === cap.id;
-                    const startStr = cap.startTime.toFixed(2);
-                    const endStr = (cap.startTime + cap.duration).toFixed(2);
-
-                    return (
-                      <View
-                        key={cap.id}
-                        style={[
-                          styles.cueCard,
-                          isSelected && styles.cueCardSelected,
-                        ]}
-                      >
-                        <View style={styles.cueMetaRow}>
-                          <View style={styles.cueTimePill}>
-                            <Text style={styles.cueTimeText}>
-                              #{idx + 1} • {startStr}s ➔ {endStr}s (
-                              {cap.duration.toFixed(1)}s)
-                            </Text>
-                          </View>
-
-                          <View style={styles.cueButtonsRow}>
-                            {onSeek && (
-                              <TouchableOpacity
-                                style={styles.cueMiniBtn}
-                                onPress={() => {
-                                  soundEngine.playSfx("click");
-                                  onSeek(cap.startTime);
-                                }}
-                              >
-                                <Ionicons
-                                  name="play-circle-outline"
-                                  size={15}
-                                  color="#00F2FE"
-                                />
-                              </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                              style={styles.cueMiniBtn}
-                              onPress={() => handleDeleteCue(cap.id)}
-                            >
-                              <Ionicons
-                                name="trash-outline"
-                                size={14}
-                                color="#EF4444"
-                              />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-
-                        <TextInput
-                          style={styles.cueTextInput}
-                          value={cap.text}
-                          onChangeText={(txt) =>
-                            handleUpdateCueText(cap.id, txt)
-                          }
-                          multiline
-                          placeholder="Subtitle text..."
-                          placeholderTextColor="#64748B"
-                        />
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-          )}
-
-          {/* ================= TAB 2: STYLE & LIVE WORD HIGHLIGHT ================= */}
-          {activeTab === "style" && (
-            <View style={{ flex: 1 }}>
-              <ScrollView
-                style={styles.bodyScroll}
-                contentContainerStyle={{ paddingBottom: 90 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {/* 1. HERO CARD: LIVE SPEAKING WORD HIGHLIGHT & PREVIEW */}
-                <View style={styles.cardSection}>
-                  <View style={styles.cardHeaderRow}>
-                    <View style={styles.cardHeaderTitleGroup}>
-                      <Ionicons name="sparkles" size={14} color="#FFE600" />
-                      <Text style={styles.cardHeaderTitle}>
-                        KARAOKE WORD HIGHLIGHT
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        setHighlightColor("#FFE600");
-                        setHighlightStyle("color");
-                        persistSettings({
-                          highlightColor: "#FFE600",
-                          highlightStyle: "color",
-                        });
-                      }}
-                      style={styles.resetLinkBtn}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name="refresh-outline"
-                        size={12}
-                        color="#8E95A5"
-                      />
-                      <Text style={styles.resetLinkText}>Reset</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Highlight Styles & Swatches - Directly configurable */}
-                  <View style={{ marginTop: 10, gap: 10 }}>
-                      <View style={styles.highlightStyleRow}>
-                        {HIGHLIGHT_STYLE_OPTIONS.map((opt) => {
-                          const isSelected = highlightStyle === opt.value;
-                          return (
-                            <TouchableOpacity
-                              key={opt.value}
-                              style={[
-                                styles.highlightStylePill,
-                                isSelected && styles.highlightStylePillActive,
-                              ]}
-                              onPress={() => {
-                                soundEngine.playSfx("click");
-                                setHighlightStyle(opt.value);
-                                persistSettings({ highlightStyle: opt.value });
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Ionicons
-                                name={opt.icon as any}
-                                size={13}
-                                color={isSelected ? "#000000" : "#8E95A5"}
-                              />
-                              <Text
-                                style={[
-                                  styles.highlightStylePillText,
-                                  isSelected &&
-                                    styles.highlightStylePillTextActive,
-                                ]}
-                              >
-                                {opt.label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{ gap: 8 }}
-                      >
-                        {HIGHLIGHT_COLOR_SWATCHES.map((swatch) => {
-                          const isSelected = highlightColor === swatch.value;
-                          return (
-                            <TouchableOpacity
-                              key={swatch.value}
-                              style={[
-                                styles.colorCircle,
-                                { backgroundColor: swatch.value },
-                                isSelected && styles.colorCircleSelected,
-                              ]}
-                              onPress={() => {
-                                soundEngine.playSfx("click");
-                                setHighlightColor(swatch.value);
-                                persistSettings({
-                                  highlightColor: swatch.value,
-                                });
-                              }}
-                            >
-                              {isSelected && (
-                                <Ionicons
-                                  name="checkmark"
-                                  size={13}
-                                  color={
-                                    swatch.value === "#FFFFFF" ||
-                                    swatch.value === "#FFE600" ||
-                                    swatch.value === "#00F2FE"
-                                      ? "#000000"
-                                      : "#FFFFFF"
-                                  }
-                                />
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-
-                  {/* Live Preview Display Box */}
-                  <View style={styles.livePreviewBox}>
-                    <Text style={styles.livePreviewHeader}>
-                      LIVE PLAYBACK PREVIEW
-                    </Text>
+                  <View style={styles.progressBarBg}>
                     <View
-                      style={[
-                        styles.karaokeWordsContainer,
-                        backgroundColor &&
-                          backgroundColor !== "transparent" && {
-                            backgroundColor,
-                            paddingHorizontal: 16,
-                            paddingVertical: 10,
-                            borderRadius: 12,
-                          },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.karaokeWordsRow,
-                          {
-                            justifyContent:
-                              textAlign === "left"
-                                ? "flex-start"
-                                : textAlign === "right"
-                                  ? "flex-end"
-                                  : "center",
-                          },
-                        ]}
-                      >
-                        {["SPEAK", "EVERY", "SINGLE", "WORD"].map((w, wIdx) => {
-                          const displayedWord = uppercase ? w.toUpperCase() : w;
-                          const isActiveWord =
-                            enableHighlight && previewTick % 4 === wIdx;
-                          const isBox =
-                            isActiveWord && highlightStyle === "box";
-                          const isGlow =
-                            isActiveWord && highlightStyle === "glow";
-                          const isScale =
-                            isActiveWord && highlightStyle === "scale";
-                          const isUnderline =
-                            isActiveWord && highlightStyle === "underline";
-
-                          let wordColor = textColor;
-                          if (isActiveWord) {
-                            if (isBox) {
-                              wordColor =
-                                highlightColor === "#000000"
-                                  ? "#FFFFFF"
-                                  : "#000000";
-                            } else {
-                              wordColor = highlightColor;
-                            }
-                          }
-
-                          return (
-                            <View
-                              key={wIdx}
-                              style={[
-                                styles.karaokeWordPill,
-                                isBox && {
-                                  backgroundColor: highlightColor,
-                                  borderRadius: 6,
-                                  paddingHorizontal: 7,
-                                  paddingVertical: 2,
-                                },
-                                isScale && { transform: [{ scale: 1.18 }] },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.karaokeWordText,
-                                  {
-                                    color: wordColor,
-                                    fontFamily,
-                                    fontSize: Math.min(24, fontSize),
-                                    fontWeight: fontWeight as any,
-                                    textShadowColor: isGlow
-                                      ? highlightColor
-                                      : textEffect === "neon"
-                                        ? wordColor
-                                        : textEffect === "3d" ||
-                                            textEffect === "shadow"
-                                          ? strokeColor !== "transparent"
-                                            ? strokeColor
-                                            : "#000000"
-                                          : "transparent",
-                                    textShadowRadius: isGlow
-                                      ? 18
-                                      : textEffect === "neon"
-                                        ? 16
-                                        : textEffect === "shadow"
-                                          ? 6
-                                          : textEffect === "3d"
-                                            ? 3
-                                            : 0,
-                                    textShadowOffset:
-                                      textEffect === "3d" && !isGlow
-                                        ? { width: 2, height: 2 }
-                                        : { width: 0, height: 0 },
-                                  },
-                                ]}
-                              >
-                                {displayedWord}
-                              </Text>
-                              {isUnderline && (
-                                <View
-                                  style={{
-                                    height: 3,
-                                    backgroundColor: highlightColor,
-                                    borderRadius: 2,
-                                    marginTop: 2,
-                                    width: "100%",
-                                  }}
-                                />
-                              )}
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </View>
+                      style={[styles.progressBarFill, { width: `${progressPct}%` }]}
+                    />
                   </View>
                 </View>
+                <Text style={styles.pctText}>{progressPct}%</Text>
+              </View>
+            ) : (
+              <View style={styles.actionCardContent}>
+                {/* Full-width primary Auto Transcribe button */}
+                <TouchableOpacity
+                  style={styles.transcribeBtn}
+                  onPress={handleGenerate}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="sparkles" size={14} color="#000000" />
+                  <Text style={styles.transcribeBtnText}>Auto Transcribe (AI FREE)</Text>
+                </TouchableOpacity>
 
-                {/* 2. TYPOGRAPHY STUDIO */}
-                <View style={styles.cardSection}>
-                  <View style={styles.cardHeaderRow}>
-                    <View style={styles.cardHeaderTitleGroup}>
-                      <Ionicons name="text-outline" size={14} color="#00F2FE" />
-                      <Text style={styles.cardHeaderTitle}>TYPOGRAPHY</Text>
-                    </View>
-                    <View style={styles.stepperRow}>
+                {/* Import SRT / Script Button */}
+                <TouchableOpacity
+                  style={styles.importSrtRowBtn}
+                  onPress={handleImportSrtFile}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="cloud-upload-outline" size={13} color={THEME_COLORS.accent} />
+                  <Text style={styles.importSrtRowText}>Import .SRT or Dialogue Script</Text>
+                </TouchableOpacity>
+
+                {/* Phrase Length Selector */}
+                <View style={styles.chunkSection}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.microTitle}>PHRASE LENGTH</Text>
+                    {existingCaptions.length > 0 && (
                       <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          const next = Math.max(10, fontSize - 2);
-                          setFontSize(next);
-                          persistSettings({ fontSize: next });
-                        }}
+                        style={styles.rechunkActionBtn}
+                        onPress={handleRechunkTimelineCaptions}
+                        activeOpacity={0.7}
                       >
-                        <Ionicons name="remove" size={13} color="#CBD5E1" />
+                        <Ionicons name="cut-outline" size={11} color={THEME_COLORS.accent} />
+                        <Text style={styles.rechunkActionText}>Re-chunk Timeline</Text>
                       </TouchableOpacity>
-                      <Text style={styles.stepperValueText}>{fontSize}px</Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => {
-                          soundEngine.playSfx("click");
-                          const next = Math.min(52, fontSize + 2);
-                          setFontSize(next);
-                          persistSettings({ fontSize: next });
-                        }}
-                      >
-                        <Ionicons name="add" size={13} color="#CBD5E1" />
-                      </TouchableOpacity>
-                    </View>
+                    )}
                   </View>
 
-                  {/* Font Family Pills */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 6, marginVertical: 6 }}
-                  >
-                    {FONT_FAMILY_OPTIONS.map((font) => {
-                      const isSelected = fontFamily === font.value;
+                  <View style={styles.chunkChipsGroup}>
+                    {CHUNK_MODE_OPTIONS.map((opt) => {
+                      const isSelected = chunkMode === opt.value;
                       return (
                         <TouchableOpacity
-                          key={font.value}
+                          key={opt.value}
                           style={[
-                            styles.fontFamilyPill,
-                            isSelected && styles.fontFamilyPillActive,
+                            styles.chunkChip,
+                            isSelected && styles.chunkChipActive,
                           ]}
                           onPress={() => {
                             soundEngine.playSfx("click");
-                            setFontFamily(font.value);
-                            persistSettings({ fontFamily: font.value });
+                            setChunkMode(opt.value as any);
+                            setMaxWordsPerCue(opt.maxWords);
+                            persistSettings({
+                              chunkMode: opt.value as any,
+                              maxWordsPerCue: opt.maxWords,
+                            });
                           }}
                         >
                           <Text
                             style={[
-                              styles.fontFamilyPillText,
-                              { fontFamily: font.value },
-                              isSelected && styles.fontFamilyPillTextActive,
+                              styles.chunkChipText,
+                              isSelected && styles.chunkChipTextActive,
                             ]}
+                            numberOfLines={1}
                           >
-                            {font.label}
+                            {opt.label}
                           </Text>
                         </TouchableOpacity>
                       );
                     })}
-                  </ScrollView>
-
-                  {/* Weights + Formatting + Align Bar */}
-                  <View style={styles.compactControlsRow}>
-                    <View style={styles.weightPillsGroup}>
-                      {FONT_WEIGHT_OPTIONS.map((fw) => {
-                        const isSelected = fontWeight === fw.value;
-                        const shortLabel =
-                          fw.value === "900"
-                            ? "Heavy"
-                            : fw.value === "800"
-                              ? "Extra"
-                              : fw.value === "700"
-                                ? "Bold"
-                                : "Semi";
-                        return (
-                          <TouchableOpacity
-                            key={fw.value}
-                            style={[
-                              styles.miniWeightPill,
-                              isSelected && styles.miniWeightPillActive,
-                            ]}
-                            onPress={() => {
-                              soundEngine.playSfx("click");
-                              setFontWeight(fw.value);
-                              persistSettings({ fontWeight: fw.value });
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.miniWeightPillText,
-                                isSelected && styles.miniWeightPillTextActive,
-                              ]}
-                            >
-                              {shortLabel}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    {/* All Caps Toggle */}
-                    <TouchableOpacity
-                      style={[
-                        styles.miniFormatPill,
-                        uppercase && styles.miniFormatPillActive,
-                      ]}
-                      onPress={() => {
-                        soundEngine.playSfx("click");
-                        const next = !uppercase;
-                        setUppercase(next);
-                        persistSettings({ uppercase: next });
-                      }}
-                    >
-                      <Ionicons
-                        name="text"
-                        size={12}
-                        color={uppercase ? "#000000" : "#8E95A5"}
-                      />
-                      <Text
-                        style={[
-                          styles.miniFormatPillText,
-                          uppercase && styles.miniFormatPillTextActive,
-                        ]}
-                      >
-                        CAPS
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Alignment */}
-                    <View style={styles.alignGroup}>
-                      {ALIGNMENT_OPTIONS.map((al) => {
-                        const isSelected = textAlign === al.value;
-                        return (
-                          <TouchableOpacity
-                            key={al.value}
-                            style={[
-                              styles.alignBtn,
-                              isSelected && styles.alignBtnActive,
-                            ]}
-                            onPress={() => {
-                              soundEngine.playSfx("click");
-                              setTextAlign(al.value as any);
-                              persistSettings({ textAlign: al.value as any });
-                            }}
-                          >
-                            <Ionicons
-                              name={al.icon as any}
-                              size={14}
-                              color={isSelected ? "#000000" : "#8E95A5"}
-                            />
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
                   </View>
                 </View>
+              </View>
+            )}
+          </View>
 
-                {/* 3. COLOR & OUTLINE STUDIO */}
-                <View style={styles.cardSection}>
-                  <View style={styles.cardHeaderRow}>
-                    <View style={styles.cardHeaderTitleGroup}>
-                      <Ionicons
-                        name="color-palette-outline"
-                        size={14}
-                        color="#00F2FE"
-                      />
-                      <Text style={styles.cardHeaderTitle}>
-                        COLOR & OUTLINE
-                      </Text>
+          {/* Cues List Header */}
+          <View style={styles.cuesListHeader}>
+            <Text style={styles.sectionHeaderTitle}>
+              SUBTITLE CUES ({existingCaptions.length})
+            </Text>
+
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <TouchableOpacity
+                style={styles.cueActionBtn}
+                onPress={handleAddNewCueAtPlayhead}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={12} color={THEME_COLORS.accent} />
+                <Text style={styles.cueActionText}>Add Cue</Text>
+              </TouchableOpacity>
+
+              {existingCaptions.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.cueActionBtn, { borderColor: THEME_COLORS.error }]}
+                  onPress={handleClearAllCaptions}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="trash-outline" size={11} color={THEME_COLORS.error} />
+                  <Text style={[styles.cueActionText, { color: THEME_COLORS.error }]}>
+                    Clear
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Cues Content List */}
+          {existingCaptions.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={30}
+                color={THEME_COLORS.textMuted}
+              />
+              <Text style={styles.emptyTitle}>No captions yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Tap "Auto Transcribe" above to generate subtitles automatically, or import an SRT script.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.cuesList}>
+              {existingCaptions.map((cap, idx) => {
+                const isSelected = selectedClipId === cap.id;
+                const startStr = cap.startTime.toFixed(2);
+                const endStr = (cap.startTime + cap.duration).toFixed(2);
+
+                return (
+                  <View
+                    key={cap.id}
+                    style={[
+                      styles.cueCard,
+                      isSelected && styles.cueCardSelected,
+                    ]}
+                  >
+                    <View style={styles.cueMetaRow}>
+                      <View style={styles.cueTimeBadge}>
+                        <Text style={styles.cueTimeText}>
+                          #{idx + 1} · {startStr}s ➔ {endStr}s ({cap.duration.toFixed(1)}s)
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        {onSeek && (
+                          <TouchableOpacity
+                            style={styles.cueIconBtn}
+                            onPress={() => {
+                              soundEngine.playSfx("click");
+                              onSeek(cap.startTime);
+                            }}
+                            accessibilityLabel="Play at cue"
+                          >
+                            <Ionicons
+                              name="play-circle-outline"
+                              size={14}
+                              color={THEME_COLORS.accent}
+                            />
+                          </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                          style={styles.cueIconBtn}
+                          onPress={() => handleDeleteCue(cap.id)}
+                          accessibilityLabel="Delete cue"
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={13}
+                            color={THEME_COLORS.error}
+                          />
+                        </TouchableOpacity>
+                      </View>
                     </View>
+
+                    <TextInput
+                      style={styles.cueInput}
+                      value={cap.text}
+                      onChangeText={(txt) => handleUpdateCueText(cap.id, txt)}
+                      multiline
+                      placeholder="Subtitle dialogue text..."
+                      placeholderTextColor={THEME_COLORS.textMuted}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ========================================================
+          TAB 2: STYLE & VIRAL PRESETS
+          ======================================================== */}
+      {activeTab === "style" && (
+        <View style={styles.styleTabRoot}>
+          <ScrollView
+            style={styles.bodyScroll}
+            contentContainerStyle={styles.styleScrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            {/* 1. Live Karaoke Animation Preview Banner */}
+            <View style={styles.previewBanner}>
+              <View
+                style={[
+                  styles.previewBox,
+                  backgroundColor &&
+                    backgroundColor !== "transparent" && {
+                      backgroundColor,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                    },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.previewWordsRow,
+                    {
+                      justifyContent:
+                        textAlign === "left"
+                          ? "flex-start"
+                          : textAlign === "right"
+                          ? "flex-end"
+                          : "center",
+                    },
+                  ]}
+                >
+                  {["SPEAK", "EVERY", "SINGLE", "WORD"].map((w, wIdx) => {
+                    const displayedWord = uppercase ? w.toUpperCase() : w;
+                    const isActiveWord =
+                      enableHighlight && previewTick % 4 === wIdx;
+                    const isBox = isActiveWord && highlightStyle === "box";
+                    const isGlow = isActiveWord && highlightStyle === "glow";
+                    const isScale = isActiveWord && highlightStyle === "scale";
+                    const isUnderline =
+                      isActiveWord && highlightStyle === "underline";
+
+                    let wordColor = textColor;
+                    if (isActiveWord) {
+                      if (isBox) {
+                        wordColor =
+                          highlightColor === "#000000" ? "#FFFFFF" : "#000000";
+                      } else {
+                        wordColor = highlightColor;
+                      }
+                    }
+
+                    return (
+                      <View
+                        key={wIdx}
+                        style={[
+                          styles.wordPill,
+                          isBox && {
+                            backgroundColor: highlightColor,
+                            borderRadius: 4,
+                            paddingHorizontal: 4,
+                            paddingVertical: 1,
+                          },
+                          isScale && { transform: [{ scale: 1.15 }] },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.wordText,
+                            {
+                              color: wordColor,
+                              fontFamily,
+                              fontSize: Math.min(18, fontSize),
+                              fontWeight: fontWeight as any,
+                              textShadowColor: isGlow
+                                ? highlightColor
+                                : textEffect === "neon"
+                                ? wordColor
+                                : textEffect === "3d" || textEffect === "shadow"
+                                ? strokeColor !== "transparent"
+                                ? strokeColor
+                                : "#000000"
+                                : "transparent",
+                              textShadowRadius: isGlow
+                                ? 12
+                                : textEffect === "neon"
+                                ? 10
+                                : textEffect === "shadow"
+                                ? 4
+                                : 0,
+                              textShadowOffset:
+                                textEffect === "3d" && !isGlow
+                                  ? { width: 1.5, height: 1.5 }
+                                  : { width: 0, height: 0 },
+                            },
+                          ]}
+                        >
+                          {displayedWord}
+                        </Text>
+                        {isUnderline && (
+                          <View
+                            style={{
+                              height: 2.5,
+                              backgroundColor: highlightColor,
+                              borderRadius: 2,
+                              marginTop: 1,
+                              width: "100%",
+                            }}
+                          />
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* 2. Viral Preset 3-Column Grid (ALL VISIBLE - ZERO HORIZONTAL SCROLL) */}
+            <View style={styles.sectionCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.sectionTitle}>VIRAL PRESETS</Text>
+                <TouchableOpacity
+                  onPress={handleResetToDefaults}
+                  style={styles.resetPresetBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="refresh-outline" size={10} color={THEME_COLORS.textMuted} />
+                  <Text style={styles.resetPresetText}>Reset</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.presetGrid}>
+                {CAPTION_STYLE_PRESETS.map((preset) => {
+                  const isSelected = selectedPresetId === preset.id;
+                  const shortName =
+                    preset.id === "mrbeast"
+                      ? "Viral Pop"
+                      : preset.id === "hormozi"
+                      ? "Hormozi"
+                      : preset.id === "karaoke"
+                      ? "Karaoke"
+                      : preset.id === "minimal_box"
+                      ? "Modern Box"
+                      : preset.id === "cyber_violet"
+                      ? "Cyber Neon"
+                      : preset.id === "cinema_yellow"
+                      ? "Cinema"
+                      : preset.name.split(" ")[0];
+
+                  return (
+                    <TouchableOpacity
+                      key={preset.id}
+                      style={[
+                        styles.presetGridCard,
+                        isSelected && styles.presetGridCardActive,
+                      ]}
+                      onPress={() => handleApplyPreset(preset)}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.presetBadge,
+                          {
+                            backgroundColor:
+                              preset.bgColor && preset.bgColor !== "transparent"
+                                ? preset.bgColor
+                                : "#08090E",
+                            borderColor: preset.strokeColor || "transparent",
+                            borderWidth: preset.strokeWidth ? 1 : 0,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: preset.color,
+                            fontSize: 11,
+                            fontWeight: "900",
+                            fontFamily: preset.fontFamily,
+                          }}
+                          numberOfLines={1}
+                        >
+                          Aa
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.presetGridName,
+                          isSelected && styles.presetGridNameActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {shortName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* 3. Karaoke Word Highlight Style & Colors (ALL VISIBLE) */}
+            <View style={styles.sectionCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.sectionTitle}>KARAOKE WORD HIGHLIGHT</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const next = !enableHighlight;
+                    setEnableHighlight(next);
+                    persistSettings({ enableHighlight: next });
+                  }}
+                  style={[styles.pillSwitch, enableHighlight && styles.pillSwitchActive]}
+                >
+                  <Text style={[styles.pillSwitchText, enableHighlight && styles.pillSwitchTextActive]}>
+                    {enableHighlight ? "ON" : "OFF"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {enableHighlight && (
+                <>
+                  {/* Highlight Style Options Grid (3-col + 2-col, NO CLIPPING) */}
+                  <View style={styles.highlightPillsGrid}>
+                    {HIGHLIGHT_STYLE_OPTIONS.map((opt, optIdx) => {
+                      const isSelected = highlightStyle === opt.value;
+                      const isThreeCol = optIdx < 3;
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            isThreeCol ? styles.highlightChip3Col : styles.highlightChip2Col,
+                            isSelected && styles.highlightChipActive,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            setHighlightStyle(opt.value);
+                            persistSettings({ highlightStyle: opt.value });
+                          }}
+                        >
+                          <Ionicons
+                            name={opt.icon as any}
+                            size={11}
+                            color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                          />
+                          <Text
+                            style={[
+                              styles.chipText,
+                              isSelected && styles.chipTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
 
-                  <Text style={styles.subSectionTitle}>TEXT COLOR</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 8, marginBottom: 10 }}
-                  >
-                    {TEXT_COLOR_SWATCHES.map((swatch) => {
-                      const isSelected = textColor === swatch.value;
+                  {/* 8 Highlight Colors in 1 Balanced Row (ZERO HORIZONTAL SCROLL) */}
+                  <View style={styles.swatchesRow}>
+                    {HIGHLIGHT_COLOR_SWATCHES.map((swatch) => {
+                      const isSelected = highlightColor === swatch.value;
                       return (
                         <TouchableOpacity
                           key={swatch.value}
                           style={[
-                            styles.colorCircle,
+                            styles.swatchCircle,
                             { backgroundColor: swatch.value },
-                            isSelected && styles.colorCircleSelected,
+                            isSelected && styles.swatchCircleSelected,
                           ]}
                           onPress={() => {
                             soundEngine.playSfx("click");
-                            setTextColor(swatch.value);
-                            persistSettings({ textColor: swatch.value });
+                            setHighlightColor(swatch.value);
+                            persistSettings({ highlightColor: swatch.value });
                           }}
                         >
                           {isSelected && (
                             <Ionicons
                               name="checkmark"
-                              size={13}
+                              size={11}
                               color={
                                 swatch.value === "#FFFFFF" ||
                                 swatch.value === "#FFE600" ||
@@ -1583,353 +1393,465 @@ export default function AutoCaptionModal({
                         </TouchableOpacity>
                       );
                     })}
-                  </ScrollView>
-
-                  <Text style={styles.subSectionTitle}>
-                    OUTLINE WIDTH & COLOR
-                  </Text>
-                  <View style={styles.pillsRow}>
-                    {STROKE_WIDTH_OPTIONS.map((sw) => {
-                      const isSelected = strokeWidth === sw.value;
-                      return (
-                        <TouchableOpacity
-                          key={sw.value}
-                          style={[
-                            styles.strokeWidthPill,
-                            isSelected && styles.strokeWidthPillActive,
-                          ]}
-                          onPress={() => {
-                            soundEngine.playSfx("click");
-                            setStrokeWidth(sw.value);
-                            persistSettings({ strokeWidth: sw.value });
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.strokeWidthPillText,
-                              isSelected && styles.strokeWidthPillTextActive,
-                            ]}
-                          >
-                            {sw.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
                   </View>
-
-                  {strokeWidth > 0 && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ gap: 8, marginTop: 8 }}
-                    >
-                      {STROKE_COLOR_SWATCHES.map((swatch) => {
-                        const isSelected = strokeColor === swatch.value;
-                        return (
-                          <TouchableOpacity
-                            key={swatch.value}
-                            style={[
-                              styles.colorCircle,
-                              {
-                                backgroundColor:
-                                  swatch.value === "transparent"
-                                    ? "#1E2638"
-                                    : swatch.value,
-                              },
-                              isSelected && styles.colorCircleSelected,
-                            ]}
-                            onPress={() => {
-                              soundEngine.playSfx("click");
-                              setStrokeColor(swatch.value);
-                              persistSettings({ strokeColor: swatch.value });
-                            }}
-                          >
-                            {isSelected && (
-                              <Ionicons
-                                name="checkmark"
-                                size={13}
-                                color={
-                                  swatch.value === "#FFFFFF"
-                                    ? "#000000"
-                                    : "#FFFFFF"
-                                }
-                              />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
-                </View>
-
-                {/* 4. BACKDROP & EFFECTS */}
-                <View style={styles.cardSection}>
-                  <View style={styles.cardHeaderRow}>
-                    <View style={styles.cardHeaderTitleGroup}>
-                      <Ionicons
-                        name="layers-outline"
-                        size={14}
-                        color="#00F2FE"
-                      />
-                      <Text style={styles.cardHeaderTitle}>
-                        BACKDROP & VISUAL EFFECTS
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.subSectionTitle}>BACKGROUND BOX</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 6, marginBottom: 10 }}
-                  >
-                    {BG_BOX_PRESETS.map((box) => {
-                      const isSelected = backgroundColor === box.value;
-                      return (
-                        <TouchableOpacity
-                          key={box.value}
-                          style={[
-                            styles.bgBoxPill,
-                            isSelected && styles.bgBoxPillActive,
-                          ]}
-                          onPress={() => {
-                            soundEngine.playSfx("click");
-                            setBackgroundColor(box.value);
-                            persistSettings({ backgroundColor: box.value });
-                          }}
-                        >
-                          <View
-                            style={[
-                              styles.bgBoxIndicator,
-                              {
-                                backgroundColor:
-                                  box.value === "transparent"
-                                    ? "transparent"
-                                    : box.value,
-                              },
-                            ]}
-                          />
-                          <Text
-                            style={[
-                              styles.bgBoxPillText,
-                              isSelected && styles.bgBoxPillTextActive,
-                            ]}
-                          >
-                            {box.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <Text style={styles.subSectionTitle}>TEXT EFFECT</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 6, paddingRight: 8 }}
-                  >
-                    {TEXT_EFFECT_OPTIONS.map((eff) => {
-                      const isSelected = textEffect === eff.value;
-                      return (
-                        <TouchableOpacity
-                          key={eff.value}
-                          style={[
-                            styles.effectPill,
-                            isSelected && styles.effectPillActive,
-                          ]}
-                          onPress={() => {
-                            soundEngine.playSfx("click");
-                            setTextEffect(eff.value);
-                            persistSettings({ textEffect: eff.value });
-                          }}
-                        >
-                          <Ionicons
-                            name={eff.icon as any}
-                            size={13}
-                            color={isSelected ? "#000000" : "#8E95A5"}
-                          />
-                          <Text
-                            style={[
-                              styles.effectPillText,
-                              isSelected && styles.effectPillTextActive,
-                            ]}
-                          >
-                            {eff.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              </ScrollView>
-
-              {/* STICKY BOTTOM ACTION BAR FOR TAB 2 */}
-              <View style={styles.stickyFooterBar}>
-                {selectedClipId && (
-                  <TouchableOpacity
-                    style={styles.footerSecondaryBtn}
-                    onPress={handleApplyStyleToSelected}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="checkmark-done" size={15} color="#00F2FE" />
-                    <Text style={styles.footerSecondaryBtnText}>
-                      Selected Cue
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                {existingCaptions.length > 0 && (
-                  <TouchableOpacity
-                    style={[
-                      styles.footerPrimaryBtn,
-                      !selectedClipId && { flex: 1 },
-                    ]}
-                    onPress={handleApplyStyleToAll}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="color-wand" size={15} color="#000000" />
-                    <Text style={styles.footerPrimaryBtnText}>
-                      Apply to All ({existingCaptions.length})
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+                </>
+              )}
             </View>
-          )}
 
-          {/* Manual Paste SRT / API Key Dialog */}
-          {showPasteSrtBox && (
-            <View style={[StyleSheet.absoluteFill, styles.dialogOverlay, { zIndex: 999 }]}>
-              <View style={styles.dialogCard}>
-                <Text style={styles.dialogTitle}>Import Subtitle / Script</Text>
-
-                {/* Mobile-only: API key section for cloud Whisper */}
-                {Platform.OS !== "web" && (
-                  <View
-                    style={{
-                      backgroundColor: "rgba(0,242,254,0.07)",
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      borderColor: "rgba(0,242,254,0.18)",
-                      padding: 12,
-                      marginBottom: 12,
-                      gap: 6,
+            {/* 4. Typography: Font Size, 2-Col Font Grid, Weights, Alignment */}
+            <View style={styles.sectionCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.sectionTitle}>TYPOGRAPHY</Text>
+                {/* Font Size Stepper */}
+                <View style={styles.stepperContainer}>
+                  <TouchableOpacity
+                    style={styles.stepperAction}
+                    onPress={() => {
+                      soundEngine.playSfx("click");
+                      const next = Math.max(10, fontSize - 2);
+                      setFontSize(next);
+                      persistSettings({ fontSize: next });
                     }}
                   >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                      <Ionicons name="flash-outline" size={15} color="#00F2FE" />
-                      <Text style={{ color: "#00F2FE", fontSize: 13, fontWeight: "800" }}>
-                        CLOUD ACCELERATION (OPTIONAL)
-                      </Text>
-                    </View>
-                    <Text style={{ color: "#94A3B8", fontSize: 11, lineHeight: 16 }}>
-                      FastArt generates captions on mobile for free with zero API keys and zero mic permissions. If you prefer ultra-fast cloud processing (1s), you can optionally paste a Groq or OpenAI key below:
-                    </Text>
-                    <TextInput
-                      style={{
-                        backgroundColor: "#0F1929",
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: whisperApiKey
-                          ? "rgba(0,242,254,0.4)"
-                          : "rgba(255,255,255,0.08)",
-                        color: "#E2E8F0",
-                        fontSize: 12,
-                        paddingHorizontal: 10,
-                        paddingVertical: 8,
-                        fontFamily: "monospace",
-                      }}
-                      value={whisperApiKey}
-                      onChangeText={setWhisperApiKey}
-                      placeholder="gsk_... or sk-... or groq:gsk_..."
-                      placeholderTextColor="#475569"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      secureTextEntry={false}
-                    />
-                    <TouchableOpacity
-                      onPress={() => {
-                        const trimmed = whisperApiKey.trim();
-                        setStorageItem(WHISPER_API_KEY_STORAGE_KEY, trimmed);
-                        if (trimmed) {
-                          setShowPasteSrtBox(false);
-                          setTimeout(() => {
-                            handleGenerate();
-                          }, 150);
-                        }
-                      }}
-                      style={{
-                        alignSelf: "flex-start",
-                        backgroundColor: whisperApiKey.trim()
-                          ? "rgba(0,242,254,0.15)"
-                          : "rgba(255,255,255,0.05)",
-                        borderRadius: 7,
-                        borderWidth: 1,
-                        borderColor: whisperApiKey.trim()
-                          ? "rgba(0,242,254,0.35)"
-                          : "rgba(255,255,255,0.08)",
-                        paddingHorizontal: 14,
-                        paddingVertical: 8,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                      activeOpacity={0.75}
-                    >
-                      <Ionicons
-                        name="sparkles"
-                        size={14}
-                        color={whisperApiKey.trim() ? "#00F2FE" : "#475569"}
-                      />
-                      <Text
-                        style={{
-                          color: whisperApiKey.trim() ? "#00F2FE" : "#475569",
-                          fontSize: 12,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Save Key & Transcribe With Whisper AI
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                <Text style={styles.dialogSubtitle}>
-                  {Platform.OS !== "web"
-                    ? "— OR — Paste dialogue script / .SRT below:"
-                    : "Paste .SRT, WebVTT, or plain dialogue sentences:"}
-                </Text>
-                <TextInput
-                  style={styles.dialogInput}
-                  multiline
-                  value={pastedSrtText}
-                  onChangeText={setPastedSrtText}
-                  placeholder={`Paste .SRT timestamps or dialogue script lines:\n\nHello welcome to my video\nToday we talk about FastArt`}
-                  placeholderTextColor="#64748B"
-                />
-                <View style={styles.dialogButtonsRow}>
-                  <TouchableOpacity
-                    style={styles.dialogCancelBtn}
-                    onPress={() => setShowPasteSrtBox(false)}
-                  >
-                    <Text style={styles.dialogCancelText}>Cancel</Text>
+                    <Ionicons name="remove" size={11} color={THEME_COLORS.textSecondary} />
                   </TouchableOpacity>
+                  <Text style={styles.stepperLabel}>{fontSize}px</Text>
                   <TouchableOpacity
-                    style={styles.dialogApplyBtn}
-                    onPress={handleApplyPastedSrt}
+                    style={styles.stepperAction}
+                    onPress={() => {
+                      soundEngine.playSfx("click");
+                      const next = Math.min(52, fontSize + 2);
+                      setFontSize(next);
+                      persistSettings({ fontSize: next });
+                    }}
                   >
-                    <Text style={styles.dialogApplyText}>Import</Text>
+                    <Ionicons name="add" size={11} color={THEME_COLORS.textSecondary} />
                   </TouchableOpacity>
                 </View>
               </View>
-            </View>
-          )}
 
-          {/* Headless Mobile Whisper Speech Recognizer (Browser Parity) */}
-          {Platform.OS !== "web" && (
-            <MobileWhisperTranscriberView />
-          )}
+              {/* Font Family 2-Column Grid (ALL 5 VISIBLE, EASY TO TAP) */}
+              <View style={styles.fontGrid}>
+                {FONT_FAMILY_OPTIONS.map((f, fIdx) => {
+                  const isSelected = fontFamily === f.value;
+                  const isLastOdd = fIdx === FONT_FAMILY_OPTIONS.length - 1 && fIdx % 2 === 0;
+                  return (
+                    <TouchableOpacity
+                      key={f.value}
+                      style={[
+                        styles.fontChip,
+                        isLastOdd && { width: "100%" },
+                        isSelected && styles.fontChipActive,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        setFontFamily(f.value);
+                        persistSettings({ fontFamily: f.value });
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.fontChipText,
+                          { fontFamily: f.value },
+                          isSelected && styles.fontChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Weights + Caps + Alignment */}
+              <View style={styles.typographyToolbar}>
+                <View style={{ flexDirection: "row", gap: 3, flex: 1 }}>
+                  {FONT_WEIGHT_OPTIONS.map((fw) => {
+                    const isSelected = fontWeight === fw.value;
+                    return (
+                      <TouchableOpacity
+                        key={fw.value}
+                        style={[
+                          styles.microBtn,
+                          isSelected && styles.microBtnActive,
+                        ]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          setFontWeight(fw.value);
+                          persistSettings({ fontWeight: fw.value });
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.microBtnText,
+                            isSelected && styles.microBtnTextActive,
+                          ]}
+                        >
+                          {fw.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* CAPS toggle */}
+                <TouchableOpacity
+                  style={[styles.microBtn, uppercase && styles.microBtnActive]}
+                  onPress={() => {
+                    soundEngine.playSfx("click");
+                    const next = !uppercase;
+                    setUppercase(next);
+                    persistSettings({ uppercase: next });
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.microBtnText,
+                      uppercase && styles.microBtnTextActive,
+                    ]}
+                  >
+                    CAPS
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Alignment buttons */}
+                <View style={styles.alignPillGroup}>
+                  {ALIGNMENT_OPTIONS.map((al) => {
+                    const isSelected = textAlign === al.value;
+                    return (
+                      <TouchableOpacity
+                        key={al.value}
+                        style={[styles.alignItem, isSelected && styles.alignItemActive]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          setTextAlign(al.value as any);
+                          persistSettings({ textAlign: al.value as any });
+                        }}
+                      >
+                        <Ionicons
+                          name={al.icon as any}
+                          size={12}
+                          color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* 5. Text & Outline Color (ALL VISIBLE IN 1 ROW - ZERO HORIZONTAL SCROLL) */}
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>TEXT & OUTLINE COLOR</Text>
+              
+              {/* 8 Text Colors in 1 Balanced Row */}
+              <View style={styles.swatchesRow}>
+                {TEXT_COLOR_SWATCHES.map((swatch) => {
+                  const isSelected = textColor === swatch.value;
+                  return (
+                    <TouchableOpacity
+                      key={swatch.value}
+                      style={[
+                        styles.swatchCircle,
+                        { backgroundColor: swatch.value },
+                        isSelected && styles.swatchCircleSelected,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        setTextColor(swatch.value);
+                        persistSettings({ textColor: swatch.value });
+                      }}
+                    >
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={11}
+                          color={
+                            swatch.value === "#FFFFFF" ||
+                            swatch.value === "#FFE600" ||
+                            swatch.value === "#00F2FE"
+                              ? "#000000"
+                              : "#FFFFFF"
+                          }
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Stroke Widths */}
+              <View style={[styles.rowBetween, { marginTop: 8 }]}>
+                <Text style={styles.microTitle}>STROKE</Text>
+                <View style={{ flexDirection: "row", gap: 3, flex: 1, justifyContent: "flex-end" }}>
+                  {STROKE_WIDTH_OPTIONS.map((sw) => {
+                    const isSelected = strokeWidth === sw.value;
+                    return (
+                      <TouchableOpacity
+                        key={sw.value}
+                        style={[styles.microBtn, isSelected && styles.microBtnActive]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          setStrokeWidth(sw.value);
+                          persistSettings({ strokeWidth: sw.value });
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.microBtnText,
+                            isSelected && styles.microBtnTextActive,
+                          ]}
+                        >
+                          {sw.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* 7 Stroke Color Swatches in 1 Balanced Row */}
+              {strokeWidth > 0 && (
+                <View style={[styles.swatchesRow, { marginTop: 6 }]}>
+                  {STROKE_COLOR_SWATCHES.map((swatch) => {
+                    const isSelected = strokeColor === swatch.value;
+                    return (
+                      <TouchableOpacity
+                        key={swatch.value}
+                        style={[
+                          styles.swatchCircle,
+                          {
+                            backgroundColor:
+                              swatch.value === "transparent" ? "#1E2638" : swatch.value,
+                          },
+                          isSelected && styles.swatchCircleSelected,
+                        ]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          setStrokeColor(swatch.value);
+                          persistSettings({ strokeColor: swatch.value });
+                        }}
+                      >
+                        {isSelected && (
+                          <Ionicons
+                            name="checkmark"
+                            size={11}
+                            color={swatch.value === "#FFFFFF" ? "#000000" : "#FFFFFF"}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* 6. Backdrop Box & Effects (3-COL GRID - ZERO HORIZONTAL SCROLL) */}
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>BACKDROP BOX & EFFECTS</Text>
+              
+              {/* 6 Backdrop Options in 3x2 Grid - All Visible */}
+              <View style={styles.boxGrid}>
+                {BG_BOX_PRESETS.map((box) => {
+                  const isSelected = backgroundColor === box.value;
+                  return (
+                    <TouchableOpacity
+                      key={box.value}
+                      style={[styles.boxChip, isSelected && styles.boxChipActive]}
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        setBackgroundColor(box.value);
+                        persistSettings({ backgroundColor: box.value });
+                      }}
+                    >
+                      <View
+                        style={[
+                          styles.boxDot,
+                          {
+                            backgroundColor:
+                              box.value === "transparent" ? "transparent" : box.value,
+                          },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.boxChipText,
+                          isSelected && styles.boxChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {box.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Text Effect 4 Pills in 1 Row */}
+              <View style={{ flexDirection: "row", gap: 4 }}>
+                {TEXT_EFFECT_OPTIONS.map((eff) => {
+                  const isSelected = textEffect === eff.value;
+                  return (
+                    <TouchableOpacity
+                      key={eff.value}
+                      style={[
+                        styles.chipBtn,
+                        { flex: 1, justifyContent: "center" },
+                        isSelected && styles.chipBtnActive,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        setTextEffect(eff.value);
+                        persistSettings({ textEffect: eff.value });
+                      }}
+                    >
+                      <Ionicons
+                        name={eff.icon as any}
+                        size={11}
+                        color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.chipText,
+                          isSelected && styles.chipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {eff.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* 7. Screen Position (2x2 Grid - ALL VISIBLE) */}
+            <View style={[styles.sectionCard, { marginBottom: 16 }]}>
+              <Text style={styles.sectionTitle}>SCREEN POSITION</Text>
+              <View style={styles.posGrid}>
+                {POSITION_PRESETS.map((pos) => {
+                  const isSelected = captionPositionY === pos.value;
+                  return (
+                    <TouchableOpacity
+                      key={pos.value}
+                      style={[
+                        styles.posChip,
+                        isSelected && styles.posChipActive,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx("click");
+                        setCaptionPositionY(pos.value);
+                        persistSettings({ positionY: pos.value });
+                      }}
+                    >
+                      <Ionicons
+                        name={pos.icon as any}
+                        size={12}
+                        color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.posChipText,
+                          isSelected && styles.posChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {pos.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Sticky Docked Action Footer */}
+          <View style={styles.dockedFooter}>
+            {selectedClipId && (
+              <TouchableOpacity
+                style={styles.dockedSecondaryBtn}
+                onPress={handleApplyStyleToSelected}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-done" size={13} color={THEME_COLORS.accent} />
+                <Text style={styles.dockedSecondaryBtnText}>Selected Cue</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.dockedPrimaryBtn,
+                !selectedClipId && { flex: 1 },
+              ]}
+              onPress={handleApplyStyleToAll}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="color-wand" size={14} color="#000000" />
+              <Text style={styles.dockedPrimaryBtnText}>
+                Apply to All ({existingCaptions.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
+      )}
+
+      {/* Manual Paste SRT / API Key Dialog */}
+      {showPasteSrtBox && (
+        <View style={[StyleSheet.absoluteFill, styles.dialogOverlay, { zIndex: 999 }]}>
+          <View style={styles.dialogCard}>
+            <Text style={styles.dialogTitle}>Import Subtitle / Script</Text>
+
+            {Platform.OS !== "web" && (
+              <View style={styles.cloudKeyCard}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Ionicons name="flash-outline" size={13} color={THEME_COLORS.accent} />
+                  <Text style={styles.cloudKeyTitle}>CLOUD ACCELERATION</Text>
+                </View>
+                <TextInput
+                  style={styles.keyInput}
+                  value={whisperApiKey}
+                  onChangeText={setWhisperApiKey}
+                  placeholder="Paste optional Groq or OpenAI Whisper key..."
+                  placeholderTextColor={THEME_COLORS.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
+
+            <Text style={styles.dialogSubtitle}>
+              Paste .SRT, WebVTT, or plain dialogue lines:
+            </Text>
+            <TextInput
+              style={styles.dialogInput}
+              multiline
+              value={pastedSrtText}
+              onChangeText={setPastedSrtText}
+              placeholder={`Paste .SRT timestamps or dialogue script lines:\n\nHello welcome to my video\nToday we talk about FastArt`}
+              placeholderTextColor={THEME_COLORS.textMuted}
+            />
+            <View style={styles.dialogButtonsRow}>
+              <TouchableOpacity
+                style={styles.dialogCancelBtn}
+                onPress={() => setShowPasteSrtBox(false)}
+              >
+                <Text style={styles.dialogCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dialogApplyBtn}
+                onPress={handleApplyPastedSrt}
+              >
+                <Text style={styles.dialogApplyText}>Import</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Headless Mobile Whisper Speech Recognizer */}
+      {Platform.OS !== "web" && <MobileWhisperTranscriberView />}
+    </View>
   );
 
   if (!visible) return null;
@@ -1941,213 +1863,82 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0F131D",
+    backgroundColor: THEME_COLORS.background,
   },
-  unifiedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
-    backgroundColor: '#08090E',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  closeBtnCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: '#131826',
-    borderWidth: 1,
-    borderColor: '#1F2637',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inlineSheetContainer: {
+  sheetContainer: {
     flex: 1,
     width: "100%",
     height: "100%",
-    maxHeight: "100%",
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderTopWidth: 0,
-    paddingBottom: 0,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-    justifyContent: "flex-end",
-  },
-  sheetContainer: {
-    backgroundColor: "#0F131D",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: Platform.OS === "web" ? "78%" : "85%",
-    minHeight: "60%",
-    borderTopWidth: 1,
-    borderColor: "#1F2637",
-    overflow: "hidden",
-    paddingBottom: Platform.OS === "ios" ? 16 : 6,
-  },
-  sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginTop: 6,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#08090E",
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  sheetTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.1,
-  },
-  resetBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: "#131826",
-    borderWidth: 1,
-    borderColor: "#1F2637",
-  },
-  resetText: {
-    color: "#94A3B8",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: "#131826",
-    borderWidth: 1,
-    borderColor: "#1F2637",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topControlRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-    marginTop: 6,
-    gap: 6,
-  },
-  srtActionGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  srtBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: "#131826",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#1F2637",
-  },
-  srtBtnText: {
-    color: "#00F2FE",
-    fontSize: 10,
-    fontWeight: "700",
+    backgroundColor: THEME_COLORS.surface,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#08090E",
+    borderBottomColor: THEME_COLORS.borderSubtle,
+    backgroundColor: THEME_COLORS.background,
   },
-  headerLeft: {
+  headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  titleIconBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 13,
+    color: THEME_COLORS.textPrimary,
+    fontSize: 12.5,
     fontWeight: "700",
-    letterSpacing: 0.1,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
+    letterSpacing: 0.2,
   },
   headerActionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     paddingHorizontal: 7,
-    paddingVertical: 4,
-    backgroundColor: "#131826",
-    borderRadius: 6,
+    paddingVertical: 3,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: THEME_COLORS.borderSubtle,
   },
   headerActionText: {
-    color: "#00F2FE",
+    color: THEME_COLORS.accent,
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   closeBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: "#131826",
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    backgroundColor: THEME_COLORS.surfaceElevated,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: THEME_COLORS.borderSubtle,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 4,
   },
-  tabsRow: {
+  navBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: THEME_COLORS.background,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME_COLORS.borderSubtle,
+    gap: 8,
+  },
+  segmentedRow: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#08090E",
-    padding: 2,
+    backgroundColor: THEME_COLORS.surfaceElevated,
     borderRadius: 6,
+    padding: 2,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: THEME_COLORS.borderSubtle,
   },
-  tabButton: {
+  segmentBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -2156,32 +1947,196 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 5,
   },
-  tabButtonActive: {
-    backgroundColor: "#131826",
-    borderWidth: 1,
-    borderColor: "#1F2637",
+  segmentBtnActive: {
+    backgroundColor: THEME_COLORS.accent,
   },
-  tabButtonText: {
-    color: "#94A3B8",
+  segmentText: {
+    color: THEME_COLORS.textSecondary,
     fontSize: 10.5,
     fontWeight: "600",
   },
-  tabButtonTextActive: {
-    color: "#00F2FE",
-    fontWeight: "700",
+  segmentTextActive: {
+    color: "#000000",
+    fontWeight: "800",
+  },
+  quickActionsGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  navIconBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  navIconText: {
+    color: THEME_COLORS.accent,
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.35)",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginHorizontal: 10,
+    marginTop: 6,
+  },
+  errorText: {
+    flex: 1,
+    color: "#FCA5A5",
+    fontSize: 11,
+    fontWeight: "500",
   },
   bodyScroll: {
+    flex: 1,
     paddingHorizontal: 10,
-    paddingTop: 6,
+    paddingTop: 8,
   },
-  cuesHeaderRow: {
+  compactActionCard: {
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    marginBottom: 8,
+  },
+  generatingRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    gap: 8,
   },
-  cuesSectionTitle: {
-    color: "#94A3B8",
+  statusText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 10.5,
+    fontWeight: "500",
+  },
+  pctText: {
+    color: THEME_COLORS.accent,
+    fontSize: 11,
+    fontWeight: "800",
+    fontFamily: "monospace",
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: THEME_COLORS.accent,
+    borderRadius: 2,
+  },
+  actionCardContent: {
+    gap: 6,
+  },
+  transcribeBtn: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: THEME_COLORS.accent,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  transcribeBtnText: {
+    color: "#000000",
+    fontSize: 11.5,
+    fontWeight: "800",
+  },
+  importSrtRowBtn: {
+    width: "100%",
+    backgroundColor: THEME_COLORS.background,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 2,
+  },
+  importSrtRowText: {
+    color: THEME_COLORS.accent,
+    fontSize: 10.5,
+    fontWeight: "600",
+  },
+  chunkSection: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: THEME_COLORS.borderSubtle,
+    gap: 5,
+  },
+  rechunkActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.3)",
+  },
+  rechunkActionText: {
+    color: THEME_COLORS.accent,
+    fontSize: 9.5,
+    fontWeight: "700",
+  },
+  chunkChipsGroup: {
+    flexDirection: "row",
+    gap: 4,
+    width: "100%",
+  },
+  chunkChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  chunkChipActive: {
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  chunkChipText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9.5,
+    fontWeight: "600",
+  },
+  chunkChipTextActive: {
+    color: THEME_COLORS.accent,
+    fontWeight: "800",
+  },
+  cuesListHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+    marginTop: 2,
+  },
+  sectionHeaderTitle: {
+    color: THEME_COLORS.textSecondary,
     fontSize: 9.5,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -2189,92 +2144,57 @@ const styles = StyleSheet.create({
   cueActionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     paddingHorizontal: 6,
-    paddingVertical: 3,
-    backgroundColor: "#131826",
+    paddingVertical: 2.5,
+    backgroundColor: THEME_COLORS.surfaceElevated,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#00F2FE",
+    borderColor: THEME_COLORS.borderSubtle,
   },
   cueActionText: {
-    color: "#00F2FE",
-    fontSize: 10,
-    fontWeight: "700",
+    color: THEME_COLORS.accent,
+    fontSize: 9.5,
+    fontWeight: "600",
   },
-  emptyCuesContainer: {
+  emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 12,
-    backgroundColor: "#131826",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: THEME_COLORS.surfaceElevated,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#1F2637",
-    marginVertical: 6,
+    borderColor: THEME_COLORS.borderSubtle,
+    marginTop: 4,
   },
-  emptyCuesTitle: {
-    color: "#FFFFFF",
-    fontSize: 12.5,
+  emptyTitle: {
+    color: THEME_COLORS.textPrimary,
+    fontSize: 12,
     fontWeight: "700",
     marginTop: 6,
   },
-  emptyCuesSubtitle: {
-    color: "#94A3B8",
-    fontSize: 10.5,
+  emptySubtitle: {
+    color: THEME_COLORS.textMuted,
+    fontSize: 10,
     textAlign: "center",
-    marginTop: 3,
+    marginTop: 2,
     lineHeight: 14,
-  },
-  emptyCuesButtonsRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 10,
-  },
-  emptyPrimaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  emptyPrimaryBtnText: {
-    color: "#08090E",
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  emptySecondaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#131826",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#1F2637",
-  },
-  emptySecondaryBtnText: {
-    color: "#00F2FE",
-    fontSize: 10.5,
-    fontWeight: "700",
   },
   cuesList: {
     gap: 5,
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
   cueCard: {
-    backgroundColor: "#131826",
-    borderRadius: 8,
-    padding: 8,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderRadius: 7,
+    padding: 7,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: THEME_COLORS.borderSubtle,
   },
   cueCardSelected: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.06)",
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.05)",
   },
   cueMetaRow: {
     flexDirection: "row",
@@ -2282,931 +2202,552 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 4,
   },
-  cueTimePill: {
-    backgroundColor: "#0A0D14",
-    paddingHorizontal: 6,
+  cueTimeBadge: {
+    backgroundColor: THEME_COLORS.background,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
   },
   cueTimeText: {
-    color: "#00F2FE",
-    fontSize: 9.5,
+    color: THEME_COLORS.accent,
+    fontSize: 9,
+    fontFamily: "monospace",
     fontWeight: "700",
-    letterSpacing: 0.3,
   },
-  cueButtonsRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  cueMiniBtn: {
-    padding: 3,
-  },
-  cueTextInput: {
-    color: "#FFFFFF",
-    fontSize: 12.5,
-    backgroundColor: "#0A0D14",
-    padding: 6,
-    borderRadius: 6,
-    minHeight: 32,
-    lineHeight: 16,
-  },
-  cardSection: {
-    backgroundColor: "#141926",
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    marginBottom: 8,
-  },
-  cardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  cardHeaderTitleGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  cardHeaderTitle: {
-    color: "#CBD5E1",
-    fontSize: 10.5,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  highlightSection: {
-    backgroundColor: "#141926",
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    marginBottom: 10,
-  },
-  highlightHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  highlightTitle: {
-    color: "#FFE600",
-    fontSize: 11.5,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  highlightSubtitle: {
-    color: "#8E95A5",
-    fontSize: 10.5,
-    marginTop: 1,
-  },
-  toggleSwitch: {
-    width: 40,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#20283A",
+  cueIconBtn: {
     padding: 2,
-    justifyContent: "center",
   },
-  toggleSwitchActive: {
-    backgroundColor: "#FFE600",
-  },
-  toggleKnob: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#8E95A5",
-  },
-  toggleKnobActive: {
-    backgroundColor: "#000000",
-    alignSelf: "flex-end",
-  },
-  subSectionTitle: {
-    color: "#8E95A5",
-    fontSize: 9.5,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  highlightStyleRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 8,
-  },
-  highlightStylePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
+  cueInput: {
+    color: THEME_COLORS.textPrimary,
+    fontSize: 11.5,
+    backgroundColor: THEME_COLORS.background,
+    paddingHorizontal: 7,
     paddingVertical: 5,
-    backgroundColor: "#141A28",
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#1E2638",
+    borderRadius: 5,
+    minHeight: 28,
+    lineHeight: 15,
   },
-  highlightStylePillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  highlightStylePillText: {
-    color: "#8E95A5",
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  highlightStylePillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  livePreviewBox: {
-    backgroundColor: "#07080C",
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#1E2638",
-  },
-  livePreviewHeader: {
-    color: "#64748B",
-    fontSize: 8.5,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
-  karaokeWordsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 6,
-  },
-  karaokeWordPill: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  karaokeWordText: {
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  section: {
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    color: "#8E95A5",
-    fontSize: 10.5,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  positionButtonsRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  posBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 7,
-    backgroundColor: "#141A28",
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-  },
-  posBtnActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  posBtnText: {
-    color: "#8E95A5",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  posBtnTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  fontSizesRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  sizeBtn: {
-    flex: 1,
+  previewBanner: {
+    backgroundColor: "#07090E",
+    borderRadius: 8,
     paddingVertical: 6,
-    alignItems: "center",
-    backgroundColor: "#141A28",
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-  },
-  sizeBtnActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  sizeBtnText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  sizeBtnTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  applyAllBtn: {
-    flexDirection: "row",
-    backgroundColor: "#00F2FE",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  applyAllBtnText: {
-    color: "#000000",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  applySelectedBtn: {
-    flexDirection: "row",
-    backgroundColor: "#141A28",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "#00F2FE",
-  },
-  applySelectedBtnText: {
-    color: "#00F2FE",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  compactControlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    marginTop: 6,
-  },
-  weightPillsGroup: {
-    flexDirection: "row",
-    gap: 4,
-    flex: 1,
-  },
-  miniWeightPill: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 7,
-    backgroundColor: "#161D2E",
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#232D42",
-  },
-  miniWeightPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  miniWeightPillText: {
-    color: "#8E95A5",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  miniWeightPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  miniFormatPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 7,
-    backgroundColor: "#161D2E",
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#232D42",
-  },
-  miniFormatPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  miniFormatPillText: {
-    color: "#8E95A5",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  miniFormatPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  stickyFooterBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: "rgba(15, 19, 29, 0.95)",
-    borderTopWidth: 1,
-    borderTopColor: "#1E273C",
-  },
-  footerPrimaryBtn: {
-    flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#00F2FE",
-    paddingVertical: 11,
-    borderRadius: 10,
-  },
-  footerPrimaryBtnText: {
-    color: "#000000",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  footerSecondaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    backgroundColor: "#161D2E",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#00F2FE",
+    borderColor: THEME_COLORS.borderSubtle,
+    marginBottom: 8,
+    minHeight: 32,
   },
-  footerSecondaryBtnText: {
-    color: "#00F2FE",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  chunkSectionBox: {
-    backgroundColor: "#111624",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    marginBottom: 16,
-    gap: 10,
-  },
-  chunkSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  chunkSectionTitle: {
-    color: "#8E95A5",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  chunkSectionDesc: {
-    color: "#64748B",
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: "500",
-  },
-  rechunkBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
-  },
-  rechunkBtnText: {
-    color: "#00F2FE",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  chunkModeRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  chunkModePill: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#141A28",
-    paddingVertical: 9,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-  },
-  chunkModePillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  chunkModePillText: {
-    color: "#8E95A5",
-    fontSize: 11,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  chunkModePillTextActive: {
-    color: "#000000",
-    fontWeight: "900",
-  },
-  karaokeWordsContainer: {
+  previewBox: {
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
-  sectionHeaderRow: {
+  previewWordsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 5,
+  },
+  wordPill: {
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+  },
+  wordText: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  sectionCard: {
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
     marginBottom: 8,
   },
-  resetLinkBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-    backgroundColor: "#161D2C",
-  },
-  resetLinkText: {
-    color: "#8E95A5",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  formatRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  formatPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#141A28",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-  },
-  formatPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  formatPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  formatPillTextActive: {
-    color: "#000000",
+  sectionTitle: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9.5,
     fontWeight: "800",
-  },
-  alignGroup: {
-    flexDirection: "row",
-    backgroundColor: "#141A28",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-    overflow: "hidden",
-  },
-  alignBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  alignBtnActive: {
-    backgroundColor: "#00F2FE",
-  },
-  fontFamilyPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: "#141A28",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-    marginRight: 8,
-  },
-  fontFamilyPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  fontFamilyPillText: {
-    color: "#8E95A5",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  fontFamilyPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  stepperRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#141A28",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  stepperBtn: {
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 4,
-    backgroundColor: "#1A2234",
-  },
-  stepperValueText: {
-    color: "#00F2FE",
-    fontSize: 12,
-    fontWeight: "800",
-    minWidth: 38,
-    textAlign: "center",
-  },
-  pillsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  weightPill: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    backgroundColor: "#141A28",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-  },
-  weightPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  weightPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  weightPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  strokeWidthPill: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    backgroundColor: "#141A28",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-  },
-  strokeWidthPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  strokeWidthPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  strokeWidthPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  bgBoxPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#141A28",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-    marginRight: 8,
-  },
-  bgBoxPillActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
-  },
-  bgBoxIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
-  },
-  bgBoxPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  bgBoxPillTextActive: {
-    color: "#00F2FE",
-    fontWeight: "800",
-  },
-  effectPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#141A28",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-    marginRight: 8,
-  },
-  effectPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  effectPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  effectPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  animPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#141A28",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#20283A",
-    marginRight: 8,
-  },
-  animPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  animPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  animPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  horizontalRow: {
-    flexDirection: "row",
-  },
-  langPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#141A28",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#22293A",
-    marginRight: 8,
-  },
-  langPillActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
-  },
-  langPillText: {
-    color: "#8E95A5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  langPillTextActive: {
-    color: "#000000",
-    fontWeight: "800",
-  },
-  colorCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-    borderWidth: 1.5,
-    borderColor: "#20283A",
-  },
-  colorCircleSelected: {
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
-  micBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#141A28",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#00F2FE",
-  },
-  micBtnActive: {
-    borderColor: "#EF4444",
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
-  },
-  micBtnText: {
-    color: "#00F2FE",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  generateCardBox: {
-    backgroundColor: "#111624",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    marginBottom: 16,
-    gap: 10,
-  },
-  primaryTranscribeBtn: {
-    flexDirection: "row",
-    backgroundColor: "#00F2FE",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  primaryTranscribeBtnText: {
-    color: "#000000",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  englishNoticeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.2)",
-  },
-  englishBadge: {
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  englishBadgeText: {
-    color: "#000000",
-    fontSize: 10,
-    fontWeight: "900",
     letterSpacing: 0.5,
   },
-  englishNoticeText: {
-    flex: 1,
-    color: "#CBD5E1",
-    fontSize: 11,
-    lineHeight: 15,
+  resetPresetBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    backgroundColor: THEME_COLORS.background,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  resetPresetText: {
+    color: THEME_COLORS.textMuted,
+    fontSize: 9,
     fontWeight: "600",
   },
-  generateBtn: {
+  presetGrid: {
     flexDirection: "row",
-    backgroundColor: "#00F2FE",
-    paddingVertical: 14,
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 6,
+  },
+  presetGridCard: {
+    width: "31.5%",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderRadius: 6,
+    backgroundColor: THEME_COLORS.background,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  presetGridCardActive: {
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  presetBadge: {
+    width: 38,
+    height: 24,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 3,
+  },
+  presetGridName: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9.5,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  presetGridNameActive: {
+    color: THEME_COLORS.accent,
+    fontWeight: "800",
+  },
+  microTitle: {
+    color: THEME_COLORS.textMuted,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  pillSwitch: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: THEME_COLORS.background,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  pillSwitchActive: {
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  pillSwitchText: {
+    color: THEME_COLORS.textMuted,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  pillSwitchTextActive: {
+    color: THEME_COLORS.accent,
+    fontWeight: "800",
+  },
+  highlightPillsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginBottom: 6,
+  },
+  highlightChip3Col: {
+    width: "31.5%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    paddingVertical: 5,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  highlightChip2Col: {
+    width: "48.5%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    paddingVertical: 5,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  highlightChipActive: {
+    backgroundColor: THEME_COLORS.accent,
+    borderColor: THEME_COLORS.accent,
+  },
+  swatchesRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    paddingVertical: 4,
+  },
+  chipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  chipBtnActive: {
+    backgroundColor: THEME_COLORS.accent,
+    borderColor: THEME_COLORS.accent,
+  },
+  chipText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  chipTextActive: {
+    color: "#000000",
+    fontWeight: "800",
+  },
+  swatchCircle: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    borderWidth: 1.5,
+    borderColor: THEME_COLORS.borderSubtle,
   },
-  generateBtnText: {
-    color: "#000000",
-    fontSize: 14,
-    fontWeight: "900",
+  swatchCircleSelected: {
+    borderColor: "#FFFFFF",
+    transform: [{ scale: 1.08 }],
   },
-  progressContainer: {
-    gap: 8,
-  },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: "#1E2333",
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#00F2FE",
-    borderRadius: 3,
-  },
-  progressStatusRow: {
+  stepperContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  statusText: {
-    flex: 1,
-    color: "#8E95A5",
-    fontSize: 12,
-  },
-  pctText: {
-    color: "#00F2FE",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    gap: 3,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    paddingHorizontal: 3,
+    paddingVertical: 1.5,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.4)",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginHorizontal: 16,
-    marginTop: 8,
+    borderColor: THEME_COLORS.borderSubtle,
   },
-  errorText: {
-    flex: 1,
-    color: "#FCA5A5",
-    fontSize: 12,
-    lineHeight: 16,
+  stepperAction: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 3,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+  },
+  stepperLabel: {
+    color: THEME_COLORS.accent,
+    fontSize: 10,
+    fontWeight: "700",
+    minWidth: 32,
+    textAlign: "center",
+    fontFamily: "monospace",
+  },
+  fontGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    paddingVertical: 4,
+  },
+  fontChip: {
+    width: "48.5%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  fontChipActive: {
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  fontChipText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 10,
     fontWeight: "600",
   },
-  errorDismissBtn: {
-    padding: 4,
+  fontChipTextActive: {
+    color: THEME_COLORS.accent,
+    fontWeight: "800",
+  },
+  typographyToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  microBtn: {
+    paddingHorizontal: 5,
+    paddingVertical: 3.5,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  microBtnActive: {
+    backgroundColor: THEME_COLORS.accent,
+    borderColor: THEME_COLORS.accent,
+  },
+  microBtnText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9,
+    fontWeight: "600",
+  },
+  microBtnTextActive: {
+    color: "#000000",
+    fontWeight: "800",
+  },
+  alignPillGroup: {
+    flexDirection: "row",
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    overflow: "hidden",
+  },
+  alignItem: {
+    paddingHorizontal: 5,
+    paddingVertical: 3.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  alignItemActive: {
+    backgroundColor: THEME_COLORS.accent,
+  },
+  boxGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    marginBottom: 8,
+  },
+  boxChip: {
+    width: "31.5%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 6,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  boxChipActive: {
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  boxChipText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9.5,
+    fontWeight: "600",
+  },
+  boxChipTextActive: {
+    color: THEME_COLORS.accent,
+    fontWeight: "800",
+  },
+  boxDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    borderWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  posGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+  },
+  posChip: {
+    width: "48.5%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 6,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+  },
+  posChipActive: {
+    borderColor: THEME_COLORS.accent,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  posChipText: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 9.5,
+    fontWeight: "600",
+  },
+  posChipTextActive: {
+    color: THEME_COLORS.accent,
+    fontWeight: "800",
+  },
+  styleTabRoot: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  styleScrollContent: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  dockedFooter: {
+    flexShrink: 0,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: THEME_COLORS.card,
+    borderTopWidth: 1,
+    borderTopColor: THEME_COLORS.borderSubtle,
+    zIndex: 10,
+  },
+  dockedPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: THEME_COLORS.accent,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  dockedPrimaryBtnText: {
+    color: "#000000",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  dockedSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.accent,
+  },
+  dockedSecondaryBtnText: {
+    color: THEME_COLORS.accent,
+    fontSize: 10.5,
+    fontWeight: "700",
   },
   dialogOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0,0,0,0.75)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 16,
   },
   dialogCard: {
-    backgroundColor: "#141A28",
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderRadius: 10,
+    padding: 14,
     width: "100%",
-    maxWidth: 420,
+    maxWidth: 400,
     borderWidth: 1,
-    borderColor: "#20283A",
+    borderColor: THEME_COLORS.borderSubtle,
   },
   dialogTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
+    color: THEME_COLORS.textPrimary,
+    fontSize: 13,
     fontWeight: "800",
     marginBottom: 4,
   },
+  cloudKeyCard: {
+    backgroundColor: "rgba(0,242,254,0.06)",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,242,254,0.18)",
+    padding: 8,
+    marginBottom: 8,
+    gap: 4,
+  },
+  cloudKeyTitle: {
+    color: THEME_COLORS.accent,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  keyInput: {
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    color: THEME_COLORS.textPrimary,
+    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    fontFamily: "monospace",
+  },
   dialogSubtitle: {
-    color: "#8E95A5",
-    fontSize: 12,
-    marginBottom: 10,
+    color: THEME_COLORS.textSecondary,
+    fontSize: 10.5,
+    marginBottom: 6,
   },
   dialogInput: {
-    backgroundColor: "#0B0E17",
-    borderRadius: 8,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#20283A",
-    color: "#FFFFFF",
-    fontSize: 12,
-    padding: 10,
-    minHeight: 130,
+    borderColor: THEME_COLORS.borderSubtle,
+    color: THEME_COLORS.textPrimary,
+    fontSize: 11,
+    padding: 8,
+    minHeight: 100,
     textAlignVertical: "top",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   dialogButtonsRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 10,
   },
   dialogCancelBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   dialogCancelText: {
-    color: "#8E95A5",
-    fontSize: 13,
+    color: THEME_COLORS.textSecondary,
+    fontSize: 11,
     fontWeight: "600",
   },
   dialogApplyBtn: {
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: THEME_COLORS.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 5,
   },
   dialogApplyText: {
     color: "#000000",
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "800",
   },
 });

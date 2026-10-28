@@ -6,7 +6,7 @@ export const MIN_CLIP_DURATION = 0.05; // 50 milliseconds precision
 
 export interface UnifiedClipItem {
   id: string;
-  type: "video" | "audio" | "text" | "caption" | "sticker" | "effects";
+  type: "video" | "photo" | "audio" | "text" | "caption" | "sticker" | "effects";
   startTime: number;
   duration: number;
   trackIndex?: number;
@@ -29,7 +29,7 @@ export interface SnapPoint {
 
 export interface DragSession {
   clipId: string;
-  clipType: "video" | "audio" | "text" | "caption" | "sticker" | "effects";
+  clipType: "video" | "photo" | "audio" | "text" | "caption" | "sticker" | "effects";
   originalStartTime: number;
   duration: number;
   originalTrackIndex: number;
@@ -42,7 +42,7 @@ export interface DragSession {
 
 export interface TrimSession {
   clipId: string;
-  clipType: "video" | "audio" | "text" | "caption" | "sticker" | "effects";
+  clipType: "video" | "photo" | "audio" | "text" | "caption" | "sticker" | "effects";
   side: "left" | "right";
   originalStartTime: number;
   originalDuration: number;
@@ -77,7 +77,7 @@ export interface TimelineProps {
   selectedClipType?: string;
   onSelectClip: (
     id: string,
-    type: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
+    type: "video" | "photo" | "audio" | "text" | "caption" | "sticker" | "effects",
   ) => void;
   onTrimClip?: (
     clipId: string,
@@ -92,7 +92,7 @@ export interface TimelineProps {
   ) => void;
   onMoveClip?: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "caption" | "sticker" | "effects",
+    trackType: "video" | "photo" | "audio" | "text" | "caption" | "sticker" | "effects",
     newStartTime: number,
     newTrackIndex?: number,
     isInsertNewTrack?: boolean,
@@ -110,6 +110,13 @@ export interface TimelineProps {
   onSplitClip?: () => void;
   onDuplicateClip?: () => void;
   onDeleteClip?: () => void;
+  onFreezeFrame?: () => void;
+  onToggleReverse?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onTimelineHeightChange?: (height: number) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   settings?: any;
   onAddMedia?: (clip: any) => void;

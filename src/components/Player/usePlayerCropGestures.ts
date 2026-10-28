@@ -175,6 +175,55 @@ export function usePlayerCropGestures({
     }
   };
 
+  // Automatically activate crop preview & sync cropBox to full size by default whenever isCroppingMode changes
+  useEffect(() => {
+    if (isCroppingMode) {
+      if (targetCropClip) {
+        setCropTargetClipId(targetCropClip.id);
+        const existingCrop = targetCropClip.crop;
+        if (existingCrop && existingCrop.width > 0 && existingCrop.height > 0) {
+          setCropBox(existingCrop);
+        } else {
+          // Full size by default (100% width, 100% height)
+          setCropBox({
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+          });
+        }
+        if (rendererRef.current) {
+          rendererRef.current.setPreviewCropMode(targetCropClip.id);
+          rendererRef.current.renderFrame(
+            project,
+            currentTime,
+            isPlaying,
+            boxWidth,
+            canvasHeight,
+          );
+        }
+      }
+    } else {
+      if (rendererRef.current) {
+        rendererRef.current.setPreviewCropMode(null);
+        rendererRef.current.renderFrame(
+          project,
+          currentTime,
+          isPlaying,
+          boxWidth,
+          canvasHeight,
+        );
+      }
+    }
+  }, [
+    isCroppingMode,
+    targetCropClip?.id,
+    targetCropClip?.crop?.x,
+    targetCropClip?.crop?.y,
+    targetCropClip?.crop?.width,
+    targetCropClip?.crop?.height,
+  ]);
+
   const handleCropDragStart = (
     e: any,
     handle: "pan" | "tl" | "tr" | "bl" | "br" | "t" | "b" | "l" | "r",
@@ -384,6 +433,19 @@ export function usePlayerCropGestures({
       }
       setCropBox(latestBox);
       setCropDragState(null);
+      const targetId = cropTargetClipId || selectedClipId || activeVideos[0]?.id;
+      if (targetId && onUpdateClipCropRef.current) {
+        onUpdateClipCropRef.current(
+          targetId,
+          {
+            x: Math.round(latestBox.x),
+            y: Math.round(latestBox.y),
+            width: Math.round(latestBox.width),
+            height: Math.round(latestBox.height),
+          },
+          true,
+        );
+      }
     };
 
     if (
@@ -538,6 +600,21 @@ export function usePlayerCropGestures({
           width: Number(nextW.toFixed(2)),
           height: Number(nextH.toFixed(2)),
         });
+      },
+      onPanResponderRelease: () => {
+        const targetId = cropTargetClipId || selectedClipId || activeVideos[0]?.id;
+        if (targetId && onUpdateClipCropRef.current) {
+          onUpdateClipCropRef.current(
+            targetId,
+            {
+              x: Math.round(cropBoxRef.current.x),
+              y: Math.round(cropBoxRef.current.y),
+              width: Math.round(cropBoxRef.current.width),
+              height: Math.round(cropBoxRef.current.height),
+            },
+            true,
+          );
+        }
       },
     });
   };

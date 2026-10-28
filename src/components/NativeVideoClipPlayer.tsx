@@ -3,6 +3,7 @@ import { View, Image, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoClip } from '../types/project';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { THEME_COLORS } from '../constants/designConstants';
 
 interface NativeVideoClipPlayerProps {
   clip: VideoClip;
@@ -50,7 +51,7 @@ function NativeVideoClipPlayerComponent({
   if (!mediaUri) {
     return (
       <View style={styles.fallbackBox}>
-        <Ionicons name="film-outline" size={32} color="#00F2FE" />
+        <Ionicons name="film-outline" size={32} color={THEME_COLORS.accent} />
         <Text style={styles.fallbackTitle}>{clip.title || 'Video Clip'}</Text>
       </View>
     );
@@ -217,7 +218,7 @@ function VideoClipRenderer({
     }
     return (
       <View style={styles.fallbackBox}>
-        <Ionicons name="film-outline" size={32} color="#00F2FE" />
+        <Ionicons name="film-outline" size={32} color={THEME_COLORS.accent} />
         <Text style={styles.fallbackTitle}>Video Clip</Text>
       </View>
     );

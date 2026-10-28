@@ -225,21 +225,11 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                   : { backgroundColor: clip.accentColor },
               ]}
             >
-              {clip.type === "sticker" ? (
-                <Text style={{ fontSize: 11 }}>
-                  {clip.rawClip?.char || "✨"}
-                </Text>
-              ) : (
-                <Ionicons
-                  name={clip.iconName}
-                  size={11}
-                  color={
-                    clip.type === "video"
-                      ? "#00F2FE"
-                      : "#000000"
-                  }
-                />
-              )}
+              <Ionicons
+                name={clip.iconName}
+                size={11}
+                color="#FFFFFF"
+              />
             </View>
 
             {/* Title and Duration in ms */}
@@ -271,7 +261,7 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                     <Ionicons
                       name="volume-medium-outline"
                       size={10}
-                      color="#00F2FE"
+                      color="#E2E8F0"
                       style={{ marginLeft: 3 }}
                     />
                   )

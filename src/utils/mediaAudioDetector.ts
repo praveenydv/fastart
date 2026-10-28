@@ -75,10 +75,11 @@ export function setCachedMediaPeaks(
   }
   setMediaHasAudio(urlOrKey, peaks.length > 0);
 
-  // Persist synchronously to local storage so page refresh retains waveforms in 0ms
+  // Persist compact peaks (2 decimal places) to local storage so page refresh retains waveforms instantly
   try {
     const storageKey = STORAGE_PEAKS_PREFIX + urlOrKey;
-    setStorageItem(storageKey, JSON.stringify(peaks));
+    const compact = peaks.map((p) => Math.round(p * 100) / 100);
+    setStorageItem(storageKey, JSON.stringify(compact));
   } catch (_) {}
 
   notifyAudioChange();

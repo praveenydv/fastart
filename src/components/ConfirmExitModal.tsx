@@ -155,7 +155,7 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
           {/* Top Home / Exit Icon Badge */}
           <View style={styles.iconContainer}>
             <View style={styles.iconPulse}>
-              <Ionicons name="home-outline" size={26} color="#00F2FE" />
+              <Ionicons name="home-outline" size={26} color="#FFFFFF" />
             </View>
           </View>
 
@@ -174,7 +174,7 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
                 <Ionicons
                   name="film-outline"
                   size={12}
-                  color="#00F2FE"
+                  color="#FFFFFF"
                   style={styles.projectBadgeIcon}
                 />
                 <Text style={styles.projectBadgeText} numberOfLines={1}>

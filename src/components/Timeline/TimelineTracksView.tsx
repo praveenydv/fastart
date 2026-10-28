@@ -29,17 +29,17 @@ interface TimelineTracksViewProps {
   dragState: any;
   onSelectClip: (
     id: string,
-    type: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    type: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
   ) => void;
   onOpenTransitions: (clipId: string) => void;
   handleRemoveTrack: (trackIdx: number) => void;
   handleClipPress: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
   ) => void;
   handleClipLongPress: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
     start: number,
     track: number,
     dur: number,
@@ -47,7 +47,7 @@ interface TimelineTracksViewProps {
   handleClipMouseDown: (
     e: any,
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
     start: number,
     track: number,
     dur: number,
@@ -167,13 +167,13 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                       left: 0,
                       right: 0,
                       height: 4,
-                      backgroundColor: "#00F2FE",
+                      backgroundColor: "#FFFFFF",
                       zIndex: 99999,
                       flexDirection: "row",
                       alignItems: "center",
                       ...(Platform.OS === "web"
                         ? {
-                            boxShadow: "0 0 10px #00F2FE, 0 0 4px #FFFFFF",
+                            boxShadow: "0 0 10px rgba(255, 255, 255, 0.5), 0 0 4px #FFFFFF",
                           }
                         : {}),
                     }}
@@ -184,7 +184,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                         left: Math.max(12, (dragState.targetStart ?? dragState.currentStart) * pxPerSec),
                         backgroundColor: "#08090E",
                         borderWidth: 1.5,
-                        borderColor: "#00F2FE",
+                        borderColor: "#FFFFFF",
                         borderRadius: 12,
                         paddingHorizontal: 8,
                         paddingVertical: 2,
@@ -194,15 +194,15 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                         transform: [{ translateY: -10 }],
                         ...(Platform.OS === "web"
                           ? {
-                              boxShadow: "0 0 12px rgba(0, 242, 254, 0.45)",
+                              boxShadow: "0 0 12px rgba(255, 255, 255, 0.35)",
                             }
                           : {}),
                       }}
                     >
-                      <Ionicons name="add-circle" size={12} color="#00F2FE" />
+                      <Ionicons name="add-circle" size={12} color="#FFFFFF" />
                       <Text
                         style={{
-                          color: "#00F2FE",
+                          color: "#FFFFFF",
                           fontSize: 10,
                           fontWeight: "700",
                           letterSpacing: 0.3,
@@ -232,10 +232,10 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                       borderRadius: 4,
                       borderWidth: 1.5,
                       borderStyle: "dashed",
-                      borderColor: "#00F2FE",
+                      borderColor: "#FFFFFF",
                       backgroundColor: dragState.isInsertingNewTrack
-                        ? "rgba(0, 242, 254, 0.22)"
-                        : "rgba(0, 242, 254, 0.16)",
+                        ? "rgba(255, 255, 255, 0.16)"
+                        : "rgba(255, 255, 255, 0.10)",
                       zIndex: 10,
                       flexDirection: "row",
                       alignItems: "center",
@@ -246,12 +246,12 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                     <Ionicons
                       name={dragState.isInsertingNewTrack ? "add-circle" : "arrow-down-circle-outline"}
                       size={12}
-                      color="#00F2FE"
+                      color="#FFFFFF"
                       style={{ marginRight: 4 }}
                     />
                     <Text
                       style={{
-                        color: "#00F2FE",
+                        color: "#FFFFFF",
                         fontSize: 10.5,
                         fontWeight: "700",
                         letterSpacing: 0.3,
@@ -394,7 +394,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                           {
                             borderColor:
                               isBeingDragged && dragState?.isInsertingNewTrack
-                                ? "#00F2FE"
+                                ? "#FFFFFF"
                                 : isSelected || isBeingDragged
                                   ? clip.accentColor
                                   : "rgba(255, 255, 255, 0.08)",
@@ -406,11 +406,11 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                             {
                               borderColor:
                                 isBeingDragged && dragState?.isInsertingNewTrack
-                                ? "#00F2FE"
+                                ? "#FFFFFF"
                                 : clip.accentColor,
                               shadowColor:
                                 isBeingDragged && dragState?.isInsertingNewTrack
-                                ? "#00F2FE"
+                                ? "#FFFFFF"
                                 : clip.accentColor,
                             },
                           ],
@@ -520,21 +520,11 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                               : { backgroundColor: clip.accentColor },
                           ]}
                         >
-                          {clip.type === "sticker" ? (
-                            <Text style={{ fontSize: 11 }}>
-                              {clip.rawClip?.char || "✨"}
-                            </Text>
-                          ) : (
                             <Ionicons
                               name={clip.iconName}
                               size={11}
-                              color={
-                                clip.type === "video"
-                                  ? "#00F2FE"
-                                  : "#000000"
-                              }
+                              color="#FFFFFF"
                             />
-                          )}
                         </View>
 
                         {/* Title and Duration */}
@@ -763,16 +753,16 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                 (dragState.insertTrackIndex === null ||
                   dragState.insertTrackIndex === undefined ||
                   dragState.insertTrackIndex >= activeTrackCount)
-                  ? "#00F2FE"
-                  : "rgba(0, 242, 254, 0.35)",
+                  ? "#FFFFFF"
+                  : "rgba(255, 255, 255, 0.25)",
               borderWidth: 1.5,
               backgroundColor:
                 dragState.isInsertingNewTrack &&
                 (dragState.insertTrackIndex === null ||
                   dragState.insertTrackIndex === undefined ||
                   dragState.insertTrackIndex >= activeTrackCount)
-                  ? "rgba(0, 242, 254, 0.16)"
-                  : "rgba(0, 242, 254, 0.03)",
+                  ? "rgba(255, 255, 255, 0.12)"
+                  : "rgba(255, 255, 255, 0.03)",
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
@@ -803,18 +793,18 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                 borderRadius: 4,
                 borderWidth: 1.5,
                 borderStyle: "dashed",
-                borderColor: "#00F2FE",
-                backgroundColor: "rgba(0, 242, 254, 0.22)",
+                borderColor: "#FFFFFF",
+                backgroundColor: "rgba(255, 255, 255, 0.15)",
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
                 paddingHorizontal: 8,
               }}
             >
-              <Ionicons name="add-circle" size={13} color="#00F2FE" style={{ marginRight: 4 }} />
+              <Ionicons name="add-circle" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
               <Text
                 style={{
-                  color: "#00F2FE",
+                  color: "#FFFFFF",
                   fontSize: 10.5,
                   fontWeight: "700",
                   letterSpacing: 0.3,
@@ -826,10 +816,10 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
             </View>
           ) : (
             <>
-              <Ionicons name="add-circle-outline" size={13} color="#00F2FE" />
+              <Ionicons name="add-circle-outline" size={13} color="#FFFFFF" />
               <Text
                 style={{
-                  color: "#00F2FE",
+                  color: "#FFFFFF",
                   fontSize: 10.5,
                   fontWeight: "600",
                   letterSpacing: 0.3,

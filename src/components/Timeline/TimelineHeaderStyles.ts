@@ -114,6 +114,36 @@ export const headerStyles = {
     borderWidth: 1,
     borderColor: "#1F2637",
   },
+  actionBtnGroup: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+  },
+  actionBtn: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+    backgroundColor: "#0F131D",
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+  },
+  actionBtnDisabled: {
+    opacity: 0.38,
+  },
+  actionBtnText: {
+    color: "#E2E8F0",
+    fontSize: 10,
+    fontWeight: "600" as const,
+  },
+  actionDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: "#1F2637",
+    marginHorizontal: 3,
+  },
   zoomBtn: {
     width: 22,
     height: 22,

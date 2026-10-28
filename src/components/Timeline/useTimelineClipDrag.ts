@@ -22,12 +22,12 @@ interface UseTimelineClipDragParams {
   onSeek?: (time: number) => void;
   onSelectClip: (
     id: string,
-    type: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    type: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
   ) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   onMoveClip?: (
     clipId: string,
-    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+    trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
     newStartTime: number,
     newTrackIndex?: number,
     isInsertNewTrack?: boolean,
@@ -260,7 +260,7 @@ export function useTimelineClipDrag({
   // Touch tracking state for mobile gesture handling
   const touchStateRef = useRef<{
     clipId: string;
-    trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption";
+    trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption";
     startX: number;
     startY: number;
     initialStart: number;
@@ -276,7 +276,7 @@ export function useTimelineClipDrag({
   const handleClipPress = useCallback(
     (
       clipId: string,
-      trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+      trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
     ) => {
       const clip = allClipsRef.current.find((c) => c.id === clipId);
       if (clip && onSeekRef.current) {
@@ -544,7 +544,7 @@ export function useTimelineClipDrag({
   const handleClipLongPress = useCallback(
     (
       clipId: string,
-      trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+      trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
       initialStartTime: number,
       initialTrackIndex: number,
       duration: number,
@@ -590,7 +590,7 @@ export function useTimelineClipDrag({
     (
       e: any,
       clipId: string,
-      trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
+      trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
       initialStartTime: number,
       initialTrackIndex: number,
       duration: number,

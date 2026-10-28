@@ -2,8 +2,9 @@ import React from "react";
 import { View, Text, TouchableOpacity, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../../utils/audioEngine";
-import { ClipTransform } from "../../../types/project";
+import { ClipTransform, KeyframeEasing } from "../../../types/project";
 import { styles } from "./KeyframeModalStyles";
+import { CompactSliderInput } from "../../Common/CompactSliderInput";
 
 const WebDiv: any = Platform.OS === "web" ? "div" : View;
 const WebInput: any = Platform.OS === "web" ? "input" : View;
@@ -15,12 +16,14 @@ interface KeyframePropertyControlsProps {
   activeX: number;
   activeY: number;
   activeOpacity: number;
+  activeEasing?: KeyframeEasing;
   activeTransform: ClipTransform;
   localTime: number;
   onUpdateKeyframeTransform?: (
     time: number,
     transform: Partial<ClipTransform>,
     opacity?: number,
+    easing?: KeyframeEasing,
   ) => void;
 }
 
@@ -31,6 +34,7 @@ export default function KeyframePropertyControls({
   activeX,
   activeY,
   activeOpacity,
+  activeEasing = "easeInOut",
   activeTransform,
   localTime,
   onUpdateKeyframeTransform,
@@ -42,14 +46,22 @@ export default function KeyframePropertyControls({
     soundEngine.playSfx("click");
     if (onUpdateKeyframeTransform) {
       if (key === "opacity") {
-        onUpdateKeyframeTransform(localTime, activeTransform, value);
+        onUpdateKeyframeTransform(localTime, activeTransform, value, activeEasing);
       } else {
         onUpdateKeyframeTransform(
           localTime,
           { ...activeTransform, [key]: value },
           activeOpacity,
+          activeEasing,
         );
       }
+    }
+  };
+
+  const handleUpdateEasing = (easing: KeyframeEasing) => {
+    soundEngine.playSfx("pop");
+    if (onUpdateKeyframeTransform) {
+      onUpdateKeyframeTransform(localTime, activeTransform, activeOpacity, easing);
     }
   };
 
@@ -63,60 +75,19 @@ export default function KeyframePropertyControls({
 
       {/* 1. SCALE */}
       <View style={styles.propertyRow}>
-        <View style={styles.propLabelRow}>
-          <View style={styles.propLabelLeft}>
-            <Ionicons name="expand" size={15} color="#00F2FE" />
-            <Text style={styles.propName}>Scale / Zoom</Text>
-          </View>
-          <Text style={styles.propValue}>{activeScale.toFixed(2)}x</Text>
-        </View>
-
-        {Platform.OS === "web" ? (
-          <WebDiv style={{ margin: "6px 0 10px" }}>
-            <WebInput
-              type="range"
-              min="0.2"
-              max="3.0"
-              step="0.05"
-              value={activeScale}
-              onChange={(e: any) =>
-                handleUpdateProperty("scale", parseFloat(e.target.value))
-              }
-              style={{
-                width: "100%",
-                accentColor: "#00F2FE",
-                height: 6,
-                cursor: "pointer",
-              }}
-            />
-          </WebDiv>
-        ) : (
-          <View style={styles.stepperContainer}>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                handleUpdateProperty(
-                  "scale",
-                  Math.max(0.2, parseFloat((activeScale - 0.1).toFixed(2))),
-                )
-              }
-            >
-              <Ionicons name="remove" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.stepperText}>{activeScale.toFixed(2)}x</Text>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                handleUpdateProperty(
-                  "scale",
-                  Math.min(3.0, parseFloat((activeScale + 0.1).toFixed(2))),
-                )
-              }
-            >
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <CompactSliderInput
+          label="Scale / Zoom"
+          icon={<Ionicons name="expand" size={14} color="#00F2FE" />}
+          value={activeScale}
+          min={0.2}
+          max={3.0}
+          step={0.01}
+          unit="x"
+          decimals={2}
+          defaultValue={1.0}
+          accentColor="#00F2FE"
+          onChange={(val) => handleUpdateProperty("scale", val)}
+        />
 
         {/* Scale Presets */}
         <View style={styles.presetRow}>
@@ -145,54 +116,18 @@ export default function KeyframePropertyControls({
 
       {/* 2. ROTATION */}
       <View style={styles.propertyRow}>
-        <View style={styles.propLabelRow}>
-          <View style={styles.propLabelLeft}>
-            <Ionicons name="refresh" size={14} color="#00F2FE" />
-            <Text style={styles.propName}>Rotation</Text>
-          </View>
-          <Text style={styles.propValue}>{activeRotation}°</Text>
-        </View>
-
-        {Platform.OS === "web" ? (
-          <WebDiv style={{ margin: "4px 0 8px" }}>
-            <WebInput
-              type="range"
-              min="-180"
-              max="180"
-              step="5"
-              value={activeRotation}
-              onChange={(e: any) =>
-                handleUpdateProperty("rotation", parseInt(e.target.value, 10))
-              }
-              style={{
-                width: "100%",
-                accentColor: "#00F2FE",
-                height: 4,
-                cursor: "pointer",
-              }}
-            />
-          </WebDiv>
-        ) : (
-          <View style={styles.stepperContainer}>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                handleUpdateProperty("rotation", Math.max(-180, activeRotation - 15))
-              }
-            >
-              <Ionicons name="remove" size={14} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.stepperText}>{activeRotation}°</Text>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                handleUpdateProperty("rotation", Math.min(180, activeRotation + 15))
-              }
-            >
-              <Ionicons name="add" size={14} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <CompactSliderInput
+          label="Rotation"
+          icon={<Ionicons name="refresh" size={14} color="#00F2FE" />}
+          value={activeRotation}
+          min={-180}
+          max={180}
+          step={1}
+          unit="°"
+          defaultValue={0}
+          accentColor="#00F2FE"
+          onChange={(val) => handleUpdateProperty("rotation", val)}
+        />
 
         {/* Rotation Presets */}
         <View style={styles.presetRow}>
@@ -218,17 +153,32 @@ export default function KeyframePropertyControls({
         </View>
       </View>
 
-      {/* 3. POSITION NUDGE (X & Y) */}
+      {/* 3. POSITION NUDGE & SLIDERS (X & Y) */}
       <View style={styles.propertyRow}>
-        <View style={styles.propLabelRow}>
-          <View style={styles.propLabelLeft}>
-            <Ionicons name="move-outline" size={14} color="#00F2FE" />
-            <Text style={styles.propName}>Position Offset</Text>
-          </View>
-          <Text style={styles.propValue}>
-            X: {activeX}px • Y: {activeY}px
-          </Text>
-        </View>
+        <CompactSliderInput
+          label="Position X"
+          icon={<Ionicons name="move-outline" size={14} color="#00F2FE" />}
+          value={activeX}
+          min={-400}
+          max={400}
+          step={1}
+          unit="px"
+          defaultValue={0}
+          accentColor="#00F2FE"
+          onChange={(val) => handleUpdateProperty("x", val)}
+        />
+        <CompactSliderInput
+          label="Position Y"
+          icon={<Ionicons name="move-outline" size={14} color="#00F2FE" />}
+          value={activeY}
+          min={-400}
+          max={400}
+          step={1}
+          unit="px"
+          defaultValue={0}
+          accentColor="#00F2FE"
+          onChange={(val) => handleUpdateProperty("y", val)}
+        />
 
         <View style={styles.nudgePad}>
           <TouchableOpacity
@@ -281,64 +231,18 @@ export default function KeyframePropertyControls({
 
       {/* 4. OPACITY */}
       <View style={styles.propertyRow}>
-        <View style={styles.propLabelRow}>
-          <View style={styles.propLabelLeft}>
-            <Ionicons name="contrast-outline" size={14} color="#00F2FE" />
-            <Text style={styles.propName}>Opacity</Text>
-          </View>
-          <Text style={styles.propValue}>
-            {Math.round(activeOpacity * 100)}%
-          </Text>
-        </View>
-
-        {Platform.OS === "web" ? (
-          <WebDiv style={{ margin: "4px 0 8px" }}>
-            <WebInput
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={activeOpacity}
-              onChange={(e: any) =>
-                handleUpdateProperty("opacity", parseFloat(e.target.value))
-              }
-              style={{
-                width: "100%",
-                accentColor: "#00F2FE",
-                height: 4,
-                cursor: "pointer",
-              }}
-            />
-          </WebDiv>
-        ) : (
-          <View style={styles.stepperContainer}>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                handleUpdateProperty(
-                  "opacity",
-                  Math.max(0, parseFloat((activeOpacity - 0.1).toFixed(2))),
-                )
-              }
-            >
-              <Ionicons name="remove" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.stepperText}>
-              {Math.round(activeOpacity * 100)}%
-            </Text>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                handleUpdateProperty(
-                  "opacity",
-                  Math.min(1.0, parseFloat((activeOpacity + 0.1).toFixed(2))),
-                )
-              }
-            >
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <CompactSliderInput
+          label="Opacity"
+          icon={<Ionicons name="contrast-outline" size={14} color="#00F2FE" />}
+          value={Math.round(activeOpacity * 100)}
+          min={0}
+          max={100}
+          step={1}
+          unit="%"
+          defaultValue={100}
+          accentColor="#00F2FE"
+          onChange={(val) => handleUpdateProperty("opacity", val / 100)}
+        />
 
         {/* Opacity Presets */}
         <View style={styles.presetRow}>
@@ -362,6 +266,61 @@ export default function KeyframePropertyControls({
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+      </View>
+
+      {/* 5. EASING CURVE (CapCut Style Interpolation Curves) */}
+      <View style={styles.propertyRow}>
+        <View style={styles.propLabelRow}>
+          <View style={styles.propLabelLeft}>
+            <Ionicons name="pulse" size={14} color="#00F2FE" />
+            <Text style={styles.propName}>Animation Curve / Easing</Text>
+          </View>
+          <Text style={[styles.propValue, { color: "#00F2FE", fontWeight: "700" }]}>
+            {activeEasing}
+          </Text>
+        </View>
+
+        <View style={[styles.presetRow, { flexWrap: "wrap", gap: 6, marginTop: 6 }]}>
+          {(
+            [
+              { id: "linear", label: "Linear", icon: "remove" },
+              { id: "easeInOut", label: "Ease In-Out", icon: "swap-horizontal" },
+              { id: "easeIn", label: "Ease In", icon: "trending-down" },
+              { id: "easeOut", label: "Ease Out", icon: "trending-up" },
+              { id: "spring", label: "Spring", icon: "sparkles" },
+              { id: "smooth", label: "Smooth", icon: "water" },
+            ] as const
+          ).map((c) => {
+            const isSelected = activeEasing === c.id;
+            return (
+              <TouchableOpacity
+                key={c.id}
+                style={[
+                  styles.presetChip,
+                  { paddingHorizontal: 10, paddingVertical: 6, height: 28 },
+                  isSelected && styles.presetChipActive,
+                ]}
+                onPress={() => handleUpdateEasing(c.id as KeyframeEasing)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={c.icon as any}
+                  size={12}
+                  color={isSelected ? "#00F2FE" : "#94A3B8"}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.presetChipText,
+                    isSelected && styles.presetChipTextActive,
+                  ]}
+                >
+                  {c.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
     </View>

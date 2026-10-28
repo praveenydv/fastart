@@ -19,7 +19,6 @@ import { styles } from "./Text/TextModalStyles";
 import TextFontTab from "./Text/TextFontTab";
 import TextStyleTab from "./Text/TextStyleTab";
 import TextEffectsTab from "./Text/TextEffectsTab";
-import TextAnimTab from "./Text/TextAnimTab";
 
 interface TextModalProps {
   visible: boolean;
@@ -43,7 +42,6 @@ export default function TextModal({
   const [inputText, setInputText] = useState("VIRAL HOOK");
   const [selectedColor, setSelectedColor] = useState("#FFFFFF");
   const [selectedBg, setSelectedBg] = useState("#FF0050");
-  const [selectedAnim, setSelectedAnim] = useState("bounce");
   const [selectedFont, setSelectedFont] = useState(
     "Impact, Arial Black, sans-serif",
   );
@@ -63,7 +61,7 @@ export default function TextModal({
     y: number;
   }>({ x: 50, y: 35 });
   const [duration, setDuration] = useState(3.0);
-  const [activeTab, setActiveTab] = useState<"font" | "style" | "effects" | "anim">(
+  const [activeTab, setActiveTab] = useState<"font" | "style" | "effects">(
     "font",
   );
   const lastLoadedClipIdRef = useRef<string | null>(null);
@@ -142,7 +140,6 @@ export default function TextModal({
           setDuration(editingClip.duration || 3.0);
           setSelectedColor(editingClip.style?.color || "#FFFFFF");
           setSelectedBg(editingClip.style?.backgroundColor || "transparent");
-          setSelectedAnim(editingClip.animation || "bounce");
           if (editingClip.style?.fontFamily)
             setSelectedFont(editingClip.style.fontFamily);
           if (editingClip.style?.fontSize)
@@ -159,7 +156,6 @@ export default function TextModal({
           setDuration(3.0);
           setSelectedColor("#FFFFFF");
           setSelectedBg("#FF0050");
-          setSelectedAnim("bounce");
           setSelectedBorderColor(undefined);
           setSelectedTextEffect("none");
           setSelectedStrokeColor(undefined);
@@ -263,7 +259,7 @@ export default function TextModal({
       ...editingClip,
       text: inputText,
       duration: duration || editingClip.duration || 3.0,
-      animation: selectedAnim as any,
+      animation: editingClip.animation,
       scale: editingClip.scale ?? selectedScale,
       rotation: editingClip.rotation ?? selectedRotation,
       position: editingClip.position ?? selectedPosition,
@@ -278,7 +274,6 @@ export default function TextModal({
     inputText,
     selectedColor,
     selectedBg,
-    selectedAnim,
     selectedFont,
     selectedFontSize,
     selectedBorderColor,
@@ -292,7 +287,6 @@ export default function TextModal({
     setInputText(tmpl.text);
     setSelectedColor(tmpl.style?.color || "#FFFFFF");
     setSelectedBg(tmpl.style?.backgroundColor || "transparent");
-    setSelectedAnim(tmpl.animation || "fade");
     if (tmpl.style?.fontFamily) setSelectedFont(tmpl.style.fontFamily);
     if (tmpl.style?.fontSize) setSelectedFontSize(tmpl.style.fontSize);
     if (tmpl.style?.borderColor) setSelectedBorderColor(tmpl.style.borderColor);
@@ -311,7 +305,7 @@ export default function TextModal({
       position: selectedPosition,
       scale: selectedScale,
       rotation: selectedRotation,
-      animation: selectedAnim as any,
+      animation: undefined,
       style: baseStyle,
     };
     soundEngine.playSfx("pop");
@@ -544,32 +538,6 @@ export default function TextModal({
                   Effects
                 </Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.tabBtn,
-                  activeTab === "anim" && styles.tabBtnActive,
-                ]}
-                onPress={() => {
-                  soundEngine.playSfx("click");
-                  setActiveTab("anim");
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="play-outline"
-                  size={13}
-                  color={activeTab === "anim" ? "#00F2FE" : "#8E9AA8"}
-                />
-                <Text
-                  style={[
-                    styles.tabBtnText,
-                    activeTab === "anim" && styles.tabBtnTextActive,
-                  ]}
-                >
-                  Motion
-                </Text>
-              </TouchableOpacity>
             </ScrollView>
 
             {activeTab === "font" && (
@@ -600,14 +568,6 @@ export default function TextModal({
                 setSelectedTextEffect={setSelectedTextEffect}
                 selectedBorderColor={selectedBorderColor}
                 setSelectedBorderColor={setSelectedBorderColor}
-              />
-            )}
-
-            {activeTab === "anim" && (
-              <TextAnimTab
-                selectedAnim={selectedAnim}
-                setSelectedAnim={setSelectedAnim}
-                onApplyTemplate={handleApplyTemplate}
               />
             )}
           </ScrollView>

@@ -150,6 +150,7 @@ export function useProjectKeyframes({
     time: number,
     transform: any,
     opacity?: number,
+    easing?: any,
   ) => {
     if (!selectedClip || !project) return;
     const rawKeyframes: any[] = selectedClip.keyframes || [];
@@ -164,6 +165,7 @@ export function useProjectKeyframes({
         ...existing,
         transform: { ...(existing.transform || {}), ...transform },
         opacity: opacity !== undefined ? opacity : (existing.opacity ?? 1.0),
+        easing: easing !== undefined ? easing : (existing.easing ?? 'easeInOut'),
       };
     } else {
       const curT = getInterpolatedTransform(
@@ -181,6 +183,7 @@ export function useProjectKeyframes({
           ...transform,
         },
         opacity: opacity !== undefined ? opacity : (selectedClip.opacity ?? 1.0),
+        easing: easing || 'easeInOut',
       });
     }
 

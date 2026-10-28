@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
+import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 interface AIEnhanceModalProps {
   visible: boolean;
@@ -63,7 +64,9 @@ export default function AIEnhanceModal({
     }
   }, [initialValues]);
 
-  // Live trigger
+  const rafRef = React.useRef<number | null>(null);
+
+  // Live trigger throttled with requestAnimationFrame for 60fps buttery responsiveness
   const triggerUpdate = (updates: Partial<{
     hdr: boolean;
     sharpness: number;
@@ -71,18 +74,24 @@ export default function AIEnhanceModal({
     skinSmoothing: number;
     faceRadiance: number;
   }>) => {
-    const nextHdr = updates.hdr !== undefined ? updates.hdr : hdr;
-    const nextSharp = updates.sharpness !== undefined ? updates.sharpness : sharpness;
-    const nextBoost = updates.colorBoost !== undefined ? updates.colorBoost : colorBoost;
-    const nextSmooth = updates.skinSmoothing !== undefined ? updates.skinSmoothing : skinSmoothing;
-    const nextRad = updates.faceRadiance !== undefined ? updates.faceRadiance : faceRadiance;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = requestAnimationFrame(() => {
+      const nextHdr = updates.hdr !== undefined ? updates.hdr : hdr;
+      const nextSharp = updates.sharpness !== undefined ? updates.sharpness : sharpness;
+      const nextBoost = updates.colorBoost !== undefined ? updates.colorBoost : colorBoost;
+      const nextSmooth = updates.skinSmoothing !== undefined ? updates.skinSmoothing : skinSmoothing;
+      const nextRad = updates.faceRadiance !== undefined ? updates.faceRadiance : faceRadiance;
 
-    onApplyEnhance({
-      hdr: nextHdr,
-      sharpness: nextSharp,
-      colorBoost: nextBoost,
-      skinSmoothing: nextSmooth,
-      faceRadiance: nextRad,
+      onApplyEnhance({
+        hdr: nextHdr,
+        sharpness: nextSharp,
+        colorBoost: nextBoost,
+        skinSmoothing: nextSmooth,
+        faceRadiance: nextRad,
+      });
+      rafRef.current = null;
     });
   };
 
@@ -194,114 +203,40 @@ export default function AIEnhanceModal({
               <View style={styles.controlsGroup}>
                 {/* Skin Smoothing */}
                 <View style={styles.sliderCard}>
-                  <View style={styles.labelRow}>
-                    <View style={styles.rowLeft}>
-                      <Ionicons name="sparkles-outline" size={15} color="#00F2FE" />
-                      <Text style={styles.sliderLabel}>Skin Smoothing</Text>
-                    </View>
-                    <Text style={[styles.badge, { color: '#00F2FE' }]}>{skinSmoothing}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '6px 0 2px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={skinSmoothing}
-                        onChange={(e: any) => {
-                          const val = parseInt(e.target.value) || 0;
-                          setSkinSmoothing(val);
-                          triggerUpdate({ skinSmoothing: val });
-                        }}
-                        style={{
-                          width: '100%',
-                          accentColor: '#00F2FE',
-                          height: 4,
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </WebDiv>
-                  ) : (
-                    <View style={styles.stepperRow}>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.max(0, skinSmoothing - 10);
-                          setSkinSmoothing(val);
-                          triggerUpdate({ skinSmoothing: val });
-                        }}
-                      >
-                        <Ionicons name="remove" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperVal}>{skinSmoothing}%</Text>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.min(100, skinSmoothing + 10);
-                          setSkinSmoothing(val);
-                          triggerUpdate({ skinSmoothing: val });
-                        }}
-                      >
-                        <Ionicons name="add" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <CompactSliderInput
+                    label="Skin Smoothing"
+                    icon={<Ionicons name="sparkles-outline" size={14} color="#00F2FE" />}
+                    value={skinSmoothing}
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit="%"
+                    defaultValue={0}
+                    accentColor="#00F2FE"
+                    onChange={(val) => {
+                      setSkinSmoothing(val);
+                      triggerUpdate({ skinSmoothing: val });
+                    }}
+                  />
                 </View>
 
                 {/* Face Radiance */}
                 <View style={styles.sliderCard}>
-                  <View style={styles.labelRow}>
-                    <View style={styles.rowLeft}>
-                      <Ionicons name="sunny-outline" size={15} color="#00F2FE" />
-                      <Text style={styles.sliderLabel}>Face Radiance &amp; Glow</Text>
-                    </View>
-                    <Text style={[styles.badge, { color: '#00F2FE' }]}>{faceRadiance}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '6px 0 2px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={faceRadiance}
-                        onChange={(e: any) => {
-                          const val = parseInt(e.target.value) || 0;
-                          setFaceRadiance(val);
-                          triggerUpdate({ faceRadiance: val });
-                        }}
-                        style={{
-                          width: '100%',
-                          accentColor: '#00F2FE',
-                          height: 4,
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </WebDiv>
-                  ) : (
-                    <View style={styles.stepperRow}>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.max(0, faceRadiance - 10);
-                          setFaceRadiance(val);
-                          triggerUpdate({ faceRadiance: val });
-                        }}
-                      >
-                        <Ionicons name="remove" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperVal}>{faceRadiance}%</Text>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.min(100, faceRadiance + 10);
-                          setFaceRadiance(val);
-                          triggerUpdate({ faceRadiance: val });
-                        }}
-                      >
-                        <Ionicons name="add" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <CompactSliderInput
+                    label="Face Radiance & Glow"
+                    icon={<Ionicons name="sunny-outline" size={14} color="#00F2FE" />}
+                    value={faceRadiance}
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit="%"
+                    defaultValue={0}
+                    accentColor="#00F2FE"
+                    onChange={(val) => {
+                      setFaceRadiance(val);
+                      triggerUpdate({ faceRadiance: val });
+                    }}
+                  />
                 </View>
               </View>
             )}
@@ -335,114 +270,40 @@ export default function AIEnhanceModal({
 
                 {/* Sharpness */}
                 <View style={styles.sliderCard}>
-                  <View style={styles.labelRow}>
-                    <View style={styles.rowLeft}>
-                      <Ionicons name="eye-outline" size={15} color="#00F2FE" />
-                      <Text style={styles.sliderLabel}>Crisp Sharpness</Text>
-                    </View>
-                    <Text style={[styles.badge, { color: '#00F2FE' }]}>{sharpness}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '6px 0 2px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={sharpness}
-                        onChange={(e: any) => {
-                          const val = parseInt(e.target.value) || 0;
-                          setSharpness(val);
-                          triggerUpdate({ sharpness: val });
-                        }}
-                        style={{
-                          width: '100%',
-                          accentColor: '#00F2FE',
-                          height: 4,
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </WebDiv>
-                  ) : (
-                    <View style={styles.stepperRow}>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.max(0, sharpness - 10);
-                          setSharpness(val);
-                          triggerUpdate({ sharpness: val });
-                        }}
-                      >
-                        <Ionicons name="remove" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperVal}>{sharpness}%</Text>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.min(100, sharpness + 10);
-                          setSharpness(val);
-                          triggerUpdate({ sharpness: val });
-                        }}
-                      >
-                        <Ionicons name="add" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <CompactSliderInput
+                    label="Crisp Sharpness"
+                    icon={<Ionicons name="eye-outline" size={14} color="#00F2FE" />}
+                    value={sharpness}
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit="%"
+                    defaultValue={0}
+                    accentColor="#00F2FE"
+                    onChange={(val) => {
+                      setSharpness(val);
+                      triggerUpdate({ sharpness: val });
+                    }}
+                  />
                 </View>
 
                 {/* Color Saturation / Vibrance */}
                 <View style={styles.sliderCard}>
-                  <View style={styles.labelRow}>
-                    <View style={styles.rowLeft}>
-                      <Ionicons name="color-palette-outline" size={15} color="#00F2FE" />
-                      <Text style={styles.sliderLabel}>Color Saturation</Text>
-                    </View>
-                    <Text style={[styles.badge, { color: '#00F2FE' }]}>{colorBoost}%</Text>
-                  </View>
-                  {Platform.OS === 'web' ? (
-                    <WebDiv style={{ margin: '6px 0 2px 0' }}>
-                      <WebInput
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={colorBoost}
-                        onChange={(e: any) => {
-                          const val = parseInt(e.target.value) || 0;
-                          setColorBoost(val);
-                          triggerUpdate({ colorBoost: val });
-                        }}
-                        style={{
-                          width: '100%',
-                          accentColor: '#00F2FE',
-                          height: 4,
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </WebDiv>
-                  ) : (
-                    <View style={styles.stepperRow}>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.max(0, colorBoost - 10);
-                          setColorBoost(val);
-                          triggerUpdate({ colorBoost: val });
-                        }}
-                      >
-                        <Ionicons name="remove" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperVal}>{colorBoost}%</Text>
-                      <TouchableOpacity
-                        style={styles.stepBtn}
-                        onPress={() => {
-                          const val = Math.min(100, colorBoost + 10);
-                          setColorBoost(val);
-                          triggerUpdate({ colorBoost: val });
-                        }}
-                      >
-                        <Ionicons name="add" size={16} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <CompactSliderInput
+                    label="Color Saturation"
+                    icon={<Ionicons name="color-palette-outline" size={14} color="#00F2FE" />}
+                    value={colorBoost}
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit="%"
+                    defaultValue={0}
+                    accentColor="#00F2FE"
+                    onChange={(val) => {
+                      setColorBoost(val);
+                      triggerUpdate({ colorBoost: val });
+                    }}
+                  />
                 </View>
               </View>
             )}

@@ -486,6 +486,7 @@ export interface AppNotification {
   actionText?: string;
   actionType?: 'open_project' | 'navigate' | string;
   icon?: string;
+  type?: 'success' | 'info' | 'warning' | 'error';
 }
 
 export const formatNotificationTime = (timestamp: number | string): string => {

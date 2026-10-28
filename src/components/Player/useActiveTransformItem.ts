@@ -388,15 +388,15 @@ export function useActiveTransformItem({
       let motionY = 0;
       let motionScale = 1.0;
       let motionRot = 0;
-      if (selectedVideo.motionTrack && selectedVideo.motionTrack.enabled) {
+      if (selectedVideo.motionTrack && selectedVideo.motionTrack.enabled && selectedVideo.motionTrack.actionType === 'camera_center') {
         const motion = applyMotionTracking(
           currentTime,
           selectedVideo.startTime,
           selectedVideo.duration,
           selectedVideo.motionTrack,
         );
-        motionX = motion.dx;
-        motionY = motion.dy;
+        motionX = (motion.dx / 100) * safeBoxW;
+        motionY = (motion.dy / 100) * safeCanvasH;
         motionScale = motion.dScale;
         motionRot = motion.dRot;
       }

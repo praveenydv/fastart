@@ -6,29 +6,33 @@
  */
 
 export const THEME_COLORS = {
-  // --- Surface & Elevation Hierarchy (Monotone Pure Dark) ---
-  background: "#08090E",       // Base canvas backdrop, player background, toolbar & navbar root
-  surface: "#0F131D",          // Inset panels, timecode pill, format pill, card buttons, text inputs
-  cardBackground: "#131826",   // Unified timeline clips, modal sheets, project cards, preset chips
-  cardElevated: "#1B2234",     // Context menus, floating popovers, dropdown lists
-  cardHover: "#232B42",        // Hover feedback state
+  // --- Surface & Elevation Hierarchy (CapCut Dark Studio) ---
+  background: "#121214",       // CapCut workspace backdrop & player framing
+  surface: "#18181A",          // Inset panels, search fields, timecode pill, card buttons
+  cardBackground: "#1B1C20",   // Timeline clips base, modal sheets, project cards
+  card: "#1B1C20",             // Shorthand alias for cardBackground
+  cardElevated: "#222328",     // Context menus, floating popovers, dropdown lists
+  surfaceElevated: "#222328",  // Shorthand alias for cardElevated
+  cardHover: "#2A2B32",        // Hover feedback state
 
   // --- Borders & Dividers ---
-  border: "#1F2637",           // Standard 1px crisp divider across all cards & panels
-  borderLight: "#2C364D",      // Highlight border for modals & popovers
+  border: "#25262B",           // Standard 1px crisp CapCut divider
+  borderLight: "#32343C",      // Highlight border for modals & popovers
   borderSubtle: "rgba(255, 255, 255, 0.08)", // Inner card lines & timeline clip separation
-  borderGlow: "rgba(255, 255, 255, 0.25)",      // Focus ring for selected tools
+  borderGlow: "rgba(0, 229, 201, 0.35)",      // Focus ring for selected tools (CapCut Cyan Glow)
 
-  // --- Pure Black & White Monotone Palette (No Cyan / No Bright Colors) ---
-  // 1. Primary Action (Solid White Monotone)
-  primary: "#FFFFFF",          // Export button, New Project CTA, Center Play/Pause button
-  primaryText: "#000000",      // Text on primary white buttons (bold)
-  primaryHover: "#E4E4E7",
+  // --- Signature CapCut Cyan Palette ---
+  primary: "#00E5C9",          // Export button, New Project CTA, CapCut Teal Hero
+  primaryDark: "#00B39D",      // Deep contrast cyan
+  primaryText: "#000000",      // Bold text on cyan buttons
+  primaryHover: "#33EBCE",
 
-  // 2. Precision Accent (Crisp White / Platinum Monotone)
-  accent: "#FFFFFF",           // Playhead scrub handle, active tab text, active bounding box, keyframe diamonds
-  accentHover: "#E2E8F0",
-  accentGlow: "rgba(255, 255, 255, 0.12)",      // Active chip background tint, studio badge
+  accent: "#00E5C9",           // CapCut Cyan accent: playhead scrub handle, active tab, active tool, keyframe diamond
+  accentHover: "#33EBCE",
+  accentGlow: "rgba(0, 229, 201, 0.15)",      // Active chip background tint, studio badge
+  cyan: "#00E5C9",
+  cyanBg: "rgba(0, 229, 201, 0.12)",
+  cyanBorder: "rgba(0, 229, 201, 0.35)",
 
   // --- Typography Colors ---
   textPrimary: "#FFFFFF",      // 100% white for titles, active buttons, root toolbar icons
@@ -36,20 +40,48 @@ export const THEME_COLORS = {
   textMuted: "#64748B",        // Slate 500 for timestamps, placeholder copy, disabled icons
   textDisabled: "#475569",     // Slate 600 for inactive/disabled states
 
-  // --- Status & Utility Colors (Muted Accents) ---
+  // --- Status & Utility Colors ---
   danger: "#EF4444",           // Delete clip, delete project
+  error: "#EF4444",            // Shorthand alias for danger
   dangerBg: "rgba(239, 68, 68, 0.08)",
   success: "#10B981",          // Export complete, download confirmation
   successBg: "rgba(16, 185, 129, 0.12)",
   warning: "#F59E0B",
   proGold: "#FBBF24",
 
-  // --- Timeline & Clip Uniform Theme ---
-  timelineTrackBg: "#08090E",
-  timelineClipBg: "#131826",
-  timelineClipBorder: "rgba(255, 255, 255, 0.08)",
+  // --- CapCut Track & Clip Color Theme (Exact from CapCut Studio) ---
+  timelineTrackBg: "#121214",
+  timelineClipBg: "#1E3A5F",
+  timelineClipBorder: "rgba(255, 255, 255, 0.12)",
   timelineHandle: "#FFFFFF",
   timelineRulerMark: "#3F3F46",
+
+  // Specific CapCut Clip Types
+  clipVideoBg: "#1E3A5F",      // Muted Navy Blue (Main Video Track)
+  clipVideoBorder: "#3B82F6",
+  clipPhotoBg: "#16384C",      // Muted Teal Cyan (Photo/Image Track)
+  clipPhotoBorder: "#00E5C9",
+  clipTextBg: "#8C483A",       // Terra-cotta / Rust Red (Text Track)
+  clipTextBorder: "#EF4444",
+  clipAudioBg: "#1E5A44",      // Forest Green (Audio Track)
+  clipAudioBorder: "#10B981",
+  clipEffectBg: "#4C2D7A",     // Muted Deep Purple (Effects Track)
+  clipEffectBorder: "#A855F7",
+  clipStickerBg: "#6B4C28",    // Muted Warm Amber (Sticker Track)
+  clipStickerBorder: "#F59E0B",
+  clipCaptionBg: "#373E4F",    // Muted Slate (Caption Track)
+  clipCaptionBorder: "#64748B",
+
+  // CapCut Desktop Studio Surfaces
+  capcutHeaderBg: "#141518",
+  capcutSidebarBg: "#101114",
+  capcutPanelBg: "#141518",
+  capcutSurfaceInset: "#1A1B20",
+  capcutBorder: "#24262C",
+  capcutBorderLight: "#32353E",
+  capcutTabActive: "#24262E",
+  capcutTeal: "#00E5C9",
+  capcutPlayhead: "#FFFFFF",
 } as const;
 
 export const DESIGN_CONSTANTS = {
@@ -171,10 +203,11 @@ export const DESIGN_CONSTANTS = {
       display: 24,  // Empty state hero icons, media picker icons
     },
     colors: {
-      active: "#FFFFFF",
+      active: "#00E5C9",
       inactive: "#94A3B8",
       muted: "#64748B",
       primaryOnWhite: "#000000",
+      cyan: "#00E5C9",
       danger: "#EF4444",
       success: "#10B981",
     },

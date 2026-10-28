@@ -9,6 +9,8 @@ export type MaskShape = 'none' | 'linear' | 'mirror' | 'circle' | 'rectangle' | 
 export interface MaskConfig {
   shape: MaskShape;
   size?: number; // 10% to 100%
+  width?: number; // 5% to 200% width deformation
+  height?: number; // 5% to 200% height deformation
   feather?: number; // 0 to 50 blur
   roundness?: number; // 0 to 50 for rectangle
   inverted?: boolean;
@@ -41,10 +43,46 @@ export interface CustomLutConfig {
   data?: number[]; // RGB matrix if 3D cube
 }
 
+export interface TrajectoryPoint {
+  time: number; // in seconds relative to project timeline
+  x: number; // normalized center x (0..100) or pixel dx
+  y: number; // normalized center y (0..100) or pixel dy
+  scale: number; // scale multiplier relative to t0 (1.0 = 100%)
+  rotation: number; // rotation offset in degrees
+  confidence: number; // 0..1 tracking quality score
+  boxWidth?: number; // width in % of frame (0..100)
+  boxHeight?: number; // height in % of frame (0..100)
+}
+
+export interface TrackingRect {
+  x: number; // 0..100%
+  y: number; // 0..100%
+  width: number; // 0..100%
+  height: number; // 0..100%
+}
+
+export type TrackingActionType =
+  | 'pin_element' // Attach another clip (Text/Sticker/PIP) to track with target
+  | 'mosaic_censor' // Dynamic pixelated/blurred censor box over target
+  | 'camera_center' // Lock video to keep target centered in viewport
+  | 'cinematic_drift'; // Procedural cinematic motion
+
 export interface MotionTrackConfig {
   enabled: boolean;
-  mode: 'follow_center' | 'cinematic_drift' | 'dynamic_zoom' | 'orbit_float' | 'custom';
+  mode: 'follow_center' | 'cinematic_drift' | 'dynamic_zoom' | 'orbit_float' | 'custom' | 'object_track';
   intensity?: number;
+  // CapCut Object Tracking
+  targetRect?: TrackingRect;
+  trajectory?: TrajectoryPoint[];
+  actionType?: TrackingActionType;
+  pinnedClipId?: string; // ID of Text / Sticker / Video clip to follow target
+  trackScale?: boolean; // Grow/shrink with subject distance (default: true)
+  trackRotation?: boolean; // Rotate with subject tilt (default: true)
+  mosaicStyle?: 'pixelate' | 'blur'; // Censor style
+  mosaicRadius?: number; // Censor block/blur radius in px (default: 16)
+  smoothness?: number; // Damping filter strength 0..100 (default: 60)
+  trackingStatus?: 'idle' | 'tracking' | 'completed' | 'failed';
+  lastTrackedAt?: number;
 }
 
 export interface CustomCrop {
@@ -53,6 +91,49 @@ export interface CustomCrop {
   width: number; // 0..100%
   height: number; // 0..100%
 }
+
+export type BlendMode =
+  | 'normal'
+  | 'screen'
+  | 'multiply'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion';
+
+export interface HSLChannelConfig {
+  hue: number; // -180 to 180
+  saturation: number; // -100 to 100
+  luminance: number; // -100 to 100
+}
+
+export type HSLColorChannel =
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'cyan'
+  | 'blue'
+  | 'purple'
+  | 'magenta';
+
+export type HSLAdjustments = Partial<Record<HSLColorChannel, HSLChannelConfig>>;
+
+export type VoiceEffectId =
+  | 'none'
+  | 'robot'
+  | 'chipmunk'
+  | 'deep_bass'
+  | 'megaphone'
+  | 'echo'
+  | 'vinyl'
+  | 'helium';
+
+export type KeyframeEasing = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'spring';
 
 export interface ClipTransform {
   scale?: number;
@@ -72,6 +153,8 @@ export interface ClipTransform {
   mask?: MaskConfig;
   crop?: CustomCrop;
   cutout?: CutoutConfig;
+  blendMode?: BlendMode;
+  blur?: number; // Blur radius in px (0..50)
 }
 
 export interface TransitionConfig {
@@ -83,6 +166,7 @@ export interface KeyframePoint {
   time: number;
   transform: ClipTransform;
   opacity: number;
+  easing?: KeyframeEasing;
 }
 
 export interface VideoClip {
@@ -96,7 +180,11 @@ export interface VideoClip {
   startTime: number;
   trimIn?: number;
   trimOut?: number;
+  minTrimIn?: number;
+  maxTrimOut?: number;
+  maxDuration?: number;
   mediaDuration?: number;
+  thumbnailTrimIn?: number;
   speed?: number;
   speedCurve?: number[] | SpeedCurvePoint[] | { id: string; name?: string; points: any } | null;
   smoothSlowMo?: 'none' | 'blend' | 'optical_flow';
@@ -120,12 +208,28 @@ export interface VideoClip {
   mask?: MaskConfig;
   crop?: CustomCrop;
   cutout?: CutoutConfig;
+  blendMode?: BlendMode;
+  hslAdjustments?: HSLAdjustments;
+  voiceEffect?: VoiceEffectId;
   keyframes?: KeyframePoint[];
   motionTrack?: MotionTrackConfig;
+  animation?: ClipAnimationConfig | string;
   trackIndex?: number;
   layer?: number;
   isEnding?: boolean;
   peaks?: number[];
+}
+
+export interface ClipAnimationConfig {
+  inPreset?: string;
+  inDuration?: number;
+  outPreset?: string;
+  outDuration?: number;
+  loopPreset?: string;
+  comboPreset?: string; // backwards compatibility alias for loopPreset
+  preset?: string;
+  type?: 'in' | 'out' | 'loop' | 'combo';
+  duration?: number;
 }
 
 export interface AudioClip {
@@ -136,6 +240,9 @@ export interface AudioClip {
   startTime: number;
   trimIn?: number;
   trimOut?: number;
+  minTrimIn?: number;
+  maxTrimOut?: number;
+  maxDuration?: number;
   mediaDuration?: number;
   speed?: number;
   speedCurve?: number[] | SpeedCurvePoint[] | { id: string; name?: string; points: any } | null;
@@ -147,6 +254,7 @@ export interface AudioClip {
   sourceMediaId?: string;
   trackIndex?: number;
   peaks?: number[];
+  voiceEffect?: VoiceEffectId;
 }
 
 export interface TextStyle {
@@ -182,7 +290,7 @@ export interface TextClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
-  animation?: 'none' | 'bounce' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
+  animation?: ClipAnimationConfig | 'none' | 'bounce' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
   style?: TextStyle;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
@@ -198,7 +306,7 @@ export interface CaptionClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
-  animation?: 'none' | 'bounce' | 'karaoke' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
+  animation?: ClipAnimationConfig | 'none' | 'bounce' | 'karaoke' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
   style?: TextStyle;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
@@ -220,7 +328,7 @@ export interface StickerClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
-  animation?: 'none' | 'bounce' | 'pulse' | 'wave' | 'fade' | 'pop' | string;
+  animation?: ClipAnimationConfig | 'none' | 'bounce' | 'pulse' | 'wave' | 'fade' | 'pop' | string;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
   layer?: number;

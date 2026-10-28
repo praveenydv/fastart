@@ -11,12 +11,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { EFFECT_PRESETS } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
 import { EffectClip } from '../../types/project';
+import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 interface EffectsModalProps {
   visible: boolean;
   onClose: () => void;
   onApply?: () => void;
   activeEffect?: string;
+  activeIntensity?: number;
   onAddEffect: (effect: any) => void;
   editingClip?: EffectClip | null;
   onUpdateEffect?: (effect: EffectClip) => void;
@@ -28,13 +30,14 @@ export default function EffectsModal({
   onClose,
   onApply,
   activeEffect,
+  activeIntensity,
   onAddEffect,
   editingClip,
   onUpdateEffect,
   isInline = false,
 }: EffectsModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
-  const [intensity, setIntensity] = useState<number>(0.8);
+  const [intensity, setIntensity] = useState<number>(activeIntensity !== undefined ? activeIntensity : 0.8);
   const [selectedEffectId, setSelectedEffectId] = useState<string>(activeEffect || 'none');
   const [activeSessionClipId, setActiveSessionClipId] = useState<string | null>(null);
 
@@ -45,14 +48,14 @@ export default function EffectsModal({
         setActiveSessionClipId(editingClip.id);
         const effType = editingClip.type || 'none';
         setSelectedEffectId(effType);
-        setIntensity(editingClip.intensity !== undefined ? editingClip.intensity : 0.8);
+        setIntensity(editingClip.intensity !== undefined ? editingClip.intensity : (activeIntensity !== undefined ? activeIntensity : 0.8));
       } else {
         setActiveSessionClipId(null);
         setSelectedEffectId(activeEffect || 'none');
-        setIntensity(0.8);
+        setIntensity(activeIntensity !== undefined ? activeIntensity : 0.8);
       }
     }
-  }, [visible, editingClip, activeEffect]);
+  }, [visible, editingClip, activeEffect, activeIntensity]);
 
   const categories = [
     { id: 'All', label: 'All' },
@@ -76,8 +79,8 @@ export default function EffectsModal({
     const effId = item.type || item.id;
     setSelectedEffectId(effId);
 
-    // 1. Timeline effect clip clear
-    if (item.id === 'none') {
+    // 1. None selected: remove effect from selected video clip or timeline clip
+    if (item.id === 'none' || item.type === 'none') {
       if (editingClip && onUpdateEffect) {
         onUpdateEffect({
           ...editingClip,
@@ -86,23 +89,18 @@ export default function EffectsModal({
           intensity: 0,
         });
       }
+      if (onAddEffect) {
+        onAddEffect(item);
+      }
+      setActiveSessionClipId(null);
       return;
     }
 
     // 2. Update existing timeline effect clip
     const targetId = editingClip?.id || activeSessionClipId;
-    if (targetId && onUpdateEffect) {
-      const baseClip: EffectClip = editingClip || {
-        id: targetId,
-        type: effId,
-        name: item.name,
-        startTime: 0,
-        duration: 3.0,
-        intensity,
-        trackIndex: 4,
-      };
+    if (editingClip && onUpdateEffect) {
       onUpdateEffect({
-        ...baseClip,
+        ...editingClip,
         type: effId,
         name: item.name,
         intensity,
@@ -110,12 +108,13 @@ export default function EffectsModal({
       return;
     }
 
-    // 3. Create new standalone timeline effect clip at current playhead
-    const newId = 'eff-' + Date.now();
+    // 3. Attach effect to selected video clip OR create new standalone timeline effect clip
+    const newId = activeSessionClipId || ('eff-' + Date.now());
     setActiveSessionClipId(newId);
     onAddEffect({
       ...item,
       id: newId,
+      type: effId,
       duration: 3.0,
       intensity,
     });
@@ -133,22 +132,22 @@ export default function EffectsModal({
     setIntensity(val);
     if (selectedEffectId === 'none') return;
 
+    const currentPreset = EFFECT_PRESETS.find(
+      (p) => p.id === selectedEffectId || p.type === selectedEffectId
+    );
+
     const targetId = editingClip?.id || activeSessionClipId;
-    if (targetId && onUpdateEffect) {
-      const currentPreset = EFFECT_PRESETS.find(
-        (p) => p.id === selectedEffectId || p.type === selectedEffectId
-      );
-      const baseClip: EffectClip = editingClip || {
-        id: targetId,
-        type: selectedEffectId,
-        name: currentPreset?.name || 'Effect',
-        startTime: 0,
-        duration: 3.0,
-        intensity: val,
-        trackIndex: 4,
-      };
+    if (editingClip && onUpdateEffect) {
       onUpdateEffect({
-        ...baseClip,
+        ...editingClip,
+        intensity: val,
+      });
+    } else if (onAddEffect) {
+      onAddEffect({
+        ...currentPreset,
+        id: targetId || selectedEffectId,
+        type: selectedEffectId,
+        name: currentPreset?.name || selectedEffectId,
         intensity: val,
       });
     }
@@ -252,36 +251,61 @@ export default function EffectsModal({
               })}
             </ScrollView>
 
-            {/* Intensity Level Quick Controls */}
+            {/* Continuous Intensity Slider & Presets */}
             {!isNone && (
-              <View style={styles.intensityGroup}>
-                {[
-                  { label: 'Mild', val: 0.4 },
-                  { label: 'Normal', val: 0.75 },
-                  { label: 'Strong', val: 1.0 },
-                ].map((opt) => {
-                  const isSelected = Math.abs(intensity - opt.val) < 0.15;
-                  return (
-                    <TouchableOpacity
-                      key={opt.label}
-                      style={[
-                        styles.intensityPill,
-                        isSelected && styles.intensityPillActive,
-                      ]}
-                      onPress={() => handleIntensityChange(opt.val)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
+              <View style={styles.intensityCard}>
+                <View style={styles.intensityHeaderRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="sparkles" size={13} color="#00F2FE" />
+                    <Text style={styles.intensityActiveName} numberOfLines={1}>
+                      {EFFECT_PRESETS.find((p) => p.id === selectedEffectId || p.type === selectedEffectId)?.name || 'Active Effect'}
+                    </Text>
+                  </View>
+                  <Text style={styles.intensityBadgeText}>{Math.round(intensity * 100)}%</Text>
+                </View>
+
+                <CompactSliderInput
+                  label="Effect Intensity"
+                  value={Math.round(intensity * 100)}
+                  min={5}
+                  max={100}
+                  step={1}
+                  unit="%"
+                  defaultValue={80}
+                  accentColor="#00F2FE"
+                  onChange={(newPct) => handleIntensityChange(newPct / 100)}
+                />
+
+                <View style={styles.quickPresetRow}>
+                  {[
+                    { label: '25%', val: 0.25 },
+                    { label: '50%', val: 0.5 },
+                    { label: '75%', val: 0.75 },
+                    { label: '100%', val: 1.0 },
+                  ].map((opt) => {
+                    const isSelected = Math.abs(intensity - opt.val) < 0.08;
+                    return (
+                      <TouchableOpacity
+                        key={opt.label}
                         style={[
-                          styles.intensityText,
-                          isSelected && styles.intensityTextActive,
+                          styles.quickPresetPill,
+                          isSelected && styles.quickPresetPillActive,
                         ]}
+                        onPress={() => handleIntensityChange(opt.val)}
+                        activeOpacity={0.7}
                       >
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.quickPresetText,
+                            isSelected && styles.quickPresetTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             )}
           </View>
@@ -467,29 +491,56 @@ const styles = StyleSheet.create({
     color: '#00F2FE',
     fontWeight: '700',
   },
-  intensityGroup: {
-    flexDirection: 'row',
-    gap: 5,
-    alignItems: 'center',
+  intensityCard: {
+    backgroundColor: '#0F131F',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.2)',
   },
-  intensityPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  intensityHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  intensityActiveName: {
+    color: '#E2E8F0',
+    fontSize: 11,
+    fontWeight: '700',
+    maxWidth: 200,
+  },
+  intensityBadgeText: {
+    color: '#00F2FE',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  quickPresetRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 6,
+  },
+  quickPresetPill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
-  intensityPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+  quickPresetPillActive: {
+    backgroundColor: 'rgba(0, 242, 254, 0.15)',
     borderColor: '#00F2FE',
   },
-  intensityText: {
+  quickPresetText: {
     color: '#94A3B8',
     fontSize: 10.5,
     fontWeight: '600',
   },
-  intensityTextActive: {
+  quickPresetTextActive: {
     color: '#00F2FE',
     fontWeight: '700',
   },

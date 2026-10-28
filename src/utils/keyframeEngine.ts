@@ -293,8 +293,23 @@ export function getInterpolatedTransform(
     if (localTime >= k1.time && localTime <= k2.time) {
       const span = k2.time - k1.time;
       const progress = span > 0 ? (localTime - k1.time) / span : 0;
-      // Hermite smoothstep cubic ease curve
-      const ease = progress * progress * (3 - 2 * progress);
+
+      const easingType = (k1 as any).easing || (k2 as any).easing || 'smooth';
+      let ease = progress;
+      if (easingType === 'linear') {
+        ease = progress;
+      } else if (easingType === 'easeIn') {
+        ease = progress * progress * progress;
+      } else if (easingType === 'easeOut') {
+        ease = 1 - Math.pow(1 - progress, 3);
+      } else if (easingType === 'easeInOut') {
+        ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      } else if (easingType === 'spring') {
+        ease = 1 + Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+      } else {
+        // Hermite smoothstep cubic ease curve
+        ease = progress * progress * (3 - 2 * progress);
+      }
 
       const t1 = k1.transform || {};
       const t2 = k2.transform || {};

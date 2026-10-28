@@ -154,7 +154,7 @@ export async function persistLargeMedia(
 }
 
 // Retrieve live object URL for a media ID from IndexedDB
-export async function getLiveMediaUrl(id: string): Promise<string | null> {
+export async function getLiveMediaUrl(id: string, hintName?: string): Promise<string | null> {
   if (objectUrlCache.has(id)) {
     return objectUrlCache.get(id)!;
   }
@@ -173,7 +173,33 @@ export async function getLiveMediaUrl(id: string): Promise<string | null> {
     // Fallback: If not found by exact id, match against all records
     if (!record) {
       const all = await getAllStoredMedia();
-      record = all.find((r) => r.id === id || id.startsWith(r.id) || r.id.startsWith(id)) || null;
+      record =
+        all.find(
+          (r) =>
+            r.id === id ||
+            id.startsWith(r.id) ||
+            r.id.startsWith(id) ||
+            (hintName &&
+              (r.name === hintName ||
+                r.name.includes(hintName) ||
+                hintName.includes(r.name)))
+        ) || null;
+
+      // Secondary fallback: case-insensitive name match or single media stored
+      if (!record && all.length > 0) {
+        if (hintName) {
+          const hn = hintName.toLowerCase();
+          record =
+            all.find(
+              (r) =>
+                r.name.toLowerCase().includes(hn) ||
+                hn.includes(r.name.toLowerCase())
+            ) || null;
+        }
+        if (!record && all.length === 1) {
+          record = all[0];
+        }
+      }
     }
 
     if (record && record.blob) {
@@ -665,11 +691,12 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
       const isKnown = isBlob && objectUrlCache.has(clip.url);
 
       if (!isKnown) {
-        const freshUrl = await getLiveMediaUrl(lookupId);
+        const freshUrl = await getLiveMediaUrl(lookupId, clip.title || clip.name);
         if (freshUrl && freshUrl !== clip.url) {
           hasChanges = true;
           return {
             ...clip,
+            sourceMediaId: clip.sourceMediaId || lookupId,
             url: freshUrl,
             thumbnail:
               clip.thumbnail && !clip.thumbnail.startsWith('blob:')
@@ -691,11 +718,12 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
       const isKnown = isBlob && objectUrlCache.has(clip.url);
 
       if (!isKnown) {
-        const freshUrl = await getLiveMediaUrl(lookupId);
+        const freshUrl = await getLiveMediaUrl(lookupId, clip.title || clip.name);
         if (freshUrl && freshUrl !== clip.url) {
           hasChanges = true;
           return {
             ...clip,
+            sourceMediaId: clip.sourceMediaId || lookupId,
             url: freshUrl,
           };
         }
