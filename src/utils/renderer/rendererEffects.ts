@@ -1,5 +1,4 @@
 import { VideoClip, EffectClip } from "../../types/project";
-import { LowLevelPixelEngine } from "../lowLevelEngine";
 import { rustCoreBridge } from "../../services/rustCoreBridge";
 
 export function evaluateSpeedCurve(curveInput: any, progress: number): number {
@@ -14,30 +13,16 @@ export function evaluateSpeedCurve(curveInput: any, progress: number): number {
 
   // Array of SpeedCurvePoint objects: [{ t, s }]
   if (typeof curve[0] === "object" && "t" in curve[0]) {
-    const points = curve as { t: number; s: number }[];
-    if (clampedP <= points[0].t) return points[0].s;
-    if (clampedP >= points[points.length - 1].t)
-      return points[points.length - 1].s;
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      if (clampedP >= p1.t && clampedP <= p2.t) {
-        const ratio = (clampedP - p1.t) / (p2.t - p1.t || 1);
-        const smoothRatio = ratio * ratio * (3 - 2 * ratio);
-        return p1.s + smoothRatio * (p2.s - p1.s);
-      }
-    }
-    return 1.0;
+    return rustCoreBridge.evaluateSpeedCurve(curve, clampedP);
   }
 
-  // Array of speed multiplier numbers: [s0, s1, ...]
+  // Array of speed multiplier numbers: [s0, s1, ...] -> evaluate in native Rust
   const numPoints = curve.length;
-  const idx = clampedP * (numPoints - 1);
-  const low = Math.floor(idx);
-  const high = Math.min(numPoints - 1, low + 1);
-  const frac = idx - low;
-  return curve[low] * (1 - frac) + curve[high] * frac;
+  const points = curve.map((s: number, i: number) => ({
+    t: i / Math.max(1, numPoints - 1),
+    s: Number(s) || 1.0,
+  }));
+  return rustCoreBridge.evaluateSpeedCurve(points, clampedP);
 }
 
 export function applyMotionTracking(
@@ -84,10 +69,12 @@ export function buildMaskPath(
 ) {
   const effW = width !== undefined ? width : size;
   const effH = height !== undefined ? height : size;
+  const minDim = Math.min(dw, dh);
 
   if (shape === "circle") {
-    const rx = Math.max(1, (dw * effW) / 200);
-    const ry = Math.max(1, (dh * effH) / 200);
+    // Isotropic circular radii based on minDim so circle is round and matches preview overlay
+    const rx = Math.max(1, (minDim * effW) / 200);
+    const ry = Math.max(1, (minDim * effH) / 200);
     if ((ctx as any).ellipse) {
       (ctx as any).ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     } else {
@@ -107,40 +94,30 @@ export function buildMaskPath(
       ctx.rect(-rw / 2, -rh / 2, rw, rh);
     }
   } else if (shape === "linear") {
-    // Sweep split line across the frame based on height (50% is center)
-    const splitY = ((50 - effH) / 100) * dh;
+    // Split line passes right through origin (0, 0), extending downwards in local coords
     const outerExtent = Math.max(dw, dh) * 4;
-    ctx.rect(-outerExtent, splitY, outerExtent * 2, outerExtent * 2);
+    ctx.rect(-outerExtent, 0, outerExtent * 2, outerExtent * 2);
   } else if (shape === "mirror") {
     // Central horizontal slot/band of height bandH
     const bandH = Math.max(2, (dh * effH) / 100);
     const outerExtent = Math.max(dw, dh) * 4;
     ctx.rect(-outerExtent, -bandH / 2, outerExtent * 2, bandH);
   } else if (shape === "heart") {
-    const scaleX = Math.max(0.01, (dw * effW) / 10000);
-    const scaleY = Math.max(0.01, (dh * effH) / 10000);
+    const hw = Math.max(1, (minDim * effW) / 100);
+    const hh = Math.max(1, (minDim * effH) / 100);
     ctx.save();
-    ctx.scale(scaleX, scaleY);
-    const s = 100;
-    const r = s * 0.25;
-    const cy = -s * 0.10;
-    const bottomY = s * 0.46;
-
-    // Start at bottom sharp tip
-    ctx.moveTo(0, bottomY);
-    // Left flank curving up to outer tangent point
-    ctx.bezierCurveTo(-s * 0.28, s * 0.22, -s * 0.50, s * 0.06, -s * 0.50, cy);
-    // Perfect circular left lobe arc from PI to 0
-    ctx.arc(-r, cy, r, Math.PI, 0, false);
-    // Perfect circular right lobe arc from PI to 0
-    ctx.arc(r, cy, r, Math.PI, 0, false);
-    // Right flank curving down from outer tangent point to bottom tip
-    ctx.bezierCurveTo(s * 0.50, s * 0.06, s * 0.28, s * 0.22, 0, bottomY);
+    ctx.scale(hw / 100, hh / 100);
+    // Exact mathematical match with SVG heart path centered at (0, 0)
+    ctx.moveTo(0, 44);
+    ctx.bezierCurveTo(-28, 18, -50, 0, -50, -20);
+    ctx.arc(-25, -20, 25, Math.PI, 0, false);
+    ctx.arc(25, -20, 25, Math.PI, 0, false);
+    ctx.bezierCurveTo(50, 0, 28, 18, 0, 44);
     ctx.closePath();
     ctx.restore();
   } else if (shape === "star") {
-    const scaleX = Math.max(0.01, (dw * effW) / 200);
-    const scaleY = Math.max(0.01, (dh * effH) / 200);
+    const scaleX = Math.max(0.01, (minDim * effW) / 200);
+    const scaleY = Math.max(0.01, (minDim * effH) / 200);
     const points = 5;
     for (let i = 0; i < points * 2; i++) {
       const radiusFactor = i % 2 === 0 ? 1.0 : 0.42;
@@ -506,7 +483,11 @@ export function drawClipWithCutout(
     return;
   }
 
-  const success = LowLevelPixelEngine.processCutout(
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  const success = rustCoreBridge.renderCutout(
     ctx,
     mediaEl as any,
     sx,
@@ -525,6 +506,7 @@ export function drawClipWithCutout(
   if (!success) {
     ctx.drawImage(mediaEl, sx, sy, sw, sh, dx, dy, dw, dh);
   }
+  ctx.restore();
 }
 
 export function applyEffectOverlay(

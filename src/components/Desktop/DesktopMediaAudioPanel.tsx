@@ -17,13 +17,7 @@ import { persistLargeMedia } from '../../utils/largeMediaStorage';
 import { addNotification } from '../../utils/storage';
 import { THEME_COLORS } from '../../constants/designConstants';
 
-export type DesktopResourceTab =
-  | 'media'
-  | 'audio'
-  | 'text'
-  | 'stickers'
-  | 'effects'
-  | 'transitions';
+export type DesktopResourceTab = 'media' | 'audio';
 
 export interface DesktopMediaAudioPanelProps {
   project: FastArtProject;
@@ -36,6 +30,7 @@ export interface DesktopMediaAudioPanelProps {
   onAddEffect?: (effectName: string) => void;
   onAddTransition?: (transitionId: string) => void;
   currentTime: number;
+  onDeleteMedia?: (clipId: string, clipType?: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   width?: number;
@@ -105,6 +100,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   onAddEffect,
   onAddTransition,
   currentTime,
+  onDeleteMedia,
   isCollapsed = false,
   onToggleCollapse,
   width,
@@ -279,13 +275,11 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
     );
   }
 
+  const effectiveTab: DesktopResourceTab = activeTab === 'audio' ? 'audio' : 'media';
+
   const tabs: { id: DesktopResourceTab; label: string; icon: any }[] = [
-    { id: 'media', label: 'Media', icon: 'folder-outline' },
+    { id: 'media', label: 'Video', icon: 'videocam-outline' },
     { id: 'audio', label: 'Audio', icon: 'musical-notes-outline' },
-    { id: 'text', label: 'Text', icon: 'text-outline' },
-    { id: 'stickers', label: 'Stickers', icon: 'happy-outline' },
-    { id: 'effects', label: 'Effects', icon: 'sparkles-outline' },
-    { id: 'transitions', label: 'Transitions', icon: 'swap-horizontal-outline' },
   ];
 
   return (
@@ -308,7 +302,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
           contentContainerStyle={styles.tabButtonsRow}
         >
           {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
+            const isActive = effectiveTab === tab.id;
             return (
               <TouchableOpacity
                 key={tab.id}
@@ -364,7 +358,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
       {/* ─────────────────────────────────────────────
           1. MEDIA TAB BODY
           ───────────────────────────────────────────── */}
-      {activeTab === 'media' && (
+      {effectiveTab === 'media' && (
         <ScrollView
           style={styles.contentScroll}
           contentContainerStyle={styles.scrollInner}
@@ -440,6 +434,22 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                         {clip.duration ? `${clip.duration.toFixed(1)}s` : '0.0s'}
                       </Text>
                     </View>
+
+                    {/* Corner Delete Button on Thumbnail */}
+                    {onDeleteMedia && (
+                      <TouchableOpacity
+                        style={styles.cardDeleteCornerBtn}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          soundEngine.playSfx('cut');
+                          onDeleteMedia(clip.id, clip.type || 'video');
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Delete imported clip"
+                      >
+                        <Ionicons name="trash-outline" size={11} color="#FF6B6B" />
+                      </TouchableOpacity>
+                    )}
                   </View>
 
                   <View style={styles.mediaCardInfo}>
@@ -450,21 +460,37 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                       <Text style={styles.mediaTypeTag}>
                         {clip.type === 'photo' ? 'PHOTO' : 'VIDEO'}
                       </Text>
-                      <TouchableOpacity
-                        style={styles.addDirectBtn}
-                        onPress={() => {
-                          soundEngine.playSfx('pop');
-                          onAddMedia({
-                            ...clip,
-                            id: `clip-copy-${Date.now()}`,
-                            startTime: currentTime,
-                          });
-                        }}
-                        activeOpacity={0.7}
-                        accessibilityLabel="Add to timeline"
-                      >
-                        <Ionicons name="add" size={14} color="#000000" />
-                      </TouchableOpacity>
+                      <View style={styles.mediaCardActions}>
+                        {onDeleteMedia && (
+                          <TouchableOpacity
+                            style={styles.deleteDirectBtn}
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              soundEngine.playSfx('cut');
+                              onDeleteMedia(clip.id, clip.type || 'video');
+                            }}
+                            activeOpacity={0.7}
+                            accessibilityLabel="Delete imported clip"
+                          >
+                            <Ionicons name="trash-outline" size={12} color="#EF4444" />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={styles.addDirectBtn}
+                          onPress={() => {
+                            soundEngine.playSfx('pop');
+                            onAddMedia({
+                              ...clip,
+                              id: `clip-copy-${Date.now()}`,
+                              startTime: currentTime,
+                            });
+                          }}
+                          activeOpacity={0.7}
+                          accessibilityLabel="Add to timeline"
+                        >
+                          <Ionicons name="add" size={14} color="#000000" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -477,7 +503,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
       {/* ─────────────────────────────────────────────
           2. AUDIO TAB BODY
           ───────────────────────────────────────────── */}
-      {activeTab === 'audio' && (
+      {effectiveTab === 'audio' && (
         <ScrollView
           style={styles.contentScroll}
           contentContainerStyle={styles.scrollInner}
@@ -499,6 +525,81 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
               </>
             )}
           </TouchableOpacity>
+
+          {/* Section: Project Imported Audio */}
+          {audioClips.length > 0 && (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>IMPORTED AUDIO</Text>
+                <Text style={styles.sectionCount}>{audioClips.length} tracks</Text>
+              </View>
+
+              {audioClips.map((audioClip, idx) => {
+                const isPlaying = playingPreviewId === audioClip.id;
+                return (
+                  <View
+                    key={audioClip.id || idx}
+                    style={[styles.presetAudioCard, Platform.OS === 'web' && ({ cursor: 'grab' } as any)]}
+                  >
+                    <TouchableOpacity
+                      style={[styles.previewPlayCircle, isPlaying && styles.previewPlayCircleActive]}
+                      onPress={() => {
+                        soundEngine.playSfx('click');
+                        setPlayingPreviewId(isPlaying ? null : audioClip.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={isPlaying ? 'pause' : 'play'}
+                        size={11}
+                        color={isPlaying ? '#000000' : THEME_COLORS.accent}
+                      />
+                    </TouchableOpacity>
+
+                    <View style={{ flex: 1, paddingHorizontal: 8 }}>
+                      <Text style={styles.presetTitle} numberOfLines={1}>
+                        {audioClip.title || `Audio ${idx + 1}`}
+                      </Text>
+                      <Text style={styles.presetMeta}>
+                        Imported • {audioClip.duration ? `${audioClip.duration.toFixed(1)}s` : '10.0s'}
+                      </Text>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      {onDeleteMedia && (
+                        <TouchableOpacity
+                          style={styles.deleteDirectBtn}
+                          onPress={() => {
+                            soundEngine.playSfx('cut');
+                            onDeleteMedia(audioClip.id, 'audio');
+                          }}
+                          activeOpacity={0.7}
+                          accessibilityLabel="Delete imported audio"
+                        >
+                          <Ionicons name="trash-outline" size={12} color="#EF4444" />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={styles.addDirectBtn}
+                        onPress={() => {
+                          soundEngine.playSfx('pop');
+                          onAddAudio({
+                            ...audioClip,
+                            id: `audio-copy-${Date.now()}`,
+                            startTime: currentTime || 0,
+                          });
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Add to timeline"
+                      >
+                        <Ionicons name="add" size={14} color="#000000" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </>
+          )}
 
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>SOUNDTRACKS & SFX</Text>
@@ -571,183 +672,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
         </ScrollView>
       )}
 
-      {/* ─────────────────────────────────────────────
-          3. TEXT TAB BODY
-          ───────────────────────────────────────────── */}
-      {activeTab === 'text' && (
-        <ScrollView
-          style={styles.contentScroll}
-          contentContainerStyle={styles.scrollInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>TEXT TEMPLATES</Text>
-            <Text style={styles.sectionCount}>{TEXT_TEMPLATES.length} presets</Text>
-          </View>
 
-          <View style={styles.textTemplatesGrid}>
-            {TEXT_TEMPLATES.map((tmpl) => (
-              <TouchableOpacity
-                key={tmpl.id}
-                style={[styles.textTemplateCard, { backgroundColor: tmpl.bg }]}
-                onPress={() => {
-                  soundEngine.playSfx('pop');
-                  if (onAddText) {
-                    onAddText(tmpl.text, tmpl.color);
-                    addNotification({
-                      title: 'Text Added',
-                      message: `Added "${tmpl.text}" at ${currentTime.toFixed(1)}s`,
-                      type: 'success',
-                    });
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.textTemplatePreview, { color: tmpl.color }]} numberOfLines={1}>
-                  {tmpl.text}
-                </Text>
-                <View style={styles.textTemplateFooter}>
-                  <Text style={styles.textTemplateTitle}>{tmpl.title}</Text>
-                  <View style={styles.textAddPill}>
-                    <Ionicons name="add" size={11} color="#000000" />
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-      )}
-
-      {/* ─────────────────────────────────────────────
-          4. STICKERS TAB BODY
-          ───────────────────────────────────────────── */}
-      {activeTab === 'stickers' && (
-        <ScrollView
-          style={styles.contentScroll}
-          contentContainerStyle={styles.scrollInner}
-          showsVerticalScrollIndicator={false}
-        >
-          {STICKER_CATEGORIES.map((cat) => (
-            <View key={cat.name} style={{ marginBottom: 14 }}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>{cat.name.toUpperCase()}</Text>
-              </View>
-              <View style={styles.stickersGrid}>
-                {cat.items.map((emoji, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={styles.stickerItem}
-                    onPress={() => {
-                      soundEngine.playSfx('pop');
-                      if (onAddSticker) {
-                        onAddSticker(emoji);
-                        addNotification({
-                          title: 'Sticker Added',
-                          message: `Added ${emoji} at ${currentTime.toFixed(1)}s`,
-                          type: 'success',
-                        });
-                      }
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.stickerEmoji}>{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* ─────────────────────────────────────────────
-          5. EFFECTS TAB BODY
-          ───────────────────────────────────────────── */}
-      {activeTab === 'effects' && (
-        <ScrollView
-          style={styles.contentScroll}
-          contentContainerStyle={styles.scrollInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>VIDEO EFFECTS</Text>
-            <Text style={styles.sectionCount}>{EFFECT_TEMPLATES.length} effects</Text>
-          </View>
-
-          {EFFECT_TEMPLATES.map((eff) => (
-            <View key={eff.id} style={styles.effectCard}>
-              <View style={styles.effectIconCircle}>
-                <Ionicons name={eff.icon as any} size={15} color={THEME_COLORS.accent} />
-              </View>
-              <View style={{ flex: 1, paddingHorizontal: 8 }}>
-                <Text style={styles.effectTitle}>{eff.label}</Text>
-                <Text style={styles.effectDesc}>{eff.desc}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.addDirectBtn}
-                onPress={() => {
-                  soundEngine.playSfx('whoosh');
-                  if (onAddEffect) {
-                    onAddEffect(eff.id);
-                    addNotification({
-                      title: 'Effect Applied',
-                      message: `Applied ${eff.label}`,
-                      type: 'success',
-                    });
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={14} color="#000000" />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* ─────────────────────────────────────────────
-          6. TRANSITIONS TAB BODY
-          ───────────────────────────────────────────── */}
-      {activeTab === 'transitions' && (
-        <ScrollView
-          style={styles.contentScroll}
-          contentContainerStyle={styles.scrollInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>TRANSITIONS</Text>
-            <Text style={styles.sectionCount}>{TRANSITION_TEMPLATES.length} transitions</Text>
-          </View>
-
-          {TRANSITION_TEMPLATES.map((tr) => (
-            <View key={tr.id} style={styles.effectCard}>
-              <View style={styles.effectIconCircle}>
-                <Ionicons name={tr.icon as any} size={15} color={THEME_COLORS.accent} />
-              </View>
-              <View style={{ flex: 1, paddingHorizontal: 8 }}>
-                <Text style={styles.effectTitle}>{tr.label}</Text>
-                <Text style={styles.effectDesc}>{tr.desc}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.addDirectBtn}
-                onPress={() => {
-                  soundEngine.playSfx('whoosh');
-                  if (onAddTransition) {
-                    onAddTransition(tr.id);
-                    addNotification({
-                      title: 'Transition Applied',
-                      message: `Applied ${tr.label}`,
-                      type: 'success',
-                    });
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={14} color="#000000" />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
-      )}
     </View>
   );
 };
@@ -969,6 +894,35 @@ const styles = StyleSheet.create({
     fontSize: 8.5,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  mediaCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  deleteDirectBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardDeleteCornerBtn: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
   },
   addDirectBtn: {
     width: 22,

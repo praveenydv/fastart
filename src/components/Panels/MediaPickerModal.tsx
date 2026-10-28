@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,21 +9,26 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { addNotification } from '../../utils/storage';
 import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import { FastArtProject } from '../../types/project';
 
 interface MediaPickerModalProps {
   visible: boolean;
   onClose: () => void;
   onAddMedia: (clip: any) => void;
+  project?: FastArtProject;
+  onDeleteMedia?: (clipId: string, clipType?: string) => void;
 }
 
-export default function MediaPickerModal({ visible, onClose, onAddMedia }: MediaPickerModalProps) {
+export default function MediaPickerModal({ visible, onClose, onAddMedia, project, onDeleteMedia }: MediaPickerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const projectClips = project?.tracks?.video || [];
 
   // Handle local device file upload (video / photo)
   const handleDeviceUpload = async () => {
@@ -235,6 +240,83 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia }: Media
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Section: Already Imported Project Media */}
+            {projectClips.length > 0 && (
+              <View style={styles.importedSection}>
+                <View style={styles.importedHeaderRow}>
+                  <Text style={styles.importedSectionTitle}>IMPORTED IN PROJECT</Text>
+                  <Text style={styles.importedCountText}>{projectClips.length} items</Text>
+                </View>
+
+                <View style={styles.importedGrid}>
+                  {projectClips.map((clip, idx) => (
+                    <View key={clip.id || idx} style={styles.importedCard}>
+                      <View style={styles.importedThumbBox}>
+                        {clip.thumbnail ? (
+                          <Image source={{ uri: clip.thumbnail }} style={styles.importedThumbImg} />
+                        ) : (
+                          <View style={styles.importedThumbFallback}>
+                            <Ionicons
+                              name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
+                              size={20}
+                              color="#00F2FE"
+                            />
+                          </View>
+                        )}
+                        <View style={styles.importedDurBadge}>
+                          <Text style={styles.importedDurText}>
+                            {clip.duration ? `${clip.duration.toFixed(1)}s` : '0.0s'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.importedCardInfo}>
+                        <Text style={styles.importedTitle} numberOfLines={1}>
+                          {clip.title || `Clip ${idx + 1}`}
+                        </Text>
+                        <View style={styles.importedMetaRow}>
+                          <Text style={styles.importedTypeTag}>
+                            {clip.type === 'photo' ? 'PHOTO' : 'VIDEO'}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            {onDeleteMedia && (
+                              <TouchableOpacity
+                                style={styles.importedDeleteBtn}
+                                onPress={() => {
+                                  soundEngine.playSfx('cut');
+                                  onDeleteMedia(clip.id, clip.type || 'video');
+                                }}
+                                activeOpacity={0.7}
+                                accessibilityLabel="Delete clip"
+                              >
+                                <Ionicons name="trash-outline" size={12} color="#EF4444" />
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                              style={styles.importedAddBtn}
+                              onPress={() => {
+                                soundEngine.playSfx('pop');
+                                onAddMedia({
+                                  ...clip,
+                                  id: `clip-copy-${Date.now()}`,
+                                  startTime: 0,
+                                });
+                                onClose();
+                              }}
+                              activeOpacity={0.7}
+                              accessibilityLabel="Add to timeline"
+                            >
+                              <Ionicons name="add" size={13} color="#000000" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -379,5 +461,113 @@ const styles = StyleSheet.create({
     color: '#08090E',
     fontSize: 12.5,
     fontWeight: '800',
+  },
+  importedSection: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#1F2637',
+    paddingTop: 16,
+  },
+  importedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  importedSectionTitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  importedCountText: {
+    color: '#00F2FE',
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  importedGrid: {
+    gap: 8,
+  },
+  importedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#131826',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    overflow: 'hidden',
+    paddingRight: 8,
+  },
+  importedThumbBox: {
+    width: 60,
+    height: 48,
+    backgroundColor: '#08090E',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  importedThumbImg: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  importedThumbFallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  importedDurBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+  },
+  importedDurText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '700',
+  },
+  importedCardInfo: {
+    flex: 1,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+  },
+  importedTitle: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  importedMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  importedTypeTag: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  importedDeleteBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  importedAddBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#00F2FE',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

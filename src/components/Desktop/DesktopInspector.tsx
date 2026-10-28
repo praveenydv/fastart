@@ -50,9 +50,6 @@ interface DesktopInspectorProps {
   style?: any;
 }
 
-const WebInput: any = Platform.OS === 'web' ? 'input' : TextInput;
-const WebDiv: any = Platform.OS === 'web' ? 'div' : View;
-
 const MASK_SHAPES: { id: MaskShape; label: string; icon: string }[] = [
   { id: 'none', label: 'None', icon: 'close-circle-outline' },
   { id: 'circle', label: 'Circle', icon: 'radio-button-on-outline' },
@@ -89,25 +86,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
   const isVisual = selectedClipType === 'video' || selectedClipType === 'photo';
   const isAudio = selectedClipType === 'audio';
   const isText = selectedClipType === 'text' || selectedClipType === 'caption' || selectedClipType === 'captions';
-
-  // Primary tab
-  const [activeTab, setActiveTab] = useState<string>('visual');
-  // Visual sub-tab: basic, crop, cutout, mask
-  const [visualSubTab, setVisualSubTab] = useState<'basic' | 'crop' | 'cutout' | 'mask'>('basic');
-
-  useEffect(() => {
-    if (!selectedClip) {
-      setActiveTab('project');
-    } else if (isVisual) {
-      setActiveTab('visual');
-    } else if (isAudio) {
-      setActiveTab('audio');
-    } else if (isText) {
-      setActiveTab('text');
-    } else {
-      setActiveTab('visual');
-    }
-  }, [selectedClip?.id, selectedClipType]);
 
   // Collapsed side rail
   if (isCollapsed) {
@@ -157,7 +135,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Project Name</Text>
             <View style={styles.inputBox}>
-              <WebInput
+              <TextInput
                 style={styles.textInput}
                 value={project.title || 'Untitled Project'}
                 onChangeText={(val: string) => onUpdateProject({ title: val })}
@@ -375,131 +353,13 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
         </View>
       </View>
 
-      {/* Primary Category Tabs (Video/Image, Audio, Speed, Adjust) */}
-      <View style={styles.primaryTabBar}>
-        {isVisual && (
-          <TouchableOpacity
-            style={[styles.primaryTab, activeTab === 'visual' && styles.primaryTabActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('visual');
-            }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === 'visual' && styles.primaryTabTextActive]}>
-              {selectedClipType === 'photo' ? 'Image' : 'Video'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isVisual && selectedClipType === 'video' && (
-          <TouchableOpacity
-            style={[styles.primaryTab, activeTab === 'audio' && styles.primaryTabActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('audio');
-            }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === 'audio' && styles.primaryTabTextActive]}>
-              Audio
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isVisual && selectedClipType === 'video' && (
-          <TouchableOpacity
-            style={[styles.primaryTab, activeTab === 'speed' && styles.primaryTabActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('speed');
-            }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === 'speed' && styles.primaryTabTextActive]}>
-              Speed
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isVisual && (
-          <TouchableOpacity
-            style={[styles.primaryTab, activeTab === 'adjust' && styles.primaryTabActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('adjust');
-            }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === 'adjust' && styles.primaryTabTextActive]}>
-              Adjust
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isAudio && (
-          <TouchableOpacity
-            style={[styles.primaryTab, activeTab === 'audio' && styles.primaryTabActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('audio');
-            }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === 'audio' && styles.primaryTabTextActive]}>
-              Audio
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isText && (
-          <TouchableOpacity
-            style={[styles.primaryTab, activeTab === 'text' && styles.primaryTabActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('text');
-            }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === 'text' && styles.primaryTabTextActive]}>
-              Text
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
       {/* ─────────────────────────────────────────────
-          TAB CONTENT: Visual (Basic, Crop, Cutout, Mask)
+          CONTENT: Visual (Transform Controls)
           ───────────────────────────────────────────── */}
-      {activeTab === 'visual' && isVisual && (
-        <>
-          {/* Sub Tab Bar: Basic | Crop | Cutout | Mask */}
-          <View style={styles.subTabBar}>
-            {(['basic', 'crop', 'cutout', 'mask'] as const).map((st) => {
-              const isActive = visualSubTab === st;
-              const labels = {
-                basic: 'Basic',
-                crop: 'Crop',
-                cutout: 'Cutout',
-                mask: 'Mask',
-              };
-              return (
-                <TouchableOpacity
-                  key={st}
-                  style={[styles.subTab, isActive && styles.subTabActive]}
-                  onPress={() => {
-                    soundEngine.playSfx('click');
-                    setVisualSubTab(st);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.subTabText, isActive && styles.subTabTextActive]}>
-                    {labels[st]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-            {/* SUB-TAB: BASIC TRANSFORM */}
-            {visualSubTab === 'basic' && (
-              <View style={styles.section}>
-                {/* Scale Slider */}
+      {isVisual && (
+        <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+          <View style={styles.section}>
+            {/* Scale Slider */}
                 <View style={styles.controlRow}>
                   <CompactSliderInput
                     label="Scale"
@@ -641,157 +501,13 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                   </View>
                 </View>
               </View>
-            )}
-
-            {/* SUB-TAB: CROP */}
-            {visualSubTab === 'crop' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Crop & Frame Preset</Text>
-                <View style={styles.chipsRow}>
-                  {['Free', '16:9', '9:16', '1:1', '4:5'].map((ratio) => (
-                    <TouchableOpacity
-                      key={ratio}
-                      style={styles.chip}
-                      onPress={() => {
-                        soundEngine.playSfx('click');
-                        onOpenModal?.('transform');
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.chipText}>{ratio}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <TouchableOpacity
-                  style={[styles.primaryActionBtn, { marginTop: 12 }]}
-                  onPress={() => onOpenModal?.('transform')}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="crop" size={14} color="#000000" />
-                  <Text style={styles.primaryActionBtnText}>Open Advanced Crop Editor</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* SUB-TAB: CUTOUT */}
-            {visualSubTab === 'cutout' && (
-              <View style={styles.section}>
-                <View style={styles.labelValueHeader}>
-                  <Text style={styles.sectionTitle}>Chroma Key Cutout</Text>
-                  <TouchableOpacity
-                    style={[styles.miniToggle, currentCutout.enabled && styles.miniToggleActive]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      onOpenModal?.('cutout');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.miniToggleText, currentCutout.enabled && styles.miniToggleTextActive]}>
-                      {currentCutout.enabled ? 'ON' : 'OFF'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={[styles.primaryActionBtn, { marginTop: 12 }]}
-                  onPress={() => onOpenModal?.('cutout')}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="color-wand" size={14} color="#000000" />
-                  <Text style={styles.primaryActionBtnText}>Configure Chroma Key</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* SUB-TAB: MASK */}
-            {visualSubTab === 'mask' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Shape Mask</Text>
-                <View style={styles.maskGrid}>
-                  {MASK_SHAPES.map((m) => {
-                    const isSelected = (currentMask.shape || 'none') === m.id;
-                    return (
-                      <TouchableOpacity
-                        key={m.id}
-                        style={[styles.maskCard, isSelected && styles.maskCardActive]}
-                        onPress={() => {
-                          soundEngine.playSfx('click');
-                          if (onUpdateClipMask) {
-                            onUpdateClipMask(selectedClip.id, {
-                              ...currentMask,
-                              shape: m.id,
-                            }, true);
-                          }
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name={m.icon as any}
-                          size={18}
-                          color={isSelected ? THEME_COLORS.accent : THEME_COLORS.textSecondary}
-                        />
-                        <Text style={[styles.maskCardLabel, isSelected && styles.maskCardLabelActive]}>
-                          {m.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {currentMask.shape !== 'none' && (
-                  <View style={{ marginTop: 12 }}>
-                    {/* Aperture Size */}
-                    <View style={styles.controlRow}>
-                      <CompactSliderInput
-                        label="Mask Size"
-                        value={currentMask.size ?? 60}
-                        min={15}
-                        max={100}
-                        step={1}
-                        unit="%"
-                        defaultValue={60}
-                        onChange={(val) => {
-                          if (onUpdateClipMask) {
-                            onUpdateClipMask(selectedClip.id, {
-                              ...currentMask,
-                              size: val,
-                            }, true);
-                          }
-                        }}
-                      />
-                    </View>
-
-                    {/* Edge Softness / Feather */}
-                    <View style={styles.controlRow}>
-                      <CompactSliderInput
-                        label="Feather Softness"
-                        value={currentMask.feather ?? 0}
-                        min={0}
-                        max={50}
-                        step={1}
-                        unit="%"
-                        defaultValue={0}
-                        onChange={(val) => {
-                          if (onUpdateClipMask) {
-                            onUpdateClipMask(selectedClip.id, {
-                              ...currentMask,
-                              feather: val,
-                            }, true);
-                          }
-                        }}
-                      />
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
-          </ScrollView>
-        </>
-      )}
+            </ScrollView>
+        )}
 
       {/* ─────────────────────────────────────────────
           TAB CONTENT: Audio (Volume, Fade, Denoise)
           ───────────────────────────────────────────── */}
-      {activeTab === 'audio' && (
+      {isAudio && (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
             {/* Volume Slider */}
@@ -816,7 +532,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
                 <View style={[styles.inputBox, { flex: 1 }]}>
                   <Text style={styles.inputPrefix}>In</Text>
-                  <WebInput
+                  <TextInput
                     style={styles.textInput}
                     keyboardType="numeric"
                     value={String(selectedClip.fadeIn || 0)}
@@ -828,7 +544,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                 </View>
                 <View style={[styles.inputBox, { flex: 1 }]}>
                   <Text style={styles.inputPrefix}>Out</Text>
-                  <WebInput
+                  <TextInput
                     style={styles.textInput}
                     keyboardType="numeric"
                     value={String(selectedClip.fadeOut || 0)}
@@ -866,112 +582,33 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
         </ScrollView>
       )}
 
-      {/* ─────────────────────────────────────────────
-          TAB CONTENT: Speed
-          ───────────────────────────────────────────── */}
-      {activeTab === 'speed' && (
-        <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-          <View style={styles.section}>
-            {/* Speed Value & Slider */}
-            <View style={styles.controlRow}>
-              <CompactSliderInput
-                label="Playback Speed"
-                value={parseFloat((selectedClip.speed || 1.0).toFixed(1))}
-                min={0.1}
-                max={5.0}
-                step={0.1}
-                unit="x"
-                decimals={1}
-                defaultValue={1.0}
-                onChange={(val) => {
-                  onApplySpeed?.(val);
-                }}
-              />
-            </View>
 
-            {/* Speed Preset Chips */}
-            <View style={[styles.chipsRow, { marginTop: 8 }]}>
-              {[0.5, 1.0, 1.5, 2.0, 4.0].map((s) => {
-                const isActive = Math.abs((selectedClip.speed || 1.0) - s) < 0.05;
-                return (
-                  <TouchableOpacity
-                    key={s}
-                    style={[styles.chip, isActive && styles.chipActive]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      onApplySpeed?.(s);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                      {s}x
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </ScrollView>
-      )}
 
       {/* ─────────────────────────────────────────────
-          TAB CONTENT: Adjust & Filters
+          CONTENT: Text
           ───────────────────────────────────────────── */}
-      {activeTab === 'adjust' && (
-        <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Color Filters & LUTs</Text>
-            <View style={styles.chipsRow}>
-              {FILTER_PRESETS.slice(0, 8).map((fp) => {
-                const isSelected = (selectedClip.filter || 'normal') === fp.id;
-                return (
-                  <TouchableOpacity
-                    key={fp.id}
-                    style={[styles.chip, isSelected && styles.chipActive]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      onApplyFilter?.(fp.id);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                      {fp.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.primaryActionBtn, { marginTop: 14 }]}
-              onPress={() => onOpenModal?.('filters')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="color-filter-outline" size={14} color="#000000" />
-              <Text style={styles.primaryActionBtnText}>Browse Full 3D LUT Library</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      )}
-
-      {/* ─────────────────────────────────────────────
-          TAB CONTENT: Text
-          ───────────────────────────────────────────── */}
-      {activeTab === 'text' && isText && (
+      {isText && (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Text Content</Text>
             <View style={styles.inputBox}>
-              <WebInput
+              <TextInput
                 style={[styles.textInput, { minHeight: 60 }]}
                 multiline
-                value={selectedClip.text || ''}
+                value={selectedClip?.text || ''}
                 onChangeText={(val: string) => {
-                  if (onUpdateProject && project.tracks.text) {
-                    const texts = project.tracks.text.map((t) =>
-                      t.id === selectedClip.id ? { ...t, text: val } : t
-                    );
-                    onUpdateProject({ tracks: { ...project.tracks, text: texts } });
+                  if (onUpdateProject) {
+                    if (project.tracks.text?.some((t) => t.id === selectedClip.id)) {
+                      const texts = project.tracks.text.map((t) =>
+                        t.id === selectedClip.id ? { ...t, text: val } : t
+                      );
+                      onUpdateProject({ tracks: { ...project.tracks, text: texts } });
+                    } else if (project.tracks.captions?.some((c) => c.id === selectedClip.id)) {
+                      const caps = project.tracks.captions.map((c) =>
+                        c.id === selectedClip.id ? { ...c, text: val } : c
+                      );
+                      onUpdateProject({ tracks: { ...project.tracks, captions: caps } });
+                    }
                   }
                 }}
                 placeholder="Enter caption or title..."

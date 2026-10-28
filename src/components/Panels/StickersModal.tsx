@@ -320,10 +320,10 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   stickerCard: {
-    width: '22.8%',
+    width: '31%',
     backgroundColor: '#131826',
     borderRadius: 8,
     padding: 8,
@@ -331,10 +331,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#1F2637',
-    minHeight: 72,
+    minHeight: 70,
   },
   badgeCard: {
-    width: '47.5%',
+    width: '48%',
     backgroundColor: '#131826',
     borderColor: '#1F2637',
   },

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Modal, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { View, Text, Modal, TouchableOpacity, ScrollView, Platform, useWindowDimensions, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ExportModalProps } from "./Export/exportTypes";
 import { styles } from "./Export/ExportModalStyles";
@@ -14,6 +14,9 @@ export default function ExportModal({
   project,
   totalDuration,
 }: ExportModalProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 768;
+
   const {
     mediaType,
     setMediaType,
@@ -60,63 +63,110 @@ export default function ExportModal({
 
   return (
     <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
-
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                if (status === "rendering") {
-                  handleCancelExport();
-                }
+      <View style={[styles.modalOverlay, isDesktop && styles.modalOverlayDesktop]}>
+        {/* Clickable Backdrop Dismiss on Desktop */}
+        {isDesktop && (
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => {
+              if (status !== "rendering") {
                 onClose();
-              }}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              accessibilityLabel={
-                status === "rendering" ? "Cancel Export and Close" : "Cancel"
               }
-            >
-              <Ionicons name="close" size={15} color="#94A3B8" />
-            </TouchableOpacity>
+            }}
+          />
+        )}
 
-            <View style={styles.headerTitleRow}>
-              <Ionicons
-                name="cloud-download-outline"
-                size={15}
-                color="#00F2FE"
-              />
-              <Text style={styles.sheetTitle}>Export Video</Text>
-            </View>
+        <View style={[styles.sheetContainer, isDesktop && styles.sheetContainerDesktop]}>
+          {/* Mobile Drag Handle */}
+          {!isDesktop && <View style={styles.sheetHandle} />}
 
-            {status === "idle" ? (
-              <TouchableOpacity
-                onPress={handleStartExport}
-                style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Start Export"
-              >
-                <Ionicons name="checkmark" size={15} color="#08090E" />
-              </TouchableOpacity>
-            ) : status === "done" ? (
-              <TouchableOpacity
-                onPress={onClose}
-                style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Done"
-              >
-                <Ionicons name="checkmark" size={15} color="#08090E" />
-              </TouchableOpacity>
+          {/* Header */}
+          <View style={[styles.sheetHeader, isDesktop && styles.sheetHeaderDesktop]}>
+            {isDesktop ? (
+              <>
+                <View style={styles.headerTitleRow}>
+                  <View style={styles.desktopIconBadge}>
+                    <Ionicons
+                      name="cloud-download-outline"
+                      size={17}
+                      color="#00F2FE"
+                    />
+                  </View>
+                  <View>
+                    <Text style={styles.sheetTitle}>Export Project</Text>
+                    <Text style={styles.sheetSubtitle}>Configure format, resolution, and render settings</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    if (status === "rendering") {
+                      handleCancelExport();
+                    }
+                    onClose();
+                  }}
+                  style={styles.closeBtn}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Close"
+                >
+                  <Ionicons name="close" size={15} color="#94A3B8" />
+                </TouchableOpacity>
+              </>
             ) : (
-              <View style={{ width: 26 }} />
+              <>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (status === "rendering") {
+                      handleCancelExport();
+                    }
+                    onClose();
+                  }}
+                  style={styles.closeBtn}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    status === "rendering" ? "Cancel Export and Close" : "Cancel"
+                  }
+                >
+                  <Ionicons name="close" size={15} color="#94A3B8" />
+                </TouchableOpacity>
+
+                <View style={styles.headerTitleRow}>
+                  <Ionicons
+                    name="cloud-download-outline"
+                    size={15}
+                    color="#00F2FE"
+                  />
+                  <Text style={styles.sheetTitle}>Export Video</Text>
+                </View>
+
+                {status === "idle" ? (
+                  <TouchableOpacity
+                    onPress={handleStartExport}
+                    style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Start Export"
+                  >
+                    <Ionicons name="checkmark" size={15} color="#08090E" />
+                  </TouchableOpacity>
+                ) : status === "done" ? (
+                  <TouchableOpacity
+                    onPress={onClose}
+                    style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Done"
+                  >
+                    <Ionicons name="checkmark" size={15} color="#08090E" />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ width: 26 }} />
+                )}
+              </>
             )}
           </View>
 
           <ScrollView
-            style={styles.sheetBody}
+            style={[styles.sheetBody, isDesktop && styles.sheetBodyDesktop]}
             showsVerticalScrollIndicator={false}
           >
             {status === "idle" ? (

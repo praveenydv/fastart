@@ -16,6 +16,7 @@ interface PlayerMaskOverlayProps {
   onCloseMaskPreview?: () => void;
   getInterpolatedTransform?: (clip: any, curTime: number, clipType?: string) => any;
   rendererRef?: React.RefObject<any>;
+  canvasBoxRef?: React.RefObject<any>;
 }
 
 export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
@@ -28,7 +29,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   onCloseMaskPreview,
   getInterpolatedTransform,
   rendererRef,
+  canvasBoxRef,
 }) => {
+  const containerRef = useRef<any>(null);
   const mask: MaskConfig = useMemo(() => {
     return (
       targetClip?.mask ||
@@ -65,6 +68,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
   useEffect(() => {
     return () => {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
       if (pendingMaskRafRef.current !== null) {
         cancelAnimationFrame(pendingMaskRafRef.current);
         pendingMaskRafRef.current = null;
@@ -85,54 +90,80 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
   const clipCx = boxWidth / 2 + (clipT.x || 0);
   const clipCy = canvasHeight / 2 + (clipT.y || 0);
-  const clipScale = Math.max(0.01, clipT.scale || 1.0);
+  const clipScaleX = Math.max(0.01, Math.abs((clipT.scale || 1.0) * (clipT.scaleX ?? 1.0)));
+  const clipScaleY = Math.max(0.01, Math.abs((clipT.scale || 1.0) * (clipT.scaleY ?? 1.0)));
+  const clipScale = Math.max(0.01, Math.abs(clipT.scale || 1.0));
   const clipRot = clipT.rotation || 0;
 
-  // Calculate dw and dh of the clip inside canvas
+  // Calculate dw and dh of the clip inside canvas exactly matching rendererClip.ts
   const { dw, dh } = useMemo(() => {
+    if (rendererRef?.current?.getClipRenderDimensions) {
+      const dims = rendererRef.current.getClipRenderDimensions(targetClip, boxWidth, canvasHeight);
+      if (dims && dims.dw > 0 && dims.dh > 0) return { dw: dims.dw, dh: dims.dh };
+    }
     const naturalDims = rendererRef?.current?.getMediaNaturalDimensions(targetClip?.url);
-    const nw = naturalDims?.width || 0;
-    const nh = naturalDims?.height || 0;
-    const aspect = nw > 0 && nh > 0 ? nw / nh : boxWidth / canvasHeight;
+    const nw = naturalDims?.width || targetClip?.naturalWidth || targetClip?.width || 1920;
+    const nh = naturalDims?.height || targetClip?.naturalHeight || targetClip?.height || 1080;
 
+    const crop = targetClip?.crop || targetClip?.transform?.crop;
+    let sw = nw;
+    let sh = nh;
+    if (crop && crop.width > 0 && crop.height > 0) {
+      sw = (crop.width / 100) * nw;
+      sh = (crop.height / 100) * nh;
+    }
+
+    const aspect = (sw / sh) || (16 / 9);
     let w = boxWidth;
     let h = boxWidth / aspect;
-    if (h > canvasHeight) {
-      h = canvasHeight;
-      w = canvasHeight * aspect;
+    const fitMode = targetClip?.fit || "contain";
+
+    if (fitMode === "cover") {
+      if (h < canvasHeight) {
+        h = canvasHeight;
+        w = canvasHeight * aspect;
+      }
+    } else {
+      if (h > canvasHeight) {
+        h = canvasHeight;
+        w = canvasHeight * aspect;
+      }
     }
     return { dw: w, dh: h };
-  }, [rendererRef, targetClip?.url, boxWidth, canvasHeight]);
+  }, [rendererRef, targetClip, boxWidth, canvasHeight]);
 
   const currentX = localMask.x || 0;
   const currentY = localMask.y || 0;
   const currentRot = localMask.rotation || 0;
-  const currentSize = Math.max(10, Math.min(100, localMask.size ?? 60));
-  const currentW = Math.max(10, Math.min(150, localMask.width ?? localMask.size ?? 60));
-  const currentH = Math.max(10, Math.min(150, localMask.height ?? localMask.size ?? 60));
+  const currentSize = Math.max(5, Math.min(250, localMask.size ?? 60));
+  const currentW = Math.max(5, Math.min(250, localMask.width ?? localMask.size ?? 60));
+  const currentH = Math.max(5, Math.min(250, localMask.height ?? localMask.size ?? 60));
 
   // Compute canvas pixel position of mask center
   const rad = (clipRot * Math.PI) / 180;
   const cosA = Math.cos(rad);
   const sinA = Math.sin(rad);
 
-  const localOffsetX = (currentX / 100) * dw * clipScale;
-  const localOffsetY = (currentY / 100) * dh * clipScale;
+  const localOffsetX = (currentX / 100) * dw * clipScaleX;
+  const localOffsetY = (currentY / 100) * dh * clipScaleY;
 
   const maskCanvasCenterX = clipCx + (localOffsetX * cosA - localOffsetY * sinA);
   const maskCanvasCenterY = clipCy + (localOffsetX * sinA + localOffsetY * cosA);
   const totalMaskRotation = clipRot + currentRot;
 
-  // Mask bounding box in pixels
-  const minDim = Math.min(dw, dh) * clipScale;
-  let maskBoxW = Math.max(20, (minDim * currentW) / 100);
-  let maskBoxH = Math.max(20, (minDim * currentH) / 100);
+  // Mask bounding box in pixels matching buildMaskPath
+  const minDim = Math.min(dw * clipScaleX, dh * clipScaleY);
+  let maskBoxW = Math.max(16, (minDim * currentW) / 100);
+  let maskBoxH = Math.max(16, (minDim * currentH) / 100);
   if (localMask.shape === "rectangle") {
-    maskBoxW = Math.max(20, (dw * clipScale * currentW) / 100);
-    maskBoxH = Math.max(20, (dh * clipScale * currentH) / 100);
-  } else if (localMask.shape === "mirror" || localMask.shape === "linear") {
-    maskBoxW = Math.max(dw, dh) * clipScale * 1.5;
-    maskBoxH = Math.max(16, (dh * clipScale * currentH) / 100);
+    maskBoxW = Math.max(16, (dw * clipScaleX * currentW) / 100);
+    maskBoxH = Math.max(16, (dh * clipScaleY * currentH) / 100);
+  } else if (localMask.shape === "mirror") {
+    maskBoxW = Math.max(dw, dh) * Math.max(clipScaleX, clipScaleY) * 2.0;
+    maskBoxH = Math.max(16, (dh * clipScaleY * currentH) / 100);
+  } else if (localMask.shape === "linear") {
+    maskBoxW = Math.max(dw, dh) * Math.max(clipScaleX, clipScaleY) * 2.0;
+    maskBoxH = 40;
   }
 
   // Generate SVG path / outline for shape with dashed bounding box and center crosshair
@@ -143,15 +174,15 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
     return (
       <>
-        {/* Outer dashed bounding box (matching reference design) */}
+        {/* Outer dashed bounding box */}
         <rect
           x={1}
           y={1}
           width={Math.max(2, w - 2)}
           height={Math.max(2, h - 2)}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.85)"
-          strokeWidth="1.5"
+          stroke="rgba(255, 255, 255, 0.45)"
+          strokeWidth="1.2"
           strokeDasharray="4 4"
         />
 
@@ -161,8 +192,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           y1={h / 2}
           x2={w}
           y2={h / 2}
-          stroke="rgba(255, 255, 255, 0.85)"
-          strokeWidth="1.5"
+          stroke="rgba(255, 255, 255, 0.45)"
+          strokeWidth="1.2"
           strokeDasharray="4 4"
         />
         <line
@@ -170,43 +201,43 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           y1={0}
           x2={w / 2}
           y2={h}
-          stroke="rgba(255, 255, 255, 0.85)"
-          strokeWidth="1.5"
+          stroke="rgba(255, 255, 255, 0.45)"
+          strokeWidth="1.2"
           strokeDasharray="4 4"
         />
 
-        {/* Actual mask shape outline (solid white, conforms to face / object) */}
+        {/* Actual mask shape outline matching video canvas mask */}
         {shape === "circle" && (
           <ellipse
             cx={w / 2}
             cy={h / 2}
-            rx={Math.max(2, w / 2 - 2)}
-            ry={Math.max(2, h / 2 - 2)}
-            fill="rgba(0, 242, 254, 0.05)"
-            stroke="#FFFFFF"
+            rx={Math.max(1, w / 2 - 1.5)}
+            ry={Math.max(1, h / 2 - 1.5)}
+            fill="rgba(0, 242, 254, 0.08)"
+            stroke="#00F2FE"
             strokeWidth="2.5"
           />
         )}
 
         {shape === "rectangle" && (
           <rect
-            x={2}
-            y={2}
-            width={Math.max(2, w - 4)}
-            height={Math.max(2, h - 4)}
+            x={1.5}
+            y={1.5}
+            width={Math.max(2, w - 3)}
+            height={Math.max(2, h - 3)}
             rx={Math.min(localMask.roundness ?? 16, Math.min(w, h) / 2)}
-            fill="rgba(0, 242, 254, 0.05)"
-            stroke="#FFFFFF"
+            fill="rgba(0, 242, 254, 0.08)"
+            stroke="#00F2FE"
             strokeWidth="2.5"
           />
         )}
 
         {shape === "heart" && (
-          <g transform={`scale(${w / 100}, ${h / 100})`}>
+          <g transform={`translate(${w / 2}, ${h / 2}) scale(${w / 100}, ${h / 100})`}>
             <path
-              d="M 50 96 C 22 72, 0 56, 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56, 78 72, 50 96 Z"
-              fill="rgba(0, 242, 254, 0.05)"
-              stroke="#FFFFFF"
+              d="M 0,44 C -28,18 -50,0 -50,-20 A 25,25 0 0,1 0,-20 A 25,25 0 0,1 50,-20 C 50,0 28,18 0,44 Z"
+              fill="rgba(0, 242, 254, 0.08)"
+              stroke="#00F2FE"
               strokeWidth="2.5"
               vectorEffect="non-scaling-stroke"
             />
@@ -214,49 +245,61 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         )}
 
         {shape === "star" && (() => {
-          const outerR = 48;
-          const innerR = 20;
-          const cx = 50;
-          const cy = 50;
           const points: string[] = [];
           for (let i = 0; i < 10; i++) {
-            const r = i % 2 === 0 ? outerR : innerR;
+            const radiusFactor = i % 2 === 0 ? 0.5 : 0.21;
             const a = (i * Math.PI) / 5 - Math.PI / 2;
-            points.push(`${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`);
+            points.push(`${w / 2 + w * radiusFactor * Math.cos(a)},${h / 2 + h * radiusFactor * Math.sin(a)}`);
           }
           return (
-            <g transform={`scale(${w / 100}, ${h / 100})`}>
-              <polygon
-                points={points.join(" ")}
-                fill="rgba(0, 242, 254, 0.05)"
-                stroke="#FFFFFF"
-                strokeWidth="2.5"
-                vectorEffect="non-scaling-stroke"
-              />
-            </g>
+            <polygon
+              points={points.join(" ")}
+              fill="rgba(0, 242, 254, 0.08)"
+              stroke="#00F2FE"
+              strokeWidth="2.5"
+              vectorEffect="non-scaling-stroke"
+            />
           );
         })()}
 
         {shape === "mirror" && (
           <>
-            <line x1={0} y1={0} x2={w} y2={0} stroke="#FFFFFF" strokeWidth="2.5" />
-            <line x1={0} y1={h} x2={w} y2={h} stroke="#FFFFFF" strokeWidth="2.5" />
+            <line x1={0} y1={0} x2={w} y2={0} stroke="#00F2FE" strokeWidth="2.5" />
+            <line x1={0} y1={h} x2={w} y2={h} stroke="#00F2FE" strokeWidth="2.5" />
+            <rect
+              x={0}
+              y={0}
+              width={w}
+              height={h}
+              fill="rgba(0, 242, 254, 0.08)"
+            />
           </>
         )}
 
         {shape === "linear" && (
-          <line
-            x1={0}
-            y1={h / 2}
-            x2={w}
-            y2={h / 2}
-            stroke="#FFFFFF"
-            strokeWidth="3"
-          />
+          <>
+            <line
+              x1={0}
+              y1={h / 2}
+              x2={w}
+              y2={h / 2}
+              stroke="#00F2FE"
+              strokeWidth="3"
+            />
+            <rect
+              x={0}
+              y={h / 2}
+              width={w}
+              height={h * 2}
+              fill="rgba(0, 242, 254, 0.08)"
+            />
+          </>
         )}
       </>
     );
   }, [maskBoxW, maskBoxH, localMask]);
+
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   // Pointer drag session handling
   const startDrag = useCallback(
@@ -274,28 +317,56 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       const startMaskX = localMask.x || 0;
       const startMaskY = localMask.y || 0;
       const startMaskRot = localMask.rotation || 0;
-      const startMaskSize = localMask.size ?? 60;
-      const startMaskW = localMask.width ?? localMask.size ?? 60;
-      const startMaskH = localMask.height ?? localMask.size ?? 60;
+      const startMaskW = Math.max(5, localMask.width ?? localMask.size ?? 60);
+      const startMaskH = Math.max(5, localMask.height ?? localMask.size ?? 60);
+      const startMaskSize = Math.max(5, localMask.size ?? 60);
       const startMaskFeather = localMask.feather || 0;
 
-      const startAngle =
-        Math.atan2(startClientY - maskCanvasCenterY, startClientX - maskCanvasCenterX) *
-        (180 / Math.PI);
-      const startDist = Math.hypot(
-        startClientX - maskCanvasCenterX,
-        startClientY - maskCanvasCenterY,
+      // Accurately compute canvas screen bounding offset
+      let canvasRectLeft = 0;
+      let canvasRectTop = 0;
+      if (typeof window !== "undefined") {
+        const el = canvasBoxRef?.current || containerRef.current || rendererRef?.current?.canvas;
+        if (el && typeof el.getBoundingClientRect === "function") {
+          const r = el.getBoundingClientRect();
+          canvasRectLeft = r.left;
+          canvasRectTop = r.top;
+        } else if (typeof document !== "undefined") {
+          const c = document.querySelector("canvas");
+          if (c) {
+            const r = c.getBoundingClientRect();
+            canvasRectLeft = r.left;
+            canvasRectTop = r.top;
+          }
+        }
+      }
+
+      // True absolute mask center in viewport client space
+      const absMaskCenterX = canvasRectLeft + maskCanvasCenterX;
+      const absMaskCenterY = canvasRectTop + maskCanvasCenterY;
+
+      // Distance and angle in absolute client space
+      const startDist = Math.max(
+        15,
+        Math.hypot(startClientX - absMaskCenterX, startClientY - absMaskCenterY),
+      );
+      const startAngle = Math.atan2(
+        startClientY - absMaskCenterY,
+        startClientX - absMaskCenterX,
       );
 
       const totalRotRad = (totalMaskRotation * Math.PI) / 180;
       const cosTR = Math.cos(totalRotRad);
       const sinTR = Math.sin(totalRotRad);
 
-      const startLocalDistX = Math.max(10, maskBoxW / 2);
-      const startLocalDistY = Math.max(10, maskBoxH / 2);
+      // Stable base dimensions for deformation handles (starts at exact 1.0 factor)
+      const startDistX = Math.max(15, maskBoxW / 2);
+      const startDistY = Math.max(15, maskBoxH / 2);
 
       let currentUpdatedMask = { ...localMask };
       pendingMaskRef.current = currentUpdatedMask;
+
+      dragCleanupRef.current?.();
 
       const onPointerMove = (moveEv: any) => {
         if (moveEv.cancelable && moveEv.preventDefault) moveEv.preventDefault();
@@ -308,14 +379,15 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           const dyPx = curClientY - startClientY;
 
           // Inverse rotate delta by clip's rotation and scale
-          const unrotDx = (dxPx * cosA + dyPx * sinA) / clipScale;
-          const unrotDy = (-dxPx * sinA + dyPx * cosA) / clipScale;
+          const unrotDx = (dxPx * cosA + dyPx * sinA) / clipScaleX;
+          const unrotDy = (-dxPx * sinA + dyPx * cosA) / clipScaleY;
 
-          const nextX = Math.round(
-            Math.max(-100, Math.min(100, startMaskX + (unrotDx / dw) * 100)),
+          // Sub-pixel floating point precision with 2 decimals - matches clip move exactly
+          const nextX = Number(
+            Math.max(-100, Math.min(100, startMaskX + (unrotDx / dw) * 100)).toFixed(2),
           );
-          const nextY = Math.round(
-            Math.max(-100, Math.min(100, startMaskY + (unrotDy / dh) * 100)),
+          const nextY = Number(
+            Math.max(-100, Math.min(100, startMaskY + (unrotDy / dh) * 100)).toFixed(2),
           );
 
           currentUpdatedMask = {
@@ -324,26 +396,33 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             y: nextY,
           };
         } else if (mode === "rotate") {
-          const curAngle =
-            Math.atan2(curClientY - maskCanvasCenterY, curClientX - maskCanvasCenterX) *
-            (180 / Math.PI);
-          const dAngle = curAngle - startAngle;
-          let nextRot = Math.round((startMaskRot + dAngle) % 360);
-          if (nextRot > 180) nextRot -= 360;
-          if (nextRot < -180) nextRot += 360;
+          const curAngle = Math.atan2(
+            curClientY - absMaskCenterY,
+            curClientX - absMaskCenterX,
+          );
+          const angleDiffDeg = ((curAngle - startAngle) * 180) / Math.PI;
+          const rawRotation = (startMaskRot + angleDiffDeg) % 360;
+          const normalized = Math.round(((rawRotation % 360) + 360) % 360);
+          let snapped = normalized;
+          [0, 45, 90, 135, 180, 225, 270, 315, 360].forEach((snapAngle) => {
+            if (Math.abs(normalized - snapAngle) < 4) snapped = snapAngle % 360;
+          });
+          if (snapped > 180) snapped -= 360;
+          if (snapped < -180) snapped += 360;
 
           currentUpdatedMask = {
             ...currentUpdatedMask,
-            rotation: nextRot,
+            rotation: snapped,
           };
         } else if (mode === "scale") {
+          // Proportional diagonal corner resize identical to clip resize
           const curDist = Math.hypot(
-            curClientX - maskCanvasCenterX,
-            curClientY - maskCanvasCenterY,
+            curClientX - absMaskCenterX,
+            curClientY - absMaskCenterY,
           );
-          const factor = curDist / Math.max(1, startDist);
-          const nextW = Math.round(Math.max(10, Math.min(150, startMaskW * factor)));
-          const nextH = Math.round(Math.max(10, Math.min(150, startMaskH * factor)));
+          const scaleRatio = curDist / startDist;
+          const nextW = Number(Math.max(5, Math.min(250, startMaskW * scaleRatio)).toFixed(2));
+          const nextH = Number(Math.max(5, Math.min(250, startMaskH * scaleRatio)).toFixed(2));
           const nextSize = Math.max(nextW, nextH);
 
           currentUpdatedMask = {
@@ -353,11 +432,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             height: nextH,
           };
         } else if (mode === "scale-w") {
-          const dx = curClientX - maskCanvasCenterX;
-          const dy = curClientY - maskCanvasCenterY;
-          const curLocalDistX = Math.abs(dx * cosTR + dy * sinTR);
-          const factor = curLocalDistX / startLocalDistX;
-          const nextW = Math.round(Math.max(10, Math.min(150, startMaskW * factor)));
+          // Width deformation handle (smooth, starts at exact 1.0 factor)
+          const curVecX = curClientX - absMaskCenterX;
+          const curVecY = curClientY - absMaskCenterY;
+          const curLocalDistX = Math.abs(curVecX * cosTR + curVecY * sinTR);
+          const scaleRatioX = curLocalDistX / startDistX;
+          const nextW = Number(Math.max(5, Math.min(250, startMaskW * scaleRatioX)).toFixed(2));
 
           currentUpdatedMask = {
             ...currentUpdatedMask,
@@ -365,11 +445,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             size: Math.max(nextW, currentUpdatedMask.height ?? startMaskH),
           };
         } else if (mode === "scale-h") {
-          const dx = curClientX - maskCanvasCenterX;
-          const dy = curClientY - maskCanvasCenterY;
-          const curLocalDistY = Math.abs(-dx * sinTR + dy * cosTR);
-          const factor = curLocalDistY / startLocalDistY;
-          const nextH = Math.round(Math.max(10, Math.min(150, startMaskH * factor)));
+          // Height deformation handle (smooth, starts at exact 1.0 factor)
+          const curVecX = curClientX - absMaskCenterX;
+          const curVecY = curClientY - absMaskCenterY;
+          const curLocalDistY = Math.abs(-curVecX * sinTR + curVecY * cosTR);
+          const scaleRatioY = curLocalDistY / startDistY;
+          const nextH = Number(Math.max(5, Math.min(250, startMaskH * scaleRatioY)).toFixed(2));
 
           currentUpdatedMask = {
             ...currentUpdatedMask,
@@ -424,6 +505,13 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         const finalMask = pendingMaskRef.current;
         setLocalMask(finalMask);
 
+        dragCleanupRef.current?.();
+        dragCleanupRef.current = null;
+
+        onUpdateClipMaskRef.current?.(targetClip.id, finalMask, true);
+      };
+
+      const cleanup = () => {
         if (typeof window !== "undefined") {
           window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
@@ -434,8 +522,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           window.removeEventListener("mousemove", onPointerMove);
           window.removeEventListener("mouseup", onPointerUp);
         }
-        onUpdateClipMaskRef.current?.(targetClip.id, finalMask, true);
       };
+      dragCleanupRef.current = cleanup;
 
       if (typeof window !== "undefined") {
         window.addEventListener("pointermove", onPointerMove, { passive: false });
@@ -452,7 +540,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       localMask,
       maskCanvasCenterX,
       maskCanvasCenterY,
-      clipScale,
+      clipScaleX,
+      clipScaleY,
       cosA,
       sinA,
       dw,
@@ -461,6 +550,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       totalMaskRotation,
       maskBoxW,
       maskBoxH,
+      canvasBoxRef,
+      rendererRef,
     ],
   );
 
@@ -508,7 +599,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   }
 
   return (
-    <>
+    <View ref={containerRef} style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {/* Top Floating HUD with Live Position, Rotation, Size & Reset Controls */}
       <View style={styles.topHudContainer} pointerEvents="box-none">
         <View style={styles.hudPill} pointerEvents="auto">
@@ -586,19 +677,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                 }
                 onCloseMaskPreview();
               }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onClick: (e: any) => {
-                      e.stopPropagation?.();
-                      soundEngine.playSfx("pop");
-                      if (targetClip?.id && onUpdateClipMask) {
-                        onUpdateClipMask(targetClip.id, localMask, true);
-                      }
-                      onCloseMaskPreview();
-                    },
-                    onMouseDown: (e: any) => e.stopPropagation?.(),
-                  } as any)
-                : {})}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               activeOpacity={0.7}
               accessibilityLabel="Confirm and close mask"
@@ -615,11 +693,15 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         style={[
           styles.maskContainer,
           {
-            left: maskCanvasCenterX - maskBoxW / 2,
-            top: maskCanvasCenterY - maskBoxH / 2,
+            left: 0,
+            top: 0,
             width: maskBoxW,
             height: maskBoxH,
-            transform: [{ rotate: `${totalMaskRotation}deg` }],
+            transform: [
+              { translateX: maskCanvasCenterX - maskBoxW / 2 },
+              { translateY: maskCanvasCenterY - maskBoxH / 2 },
+              { rotate: `${totalMaskRotation}deg` },
+            ],
           },
         ]}
         {...(Platform.OS === "web"
@@ -648,37 +730,22 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           </svg>
         )}
 
-        {/* Top Feather / Softness Control Handle (Matching Screenshot: Circle with Chevron-Up) */}
+        {/* Top Rotation Control Handle (Moved to top per user request, replacing arrow) */}
+        <View style={styles.rotStemTop} pointerEvents="none" />
         <View
-          style={styles.featherKnob}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "feather"),
-                onTouchStart: (e: any) => startDrag(e, "feather"),
-                style: { cursor: "ns-resize" },
-              } as any)
-            : {})}
-        >
-          <Ionicons name="chevron-up" size={16} color="#000000" />
-        </View>
-
-        {/* Bottom Rotation Control Handle (Matching Screenshot: Circle with Rotate Arrow) */}
-        <View
-          style={styles.rotKnobBottom}
+          style={styles.rotKnobTop}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "rotate"),
                 onTouchStart: (e: any) => startDrag(e, "rotate"),
-                style: { cursor: "grab" },
               } as any)
             : {})}
         >
           <Ionicons name="sync-outline" size={15} color="#000000" />
         </View>
 
-        {/* 4 Corner Solid White Resize Dots (Matching Screenshot) */}
+        {/* 4 Corner Solid White Resize Dots */}
         <View
           style={[styles.cornerDot, styles.dotTL]}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -686,7 +753,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
-                style: { cursor: "nwse-resize" },
               } as any)
             : {})}
         />
@@ -697,7 +763,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
-                style: { cursor: "nesw-resize" },
               } as any)
             : {})}
         />
@@ -708,7 +773,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
-                style: { cursor: "nesw-resize" },
               } as any)
             : {})}
         />
@@ -719,7 +783,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
-                style: { cursor: "nwse-resize" },
               } as any)
             : {})}
         />
@@ -732,7 +795,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale-w"),
                 onTouchStart: (e: any) => startDrag(e, "scale-w"),
-                style: { cursor: "ew-resize" },
               } as any)
             : {})}
         />
@@ -743,7 +805,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale-w"),
                 onTouchStart: (e: any) => startDrag(e, "scale-w"),
-                style: { cursor: "ew-resize" },
               } as any)
             : {})}
         />
@@ -756,7 +817,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                 ? ({
                     onMouseDown: (e: any) => startDrag(e, "scale-h"),
                     onTouchStart: (e: any) => startDrag(e, "scale-h"),
-                    style: { cursor: "ns-resize" },
                   } as any)
                 : {})}
             />
@@ -767,14 +827,13 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                 ? ({
                     onMouseDown: (e: any) => startDrag(e, "scale-h"),
                     onTouchStart: (e: any) => startDrag(e, "scale-h"),
-                    style: { cursor: "ns-resize" },
                   } as any)
                 : {})}
             />
           </>
         )}
       </View>
-    </>
+    </View>
   );
 };
 
@@ -836,11 +895,21 @@ const styles = StyleSheet.create({
     zIndex: 10000,
     alignItems: "center",
     justifyContent: "center",
-    willChange: "transform, left, top" as any,
+    willChange: "transform" as any,
     transition: "none" as any,
     cursor: "move" as any,
   },
-  featherKnob: {
+  rotStemTop: {
+    position: "absolute",
+    top: -46,
+    left: "50%",
+    width: 2,
+    height: 46,
+    backgroundColor: THEME_COLORS.accent,
+    marginLeft: -1,
+    zIndex: 10014,
+  },
+  rotKnobTop: {
     position: "absolute",
     top: -46,
     left: "50%",
@@ -848,6 +917,8 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: THEME_COLORS.accent,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: -14,
@@ -857,24 +928,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 8,
     zIndex: 10015,
-  },
-  rotKnobBottom: {
-    position: "absolute",
-    bottom: -46,
-    left: "50%",
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: -14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 8,
-    zIndex: 10015,
+    cursor: "grab" as any,
   },
   cornerDot: {
     position: "absolute",
@@ -882,6 +936,8 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 7,
     backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: THEME_COLORS.accent,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
@@ -892,18 +948,22 @@ const styles = StyleSheet.create({
   dotTL: {
     top: -7,
     left: -7,
+    cursor: "nwse-resize" as any,
   },
   dotTR: {
     top: -7,
     right: -7,
+    cursor: "nesw-resize" as any,
   },
   dotBL: {
     bottom: -7,
     left: -7,
+    cursor: "nesw-resize" as any,
   },
   dotBR: {
     bottom: -7,
     right: -7,
+    cursor: "nwse-resize" as any,
   },
   pillHandleV: {
     position: "absolute",
@@ -911,12 +971,15 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 6,
     backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: THEME_COLORS.accent,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
     shadowRadius: 4,
     elevation: 7,
     zIndex: 10012,
+    cursor: "ew-resize" as any,
   },
   pillLeft: {
     top: "50%",
@@ -934,12 +997,15 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: THEME_COLORS.accent,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
     shadowRadius: 4,
     elevation: 7,
     zIndex: 10012,
+    cursor: "ns-resize" as any,
   },
   pillTop: {
     left: "50%",

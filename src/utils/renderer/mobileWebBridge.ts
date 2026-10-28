@@ -14,6 +14,7 @@
 
 import { FastArtProject, VideoClip, TextClip, CaptionClip, StickerClip, EffectClip } from "../../types/project";
 import { ExportOptions } from "./videoExporter";
+import { getExportResolutionDimensions } from "../../components/Panels/Export/exportTypes";
 
 export function generateCanvasBridgeHtml(
   project: FastArtProject,
@@ -28,48 +29,7 @@ export function generateCanvasBridgeHtml(
   } = options;
 
   // Resolve target dimensions based on aspect ratio and resolution
-  let width = 1080;
-  let height = 1920;
-  const isHD = resolution === "1080p" || resolution === "2K/4K";
-
-  if (isHD) {
-    if (project.aspectRatio === "16:9") {
-      width = 1920;
-      height = 1080;
-    } else if (project.aspectRatio === "1:1") {
-      width = 1080;
-      height = 1080;
-    } else if (project.aspectRatio === "4:5") {
-      width = 1080;
-      height = 1350;
-    } else if (project.aspectRatio === "2.35:1") {
-      width = 1920;
-      height = 817;
-    } else {
-      // 9:16
-      width = 1080;
-      height = 1920;
-    }
-  } else {
-    // 720p Mobile Optimized
-    if (project.aspectRatio === "16:9") {
-      width = 1280;
-      height = 720;
-    } else if (project.aspectRatio === "1:1") {
-      width = 720;
-      height = 720;
-    } else if (project.aspectRatio === "4:5") {
-      width = 720;
-      height = 900;
-    } else if (project.aspectRatio === "2.35:1") {
-      width = 1280;
-      height = 545;
-    } else {
-      // 9:16
-      width = 720;
-      height = 1280;
-    }
-  }
+  const [width, height] = getExportResolutionDimensions(resolution, project.aspectRatio);
 
   // Pre-serialize project safely
   const projectJson = JSON.stringify(project).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");

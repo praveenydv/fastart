@@ -58,6 +58,8 @@ export class VideoRenderer {
       ? 16
       : 32;
   public previewCropClipId: string | null = null;
+  public isPlaying: boolean = false;
+  private maskFramePending: boolean = false;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -72,7 +74,19 @@ export class VideoRenderer {
     this.videoElements = new Map();
 
     setOnMaskUpdated(() => {
-      if (this.onFrameNeeded) this.onFrameNeeded();
+      // If video is playing, animation loop already renders at 60fps; do NOT re-trigger!
+      // When paused, debounce with requestAnimationFrame to prevent recursion lockup.
+      if (this.onFrameNeeded && !this.isPlaying) {
+        if (!this.maskFramePending) {
+          this.maskFramePending = true;
+          requestAnimationFrame(() => {
+            this.maskFramePending = false;
+            if (!this.isPlaying && this.onFrameNeeded) {
+              this.onFrameNeeded();
+            }
+          });
+        }
+      }
     });
   }
 
@@ -105,6 +119,46 @@ export class VideoRenderer {
       }
     }
     return null;
+  }
+
+  getClipRenderDimensions(
+    clip: any,
+    logicalWidth?: number,
+    logicalHeight?: number
+  ): { dw: number; dh: number; sw: number; sh: number } {
+    const w = logicalWidth && logicalWidth > 0 ? logicalWidth : (this.canvas?.clientWidth || 360);
+    const h = logicalHeight && logicalHeight > 0 ? logicalHeight : (this.canvas?.clientHeight || 640);
+
+    const natural = this.getMediaNaturalDimensions(clip?.url);
+    const mw = natural?.width || clip?.naturalWidth || clip?.width || 1920;
+    const mh = natural?.height || clip?.naturalHeight || clip?.height || 1080;
+
+    const crop = clip?.crop || clip?.transform?.crop;
+    let sw = mw;
+    let sh = mh;
+    if (crop && crop.width > 0 && crop.height > 0) {
+      sw = Math.min(mw, (crop.width / 100) * mw);
+      sh = Math.min(mh, (crop.height / 100) * mh);
+    }
+
+    const aspect = (sw / sh) || (16 / 9);
+    let dw = w;
+    let dh = w / aspect;
+    const fitMode = clip?.fit || "contain";
+
+    if (fitMode === "cover") {
+      if (dh < h) {
+        dh = h;
+        dw = h * aspect;
+      }
+    } else {
+      if (dh > h) {
+        dh = h;
+        dw = h * aspect;
+      }
+    }
+
+    return { dw, dh, sw, sh };
   }
 
   ensureOffscreen(w?: number, h?: number): HTMLCanvasElement | null {
@@ -263,6 +317,7 @@ export class VideoRenderer {
     } | null,
   ) {
     if (!this.canvas || !this.ctx) return;
+    this.isPlaying = isPlaying;
     const ctx = this.ctx;
     const canvasW = this.canvas.width;
     const canvasH = this.canvas.height;

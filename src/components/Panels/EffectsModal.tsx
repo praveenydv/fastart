@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   effectCard: {
-    width: '23.5%',
+    width: '31%',
     alignItems: 'center',
     paddingVertical: 7,
     paddingHorizontal: 3,

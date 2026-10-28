@@ -28,6 +28,8 @@ export interface CutoutConfig {
   strokeColor?: string; // outline color e.g. '#00F2FE'
   strokeWidth?: number; // outline width 0..10
   bgColor?: string; // background fill color e.g. '#000000', '#FFFFFF', '#00F2FE' or 'none'
+  clipId?: string;
+  clipTime?: number;
 }
 
 export interface SpeedCurvePoint {

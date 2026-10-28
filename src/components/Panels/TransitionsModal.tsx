@@ -298,10 +298,10 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   transitionCard: {
-    width: '31.3%',
+    width: '31%',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 4,

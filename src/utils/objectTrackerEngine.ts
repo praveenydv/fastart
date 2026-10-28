@@ -8,6 +8,7 @@ import {
   ClipTransform,
 } from '../types/project';
 import { globalActiveVideoElements } from './renderer/rendererMediaSync';
+import { rustCoreBridge } from '../services/rustCoreBridge';
 
 export interface TrackProgressInfo {
   percent: number;
@@ -197,13 +198,49 @@ export class ObjectTrackerEngine {
     scales: number[]
   ): { x: number; y: number; scale: number; rotation: number; confidence: number } {
     const { width: fw, height: fh } = imgData;
+    const step = 2; // pixel stride for speed
+
+    // 1. High-Performance Native Rust / WebAssembly Normalized Cross-Correlation
+    const rustRes = rustCoreBridge.searchTemplateNCC(
+      imgData.data,
+      fw,
+      fh,
+      template.data,
+      template.width,
+      template.mean,
+      template.std,
+      template.angle,
+      center.x,
+      center.y,
+      currentBox.w,
+      currentBox.h,
+      searchRadius,
+      scales,
+      step
+    );
+    if (rustRes && rustRes.confidence > -1) {
+      return {
+        x: rustRes.x,
+        y: rustRes.y,
+        scale: rustRes.scale,
+        rotation: rustRes.rotation,
+        confidence: Math.max(0, Math.min(1.0, rustRes.confidence)),
+      };
+    }
+
+    // 2. JavaScript fallback
     let bestScore = -1;
     let bestX = center.x;
     let bestY = center.y;
     let bestScale = 1.0;
     let bestAngle = template.angle;
 
-    const step = 2; // pixel stride for speed
+    const len = template.data.length;
+    const normT = new Float32Array(len);
+    for (let i = 0; i < len; i++) {
+      normT[i] = template.data[i] - template.mean;
+    }
+    const tStdInv = 1.0 / Math.max(0.0001, template.std * len);
 
     for (const sc of scales) {
       const bw = currentBox.w * sc;
@@ -225,14 +262,14 @@ export class ObjectTrackerEngine {
           );
           if (!candidate) continue;
 
-          // Normalized Cross Correlation
+          // Normalized Cross Correlation with SIMD-friendly pre-normalized vectors
           let dot = 0;
-          const len = template.data.length;
+          const cData = candidate.data;
+          const cMean = candidate.mean;
           for (let i = 0; i < len; i++) {
-            dot += (template.data[i] - template.mean) * (candidate.data[i] - candidate.mean);
+            dot += normT[i] * (cData[i] - cMean);
           }
-          const denom = template.std * candidate.std * len;
-          const score = denom > 0.0001 ? dot / denom : 0;
+          const score = (dot * tStdInv) / Math.max(0.0001, candidate.std);
 
           if (score > bestScore) {
             bestScore = score;

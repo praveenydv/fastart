@@ -97,8 +97,8 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
             </View>
           </View>
 
-          {/* Undo / Redo Quick Actions */}
-          {(onUndo || onRedo) && (
+          {/* Undo / Redo Quick Actions (Desktop only - mobile has top header undo/redo) */}
+          {!isMobile && (onUndo || onRedo) && (
             <View style={styles.actionBtnGroup}>
               {onUndo && (
                 <TouchableOpacity

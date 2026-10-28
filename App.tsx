@@ -649,6 +649,7 @@ export default function App() {
               handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
               handleClearAllKeyframes={handleClearAllKeyframes}
               handleConfirmDeleteClip={handleConfirmDeleteClip}
+              handleDeleteClip={handleDeleteClip}
               handleAddCaptions={handleAddCaptions}
               handleUpdateCaption={handleUpdateCaption}
               handleMoveClip={handleMoveClip}

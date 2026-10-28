@@ -53,3 +53,4 @@ rust/**/target/
 *.a
 *.so
 *.dylib
+rea-capcut

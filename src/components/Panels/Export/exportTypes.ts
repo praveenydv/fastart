@@ -86,3 +86,47 @@ export const MEDIA_FORMATS: MediaFormatOption[] = [
 
 export const RESOLUTIONS = ["720p", "1080p", "2K/4K"];
 export const FRAME_RATES = [24, 30, 60];
+
+export const RESOLUTION_DIMENSIONS: Record<string, Record<string, [number, number]>> = {
+  "720p": {
+    "9:16": [720, 1280],
+    "16:9": [1280, 720],
+    "1:1": [720, 720],
+    "4:5": [720, 900],
+    "2.35:1": [1280, 545],
+  },
+  "1080p": {
+    "9:16": [1080, 1920],
+    "16:9": [1920, 1080],
+    "1:1": [1080, 1080],
+    "4:5": [1080, 1350],
+    "2.35:1": [1920, 817],
+  },
+  "2K/4K": {
+    "9:16": [2160, 3840],
+    "16:9": [3840, 2160],
+    "1:1": [2160, 2160],
+    "4:5": [2160, 2700],
+    "2.35:1": [3840, 1634],
+  },
+};
+
+export const LOGICAL_BASE_DIMENSIONS: Record<string, [number, number]> = {
+  "9:16": [360, 640],
+  "16:9": [640, 360],
+  "1:1": [480, 480],
+  "4:5": [384, 480],
+  "2.35:1": [705, 300],
+};
+
+export function getExportResolutionDimensions(
+  resolution: string = "1080p",
+  aspectRatio: string = "9:16"
+): [number, number] {
+  const resMap = RESOLUTION_DIMENSIONS[resolution] || RESOLUTION_DIMENSIONS["1080p"];
+  return resMap[aspectRatio] || [1080, 1920];
+}
+
+export function getLogicalBaseDimensions(aspectRatio: string = "9:16"): [number, number] {
+  return LOGICAL_BASE_DIMENSIONS[aspectRatio] || [360, 640];
+}

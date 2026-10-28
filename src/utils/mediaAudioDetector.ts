@@ -3,6 +3,7 @@
 import { Platform } from "react-native";
 import { getMediaBinaryBuffer } from "./largeMediaStorage";
 import { getStorageItem, setStorageItem } from "./storage";
+import { rustCoreBridge } from "../services/rustCoreBridge";
 
 const STORAGE_PEAKS_PREFIX = "@fastart_peaks_";
 const mediaAudioPresenceCache = new Map<string, boolean>();
@@ -172,30 +173,12 @@ export function mediaHasAudioTrack(clip: any): boolean {
 
 /**
  * Spectral Denoise Transfer Function for Waveform Peaks:
- * Simulates AI noise gate & vocal speech isolation:
+ * Simulates AI noise gate & vocal speech isolation via native Rust/WASM:
  * - Ambient noise floor (< 0.22) is attenuated to a quiet baseline (0.02 - 0.04)
  * - Dialogue, speech harmonics, and prominent audio transients are cleanly boosted
  */
 export function applyDenoiseToPeaks(rawPeaks: number[]): number[] {
-  const noiseFloorThreshold = 0.22;
-  const len = rawPeaks.length;
-  const denoised = new Array<number>(len);
-
-  for (let i = 0; i < len; i++) {
-    const val = rawPeaks[i];
-    if (val <= noiseFloorThreshold) {
-      // Attenuate noise floor smoothly down to flat baseline
-      const factor = val / noiseFloorThreshold;
-      denoised[i] = Math.max(0.02, factor * factor * 0.05);
-    } else {
-      // Expand dynamic contrast of speech/dialogue peaks
-      const above = (val - noiseFloorThreshold) / (1.0 - noiseFloorThreshold);
-      const boosted = 0.05 + Math.pow(above, 0.85) * 0.95;
-      denoised[i] = Math.min(1.0, Math.max(0.04, boosted));
-    }
-  }
-
-  return denoised;
+  return rustCoreBridge.denoiseWaveformPeaks(rawPeaks);
 }
 
 /**

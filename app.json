@@ -9,7 +9,13 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0B0D13",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.FastArt",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "FastArt requires access to import photos and videos into your projects.",
+        "NSPhotoLibraryAddUsageDescription": "FastArt requires permission to save exported videos and photos to your photo library.",
+        "NSMicrophoneUsageDescription": "FastArt needs access to your microphone for voice dictation, auto-captions, and voiceover."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +23,14 @@
         "backgroundColor": "#0B0D13"
       },
       "package": "com.FastArt",
-      "backgroundColor": "#0B0D13"
+      "backgroundColor": "#0B0D13",
+      "permissions": [
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_AUDIO",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -47,7 +60,8 @@
       ],
       "expo-font",
       "expo-video",
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      "expo-status-bar"
     ]
   }
 }

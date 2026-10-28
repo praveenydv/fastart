@@ -514,15 +514,18 @@ export default function Toolbar({
   return (
     <View style={styles.horizontalContainer}>
       {selectedClip && (
-        <TouchableOpacity
-          style={styles.mobileBackBtn}
-          onPress={onDeselectClip}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Back to root tools"
-        >
-          <Ionicons name="chevron-back" size={17} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity
+            style={styles.mobileBackBtn}
+            onPress={onDeselectClip}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Back to root tools"
+          >
+            <Ionicons name="chevron-back" size={17} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.mobileBackDivider} />
+        </View>
       )}
 
       <ScrollView
@@ -730,6 +733,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F131D",
     borderWidth: 1,
     borderColor: "#1F2637",
+    marginRight: 6,
+  },
+  mobileBackDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: "#1F2637",
     marginRight: 6,
   },
   mobileBackText: {

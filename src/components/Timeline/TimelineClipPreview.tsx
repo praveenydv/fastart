@@ -15,6 +15,7 @@ interface TimelineClipPreviewProps {
 }
 
 const FRAME_WIDTH = 54;
+const isWeb = typeof window !== "undefined" || (typeof Platform !== "undefined" && Platform?.OS === "web");
 
 export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
   clip,
@@ -70,7 +71,7 @@ export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
   const frameCount = useMemo(() => {
     if (width <= 0) return 0;
     const count = Math.max(1, Math.ceil(width / FRAME_WIDTH));
-    return Platform.OS === "web" ? count : Math.min(count, 20);
+    return isWeb ? count : Math.min(count, 20);
   }, [width]);
 
   if (!thumbUri || frameCount <= 0) {
@@ -78,7 +79,7 @@ export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
   }
 
   // 100% Optimized Web Fast-Path: 1 single DOM node with GPU CSS background-repeat
-  if (Platform.OS === "web") {
+  if (isWeb) {
     return (
       <View style={previewStyles.container} pointerEvents="none">
         <View

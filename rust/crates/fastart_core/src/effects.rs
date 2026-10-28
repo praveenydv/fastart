@@ -308,3 +308,74 @@ pub fn apply_fast_blur(fb: &mut FrameBuffer, radius: u32) {
         }
     }
 }
+
+/// Applies in-place color grading directly on linear memory RGBA slice
+pub fn apply_color_adjustments_raw(
+    pixels: &mut [u8],
+    brightness: f32,
+    contrast: f32,
+    saturation: f32,
+) {
+    let b_offset = brightness * 255.0;
+    for chunk in pixels.chunks_exact_mut(4) {
+        let mut r = chunk[0] as f32;
+        let mut g = chunk[1] as f32;
+        let mut b = chunk[2] as f32;
+
+        // Brightness
+        r += b_offset;
+        g += b_offset;
+        b += b_offset;
+
+        // Contrast
+        r = (r - 128.0) * contrast + 128.0;
+        g = (g - 128.0) * contrast + 128.0;
+        b = (b - 128.0) * contrast + 128.0;
+
+        // Saturation
+        let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = gray + (r - gray) * saturation;
+        g = gray + (g - gray) * saturation;
+        b = gray + (g - gray) * saturation;
+
+        chunk[0] = r.clamp(0.0, 255.0) as u8;
+        chunk[1] = g.clamp(0.0, 255.0) as u8;
+        chunk[2] = b.clamp(0.0, 255.0) as u8;
+    }
+}
+
+/// Applies in-place vignette falloff directly on linear memory RGBA slice
+pub fn apply_vignette_raw(
+    pixels: &mut [u8],
+    width: usize,
+    height: usize,
+    intensity: f32,
+    radius: f32,
+) {
+    if intensity <= 0.0 || width == 0 || height == 0 {
+        return;
+    }
+    let cx = width as f32 * 0.5;
+    let cy = height as f32 * 0.5;
+    let max_dist = (cx * cx + cy * cy).sqrt();
+    let inner = radius * max_dist;
+    let inv_range = 1.0 / (max_dist - inner).max(0.001);
+    let clamped_int = intensity.clamp(0.0, 1.0);
+
+    for y in 0..height {
+        let dy = y as f32 - cy;
+        let row_offset = y * width * 4;
+        for x in 0..width {
+            let dx = x as f32 - cx;
+            let d = (dx * dx + dy * dy).sqrt();
+            if d > inner {
+                let falloff = ((d - inner) * inv_range).clamp(0.0, 1.0);
+                let factor = 1.0 - falloff * clamped_int;
+                let idx = row_offset + x * 4;
+                pixels[idx] = (pixels[idx] as f32 * factor) as u8;
+                pixels[idx + 1] = (pixels[idx + 1] as f32 * factor) as u8;
+                pixels[idx + 2] = (pixels[idx + 2] as f32 * factor) as u8;
+            }
+        }
+    }
+}

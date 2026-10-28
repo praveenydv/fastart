@@ -26,6 +26,7 @@ import { usePlayerViewport } from "./Player/usePlayerViewport";
 import { usePlayerWebRenderer } from "./Player/usePlayerWebRenderer";
 import { usePlayerAudioSync } from "./Player/usePlayerAudioSync";
 import { useActiveTransformItem } from "./Player/useActiveTransformItem";
+import { getExportResolutionDimensions } from "./Panels/Export/exportTypes";
 import { THEME_COLORS } from "../constants/designConstants";
 
 function Player({
@@ -445,13 +446,10 @@ function Player({
             <Text style={styles.playerHeaderTitle}>Player</Text>
           </View>
           <Text style={styles.playerHeaderResolution}>
-            {project.aspectRatio === "9:16"
-              ? "1080 × 1920"
-              : project.aspectRatio === "1:1"
-                ? "1080 × 1080"
-                : project.aspectRatio === "4:5"
-                  ? "1080 × 1350"
-                  : "1920 × 1080"} · 30 fps
+            {(() => {
+              const [resW, resH] = getExportResolutionDimensions("1080p", project.aspectRatio);
+              return `${resW} × ${resH} · ${project.fps || 30} fps`;
+            })()}
           </Text>
         </View>
       )}
@@ -553,6 +551,7 @@ function Player({
                 }}
                 getInterpolatedTransform={getInterpolatedTransform}
                 rendererRef={rendererRef}
+                canvasBoxRef={canvasBoxRef}
               />
             ) : activeModal === "tracking" && targetTrackingClip ? (
               <PlayerTrackingReticle
@@ -805,11 +804,6 @@ function Player({
               </Text>
             </TouchableOpacity>
           )}
-
-          {/* HUD Badge: Aspect Ratio */}
-          <View style={styles.hudBadge}>
-            <Text style={styles.hudText}>{project.aspectRatio}</Text>
-          </View>
 
           {/* Floating Keyframe Action HUD Toast */}
           {kfToast && (

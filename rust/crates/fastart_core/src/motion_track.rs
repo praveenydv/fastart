@@ -195,3 +195,151 @@ pub fn evaluate_motion_track(
         },
     }
 }
+
+/// Computes the principal orientation angle via spatial central moments for a patch
+pub fn compute_patch_angle(patch: &[f32], dim: usize) -> f32 {
+    let mut m00 = 0.0f32;
+    let mut m10 = 0.0f32;
+    let mut m01 = 0.0f32;
+
+    for py in 0..dim {
+        for px in 0..dim {
+            let v = patch[py * dim + px];
+            m00 += v;
+            m10 += (px as f32) * v;
+            m01 += (py as f32) * v;
+        }
+    }
+
+    let cx = if m00 > 0.0 { m10 / m00 } else { (dim as f32) * 0.5 };
+    let cy = if m00 > 0.0 { m01 / m00 } else { (dim as f32) * 0.5 };
+
+    let mut u20 = 0.0f32;
+    let mut u02 = 0.0f32;
+    let mut u11 = 0.0f32;
+
+    for py in 0..dim {
+        let dy = (py as f32) - cy;
+        for px in 0..dim {
+            let dx = (px as f32) - cx;
+            let v = patch[py * dim + px];
+            u20 += dx * dx * v;
+            u02 += dy * dy * v;
+            u11 += dx * dy * v;
+        }
+    }
+
+    let angle = 0.5 * (2.0 * u11).atan2(u20 - u02) * (180.0 / std::f32::consts::PI);
+    if angle.is_nan() { 0.0 } else { angle }
+}
+
+/// Fast Multi-Scale Normalized Cross-Correlation (NCC) template matching in Rust
+/// Returns (best_x, best_y, best_scale, best_angle, best_score)
+pub fn search_template_ncc(
+    frame_pixels: &[u8],
+    fw: usize,
+    fh: usize,
+    template_data: &[f32],
+    dim: usize,
+    template_mean: f32,
+    template_std: f32,
+    template_angle: f32,
+    center_x: f32,
+    center_y: f32,
+    box_w: f32,
+    box_h: f32,
+    search_radius: f32,
+    scales: &[f32],
+    step: usize,
+) -> (f32, f32, f32, f32, f32) {
+    let len = dim * dim;
+    if template_data.len() < len || frame_pixels.len() < fw * fh * 4 {
+        return (center_x, center_y, 1.0, template_angle, -1.0);
+    }
+
+    let mut norm_t = Vec::with_capacity(len);
+    for i in 0..len {
+        norm_t.push(template_data[i] - template_mean);
+    }
+    let t_std_inv = 1.0 / (template_std * len as f32).max(0.0001);
+
+    let mut best_score = -1.0f32;
+    let mut best_x = center_x;
+    let mut best_y = center_y;
+    let mut best_scale = 1.0f32;
+    let mut best_angle = template_angle;
+
+    let stride = step.max(1);
+    let mut patch_buf = vec![0.0f32; len];
+
+    for &sc in scales {
+        let bw = box_w * sc;
+        let bh = box_h * sc;
+        let half_w = bw * 0.5;
+        let half_h = bh * 0.5;
+
+        let min_x = (half_w).max(center_x - search_radius).floor() as isize;
+        let max_x = ((fw as f32 - half_w).min(center_x + search_radius)).ceil() as isize;
+        let min_y = (half_h).max(center_y - search_radius).floor() as isize;
+        let max_y = ((fh as f32 - half_h).min(center_y + search_radius)).ceil() as isize;
+
+        if min_x > max_x || min_y > max_y {
+            continue;
+        }
+
+        let mut sy = min_y;
+        while sy <= max_y {
+            let mut sx = min_x;
+            while sx <= max_x {
+                // Extract candidate patch
+                let rx = (sx as f32 - half_w).round().max(0.0).min((fw - 2) as f32) as usize;
+                let ry = (sy as f32 - half_h).round().max(0.0).min((fh - 2) as f32) as usize;
+                let rw = (bw.round() as usize).max(4).min(fw - rx);
+                let rh = (bh.round() as usize).max(4).min(fh - ry);
+
+                let mut sum = 0.0f32;
+                let mut sum_sq = 0.0f32;
+
+                for py in 0..dim {
+                    let src_y = ry + (py * rh) / dim;
+                    let row_idx = src_y * fw * 4;
+                    for px in 0..dim {
+                        let src_x = rx + (px * rw) / dim;
+                        let idx = row_idx + src_x * 4;
+                        let lum = (0.2126 * (frame_pixels[idx] as f32)
+                            + 0.7152 * (frame_pixels[idx + 1] as f32)
+                            + 0.0722 * (frame_pixels[idx + 2] as f32))
+                            * (1.0 / 255.0);
+                        patch_buf[py * dim + px] = lum;
+                        sum += lum;
+                        sum_sq += lum * lum;
+                    }
+                }
+
+                let c_mean = sum / (len as f32);
+                let variance = (sum_sq / (len as f32) - c_mean * c_mean).max(0.0001);
+                let c_std = variance.sqrt();
+
+                // Normalized Cross Correlation dot product
+                let mut dot = 0.0f32;
+                for i in 0..len {
+                    dot += norm_t[i] * (patch_buf[i] - c_mean);
+                }
+                let score = (dot * t_std_inv) / c_std.max(0.0001);
+
+                if score > best_score {
+                    best_score = score;
+                    best_x = sx as f32;
+                    best_y = sy as f32;
+                    best_scale = sc;
+                    best_angle = compute_patch_angle(&patch_buf, dim);
+                }
+
+                sx += stride as isize;
+            }
+            sy += stride as isize;
+        }
+    }
+
+    (best_x, best_y, best_scale, best_angle, best_score)
+}

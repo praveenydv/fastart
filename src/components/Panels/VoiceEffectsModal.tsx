@@ -48,7 +48,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     id: 'chipmunk',
     name: 'Chipmunk',
     desc: 'High-speed comic pitch',
-    icon: 'squirrel',
+    icon: 'paw',
     badge: 'Trending',
     color: '#FACC15',
   },

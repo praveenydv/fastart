@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
 import { formatTime } from "./playerUtils";
@@ -36,6 +36,9 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
   toggleFullscreen,
   isMobile,
 }) => {
+  const { width } = useWindowDimensions();
+  const isNarrow = width < 375;
+
   return (
     <View
       style={[
@@ -46,10 +49,10 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
     >
       {/* Left: Timecode */}
       <View style={styles.controlGroupLeft}>
-        <View style={styles.timecodePill}>
-          <Text style={styles.timecodeText}>
+        <View style={[styles.timecodePill, isNarrow && { paddingHorizontal: 6, paddingVertical: 2.5 }]}>
+          <Text style={[styles.timecodeText, isNarrow && { fontSize: 10.5 }]}>
             {formatTime(currentTime)}
-            <Text style={styles.timecodeTotalText}>
+            <Text style={[styles.timecodeTotalText, isNarrow && { fontSize: 10 }]}>
               {" "}
               / {formatTime(totalDuration)}
             </Text>
@@ -62,27 +65,29 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
         style={styles.controlGroupCenter}
         pointerEvents="box-none"
       >
-        <TouchableOpacity
-          style={[
-            styles.stepBtn,
-            isMobile && styles.stepBtnMobile,
-            totalDuration <= 0 && { opacity: 0.3 },
-          ]}
-          onPress={() => {
-            if (totalDuration <= 0) return;
-            stepFrame(-1);
-          }}
-          disabled={totalDuration <= 0}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Previous Frame"
-        >
-          <Ionicons
-            name="play-skip-back"
-            size={isMobile ? 13 : 14}
-            color={THEME_COLORS.textMuted}
-          />
-        </TouchableOpacity>
+        {!isNarrow && (
+          <TouchableOpacity
+            style={[
+              styles.stepBtn,
+              isMobile && styles.stepBtnMobile,
+              totalDuration <= 0 && { opacity: 0.3 },
+            ]}
+            onPress={() => {
+              if (totalDuration <= 0) return;
+              stepFrame(-1);
+            }}
+            disabled={totalDuration <= 0}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Previous Frame"
+          >
+            <Ionicons
+              name="play-skip-back"
+              size={isMobile ? 12 : 14}
+              color={THEME_COLORS.textMuted}
+            />
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[
@@ -103,27 +108,29 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.stepBtn,
-            isMobile && styles.stepBtnMobile,
-            totalDuration <= 0 && { opacity: 0.3 },
-          ]}
-          onPress={() => {
-            if (totalDuration <= 0) return;
-            stepFrame(1);
-          }}
-          disabled={totalDuration <= 0}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Next Frame"
-        >
-          <Ionicons
-            name="play-skip-forward"
-            size={isMobile ? 13 : 14}
-            color={THEME_COLORS.textMuted}
-          />
-        </TouchableOpacity>
+        {!isNarrow && (
+          <TouchableOpacity
+            style={[
+              styles.stepBtn,
+              isMobile && styles.stepBtnMobile,
+              totalDuration <= 0 && { opacity: 0.3 },
+            ]}
+            onPress={() => {
+              if (totalDuration <= 0) return;
+              stepFrame(1);
+            }}
+            disabled={totalDuration <= 0}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Next Frame"
+          >
+            <Ionicons
+              name="play-skip-forward"
+              size={isMobile ? 12 : 14}
+              color={THEME_COLORS.textMuted}
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Right: Keyframe, Grid, Fullscreen */}

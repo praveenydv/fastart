@@ -165,6 +165,24 @@ pub fn generate_waveform_peaks(samples: &[f32], buckets: usize) -> Vec<f32> {
     result
 }
 
+/// Applies spectral denoise transfer function to waveform peaks:
+/// - Attenuates noise floor (< 0.22) smoothly down to a quiet baseline (0.02 - 0.04)
+/// - Expands dynamic contrast of speech/dialogue peaks
+pub fn denoise_waveform_peaks(peaks: &mut [f32]) {
+    let noise_floor = 0.22f32;
+    for val in peaks.iter_mut() {
+        let v = *val;
+        if v <= noise_floor {
+            let factor = v / noise_floor;
+            *val = (factor * factor * 0.05).max(0.02);
+        } else {
+            let above = (v - noise_floor) / (1.0 - noise_floor);
+            let boosted = 0.05 + above.powf(0.85) * 0.95;
+            *val = boosted.clamp(0.04, 1.0);
+        }
+    }
+}
+
 /// Encodes 32-bit float audio buffer into standard 16-bit PCM RIFF WAV bytes
 pub fn encode_wav_16bit(buffer: &AudioBuffer) -> Vec<u8> {
     let mut out = Vec::new();

@@ -14,6 +14,7 @@
 import { FastArtProject, AudioClip, VideoClip } from '../types/project';
 import { mediaHasAudioTrack, isMediaAudioDetected } from './mediaAudioDetector';
 import { getMediaBinaryBuffer } from './largeMediaStorage';
+import { rustCoreBridge } from '../services/rustCoreBridge';
 
 export interface DecodedAudio {
   sampleRate: number;
@@ -203,6 +204,19 @@ export async function exportProjectAudioToWavBytes(
   duration: number = 10,
   sampleRate: number = 44100
 ): Promise<Uint8Array> {
+  // Fast-path: Native Rust Core Audio Mixdown
+  try {
+    const isRustReady = await rustCoreBridge.isAvailable();
+    if (isRustReady) {
+      const rustWav = await rustCoreBridge.exportProjectWav(project, sampleRate, duration);
+      if (rustWav && rustWav.length > 44) {
+        return rustWav;
+      }
+    }
+  } catch (err) {
+    console.warn("[audioExporter] Rust mixdown fallback:", err);
+  }
+
   const numChannels = 2; // Stereo
   const totalSamples = Math.ceil(duration * sampleRate);
   const bytesPerSample = 2; // 16-bit

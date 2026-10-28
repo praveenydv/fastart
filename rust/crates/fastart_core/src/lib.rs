@@ -1,8 +1,10 @@
 pub mod audio;
 pub mod codecs;
 pub mod compositor;
+pub mod cutout;
 pub mod effects;
 pub mod engine;
+pub mod exporter;
 pub mod motion_track;
 pub mod speed_curve;
 pub mod transform;
@@ -11,8 +13,10 @@ pub mod types;
 pub use audio::*;
 pub use codecs::*;
 pub use compositor::*;
+pub use cutout::*;
 pub use effects::*;
 pub use engine::*;
+pub use exporter::*;
 pub use motion_track::*;
 pub use speed_curve::*;
 pub use transform::*;
@@ -72,6 +76,32 @@ mod tests {
         ];
         let speed = evaluate_speed_curve(&points, 0.25);
         assert!(speed > 1.0 && speed < 3.0);
+    }
+
+    #[test]
+    fn test_refine_cutout_matte() {
+        let width = 32;
+        let height = 32;
+        let total = width * height;
+        let mut rgba = vec![255u8; total * 4];
+        let mut mask = vec![0u8; total * 4];
+
+        // Center square foreground in mask
+        for y in 8..24 {
+            for x in 8..24 {
+                let idx = (y * width + x) * 4;
+                mask[idx + 3] = 255;
+            }
+        }
+
+        refine_cutout_matte(&mut rgba, &mask, width, height, 0.5, 0.1, true);
+        // Center pixel should be opaque foreground
+        let center_idx = (16 * width + 16) * 4;
+        assert!(rgba[center_idx + 3] > 200);
+
+        // Corner pixel should be transparent background
+        let corner_idx = 0;
+        assert_eq!(rgba[corner_idx + 3], 0);
     }
 }
 

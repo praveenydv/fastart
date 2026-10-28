@@ -30,6 +30,7 @@ import AnimationModal from "../Panels/AnimationModal";
 import BlendModeModal from "../Panels/BlendModeModal";
 import HSLAdjustModal from "../Panels/HSLAdjustModal";
 import VoiceEffectsModal from "../Panels/VoiceEffectsModal";
+import { CompactSliderInput } from "../Common/CompactSliderInput";
 import {
   FastArtProject,
   VideoClip,
@@ -114,6 +115,7 @@ interface EditorModalsProps {
     newTrackIndex?: number,
     isInsertNewTrack?: boolean,
   ) => void;
+  handleDeleteClip?: (targetId?: string, targetType?: string) => void;
 }
 
 export const INLINE_MODAL_KEYS = new Set([
@@ -205,6 +207,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   isInline = false,
   handleUpdateClipMask,
   handleMoveClip,
+  handleDeleteClip,
 }) => {
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
@@ -240,6 +243,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           visible={true}
           onClose={closeModal}
           onAddMedia={handleAddMedia}
+          project={project || undefined}
+          onDeleteMedia={handleDeleteClip}
         />
       )}
 
@@ -466,21 +471,29 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "mask" && (
-        <MaskModal
-          visible={true}
-          onClose={handleCancel}
-          onApply={handleApply}
-          currentMask={selectedClip?.mask || selectedClip?.transform?.mask}
-          onApplyMask={(newMask) => {
-            handleApplyTransform(selectedClip?.transform || {}, undefined, newMask);
-            if (handleUpdateClipMask && selectedClip?.id) {
-              handleUpdateClipMask(selectedClip.id, newMask, true);
-            }
-          }}
-          isInline={isInline}
-        />
-      )}
+      {activeModal === "mask" && (() => {
+        const targetVideoClip =
+          selectedClip?.id && (selectedClipType === "video" || !selectedClipType)
+            ? selectedClip
+            : (project?.tracks?.video || []).find((v) => currentTime >= v.startTime && currentTime <= v.startTime + v.duration) ||
+              (project?.tracks?.video || [])[0];
+
+        return (
+          <MaskModal
+            visible={true}
+            onClose={handleCancel}
+            onApply={handleApply}
+            currentMask={targetVideoClip?.mask || targetVideoClip?.transform?.mask}
+            onApplyMask={(newMask) => {
+              handleApplyTransform(targetVideoClip?.transform || {}, undefined, newMask);
+              if (handleUpdateClipMask && targetVideoClip?.id) {
+                handleUpdateClipMask(targetVideoClip.id, newMask, true);
+              }
+            }}
+            isInline={isInline}
+          />
+        );
+      })()}
 
       {activeModal === "transform" && (
         <TransformModal
@@ -614,8 +627,41 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
       {/* Opacity Panel */}
       {activeModal === "opacity" && selectedClip && (
         <View style={modalStyles.panelContainer}>
-          <Text style={modalStyles.panelSectionTitle}>CLIP OPACITY</Text>
-          <View style={modalStyles.chipRow}>
+          <CompactSliderInput
+            label="Layer Opacity"
+            value={selectedClip?.opacity !== undefined ? Math.round(selectedClip.opacity * 100) : 100}
+            min={0}
+            max={100}
+            step={1}
+            unit="%"
+            defaultValue={100}
+            showReset={true}
+            accentColor="#00F2FE"
+            onChange={(val) => {
+              if (project) {
+                const tracks = { ...project.tracks };
+                const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                if (idx >= 0) {
+                  targetList[idx] = { ...targetList[idx], opacity: Math.max(0, Math.min(100, val)) / 100 };
+                  updateProjectWithHistory({ ...project, tracks });
+                }
+              }
+            }}
+            onReset={() => {
+              soundEngine.playSfx("click");
+              if (project) {
+                const tracks = { ...project.tracks };
+                const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                if (idx >= 0) {
+                  targetList[idx] = { ...targetList[idx], opacity: 1.0 };
+                  updateProjectWithHistory({ ...project, tracks });
+                }
+              }
+            }}
+          />
+          <View style={[modalStyles.chipRow, { marginTop: 10 }]}>
             {[100, 75, 50, 25, 0].map((op) => {
               const curOp = selectedClip?.opacity !== undefined ? Math.round(selectedClip.opacity * 100) : 100;
               const isSel = curOp === op;

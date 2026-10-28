@@ -722,16 +722,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                 soundEngine.playSfx("pop");
                 onSelectClip?.(null);
               }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onClick: (e: any) => {
-                      e.stopPropagation?.();
-                      soundEngine.playSfx("pop");
-                      onSelectClip?.(null);
-                    },
-                    onMouseDown: (e: any) => e.stopPropagation?.(),
-                  } as any)
-                : {})}
+              activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons

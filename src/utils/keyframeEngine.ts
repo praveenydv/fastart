@@ -1,4 +1,5 @@
 import { ClipTransform, KeyframePoint } from "../types/project";
+import { rustCoreBridge } from "../services/rustCoreBridge";
 
 export interface ResolvedTransform {
   x: number;
@@ -140,14 +141,21 @@ export function getBaseTransform(
   };
 }
 
+const sortedKfCache = new WeakMap<KeyframePoint[], KeyframePoint[]>();
+
 /**
- * Sanitizes, deduplicates, and sorts keyframe points by time ascending.
+ * Validates, sorts, and deduplicates keyframes by timestamp.
  */
 export function cleanAndSortKeyframes(
   keyframes: KeyframePoint[] | undefined | null,
 ): KeyframePoint[] {
   if (!keyframes || !Array.isArray(keyframes) || keyframes.length === 0) {
     return [];
+  }
+
+  const cached = sortedKfCache.get(keyframes);
+  if (cached) {
+    return cached;
   }
 
   // Filter valid entries
@@ -202,6 +210,7 @@ export function cleanAndSortKeyframes(
     result.push(cleanKf);
   }
 
+  sortedKfCache.set(keyframes, result);
   return result;
 }
 
@@ -286,7 +295,31 @@ export function getInterpolatedTransform(
     };
   }
 
-  // Between two surrounding keyframes
+  // 1. High-Performance Native Rust / WebAssembly Evaluation with Hermite Ease
+  const hasAdvancedProps = kfs.some((k: any) => k.easing || k.transform?.rotateX || k.transform?.rotateY || k.transform?.skewX);
+  if (!hasAdvancedProps) {
+    const rustInterp = rustCoreBridge.evaluateKeyframes(baseT, kfs, localTime);
+    if (rustInterp) {
+      return {
+        x: rustInterp.x,
+        y: rustInterp.y,
+        scale: Math.max(0.1, Math.min(10.0, rustInterp.scale)),
+        scaleX: baseT.scaleX,
+        scaleY: baseT.scaleY,
+        rotation: ((Math.round(rustInterp.rotation) % 360) + 360) % 360,
+        rotateX: baseT.rotateX,
+        rotateY: baseT.rotateY,
+        skewX: baseT.skewX,
+        skewY: baseT.skewY,
+        perspective: baseT.perspective,
+        opacity: Math.max(0, Math.min(1, rustInterp.opacity)),
+        flipX: baseT.flipX,
+        flipY: baseT.flipY,
+      };
+    }
+  }
+
+  // 2. Fallback / Advanced Custom Easing Keyframe Loop
   for (let i = 0; i < kfs.length - 1; i++) {
     const k1 = kfs[i];
     const k2 = kfs[i + 1];

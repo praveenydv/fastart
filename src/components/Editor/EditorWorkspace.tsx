@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, Text, ActivityIndicator, TouchableOpacity, Platform } from "react-native";
+import { View, StyleSheet, Text, ActivityIndicator, TouchableOpacity, Platform, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../Header";
 import Player from "../Player";
@@ -672,18 +672,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     [currentTime, project, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType]
   );
 
-  // Determine platform layout
-  const [windowWidth, setWindowWidth] = React.useState(
-    typeof window !== "undefined" ? window.innerWidth : 800
-  );
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
+  // Determine platform layout via standard responsive dimensions hook
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 768;
 
   // Desktop: track which left-panel tab is open
@@ -1196,6 +1186,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   onAddEffect={(eff) => handleAddEffect(eff)}
                   onAddTransition={(trId) => handleOpenTransitionsModal(selectedClipId || '')}
                   currentTime={currentTime}
+                  onDeleteMedia={handleDeleteClip}
                   width={mediaPanelWidth}
                   position="right"
                   onSwapPosition={() => setDesktopPanelOrder('media_left')}
@@ -1217,6 +1208,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   onAddEffect={(eff) => handleAddEffect(eff)}
                   onAddTransition={(trId) => handleOpenTransitionsModal(selectedClipId || '')}
                   currentTime={currentTime}
+                  onDeleteMedia={handleDeleteClip}
                   width={mediaPanelWidth}
                   position="left"
                   onSwapPosition={() => setDesktopPanelOrder('config_left')}
@@ -1402,7 +1394,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       {!isFullscreen && (
         <View style={styles.mobileBottomArea}>
           {isMobileInlineActive ? (
-            <View style={[styles.mobileInlineConfigArea, { height: Math.max(260, currentTimelineHeight) }]}>
+            <View style={[styles.mobileInlineConfigArea, { height: Math.min(Math.round(windowHeight * 0.52), Math.max(220, currentTimelineHeight)) }]}>
               {/* Mobile menu modal header bar with close/back and done to restore timeline */}
               <View style={styles.mobileInlineHeader}>
                 <TouchableOpacity

@@ -148,3 +148,158 @@ pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeRenderSnapshot(
     )
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    time_sec: f64,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let media_cache = HashMap::new();
+    let fb = FastArtEngine::render_frame(
+        &project,
+        time_sec,
+        width as u32,
+        height as u32,
+        &media_cache,
+    );
+
+    let j_bytes = match env.new_byte_array(fb.data.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let signed_bytes: Vec<i8> = fb.data.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_bytes);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportGif(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let media_cache = HashMap::new();
+    let gif_bytes = FastArtEngine::export_gif(
+        &project,
+        fps as u32,
+        width as u32,
+        height as u32,
+        duration,
+        &media_cache,
+    );
+
+    let j_bytes = match env.new_byte_array(gif_bytes.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let signed_bytes: Vec<i8> = gif_bytes.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_bytes);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportWav(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+) -> jbyteArray {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let audio_cache = HashMap::new();
+    let wav_bytes = FastArtEngine::export_wav(
+        &project,
+        sample_rate as u32,
+        duration,
+        &audio_cache,
+    );
+
+    let j_bytes = match env.new_byte_array(wav_bytes.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let signed_bytes: Vec<i8> = wav_bytes.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_bytes);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportMp4(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let media_cache = HashMap::new();
+    let mp4_bytes = FastArtEngine::export_mp4(
+        &project,
+        fps as u32,
+        width as u32,
+        height as u32,
+        duration,
+        &media_cache,
+    );
+
+    let j_bytes = match env.new_byte_array(mp4_bytes.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+
+    let signed_bytes: Vec<i8> = mp4_bytes.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_bytes);
+    j_bytes.into_raw()
+}
+
+

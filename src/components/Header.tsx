@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
@@ -38,6 +39,10 @@ function Header({
   onOpenCanvasModal,
   hideBackButton = false,
 }: HeaderProps) {
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 420;
+  const isVerySmallScreen = width < 370;
+
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
 
@@ -52,23 +57,23 @@ function Header({
   const [editedTitle, setEditedTitle] = useState(displayTitle);
 
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, isSmallScreen && styles.headerCompact]}>
       {/* Left: Back button & Resolution/Aspect Ratio Pill */}
-      <View style={styles.leftSection}>
+      <View style={[styles.leftSection, isSmallScreen && { gap: 6 }]}>
         {!hideBackButton && (
           <TouchableOpacity
-            style={styles.backButton}
+            style={[styles.backButton, isSmallScreen && styles.backButtonSmall]}
             onPress={onBackToHome}
             activeOpacity={0.7}
             accessibilityLabel="Back to Home"
           >
-            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={isSmallScreen ? 18 : 20} color="#FFFFFF" />
           </TouchableOpacity>
         )}
 
-        {/* CapCut Resolution / Aspect Ratio Pill Button */}
+        {/* Resolution / Aspect Ratio Pill Button */}
         <TouchableOpacity
-          style={styles.ratioPill}
+          style={[styles.ratioPill, isSmallScreen && styles.ratioPillCompact]}
           onPress={() => {
             soundEngine.playSfx("click");
             if (onOpenCanvasModal) onOpenCanvasModal();
@@ -77,14 +82,21 @@ function Header({
           accessibilityLabel="Change Canvas Format"
         >
           <Text style={styles.ratioText}>{currentRatio.label}</Text>
-          <Text style={styles.ratioDivider}>•</Text>
-          <Text style={styles.resolutionText}>1080P</Text>
+          {!isSmallScreen && (
+            <>
+              <Text style={styles.ratioDivider}>•</Text>
+              <Text style={styles.resolutionText}>1080P</Text>
+            </>
+          )}
           <Ionicons name="chevron-down" size={11} color="#8E8E93" style={{ marginLeft: 3 }} />
         </TouchableOpacity>
 
         {/* Project Title (Clean, tap to rename) */}
         <TouchableOpacity
-          style={styles.titlePill}
+          style={[
+            styles.titlePill,
+            isSmallScreen && { maxWidth: isVerySmallScreen ? 80 : 110, paddingHorizontal: 4 },
+          ]}
           onPress={() => {
             soundEngine.playSfx("click");
             setEditedTitle(displayTitle);
@@ -100,10 +112,14 @@ function Header({
       </View>
 
       {/* Right: Undo / Redo & Export CTA */}
-      <View style={styles.rightSection}>
+      <View style={[styles.rightSection, isSmallScreen && { gap: 5 }]}>
         {/* Undo */}
         <TouchableOpacity
-          style={[styles.historyButton, !canUndo && styles.disabledButton]}
+          style={[
+            styles.historyButton,
+            isSmallScreen && styles.historyButtonSmall,
+            !canUndo && styles.disabledButton,
+          ]}
           onPress={onUndo}
           disabled={!canUndo}
           activeOpacity={0.7}
@@ -111,14 +127,18 @@ function Header({
         >
           <Ionicons
             name="arrow-undo-outline"
-            size={16}
+            size={isSmallScreen ? 14 : 16}
             color={canUndo ? "#FFFFFF" : "#64748B"}
           />
         </TouchableOpacity>
 
         {/* Redo */}
         <TouchableOpacity
-          style={[styles.historyButton, !canRedo && styles.disabledButton]}
+          style={[
+            styles.historyButton,
+            isSmallScreen && styles.historyButtonSmall,
+            !canRedo && styles.disabledButton,
+          ]}
           onPress={onRedo}
           disabled={!canRedo}
           activeOpacity={0.7}
@@ -126,20 +146,20 @@ function Header({
         >
           <Ionicons
             name="arrow-redo-outline"
-            size={16}
+            size={isSmallScreen ? 14 : 16}
             color={canRedo ? "#FFFFFF" : "#64748B"}
           />
         </TouchableOpacity>
 
         {/* Monochromatic Pro Export CTA Button */}
         <TouchableOpacity
-          style={styles.exportButton}
+          style={[styles.exportButton, isSmallScreen && styles.exportButtonCompact]}
           onPress={onOpenExport}
           activeOpacity={0.85}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={14} color="#000000" style={{ marginRight: 2 }} />
-          <Text style={styles.exportText}>Export</Text>
+          <Ionicons name="arrow-up" size={13} color="#000000" style={{ marginRight: 2 }} />
+          <Text style={[styles.exportText, isSmallScreen && { fontSize: 11.5 }]}>Export</Text>
         </TouchableOpacity>
       </View>
 
@@ -225,11 +245,16 @@ const styles = StyleSheet.create({
     zIndex: 10,
     flexShrink: 0,
   },
+  headerCompact: {
+    paddingHorizontal: 8,
+    height: 44,
+  },
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flex: 1,
+    minWidth: 0,
   },
   backButton: {
     width: 32,
@@ -241,6 +266,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  backButtonSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+  },
   ratioPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -250,6 +280,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: THEME_COLORS.border,
+    flexShrink: 0,
+  },
+  ratioPillCompact: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   ratioText: {
     color: THEME_COLORS.textPrimary,
@@ -270,16 +306,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
     maxWidth: 160,
+    flexShrink: 1,
   },
   titleText: {
     color: THEME_COLORS.textPrimary,
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: "600",
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 0,
   },
   historyButton: {
     width: 32,
@@ -290,6 +328,11 @@ const styles = StyleSheet.create({
     borderColor: THEME_COLORS.border,
     alignItems: "center",
     justifyContent: "center",
+  },
+  historyButtonSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
   },
   disabledButton: {
     opacity: 0.45,
@@ -305,6 +348,11 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOpacity: 0.25,
     shadowRadius: 4,
+  },
+  exportButtonCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 7,
   },
   exportText: {
     color: THEME_COLORS.primaryText,

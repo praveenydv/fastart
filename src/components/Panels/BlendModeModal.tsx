@@ -9,6 +9,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { BlendMode } from '../../types/project';
+import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 export interface BlendModeModalProps {
   visible: boolean;
@@ -177,19 +178,36 @@ export default function BlendModeModal({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Opacity Quick Bar */}
+          {/* Layer Opacity Slider & Quick Presets */}
           <View style={styles.opacityCard}>
-            <View style={styles.opacityRowHeader}>
-              <Text style={styles.sectionTitle}>Layer Opacity</Text>
-              <Text style={styles.opacityValueBadge}>{Math.round(opacity * 100)}%</Text>
-            </View>
-            <View style={styles.opacityPillsRow}>
-              {[0.25, 0.5, 0.75, 1.0].map((val) => (
+            <CompactSliderInput
+              label="Layer Opacity"
+              value={Math.round(opacity * 100)}
+              min={0}
+              max={100}
+              step={1}
+              unit="%"
+              defaultValue={100}
+              showReset={true}
+              accentColor="#00F2FE"
+              onChange={(val) => {
+                const nextOp = Math.max(0, Math.min(100, val)) / 100;
+                setOpacity(nextOp);
+                onApply(selectedMode, nextOp);
+              }}
+              onReset={() => {
+                soundEngine.playSfx('click');
+                setOpacity(1.0);
+                onApply(selectedMode, 1.0);
+              }}
+            />
+            <View style={[styles.opacityPillsRow, { marginTop: 8 }]}>
+              {[0, 0.25, 0.5, 0.75, 1.0].map((val) => (
                 <TouchableOpacity
                   key={val}
                   style={[
                     styles.opacityPill,
-                    Math.abs(opacity - val) < 0.05 && styles.opacityPillActive,
+                    Math.abs(opacity - val) < 0.03 && styles.opacityPillActive,
                   ]}
                   onPress={() => {
                     soundEngine.playSfx('click');
@@ -200,7 +218,7 @@ export default function BlendModeModal({
                   <Text
                     style={[
                       styles.opacityPillText,
-                      Math.abs(opacity - val) < 0.05 && styles.opacityPillTextActive,
+                      Math.abs(opacity - val) < 0.03 && styles.opacityPillTextActive,
                     ]}
                   >
                     {Math.round(val * 100)}%

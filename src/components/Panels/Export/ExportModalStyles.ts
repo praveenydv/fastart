@@ -1,12 +1,16 @@
-import { Platform } from "expo";
-import { StyleSheet } from "react-native";
+import { StyleSheet, Platform } from "react-native";
 import { theme } from "../../../constants/theme";
 
 export const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
     justifyContent: "flex-end",
+  },
+  modalOverlayDesktop: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
   },
   sheetContainer: {
     backgroundColor: '#0F131D',
@@ -18,6 +22,21 @@ export const styles = StyleSheet.create({
     alignSelf: "center",
     borderTopWidth: 1,
     borderColor: '#1F2637',
+  },
+  sheetContainerDesktop: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#232A3B',
+    maxHeight: "88%",
+    maxWidth: 540,
+    width: "100%",
+    boxShadow: "0 24px 48px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08)" as any,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.65,
+    shadowRadius: 32,
+    elevation: 24,
+    overflow: "hidden",
   },
   sheetHandle: {
     width: 32,
@@ -37,16 +56,39 @@ export const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
   },
+  sheetHeaderDesktop: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+  },
+  desktopIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.25)',
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 4,
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: "800",
     letterSpacing: 0.2,
+  },
+  sheetSubtitle: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 1,
   },
   closeBtn: {
     width: 26,
@@ -62,6 +104,11 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  sheetBodyDesktop: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -159,19 +206,22 @@ export const styles = StyleSheet.create({
   },
   compactRow: {
     flexDirection: "row",
-    gap: 8,
+    flexWrap: "wrap",
+    gap: 6,
   },
   compactPill: {
     flex: 1,
+    minWidth: "22%",
     flexDirection: "row",
     paddingVertical: 7,
+    paddingHorizontal: 4,
     borderRadius: 6,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 4,
   },
   compactPillActive: {
     borderColor: '#00F2FE',

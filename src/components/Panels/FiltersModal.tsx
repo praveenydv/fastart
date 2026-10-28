@@ -549,10 +549,10 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   card: {
-    width: '31.3%',
+    width: '31%',
     backgroundColor: '#131826',
     borderRadius: 7,
     overflow: 'hidden',

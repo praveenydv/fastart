@@ -8,9 +8,14 @@ import {
 } from "../../../utils/videoRenderer";
 import { soundEngine } from "../../../utils/audioEngine";
 import { addNotification } from "../../../utils/storage";
-import { MEDIA_FORMATS, NoticeDialogState } from "./exportTypes";
+import {
+  MEDIA_FORMATS,
+  NoticeDialogState,
+  getExportResolutionDimensions,
+  getLogicalBaseDimensions,
+} from "./exportTypes";
 import { executeDirectDownload } from "./exportFileStorage";
-import { exportMobileProject } from "../../../utils/renderer/mobileExporter";
+import { exportFastArtProject } from "../../../utils/renderer/unifiedExporter";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
 
 export function useExportProcess(
@@ -135,196 +140,39 @@ export function useExportProcess(
     soundEngine.playSfx("whoosh");
 
     try {
-      if (Platform.OS === "web") {
-        const offscreenCanvas = document.createElement("canvas");
-        const baseResolutions: Record<string, Record<string, [number, number]>> = {
-          "720p": {
-            "9:16": [720, 1280],
-            "16:9": [1280, 720],
-            "1:1": [720, 720],
-            "4:5": [720, 900],
-            "2.35:1": [1280, 545],
-          },
-          "1080p": {
-            "9:16": [1080, 1920],
-            "16:9": [1920, 1080],
-            "1:1": [1080, 1080],
-            "4:5": [1080, 1350],
-            "2.35:1": [1920, 817],
-          },
-          "2K/4K": {
-            "9:16": [2160, 3840],
-            "16:9": [3840, 2160],
-            "1:1": [2160, 2160],
-            "4:5": [2160, 2700],
-            "2.35:1": [3840, 1634],
-          },
-        };
+      const renderDuration = Math.max(totalDuration || 2.0, 1.0);
+      updateProgressMonotonic(5);
 
-        const resMap = baseResolutions[resolution] || baseResolutions["1080p"];
-        const [targetW, targetH] = resMap[project.aspectRatio] || [1080, 1920];
-        offscreenCanvas.width = targetW;
-        offscreenCanvas.height = targetH;
-
-        const baseLogicalDims: Record<string, [number, number]> = {
-          "9:16": [360, 640],
-          "16:9": [640, 360],
-          "1:1": [480, 480],
-          "4:5": [384, 480],
-          "2.35:1": [705, 300],
-        };
-        const [baseW, baseH] = baseLogicalDims[project.aspectRatio] || [360, 640];
-
-        // 1. Rust WebAssembly Fast Snapshot Export
-        if (mediaType === "png") {
-          try {
-            const isRustReady = await rustCoreBridge.isAvailable();
-            if (isRustReady) {
-              updateProgressMonotonic(50);
-              const rustPng = await rustCoreBridge.renderSnapshot(project, 0, baseW * 2, baseH * 2);
-              if (rustPng) {
-                updateProgressMonotonic(100);
-                const result: ExportResult = {
-                  blob: new Blob([]),
-                  videoUrl: rustPng,
-                  mimeType: "image/png",
-                  format: "png",
-                  extension: "png",
-                };
-                setExportedResult(result);
-                setExportedUrl(result.videoUrl);
-                setStatus("done");
-                soundEngine.playSfx("pop");
-                return;
-              }
-            }
-          } catch (rustErr) {
-            console.warn("[useExportProcess] Rust snapshot fallback:", rustErr);
-          }
+      const result = await exportFastArtProject(
+        project,
+        {
+          fps,
+          duration: renderDuration,
+          format: mediaType,
+          currentTime: project?.currentTime || 0,
+          resolution,
+          isCancelled: () => isCancelledRef.current,
+        },
+        (pct) => {
+          updateProgressMonotonic(pct);
         }
+      );
 
-        const renderer = new VideoRenderer(offscreenCanvas);
-        for (const clip of project.tracks?.video || []) {
-          await renderer.preloadClip(clip);
-        }
+      if (isCancelledRef.current || !result) return;
 
-        const renderDuration = Math.max(totalDuration || 2.0, 1.0);
-        const result = await renderer.exportVideo(
-          project,
-          {
-            fps,
-            duration: renderDuration,
-            format: mediaType,
-            currentTime: 0,
-            logicalWidth: baseW,
-            logicalHeight: baseH,
-            isCancelled: () => isCancelledRef.current,
-          },
-          (pct) => {
-            updateProgressMonotonic(pct);
-          },
-        );
-
-        if (isCancelledRef.current) return;
-
-        updateProgressMonotonic(100);
-        setExportedResult(result);
-        setExportedUrl(result.videoUrl);
-        setStatus("done");
-        soundEngine.playSfx("pop");
-        addNotification({
-          title: "Export Ready",
-          message: `"${project?.title || "Project"}" exported as ${resolution} ${mediaType.toUpperCase()}.`,
-          projectId: project?.id,
-          projectTitle: project?.title,
-          actionText: "Open Project",
-          icon: "videocam",
-        });
-      } else {
-        const renderDuration = Math.max(totalDuration || 2.0, 1.0);
-        updateProgressMonotonic(3);
-
-        let result: ExportResult | null = null;
-
-        // If exporting PNG, WAV, or GIF, use mobileExporter directly
-        if (mediaType === "png" || mediaType === "wav" || mediaType === "gif") {
-          result = await exportMobileProject(
-            project,
-            {
-              fps,
-              duration: renderDuration,
-              format: mediaType,
-              currentTime: project.currentTime || 0,
-              resolution,
-              isCancelled: () => isCancelledRef.current,
-            },
-            (pct) => {
-              updateProgressMonotonic(pct);
-            }
-          );
-        } else {
-          // Hardware-accelerated Skia Canvas & MediaRecorder engine via MobileCanvasExportView
-          try {
-            setIsMobileCanvasRendering(true);
-            result = await new Promise<ExportResult>((resolve, reject) => {
-              mobileCanvasResolverRef.current = { resolve, reject };
-              // Set generous safety timeout (at least 60s, or 3.5x real-time)
-              const safetyTimeout = Math.max(60000, renderDuration * 3500);
-              const timer = setTimeout(() => {
-                if (mobileCanvasResolverRef.current) {
-                  mobileCanvasResolverRef.current.reject(new Error("Mobile canvas bridge timeout"));
-                }
-              }, safetyTimeout);
-              // Clean up timer if cancelled
-              const checkCancel = setInterval(() => {
-                if (isCancelledRef.current) {
-                  clearTimeout(timer);
-                  clearInterval(checkCancel);
-                  reject(new Error("Export cancelled"));
-                }
-              }, 500);
-            });
-          } catch (canvasErr: any) {
-            if (isCancelledRef.current) return;
-            console.warn("[useExportProcess] Canvas exporter fallback:", canvasErr);
-
-            // Fallback: Pure native compositor
-            result = await exportMobileProject(
-              project,
-              {
-                fps,
-                duration: renderDuration,
-                format: mediaType,
-                currentTime: project.currentTime || 0,
-                resolution,
-                isCancelled: () => isCancelledRef.current,
-              },
-              (pct) => {
-                updateProgressMonotonic(pct);
-              }
-            );
-          } finally {
-            setIsMobileCanvasRendering(false);
-            mobileCanvasResolverRef.current = null;
-          }
-        }
-
-        if (isCancelledRef.current || !result) return;
-
-        updateProgressMonotonic(100);
-        setExportedResult(result);
-        setExportedUrl(result.videoUrl);
-        setStatus("done");
-        soundEngine.playSfx("pop");
-        addNotification({
-          title: "Export Ready",
-          message: `"${project?.title || "Project"}" exported as ${resolution} ${mediaType.toUpperCase()}.`,
-          projectId: project?.id,
-          projectTitle: project?.title,
-          actionText: "Open Project",
-          icon: "videocam",
-        });
-      }
+      updateProgressMonotonic(100);
+      setExportedResult(result);
+      setExportedUrl(result.videoUrl);
+      setStatus("done");
+      soundEngine.playSfx("pop");
+      addNotification({
+        title: "Export Ready",
+        message: `"${project?.title || "Project"}" exported as ${resolution} ${mediaType.toUpperCase()}.`,
+        projectId: project?.id,
+        projectTitle: project?.title,
+        actionText: "Open Project",
+        icon: "videocam",
+      });
     } catch (err: any) {
       if (err?.message === "Export cancelled" || isCancelledRef.current) {
         setStatus("idle");

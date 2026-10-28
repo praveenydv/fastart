@@ -16,7 +16,10 @@ import {
   processVideoFrameByFrame,
   hasClipMasks,
   getClipProcessedCount,
+  clearClipMasks,
+  processClipStudioCutout,
 } from "../../services/selfieSegmentationService";
+import { rustCoreBridge } from "../../services/rustCoreBridge";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,6 +48,13 @@ const BG_COLOR_PRESETS = [
 
 const QUICK_BG_COLORS = BG_COLOR_PRESETS.slice(0, 5);
 const QUICK_STROKE_COLORS = STROKE_PRESETS.slice(0, 5);
+const CHROMA_QUICK_PRESETS = [
+  { label: "Green", color: "#00FF00" },
+  { label: "Blue", color: "#0047FF" },
+  { label: "Black", color: "#000000" },
+  { label: "White", color: "#FFFFFF" },
+  { label: "Magenta", color: "#FF00FF" },
+];
 
 function isLightColor(hex: string): boolean {
   if (!hex || hex === "none" || hex === "transparent") return false;
@@ -100,7 +110,10 @@ export default function CutoutModal({
   const [frameProgress, setFrameProgress] = useState<number>(0);
   const [processedFrames, setProcessedFrames] = useState<number>(0);
   const [totalFramesToProcess, setTotalFramesToProcess] = useState<number>(0);
+  const [finishTab, setFinishTab] = useState<"bg" | "outline">("bg");
   const abortCtrlRef = useRef<AbortController | null>(null);
+  const customBgInputRef = useRef<any>(null);
+  const customStrokeInputRef = useRef<any>(null);
 
   const clipId = selectedClip?.id || "";
   const isVideoClip = selectedClip?.type === "video" || !!selectedClip?.duration;
@@ -300,6 +313,50 @@ export default function CutoutModal({
       colorInputRef.current.click();
     }
   };
+
+  const handleAutoDetectBackdrop = () => {
+    soundEngine.playSfx("click");
+    if (typeof document === "undefined") return;
+
+    const video = document.querySelector("video");
+    const canvas = document.querySelector("canvas");
+    const source: any = video || canvas;
+    if (!source) return;
+
+    try {
+      const sw = 160;
+      const sh = 90;
+      const offC = document.createElement("canvas");
+      offC.width = sw;
+      offC.height = sh;
+      const c = offC.getContext("2d", { willReadFrequently: true });
+      if (!c) return;
+      c.drawImage(source, 0, 0, sw, sh);
+      const imgData = c.getImageData(0, 0, sw, sh);
+
+      let detected: { hex: string } | null = null;
+      if (rustCoreBridge.isWasmReady()) {
+        detected = rustCoreBridge.detectUniformBackdrop(imgData.data, sw, sh);
+      }
+
+      if (!detected) {
+        const u32 = new Uint32Array(imgData.data.buffer);
+        const pTL = u32[0];
+        const r = pTL & 0xff;
+        const g = (pTL >> 8) & 0xff;
+        const b = (pTL >> 16) & 0xff;
+        const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+        detected = { hex };
+      }
+
+      if (detected && detected.hex) {
+        soundEngine.playSfx("whoosh");
+        updateKeyColor(detected.hex);
+      }
+    } catch {
+      // Ignore
+    }
+  };
   const updateBgColor = (col: string) => {
     bgColorRef.current = col;
     setBgColor(col);
@@ -316,6 +373,39 @@ export default function CutoutModal({
     setStrokeWidth(v);
     syncCutout({ strokeWidth: v });
   };
+  const [isProcessingActiveFrame, setIsProcessingActiveFrame] = useState<boolean>(false);
+
+  const handleProcessActiveFrame = async () => {
+    if (!clipId || typeof document === "undefined") return;
+    soundEngine.playSfx("click");
+    setIsProcessingActiveFrame(true);
+
+    try {
+      const videoEl: any = document.querySelector("video");
+      const imgEl: any = document.querySelector("img");
+      const canvasEl: any = document.querySelector("canvas");
+      const source = videoEl || imgEl || canvasEl || selectedClip?.url;
+
+      if (source) {
+        const ok = await processClipStudioCutout(source, clipId, 0);
+        if (ok) {
+          soundEngine.playSfx("whoosh");
+          syncCutout({ mode: "auto", enabled: true });
+        }
+      }
+    } catch (e) {
+      console.warn("[CutoutModal] Active frame processing error:", e);
+    } finally {
+      setIsProcessingActiveFrame(false);
+    }
+  };
+
+  const handleClearBakedMasks = () => {
+    soundEngine.playSfx("pop");
+    clearClipMasks(clipId);
+    syncCutout({ mode: "auto", enabled: true });
+  };
+
   const toggleCutoutOption = (mode: CutoutMode) => {
     soundEngine.playSfx("click");
     if (enabled && cutoutMode === mode) {
@@ -330,6 +420,11 @@ export default function CutoutModal({
       setCutoutMode(mode);
       cutoutModeRef.current = mode;
       syncCutout({ enabled: true, mode });
+
+      // Automatically run studio neural cutout for image clips or active preview
+      if (mode === "auto" && !isAlreadyProcessed) {
+        handleProcessActiveFrame().catch(() => {});
+      }
     }
   };
 
@@ -352,7 +447,8 @@ export default function CutoutModal({
         setProcessedFrames(curr);
         setTotalFramesToProcess(total);
       },
-      abortCtrl.signal
+      abortCtrl.signal,
+      true // High-accuracy IS-Net studio model
     );
 
     setIsProcessingFrames(false);
@@ -401,134 +497,359 @@ export default function CutoutModal({
 
     return (
       <>
-        {/* Checkbox Buttons: AI Cutout vs Chroma Key */}
-        <View style={s.checkboxRow}>
-          {/* AI Cutout Checkbox */}
+        {/* Compact Mode Selector Bar */}
+        <View style={s.compactModeBar}>
           <TouchableOpacity
-            style={[s.checkboxCard, isAiChecked && s.checkboxCardActive]}
+            style={[s.compactModeChip, isAiChecked && s.compactModeChipActive]}
             onPress={() => toggleCutoutOption("auto")}
             activeOpacity={0.75}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: isAiChecked }}
             accessibilityLabel="AI Cutout"
           >
-            <View style={[s.checkboxBox, isAiChecked && s.checkboxBoxActive]}>
-              {isAiChecked ? (
-                <Ionicons name="checkmark" size={13} color="#08090E" />
-              ) : null}
+            <View style={[s.compactCheckbox, isAiChecked && s.compactCheckboxActive]}>
+              {isAiChecked ? <Ionicons name="checkmark" size={11} color="#08090E" /> : null}
             </View>
-            <View style={s.checkboxContent}>
-              <View style={s.checkboxTitleRow}>
-                <Ionicons
-                  name="sparkles"
-                  size={13}
-                  color={isAiChecked ? "#00F2FE" : "#94A3B8"}
-                />
-                <Text
-                  style={[s.checkboxTitle, isAiChecked && s.checkboxTitleActive]}
-                >
-                  AI Cutout
-                </Text>
-              </View>
-              <Text style={s.checkboxSub}>Auto person removal</Text>
-            </View>
+            <Ionicons
+              name="sparkles"
+              size={13}
+              color={isAiChecked ? "#00F2FE" : "#94A3B8"}
+            />
+            <Text style={[s.compactModeLabel, isAiChecked && s.compactModeLabelActive]}>
+              AI Cutout
+            </Text>
           </TouchableOpacity>
 
-          {/* Chroma Key Checkbox */}
           <TouchableOpacity
-            style={[s.checkboxCard, isChromaChecked && s.checkboxCardActive]}
+            style={[s.compactModeChip, isChromaChecked && s.compactModeChipActive]}
             onPress={() => toggleCutoutOption("chroma")}
             activeOpacity={0.75}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: isChromaChecked }}
             accessibilityLabel="Chroma Key"
           >
-            <View
-              style={[s.checkboxBox, isChromaChecked && s.checkboxBoxActive]}
-            >
-              {isChromaChecked ? (
-                <Ionicons name="checkmark" size={13} color="#08090E" />
-              ) : null}
+            <View style={[s.compactCheckbox, isChromaChecked && s.compactCheckboxActive]}>
+              {isChromaChecked ? <Ionicons name="checkmark" size={11} color="#08090E" /> : null}
             </View>
-            <View style={s.checkboxContent}>
-              <View style={s.checkboxTitleRow}>
-                <Ionicons
-                  name="color-filter"
-                  size={13}
-                  color={isChromaChecked ? "#00F2FE" : "#94A3B8"}
-                />
-                <Text
-                  style={[
-                    s.checkboxTitle,
-                    isChromaChecked && s.checkboxTitleActive,
-                  ]}
-                >
-                  Chroma Key
-                </Text>
-              </View>
-              <Text style={s.checkboxSub}>Color screen picker</Text>
-            </View>
+            <Ionicons
+              name="color-filter"
+              size={13}
+              color={isChromaChecked ? "#00F2FE" : "#94A3B8"}
+            />
+            <Text style={[s.compactModeLabel, isChromaChecked && s.compactModeLabelActive]}>
+              Chroma Key
+            </Text>
           </TouchableOpacity>
         </View>
 
         {!enabled ? (
-          <View style={s.noneActiveCard}>
-            <View style={s.noneActiveIconWrap}>
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={20}
-                color="#64748B"
-              />
-            </View>
-            <View style={s.noneActiveTextWrap}>
-              <Text style={s.noneActiveTitle}>No Cutout Applied</Text>
-              <Text style={s.noneActiveSub}>
-                Original video background is retained. Select "AI Cutout" or "Chroma Key" above to remove background.
-              </Text>
-            </View>
+          <View style={s.compactNoneBox}>
+            <Ionicons name="shield-checkmark-outline" size={15} color="#00F2FE" />
+            <Text style={s.compactNoneText}>
+              No cutout applied — Original video background is preserved.
+            </Text>
           </View>
         ) : (
           <View style={s.sectionBox}>
             {cutoutMode === "chroma" ? (
               <>
-                <View style={s.dropperHeaderRow}>
-                  <Text style={s.sectionHeader}>CHROMA KEY COLOR</Text>
+                <View style={s.compactChromaHeaderRow}>
+                  <Text style={s.sectionHeader}>SCREEN COLOR</Text>
+                  <View style={s.compactPresetGroup}>
+                    {CHROMA_QUICK_PRESETS.map((p) => {
+                      const isSelected = keyColor.toLowerCase() === p.color.toLowerCase();
+                      return (
+                        <TouchableOpacity
+                          key={p.color}
+                          style={[
+                            s.compactPresetSwatch,
+                            { backgroundColor: p.color },
+                            isSelected && s.compactPresetSwatchSelected,
+                          ]}
+                          onPress={() => {
+                            soundEngine.playSfx("click");
+                            updateKeyColor(p.color);
+                          }}
+                          activeOpacity={0.8}
+                          accessibilityLabel={p.label}
+                        >
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark"
+                              size={10}
+                              color={p.color === "#FFFFFF" || p.color === "#00FF00" ? "#000000" : "#FFFFFF"}
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={s.compactPickerTrigger}>
                   <TouchableOpacity
-                    style={s.dropperIconBtn}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
                     onPress={handleOpenEyeDropper}
                     activeOpacity={0.8}
-                    accessibilityLabel="Pick color with dropper"
                   >
-                    <Ionicons name="eyedrop" size={17} color="#00F2FE" />
+                    <View style={[s.compactColorSwatch, { backgroundColor: keyColor }]} />
+                    <Text style={s.compactHex}>{keyColor.toUpperCase()}</Text>
+                    <View style={s.dropperIconBadge}>
+                      <Ionicons name="eyedrop" size={12} color="#00F2FE" />
+                      <Text style={s.dropperBadgeText}>Sample</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.dropperIconBadge, { backgroundColor: "rgba(16, 185, 129, 0.12)", borderColor: "rgba(16, 185, 129, 0.3)" }]}
+                    onPress={handleAutoDetectBackdrop}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Auto-detect backdrop color using Rust engine"
+                  >
+                    <Ionicons name="sparkles" size={12} color="#10B981" />
+                    <Text style={[s.dropperBadgeText, { color: "#10B981" }]}>Auto Detect</Text>
                   </TouchableOpacity>
                 </View>
 
-                <View style={s.dropperCard}>
-                  <TouchableOpacity
-                    style={s.dropperCardTouch}
-                    onPress={handleOpenEyeDropper}
-                    activeOpacity={0.85}
-                  >
-                    <View
-                      style={[s.dropperSwatchLarge, { backgroundColor: keyColor }]}
-                    />
-                    <View style={s.dropperInfo}>
-                      <Text style={s.dropperCardTitle}>Key Color</Text>
-                      <Text style={s.dropperCardHex}>
-                        {keyColor.toUpperCase()}
+                {Platform.OS === "web" && (
+                  <WebInput
+                    ref={colorInputRef}
+                    type="color"
+                    value={keyColor}
+                    onChange={(e: any) => updateKeyColor(e.target.value)}
+                    style={{
+                      position: "absolute",
+                      opacity: 0,
+                      width: 1,
+                      height: 1,
+                      pointerEvents: "none",
+                    }}
+                  />
+                )}
+
+                {renderSlider("Tolerance", intensity, "%", 1, 100, updateIntensity)}
+                {renderSlider("Softness", shadow, "%", 0, 100, updateShadow)}
+              </>
+            ) : (
+              <View style={s.autoCutoutPanel}>
+                <View style={s.compactAiHeader}>
+                  <View style={s.compactAiBadge}>
+                    <Ionicons name="sparkles" size={12} color="#00F2FE" />
+                    <Text style={s.compactAiBadgeText}>Studio AI (IS-Net)</Text>
+                  </View>
+
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <TouchableOpacity
+                      onPress={handleProcessActiveFrame}
+                      style={[
+                        s.compactProcessBtn,
+                        {
+                          backgroundColor: isProcessingActiveFrame ? "rgba(0, 242, 254, 0.2)" : "rgba(255, 255, 255, 0.08)",
+                          borderWidth: 1,
+                          borderColor: "rgba(0, 242, 254, 0.3)",
+                        },
+                      ]}
+                      activeOpacity={0.8}
+                      disabled={isProcessingActiveFrame}
+                      accessibilityLabel="Matte current frame using studio IS-Net neural network"
+                    >
+                      {isProcessingActiveFrame ? (
+                        <ActivityIndicator size="small" color="#00F2FE" />
+                      ) : (
+                        <Ionicons name="scan" size={11} color="#00F2FE" />
+                      )}
+                      <Text style={[s.compactProcessBtnText, { color: "#00F2FE" }]}>
+                        {isProcessingActiveFrame ? "Matting..." : "Matte Frame"}
                       </Text>
-                    </View>
-                    <View style={s.dropperIconPill}>
-                      <Ionicons name="eyedrop" size={18} color="#00F2FE" />
-                    </View>
+                    </TouchableOpacity>
+
+                    {isVideoClip && (
+                      isProcessingFrames ? (
+                        <View style={s.compactProgressInline}>
+                          <ActivityIndicator size="small" color="#00F2FE" />
+                          <Text style={s.compactProgressPct}>{frameProgress}%</Text>
+                          <TouchableOpacity onPress={handleCancelProcessing} style={s.compactCancelBtn}>
+                            <Text style={s.compactCancelText}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : isAlreadyProcessed ? (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          <TouchableOpacity onPress={handleProcessFrameByFrame} style={s.compactReprocessBtn} activeOpacity={0.8}>
+                            <Ionicons name="checkmark-circle" size={12} color="#10B981" />
+                            <Text style={s.compactReprocessText}>Studio HD ↻</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={handleClearBakedMasks} style={[s.compactCancelBtn, { paddingHorizontal: 6 }]}>
+                            <Ionicons name="trash-outline" size={11} color="#EF4444" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity onPress={handleProcessFrameByFrame} style={s.compactProcessBtn} activeOpacity={0.8}>
+                          <Ionicons name="flash" size={11} color="#08090E" />
+                          <Text style={s.compactProcessBtnText}>Process Video</Text>
+                        </TouchableOpacity>
+                      )
+                    )}
+                  </View>
+                </View>
+
+                {isProcessingFrames && (
+                  <View style={s.progressBarTrack}>
+                    <View style={[s.progressBarFill, { width: `${frameProgress}%` }]} />
+                  </View>
+                )}
+
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
+                  <Ionicons name="information-circle-outline" size={12} color="#64748B" />
+                  <Text style={{ fontSize: 10, color: "#64748B" }}>
+                    Studio IS-Net removes outdoor fences, foliage & limb gaps with zero artifacts.
+                  </Text>
+                </View>
+
+                {renderSlider("Matte Threshold", intensity, "%", 1, 100, updateIntensity)}
+                {renderSlider("Edge Softness", shadow, "%", 0, 100, updateShadow)}
+              </View>
+            )}
+          </View>
+        )}
+
+        {enabled && (
+          <View style={s.sectionBox}>
+            <View style={s.finishSegmentRow}>
+              <View style={s.finishTabGroup}>
+                <TouchableOpacity
+                  style={[s.finishTabBtn, finishTab === "bg" && s.finishTabBtnActive]}
+                  onPress={() => setFinishTab("bg")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.finishTabText, finishTab === "bg" && s.finishTabTextActive]}>Background</Text>
+                  {bgColor !== "none" && <View style={s.activeDot} />}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[s.finishTabBtn, finishTab === "outline" && s.finishTabBtnActive]}
+                  onPress={() => setFinishTab("outline")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.finishTabText, finishTab === "outline" && s.finishTabTextActive]}>Outline</Text>
+                  {strokeColor !== "none" && <View style={s.activeDot} />}
+                </TouchableOpacity>
+              </View>
+
+              {(finishTab === "bg" ? bgColor !== "none" : strokeColor !== "none") && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (finishTab === "bg") updateBgColor("none");
+                    else updateStrokeColor("none");
+                  }}
+                  style={s.clearBtnTouch}
+                >
+                  <Text style={s.clearBtn}>Reset</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {finishTab === "bg" ? (
+              <View style={s.compactSwatchRow}>
+                {QUICK_BG_COLORS.map((preset) => {
+                  const isSelected = bgColor.toUpperCase() === preset.color.toUpperCase();
+                  return (
+                    <TouchableOpacity
+                      key={preset.color}
+                      style={[
+                        s.colorSwatch,
+                        { backgroundColor: preset.color === "none" ? "#202832" : preset.color },
+                        preset.color === "none" && s.transparentSwatch,
+                        isSelected && s.colorSwatchSelected,
+                      ]}
+                      onPress={() => updateBgColor(preset.color)}
+                      activeOpacity={0.8}
+                      accessibilityLabel={preset.label}
+                    >
+                      {preset.color === "none" && (
+                        <Ionicons name="close" size={13} color="#00F2FE" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* Custom Color Palette Button */}
+                <TouchableOpacity
+                  style={[
+                    s.colorSwatch,
+                    s.customSwatchBtn,
+                    bgColor !== "none" && !QUICK_BG_COLORS.some((p) => p.color.toUpperCase() === bgColor.toUpperCase()) && s.colorSwatchSelected,
+                  ]}
+                  onPress={() => customBgInputRef.current?.click()}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Pick custom background color"
+                >
+                  <Ionicons name="color-palette-outline" size={13} color="#00F2FE" />
+                </TouchableOpacity>
+
+                {Platform.OS === "web" && (
+                  <WebInput
+                    ref={customBgInputRef}
+                    type="color"
+                    value={bgColor === "none" ? "#000000" : bgColor}
+                    onChange={(e: any) => updateBgColor(e.target.value)}
+                    style={{
+                      position: "absolute",
+                      opacity: 0,
+                      width: 1,
+                      height: 1,
+                      pointerEvents: "none",
+                    }}
+                  />
+                )}
+              </View>
+            ) : (
+              <>
+                <View style={s.compactSwatchRow}>
+                  {QUICK_STROKE_COLORS.map((sp) => {
+                    const isSelected = strokeColor === sp.color;
+                    return (
+                      <TouchableOpacity
+                        key={sp.color}
+                        style={[
+                          s.colorSwatch,
+                          { backgroundColor: sp.color === "none" ? "#202832" : sp.color },
+                          sp.color === "none" && s.transparentSwatch,
+                          isSelected && s.colorSwatchSelected,
+                        ]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          updateStrokeColor(sp.color);
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityLabel={sp.label}
+                      >
+                        {sp.color === "none" && (
+                          <Ionicons name="close" size={13} color="#00F2FE" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* Custom Stroke Palette Button */}
+                  <TouchableOpacity
+                    style={[
+                      s.colorSwatch,
+                      s.customSwatchBtn,
+                      strokeColor !== "none" && !QUICK_STROKE_COLORS.some((sp) => sp.color === strokeColor) && s.colorSwatchSelected,
+                    ]}
+                    onPress={() => customStrokeInputRef.current?.click()}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Pick custom outline color"
+                  >
+                    <Ionicons name="color-palette-outline" size={13} color="#00F2FE" />
                   </TouchableOpacity>
 
                   {Platform.OS === "web" && (
                     <WebInput
-                      ref={colorInputRef}
+                      ref={customStrokeInputRef}
                       type="color"
-                      value={keyColor}
-                      onChange={(e: any) => updateKeyColor(e.target.value)}
+                      value={strokeColor === "none" ? "#FFFFFF" : strokeColor}
+                      onChange={(e: any) => updateStrokeColor(e.target.value)}
                       style={{
                         position: "absolute",
                         opacity: 0,
@@ -539,246 +860,17 @@ export default function CutoutModal({
                     />
                   )}
                 </View>
-                <Text style={s.dropperHint}>
-                  Tap the eyedrop icon to sample any green screen or background color directly from the video.
-                </Text>
 
-                {renderSlider(
-                  "Color tolerance",
-                  intensity,
-                  "%",
-                  1,
-                  100,
-                  updateIntensity,
+                {strokeColor !== "none" && (
+                  renderSlider("Outline Width", strokeWidth, "px", 1, 20, updateStrokeWidth, 1)
                 )}
-                {renderSlider("Edge softness", shadow, "%", 0, 100, updateShadow)}
               </>
-            ) : (
-              <View style={s.autoCutoutPanel}>
-                <View style={s.aiBadge}>
-                  <Ionicons name="sparkles" size={15} color="#00F2FE" />
-                  <Text style={s.aiBadgeTitle}>Neural AI Background Removal</Text>
-                </View>
-                <Text style={s.autoHelperText}>
-                  Automatically isolates human persons and portraits from video backgrounds frame-by-frame using real-time neural segmentation.
-                </Text>
-
-                {isVideoClip && (
-                  <View style={s.frameProcessBox}>
-                    <View style={s.frameProcessHeader}>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
-                      >
-                        <Ionicons name="film-outline" size={14} color="#00F2FE" />
-                        <Text style={s.frameProcessTitle}>
-                          Frame-by-Frame Video Processing
-                        </Text>
-                      </View>
-                      {isAlreadyProcessed && !isProcessingFrames && (
-                        <View style={s.cachedBadge}>
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={13}
-                            color="#10B981"
-                          />
-                          <Text style={s.cachedBadgeText}>Pre-rendered</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {isProcessingFrames ? (
-                      <View style={s.processingContainer}>
-                        <View style={s.progressRow}>
-                          <ActivityIndicator size="small" color="#00F2FE" />
-                          <Text style={s.progressText}>
-                            Processing frame {processedFrames}/
-                            {totalFramesToProcess} ({frameProgress}%)
-                          </Text>
-                          <TouchableOpacity
-                            style={s.cancelProcessBtn}
-                            onPress={handleCancelProcessing}
-                          >
-                            <Text style={s.cancelProcessText}>Cancel</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <View style={s.progressBarTrack}>
-                          <View
-                            style={[
-                              s.progressBarFill,
-                              { width: `${frameProgress}%` },
-                            ]}
-                          />
-                        </View>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={s.processFramesBtn}
-                        onPress={handleProcessFrameByFrame}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="scan-outline" size={16} color="#08090E" />
-                        <Text style={s.processFramesBtnText}>
-                          {isAlreadyProcessed
-                            ? "Re-Process Video Frames"
-                            : "Process Video Frame-by-Frame"}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-              </View>
             )}
           </View>
         )}
-
-      {enabled && (
-        <View style={s.sectionBox}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 4,
-            }}
-          >
-            <Text style={s.sectionHeader}>FINISH</Text>
-            {bgColor !== "none" && (
-              <TouchableOpacity onPress={() => updateBgColor("none")}>
-                <Text style={s.clearBtn}>Clear</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={s.subsectionLabel}>Background</Text>
-          <View style={s.swatchRow}>
-            {QUICK_BG_COLORS.map((preset) => {
-              const isSelected =
-                bgColor.toUpperCase() === preset.color.toUpperCase();
-              return (
-                <TouchableOpacity
-                  key={preset.color}
-                  style={[
-                    s.colorSwatch,
-                    {
-                      backgroundColor:
-                        preset.color === "none" ? "#202832" : preset.color,
-                    },
-                    preset.color === "none" && s.transparentSwatch,
-                    isSelected && s.colorSwatchSelected,
-                  ]}
-                  onPress={() => updateBgColor(preset.color)}
-                  activeOpacity={0.8}
-                  accessibilityLabel={`Use ${preset.label} background`}
-                >
-                  {preset.color === "none" && (
-                    <Ionicons name="close" size={14} color="#00F2FE" />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <View style={s.customColorRow}>
-            <Text style={s.sliderLabel}>Custom</Text>
-            <View style={s.colorInputBox}>
-              <View
-                style={[
-                  s.sampleSquare,
-                  { backgroundColor: bgColor === "none" ? "#141721" : bgColor },
-                ]}
-              />
-              {Platform.OS === "web" ? (
-                <WebInput
-                  type="color"
-                  value={bgColor === "none" ? "#000000" : bgColor}
-                  onChange={(e: any) => updateBgColor(e.target.value)}
-                  style={{
-                    width: 38,
-                    height: 24,
-                    backgroundColor: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                />
-              ) : null}
-              <Text style={s.hexCodeText}>
-                {bgColor === "none" ? "TRANSPARENT" : bgColor.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-          <View style={s.finishDivider} />
-          <Text style={s.subsectionLabel}>Outline</Text>
-          <View style={s.swatchRow}>
-            {QUICK_STROKE_COLORS.map((sp) => {
-              const isSelected = strokeColor === sp.color;
-              return (
-                <TouchableOpacity
-                  key={sp.color}
-                  style={[
-                    s.colorSwatch,
-                    {
-                      backgroundColor: sp.color === "none" ? "#202832" : sp.color,
-                    },
-                    sp.color === "none" && s.transparentSwatch,
-                    isSelected && s.colorSwatchSelected,
-                  ]}
-                  onPress={() => {
-                    soundEngine.playSfx("click");
-                    updateStrokeColor(sp.color);
-                  }}
-                  activeOpacity={0.8}
-                  accessibilityLabel={`Use ${sp.label} outline`}
-                >
-                  {sp.color === "none" && (
-                    <Ionicons name="close" size={14} color="#00F2FE" />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          {strokeColor !== "none" && (
-            <>
-              {renderSlider(
-                "Outline width",
-                strokeWidth,
-                "px",
-                1,
-                20,
-                updateStrokeWidth,
-                1,
-              )}
-              <View style={s.customColorRow}>
-                <Text style={s.sliderLabel}>Custom</Text>
-                <View style={s.colorInputBox}>
-                  <View
-                    style={[s.sampleSquare, { backgroundColor: strokeColor }]}
-                  />
-                  {Platform.OS === "web" ? (
-                    <WebInput
-                      type="color"
-                      value={strokeColor}
-                      onChange={(e: any) => updateStrokeColor(e.target.value)}
-                      style={{
-                        width: 38,
-                        height: 24,
-                        backgroundColor: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    />
-                  ) : null}
-                  <Text style={s.hexCodeText}>{strokeColor.toUpperCase()}</Text>
-                </View>
-              </View>
-            </>
-          )}
-        </View>
-      )}
-    </>
-  );
-};
+      </>
+    );
+  };
 
   // ── Sheet Content ─────────────────────────────────────────────────────────
   const sheetContent = (
@@ -919,178 +1011,279 @@ const s = StyleSheet.create({
     borderColor: "#1F2637",
     backgroundColor: "#131826",
   },
-  checkboxCardActive: {
+  compactModeBar: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 6,
+  },
+  compactModeChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 7,
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#1F2637",
+  },
+  compactModeChipActive: {
     borderColor: "#00F2FE",
     backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
-  checkboxBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+  compactCheckbox: {
+    width: 15,
+    height: 15,
+    borderRadius: 3.5,
     borderWidth: 1.5,
     borderColor: "#475569",
     backgroundColor: "#0B0E17",
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxBoxActive: {
+  compactCheckboxActive: {
     borderColor: "#00F2FE",
     backgroundColor: "#00F2FE",
   },
-  checkboxContent: {
-    flex: 1,
-  },
-  checkboxTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  checkboxTitle: {
+  compactModeLabel: {
     fontSize: 11.5,
     fontWeight: "700",
-    color: "#CBD5E1",
+    color: "#94A3B8",
   },
-  checkboxTitleActive: {
+  compactModeLabelActive: {
     color: "#FFFFFF",
   },
-  checkboxSub: {
-    fontSize: 9.5,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  noneActiveCard: {
+  compactNoneBox: {
     backgroundColor: "#131826",
-    borderRadius: 8,
-    padding: 14,
+    borderRadius: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "#1F2637",
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 6,
   },
-  noneActiveIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderWidth: 1,
-    borderColor: "#1F2637",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  noneActiveTextWrap: {
+  compactNoneText: {
+    fontSize: 11,
+    color: "#94A3B8",
     flex: 1,
   },
-  noneActiveTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginBottom: 3,
-  },
-  noneActiveSub: {
-    fontSize: 10.5,
-    color: "#64748B",
-    lineHeight: 15,
-  },
-  sheetBody: { padding: 10 },
+  sheetBody: { padding: 8 },
   sectionBox: {
     backgroundColor: "#131826",
     borderRadius: 8,
-    padding: 10,
+    padding: 8,
     borderWidth: 1,
     borderColor: "#1F2637",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   sectionHeader: {
     fontSize: 9.5,
     fontWeight: "700",
     color: "#94A3B8",
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: 4,
     textTransform: "uppercase",
   },
-  dropperHeaderRow: {
+  compactChromaHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  dropperIconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 7,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+  compactPresetGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  compactPresetSwatch: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  compactPresetSwatchSelected: {
+    borderWidth: 2,
     borderColor: "#00F2FE",
-    alignItems: "center",
-    justifyContent: "center",
+    transform: [{ scale: 1.08 }],
   },
-  dropperCard: {
+  compactPickerTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#0B0E17",
-    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "#1F2637",
-    marginBottom: 6,
-    overflow: "hidden",
-  },
-  dropperCardTouch: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 8,
-    gap: 10,
-  },
-  dropperSwatchLarge: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: "#2E384D",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dropperInfo: {
-    flex: 1,
-  },
-  dropperCardTitle: {
-    fontSize: 10,
-    color: "#94A3B8",
-    fontWeight: "500",
-  },
-  dropperCardHex: {
-    fontSize: 13,
-    color: "#FFFFFF",
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginTop: 1,
-  },
-  dropperIconPill: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: "#131826",
-    borderWidth: 1,
-    borderColor: "#1F2637",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dropperHint: {
-    fontSize: 10,
-    color: "#64748B",
-    lineHeight: 14,
-    marginBottom: 8,
-  },
-  subsectionLabel: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginBottom: 6,
-  },
-  swatchRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
     marginBottom: 4,
+  },
+  compactColorSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#2E384D",
+  },
+  compactHex: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+    flex: 1,
+  },
+  dropperIconBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.25)",
+  },
+  dropperBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#00F2FE",
+  },
+  compactAiHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  compactAiBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.2)",
+  },
+  compactAiBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#00F2FE",
+  },
+  compactProcessBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#00F2FE",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 5,
+  },
+  compactProcessBtnText: {
+    color: "#08090E",
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  compactReprocessBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#10B981",
+  },
+  compactReprocessText: {
+    color: "#10B981",
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  compactProgressInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  compactProgressPct: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#00F2FE",
+  },
+  compactCancelBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "#1F2637",
+  },
+  compactCancelText: {
+    fontSize: 9.5,
+    color: "#EF4444",
+    fontWeight: "700",
+  },
+  finishSegmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  finishTabGroup: {
+    flexDirection: "row",
+    backgroundColor: "#0B0E17",
+    borderRadius: 6,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: "#1F2637",
+  },
+  finishTabBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  finishTabBtnActive: {
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
+  },
+  finishTabText: {
+    fontSize: 10.5,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  finishTabTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#00F2FE",
+  },
+  clearBtnTouch: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  compactSwatchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  customSwatchBtn: {
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   colorSwatch: {
     width: 24,
@@ -1107,202 +1300,21 @@ const s = StyleSheet.create({
     transform: [{ scale: 1.06 }],
   },
   transparentSwatch: { borderColor: "#00F2FE", borderStyle: "dashed" },
-  finishDivider: { height: 1, backgroundColor: "#1F2637", marginVertical: 8 },
-  customColorRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#1F2637",
-    marginTop: 4,
-  },
-  colorInputBox: { flexDirection: "row", alignItems: "center", gap: 6 },
-  sampleSquare: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#1F2637",
-  },
-  hexCodeText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
   clearBtn: { fontSize: 10.5, color: "#00F2FE", fontWeight: "600" },
-  sliderGroup: { marginTop: 8 },
-  sliderHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  sliderLabel: { fontSize: 11, color: "#94A3B8", fontWeight: "500" },
-  sliderVal: { fontSize: 11, color: "#FFFFFF", fontWeight: "700" },
-  sliderContainer: { flexDirection: "row", alignItems: "center", gap: 6 },
-  stepBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: "#1B2234",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#1F2637",
-  },
-  trackFallback: {
-    flex: 1,
-    height: 4,
-    backgroundColor: "#1F2637",
-    borderRadius: 2,
-  },
-  fillFallback: { height: 4, backgroundColor: "#00F2FE", borderRadius: 2 },
-  autoBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#131826",
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: "#1F2637",
-  },
-  autoBadgeText: { fontSize: 11, fontWeight: "700", color: "#FFFFFF", flex: 1 },
-  helperText: {
-    fontSize: 10.5,
-    color: "#64748B",
-    lineHeight: 15,
-    marginBottom: 8,
-  },
-  inlineApplyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  inlineAppliedBtn: {
-    backgroundColor: "#10B981",
-  },
-  inlineApplyText: {
-    color: "#08090E",
-    fontSize: 11,
-    fontWeight: "700",
-  },
+  sliderGroup: { marginTop: 4 },
   autoCutoutPanel: {
-    marginTop: 4,
-  },
-  aiBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
-    marginBottom: 6,
-  },
-  aiBadgeTitle: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#00F2FE",
-  },
-  autoHelperText: {
-    fontSize: 10.5,
-    color: "#94A3B8",
-    lineHeight: 15,
-    marginBottom: 10,
-  },
-  frameProcessBox: {
-    backgroundColor: "#0B0E17",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#1F2637",
-    padding: 10,
-    marginTop: 4,
-  },
-  frameProcessHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  frameProcessTitle: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  cachedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    borderWidth: 1,
-    borderColor: "#10B981",
-  },
-  cachedBadgeText: {
-    fontSize: 9.5,
-    fontWeight: "700",
-    color: "#10B981",
-  },
-  processingContainer: {
     marginTop: 2,
-  },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
-  },
-  progressText: {
-    fontSize: 10.5,
-    color: "#00F2FE",
-    fontWeight: "600",
-    flex: 1,
-  },
-  cancelProcessBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: "#1F2637",
-  },
-  cancelProcessText: {
-    fontSize: 10,
-    color: "#EF4444",
-    fontWeight: "700",
   },
   progressBarTrack: {
     height: 4,
     backgroundColor: "#1F2637",
     borderRadius: 2,
     overflow: "hidden",
+    marginVertical: 4,
   },
   progressBarFill: {
     height: "100%",
     backgroundColor: "#00F2FE",
     borderRadius: 2,
-  },
-  processFramesBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#00F2FE",
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  processFramesBtnText: {
-    color: "#08090E",
-    fontSize: 11.5,
-    fontWeight: "700",
   },
 });
