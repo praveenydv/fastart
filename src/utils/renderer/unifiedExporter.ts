@@ -10,6 +10,7 @@ import {
   getExportResolutionDimensions,
   getLogicalBaseDimensions,
 } from "../../components/Panels/Export/exportTypes";
+import { exportBrowserVideo } from "./browserVideoExporter";
 
 export type ExportFormat = "mp4" | "webm" | "gif" | "png" | "wav";
 
@@ -130,7 +131,8 @@ function base64ToUint8(b64: string): Uint8Array {
 export async function exportFastArtProject(
   project: FastArtProject,
   options: ExportOptions = {},
-  onProgress?: (percent: number, currentTime: number, duration: number) => void
+  onProgress?: (percent: number, currentTime: number, duration: number) => void,
+  existingRenderer?: any
 ): Promise<ExportResult> {
   const {
     fps = 30,
@@ -293,11 +295,41 @@ export async function exportFastArtProject(
   }
 
   // -------------------------------------------------------------------------
-  // 4. Genuine Multi-Track H.264 MP4 Export directly in Rust
+  // 4. Video Export (MP4 & WebM)
   // -------------------------------------------------------------------------
-  if (format === "mp4") {
-    onProgress?.(25, 0, duration);
+  if (format === "mp4" || format === "webm") {
+    // A. Web Browser: Hardware-accelerated Canvas + MediaRecorder with GPU video decoders
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      let renderer = existingRenderer;
+      if (!renderer || !renderer.canvas) {
+        const offscreenCanvas = document.createElement("canvas");
+        offscreenCanvas.width = targetW;
+        offscreenCanvas.height = targetH;
+        const { VideoRenderer } = require("../videoRenderer");
+        renderer = new VideoRenderer(offscreenCanvas);
+        for (const clip of project.tracks?.video || []) {
+          await renderer.preloadClip(clip);
+        }
+      }
 
+      return await exportBrowserVideo(
+        renderer,
+        project,
+        {
+          fps,
+          duration,
+          format,
+          currentTime,
+          logicalWidth: baseW,
+          logicalHeight: baseH,
+          isCancelled,
+        },
+        onProgress
+      );
+    }
+
+    // B. Native Mobile (Android & iOS): High-Performance Native Rust Core Engine
+    onProgress?.(25, 0, duration);
     try {
       const isRustReady = await rustCoreBridge.isAvailable();
       if (isRustReady) {
@@ -311,19 +343,6 @@ export async function exportFastArtProject(
         );
         if (mp4Bytes && mp4Bytes.length > 128) {
           onProgress?.(100, duration, duration);
-
-          if (Platform.OS === "web" && typeof URL !== "undefined") {
-            const blob = new Blob([mp4Bytes as any], { type: "video/mp4" });
-            const videoUrl = URL.createObjectURL(blob);
-            return {
-              blob,
-              videoUrl,
-              mimeType: "video/mp4",
-              format: "mp4",
-              extension: "mp4",
-              fileSize: mp4Bytes.length,
-            };
-          }
 
           const filename = `${cleanTitle}_video_${Date.now()}.mp4`;
           const targetFileUri = `${targetDir}${filename}`;
@@ -340,39 +359,8 @@ export async function exportFastArtProject(
         }
       }
     } catch (err) {
-      console.warn("[unifiedExporter] Rust MP4 fallback:", err);
+      console.warn("[unifiedExporter] Native Rust MP4 export:", err);
     }
-  }
-
-  // -------------------------------------------------------------------------
-  // 5. Web Canvas / MediaRecorder Pipeline (Web Fallback)
-  // -------------------------------------------------------------------------
-  if (Platform.OS === "web" && typeof document !== "undefined") {
-    const offscreenCanvas = document.createElement("canvas");
-    offscreenCanvas.width = targetW;
-    offscreenCanvas.height = targetH;
-
-    const { VideoRenderer } = require("../videoRenderer");
-    const renderer = new VideoRenderer(offscreenCanvas);
-    for (const clip of project.tracks?.video || []) {
-      await renderer.preloadClip(clip);
-    }
-
-    return await renderer.exportVideo(
-      project,
-      {
-        fps,
-        duration,
-        format,
-        currentTime,
-        logicalWidth: baseW,
-        logicalHeight: baseH,
-        isCancelled,
-      },
-      (pct: number) => {
-        onProgress?.(pct, 0, duration);
-      }
-    );
   }
 
   throw new Error(`Export format ${format} could not be rendered.`);
@@ -382,13 +370,13 @@ export async function exportFastArtProject(
 // Backward Compatibility Re-Exports (Seamless drop-in replacements)
 // ---------------------------------------------------------------------------
 export async function exportVideo(
-  _renderer: any,
+  renderer: any,
   project: FastArtProject,
   options: ExportOptions = {},
   onProgress?: (percent: number, currentTime: number, duration: number) => void,
   _createRenderer?: any
 ): Promise<ExportResult> {
-  return exportFastArtProject(project, options, onProgress);
+  return exportFastArtProject(project, options, onProgress, renderer);
 }
 
 export async function exportMobileProject(

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { EFFECT_PRESETS } from '../../constants/sampleMedia';
+import { EFFECT_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
 import { EffectClip } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
@@ -23,7 +24,78 @@ interface EffectsModalProps {
   editingClip?: EffectClip | null;
   onUpdateEffect?: (effect: EffectClip) => void;
   isInline?: boolean;
+  selectedClip?: any;
+  project?: any;
 }
+
+const getEffectFilterStyle = (type: string): any => {
+  if (Platform.OS !== 'web') return null;
+  switch (type) {
+    case 'glitch':
+      return { filter: 'contrast(1.3) hue-rotate(90deg)' };
+    case 'vhs':
+      return { filter: 'sepia(0.35) saturate(1.4) contrast(1.15)' };
+    case 'rgb_split':
+      return { filter: 'contrast(1.4) saturate(1.5)' };
+    case 'film_grain':
+      return { filter: 'sepia(0.4) contrast(1.2) brightness(0.9)' };
+    case 'old_film':
+      return { filter: 'grayscale(1) sepia(0.65) contrast(1.45)' };
+    case 'crt_tv':
+      return { filter: 'contrast(1.25) brightness(1.1)' };
+    case 'zoom_pulse':
+      return { transform: [{ scale: 1.15 }] };
+    case 'neon_edge':
+    case 'ai_cyberpunk':
+      return { filter: 'saturate(2.2) contrast(1.4)' };
+    case 'blur':
+    case 'blur_cinematic':
+    case 'gaussian_blur':
+      return { filter: 'blur(2.5px)' };
+    case 'motion_blur':
+      return { filter: 'blur(2px) contrast(1.15)' };
+    case 'radial_blur':
+      return { filter: 'blur(1.8px) contrast(1.2)' };
+    case 'mosaic_blur':
+      return { filter: 'contrast(1.35) brightness(0.95)' };
+    case 'flash':
+      return { filter: 'brightness(1.55) contrast(1.25)' };
+    case 'vignette':
+      return { filter: 'contrast(1.3) brightness(0.85)' };
+    case 'mirror':
+      return { transform: [{ scaleX: -1 }] };
+    case 'shake':
+      return { transform: [{ rotate: '-4deg' }, { scale: 1.08 }] };
+    case 'thermal':
+      return { filter: 'invert(1) hue-rotate(180deg) saturate(3)' };
+    case 'ai_matrix':
+      return { filter: 'hue-rotate(90deg) saturate(3.5) contrast(1.5) brightness(0.85)' };
+    case 'ai_manga':
+      return { filter: 'grayscale(0.85) contrast(1.8) brightness(1.1)' };
+    case 'ai_night_vision':
+      return { filter: 'sepia(1) hue-rotate(85deg) saturate(4) brightness(0.9)' };
+    case 'ai_cartoon':
+      return { filter: 'saturate(2.2) contrast(1.55)' };
+    case 'beauty_smooth':
+      return { filter: 'brightness(1.08) contrast(0.95) saturate(1.12)' };
+    case 'ai_aura':
+      return { filter: 'saturate(1.6) brightness(1.1)' };
+    case 'sun_flare':
+      return { filter: 'brightness(1.28) saturate(1.35)' };
+    case 'prism_leak':
+      return { filter: 'saturate(1.7) hue-rotate(45deg)' };
+    case 'cyberpunk_dual':
+      return { filter: 'contrast(1.35) saturate(1.85)' };
+    case 'fisheye':
+      return { transform: [{ scale: 1.15 }] };
+    case 'water_ripple':
+      return { filter: 'hue-rotate(15deg) contrast(1.15)' };
+    case 'kaleidoscope':
+      return { filter: 'contrast(1.3) saturate(1.4)' };
+    default:
+      return null;
+  }
+};
 
 export default function EffectsModal({
   visible,
@@ -35,11 +107,16 @@ export default function EffectsModal({
   editingClip,
   onUpdateEffect,
   isInline = false,
+  selectedClip,
+  project,
 }: EffectsModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [intensity, setIntensity] = useState<number>(activeIntensity !== undefined ? activeIntensity : 0.8);
   const [selectedEffectId, setSelectedEffectId] = useState<string>(activeEffect || 'none');
   const [activeSessionClipId, setActiveSessionClipId] = useState<string | null>(null);
+
+  // Standardized prefix reference model image for consistent, high-clarity effect previews
+  const previewThumb = PRESET_PREVIEW_IMAGE;
 
   useEffect(() => {
     if (visible) {
@@ -333,24 +410,64 @@ export default function EffectsModal({
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.8}
                   >
-                    <View
-                      style={[
-                        styles.iconBox,
-                        isCurrentActive && styles.iconBoxActive,
-                        isItemNone && styles.iconBoxNone,
-                      ]}
-                    >
-                      <Ionicons
-                        name={(item.icon || 'sparkles-outline') as any}
-                        size={20}
-                        color={
-                          isItemNone
-                            ? '#64748B'
-                            : isCurrentActive
-                            ? '#00F2FE'
-                            : '#94A3B8'
-                        }
-                      />
+                    <View style={styles.previewBox}>
+                      {isItemNone ? (
+                        <View style={styles.nonePreviewBox}>
+                          <Ionicons name="close-circle-outline" size={24} color="#64748B" />
+                          <Text style={styles.nonePreviewText}>None</Text>
+                        </View>
+                      ) : (
+                        <>
+                          <Image
+                            source={{ uri: previewThumb }}
+                            style={[styles.previewImg, getEffectFilterStyle(item.type)]}
+                            resizeMode="cover"
+                          />
+                          {/* Visual effect overlays */}
+                          {item.type === 'vhs' && (
+                            <View style={styles.recBadge}>
+                              <View style={styles.recDot} />
+                              <Text style={styles.recText}>REC</Text>
+                            </View>
+                          )}
+                          {item.type === 'glitch' && (
+                            <>
+                              <View style={styles.glitchStripe1} />
+                              <View style={styles.glitchStripe2} />
+                            </>
+                          )}
+                          {item.type === 'ai_matrix' && (
+                            <View style={styles.matrixOverlay}>
+                              <Text style={styles.matrixCodeText}>10101</Text>
+                            </View>
+                          )}
+                          {item.type === 'thermal' && <View style={styles.thermalOverlay} />}
+                          {item.type === 'crt_tv' && <View style={styles.crtScanlines} />}
+                          {item.type === 'mirror' && <View style={styles.mirrorLine} />}
+                          {item.type === 'kaleidoscope' && (
+                            <>
+                              <View style={styles.kaleidoscopeCrossH} />
+                              <View style={styles.kaleidoscopeCrossV} />
+                            </>
+                          )}
+                          {(item.type === 'neon_edge' || item.type === 'ai_cyberpunk') && (
+                            <View style={styles.neonBorder} />
+                          )}
+                          {item.type === 'vignette' && <View style={styles.vignetteShadow} />}
+                          {item.type === 'flash' && <View style={styles.centerGlow} />}
+                          {(item.type === 'prism_leak' || item.type === 'sun_flare') && (
+                            <View style={styles.lightLeakStripe} />
+                          )}
+                          <View style={styles.badgeTag}>
+                            <Text style={styles.badgeTagText}>{item.category || 'FX'}</Text>
+                          </View>
+                          {isCurrentActive && (
+                            <View style={styles.activeCheckBadge}>
+                              <Ionicons name="checkmark" size={12} color="#000000" />
+                            </View>
+                          )}
+                        </>
+                      )}
                     </View>
                     <Text
                       style={[
@@ -559,16 +676,201 @@ const styles = StyleSheet.create({
   effectCard: {
     width: '31%',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 3,
-    borderRadius: 6,
+    padding: 4,
+    borderRadius: 8,
     backgroundColor: '#131826',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#1F2637',
   },
   effectCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
+  },
+  previewBox: {
+    width: '100%',
+    height: 52,
+    borderRadius: 5,
+    overflow: 'hidden',
+    backgroundColor: '#090B10',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  previewImg: {
+    width: '100%',
+    height: '100%',
+  },
+  nonePreviewBox: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#0A0D14',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  nonePreviewText: {
+    color: '#64748B',
+    fontSize: 9.5,
+    fontWeight: '600',
+  },
+  activeCheckBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  recBadge: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    zIndex: 5,
+  },
+  recDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#EF4444',
+  },
+  recText: {
+    color: '#FFFFFF',
+    fontSize: 7.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  glitchStripe1: {
+    position: 'absolute',
+    top: 12,
+    left: 0,
+    right: 0,
+    height: 6,
+    backgroundColor: 'rgba(0, 242, 254, 0.45)',
+  },
+  glitchStripe2: {
+    position: 'absolute',
+    top: 26,
+    left: 0,
+    right: 0,
+    height: 5,
+    backgroundColor: 'rgba(255, 0, 80, 0.45)',
+  },
+  matrixOverlay: {
+    position: 'absolute',
+    bottom: 2,
+    right: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    borderWidth: 0.5,
+    borderColor: '#10B981',
+    zIndex: 5,
+  },
+  matrixCodeText: {
+    color: '#10B981',
+    fontSize: 7,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  thermalOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    borderBottomWidth: 3,
+    borderColor: '#F59E0B',
+  },
+  crtScanlines: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  mirrorLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  kaleidoscopeCrossH: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  kaleidoscopeCrossV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  neonBorder: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 1.5,
+    borderColor: '#00F2FE',
+    borderRadius: 5,
+  },
+  vignetteShadow: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 4,
+    borderColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 5,
+  },
+  centerGlow: {
+    position: 'absolute',
+    top: '25%',
+    left: '25%',
+    width: '50%',
+    height: '50%',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  lightLeakStripe: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    width: 30,
+    height: 60,
+    backgroundColor: 'rgba(245, 158, 11, 0.35)',
+    transform: [{ rotate: '35deg' }],
+  },
+  badgeTag: {
+    position: 'absolute',
+    bottom: 2,
+    left: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    zIndex: 5,
+  },
+  badgeTagText: {
+    color: '#94A3B8',
+    fontSize: 7,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   iconBox: {
     width: 34,

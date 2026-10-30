@@ -4,8 +4,10 @@
 import { Platform } from 'react-native';
 
 const DB_NAME = 'fastart_media_db';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE_MEDIA = 'media_files';
+const STORE_MASKS = 'cutout_masks';
+const STORE_PROJECTS = 'projects_data';
 
 export interface StoredMediaRecord {
   id: string;
@@ -13,7 +15,10 @@ export interface StoredMediaRecord {
   type: 'video' | 'photo' | 'audio';
   mimeType: string;
   size: number;
-  blob: Blob;
+  blob?: Blob;
+  handle?: any; // FileSystemFileHandle for zero-duplication direct disk linking
+  isLinked?: boolean;
+  nativePath?: string;
   duration?: number;
   width?: number;
   height?: number;
@@ -41,10 +46,20 @@ function getIndexedDB(): Promise<IDBDatabase> {
           const store = db.createObjectStore(STORE_MEDIA, { keyPath: 'id' });
           store.createIndex('createdAt', 'createdAt', { unique: false });
         }
+        if (!db.objectStoreNames.contains(STORE_MASKS)) {
+          db.createObjectStore(STORE_MASKS, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(STORE_PROJECTS)) {
+          db.createObjectStore(STORE_PROJECTS, { keyPath: 'id' });
+        }
       };
       request.onsuccess = () => {
         const db = request.result;
-        if (!db.objectStoreNames.contains(STORE_MEDIA)) {
+        if (
+          !db.objectStoreNames.contains(STORE_MEDIA) ||
+          !db.objectStoreNames.contains(STORE_MASKS) ||
+          !db.objectStoreNames.contains(STORE_PROJECTS)
+        ) {
           db.close();
           const upgradeReq = indexedDB.open(DB_NAME, (db.version || 1) + 1);
           upgradeReq.onupgradeneeded = () => {
@@ -52,6 +67,12 @@ function getIndexedDB(): Promise<IDBDatabase> {
             if (!upDb.objectStoreNames.contains(STORE_MEDIA)) {
               const store = upDb.createObjectStore(STORE_MEDIA, { keyPath: 'id' });
               store.createIndex('createdAt', 'createdAt', { unique: false });
+            }
+            if (!upDb.objectStoreNames.contains(STORE_MASKS)) {
+              upDb.createObjectStore(STORE_MASKS, { keyPath: 'id' });
+            }
+            if (!upDb.objectStoreNames.contains(STORE_PROJECTS)) {
+              upDb.createObjectStore(STORE_PROJECTS, { keyPath: 'id' });
             }
           };
           upgradeReq.onsuccess = () => resolve(upgradeReq.result);
@@ -66,14 +87,319 @@ function getIndexedDB(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-// Store a large media file (Blob / File) safely in IndexedDB without memory or localStorage limit
+/**
+ * Verifies or prompts user permission for a stored FileSystemFileHandle
+ */
+export async function verifyHandlePermission(handle: any): Promise<boolean> {
+  if (!handle || typeof handle.queryPermission !== 'function') return false;
+  try {
+    const status = await handle.queryPermission({ mode: 'read' });
+    if (status === 'granted') return true;
+    if (status === 'prompt' && typeof handle.requestPermission === 'function') {
+      const requestStatus = await handle.requestPermission({ mode: 'read' });
+      return requestStatus === 'granted';
+    }
+  } catch (e) {
+    console.warn('Handle permission check error:', e);
+  }
+  return false;
+}
+
+export interface WebMediaPickResult {
+  file: File;
+  handle?: any; // FileSystemFileHandle
+  isLinked: boolean;
+}
+
+/**
+ * Universal Web file picker:
+ * - Prioritizes File System Access API (showOpenFilePicker): links directly to user's file location with 0 duplicate bytes!
+ * - Fallbacks to HTML5 file input when unavailable (Safari, Firefox)
+ */
+export async function pickWebMedia(
+  acceptTypes: 'all' | 'video' | 'photo' | 'audio' = 'all'
+): Promise<WebMediaPickResult | null> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+
+  // 1. Prioritize File System Access API (Zero-Duplication Local File Linking)
+  if ('showOpenFilePicker' in window) {
+    try {
+      const acceptMap: Record<string, string[]> = {};
+      if (acceptTypes === 'all' || acceptTypes === 'video') {
+        acceptMap['video/*'] = ['.mp4', '.mov', '.webm', '.m4v', '.mkv'];
+      }
+      if (acceptTypes === 'all' || acceptTypes === 'photo') {
+        acceptMap['image/*'] = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'];
+      }
+      if (acceptTypes === 'all' || acceptTypes === 'audio') {
+        acceptMap['audio/*'] = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+      }
+
+      const handles = await (window as any).showOpenFilePicker({
+        multiple: false,
+        types: [
+          {
+            description: 'Media Files',
+            accept: acceptMap,
+          },
+        ],
+      });
+
+      if (handles && handles.length > 0) {
+        const handle = handles[0];
+        const file = await handle.getFile();
+        return { file, handle, isLinked: true };
+      }
+      return null;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return null; // User cancelled dialog
+      }
+      console.warn('showOpenFilePicker error, falling back to input:', err);
+    }
+  }
+
+  // 2. Standard HTML5 file picker fallback
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    let accept = 'video/*,image/*,audio/*';
+    if (acceptTypes === 'video') accept = 'video/*';
+    else if (acceptTypes === 'photo') accept = 'image/*';
+    else if (acceptTypes === 'audio') accept = 'audio/*';
+    input.accept = accept;
+
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (file) {
+        resolve({ file, isLinked: false });
+      } else {
+        resolve(null);
+      }
+    };
+
+    input.oncancel = () => resolve(null);
+
+    setTimeout(() => {
+      try {
+        input.click();
+      } catch {
+        resolve(null);
+      }
+    }, 40);
+  });
+}
+
+/**
+ * On Mobile (iOS & Android): Copies media from ephemeral picker cache to the application's permanent Documents/media/ directory.
+ * Survives app restarts, system cache cleanups, and device reboot.
+ */
+export async function persistNativeMediaCopy(
+  sourceUri: string,
+  id: string,
+  fileName?: string
+): Promise<string> {
+  if (Platform.OS === 'web') return sourceUri;
+  try {
+    const FileSystemLegacy = await import('expo-file-system/legacy');
+    const docDir = FileSystemLegacy.documentDirectory;
+    if (!docDir) return sourceUri;
+
+    const mediaDir = `${docDir}media/`;
+    const dirInfo = await FileSystemLegacy.getInfoAsync(mediaDir);
+    if (!dirInfo.exists) {
+      await FileSystemLegacy.makeDirectoryAsync(mediaDir, { intermediates: true });
+    }
+
+    const cleanName = (fileName || 'media').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ext = cleanName.includes('.') ? '' : '.mp4';
+    const targetPath = `${mediaDir}${id}_${cleanName}${ext}`;
+
+    const targetInfo = await FileSystemLegacy.getInfoAsync(targetPath);
+    if (targetInfo.exists) {
+      return targetPath;
+    }
+
+    await FileSystemLegacy.copyAsync({
+      from: sourceUri,
+      to: targetPath,
+    });
+
+    return targetPath;
+  } catch (err) {
+    console.warn('[largeMediaStorage] Failed to copy media on native:', err);
+    return sourceUri;
+  }
+}
+
+/**
+ * Checks if a stored media record exists in IndexedDB and whether it has a handle or blob.
+ */
+export async function getStoredMediaStatus(
+  id: string,
+  hintName?: string
+): Promise<{ exists: boolean; hasHandle: boolean; hasBlob: boolean; name?: string }> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') {
+    return { exists: false, hasHandle: false, hasBlob: false };
+  }
+  try {
+    const all = await getAllStoredMedia();
+    let record =
+      all.find(
+        (r) =>
+          r.id === id ||
+          r.id.startsWith(id) ||
+          id.startsWith(r.id) ||
+          (hintName &&
+            (r.name === hintName ||
+              r.name.toLowerCase().includes(hintName.toLowerCase()) ||
+              hintName.toLowerCase().includes(r.name.toLowerCase())))
+      ) || null;
+
+    if (!record && all.length === 1) {
+      record = all[0];
+    }
+
+    if (!record) return { exists: false, hasHandle: false, hasBlob: false };
+    return {
+      exists: true,
+      hasHandle: Boolean(record.handle),
+      hasBlob: Boolean(record.blob),
+      name: record.name,
+    };
+  } catch {
+    return { exists: false, hasHandle: false, hasBlob: false };
+  }
+}
+
+/**
+ * Attempts to reconnect a linked media file using its existing FileSystemFileHandle without opening a file picker.
+ * Called during a user interaction (gesture) so Chrome/WebKit permits querying/requesting permission.
+ */
+export async function reconnectLinkedMedia(
+  mediaId: string,
+  hintName?: string
+): Promise<{ url: string; title: string } | null> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return null;
+  try {
+    const db = await getIndexedDB();
+    const all = await getAllStoredMedia();
+    let record =
+      all.find(
+        (r) =>
+          r.id === mediaId ||
+          r.id.startsWith(mediaId) ||
+          mediaId.startsWith(r.id) ||
+          (hintName &&
+            (r.name === hintName ||
+              r.name.toLowerCase().includes(hintName.toLowerCase()) ||
+              hintName.toLowerCase().includes(r.name.toLowerCase())))
+      ) || null;
+
+    if (!record && all.length === 1) {
+      record = all[0];
+    }
+
+    if (!record) return null;
+
+    // If record already has a blob, create and cache URL immediately
+    if (record.blob) {
+      const live = URL.createObjectURL(record.blob);
+      objectUrlCache.set(mediaId, live);
+      objectUrlCache.set(live, live);
+      if (record.id) objectUrlCache.set(record.id, live);
+      blobByUrlCache.set(live, record.blob);
+      return { url: live, title: record.name };
+    }
+
+    if (!record.handle) return null;
+
+    let hasPerm = false;
+    try {
+      const status = await record.handle.queryPermission({ mode: 'read' });
+      if (status === 'granted') {
+        hasPerm = true;
+      } else if (typeof record.handle.requestPermission === 'function') {
+        const req = await record.handle.requestPermission({ mode: 'read' });
+        hasPerm = req === 'granted';
+      }
+    } catch (e) {
+      console.warn('[reconnectLinkedMedia] Permission check:', e);
+    }
+
+    if (hasPerm) {
+      const file = await record.handle.getFile();
+      if (file) {
+        const live = URL.createObjectURL(file);
+        objectUrlCache.set(mediaId, live);
+        objectUrlCache.set(live, live);
+        if (record.id) objectUrlCache.set(record.id, live);
+        blobByUrlCache.set(live, file);
+
+        // Permanently cache blob in record so that all future refreshes load instantly
+        try {
+          const tx = db.transaction(STORE_MEDIA, 'readwrite');
+          const store = tx.objectStore(STORE_MEDIA);
+          record.blob = file;
+          store.put(record);
+        } catch (saveErr) {
+          console.warn('[reconnectLinkedMedia] Failed to cache blob into record:', saveErr);
+        }
+
+        return { url: live, title: record.name };
+      }
+    }
+  } catch (err) {
+    console.warn('[reconnectLinkedMedia] Error reconnecting:', err);
+  }
+  return null;
+}
+
+/**
+ * Relinks a missing or moved media file by selecting a new location from the user's filesystem.
+ */
+export async function relinkMediaFile(
+  mediaId: string,
+  type: 'all' | 'video' | 'photo' | 'audio' = 'all'
+): Promise<{ url: string; title: string } | null> {
+  const result = await pickWebMedia(type as any);
+  if (!result) return null;
+
+  const { file, handle } = result;
+  const title = file.name.replace(/\.[^/.]+$/, '');
+  const mediaType =
+    type === 'all'
+      ? file.type.startsWith('video')
+        ? 'video'
+        : file.type.startsWith('audio')
+          ? 'audio'
+          : 'photo'
+      : type;
+
+  const saved = await persistLargeMedia(file, mediaId, title, mediaType, {
+    handle,
+    isLinked: !!handle,
+  });
+
+  return { url: saved.url, title };
+}
+
+// Store a large media file (or linked FileSystemFileHandle) safely in IndexedDB
 export async function persistLargeMedia(
   fileOrBlob: Blob | File,
   id: string,
   name: string,
   type: 'video' | 'photo' | 'audio',
-  metadata?: { duration?: number; width?: number; height?: number; thumbnail?: string }
-): Promise<{ id: string; url: string; size: number; duration: number; thumbnail?: string }> {
+  metadata?: {
+    duration?: number;
+    width?: number;
+    height?: number;
+    thumbnail?: string;
+    handle?: any; // FileSystemFileHandle for zero-duplication linking
+    nativePath?: string;
+    isLinked?: boolean;
+  }
+): Promise<{ id: string; url: string; size: number; duration: number; thumbnail?: string; isLinked?: boolean }> {
   const mimeType = fileOrBlob.type || (type === 'video' ? 'video/mp4' : type === 'audio' ? 'audio/mpeg' : 'image/jpeg');
   const size = fileOrBlob.size;
 
@@ -118,8 +444,11 @@ export async function persistLargeMedia(
   if (!liveUrl) {
     liveUrl = URL.createObjectURL(fileOrBlob);
     objectUrlCache.set(id, liveUrl);
+    objectUrlCache.set(liveUrl, liveUrl);
     blobByUrlCache.set(liveUrl, fileOrBlob);
   }
+
+  const isLinked = !!metadata?.handle || metadata?.isLinked === true;
 
   // Save to IndexedDB if on web
   if (Platform.OS === 'web' && typeof indexedDB !== 'undefined') {
@@ -134,7 +463,12 @@ export async function persistLargeMedia(
           type,
           mimeType,
           size,
-          blob: fileOrBlob,
+          // Zero-duplication: For linked files with a disk handle, NEVER copy the giant blob into IndexedDB!
+          // Only unlinked ephemeral files (clipboard / recordings) store a local blob.
+          blob: isLinked ? undefined : fileOrBlob,
+          handle: metadata?.handle,
+          isLinked,
+          nativePath: metadata?.nativePath,
           duration,
           width,
           height,
@@ -150,7 +484,7 @@ export async function persistLargeMedia(
     }
   }
 
-  return { id, url: liveUrl, size, duration, thumbnail };
+  return { id, url: liveUrl, size, duration, thumbnail, isLinked };
 }
 
 // Retrieve live object URL for a media ID from IndexedDB
@@ -202,12 +536,67 @@ export async function getLiveMediaUrl(id: string, hintName?: string): Promise<st
       }
     }
 
-    if (record && record.blob) {
-      const url = URL.createObjectURL(record.blob);
-      objectUrlCache.set(id, url);
-      objectUrlCache.set(record.id, url);
-      blobByUrlCache.set(url, record.blob);
-      return url;
+    if (record) {
+      // 1. Prioritize stored blob (instant, reliable, no user-gesture permission hurdle)
+      if (record.blob) {
+        const url = URL.createObjectURL(record.blob);
+        objectUrlCache.set(id, url);
+        objectUrlCache.set(url, url);
+        if (record.id) {
+          objectUrlCache.set(record.id, url);
+        }
+        blobByUrlCache.set(url, record.blob);
+        return url;
+      }
+
+      // 2. Direct local disk handle
+      if (record.handle) {
+        try {
+          const file = await record.handle.getFile();
+          if (file) {
+            const url = URL.createObjectURL(file);
+            objectUrlCache.set(id, url);
+            objectUrlCache.set(url, url);
+            if (record.id) objectUrlCache.set(record.id, url);
+            blobByUrlCache.set(url, file);
+
+            // Cache blob permanently into store so future refreshes need 0 permissions
+            try {
+              const writeTx = db.transaction(STORE_MEDIA, 'readwrite');
+              const writeStore = writeTx.objectStore(STORE_MEDIA);
+              record.blob = file;
+              writeStore.put(record);
+            } catch {}
+
+            return url;
+          }
+        } catch (handleErr: any) {
+          if (handleErr.name === 'NotAllowedError') {
+            const granted = await verifyHandlePermission(record.handle);
+            if (granted) {
+              const file = await record.handle.getFile();
+              if (file) {
+                const url = URL.createObjectURL(file);
+                objectUrlCache.set(id, url);
+                objectUrlCache.set(url, url);
+                if (record.id) objectUrlCache.set(record.id, url);
+                blobByUrlCache.set(url, file);
+
+                try {
+                  const writeTx = db.transaction(STORE_MEDIA, 'readwrite');
+                  const writeStore = writeTx.objectStore(STORE_MEDIA);
+                  record.blob = file;
+                  writeStore.put(record);
+                } catch {}
+
+                return url;
+              }
+            }
+          }
+          console.warn(`[largeMediaStorage] Linked file "${record.name}" could not be opened:`, handleErr);
+          return null;
+        }
+      }
     }
   } catch (err) {
     console.warn('Failed to load media from IndexedDB:', err);
@@ -227,7 +616,27 @@ export async function getLiveMediaBlob(id: string): Promise<Blob | File | null> 
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => reject(req.error);
     });
-    return record?.blob || null;
+
+    if (record?.blob) {
+      return record.blob;
+    }
+
+    if (record?.handle) {
+      try {
+        const file = await record.handle.getFile();
+        if (file) return file;
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError') {
+          const granted = await verifyHandlePermission(record.handle);
+          if (granted) {
+            const file = await record.handle.getFile();
+            if (file) return file;
+          }
+        }
+      }
+    }
+
+    return null;
   } catch (err) {
     console.warn('Failed to load media blob from IndexedDB:', err);
     return null;
@@ -394,7 +803,7 @@ export function extractVideoMetadata(
     const vid = document.createElement('video');
     vid.muted = true;
     vid.playsInline = true;
-    vid.preload = 'auto';
+    vid.preload = 'metadata'; // Fast header-only load: avoids buffering the full multi-GB video
     vid.style.position = 'fixed';
     vid.style.top = '-9999px';
     vid.style.left = '-9999px';
@@ -415,7 +824,6 @@ export function extractVideoMetadata(
     };
 
     let resolved = false;
-    let seekAttempt = 0;
     const finish = (duration: number, width: number, height: number, thumbnail = '') => {
       if (resolved) return;
       resolved = true;
@@ -429,13 +837,11 @@ export function extractVideoMetadata(
         vid.videoWidth || 1920,
         vid.videoHeight || 1080
       );
-    }, 4500);
+    }, 1200);
 
     vid.onloadedmetadata = () => {
       const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
-      // Seek to at least 0.25s to avoid pre-roll black frames
-      const seekTime = Math.min(Math.max(0.25, dur * 0.15), Math.max(0.2, dur - 0.2));
-      vid.currentTime = seekTime;
+      vid.currentTime = Math.min(0.2, Math.max(0, dur * 0.1));
     };
 
     vid.onseeked = () => {
@@ -444,34 +850,15 @@ export function extractVideoMetadata(
         const vw = vid.videoWidth || 640;
         const vh = vid.videoHeight || 360;
         const thumbCanvas = document.createElement('canvas');
-        const tw = Math.min(480, vw);
+        const tw = Math.min(320, vw);
         const aspect = vw / (vh || 1);
         const th = Math.round(tw / aspect);
         thumbCanvas.width = tw;
         thumbCanvas.height = th;
         const ctx = thumbCanvas.getContext('2d');
         if (ctx) {
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(vid, 0, 0, tw, th);
-
-          // Check if frame is pure black
-          let isBlack = false;
-          try {
-            const p = ctx.getImageData(Math.floor(tw / 2), Math.floor(th / 2), 1, 1).data;
-            if (p[0] < 15 && p[1] < 15 && p[2] < 15) {
-              isBlack = true;
-            }
-          } catch (_) {}
-
-          const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
-          if (isBlack && seekAttempt === 0 && dur > 0.8) {
-            seekAttempt++;
-            vid.currentTime = Math.min(1.0, dur * 0.35);
-            return;
-          }
-
-          thumb = thumbCanvas.toDataURL('image/jpeg', 0.85);
+          thumb = thumbCanvas.toDataURL('image/jpeg', 0.7);
         }
       } catch (e) {}
 
@@ -698,12 +1085,33 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
             ...clip,
             sourceMediaId: clip.sourceMediaId || lookupId,
             url: freshUrl,
+            isMissing: false,
+            needsPermission: false,
             thumbnail:
               clip.thumbnail && !clip.thumbnail.startsWith('blob:')
                 ? clip.thumbnail
                 : clip.type === 'photo'
                   ? freshUrl
                   : clip.thumbnail,
+          };
+        } else if (!freshUrl && isBlob) {
+          hasChanges = true;
+          const status = await getStoredMediaStatus(lookupId, clip.title || clip.name);
+          if (clip.isLinked || status.hasHandle || status.exists) {
+            return {
+              ...clip,
+              isLinked: true,
+              needsPermission: true,
+              isMissing: false, // Guaranteed: linked files on user's disk are NEVER falsely marked missing!
+              missingTitle: status.name || clip.title || clip.name,
+            };
+          }
+          return {
+            ...clip,
+            isLinked: true,
+            needsPermission: true,
+            isMissing: false,
+            missingTitle: clip.title || clip.name,
           };
         }
       }
@@ -725,6 +1133,27 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
             ...clip,
             sourceMediaId: clip.sourceMediaId || lookupId,
             url: freshUrl,
+            isMissing: false,
+            needsPermission: false,
+          };
+        } else if (!freshUrl && isBlob) {
+          hasChanges = true;
+          const status = await getStoredMediaStatus(lookupId, clip.title || clip.name);
+          if (clip.isLinked || status.hasHandle || status.exists) {
+            return {
+              ...clip,
+              isLinked: true,
+              needsPermission: true,
+              isMissing: false,
+              missingTitle: status.name || clip.title || clip.name,
+            };
+          }
+          return {
+            ...clip,
+            isLinked: true,
+            needsPermission: true,
+            isMissing: false,
+            missingTitle: clip.title || clip.name,
           };
         }
       }
@@ -749,4 +1178,122 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
 export async function rehydrateProjectsMedia(projects: any[]): Promise<any[]> {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return projects;
   return Promise.all(projects.map(rehydrateProjectMedia));
+}
+
+/**
+ * Listens for the first user interaction to transparently query and reconnect any linked files
+ * that Chrome held back permissions for during page load.
+ */
+export function setupAutoReconnectListener(
+  onReconnected?: (lookupId: string, url: string) => void
+) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+  const tryReconnectAll = async () => {
+    window.removeEventListener('click', tryReconnectAll, true);
+    window.removeEventListener('keydown', tryReconnectAll, true);
+
+    try {
+      const all = await getAllStoredMedia();
+      for (const record of all) {
+        if (record.handle && !record.blob) {
+          const res = await reconnectLinkedMedia(record.id, record.name);
+          if (res && onReconnected) {
+            onReconnected(record.id, res.url);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[setupAutoReconnectListener] error:', e);
+    }
+  };
+
+  window.addEventListener('click', tryReconnectAll, { capture: true, once: true });
+  window.addEventListener('keydown', tryReconnectAll, { capture: true, once: true });
+}
+
+/**
+ * Persists compressed 8-bit RLE cutout masks into IndexedDB for instant, persistent recovery.
+ */
+export async function persistMasksRLE(
+  clipId: string,
+  masks: Record<string, Uint8Array>,
+): Promise<void> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    const db = await getIndexedDB();
+    if (!db.objectStoreNames.contains(STORE_MASKS)) return;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MASKS, 'readwrite');
+      const store = tx.objectStore(STORE_MASKS);
+      store.put({ id: clipId, masks, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn('[largeMediaStorage] Failed to persist masks:', e);
+  }
+}
+
+/**
+ * Loads compressed 8-bit RLE cutout masks from IndexedDB.
+ */
+export async function loadMasksRLE(
+  clipId: string,
+): Promise<Record<string, Uint8Array> | null> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  try {
+    const db = await getIndexedDB();
+    if (!db.objectStoreNames.contains(STORE_MASKS)) return null;
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_MASKS, 'readonly');
+      const store = tx.objectStore(STORE_MASKS);
+      const req = store.get(clipId);
+      req.onsuccess = () => {
+        resolve(req.result ? req.result.masks : null);
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persists all projects JSON into IndexedDB as a resilient tier-2 storage backup
+ * that survives browser local storage quota limits and tab crashes.
+ */
+export async function persistProjectsToIndexedDB(projectsJson: string): Promise<void> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    const db = await getIndexedDB();
+    if (!db.objectStoreNames.contains(STORE_PROJECTS)) return;
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_PROJECTS, 'readwrite');
+      const store = tx.objectStore(STORE_PROJECTS);
+      store.put({ id: 'all_projects', data: projectsJson, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {}
+}
+
+/**
+ * Loads projects JSON backup from IndexedDB if local storage is missing or corrupted.
+ */
+export async function loadProjectsFromIndexedDB(): Promise<string | null> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  try {
+    const db = await getIndexedDB();
+    if (!db.objectStoreNames.contains(STORE_PROJECTS)) return null;
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_PROJECTS, 'readonly');
+      const store = tx.objectStore(STORE_PROJECTS);
+      const req = store.get('all_projects');
+      req.onsuccess = () => resolve(req.result ? req.result.data : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
 }

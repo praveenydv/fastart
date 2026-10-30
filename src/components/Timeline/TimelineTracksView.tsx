@@ -19,9 +19,9 @@ interface TimelineTracksViewProps {
   trackRows: UnifiedClipItem[][];
   activeTrackCount: number;
   timelineContentWidth: number;
-  rulerRef: React.RefObject<any>;
-  rulerPanResponder: any;
-  renderedTicks: React.ReactNode;
+  rulerRef?: React.RefObject<any>;
+  rulerPanResponder?: any;
+  renderedTicks?: React.ReactNode;
   selectedClipId: string | null;
   pxPerSec: number;
   activeTrimming: any;
@@ -118,15 +118,6 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
 
   return (
     <View style={[styles.tracksContainer, { width: timelineContentWidth }]}>
-      {/* Time Ruler (Interactive Tap & Drag to Seek with ms precision) */}
-      <View
-        ref={rulerRef}
-        style={styles.rulerContainer}
-        {...rulerPanResponder.panHandlers}
-      >
-        {renderedTicks}
-      </View>
-
       {/* Track Lanes */}
       {trackRows.map((rowClips, trackIdx) => {
         const isEmptyTrack = rowClips.length === 0;

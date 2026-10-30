@@ -6,7 +6,7 @@ use crate::codecs::{
 };
 use crate::compositor::{render_canvas_background, BlendMode};
 use crate::effects::{apply_color_adjustments, apply_fast_blur, apply_vignette};
-use crate::transform::{composite_transformed, evaluate_keyframes, EvaluatedTransform};
+use crate::transform::{composite_transformed, evaluate_keyframes, evaluate_mask_keyframes, EvaluatedTransform};
 use crate::types::{FastArtProject, FrameBuffer, VideoClip};
 
 pub struct FastArtExporter;
@@ -85,12 +85,19 @@ impl FastArtExporter {
                     );
                 }
 
+                let evaluated_mask = evaluate_mask_keyframes(
+                    clip.mask.as_ref(),
+                    clip.mask_keyframes.as_deref().or_else(|| clip.mask.as_ref().and_then(|m| m.keyframes.as_deref())),
+                    clip.keyframes.as_deref(),
+                    local_time,
+                );
+
                 composite_transformed(
                     &mut fb,
                     src_frame,
                     &transform,
                     Some(fit),
-                    clip.mask.as_ref(),
+                    evaluated_mask.as_ref().or(clip.mask.as_ref()),
                     clip.cutout.as_ref(),
                     BlendMode::Normal,
                 );

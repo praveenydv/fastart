@@ -1,4 +1,4 @@
-import { ClipTransform, KeyframePoint } from "../types/project";
+import { ClipTransform, KeyframePoint, MaskConfig, MaskKeyframePoint } from "../types/project";
 import { rustCoreBridge } from "../services/rustCoreBridge";
 
 export interface ResolvedTransform {
@@ -16,6 +16,7 @@ export interface ResolvedTransform {
   opacity: number;
   flipX: boolean;
   flipY: boolean;
+  mask?: MaskConfig;
 }
 
 /**
@@ -121,7 +122,9 @@ export function getBaseTransform(
   const rotateY = Number.isFinite(t.rotateY) ? Number(t.rotateY) : 0;
   const skewX = Number.isFinite(t.skewX) ? Number(t.skewX) : 0;
   const skewY = Number.isFinite(t.skewY) ? Number(t.skewY) : 0;
-  const perspective = Number.isFinite(t.perspective) ? Number(t.perspective) : 800;
+  const perspective = Number.isFinite(t.perspective)
+    ? Number(t.perspective)
+    : 800;
 
   return {
     x,
@@ -142,6 +145,84 @@ export function getBaseTransform(
 }
 
 const sortedKfCache = new WeakMap<KeyframePoint[], KeyframePoint[]>();
+const sortedMaskKfCache = new WeakMap<MaskKeyframePoint[], MaskKeyframePoint[]>();
+
+/**
+ * Validates, sorts, and deduplicates mask keyframes by timestamp.
+ */
+export function cleanAndSortMaskKeyframes(
+  keyframes: MaskKeyframePoint[] | undefined | null,
+): MaskKeyframePoint[] {
+  if (!keyframes || !Array.isArray(keyframes) || keyframes.length === 0) {
+    return [];
+  }
+
+  const cached = sortedMaskKfCache.get(keyframes);
+  if (cached) {
+    return cached;
+  }
+
+  const valid = keyframes.filter(
+    (k) => k && typeof k.time === "number" && Number.isFinite(k.time) && k.mask,
+  );
+
+  const sorted = [...valid].sort((a, b) => a.time - b.time);
+
+  const result: MaskKeyframePoint[] = [];
+  for (const kf of sorted) {
+    const cleanTime = Math.max(0, Number(kf.time.toFixed(3)));
+    const m = kf.mask;
+    const s = Number.isFinite(m.size) ? Number(m.size) : 60;
+    const cleanMask: MaskConfig = {
+      shape: m.shape || "none",
+      size: s,
+      width: Number.isFinite(m.width) ? Number(m.width) : s,
+      height: Number.isFinite(m.height) ? Number(m.height) : s,
+      feather: Number.isFinite(m.feather) ? Number(m.feather) : 0,
+      roundness: Number.isFinite(m.roundness) ? Number(m.roundness) : 16,
+      inverted: Boolean(m.inverted),
+      x: Number.isFinite(m.x) ? Number(m.x) : 0,
+      y: Number.isFinite(m.y) ? Number(m.y) : 0,
+      rotation: Number.isFinite(m.rotation)
+        ? ((Math.round(Number(m.rotation)) % 360) + 360) % 360
+        : 0,
+    };
+
+    const cleanKf: MaskKeyframePoint = {
+      time: cleanTime,
+      mask: cleanMask,
+      easing: kf.easing,
+    };
+
+    if (result.length > 0) {
+      const last = result[result.length - 1];
+      if (Math.abs(last.time - cleanTime) < 0.04) {
+        result[result.length - 1] = cleanKf;
+        continue;
+      }
+    }
+    result.push(cleanKf);
+  }
+
+  sortedMaskKfCache.set(keyframes, result);
+  return result;
+}
+
+/**
+ * Finds a mask keyframe point near the specified local time.
+ */
+export function findMaskKeyframeAtTime(
+  keyframes: MaskKeyframePoint[] | undefined | null,
+  localTime: number,
+  threshold = 0.12,
+): MaskKeyframePoint | null {
+  if (!keyframes || !Array.isArray(keyframes) || keyframes.length === 0) {
+    return null;
+  }
+  return (
+    keyframes.find((k) => Math.abs(k.time - localTime) <= threshold) || null
+  );
+}
 
 /**
  * Validates, sorts, and deduplicates keyframes by timestamp.
@@ -179,16 +260,56 @@ export function cleanAndSortKeyframes(
       rotation: Number.isFinite(kf.transform?.rotation)
         ? ((Math.round(Number(kf.transform.rotation)) % 360) + 360) % 360
         : 0,
-      scaleX: Number.isFinite(kf.transform?.scaleX) ? Number(kf.transform?.scaleX) : 1.0,
-      scaleY: Number.isFinite(kf.transform?.scaleY) ? Number(kf.transform?.scaleY) : 1.0,
-      rotateX: Number.isFinite(kf.transform?.rotateX) ? Number(kf.transform?.rotateX) : 0,
-      rotateY: Number.isFinite(kf.transform?.rotateY) ? Number(kf.transform?.rotateY) : 0,
-      skewX: Number.isFinite(kf.transform?.skewX) ? Number(kf.transform?.skewX) : 0,
-      skewY: Number.isFinite(kf.transform?.skewY) ? Number(kf.transform?.skewY) : 0,
-      perspective: Number.isFinite(kf.transform?.perspective) ? Number(kf.transform?.perspective) : 800,
+      scaleX: Number.isFinite(kf.transform?.scaleX)
+        ? Number(kf.transform?.scaleX)
+        : 1.0,
+      scaleY: Number.isFinite(kf.transform?.scaleY)
+        ? Number(kf.transform?.scaleY)
+        : 1.0,
+      rotateX: Number.isFinite(kf.transform?.rotateX)
+        ? Number(kf.transform?.rotateX)
+        : 0,
+      rotateY: Number.isFinite(kf.transform?.rotateY)
+        ? Number(kf.transform?.rotateY)
+        : 0,
+      skewX: Number.isFinite(kf.transform?.skewX)
+        ? Number(kf.transform?.skewX)
+        : 0,
+      skewY: Number.isFinite(kf.transform?.skewY)
+        ? Number(kf.transform?.skewY)
+        : 0,
+      perspective: Number.isFinite(kf.transform?.perspective)
+        ? Number(kf.transform?.perspective)
+        : 800,
       flipX: Boolean(kf.transform?.flipX),
       flipY: Boolean(kf.transform?.flipY),
     };
+    const rawMask = kf.mask || kf.transform?.mask;
+    let cleanMask: MaskConfig | undefined = undefined;
+    if (rawMask && rawMask.shape && rawMask.shape !== "none") {
+      cleanMask = {
+        shape: rawMask.shape,
+        size: Number.isFinite(rawMask.size) ? Number(rawMask.size) : 60,
+        width: Number.isFinite(rawMask.width)
+          ? Number(rawMask.width)
+          : rawMask.size || 60,
+        height: Number.isFinite(rawMask.height)
+          ? Number(rawMask.height)
+          : rawMask.size || 60,
+        feather: Number.isFinite(rawMask.feather) ? Number(rawMask.feather) : 0,
+        roundness: Number.isFinite(rawMask.roundness)
+          ? Number(rawMask.roundness)
+          : 16,
+        inverted: Boolean(rawMask.inverted),
+        x: Number.isFinite(rawMask.x) ? Number(rawMask.x) : 0,
+        y: Number.isFinite(rawMask.y) ? Number(rawMask.y) : 0,
+        rotation: Number.isFinite(rawMask.rotation)
+          ? Number(rawMask.rotation)
+          : 0,
+      };
+      cleanTransform.mask = cleanMask;
+    }
+
     const cleanOpacity = Number.isFinite(kf.opacity)
       ? Math.max(0, Math.min(1, Number(kf.opacity)))
       : 1.0;
@@ -197,6 +318,8 @@ export function cleanAndSortKeyframes(
       time: cleanTime,
       transform: cleanTransform,
       opacity: cleanOpacity,
+      easing: kf.easing,
+      mask: cleanMask,
     };
 
     if (result.length > 0) {
@@ -230,6 +353,177 @@ export function findKeyframeAtTime(
   );
 }
 
+function interpolateMaskPair(
+  m1: MaskConfig,
+  m2: MaskConfig,
+  ease: number,
+  progress: number,
+): MaskConfig {
+  const rot1 = m1.rotation ?? 0;
+  const rot2 = m2.rotation ?? 0;
+  let rotDiff = (rot2 - rot1) % 360;
+  if (rotDiff > 180) rotDiff -= 360;
+  if (rotDiff < -180) rotDiff += 360;
+  const interpRot = (((rot1 + rotDiff * ease) % 360) + 360) % 360;
+
+  const s1 = m1.size ?? 60;
+  const s2 = m2.size ?? 60;
+  const w1 = m1.width ?? s1;
+  const w2 = m2.width ?? s2;
+  const h1 = m1.height ?? s1;
+  const h2 = m2.height ?? s2;
+  const f1 = m1.feather ?? 0;
+  const f2 = m2.feather ?? 0;
+  const r1 = m1.roundness ?? 16;
+  const r2 = m2.roundness ?? 16;
+  const x1 = m1.x ?? 0;
+  const x2 = m2.x ?? 0;
+  const y1 = m1.y ?? 0;
+  const y2 = m2.y ?? 0;
+
+  return {
+    shape: progress < 0.5 ? m1.shape : m2.shape,
+    size: s1 + (s2 - s1) * ease,
+    width: w1 + (w2 - w1) * ease,
+    height: h1 + (h2 - h1) * ease,
+    feather: Math.max(0, f1 + (f2 - f1) * ease),
+    roundness: Math.max(0, r1 + (r2 - r1) * ease),
+    x: x1 + (x2 - x1) * ease,
+    y: y1 + (y2 - y1) * ease,
+    rotation: interpRot,
+    inverted: progress < 0.5 ? m1.inverted : m2.inverted,
+  };
+}
+
+/**
+ * Smoothly interpolates clip mask parameters across keyframes,
+ * prioritizing dedicated `maskKeyframes`, with fallback to embedded legacy keyframes.
+ */
+export function getInterpolatedMask(
+  clip: any,
+  curTime: number,
+): MaskConfig | undefined {
+  if (!clip) return undefined;
+
+  const baseMask: MaskConfig | undefined = clip.mask || clip.transform?.mask;
+
+  // 1. Dedicated mask keyframes
+  const rawMaskKfs = clip.maskKeyframes || clip.mask?.keyframes;
+  if (rawMaskKfs && Array.isArray(rawMaskKfs) && rawMaskKfs.length > 0) {
+    const maskKfs = cleanAndSortMaskKeyframes(rawMaskKfs);
+    if (maskKfs.length > 0) {
+      const localTime = Math.max(0, curTime - (clip.startTime || 0));
+
+      if (localTime <= maskKfs[0].time) {
+        return maskKfs[0].mask || baseMask;
+      }
+
+      if (localTime >= maskKfs[maskKfs.length - 1].time) {
+        const last = maskKfs[maskKfs.length - 1];
+        return last.mask || baseMask;
+      }
+
+      for (let i = 0; i < maskKfs.length - 1; i++) {
+        const k1 = maskKfs[i];
+        const k2 = maskKfs[i + 1];
+        if (localTime >= k1.time && localTime <= k2.time) {
+          const span = k2.time - k1.time;
+          const progress = span > 0 ? (localTime - k1.time) / span : 0;
+          const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
+          let ease = progress;
+          if (easingType === "linear") {
+            ease = progress;
+          } else if (easingType === "easeIn") {
+            ease = progress * progress * progress;
+          } else if (easingType === "easeOut") {
+            ease = 1 - Math.pow(1 - progress, 3);
+          } else if (easingType === "easeInOut") {
+            ease =
+              progress < 0.5
+                ? 4 * progress * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+          } else if (easingType === "spring") {
+            ease =
+              1 +
+              Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+          } else {
+            ease = progress * progress * (3 - 2 * progress);
+          }
+
+          const m1 = k1.mask || baseMask;
+          const m2 = k2.mask || baseMask;
+          if (!m1 && !m2) return undefined;
+          if (!m1) return m2;
+          if (!m2) return m1;
+
+          return interpolateMaskPair(m1, m2, ease, progress);
+        }
+      }
+    }
+  }
+
+  // 2. Legacy fallback to embedded transform keyframes
+  if (
+    clip.keyframes &&
+    Array.isArray(clip.keyframes) &&
+    clip.keyframes.length > 0
+  ) {
+    const kfs = cleanAndSortKeyframes(clip.keyframes);
+    const legacyMaskKfs = kfs.filter((k) => k.mask || k.transform?.mask);
+    if (legacyMaskKfs.length > 0) {
+      const localTime = Math.max(0, curTime - (clip.startTime || 0));
+
+      if (localTime <= legacyMaskKfs[0].time) {
+        return legacyMaskKfs[0].mask || legacyMaskKfs[0].transform?.mask || baseMask;
+      }
+
+      if (localTime >= legacyMaskKfs[legacyMaskKfs.length - 1].time) {
+        const last = legacyMaskKfs[legacyMaskKfs.length - 1];
+        return last.mask || last.transform?.mask || baseMask;
+      }
+
+      for (let i = 0; i < legacyMaskKfs.length - 1; i++) {
+        const k1 = legacyMaskKfs[i];
+        const k2 = legacyMaskKfs[i + 1];
+        if (localTime >= k1.time && localTime <= k2.time) {
+          const span = k2.time - k1.time;
+          const progress = span > 0 ? (localTime - k1.time) / span : 0;
+          const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
+          let ease = progress;
+          if (easingType === "linear") {
+            ease = progress;
+          } else if (easingType === "easeIn") {
+            ease = progress * progress * progress;
+          } else if (easingType === "easeOut") {
+            ease = 1 - Math.pow(1 - progress, 3);
+          } else if (easingType === "easeInOut") {
+            ease =
+              progress < 0.5
+                ? 4 * progress * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+          } else if (easingType === "spring") {
+            ease =
+              1 +
+              Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+          } else {
+            ease = progress * progress * (3 - 2 * progress);
+          }
+
+          const m1 = k1.mask || k1.transform?.mask || baseMask;
+          const m2 = k2.mask || k2.transform?.mask || baseMask;
+          if (!m1 && !m2) return undefined;
+          if (!m1) return m2;
+          if (!m2) return m1;
+
+          return interpolateMaskPair(m1, m2, ease, progress);
+        }
+      }
+    }
+  }
+
+  return baseMask;
+}
+
 /**
  * Centralized, authoritative keyframe interpolation function.
  * Smoothly interpolates transform parameters across keyframes or returns static base.
@@ -240,14 +534,25 @@ export function getInterpolatedTransform(
   clipType?: string,
 ): ResolvedTransform {
   const baseT = getBaseTransform(clip, clipType);
+  const interpolatedMask = getInterpolatedMask(clip, curTime);
 
-  if (!clip?.keyframes || !Array.isArray(clip.keyframes) || clip.keyframes.length === 0) {
-    return baseT;
+  if (
+    !clip?.keyframes ||
+    !Array.isArray(clip.keyframes) ||
+    clip.keyframes.length === 0
+  ) {
+    return {
+      ...baseT,
+      mask: interpolatedMask,
+    };
   }
 
   const kfs = cleanAndSortKeyframes(clip.keyframes);
   if (kfs.length === 0) {
-    return baseT;
+    return {
+      ...baseT,
+      mask: interpolatedMask,
+    };
   }
 
   const localTime = Math.max(0, curTime - (clip.startTime || 0));
@@ -270,6 +575,7 @@ export function getInterpolatedTransform(
       opacity: kfs[0].opacity !== undefined ? kfs[0].opacity : baseT.opacity,
       flipX: t0.flipX !== undefined ? t0.flipX : baseT.flipX,
       flipY: t0.flipY !== undefined ? t0.flipY : baseT.flipY,
+      mask: interpolatedMask,
     };
   }
 
@@ -292,11 +598,18 @@ export function getInterpolatedTransform(
       opacity: last.opacity !== undefined ? last.opacity : baseT.opacity,
       flipX: tLast.flipX !== undefined ? tLast.flipX : baseT.flipX,
       flipY: tLast.flipY !== undefined ? tLast.flipY : baseT.flipY,
+      mask: interpolatedMask,
     };
   }
 
   // 1. High-Performance Native Rust / WebAssembly Evaluation with Hermite Ease
-  const hasAdvancedProps = kfs.some((k: any) => k.easing || k.transform?.rotateX || k.transform?.rotateY || k.transform?.skewX);
+  const hasAdvancedProps = kfs.some(
+    (k: any) =>
+      k.easing ||
+      k.transform?.rotateX ||
+      k.transform?.rotateY ||
+      k.transform?.skewX,
+  );
   if (!hasAdvancedProps) {
     const rustInterp = rustCoreBridge.evaluateKeyframes(baseT, kfs, localTime);
     if (rustInterp) {
@@ -315,6 +628,7 @@ export function getInterpolatedTransform(
         opacity: Math.max(0, Math.min(1, rustInterp.opacity)),
         flipX: baseT.flipX,
         flipY: baseT.flipY,
+        mask: interpolatedMask,
       };
     }
   }
@@ -327,18 +641,23 @@ export function getInterpolatedTransform(
       const span = k2.time - k1.time;
       const progress = span > 0 ? (localTime - k1.time) / span : 0;
 
-      const easingType = (k1 as any).easing || (k2 as any).easing || 'smooth';
+      const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
       let ease = progress;
-      if (easingType === 'linear') {
+      if (easingType === "linear") {
         ease = progress;
-      } else if (easingType === 'easeIn') {
+      } else if (easingType === "easeIn") {
         ease = progress * progress * progress;
-      } else if (easingType === 'easeOut') {
+      } else if (easingType === "easeOut") {
         ease = 1 - Math.pow(1 - progress, 3);
-      } else if (easingType === 'easeInOut') {
-        ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-      } else if (easingType === 'spring') {
-        ease = 1 + Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+      } else if (easingType === "easeInOut") {
+        ease =
+          progress < 0.5
+            ? 4 * progress * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      } else if (easingType === "spring") {
+        ease =
+          1 +
+          Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
       } else {
         // Hermite smoothstep cubic ease curve
         ease = progress * progress * (3 - 2 * progress);
@@ -374,7 +693,7 @@ export function getInterpolatedTransform(
       let rotDiff = (rot2 - rot1) % 360;
       if (rotDiff > 180) rotDiff -= 360;
       if (rotDiff < -180) rotDiff += 360;
-      const interpolatedRot = ((rot1 + rotDiff * ease) % 360 + 360) % 360;
+      const interpolatedRot = (((rot1 + rotDiff * ease) % 360) + 360) % 360;
 
       return {
         x: x1 + (x2 - x1) * ease,
@@ -391,11 +710,15 @@ export function getInterpolatedTransform(
         opacity: op1 + (op2 - op1) * ease,
         flipX: t2.flipX !== undefined ? t2.flipX : (t1.flipX ?? baseT.flipX),
         flipY: t2.flipY !== undefined ? t2.flipY : (t1.flipY ?? baseT.flipY),
+        mask: interpolatedMask,
       };
     }
   }
 
-  return baseT;
+  return {
+    ...baseT,
+    mask: interpolatedMask,
+  };
 }
 
 /**
@@ -413,7 +736,10 @@ export function applyTransformUpdateToClip(
   if (!clip) return clip;
 
   const isVideoOrPhoto =
-    clipType === "video" || clipType === "photo" || clip.type === "photo" || clip.type === "video";
+    clipType === "video" ||
+    clipType === "photo" ||
+    clip.type === "photo" ||
+    clip.type === "video";
 
   const updatedTransform: ClipTransform = {
     ...(clip.transform || {}),
@@ -435,7 +761,11 @@ export function applyTransformUpdateToClip(
   }
 
   // If clip has keyframes, update the active keyframe or auto-stamp at playhead
-  if (clip.keyframes && Array.isArray(clip.keyframes) && clip.keyframes.length > 0) {
+  if (
+    clip.keyframes &&
+    Array.isArray(clip.keyframes) &&
+    clip.keyframes.length > 0
+  ) {
     const localTime = Math.max(0, currentTime - (clip.startTime || 0));
     const kfs = cleanAndSortKeyframes(clip.keyframes);
 
@@ -457,7 +787,7 @@ export function applyTransformUpdateToClip(
       rotation: transform.rotation,
     };
 
-    if (minDiff <= 0.2 || kfs.length === 1) {
+    if (minDiff <= 0.2) {
       // Update keyframe closest to playhead
       kfs[closestIdx] = {
         ...kfs[closestIdx],
@@ -476,4 +806,88 @@ export function applyTransformUpdateToClip(
   }
 
   return updatedClip;
+}
+
+/**
+ * Applies a mask update to a clip.
+ * - If the clip has NO mask keyframes, updates static base mask.
+ * - If the clip HAS mask keyframes, updates closest mask keyframe at playhead OR auto-stamps a new mask keyframe.
+ */
+export function applyMaskUpdateToClip(
+  clip: any,
+  newMask: MaskConfig,
+  currentTime: number = 0,
+): any {
+  if (!clip) return clip;
+
+  const rawMaskKfs = clip.maskKeyframes || clip.mask?.keyframes;
+  const hasMaskKfs =
+    rawMaskKfs &&
+    Array.isArray(rawMaskKfs) &&
+    rawMaskKfs.length > 0;
+
+  if (hasMaskKfs) {
+    const localTime = Math.max(0, currentTime - (clip.startTime || 0));
+    // Always clone objects to prevent mutating cached instances
+    const kfs = cleanAndSortMaskKeyframes(rawMaskKfs).map((k) => ({
+      time: k.time,
+      mask: { ...k.mask },
+      easing: k.easing,
+    }));
+
+    let closestIdx = 0;
+    let minDiff = Math.abs(kfs[0].time - localTime);
+    for (let i = 1; i < kfs.length; i++) {
+      const diff = Math.abs(kfs[i].time - localTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = i;
+      }
+    }
+
+    if (minDiff <= 0.2) {
+      // Update mask keyframe closest to playhead
+      kfs[closestIdx] = {
+        ...kfs[closestIdx],
+        mask: { ...newMask },
+      };
+    } else {
+      // Auto-keyframe: user adjusted mask at a new time!
+      kfs.push({
+        time: Number(localTime.toFixed(3)),
+        mask: { ...newMask },
+        easing: "easeInOut",
+      });
+    }
+
+    const sorted = cleanAndSortMaskKeyframes(kfs);
+    const updatedMask = {
+      ...(clip.mask || {}),
+      ...newMask,
+      keyframes: sorted,
+    };
+    const updatedTransform: ClipTransform = {
+      ...(clip.transform || {}),
+      mask: updatedMask,
+    };
+
+    return {
+      ...clip,
+      maskKeyframes: sorted,
+      mask: updatedMask,
+      transform: updatedTransform,
+    };
+  }
+
+  // Clip has no mask keyframes: update static base mask
+  const updatedTransform: ClipTransform = {
+    ...(clip.transform || {}),
+    mask: newMask,
+  };
+
+  return {
+    ...clip,
+    mask: newMask,
+    transform: updatedTransform,
+  };
 }

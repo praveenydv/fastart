@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { soundEngine } from "../utils/audioEngine";
-import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia } from "../utils/largeMediaStorage";
+import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia, setupAutoReconnectListener } from "../utils/largeMediaStorage";
 import {
   FastArtProject,
   createDefaultProject,
@@ -32,6 +32,7 @@ interface UseAppBootstrapParams {
   setActiveModal: (modal: string | null) => void;
   setIsFullscreen: (full: boolean) => void;
   closeModal: () => void;
+  setZoom?: (zoom: number) => void;
 }
 
 export function useAppBootstrap({
@@ -43,6 +44,7 @@ export function useAppBootstrap({
   setActiveModal,
   setIsFullscreen,
   closeModal,
+  setZoom,
 }: UseAppBootstrapParams) {
   const [projects, setProjects] = useState<FastArtProject[]>(() =>
     loadAllProjects(),
@@ -122,6 +124,15 @@ export function useAppBootstrap({
                 ? session.selectedClipId || null
                 : null
             );
+            if (setZoom) {
+              const resumeZoom =
+                session &&
+                session.projectId === matched.id &&
+                typeof session.zoom === "number"
+                  ? session.zoom
+                  : matched.zoom || 60;
+              setZoom(resumeZoom);
+            }
           }
         }
 
@@ -129,6 +140,34 @@ export function useAppBootstrap({
           if (isMounted && hydratedProjs) {
             setProjects(hydratedProjs);
           }
+        });
+
+        setupAutoReconnectListener((lookupId, liveUrl) => {
+          if (!isMounted) return;
+          setProject((prev: any) => {
+            if (!prev || !prev.tracks) return prev;
+            let changed = false;
+            const video = (prev.tracks.video || []).map((c: any) => {
+              const match = c.sourceMediaId === lookupId || c.id === lookupId;
+              if (match && (c.needsPermission || c.isMissing || c.url !== liveUrl)) {
+                changed = true;
+                return { ...c, url: liveUrl, isMissing: false, needsPermission: false };
+              }
+              return c;
+            });
+            const audio = (prev.tracks.audio || []).map((c: any) => {
+              const match = c.sourceMediaId === lookupId || c.id === lookupId;
+              if (match && (c.needsPermission || c.isMissing || c.url !== liveUrl)) {
+                changed = true;
+                return { ...c, url: liveUrl, isMissing: false, needsPermission: false };
+              }
+              return c;
+            });
+            if (!changed) return prev;
+            const updated = { ...prev, tracks: { ...prev.tracks, video, audio } };
+            saveProject(updated);
+            return updated;
+          });
         });
 
         setSplashStatus("Ready");
@@ -171,10 +210,23 @@ export function useAppBootstrap({
           ? session.currentTime
           : target.currentTime || 0;
       setCurrentTime(resumeTime);
-      setSelectedClipId(null);
+      setSelectedClipId(
+        session && session.projectId === target.id
+          ? session.selectedClipId || null
+          : null
+      );
+      if (setZoom) {
+        const resumeZoom =
+          session &&
+          session.projectId === target.id &&
+          typeof session.zoom === "number"
+            ? session.zoom
+            : target.zoom || 60;
+        setZoom(resumeZoom);
+      }
     }
     navigate(`/project/${id}`);
-  }, [projects, navigate, setCurrentTime, setSelectedClipId]);
+  }, [projects, navigate, setCurrentTime, setSelectedClipId, setZoom]);
 
   const handleCreateNewProject = useCallback(() => {
     const newProj = createDefaultProject(`Project ${projects.length + 1}`);

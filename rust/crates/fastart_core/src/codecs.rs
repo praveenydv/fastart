@@ -252,16 +252,27 @@ fn write_lzw_subblocks(out: &mut Vec<u8>, pixels: &[u8], min_code_size: u8) {
 
 pub struct BitWriter {
     data: Vec<u8>,
-    bit_buf: u32,
-    bits_in_buf: u8,
+    current_byte: u8,
+    bits_in_byte: u8,
 }
 
 impl BitWriter {
     pub fn new(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
-            bit_buf: 0,
-            bits_in_buf: 0,
+            current_byte: 0,
+            bits_in_byte: 0,
+        }
+    }
+
+    #[inline]
+    pub fn write_bit(&mut self, bit: u8) {
+        self.current_byte = (self.current_byte << 1) | (bit & 1);
+        self.bits_in_byte += 1;
+        if self.bits_in_byte == 8 {
+            self.data.push(self.current_byte);
+            self.current_byte = 0;
+            self.bits_in_byte = 0;
         }
     }
 
@@ -269,42 +280,42 @@ impl BitWriter {
         if count == 0 {
             return;
         }
-        let val = val & ((1u64 << count) - 1) as u32;
-        self.bit_buf = (self.bit_buf << count) | val;
-        self.bits_in_buf += count;
-        while self.bits_in_buf >= 8 {
-            let shift = self.bits_in_buf - 8;
-            let byte = ((self.bit_buf >> shift) & 0xFF) as u8;
-            self.data.push(byte);
-            self.bits_in_buf -= 8;
-            self.bit_buf &= (1u32 << self.bits_in_buf) - 1;
+        for i in (0..count).rev() {
+            let bit = ((val >> i) & 1) as u8;
+            self.write_bit(bit);
         }
     }
 
-    pub fn write_bit(&mut self, b: u8) {
-        self.write_bits(b as u32, 1);
-    }
-
     pub fn write_ue(&mut self, val: u32) {
-        let val_plus_1 = val + 1;
-        let len = 32 - val_plus_1.leading_zeros();
-        self.write_bits(0, (len - 1) as u8);
-        self.write_bits(val_plus_1, len as u8);
+        let val_plus_1 = (val as u64) + 1;
+        let len = 64 - val_plus_1.leading_zeros(); // number of bits
+        // Write (len - 1) zeros
+        for _ in 0..(len - 1) {
+            self.write_bit(0);
+        }
+        // Write val_plus_1
+        for i in (0..len).rev() {
+            let bit = ((val_plus_1 >> i) & 1) as u8;
+            self.write_bit(bit);
+        }
     }
 
     pub fn write_se(&mut self, val: i32) {
         let mapped = if val <= 0 {
-            (-val * 2) as u32
+            ((-val as i64) * 2) as u32
         } else {
-            (val * 2 - 1) as u32
+            ((val as i64) * 2 - 1) as u32
         };
         self.write_ue(mapped);
     }
 
     pub fn align_zero(&mut self) {
-        if self.bits_in_buf > 0 {
-            let pad = 8 - self.bits_in_buf;
-            self.write_bits(0, pad);
+        if self.bits_in_byte > 0 {
+            let pad = 8 - self.bits_in_byte;
+            self.current_byte <<= pad;
+            self.data.push(self.current_byte);
+            self.current_byte = 0;
+            self.bits_in_byte = 0;
         }
     }
 

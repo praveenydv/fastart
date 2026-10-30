@@ -19,6 +19,15 @@ interface MaskModalProps {
   currentMask?: MaskConfig;
   onApplyMask: (newMask: MaskConfig) => void;
   isInline?: boolean;
+  selectedClip?: any;
+  currentTime?: number;
+  onSeek?: (time: number) => void;
+  onAddKeyframe?: () => void;
+  hasKeyframeAtCurrentTime?: boolean;
+  hasPrevKeyframe?: boolean;
+  hasNextKeyframe?: boolean;
+  onJumpPrevKeyframe?: () => void;
+  onJumpNextKeyframe?: () => void;
 }
 
 const WebDiv: any = Platform.OS === 'web' ? 'div' : View;
@@ -41,6 +50,15 @@ export default function MaskModal({
   currentMask,
   onApplyMask,
   isInline = false,
+  selectedClip,
+  currentTime = 0,
+  onSeek,
+  onAddKeyframe,
+  hasKeyframeAtCurrentTime = false,
+  hasPrevKeyframe = false,
+  hasNextKeyframe = false,
+  onJumpPrevKeyframe,
+  onJumpNextKeyframe,
 }: MaskModalProps) {
   const [maskShape, setMaskShape] = useState<MaskShape>(currentMask?.shape || 'none');
   const [maskSize, setMaskSize] = useState<number>(currentMask?.size || 60);
@@ -137,6 +155,13 @@ export default function MaskModal({
     });
   };
 
+  const formatSec = (s: number) => {
+    const min = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec.toFixed(2)}`;
+  };
+  const keyframeCount = (selectedClip?.maskKeyframes || selectedClip?.mask?.keyframes || []).length;
+
   const isModified = maskShape !== 'none';
 
   const handleCancel = () => {
@@ -229,6 +254,110 @@ export default function MaskModal({
                   );
                 })}
               </View>
+
+              {maskShape !== 'none' && (
+                <View style={styles.keyframeBar}>
+                  <View style={styles.kfLeftGroup}>
+                    <View style={styles.kfTimePill}>
+                      <Ionicons name="time-outline" size={11} color="#00F2FE" />
+                      <Text style={styles.kfTimeText}>
+                        {formatSec(currentTime)}
+                        {selectedClip?.startTime !== undefined && (
+                          <Text style={styles.kfOffsetTime}>
+                            {" "}+{Math.max(0, currentTime - selectedClip.startTime).toFixed(2)}s
+                          </Text>
+                        )}
+                      </Text>
+                    </View>
+                    {keyframeCount > 0 && (
+                      <View style={styles.kfCountBadge}>
+                        <Ionicons name="diamond" size={9} color="#A855F7" />
+                        <Text style={styles.kfCountText}>{keyframeCount} mask kf</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.kfActionGroup}>
+                    {/* Prev Keyframe Button */}
+                    <TouchableOpacity
+                      style={[styles.kfStepBtn, !hasPrevKeyframe && styles.kfStepBtnDisabled]}
+                      onPress={() => {
+                        soundEngine.playSfx('pop');
+                        onJumpPrevKeyframe?.();
+                      }}
+                      disabled={!hasPrevKeyframe}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Jump to previous mask keyframe"
+                    >
+                      <Ionicons
+                        name="caret-back"
+                        size={13}
+                        color={hasPrevKeyframe ? "#00F2FE" : "#475569"}
+                      />
+                    </TouchableOpacity>
+
+                    {/* Stamp / Remove Keyframe Button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.kfDiamondBtn,
+                        hasKeyframeAtCurrentTime && styles.kfDiamondBtnActive,
+                      ]}
+                      onPress={() => {
+                        soundEngine.playSfx(hasKeyframeAtCurrentTime ? 'pop' : 'whoosh');
+                        onAddKeyframe?.();
+                      }}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Stamp or remove keyframe"
+                    >
+                      <Ionicons
+                        name={hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"}
+                        size={13}
+                        color={hasKeyframeAtCurrentTime ? "#00F2FE" : "#94A3B8"}
+                      />
+                      <Text
+                        style={[
+                          styles.kfDiamondText,
+                          hasKeyframeAtCurrentTime && styles.kfDiamondTextActive,
+                        ]}
+                      >
+                        {hasKeyframeAtCurrentTime ? "Remove" : "Keyframe"}
+                      </Text>
+                      <View
+                        style={[
+                          styles.kfDiamondBadge,
+                          hasKeyframeAtCurrentTime
+                            ? styles.kfDiamondBadgeRemove
+                            : styles.kfDiamondBadgeAdd,
+                        ]}
+                      >
+                        <Ionicons
+                          name={hasKeyframeAtCurrentTime ? "remove" : "add"}
+                          size={7}
+                          color="#FFFFFF"
+                        />
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Next Keyframe Button */}
+                    <TouchableOpacity
+                      style={[styles.kfStepBtn, !hasNextKeyframe && styles.kfStepBtnDisabled]}
+                      onPress={() => {
+                        soundEngine.playSfx('pop');
+                        onJumpNextKeyframe?.();
+                      }}
+                      disabled={!hasNextKeyframe}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Jump to next mask keyframe"
+                    >
+                      <Ionicons
+                        name="caret-forward"
+                        size={13}
+                        color={hasNextKeyframe ? "#00F2FE" : "#475569"}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               {maskShape !== 'none' && (
                 <View style={styles.controlsCard}>
@@ -758,5 +887,117 @@ const styles = StyleSheet.create({
   ratioPillTextActive: {
     color: '#00F2FE',
     fontWeight: '700',
+  },
+  keyframeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+    backgroundColor: '#121724',
+    borderWidth: 1,
+    borderColor: '#1E2638',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  kfLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  kfTimePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.25)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
+    gap: 4,
+  },
+  kfTimeText: {
+    color: '#00F2FE',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  kfOffsetTime: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  kfCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1B2234',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 2.5,
+    gap: 3,
+  },
+  kfCountText: {
+    color: '#CBD5E1',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  kfActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  kfStepBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#182030',
+    borderWidth: 1,
+    borderColor: '#26334A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kfStepBtnDisabled: {
+    opacity: 0.35,
+    backgroundColor: '#121724',
+  },
+  kfDiamondBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#182030',
+    borderWidth: 1,
+    borderColor: '#26334A',
+    borderRadius: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    position: 'relative',
+  },
+  kfDiamondBtnActive: {
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderColor: '#00F2FE',
+  },
+  kfDiamondText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  kfDiamondTextActive: {
+    color: '#00F2FE',
+  },
+  kfDiamondBadge: {
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 1,
+  },
+  kfDiamondBadgeAdd: {
+    backgroundColor: '#00F2FE',
+  },
+  kfDiamondBadgeRemove: {
+    backgroundColor: '#EF4444',
   },
 });

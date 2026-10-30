@@ -199,6 +199,7 @@ export function drawClipWithMask(
   }
 
   if (
+    !cutout?.enabled &&
     (clip.smoothSlowMo === "blend" || clip.smoothSlowMo === "optical_flow") &&
     (clip.speed || 1.0) < 1.0
   ) {

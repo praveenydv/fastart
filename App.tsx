@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { StyleSheet, View, StatusBar, Platform, BackHandler } from "react-native";
+import { StyleSheet, View, StatusBar, Platform, BackHandler, AppState } from "react-native";
 import HomeDashboard from "./src/components/HomeDashboard";
 import SettingsScreen from "./src/components/SettingsScreen";
 import NotificationsScreen from "./src/components/NotificationsScreen";
@@ -27,6 +27,7 @@ import { computeTotalDuration, FastArtProject } from "./src/types/project";
 import { soundEngine } from "./src/utils/audioEngine";
 import { saveLastSession, LastEditSession, saveProject } from "./src/utils/storage";
 import { mediaHasAudioTrack } from "./src/utils/mediaAudioDetector";
+import { deleteMedia } from "./src/utils/largeMediaStorage";
 
 // Keep native splash screen visible while app hydrates
 ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
@@ -41,8 +42,13 @@ export default function App() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const selectedClipIdRef = useRef(selectedClipId);
+  selectedClipIdRef.current = selectedClipId;
+
   const [selectedClipType, setSelectedClipType] = useState<string>("video");
   const [zoom, setZoom] = useState(60);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   const [clipToDelete, setClipToDelete] = useState<{
     id: string;
     type: string;
@@ -172,6 +178,7 @@ export default function App() {
     setActiveModal,
     setIsFullscreen,
     closeModal,
+    setZoom,
   });
 
   const projectRef = useRef(project);
@@ -193,6 +200,7 @@ export default function App() {
     projectRef,
     setProject,
     setProjects,
+    projectId: project?.id,
   });
   historyStackRef.current = historyStack;
 
@@ -352,6 +360,61 @@ export default function App() {
     startProcessing,
   });
 
+  // Delete master asset from imported media bin (master reference deletion cascades to timeline instances)
+  const handleDeleteProjectAsset = useCallback(
+    (assetId: string) => {
+      const current = projectRef.current || project;
+      if (!current) return;
+
+      const targetAsset = (current.assets || []).find(
+        (a) => a.id === assetId || a.sourceMediaId === assetId
+      );
+      const targetSourceId = targetAsset?.sourceMediaId || assetId;
+      const targetIds = new Set([assetId, targetSourceId]);
+
+      // 1. Remove master asset reference from project.assets
+      const assets = (current.assets || []).filter(
+        (a) => !targetIds.has(a.id) && !targetIds.has(a.sourceMediaId || "")
+      );
+
+      // 2. Cascade delete from timeline: remove all instances referencing this asset
+      const videoList = (current.tracks.video || []).filter(
+        (c) => !targetIds.has(c.id) && !targetIds.has(c.sourceMediaId || "")
+      );
+      const audioList = (current.tracks.audio || []).filter(
+        (c) => !targetIds.has(c.id) && !targetIds.has(c.sourceMediaId || "")
+      );
+
+      // 3. Clear selectedClipId if the deleted clip was currently selected
+      if (
+        selectedClipId &&
+        ((current.tracks.video || []).some((c) => targetIds.has(c.id) && c.id === selectedClipId) ||
+         (current.tracks.audio || []).some((c) => targetIds.has(c.id) && c.id === selectedClipId))
+      ) {
+        setSelectedClipId(null);
+      }
+
+      // 4. Free up storage completely since master reference was deleted from the bin
+      targetIds.forEach((id) => {
+        if (id) deleteMedia(id).catch(() => {});
+      });
+
+      // 5. Update project with history
+      updateProjectDispatcher({
+        ...current,
+        assets,
+        tracks: {
+          ...current.tracks,
+          video: videoList,
+          audio: audioList,
+        },
+      });
+
+      soundEngine.playSfx("cut");
+    },
+    [project, projectRef, selectedClipId, updateProjectDispatcher, setSelectedClipId],
+  );
+
   // Keyframes hook
   const {
     isKeyframeAtPlayhead,
@@ -359,6 +422,20 @@ export default function App() {
     handleUpdateKeyframeTransform,
     handleDeleteKeyframeAtTime,
     handleClearAllKeyframes,
+    handleJumpPrevKeyframe,
+    handleJumpNextKeyframe,
+    hasPrevKeyframe,
+    hasNextKeyframe,
+    keyframeCount,
+    isMaskKeyframeAtPlayhead,
+    hasPrevMaskKeyframe,
+    hasNextMaskKeyframe,
+    maskKeyframeCount,
+    handleJumpPrevMaskKeyframe,
+    handleJumpNextMaskKeyframe,
+    handleAddMaskKeyframe,
+    handleDeleteMaskKeyframeAtTime,
+    handleClearAllMaskKeyframes,
   } = useProjectKeyframes({
     project,
     selectedClip,
@@ -368,6 +445,7 @@ export default function App() {
     setSelectedClipType,
     currentTime,
     currentTimeRef,
+    setCurrentTime,
     updateProjectWithHistory: updateProjectDispatcher,
     openModal,
   });
@@ -413,7 +491,39 @@ export default function App() {
     }
   }, [totalDuration, isPlaying, currentTime, setIsPlaying, setCurrentTime]);
 
-  // Persist last active editing session (debounced by 1500ms to eliminate synchronous disk I/O while scrubbing)
+  // Immediate flush of session and project data (for refresh, close, tab hide, app background)
+  const flushSessionAndProject = useCallback(() => {
+    const proj = projectRef.current;
+    if (proj && routeRef.current?.screen === "editor") {
+      // 1. If in the middle of a modal preview, commit before exiting/reloading
+      if (modalInitialSnapshotRef.current) {
+        commitPreview(modalInitialSnapshotRef.current);
+        modalInitialSnapshotRef.current = null;
+      }
+      // 2. Persist exact playhead, zoom and selection
+      const curTime = currentTimeRef.current || 0;
+      const curZoom = zoomRef.current || 60;
+      const curSelectedClipId = selectedClipIdRef.current || null;
+      const session: LastEditSession = {
+        projectId: proj.id,
+        currentTime: curTime,
+        zoom: curZoom,
+        selectedClipId: curSelectedClipId,
+        updatedAt: Date.now(),
+      };
+      saveLastSession(session);
+
+      // 3. Persist project state with updated currentTime & zoom
+      const currentProj = projectRef.current || proj;
+      saveProject({
+        ...currentProj,
+        currentTime: curTime,
+        zoom: curZoom,
+      });
+    }
+  }, [commitPreview]);
+
+  // Persist last active editing session (debounced by 200ms for smooth 60fps scrubbing with near-instant persistence)
   useEffect(() => {
     if (!project || route.screen !== "editor" || isPlaying) return;
 
@@ -426,10 +536,49 @@ export default function App() {
         updatedAt: Date.now(),
       };
       saveLastSession(session);
-    }, 1500);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [project?.id, currentTime, zoom, selectedClipId, route.screen, isPlaying]);
+
+  // Lifecycle listeners to guarantee persistence across close, refresh, background and reopen
+  useEffect(() => {
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        flushSessionAndProject();
+      }
+    });
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      const handleBeforeUnload = () => {
+        flushSessionAndProject();
+      };
+      const handleVisibilityChange = () => {
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+          flushSessionAndProject();
+        }
+      };
+
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      window.addEventListener("pagehide", handleBeforeUnload);
+      if (typeof document !== "undefined") {
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+      }
+
+      return () => {
+        appStateSub.remove();
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+        window.removeEventListener("pagehide", handleBeforeUnload);
+        if (typeof document !== "undefined") {
+          document.removeEventListener("visibilitychange", handleVisibilityChange);
+        }
+      };
+    }
+
+    return () => {
+      appStateSub.remove();
+    };
+  }, [flushSessionAndProject]);
 
   const handleOpenTransitionsModal = useCallback((clipId: string) => {
     setTransitionTargetClipId(clipId);
@@ -438,11 +587,12 @@ export default function App() {
 
   // Confirm project exit handler
   const handleConfirmExitProject = useCallback(() => {
+    flushSessionAndProject();
     setShowExitConfirmModal(false);
     setIsPlaying(false);
     soundEngine.playSfx("click");
     navigate("/");
-  }, [navigate]);
+  }, [flushSessionAndProject, navigate]);
 
   // Synchronized state refs for Hardware Back Handler
   const activeModalRef = useRef(activeModal);
@@ -456,9 +606,6 @@ export default function App() {
 
   const isCroppingPreviewRef = useRef(isCroppingPreview);
   isCroppingPreviewRef.current = isCroppingPreview;
-
-  const selectedClipIdRef = useRef(selectedClipId);
-  selectedClipIdRef.current = selectedClipId;
 
   const showExitConfirmModalRef = useRef(showExitConfirmModal);
   showExitConfirmModalRef.current = showExitConfirmModal;
@@ -645,14 +792,28 @@ export default function App() {
               handleApplyVoiceEffect={handleApplyVoiceEffect}
               handleAddKeyframe={handleAddKeyframe}
               isKeyframeAtPlayhead={isKeyframeAtPlayhead}
+              hasPrevKeyframe={hasPrevKeyframe}
+              hasNextKeyframe={hasNextKeyframe}
+              handleJumpPrevKeyframe={handleJumpPrevKeyframe}
+              handleJumpNextKeyframe={handleJumpNextKeyframe}
               handleUpdateKeyframeTransform={handleUpdateKeyframeTransform}
               handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
               handleClearAllKeyframes={handleClearAllKeyframes}
+              handleAddMaskKeyframe={handleAddMaskKeyframe}
+              isMaskKeyframeAtPlayhead={isMaskKeyframeAtPlayhead}
+              hasPrevMaskKeyframe={hasPrevMaskKeyframe}
+              hasNextMaskKeyframe={hasNextMaskKeyframe}
+              handleJumpPrevMaskKeyframe={handleJumpPrevMaskKeyframe}
+              handleJumpNextMaskKeyframe={handleJumpNextMaskKeyframe}
+              handleDeleteMaskKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
+              handleClearAllMaskKeyframes={handleClearAllMaskKeyframes}
               handleConfirmDeleteClip={handleConfirmDeleteClip}
               handleDeleteClip={handleDeleteClip}
+              handleDeleteProjectAsset={handleDeleteProjectAsset}
               handleAddCaptions={handleAddCaptions}
               handleUpdateCaption={handleUpdateCaption}
               handleMoveClip={handleMoveClip}
+              handleUpdateClipMask={handleUpdateClipMask}
               isInline={isInline}
             />
           );
@@ -717,6 +878,7 @@ export default function App() {
                   handleFreezeFrame={handleFreezeFrame}
                   handleDuplicateClip={handleDuplicateClip}
                   handleDeleteClip={handleDeleteClip}
+                  handleDeleteProjectAsset={handleDeleteProjectAsset}
                   handleMoveClip={handleMoveClip}
                   handleTrimClip={handleTrimClip}
                   handleRotateClip={handleRotateClip}

@@ -88,6 +88,17 @@ export function useTimelineScrubbing({
             }
           });
         }
+        const maskKfs = c.rawClip?.maskKeyframes || c.rawClip?.mask?.keyframes;
+        if (maskKfs && Array.isArray(maskKfs)) {
+          maskKfs.forEach((mkf: any) => {
+            const mkfTime = c.startTime + (mkf.time || 0);
+            const diffMkf = Math.abs(newTime - mkfTime);
+            if (diffMkf < minDiff) {
+              closestSnap = mkfTime;
+              minDiff = diffMkf;
+            }
+          });
+        }
       });
 
       if (closestSnap !== null) {
@@ -156,6 +167,17 @@ export function useTimelineScrubbing({
                 if (diffKf < minDiff) {
                   closestSnap = kfTime;
                   minDiff = diffKf;
+                }
+              });
+            }
+            const maskKfs = c.rawClip?.maskKeyframes || c.rawClip?.mask?.keyframes;
+            if (maskKfs && Array.isArray(maskKfs)) {
+              maskKfs.forEach((mkf: any) => {
+                const mkfTime = c.startTime + (mkf.time || 0);
+                const diffMkf = Math.abs(newTime - mkfTime);
+                if (diffMkf < minDiff) {
+                  closestSnap = mkfTime;
+                  minDiff = diffMkf;
                 }
               });
             }

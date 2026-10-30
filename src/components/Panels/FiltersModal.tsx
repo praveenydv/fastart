@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { FILTER_PRESETS } from '../../constants/sampleMedia';
+import { FILTER_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
 import { parseCubeLut, PRO_3D_LUTS } from '../../utils/lutParser';
 import { CustomLutConfig } from '../../types/project';
@@ -22,6 +23,8 @@ interface FiltersModalProps {
   onSelectFilter: (filterId: string, customLut?: CustomLutConfig, applyToAll?: boolean) => void;
   isInline?: boolean;
   isWholeProject?: boolean;
+  selectedClip?: any;
+  project?: any;
 }
 
 export default function FiltersModal({
@@ -32,10 +35,15 @@ export default function FiltersModal({
   onSelectFilter,
   isInline = false,
   isWholeProject = false,
+  selectedClip,
+  project,
 }: FiltersModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [customLuts, setCustomLuts] = useState<CustomLutConfig[]>(PRO_3D_LUTS);
   const [selectedLutId, setSelectedLutId] = useState<string>(activeFilter);
+
+  // Standardized prefix reference model image for consistent, clear filter previews
+  const previewThumb = PRESET_PREVIEW_IMAGE;
 
   useEffect(() => {
     setSelectedLutId(activeFilter);
@@ -284,11 +292,26 @@ export default function FiltersModal({
                         onPress={() => handleSelectCustomLut(lut)}
                         activeOpacity={0.7}
                       >
-                        <View style={[styles.colorPreview, { backgroundColor: sampleColor }]}>
-                          <Ionicons
-                            name="cube-outline"
-                            size={18}
-                            color={sampleColor === '#FFFFFF' ? '#000' : '#FFF'}
+                        <View style={styles.colorPreview}>
+                          <Image
+                            source={{ uri: previewThumb }}
+                            style={[
+                              styles.previewImage,
+                              Platform.OS === 'web'
+                                ? ({ filter: `contrast(1.22) saturate(1.28) ${lut.id.includes('warm') ? 'sepia(0.35)' : lut.id.includes('cold') ? 'hue-rotate(180deg)' : ''}` } as any)
+                                : null,
+                            ]}
+                            resizeMode="cover"
+                          />
+                          <View
+                            style={[
+                              StyleSheet.absoluteFill,
+                              {
+                                backgroundColor: sampleColor,
+                                opacity: 0.2,
+                                mixBlendMode: 'color' as any,
+                              },
+                            ]}
                           />
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
@@ -330,18 +353,29 @@ export default function FiltersModal({
                         onPress={() => handleSelectStandardPreset(item.id)}
                         activeOpacity={0.7}
                       >
-                        <View
-                          style={[
-                            styles.colorPreview,
-                            { backgroundColor: sampleColor },
-                            isItemNormal && { borderWidth: 1, borderColor: '#333D52' },
-                          ]}
-                        >
-                          <Ionicons
-                            name={isItemNormal ? 'contrast-outline' : 'color-filter-outline'}
-                            size={18}
-                            color={sampleColor === '#FFFFFF' ? '#000' : '#FFF'}
+                        <View style={styles.colorPreview}>
+                          <Image
+                            source={{ uri: previewThumb }}
+                            style={[
+                              styles.previewImage,
+                              Platform.OS === 'web' && item.css && item.css !== 'none'
+                                ? ({ filter: item.css } as any)
+                                : null,
+                            ]}
+                            resizeMode="cover"
                           />
+                          {!isItemNormal && (
+                            <View
+                              style={[
+                                StyleSheet.absoluteFill,
+                                {
+                                  backgroundColor: sampleColor,
+                                  opacity: 0.18,
+                                  mixBlendMode: 'color' as any,
+                                },
+                              ]}
+                            />
+                          )}
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
                               <Ionicons name="checkmark" size={12} color="#000000" />
@@ -564,10 +598,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   colorPreview: {
-    height: 40,
+    height: 54,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#08090E',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
   activeCheckBadge: {
     position: 'absolute',

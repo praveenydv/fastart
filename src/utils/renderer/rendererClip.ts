@@ -1,5 +1,5 @@
 import { VideoClip } from "../../types/project";
-import { getInterpolatedTransform } from "../keyframeEngine";
+import { getInterpolatedTransform, getInterpolatedMask } from "../keyframeEngine";
 import {
   applyMaskPath,
   drawClipWithMask,
@@ -350,36 +350,49 @@ export function drawClip(
 
     const isPreviewCropping = renderCtx.previewCropClipId === clip.id;
     const crop = isPreviewCropping ? null : (clip.crop || clip.transform?.crop);
+
+    // Compute base display dimensions of the full video on canvas
+    const baseAspect = mw / mh;
+    let baseDW = w;
+    let baseDH = w / baseAspect;
+    const fitMode = clip.fit || "contain";
+
+    if (fitMode === "cover") {
+      if (baseDH < h) {
+        baseDH = h;
+        baseDW = h * baseAspect;
+      }
+    } else {
+      // Default "contain" mode: keep the full video visible and reveal canvas background
+      if (baseDH > h) {
+        baseDH = h;
+        baseDW = h * baseAspect;
+      }
+    }
+
     let sx = 0;
     let sy = 0;
     let sw = mw;
     let sh = mh;
-    if (crop && crop.width > 0 && crop.height > 0) {
+    let dw = baseDW;
+    let dh = baseDH;
+
+    if (
+      !isPreviewCropping &&
+      crop &&
+      crop.width > 0 &&
+      crop.height > 0 &&
+      (crop.width < 100 || crop.height < 100 || crop.x > 0 || crop.y > 0)
+    ) {
       sx = Math.max(0, (crop.x / 100) * mw);
       sy = Math.max(0, (crop.y / 100) * mh);
       sw = Math.min(mw - sx, (crop.width / 100) * mw);
       sh = Math.min(mh - sy, (crop.height / 100) * mh);
+      dw = baseDW * (crop.width / 100);
+      dh = baseDH * (crop.height / 100);
     }
 
-    const aspect = sw / sh;
-    let dw = w;
-    let dh = w / aspect;
-    const fitMode = clip.fit || "contain";
-
-    if (isPreviewCropping || fitMode === "cover") {
-      if (dh < h) {
-        dh = h;
-        dw = h * aspect;
-      }
-    } else {
-      // Default "contain" mode: keep the full video visible and reveal canvas background
-      if (dh > h) {
-        dh = h;
-        dw = h * aspect;
-      }
-    }
-
-    const mask = clip.mask || clip.transform?.mask;
+    const mask = getInterpolatedMask(clip, time) || clip.mask || clip.transform?.mask;
     const rawCutout = clip.cutout || clip.transform?.cutout;
     const cutout = rawCutout
       ? {
@@ -429,6 +442,7 @@ export function drawClip(
       }
 
       if (
+        !cutout?.enabled &&
         (clip.smoothSlowMo === "blend" || clip.smoothSlowMo === "optical_flow") &&
         (clip.speed || 1.0) < 1.0
       ) {

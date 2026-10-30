@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { View, StyleSheet, Text, ActivityIndicator, TouchableOpacity, Platform, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../Header";
@@ -13,11 +13,12 @@ import { FastArtProject, EffectClip, MotionTrackConfig } from "../../types/proje
 import { allocateNewTrackForClip } from "../../utils/trackPlacement";
 import { THEME_COLORS } from "../../constants/designConstants";
 import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
+import { reconnectLinkedMedia } from "../../utils/largeMediaStorage";
 
 const CLIP_TYPE_AVAILABLE_MENUS: Record<string, Set<string>> = {
-  text: new Set(["text", "edit", "animation", "keyframe", "tracking", "opacity"]),
-  caption: new Set(["captions", "caption", "text", "edit", "keyframe", "tracking", "animation", "opacity"]),
-  captions: new Set(["captions", "caption", "text", "edit", "keyframe", "tracking", "animation", "opacity"]),
+  text: new Set(["text", "edit", "tts", "animation", "keyframe", "tracking", "opacity"]),
+  caption: new Set(["captions", "caption", "text", "edit", "tts", "keyframe", "tracking", "animation", "opacity"]),
+  captions: new Set(["captions", "caption", "text", "edit", "tts", "keyframe", "tracking", "animation", "opacity"]),
   sticker: new Set(["stickers", "sticker", "edit", "animation", "keyframe", "tracking", "opacity"]),
   stickers: new Set(["stickers", "sticker", "edit", "animation", "keyframe", "tracking", "opacity"]),
   audio: new Set(["volume", "speed", "denoise", "audio", "audio_effects", "voice_effects"]),
@@ -122,10 +123,11 @@ interface EditorWorkspaceProps {
     isFinal?: boolean,
   ) => void;
   handleUpdateClipCrop: (clipId: string, crop: any, isFinal?: boolean) => void;
-  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean) => void;
+  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean, timeOverride?: number) => void;
   handleSplitClip: () => void;
   handleDuplicateClip: (targetId?: string, targetType?: string) => void;
   handleDeleteClip: (targetId?: string, targetType?: string) => void;
+  handleDeleteProjectAsset?: (assetId: string, type?: string) => void;
   handleMoveClip: (
     clipId: string,
     trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
@@ -249,6 +251,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   renderModals,
   handleAddMedia,
   handleAddAudio,
+  handleDeleteProjectAsset,
 }) => {
   const activeModalRef = React.useRef(activeModal);
   activeModalRef.current = activeModal;
@@ -838,6 +841,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       onOpenAudioEffectsModal={() => openModal("audio_effects")}
       onOpenBlendModal={() => openModal("blend")}
       onOpenHSLModal={() => openModal("hsl")}
+      onOpenTTSModal={handleOpenTTS}
       onCloseModal={handleCloseMenu}
       onBackToHome={onBackToHome}
     />
@@ -941,6 +945,31 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
   };
 
+  const handleRelinkClip = (
+    clipId: string,
+    clipType: string,
+    newUrl: string,
+    sourceMediaId?: string,
+  ) => {
+    if (!project) return;
+    const key = (clipType === "audio" ? "audio" : "video") as "video" | "audio";
+    const list = [...(((project.tracks as any)[key] as any[]) || [])];
+    const idx = list.findIndex((c) => c.id === clipId);
+    if (idx >= 0) {
+      list[idx] = {
+        ...list[idx],
+        url: newUrl,
+        sourceMediaId: sourceMediaId || list[idx].sourceMediaId || clipId,
+        isMissing: false,
+        needsPermission: false,
+      };
+      updateProjectWithHistory({
+        ...project,
+        tracks: { ...project.tracks, [key]: list },
+      });
+    }
+  };
+
   // Player JSX shared between desktop and mobile
   const renderPlayer = () => (
     <Player
@@ -960,8 +989,22 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           return;
         }
         soundEngine.playSfx("click");
-        if (!isPlaying && (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration)) {
-          setCurrentTime(0);
+        if (!isPlaying) {
+          const needsPermClips = [
+            ...(project?.tracks?.video || []),
+            ...(project?.tracks?.audio || []),
+          ].filter((c: any) => c.needsPermission);
+          for (const c of needsPermClips) {
+            const lookupId = c.sourceMediaId || c.id;
+            reconnectLinkedMedia(lookupId, c.title).then((res) => {
+              if (res) {
+                handleRelinkClip(c.id, (c as any).type || "video", res.url, lookupId);
+              }
+            });
+          }
+          if (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration) {
+            setCurrentTime(0);
+          }
         }
         setIsPlaying(!isPlaying);
       }}
@@ -996,9 +1039,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           handleCloseMenu();
         }
       }}
-      onUpdateClipMask={handleUpdateClipMask}
+      onUpdateClipMask={(clipId, mask, isFinal) =>
+        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal, currentTime)
+      }
       activeModal={activeModal}
       onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
+      onRelinkClip={handleRelinkClip}
     />
   );
 
@@ -1119,7 +1165,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       }
                       onUpdateClipCrop={(clipId, crop) => handleUpdateClipCrop(clipId, crop, true)}
                       onUpdateClipMask={(clipId, mask, isFinal) =>
-                        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal)
+                        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal, currentTime)
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
@@ -1186,7 +1232,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   onAddEffect={(eff) => handleAddEffect(eff)}
                   onAddTransition={(trId) => handleOpenTransitionsModal(selectedClipId || '')}
                   currentTime={currentTime}
-                  onDeleteMedia={handleDeleteClip}
+                  onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
                   width={mediaPanelWidth}
                   position="right"
                   onSwapPosition={() => setDesktopPanelOrder('media_left')}
@@ -1208,7 +1254,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   onAddEffect={(eff) => handleAddEffect(eff)}
                   onAddTransition={(trId) => handleOpenTransitionsModal(selectedClipId || '')}
                   currentTime={currentTime}
-                  onDeleteMedia={handleDeleteClip}
+                  onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
                   width={mediaPanelWidth}
                   position="left"
                   onSwapPosition={() => setDesktopPanelOrder('config_left')}
@@ -1317,7 +1363,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       }
                       onUpdateClipCrop={(clipId, crop) => handleUpdateClipCrop(clipId, crop, true)}
                       onUpdateClipMask={(clipId, mask, isFinal) =>
-                        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal)
+                        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal, currentTime)
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })

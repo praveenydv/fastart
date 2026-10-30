@@ -14,12 +14,18 @@ import { soundEngine } from "../../utils/audioEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import {
   processVideoFrameByFrame,
+  renderCutoutToVideoBlob,
   hasClipMasks,
+  hasFrameMask,
   getClipProcessedCount,
   clearClipMasks,
+  restoreClipMasksFromStorage,
+  getClipBakedFps,
   processClipStudioCutout,
+  updateActiveFrameMatteParams,
 } from "../../services/selfieSegmentationService";
 import { rustCoreBridge } from "../../services/rustCoreBridge";
+import { getActiveMediaElement } from "../../utils/videoRenderer";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -76,9 +82,15 @@ interface CutoutModalProps {
   initialMode?: "auto" | "chroma";
   isInline?: boolean;
   selectedClip?: any;
+  currentTime?: number;
+  onReplaceClipWithMedia?: (
+    clipId: string,
+    newUrl: string,
+    newThumbnail?: string,
+  ) => void;
 }
 
-type CutoutMode = "chroma" | "auto";
+type CutoutMode = "none" | "chroma" | "auto";
 
 const WebDiv: any = Platform.OS === "web" ? "div" : View;
 const WebInput: any = Platform.OS === "web" ? "input" : View;
@@ -94,6 +106,8 @@ export default function CutoutModal({
   initialMode,
   isInline = false,
   selectedClip,
+  currentTime = 0,
+  onReplaceClipWithMedia,
 }: CutoutModalProps) {
   // Cutout state
   const [enabled, setEnabled] = useState<boolean>(false);
@@ -107,6 +121,8 @@ export default function CutoutModal({
 
   // Frame-by-frame processing state
   const [isProcessingFrames, setIsProcessingFrames] = useState<boolean>(false);
+  const [isProcessingActiveFrame, setIsProcessingActiveFrame] = useState<boolean>(false);
+  const [activeFrameMatted, setActiveFrameMatted] = useState<boolean>(false);
   const [frameProgress, setFrameProgress] = useState<number>(0);
   const [processedFrames, setProcessedFrames] = useState<number>(0);
   const [totalFramesToProcess, setTotalFramesToProcess] = useState<number>(0);
@@ -115,10 +131,57 @@ export default function CutoutModal({
   const customBgInputRef = useRef<any>(null);
   const customStrokeInputRef = useRef<any>(null);
 
+  const [currentFrameMatted, setCurrentFrameMatted] = useState<boolean>(false);
+  const [settingsChangedSinceBake, setSettingsChangedSinceBake] = useState<boolean>(false);
+  const [isReplacingClip, setIsReplacingClip] = useState<boolean>(false);
+  const lastMattedTimeRef = useRef<number | null>(null);
+  const previousClipUrlRef = useRef<string | null>(selectedClip?.url || null);
+  const bakedIntensityRef = useRef<number>(intensity);
+  const bakedShadowRef = useRef<number>(shadow);
+
   const clipId = selectedClip?.id || "";
   const isVideoClip = selectedClip?.type === "video" || !!selectedClip?.duration;
   const isAlreadyProcessed = clipId ? hasClipMasks(clipId) : false;
   const currentProcessedCount = clipId ? getClipProcessedCount(clipId) : 0;
+
+  const clipStart = selectedClip?.startTime || 0;
+  const localTime = Math.max(0, (currentTime || 0) - clipStart);
+  const bakedFps = getClipBakedFps(clipId);
+  const frameIdx = Math.max(0, Math.floor(localTime * bakedFps));
+
+  // Detect playhead movement / scrubbing and dynamically update active frame state
+  useEffect(() => {
+    if (!clipId) return;
+    const hasMask = hasFrameMask(clipId, frameIdx);
+    setCurrentFrameMatted(hasMask);
+  }, [currentTime, clipId, frameIdx]);
+
+  // Auto-restore persisted masks from IndexedDB if not in memory
+  useEffect(() => {
+    if (!clipId) return;
+    if (!hasClipMasks(clipId)) {
+      restoreClipMasksFromStorage(clipId).then((restored) => {
+        if (restored) {
+          setCurrentFrameMatted(hasFrameMask(clipId, frameIdx));
+        }
+      });
+    }
+  }, [clipId, frameIdx]);
+
+  // Invalidate masks if the clip's media URL was replaced on the timeline
+  useEffect(() => {
+    if (
+      selectedClip?.url &&
+      previousClipUrlRef.current &&
+      previousClipUrlRef.current !== selectedClip.url
+    ) {
+      clearClipMasks(clipId);
+      setCurrentFrameMatted(false);
+      lastMattedTimeRef.current = null;
+      setSettingsChangedSinceBake(false);
+    }
+    previousClipUrlRef.current = selectedClip?.url || null;
+  }, [selectedClip?.url, clipId]);
 
   // Refs for always-current values (avoids stale closures in callbacks)
   const enabledRef = useRef(enabled);
@@ -162,11 +225,11 @@ export default function CutoutModal({
   // old config" bug). Only user interactions trigger onApplyCutout.
   useEffect(() => {
     if (!visible) return;
+    const en = currentCutout?.enabled || false;
     const targetMode: CutoutMode =
-      initialMode || currentCutout?.mode || "chroma";
+      initialMode || (en && currentCutout?.mode ? currentCutout.mode : "none");
     cutoutModeRef.current = targetMode;
     setCutoutMode(targetMode);
-    const en = currentCutout?.enabled || false;
     enabledRef.current = en;
     setEnabled(en);
     const kc = currentCutout?.keyColor || "#00FF00";
@@ -196,8 +259,10 @@ export default function CutoutModal({
         overrides?.enabled !== undefined
           ? overrides.enabled
           : enabledRef.current;
-      const nextMode =
+      const rawMode =
         overrides?.mode !== undefined ? overrides.mode : cutoutModeRef.current;
+      const nextMode: "chroma" | "auto" =
+        rawMode === "auto" ? "auto" : "chroma";
       const nextKeyColor =
         overrides?.keyColor !== undefined
           ? overrides.keyColor
@@ -245,29 +310,32 @@ export default function CutoutModal({
 
   const handleReset = () => {
     soundEngine.playSfx("click");
+    clearClipMasks(clipId);
     setEnabled(false);
-    setCutoutMode("chroma");
-    setKeyColor("#00FF00");
+    enabledRef.current = false;
     setIntensity(45);
     setShadow(25);
     setStrokeColor("none");
     setStrokeWidth(3);
     setBgColor("none");
-    enabledRef.current = false;
-    cutoutModeRef.current = "chroma";
-    keyColorRef.current = "#00FF00";
     intensityRef.current = 45;
     shadowRef.current = 25;
     strokeColorRef.current = "none";
     strokeWidthRef.current = 3;
     bgColorRef.current = "none";
+    setCurrentFrameMatted(false);
+    lastMattedTimeRef.current = null;
+    setSettingsChangedSinceBake(false);
+    const activeMode = cutoutModeRef.current === "chroma" ? "chroma" : "auto";
     onApplyCutout({
       enabled: false,
-      mode: "chroma",
-      keyColor: "#00FF00",
+      mode: activeMode,
+      keyColor: keyColorRef.current,
       intensity: 45,
       shadow: 25,
       strokeWidth: 0,
+      bgColor: undefined,
+      strokeColor: undefined,
     });
   };
 
@@ -282,13 +350,41 @@ export default function CutoutModal({
     intensityRef.current = v;
     setIntensity(v);
     syncCutout({ intensity: v });
+
+    if (cutoutMode === "auto" && clipId) {
+      // Instantly update active preview frame in 0.1ms via native Rust/WASM
+      updateActiveFrameMatteParams(
+        clipId,
+        frameIdx,
+        v / 100,
+        shadowRef.current / 100,
+      );
+      if (isAlreadyProcessed && Math.abs(v - bakedIntensityRef.current) > 2) {
+        setSettingsChangedSinceBake(true);
+      }
+    }
   };
+
   const updateShadow = (val: number) => {
     const v = Math.max(0, Math.min(100, val));
     shadowRef.current = v;
     setShadow(v);
     syncCutout({ shadow: v });
+
+    if (cutoutMode === "auto" && clipId) {
+      // Instantly update active preview frame in 0.1ms via native Rust/WASM
+      updateActiveFrameMatteParams(
+        clipId,
+        frameIdx,
+        intensityRef.current / 100,
+        v / 100,
+      );
+      if (isAlreadyProcessed && Math.abs(v - bakedShadowRef.current) > 2) {
+        setSettingsChangedSinceBake(true);
+      }
+    }
   };
+
   const updateKeyColor = (col: string) => {
     keyColorRef.current = col;
     setKeyColor(col);
@@ -357,23 +453,25 @@ export default function CutoutModal({
       // Ignore
     }
   };
+
   const updateBgColor = (col: string) => {
     bgColorRef.current = col;
     setBgColor(col);
     syncCutout({ bgColor: col });
   };
+
   const updateStrokeColor = (col: string) => {
     strokeColorRef.current = col;
     setStrokeColor(col);
     syncCutout({ strokeColor: col });
   };
+
   const updateStrokeWidth = (w: number) => {
     const v = Math.max(1, Math.min(20, w));
     strokeWidthRef.current = v;
     setStrokeWidth(v);
     syncCutout({ strokeWidth: v });
   };
-  const [isProcessingActiveFrame, setIsProcessingActiveFrame] = useState<boolean>(false);
 
   const handleProcessActiveFrame = async () => {
     if (!clipId || typeof document === "undefined") return;
@@ -381,29 +479,28 @@ export default function CutoutModal({
     setIsProcessingActiveFrame(true);
 
     try {
-      const videoEl: any = document.querySelector("video");
-      const imgEl: any = document.querySelector("img");
-      const canvasEl: any = document.querySelector("canvas");
-      const source = videoEl || imgEl || canvasEl || selectedClip?.url;
+      let activeEl: any = getActiveMediaElement(selectedClip?.url || clipId);
 
-      if (source) {
-        const ok = await processClipStudioCutout(source, clipId, 0);
-        if (ok) {
-          soundEngine.playSfx("whoosh");
-          syncCutout({ mode: "auto", enabled: true });
-        }
+      const ok = await processClipStudioCutout(
+        activeEl || selectedClip?.url || clipId,
+        clipId,
+        frameIdx,
+        localTime,
+        intensityRef.current / 100,
+        shadowRef.current / 100,
+      );
+
+      if (ok) {
+        soundEngine.playSfx("whoosh");
+        syncCutout({ mode: "auto", enabled: true });
+        setCurrentFrameMatted(true);
+        lastMattedTimeRef.current = currentTime;
       }
     } catch (e) {
       console.warn("[CutoutModal] Active frame processing error:", e);
     } finally {
       setIsProcessingActiveFrame(false);
     }
-  };
-
-  const handleClearBakedMasks = () => {
-    soundEngine.playSfx("pop");
-    clearClipMasks(clipId);
-    syncCutout({ mode: "auto", enabled: true });
   };
 
   const toggleCutoutOption = (mode: CutoutMode) => {
@@ -419,16 +516,17 @@ export default function CutoutModal({
       enabledRef.current = true;
       setCutoutMode(mode);
       cutoutModeRef.current = mode;
-      syncCutout({ enabled: true, mode });
-
-      // Automatically run studio neural cutout for image clips or active preview
-      if (mode === "auto" && !isAlreadyProcessed) {
-        handleProcessActiveFrame().catch(() => {});
-      }
+      const effectiveMode: "chroma" | "auto" = mode === "auto" ? "auto" : "chroma";
+      syncCutout({ enabled: true, mode: effectiveMode });
     }
   };
 
-  const handleProcessFrameByFrame = async () => {
+  const handleProcessVideoClick = () => {
+    soundEngine.playSfx("click");
+    handleProcessFrameByFrame(true);
+  };
+
+  const handleProcessFrameByFrame = async (replace = false) => {
     if (!selectedClip?.url || !clipId) return;
     soundEngine.playSfx("click");
     setIsProcessingFrames(true);
@@ -436,25 +534,38 @@ export default function CutoutModal({
     const abortCtrl = new AbortController();
     abortCtrlRef.current = abortCtrl;
 
+    if (replace) {
+      clearClipMasks(clipId);
+    }
+
     const dur = selectedClip.duration || 5;
+    const trimIn = selectedClip.trimIn || 0;
+    const speed = selectedClip.speed || 1;
     const count = await processVideoFrameByFrame(
       selectedClip.url,
       clipId,
       dur,
-      15,
+      trimIn,
+      speed,
+      20, // 20 FPS = high quality temporal sampling, zero jitter, perfectly smooth playback!
+      intensityRef.current / 100,
+      shadowRef.current / 100,
       (pct, curr, total) => {
         setFrameProgress(pct);
         setProcessedFrames(curr);
         setTotalFramesToProcess(total);
       },
       abortCtrl.signal,
-      true // High-accuracy IS-Net studio model
     );
 
     setIsProcessingFrames(false);
     if (count > 0) {
       soundEngine.playSfx("whoosh");
       syncCutout({ mode: "auto", enabled: true });
+      bakedIntensityRef.current = intensityRef.current;
+      bakedShadowRef.current = shadowRef.current;
+      setSettingsChangedSinceBake(false);
+      setCurrentFrameMatted(true);
     }
   };
 
@@ -464,6 +575,7 @@ export default function CutoutModal({
       abortCtrlRef.current = null;
     }
     setIsProcessingFrames(false);
+    setIsReplacingClip(false);
   };
 
   // ── Slider helper ─────────────────────────────────────────────────────────
@@ -492,61 +604,106 @@ export default function CutoutModal({
   );
 
   const renderCutoutContent = () => {
-    const isAiChecked = enabled && cutoutMode === "auto";
-    const isChromaChecked = enabled && cutoutMode === "chroma";
-
     return (
       <>
-        {/* Compact Mode Selector Bar */}
-        <View style={s.compactModeBar}>
+        {/* Sleek Segmented Mode Switcher */}
+        <View style={s.modeSegmentedBar}>
           <TouchableOpacity
-            style={[s.compactModeChip, isAiChecked && s.compactModeChipActive]}
-            onPress={() => toggleCutoutOption("auto")}
-            activeOpacity={0.75}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: isAiChecked }}
-            accessibilityLabel="AI Cutout"
+            style={[s.modeSegmentItem, cutoutMode === "none" && s.modeSegmentItemActive]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              setCutoutMode("none");
+              cutoutModeRef.current = "none";
+              setEnabled(false);
+              enabledRef.current = false;
+              syncCutout({ enabled: false });
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: cutoutMode === "none" }}
           >
-            <View style={[s.compactCheckbox, isAiChecked && s.compactCheckboxActive]}>
-              {isAiChecked ? <Ionicons name="checkmark" size={11} color="#08090E" /> : null}
-            </View>
             <Ionicons
-              name="sparkles"
+              name="close-circle-outline"
               size={13}
-              color={isAiChecked ? "#00F2FE" : "#94A3B8"}
+              color={cutoutMode === "none" ? "#00F2FE" : "#94A3B8"}
             />
-            <Text style={[s.compactModeLabel, isAiChecked && s.compactModeLabelActive]}>
-              AI Cutout
+            <Text style={[s.modeSegmentText, cutoutMode === "none" && s.modeSegmentTextActive]}>
+              None
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.compactModeChip, isChromaChecked && s.compactModeChipActive]}
-            onPress={() => toggleCutoutOption("chroma")}
-            activeOpacity={0.75}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: isChromaChecked }}
-            accessibilityLabel="Chroma Key"
+            style={[
+              s.modeSegmentItem,
+              cutoutMode === "auto" && s.modeSegmentItemActive,
+            ]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              setCutoutMode("auto");
+              cutoutModeRef.current = "auto";
+              // Only enable if the clip already has baked masks or a previewed mask
+              const isReady = hasClipMasks(clipId);
+              setEnabled(isReady);
+              enabledRef.current = isReady;
+              syncCutout({ enabled: isReady, mode: "auto" });
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: cutoutMode === "auto" }}
           >
-            <View style={[s.compactCheckbox, isChromaChecked && s.compactCheckboxActive]}>
-              {isChromaChecked ? <Ionicons name="checkmark" size={11} color="#08090E" /> : null}
-            </View>
+            <Ionicons
+              name="sparkles"
+              size={13}
+              color={cutoutMode === "auto" ? "#00F2FE" : "#94A3B8"}
+            />
+            <Text
+              style={[
+                s.modeSegmentText,
+                cutoutMode === "auto" && s.modeSegmentTextActive,
+              ]}
+            >
+              Auto Cutout
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              s.modeSegmentItem,
+              cutoutMode === "chroma" && s.modeSegmentItemActive,
+            ]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              setCutoutMode("chroma");
+              cutoutModeRef.current = "chroma";
+              setEnabled(true);
+              enabledRef.current = true;
+              syncCutout({ enabled: true, mode: "chroma" });
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: cutoutMode === "chroma" }}
+          >
             <Ionicons
               name="color-filter"
               size={13}
-              color={isChromaChecked ? "#00F2FE" : "#94A3B8"}
+              color={cutoutMode === "chroma" ? "#00F2FE" : "#94A3B8"}
             />
-            <Text style={[s.compactModeLabel, isChromaChecked && s.compactModeLabelActive]}>
+            <Text
+              style={[
+                s.modeSegmentText,
+                cutoutMode === "chroma" && s.modeSegmentTextActive,
+              ]}
+            >
               Chroma Key
             </Text>
           </TouchableOpacity>
         </View>
 
-        {!enabled ? (
+        {cutoutMode === "none" ? (
           <View style={s.compactNoneBox}>
-            <Ionicons name="shield-checkmark-outline" size={15} color="#00F2FE" />
+            <Ionicons name="shield-checkmark-outline" size={14} color="#00F2FE" />
             <Text style={s.compactNoneText}>
-              No cutout applied — Original video background is preserved.
+              Original video background is preserved. Select Auto Cutout or Chroma Key above to remove background.
             </Text>
           </View>
         ) : (
@@ -604,7 +761,7 @@ export default function CutoutModal({
                     style={[s.dropperIconBadge, { backgroundColor: "rgba(16, 185, 129, 0.12)", borderColor: "rgba(16, 185, 129, 0.3)" }]}
                     onPress={handleAutoDetectBackdrop}
                     activeOpacity={0.8}
-                    accessibilityLabel="Auto-detect backdrop color using Rust engine"
+                    accessibilityLabel="Auto-detect backdrop color"
                   >
                     <Ionicons name="sparkles" size={12} color="#10B981" />
                     <Text style={[s.dropperBadgeText, { color: "#10B981" }]}>Auto Detect</Text>
@@ -632,87 +789,176 @@ export default function CutoutModal({
               </>
             ) : (
               <View style={s.autoCutoutPanel}>
+                {/* Header Status Bar */}
                 <View style={s.compactAiHeader}>
                   <View style={s.compactAiBadge}>
                     <Ionicons name="sparkles" size={12} color="#00F2FE" />
-                    <Text style={s.compactAiBadgeText}>Studio AI (IS-Net)</Text>
+                    <Text style={s.compactAiBadgeText}>Auto Cutout</Text>
                   </View>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <TouchableOpacity
-                      onPress={handleProcessActiveFrame}
-                      style={[
-                        s.compactProcessBtn,
-                        {
-                          backgroundColor: isProcessingActiveFrame ? "rgba(0, 242, 254, 0.2)" : "rgba(255, 255, 255, 0.08)",
-                          borderWidth: 1,
-                          borderColor: "rgba(0, 242, 254, 0.3)",
-                        },
-                      ]}
-                      activeOpacity={0.8}
-                      disabled={isProcessingActiveFrame}
-                      accessibilityLabel="Matte current frame using studio IS-Net neural network"
-                    >
-                      {isProcessingActiveFrame ? (
-                        <ActivityIndicator size="small" color="#00F2FE" />
-                      ) : (
-                        <Ionicons name="scan" size={11} color="#00F2FE" />
-                      )}
-                      <Text style={[s.compactProcessBtnText, { color: "#00F2FE" }]}>
-                        {isProcessingActiveFrame ? "Matting..." : "Matte Frame"}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {isVideoClip && (
-                      isProcessingFrames ? (
-                        <View style={s.compactProgressInline}>
-                          <ActivityIndicator size="small" color="#00F2FE" />
-                          <Text style={s.compactProgressPct}>{frameProgress}%</Text>
-                          <TouchableOpacity onPress={handleCancelProcessing} style={s.compactCancelBtn}>
-                            <Text style={s.compactCancelText}>Cancel</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : isAlreadyProcessed ? (
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                          <TouchableOpacity onPress={handleProcessFrameByFrame} style={s.compactReprocessBtn} activeOpacity={0.8}>
-                            <Ionicons name="checkmark-circle" size={12} color="#10B981" />
-                            <Text style={s.compactReprocessText}>Studio HD ↻</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={handleClearBakedMasks} style={[s.compactCancelBtn, { paddingHorizontal: 6 }]}>
-                            <Ionicons name="trash-outline" size={11} color="#EF4444" />
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity onPress={handleProcessFrameByFrame} style={s.compactProcessBtn} activeOpacity={0.8}>
-                          <Ionicons name="flash" size={11} color="#08090E" />
-                          <Text style={s.compactProcessBtnText}>Process Video</Text>
-                        </TouchableOpacity>
-                      )
-                    )}
-                  </View>
+                  {isProcessingFrames || isReplacingClip ? (
+                    <View style={s.statusPillProcessing}>
+                      <ActivityIndicator size="small" color="#00F2FE" style={{ transform: [{ scale: 0.65 }] }} />
+                      <Text style={s.statusPillTextProcessing}>{frameProgress}%</Text>
+                    </View>
+                  ) : isAlreadyProcessed ? (
+                    <View style={s.statusPillSuccess}>
+                      <Ionicons name="checkmark-circle" size={10} color="#10B981" />
+                      <Text style={s.statusPillTextSuccess}>{currentProcessedCount} frames removed</Text>
+                    </View>
+                  ) : currentFrameMatted ? (
+                    <View style={s.statusPillSuccess}>
+                      <Ionicons name="checkmark-circle" size={10} color="#10B981" />
+                      <Text style={s.statusPillTextSuccess}>Preview active</Text>
+                    </View>
+                  ) : (
+                    <Text style={s.statusPillMuted}>Ready to preview</Text>
+                  )}
                 </View>
 
-                {isProcessingFrames && (
-                  <View style={s.progressBarTrack}>
-                    <View style={[s.progressBarFill, { width: `${frameProgress}%` }]} />
+                {/* Active Processing Banner */}
+                {(isProcessingFrames || isReplacingClip) && (
+                  <View style={s.compactProcessingBanner}>
+                    <View style={s.compactProcessingHeader}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                        <ActivityIndicator size="small" color="#00F2FE" />
+                        <Text style={s.compactProgressPct} numberOfLines={1}>
+                          {isReplacingClip
+                            ? `Baking video clip... ${frameProgress}% (${processedFrames}/${totalFramesToProcess})`
+                            : `Removing background... ${frameProgress}% (${processedFrames}/${totalFramesToProcess})`}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={handleCancelProcessing} style={s.compactCancelBtn}>
+                        <Text style={s.compactCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={s.progressBarTrack}>
+                      <View style={[s.progressBarFill, { width: `${frameProgress}%` }]} />
+                    </View>
                   </View>
                 )}
 
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
-                  <Ionicons name="information-circle-outline" size={12} color="#64748B" />
-                  <Text style={{ fontSize: 10, color: "#64748B" }}>
-                    Studio IS-Net removes outdoor fences, foliage & limb gaps with zero artifacts.
-                  </Text>
-                </View>
+                {/* Main Action Controls */}
+                {!isProcessingFrames && !isReplacingClip && (
+                  <View style={s.actionsContainer}>
+                    {/* Status Banner */}
+                    {isAlreadyProcessed ? (
+                      <View style={s.activeOnTimelineBanner}>
+                        <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                        <Text style={s.activeOnTimelineText}>
+                          Background removed for full video ({currentProcessedCount} frames). Active for playback & export.
+                        </Text>
+                      </View>
+                    ) : currentFrameMatted ? (
+                      <View style={s.activeOnTimelineBanner}>
+                        <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
+                        <Text style={s.activeOnTimelineText}>
+                          Preview active on current frame. Scrubbing shows original video.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={s.subtleHintRow}>
+                        <Ionicons name="information-circle-outline" size={12} color="#64748B" />
+                        <Text style={s.subtleHintText}>
+                          Applies neural AI background removal with active threshold & softness.
+                        </Text>
+                      </View>
+                    )}
 
-                {renderSlider("Matte Threshold", intensity, "%", 1, 100, updateIntensity)}
-                {renderSlider("Edge Softness", shadow, "%", 0, 100, updateShadow)}
+                    {settingsChangedSinceBake && (
+                      <View style={s.settingsChangedBanner}>
+                        <Ionicons name="information-circle" size={13} color="#00F2FE" />
+                        <Text style={s.settingsChangedText}>
+                          Settings modified. Tap "Reprocess Preview" or "Reprocess Full Video" to update.
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Always Consistent 3 Actions: Preview, Full Video, and Reset */}
+                    <View style={{ gap: 8 }}>
+                      {/* 1. Full Video Action Button */}
+                      {isVideoClip && (
+                        <TouchableOpacity
+                          onPress={handleProcessVideoClick}
+                          style={s.heroBtn}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name={isAlreadyProcessed ? "refresh" : "sparkles"}
+                            size={14}
+                            color="#08090E"
+                          />
+                          <Text style={s.heroBtnText}>
+                            {isAlreadyProcessed
+                              ? "Reprocess Full Video"
+                              : "Remove Background (Full Video)"}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Row with Preview and Reset Options */}
+                      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                        {/* 2. Preview Action Button */}
+                        <TouchableOpacity
+                          onPress={handleProcessActiveFrame}
+                          style={[s.secondaryActionBtn, { flex: 1.2 }]}
+                          activeOpacity={0.8}
+                          disabled={isProcessingActiveFrame}
+                        >
+                          {isProcessingActiveFrame ? (
+                            <ActivityIndicator size="small" color="#00F2FE" />
+                          ) : (
+                            <Ionicons
+                              name={currentFrameMatted ? "refresh" : "eye-outline"}
+                              size={14}
+                              color="#00F2FE"
+                            />
+                          )}
+                          <Text
+                            style={[s.secondaryActionText, { color: "#00F2FE" }]}
+                            numberOfLines={1}
+                          >
+                            {isProcessingActiveFrame
+                              ? "Processing..."
+                              : currentFrameMatted
+                              ? "Reprocess Preview"
+                              : "Preview Current Frame"}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* 3. Reset Action Button */}
+                        <TouchableOpacity
+                          onPress={handleReset}
+                          style={[
+                            s.secondaryActionBtn,
+                            { flex: 0.8, borderColor: "rgba(148, 163, 184, 0.25)" },
+                          ]}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="reload-outline" size={13} color="#94A3B8" />
+                          <Text
+                            style={[s.secondaryActionText, { color: "#94A3B8" }]}
+                            numberOfLines={1}
+                          >
+                            Reset Cutout
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Threshold and Softness Tuning Sliders */}
+                    <View style={{ marginTop: 6 }}>
+                      {renderSlider("Cutout Threshold", intensity, "%", 1, 100, updateIntensity)}
+                      {renderSlider("Edge Softness", shadow, "%", 0, 100, updateShadow)}
+                    </View>
+                  </View>
+                )}
               </View>
             )}
           </View>
         )}
 
-        {enabled && (
+        {(cutoutMode === "chroma" || currentFrameMatted || isAlreadyProcessed) && (
           <View style={s.sectionBox}>
             <View style={s.finishSegmentRow}>
               <View style={s.finishTabGroup}>
@@ -1016,44 +1262,119 @@ const s = StyleSheet.create({
     gap: 6,
     marginBottom: 6,
   },
-  compactModeChip: {
+  modeSegmentedBar: {
+    flexDirection: "row",
+    backgroundColor: "#0A0D15",
+    borderRadius: 8,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "#1E2638",
+    marginBottom: 8,
+    gap: 4,
+  },
+  modeSegmentItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: 5,
     paddingVertical: 7,
-    paddingHorizontal: 10,
-    borderRadius: 7,
-    backgroundColor: "#131826",
+    borderRadius: 6,
+  },
+  modeSegmentItemActive: {
+    backgroundColor: "#161D2B",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.35)",
   },
-  compactModeChipActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-  },
-  compactCheckbox: {
-    width: 15,
-    height: 15,
-    borderRadius: 3.5,
-    borderWidth: 1.5,
-    borderColor: "#475569",
-    backgroundColor: "#0B0E17",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  compactCheckboxActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "#00F2FE",
-  },
-  compactModeLabel: {
-    fontSize: 11.5,
-    fontWeight: "700",
+  modeSegmentText: {
+    fontSize: 11,
+    fontWeight: "600",
     color: "#94A3B8",
   },
-  compactModeLabelActive: {
-    color: "#FFFFFF",
+  modeSegmentTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+  actionsContainer: {
+    marginBottom: 6,
+  },
+  heroBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#00F2FE",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 7,
+  },
+  heroBtnText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#08090E",
+  },
+  secondaryActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  secondaryActionText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  deleteGhostBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.25)",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  deleteGhostText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#EF4444",
+  },
+  subtleHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 3,
+    paddingHorizontal: 2,
+  },
+  subtleHintText: {
+    fontSize: 10.5,
+    color: "#64748B",
+    flex: 1,
+    lineHeight: 14,
+  },
+  activeOnTimelineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.25)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 7,
+  },
+  activeOnTimelineText: {
+    fontSize: 11,
+    color: "#10B981",
+    fontWeight: "600",
+    flex: 1,
   },
   compactNoneBox: {
     backgroundColor: "#131826",
@@ -1177,6 +1498,99 @@ const s = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#00F2FE",
+  },
+  statusPillSuccess: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.3)",
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  statusPillTextSuccess: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#10B981",
+  },
+  statusPillProcessing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.25)",
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  statusPillTextProcessing: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: "#00F2FE",
+  },
+  statusPillMuted: {
+    fontSize: 9.5,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  compactAiActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  compactActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    minHeight: 30,
+  },
+  compactActionBtnText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  compactDeleteActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.35)",
+    minHeight: 30,
+    flexShrink: 0,
+  },
+  compactDeleteActionText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#EF4444",
+  },
+  compactProcessingBanner: {
+    backgroundColor: "#0A0D15",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderRadius: 7,
+    padding: 7,
+    marginVertical: 6,
+  },
+  compactProcessingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 5,
+    gap: 8,
   },
   compactProcessBtn: {
     flexDirection: "row",
@@ -1316,5 +1730,74 @@ const s = StyleSheet.create({
     height: "100%",
     backgroundColor: "#00F2FE",
     borderRadius: 2,
+  },
+  settingsChangedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginVertical: 4,
+  },
+  settingsChangedText: {
+    fontSize: 10,
+    color: "#00F2FE",
+    fontWeight: "500",
+    flex: 1,
+  },
+  replaceConfirmOverlay: {
+    marginVertical: 8,
+    backgroundColor: "rgba(10, 14, 23, 0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.4)",
+    borderRadius: 12,
+    padding: 12,
+  },
+  replaceConfirmBox: {},
+  replaceConfirmTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#F8FAFC",
+  },
+  replaceConfirmDesc: {
+    fontSize: 11,
+    color: "#94A3B8",
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  replaceConfirmActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  replaceConfirmKeepBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+  },
+  replaceConfirmKeepText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  replaceConfirmReplaceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#00F2FE",
+  },
+  replaceConfirmReplaceText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#08090E",
   },
 });

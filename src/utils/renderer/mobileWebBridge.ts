@@ -298,9 +298,15 @@ export function generateCanvasBridgeHtml(
         } else if (canvasBg.startsWith("blur:")) {
           const blurPx = parseInt(canvasBg.split(":")[1]) || 25;
           let blurMedia = null;
-          for (const v of (PROJECT.tracks?.video || [])) {
-            const m = mediaMap.get(v.url) || mediaMap.get(v.id);
-            if (m) { blurMedia = m; break; }
+          const activeVid =
+            (PROJECT.tracks?.video || []).find(
+              (v: any) =>
+                time >= v.startTime &&
+                time <= v.startTime + v.duration &&
+                !v.cutout?.enabled,
+            ) || (PROJECT.tracks?.video || []).find((v: any) => !v.cutout?.enabled) || (PROJECT.tracks?.video || [])[0];
+          if (activeVid) {
+            blurMedia = mediaMap.get(activeVid.url) || mediaMap.get(activeVid.id);
           }
           if (blurMedia) {
             const mw = blurMedia.videoWidth || blurMedia.naturalWidth || blurMedia.width || width;

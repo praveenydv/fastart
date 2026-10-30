@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TRANSITION_PRESETS } from '../../constants/sampleMedia';
+import { TRANSITION_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
 
 interface TransitionsModalProps {
@@ -19,6 +20,47 @@ interface TransitionsModalProps {
   onApplyTransition: (transition: { type: string; duration: number }) => void;
   isInline?: boolean;
 }
+
+const getTransitionIcon = (id: string): keyof typeof Ionicons.glyphMap => {
+  switch (id) {
+    case 'cut': return 'cut-outline';
+    case 'dissolve': return 'color-filter-outline';
+    case 'zoom_in': return 'expand-outline';
+    case 'zoom_out': return 'contract-outline';
+    case 'slide_left': return 'arrow-back-outline';
+    case 'slide_right': return 'arrow-forward-outline';
+    case 'push_up': return 'arrow-up-outline';
+    case 'push_down': return 'arrow-down-outline';
+    case 'flash_white': return 'sunny-outline';
+    case 'fade_black': return 'moon-outline';
+    case 'glitch_transition': return 'flash-outline';
+    case 'spin_cw': return 'refresh-outline';
+    case 'spin_ccw': return 'reload-outline';
+    case 'light_leak': return 'sparkles-outline';
+    default: return 'close-circle-outline';
+  }
+};
+
+const getTransitionAnimStyle = (id: string): any => {
+  if (Platform.OS !== 'web') return null;
+  switch (id) {
+    case 'dissolve': return { animation: 'transDissolve 2.2s ease-in-out infinite' };
+    case 'slide_left': return { animation: 'transSlideLeft 2.2s ease-in-out infinite' };
+    case 'slide_right': return { animation: 'transSlideRight 2.2s ease-in-out infinite' };
+    case 'push_up': return { animation: 'transPushUp 2.2s ease-in-out infinite' };
+    case 'push_down': return { animation: 'transPushDown 2.2s ease-in-out infinite' };
+    case 'zoom_in': return { animation: 'transZoomIn 2.2s ease-in-out infinite' };
+    case 'zoom_out': return { animation: 'transZoomOut 2.2s ease-in-out infinite' };
+    case 'flash_white': return { animation: 'transFlashWhite 2.2s ease-in-out infinite' };
+    case 'fade_black': return { animation: 'transFadeBlack 2.2s ease-in-out infinite' };
+    case 'glitch_transition': return { animation: 'transGlitch 2.2s ease-in-out infinite' };
+    case 'spin_cw': return { animation: 'transSpinCw 2.2s ease-in-out infinite' };
+    case 'spin_ccw': return { animation: 'transSpinCcw 2.2s ease-in-out infinite' };
+    case 'light_leak': return { animation: 'transLightLeak 2.2s ease-in-out infinite' };
+    case 'cut': return { animation: 'transCut 2.2s steps(1) infinite' };
+    default: return null;
+  }
+};
 
 export default function TransitionsModal({
   visible,
@@ -132,6 +174,7 @@ export default function TransitionsModal({
             <View style={styles.grid}>
               {allPresets.map((item) => {
                 const isActive = (selectedType === item.id) || (isNone && item.id === 'none');
+                const isItemNone = item.id === 'none';
                 return (
                   <TouchableOpacity
                     key={item.id}
@@ -139,12 +182,34 @@ export default function TransitionsModal({
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.8}
                   >
-                    <View style={[styles.iconBox, isActive && styles.iconBoxActive]}>
-                      <Ionicons
-                        name={item.id === 'none' ? 'close-circle-outline' : 'flash-outline'}
-                        size={18}
-                        color={isActive ? '#00F2FE' : '#94A3B8'}
-                      />
+                    <View style={styles.transPreviewStage}>
+                      {isItemNone ? (
+                        <View style={styles.noneStage}>
+                          <Ionicons name="close-circle-outline" size={22} color="#64748B" />
+                          <Text style={styles.noneStageText}>None</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.splitBlockContainer}>
+                          <View style={styles.splitClipA}>
+                            <Text style={styles.clipLabel}>A</Text>
+                          </View>
+                          <View style={[styles.transIconCenter, isActive && styles.transIconCenterActive]}>
+                            <Ionicons
+                              name={getTransitionIcon(item.id)}
+                              size={13}
+                              color={isActive ? '#00F2FE' : '#E2E8F0'}
+                            />
+                          </View>
+                          <View style={styles.splitClipB}>
+                            <Text style={styles.clipLabel}>B</Text>
+                          </View>
+                          {isActive && (
+                            <View style={styles.activeCheckBadge}>
+                              <Ionicons name="checkmark" size={10} color="#000000" />
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </View>
                     <Text
                       style={[
@@ -303,16 +368,99 @@ const styles = StyleSheet.create({
   transitionCard: {
     width: '31%',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderRadius: 7,
+    padding: 4,
+    borderRadius: 8,
     backgroundColor: '#131826',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#1F2637',
   },
   transitionCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
+  },
+  transPreviewStage: {
+    width: '100%',
+    height: 52,
+    borderRadius: 5,
+    backgroundColor: '#090B10',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: 4,
+  },
+  noneStage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  noneStageText: {
+    color: '#64748B',
+    fontSize: 9.5,
+    fontWeight: '600',
+  },
+  splitBlockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+    paddingHorizontal: 4,
+    gap: 2,
+    position: 'relative',
+  },
+  splitClipA: {
+    flex: 1,
+    height: 36,
+    borderRadius: 4,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splitClipB: {
+    flex: 1,
+    height: 36,
+    borderRadius: 4,
+    backgroundColor: '#0F2338',
+    borderWidth: 1,
+    borderColor: '#1E3A5F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clipLabel: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  transIconCenter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#0A0E17',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    marginHorizontal: -6,
+  },
+  transIconCenterActive: {
+    borderColor: '#00F2FE',
+    backgroundColor: '#0E2433',
+  },
+  activeCheckBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   iconBox: {
     width: 36,

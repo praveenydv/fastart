@@ -323,6 +323,152 @@ export default function KeyframePropertyControls({
           })}
         </View>
       </View>
+
+      {/* 6. MASK KEYFRAME PROPERTIES */}
+      {activeTransform.mask && activeTransform.mask.shape !== 'none' && (
+        <View style={styles.propertyRow}>
+          <View style={styles.propLabelRow}>
+            <View style={styles.propLabelLeft}>
+              <Ionicons name="shapes-outline" size={14} color="#00F2FE" />
+              <Text style={styles.propName}>
+                Mask Keyframe ({activeTransform.mask.shape.toUpperCase()})
+              </Text>
+            </View>
+          </View>
+
+          <CompactSliderInput
+            label="Mask Size"
+            icon={<Ionicons name="resize-outline" size={13} color="#00F2FE" />}
+            value={activeTransform.mask.size ?? 60}
+            min={10}
+            max={100}
+            step={1}
+            unit="%"
+            defaultValue={60}
+            accentColor="#00F2FE"
+            onChange={(val) => {
+              if (onUpdateKeyframeTransform) {
+                const updatedMask = {
+                  ...activeTransform.mask!,
+                  size: val,
+                  width: val,
+                  height: val,
+                };
+                onUpdateKeyframeTransform(
+                  localTime,
+                  { ...activeTransform, mask: updatedMask },
+                  activeOpacity,
+                  activeEasing,
+                );
+              }
+            }}
+          />
+
+          <CompactSliderInput
+            label="Mask Feather"
+            icon={<Ionicons name="water-outline" size={13} color="#00F2FE" />}
+            value={activeTransform.mask.feather ?? 0}
+            min={0}
+            max={50}
+            step={1}
+            unit="px"
+            defaultValue={0}
+            accentColor="#00F2FE"
+            onChange={(val) => {
+              if (onUpdateKeyframeTransform) {
+                const updatedMask = {
+                  ...activeTransform.mask!,
+                  feather: val,
+                };
+                onUpdateKeyframeTransform(
+                  localTime,
+                  { ...activeTransform, mask: updatedMask },
+                  activeOpacity,
+                  activeEasing,
+                );
+              }
+            }}
+          />
+
+          <CompactSliderInput
+            label="Mask Rotation"
+            icon={<Ionicons name="refresh-outline" size={13} color="#00F2FE" />}
+            value={activeTransform.mask.rotation ?? 0}
+            min={-180}
+            max={180}
+            step={1}
+            unit="°"
+            defaultValue={0}
+            accentColor="#00F2FE"
+            onChange={(val) => {
+              if (onUpdateKeyframeTransform) {
+                const updatedMask = {
+                  ...activeTransform.mask!,
+                  rotation: val,
+                };
+                onUpdateKeyframeTransform(
+                  localTime,
+                  { ...activeTransform, mask: updatedMask },
+                  activeOpacity,
+                  activeEasing,
+                );
+              }
+            }}
+          />
+
+          <CompactSliderInput
+            label="Mask Position X"
+            icon={<Ionicons name="move-outline" size={13} color="#00F2FE" />}
+            value={activeTransform.mask.x ?? 0}
+            min={-100}
+            max={100}
+            step={1}
+            unit="%"
+            defaultValue={0}
+            accentColor="#00F2FE"
+            onChange={(val) => {
+              if (onUpdateKeyframeTransform) {
+                const updatedMask = {
+                  ...activeTransform.mask!,
+                  x: val,
+                };
+                onUpdateKeyframeTransform(
+                  localTime,
+                  { ...activeTransform, mask: updatedMask },
+                  activeOpacity,
+                  activeEasing,
+                );
+              }
+            }}
+          />
+
+          <CompactSliderInput
+            label="Mask Position Y"
+            icon={<Ionicons name="move-outline" size={13} color="#00F2FE" />}
+            value={activeTransform.mask.y ?? 0}
+            min={-100}
+            max={100}
+            step={1}
+            unit="%"
+            defaultValue={0}
+            accentColor="#00F2FE"
+            onChange={(val) => {
+              if (onUpdateKeyframeTransform) {
+                const updatedMask = {
+                  ...activeTransform.mask!,
+                  y: val,
+                };
+                onUpdateKeyframeTransform(
+                  localTime,
+                  { ...activeTransform, mask: updatedMask },
+                  activeOpacity,
+                  activeEasing,
+                );
+              }
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 }

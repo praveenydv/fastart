@@ -1,5 +1,5 @@
 use crate::compositor::{blend_pixel_over, BlendMode};
-use crate::types::{ClipTransform, CutoutConfig, FrameBuffer, KeyframePoint, MaskConfig};
+use crate::types::{ClipTransform, CutoutConfig, FrameBuffer, KeyframePoint, MaskConfig, MaskKeyframePoint};
 
 #[derive(Debug, Clone, Copy)]
 pub struct EvaluatedTransform {
@@ -103,6 +103,120 @@ fn apply_keyframe(target: &mut EvaluatedTransform, kf: &KeyframePoint) {
     target.opacity = (kf.opacity * kf.transform.opacity.unwrap_or(1.0)) as f32;
     target.flip_x = kf.transform.flip_x.unwrap_or(false);
     target.flip_y = kf.transform.flip_y.unwrap_or(false);
+}
+
+/// Evaluates shape mask parameters smoothly across keyframes.
+/// Prioritizes dedicated `mask_keyframes`, falling back to embedded `keyframes` for legacy projects.
+pub fn evaluate_mask_keyframes(
+    base: Option<&MaskConfig>,
+    mask_keyframes: Option<&[MaskKeyframePoint]>,
+    keyframes: Option<&[KeyframePoint]>,
+    time: f64,
+) -> Option<MaskConfig> {
+    // 1. Dedicated mask keyframes
+    if let Some(mkfs) = mask_keyframes {
+        if !mkfs.is_empty() {
+            if time <= mkfs[0].time {
+                return Some(mkfs[0].mask.clone());
+            }
+            if time >= mkfs[mkfs.len() - 1].time {
+                return Some(mkfs[mkfs.len() - 1].mask.clone());
+            }
+            for i in 0..mkfs.len() - 1 {
+                let k1 = &mkfs[i];
+                let k2 = &mkfs[i + 1];
+                if time >= k1.time && time <= k2.time {
+                    let range = (k2.time - k1.time).max(0.0001);
+                    let t = ((time - k1.time) / range) as f32;
+                    let ease_t = t * t * (3.0 - 2.0 * t);
+                    return interpolate_mask_pair(&k1.mask, &k2.mask, ease_t);
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to legacy embedded keyframes
+    if let Some(kfs) = keyframes {
+        let mask_kfs: Vec<&KeyframePoint> = kfs
+            .iter()
+            .filter(|k| k.mask.is_some() || k.transform.mask.is_some())
+            .collect();
+
+        if !mask_kfs.is_empty() {
+            let get_mask = |k: &KeyframePoint| -> Option<MaskConfig> {
+                k.mask.clone().or_else(|| k.transform.mask.clone())
+            };
+
+            if time <= mask_kfs[0].time {
+                return get_mask(mask_kfs[0]).or_else(|| base.cloned());
+            }
+            if time >= mask_kfs[mask_kfs.len() - 1].time {
+                return get_mask(mask_kfs[mask_kfs.len() - 1]).or_else(|| base.cloned());
+            }
+            for i in 0..mask_kfs.len() - 1 {
+                let k1 = mask_kfs[i];
+                let k2 = mask_kfs[i + 1];
+                if time >= k1.time && time <= k2.time {
+                    let range = (k2.time - k1.time).max(0.0001);
+                    let t = ((time - k1.time) / range) as f32;
+                    let ease_t = t * t * (3.0 - 2.0 * t);
+                    let m1 = get_mask(k1);
+                    let m2 = get_mask(k2);
+                    if let (Some(a), Some(b)) = (m1.as_ref(), m2.as_ref()) {
+                        return interpolate_mask_pair(a, b, ease_t);
+                    } else if m1.is_some() {
+                        return m1;
+                    } else {
+                        return m2;
+                    }
+                }
+            }
+        }
+    }
+
+    base.cloned()
+}
+
+fn interpolate_mask_pair(a: &MaskConfig, b: &MaskConfig, ease_t: f32) -> Option<MaskConfig> {
+    let rot_a = a.rotation.unwrap_or(0.0);
+    let rot_b = b.rotation.unwrap_or(0.0);
+    let mut diff = (rot_b - rot_a) % 360.0;
+    if diff > 180.0 {
+        diff -= 360.0;
+    }
+    if diff < -180.0 {
+        diff += 360.0;
+    }
+    let rot_interp = ((rot_a + diff * ease_t as f64) % 360.0 + 360.0) % 360.0;
+
+    let s_a = a.size.unwrap_or(60.0);
+    let s_b = b.size.unwrap_or(60.0);
+    let w_a = a.width.unwrap_or(s_a);
+    let w_b = b.width.unwrap_or(s_b);
+    let h_a = a.height.unwrap_or(s_a);
+    let h_b = b.height.unwrap_or(s_b);
+    let f_a = a.feather.unwrap_or(0.0);
+    let f_b = b.feather.unwrap_or(0.0);
+    let r_a = a.roundness.unwrap_or(16.0);
+    let r_b = b.roundness.unwrap_or(16.0);
+    let x_a = a.x.unwrap_or(0.0);
+    let x_b = b.x.unwrap_or(0.0);
+    let y_a = a.y.unwrap_or(0.0);
+    let y_b = b.y.unwrap_or(0.0);
+
+    Some(MaskConfig {
+        shape: if ease_t < 0.5 { a.shape.clone() } else { b.shape.clone() },
+        size: Some(s_a + (s_b - s_a) * ease_t as f64),
+        width: Some(w_a + (w_b - w_a) * ease_t as f64),
+        height: Some(h_a + (h_b - h_a) * ease_t as f64),
+        feather: Some((f_a + (f_b - f_a) * ease_t as f64).max(0.0)),
+        roundness: Some((r_a + (r_b - r_a) * ease_t as f64).max(0.0)),
+        inverted: if ease_t < 0.5 { a.inverted } else { b.inverted },
+        x: Some(x_a + (x_b - x_a) * ease_t as f64),
+        y: Some(y_a + (y_b - y_a) * ease_t as f64),
+        rotation: Some(rot_interp),
+        keyframes: None,
+    })
 }
 
 /// Bilinear sampling of a FrameBuffer at normalized or pixel coordinates (u, v)

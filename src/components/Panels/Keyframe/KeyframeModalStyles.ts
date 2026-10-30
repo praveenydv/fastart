@@ -412,6 +412,8 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 6,
     backgroundColor: "rgba(239, 68, 68, 0.08)",
     padding: 8,
     borderRadius: 8,

@@ -212,7 +212,7 @@ export function useProjectFilterEffects({
   // Apply Cutout — only writes to clip.cutout, never overwrites clip.transform
   const handleApplyCutout = useCallback(
     (cutoutConfig: CutoutConfig) => {
-      const current = projectRef.current;
+      const current = projectRef.current || project;
       if (!current) return;
       const targetId = resolveTargetClipId("video");
       if (!targetId) return;
@@ -230,7 +230,7 @@ export function useProjectFilterEffects({
         });
       }
     },
-    [projectRef, resolveTargetClipId, updateProjectWithHistory],
+    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply AI Motion Tracking
@@ -569,6 +569,7 @@ export function useProjectFilterEffects({
       const newAudioClipId = `clip-a-ext-${Date.now()}`;
       const newAudioClip: AudioClip = {
         id: newAudioClipId,
+        sourceMediaId: targetVideo.sourceMediaId || targetVideo.id,
         title: `${targetVideo.title || "Video"} (Audio)`,
         artist: "Extracted Audio",
         duration: targetVideo.duration,

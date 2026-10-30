@@ -65,6 +65,30 @@ mod tests {
     }
 
     #[test]
+    fn test_export_mp4() {
+        use std::collections::HashMap;
+        let json = r#"{
+            "id": "proj-1",
+            "title": "Test Project",
+            "aspectRatio": "9:16",
+            "tracks": {
+                "video": [],
+                "audio": [],
+                "text": [],
+                "captions": [],
+                "stickers": [],
+                "effects": [],
+                "filters": []
+            }
+        }"#;
+        let proj: FastArtProject = serde_json::from_str(json).unwrap();
+        let cache = HashMap::new();
+        let mp4 = FastArtEngine::export_mp4(&proj, 30, 360, 640, 1.0, &cache);
+        assert!(!mp4.is_empty());
+        assert_eq!(&mp4[4..8], b"ftyp");
+    }
+
+    #[test]
     fn test_motion_track_and_speed_curve() {
         let track = evaluate_motion_track(1.5, 0.0, 3.0, "follow_center", 60.0);
         assert!(track.dx.abs() > 0.0 || track.dy.abs() > 0.0);
@@ -102,6 +126,68 @@ mod tests {
         // Corner pixel should be transparent background
         let corner_idx = 0;
         assert_eq!(rgba[corner_idx + 3], 0);
+    }
+
+    #[test]
+    fn test_modnet_tensor_preparation_and_output() {
+        let total = 512 * 512;
+        let mut rgba = vec![0u8; total * 4];
+        // Set first pixel to (255, 128, 0, 255)
+        rgba[0] = 255;
+        rgba[1] = 128;
+        rgba[2] = 0;
+        rgba[3] = 255;
+
+        let mut tensor = vec![0.0f32; total * 3];
+        prepare_modnet_input_tensor(&rgba, 512, 512, &mut tensor);
+
+        // (255 - 127.5)/127.5 = 1.0
+        assert!((tensor[0] - 1.0).abs() < 0.01);
+        // (128 - 127.5)/127.5 approx 0.0039
+        assert!((tensor[total] - 0.0039).abs() < 0.01);
+        // (0 - 127.5)/127.5 = -1.0
+        assert!((tensor[total * 2] - (-1.0)).abs() < 0.01);
+
+        // Test output processing
+        let mut raw_alpha = vec![0.0f32; total];
+        raw_alpha[0] = 1.0;
+        raw_alpha[1] = 0.5;
+        raw_alpha[2] = 0.0;
+
+        let mut out_rgba = vec![0u8; total * 4];
+        process_modnet_output_tensor(&raw_alpha, &mut out_rgba, 0.0, 0.0);
+
+        assert_eq!(out_rgba[0], 255);
+        assert_eq!(out_rgba[1], 255);
+        assert_eq!(out_rgba[2], 255);
+        assert_eq!(out_rgba[3], 255);
+
+        assert_eq!(out_rgba[4], 128);
+        assert_eq!(out_rgba[8], 0);
+    }
+
+    #[test]
+    fn test_rle_alpha_compression() {
+        // Create 512x512 alpha with large foreground and background regions
+        let total = 512 * 512;
+        let mut alpha = vec![0u8; total];
+        for i in 1000..50000 {
+            alpha[i] = 255;
+        }
+
+        let packed = pack_alpha_rle(&alpha);
+        // RLE should be dramatically smaller than 262 KB (~2 KB, 99% reduction)
+        assert!(packed.len() < 3000);
+
+        let mut unpacked = vec![0u8; total];
+        let bytes_written = unpack_alpha_rle(&packed, &mut unpacked);
+        assert_eq!(bytes_written, total);
+        assert_eq!(alpha, unpacked);
+
+        let mut out_rgba = vec![0u8; total * 4];
+        alpha_to_rgba(&unpacked, &mut out_rgba);
+        assert_eq!(out_rgba[0], 0);
+        assert_eq!(out_rgba[1000 * 4 + 3], 255);
     }
 }
 

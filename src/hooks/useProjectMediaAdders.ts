@@ -215,6 +215,7 @@ export function useProjectMediaAdders({
     (newClip: any) => {
       const current = projectRef.current || project;
       if (!current) return;
+      newClip.sourceMediaId = newClip.sourceMediaId || newClip.id;
       startProcessing(
         `Importing ${newClip.title || (newClip.type === "photo" ? "Photo" : "Video")}...`,
         450,
@@ -257,8 +258,24 @@ export function useProjectMediaAdders({
         videoClips.push(endingClip);
       }
 
+      const assets = [...(current.assets || [])];
+      const assetKey = newClip.sourceMediaId || newClip.id;
+      if (!assets.some((a) => (a.sourceMediaId || a.id) === assetKey)) {
+        assets.push({
+          id: assetKey,
+          sourceMediaId: newClip.sourceMediaId || newClip.id,
+          title: newClip.title || (newClip.type === "photo" ? "Photo Asset" : "Video Asset"),
+          type: newClip.type || "video",
+          url: newClip.url,
+          thumbnail: newClip.thumbnail,
+          duration: newClip.duration || 4.0,
+          importedAt: Date.now(),
+        });
+      }
+
       updateProjectWithHistory({
         ...current,
+        assets,
         tracks: { ...current.tracks, video: videoClips },
       });
 
@@ -362,6 +379,7 @@ export function useProjectMediaAdders({
     (newAudioClip: any) => {
       const current = projectRef.current || project;
       if (!current) return;
+      newAudioClip.sourceMediaId = newAudioClip.sourceMediaId || newAudioClip.id;
       startProcessing(
         `Adding Audio "${newAudioClip.title || "Sound Track"}"...`,
         450,
@@ -382,8 +400,23 @@ export function useProjectMediaAdders({
         icon: "musical-notes-outline",
       });
 
+      const assets = [...(current.assets || [])];
+      const assetKey = newAudioClip.sourceMediaId || newAudioClip.id;
+      if (!assets.some((a) => (a.sourceMediaId || a.id) === assetKey)) {
+        assets.push({
+          id: assetKey,
+          sourceMediaId: newAudioClip.sourceMediaId || newAudioClip.id,
+          title: newAudioClip.title || "Audio Asset",
+          type: "audio",
+          url: newAudioClip.url,
+          duration: newAudioClip.duration || 10.0,
+          importedAt: Date.now(),
+        });
+      }
+
       updateProjectWithHistory({
         ...current,
+        assets,
         tracks: { ...current.tracks, audio: audioClips },
       });
 

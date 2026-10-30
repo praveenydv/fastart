@@ -3,6 +3,10 @@
 import { Platform } from 'react-native';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import {
+  persistProjectsToIndexedDB,
+  loadProjectsFromIndexedDB,
+} from './largeMediaStorage';
+import {
   createDefaultProject,
   computeTotalDuration,
   FastArtProject,
@@ -58,10 +62,22 @@ const scheduleNativeDiskSync = () => {
   }, 150);
 };
 
-// Initialize mobile native storage from disk on app start
+// Initialize storage engine on app start (IndexedDB on Web, Disk File on Mobile)
 export const initNativeStorageAsync = async (): Promise<boolean> => {
   if (Platform.OS === 'web') {
-    isStorageInitialized = true;
+    try {
+      const raw = getStorageItem(PROJECTS_STORAGE_KEY);
+      if (!raw || raw === '[]') {
+        const idbData = await loadProjectsFromIndexedDB();
+        if (idbData && idbData !== '[]') {
+          setStorageItem(PROJECTS_STORAGE_KEY, idbData);
+        }
+      }
+    } catch (err) {
+      console.warn('FastArt web IndexedDB backup restoration warning:', err);
+    } finally {
+      isStorageInitialized = true;
+    }
     return true;
   }
 
@@ -184,6 +200,34 @@ const sanitizeProject = (proj: any): FastArtProject => {
       tracks.video?.[0]?.url,
     createdAt: proj.createdAt || Date.now(),
     updatedAt: proj.updatedAt || Date.now(),
+    assets: Array.isArray(proj.assets)
+      ? proj.assets
+      : [
+          ...(tracks.video || []).map((v: any) => ({
+            id: v.sourceMediaId || v.id,
+            sourceMediaId: v.sourceMediaId || v.id,
+            title: v.title || 'Video Clip',
+            type: v.type || 'video',
+            url: v.url,
+            thumbnail: v.thumbnail,
+            duration: v.duration,
+            importedAt: v.createdAt || proj.createdAt || Date.now(),
+          })),
+          ...(tracks.audio || []).map((a: any) => ({
+            id: a.sourceMediaId || a.id,
+            sourceMediaId: a.sourceMediaId || a.id,
+            title: a.title || 'Audio Clip',
+            type: 'audio',
+            url: a.url,
+            duration: a.duration,
+            importedAt: a.createdAt || proj.createdAt || Date.now(),
+          })),
+        ].filter(
+          (item, idx, arr) =>
+            arr.findIndex(
+              (x) => (x.sourceMediaId || x.id) === (item.sourceMediaId || item.id)
+            ) === idx
+        ),
     tracks: {
       video: Array.isArray(tracks.video) ? tracks.video : [],
       audio: Array.isArray(tracks.audio) ? tracks.audio : [],
@@ -243,7 +287,11 @@ export const loadAllProjects = (): FastArtProject[] => {
 export const saveAllProjects = (projects: FastArtProject[]): void => {
   try {
     const sanitized = projects.map(sanitizeProject);
-    setStorageItem(PROJECTS_STORAGE_KEY, JSON.stringify(sanitized));
+    const json = JSON.stringify(sanitized);
+    setStorageItem(PROJECTS_STORAGE_KEY, json);
+    if (Platform.OS === 'web') {
+      persistProjectsToIndexedDB(json).catch(() => {});
+    }
   } catch (err) {
     console.warn('Error saving projects:', err);
   }
@@ -283,6 +331,16 @@ export const deleteProject = (projectId: string): FastArtProject[] => {
   const projects = loadAllProjects();
   const filtered = projects.filter((p) => p.id !== projectId);
   saveAllProjects(filtered);
+
+  // Clean up persistent undo/redo history stacks for the deleted project
+  removeStorageItem(`@fastart_hist_${projectId}`);
+  removeStorageItem(`@fastart_redo_${projectId}`);
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      window.sessionStorage.removeItem(`@fastart_hist_${projectId}`);
+      window.sessionStorage.removeItem(`@fastart_redo_${projectId}`);
+    } catch {}
+  }
 
   // Update last session if deleted project was active
   const lastSession = loadLastSession();

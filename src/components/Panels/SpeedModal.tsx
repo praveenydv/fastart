@@ -30,6 +30,8 @@ interface SpeedModalProps {
     smoothSlowMo?: 'none' | 'blend' | 'optical_flow'
   ) => void;
   isInline?: boolean;
+  selectedClip?: any;
+  projectAudioTracks?: any[];
 }
 
 export default function SpeedModal({
@@ -43,6 +45,8 @@ export default function SpeedModal({
   currentSlowMo = 'none',
   onApplySpeed,
   isInline = false,
+  selectedClip,
+  projectAudioTracks,
 }: SpeedModalProps) {
   const isAudio = clipType === 'audio';
   const [activeTab, setActiveTab] = useState<'normal' | 'curve' | 'custom'>('normal');
@@ -240,6 +244,9 @@ export default function SpeedModal({
                     customPoints={customPoints}
                     setCustomPoints={setCustomPoints}
                     onApplyCustomCurve={handleApplyCustomCurve}
+                    clip={selectedClip}
+                    clipDuration={clipDuration}
+                    projectAudioTracks={projectAudioTracks}
                   />
                 )}
 

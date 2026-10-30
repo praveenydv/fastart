@@ -353,6 +353,96 @@ pub extern "C" fn fastart_refine_cutout_c(
     );
 }
 
+/// Prepares a 512x512 NCHW planar Float32 tensor for neural matting (MODNet / CapCut model)
+#[no_mangle]
+pub extern "C" fn fastart_prepare_modnet_input_c(
+    rgba_ptr: *const u8,
+    width: u32,
+    height: u32,
+    out_tensor_ptr: *mut f32,
+) -> usize {
+    if rgba_ptr.is_null() || out_tensor_ptr.is_null() || width == 0 || height == 0 {
+        return 0;
+    }
+    let total_in = (width as usize) * (height as usize) * 4;
+    let rgba = unsafe { slice::from_raw_parts(rgba_ptr, total_in) };
+    let out_tensor = unsafe { slice::from_raw_parts_mut(out_tensor_ptr, 512 * 512 * 3) };
+    fastart_core::prepare_modnet_input_tensor(rgba, width as usize, height as usize, out_tensor);
+    512 * 512 * 3
+}
+
+/// Converts raw neural model output alpha floats into packed 32-bit RGBA mask pixels
+#[no_mangle]
+pub extern "C" fn fastart_process_modnet_output_c(
+    raw_alpha_ptr: *const f32,
+    out_rgba_ptr: *mut u8,
+    threshold: f32,
+    feather: f32,
+) -> usize {
+    if raw_alpha_ptr.is_null() || out_rgba_ptr.is_null() {
+        return 0;
+    }
+    let total_pixels = 512 * 512;
+    let raw_alpha = unsafe { slice::from_raw_parts(raw_alpha_ptr, total_pixels) };
+    let out_rgba = unsafe { slice::from_raw_parts_mut(out_rgba_ptr, total_pixels * 4) };
+    fastart_core::process_modnet_output_tensor(raw_alpha, out_rgba, threshold, feather);
+    total_pixels * 4
+}
+
+/// Compresses an 8-bit alpha buffer using Run-Length Encoding (RLE) in WebAssembly.
+/// Returns the number of compressed bytes written to out_rle_ptr.
+#[no_mangle]
+pub extern "C" fn fastart_pack_alpha_rle_c(
+    alpha_ptr: *const u8,
+    len: usize,
+    out_rle_ptr: *mut u8,
+    max_out_len: usize,
+) -> usize {
+    if alpha_ptr.is_null() || out_rle_ptr.is_null() || len == 0 || max_out_len == 0 {
+        return 0;
+    }
+    let alpha = unsafe { slice::from_raw_parts(alpha_ptr, len) };
+    let packed = fastart_core::pack_alpha_rle(alpha);
+    let copy_len = packed.len().min(max_out_len);
+    unsafe {
+        std::ptr::copy_nonoverlapping(packed.as_ptr(), out_rle_ptr, copy_len);
+    }
+    copy_len
+}
+
+/// Decompresses an RLE buffer into an 8-bit alpha buffer in WebAssembly.
+/// Returns the number of decompressed alpha bytes written to out_alpha_ptr.
+#[no_mangle]
+pub extern "C" fn fastart_unpack_alpha_rle_c(
+    rle_ptr: *const u8,
+    rle_len: usize,
+    out_alpha_ptr: *mut u8,
+    max_out_len: usize,
+) -> usize {
+    if rle_ptr.is_null() || out_alpha_ptr.is_null() || rle_len == 0 || max_out_len == 0 {
+        return 0;
+    }
+    let rle = unsafe { slice::from_raw_parts(rle_ptr, rle_len) };
+    let out_alpha = unsafe { slice::from_raw_parts_mut(out_alpha_ptr, max_out_len) };
+    fastart_core::unpack_alpha_rle(rle, out_alpha)
+}
+
+/// Expands an 8-bit alpha buffer into 32-bit RGBA mask pixels in WebAssembly.
+#[no_mangle]
+pub extern "C" fn fastart_alpha_to_rgba_c(
+    alpha_ptr: *const u8,
+    alpha_len: usize,
+    out_rgba_ptr: *mut u8,
+    max_out_len: usize,
+) {
+    if alpha_ptr.is_null() || out_rgba_ptr.is_null() || alpha_len == 0 || max_out_len < alpha_len * 4 {
+        return;
+    }
+    let alpha = unsafe { slice::from_raw_parts(alpha_ptr, alpha_len) };
+    let out_rgba = unsafe { slice::from_raw_parts_mut(out_rgba_ptr, max_out_len) };
+    fastart_core::alpha_to_rgba(alpha, out_rgba);
+}
+
 /// Normalized Cross-Correlation (NCC) multi-scale template matching in WebAssembly
 #[no_mangle]
 pub extern "C" fn fastart_search_template_ncc_c(

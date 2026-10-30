@@ -31,6 +31,7 @@ import BlendModeModal from "../Panels/BlendModeModal";
 import HSLAdjustModal from "../Panels/HSLAdjustModal";
 import VoiceEffectsModal from "../Panels/VoiceEffectsModal";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
+import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import {
   FastArtProject,
   VideoClip,
@@ -97,9 +98,21 @@ interface EditorModalsProps {
   handleApplyVoiceEffect?: (effectId: VoiceEffectId) => void;
   handleAddKeyframe: () => void;
   isKeyframeAtPlayhead: boolean;
+  hasPrevKeyframe?: boolean;
+  hasNextKeyframe?: boolean;
+  handleJumpPrevKeyframe?: () => void;
+  handleJumpNextKeyframe?: () => void;
   handleUpdateKeyframeTransform: (time: number, transform: any, opacity?: number, easing?: any) => void;
   handleDeleteKeyframeAtTime: (time?: number) => void;
   handleClearAllKeyframes: () => void;
+  handleAddMaskKeyframe?: () => void;
+  isMaskKeyframeAtPlayhead?: boolean;
+  hasPrevMaskKeyframe?: boolean;
+  hasNextMaskKeyframe?: boolean;
+  handleJumpPrevMaskKeyframe?: () => void;
+  handleJumpNextMaskKeyframe?: () => void;
+  handleDeleteMaskKeyframeAtTime?: (time?: number) => void;
+  handleClearAllMaskKeyframes?: () => void;
   handleConfirmDeleteClip: () => void;
   handleAddCaptions?: (captions: any[]) => void;
   handleUpdateCaption?: (clip: any) => void;
@@ -107,7 +120,7 @@ interface EditorModalsProps {
   onOpenScreenCrop?: () => void;
   setIsCroppingPreview?: (c: boolean) => void;
   isInline?: boolean;
-  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean) => void;
+  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean, timeOverride?: number) => void;
   handleMoveClip?: (
     clipId: string,
     trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
@@ -116,9 +129,11 @@ interface EditorModalsProps {
     isInsertNewTrack?: boolean,
   ) => void;
   handleDeleteClip?: (targetId?: string, targetType?: string) => void;
+  handleDeleteProjectAsset?: (assetId: string, type?: string) => void;
 }
 
 export const INLINE_MODAL_KEYS = new Set([
+  'media',
   'audio',
   'filters',
   'transform',
@@ -197,9 +212,21 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleApplyVoiceEffect,
   handleAddKeyframe,
   isKeyframeAtPlayhead,
+  hasPrevKeyframe,
+  hasNextKeyframe,
+  handleJumpPrevKeyframe,
+  handleJumpNextKeyframe,
   handleUpdateKeyframeTransform,
   handleDeleteKeyframeAtTime,
   handleClearAllKeyframes,
+  handleAddMaskKeyframe,
+  isMaskKeyframeAtPlayhead,
+  hasPrevMaskKeyframe,
+  hasNextMaskKeyframe,
+  handleJumpPrevMaskKeyframe,
+  handleJumpNextMaskKeyframe,
+  handleDeleteMaskKeyframeAtTime,
+  handleClearAllMaskKeyframes,
   handleConfirmDeleteClip,
   transformInitialTab,
   onOpenScreenCrop,
@@ -208,6 +235,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   handleUpdateClipMask,
   handleMoveClip,
   handleDeleteClip,
+  handleDeleteProjectAsset,
 }) => {
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
@@ -244,7 +272,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onClose={closeModal}
           onAddMedia={handleAddMedia}
           project={project || undefined}
-          onDeleteMedia={handleDeleteClip}
+          onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
+          isInline={isInline}
         />
       )}
 
@@ -255,9 +284,33 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           onApply={handleApply}
           currentCutout={selectedClip?.cutout}
           onApplyCutout={handleApplyCutout}
+          onReplaceClipWithMedia={(clipId, newUrl, newThumb) => {
+            if (!project) return;
+            const videoClips = [...(project.tracks.video || [])];
+            const idx = videoClips.findIndex((c) => c.id === clipId);
+            if (idx >= 0) {
+              videoClips[idx] = {
+                ...videoClips[idx],
+                url: newUrl,
+                thumbnail: newThumb || videoClips[idx].thumbnail,
+                cutout: {
+                  enabled: false,
+                  mode: "auto",
+                  keyColor: "#00FF00",
+                  intensity: 45,
+                  shadow: 25,
+                },
+              };
+              updateProjectWithHistory({
+                ...project,
+                tracks: { ...project.tracks, video: videoClips },
+              });
+            }
+          }}
           initialMode={cutoutInitialMode}
           isInline={isInline}
           selectedClip={selectedClip}
+          currentTime={currentTime}
         />
       )}
 
@@ -342,6 +395,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           }
           onSelectFilter={handleApplyFilter}
           isInline={isInline}
+          selectedClip={selectedClip}
+          project={project}
         />
       )}
 
@@ -374,6 +429,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           }
           onUpdateEffect={handleUpdateEffect}
           isInline={isInline}
+          selectedClip={selectedClip}
+          project={project}
         />
       )}
 
@@ -420,6 +477,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           currentSlowMo={selectedClip?.smoothSlowMo}
           onApplySpeed={handleApplySpeed}
           isInline={isInline}
+          selectedClip={selectedClip}
+          projectAudioTracks={project?.tracks?.audio}
         />
       )}
 
@@ -473,24 +532,36 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
 
       {activeModal === "mask" && (() => {
         const targetVideoClip =
-          selectedClip?.id && (selectedClipType === "video" || !selectedClipType)
+          selectedClip?.id && (selectedClipType === "video" || selectedClipType === "photo" || !selectedClipType)
             ? selectedClip
             : (project?.tracks?.video || []).find((v) => currentTime >= v.startTime && currentTime <= v.startTime + v.duration) ||
               (project?.tracks?.video || [])[0];
+
+        const currentInterpMask = targetVideoClip
+          ? (getInterpolatedMask(targetVideoClip, currentTime) || targetVideoClip.mask || targetVideoClip.transform?.mask)
+          : undefined;
 
         return (
           <MaskModal
             visible={true}
             onClose={handleCancel}
             onApply={handleApply}
-            currentMask={targetVideoClip?.mask || targetVideoClip?.transform?.mask}
+            currentMask={currentInterpMask}
             onApplyMask={(newMask) => {
-              handleApplyTransform(targetVideoClip?.transform || {}, undefined, newMask);
               if (handleUpdateClipMask && targetVideoClip?.id) {
-                handleUpdateClipMask(targetVideoClip.id, newMask, true);
+                handleUpdateClipMask(targetVideoClip.id, newMask, true, currentTime);
               }
             }}
             isInline={isInline}
+            selectedClip={targetVideoClip}
+            currentTime={currentTime}
+            onSeek={setCurrentTime}
+            onAddKeyframe={handleAddMaskKeyframe}
+            hasKeyframeAtCurrentTime={isMaskKeyframeAtPlayhead}
+            hasPrevKeyframe={hasPrevMaskKeyframe}
+            hasNextKeyframe={hasNextMaskKeyframe}
+            onJumpPrevKeyframe={handleJumpPrevMaskKeyframe}
+            onJumpNextKeyframe={handleJumpNextMaskKeyframe}
           />
         );
       })()}
@@ -538,6 +609,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           project={project}
           onUpdateProject={(updates) => updateProjectWithHistory(updates)}
           isInline={isInline}
+          currentTime={currentTime}
+          selectedClip={selectedClip}
         />
       )}
 
@@ -594,6 +667,8 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
             onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
             onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
             onClearAllKeyframes={handleClearAllKeyframes}
+            onDeleteMaskKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
+            onClearAllMaskKeyframes={handleClearAllMaskKeyframes}
             isInline={isInline}
           />
         );

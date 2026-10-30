@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, useEffect } from "react";
+import React, { useRef, useState, useMemo, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -23,7 +23,10 @@ import { useTimelineScrubbing } from "./Timeline/useTimelineScrubbing";
 import { useTimelineDragTrim } from "./Timeline/useTimelineDragTrim";
 import { TimelineHeaderBar } from "./Timeline/TimelineHeaderBar";
 import { TimelineTracksView } from "./Timeline/TimelineTracksView";
-import TimelinePlayhead from "./Timeline/TimelinePlayhead";
+import TimelinePlayhead, {
+  TimelinePlayheadHead,
+  TimelinePlayheadNeedle,
+} from "./Timeline/TimelinePlayhead";
 import { THEME_COLORS } from "../constants/designConstants";
 
 // Re-export constants and helpers for backwards-compatibility
@@ -116,6 +119,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     playheadPanResponder,
     rulerPanResponder,
     handlePlayheadPointerDown,
+    handleRulerPointerDown,
   } = useTimelineScrubbing({
     currentTime,
     totalDuration,
@@ -160,27 +164,115 @@ export const Timeline: React.FC<TimelineProps> = ({
     onTrimClip,
   });
 
+  const rulerScrollRef = useRef<any>(null);
   const currentScrollXRef = useRef(0);
+  const isSyncingScrollRef = useRef(false);
+
+  // Synchronize tracks horizontal scroll with ruler
+  const handleTracksScroll = useCallback((e: any) => {
+    const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
+    currentScrollXRef.current = scrollX;
+    if (isSyncingScrollRef.current) return;
+    isSyncingScrollRef.current = true;
+    if (Platform.OS === "web") {
+      const el = rulerScrollRef.current;
+      const dom = (el as any)?._inputRef || el;
+      if (dom && dom.scrollLeft !== undefined) {
+        dom.scrollLeft = scrollX;
+      }
+    } else if (rulerScrollRef.current?.scrollTo) {
+      rulerScrollRef.current.scrollTo({ x: scrollX, animated: false });
+    }
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  }, []);
+
+  // Synchronize ruler horizontal scroll with tracks
+  const handleRulerScroll = useCallback((e: any) => {
+    const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
+    if (isSyncingScrollRef.current) return;
+    isSyncingScrollRef.current = true;
+    currentScrollXRef.current = scrollX;
+    if (Platform.OS === "web") {
+      const el = scrollRef.current;
+      const dom = (el as any)?._inputRef || el;
+      if (dom && dom.scrollLeft !== undefined) {
+        dom.scrollLeft = scrollX;
+      }
+    } else if (scrollRef.current?.scrollTo) {
+      scrollRef.current.scrollTo({ x: scrollX, animated: false });
+    }
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  }, []);
+
+  // Direct DOM scroll listener on Web for zero-latency 60fps horizontal synchronization
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const trackDom = (scrollRef.current as any)?._inputRef || scrollRef.current;
+    const rulerDom = (rulerScrollRef.current as any)?._inputRef || rulerScrollRef.current;
+    if (!trackDom || !rulerDom) return;
+
+    let isSyncing = false;
+
+    const onTrackDomScroll = () => {
+      if (isSyncing) return;
+      isSyncing = true;
+      currentScrollXRef.current = trackDom.scrollLeft;
+      rulerDom.scrollLeft = trackDom.scrollLeft;
+      requestAnimationFrame(() => {
+        isSyncing = false;
+      });
+    };
+
+    const onRulerDomScroll = () => {
+      if (isSyncing) return;
+      isSyncing = true;
+      currentScrollXRef.current = rulerDom.scrollLeft;
+      trackDom.scrollLeft = rulerDom.scrollLeft;
+      requestAnimationFrame(() => {
+        isSyncing = false;
+      });
+    };
+
+    trackDom.addEventListener("scroll", onTrackDomScroll, { passive: true });
+    rulerDom.addEventListener("scroll", onRulerDomScroll, { passive: true });
+
+    return () => {
+      trackDom.removeEventListener("scroll", onTrackDomScroll);
+      rulerDom.removeEventListener("scroll", onRulerDomScroll);
+    };
+  }, []);
 
   // Auto-scroll when playing (only scroll when playhead approaches screen edge to avoid 60fps stutter)
   useEffect(() => {
     if (!isPlaying && !project?.isPlaying) return;
     const playheadX = currentTime * pxPerSec;
     const el = scrollRef.current;
+    const elRuler = rulerScrollRef.current;
     if (Platform.OS === "web") {
       const domNode = (el as any)?._inputRef || (el as any);
+      const domRuler = (elRuler as any)?._inputRef || (elRuler as any);
       if (domNode && domNode.scrollLeft !== undefined) {
         const viewW = domNode.clientWidth || screenWidth;
         const sLeft = domNode.scrollLeft;
         if (playheadX > sLeft + viewW - 120 || playheadX < sLeft) {
-          domNode.scrollLeft = Math.max(0, playheadX - 60);
+          const target = Math.max(0, playheadX - 60);
+          domNode.scrollLeft = target;
+          if (domRuler) domRuler.scrollLeft = target;
         }
       }
     } else if (el && typeof el.scrollTo === "function") {
       const sLeft = currentScrollXRef.current;
       const viewW = screenWidth - (isMobile ? 55 : 80);
       if (playheadX > sLeft + viewW - 100 || playheadX < sLeft) {
-        el.scrollTo({ x: Math.max(0, playheadX - 60), animated: false });
+        const target = Math.max(0, playheadX - 60);
+        el.scrollTo({ x: target, animated: false });
+        if (elRuler?.scrollTo) {
+          elRuler.scrollTo({ x: target, animated: false });
+        }
       }
     }
   }, [project?.isPlaying, currentTime, pxPerSec, screenWidth, isMobile]);
@@ -489,6 +581,50 @@ export const Timeline: React.FC<TimelineProps> = ({
         selectedClipType={selectedClipType}
       />
 
+      {/* Pinned Sticky Time Ruler Row (pinned to top; tracks scroll vertically underneath) */}
+      <View style={styles.stickyRulerBar}>
+        <View
+          style={[
+            styles.rulerCornerHeader,
+            isMobile && styles.rulerCornerHeaderMobile,
+          ]}
+        >
+          <Ionicons name="time-outline" size={11} color="#6B7280" />
+        </View>
+
+        <ScrollView
+          ref={rulerScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={handleRulerScroll}
+          style={styles.rulerHorizontalScroll}
+          contentContainerStyle={{
+            width: timelineContentWidth,
+            position: "relative",
+          }}
+        >
+          <View
+            ref={rulerRef}
+            style={[styles.rulerContainer, { width: timelineContentWidth }]}
+            {...rulerPanResponder.panHandlers}
+            {...(Platform.OS === "web"
+              ? { onMouseDown: handleRulerPointerDown }
+              : {})}
+          >
+            {renderedTicks}
+
+            <TimelinePlayheadHead
+              currentTime={currentTime}
+              pxPerSec={pxPerSec}
+              isScrubbingRuler={isScrubbingRuler}
+              playheadPanResponder={playheadPanResponder}
+              handlePlayheadPointerDown={handlePlayheadPointerDown}
+            />
+          </View>
+        </ScrollView>
+      </View>
+
       {/* Synchronized Vertical Scroll for all tracks */}
       <ScrollView
         style={[
@@ -510,10 +646,6 @@ export const Timeline: React.FC<TimelineProps> = ({
               isMobile && styles.leftHeadersColumnMobile,
             ]}
           >
-            <View style={styles.rulerCornerHeader}>
-              <Ionicons name="time-outline" size={11} color="#6B7280" />
-            </View>
-
             {renderedTrackHeaders}
 
             {activeTrackCount < MAX_TRACKS && (
@@ -539,9 +671,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             keyboardShouldPersistTaps="handled"
             scrollEnabled={!isInteractingWithTimeline}
             scrollEventThrottle={16}
-            onScroll={(e) => {
-              currentScrollXRef.current = e.nativeEvent.contentOffset.x;
-            }}
+            onScroll={handleTracksScroll}
             style={[
               styles.timelineScroll,
               {
@@ -572,12 +702,14 @@ export const Timeline: React.FC<TimelineProps> = ({
                           onAddMedia({
                             ...data.clip,
                             id: `clip-${Date.now()}`,
+                            sourceMediaId: data.clip.sourceMediaId || data.clip.id,
                             startTime: dropTime,
                           });
                         } else if (data.type === "audio" && onAddAudio) {
                           onAddAudio({
                             ...data.clip,
                             id: `audio-${Date.now()}`,
+                            sourceMediaId: data.clip.sourceMediaId || data.clip.id,
                             startTime: dropTime,
                           });
                         }
@@ -618,12 +750,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                 onOpenEditModal={onOpenEditModal}
               />
 
-              <TimelinePlayhead
+              <TimelinePlayheadNeedle
                 currentTime={currentTime}
                 pxPerSec={pxPerSec}
                 isScrubbingRuler={isScrubbingRuler}
-                playheadPanResponder={playheadPanResponder}
-                handlePlayheadPointerDown={handlePlayheadPointerDown}
               />
             </View>
           </ScrollView>

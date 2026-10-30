@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { View, Text, TouchableOpacity, Platform, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { soundEngine } from "../utils/audioEngine";
 import { PlayerProps, TransientTransformState } from "./Player/playerTypes";
 import {
   getItemBaseDimensions,
@@ -28,6 +29,7 @@ import { usePlayerAudioSync } from "./Player/usePlayerAudioSync";
 import { useActiveTransformItem } from "./Player/useActiveTransformItem";
 import { getExportResolutionDimensions } from "./Panels/Export/exportTypes";
 import { THEME_COLORS } from "../constants/designConstants";
+import { relinkMediaFile, reconnectLinkedMedia } from "../utils/largeMediaStorage";
 
 function Player({
   project,
@@ -63,6 +65,7 @@ function Player({
   processingMessage,
   activeModal,
   onUpdateClipMotionTrack,
+  onRelinkClip,
 }: PlayerProps) {
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const [internalMaskingMode, setInternalMaskingMode] = useState(false);
@@ -120,6 +123,31 @@ function Player({
     (project.tracks.audio && project.tracks.audio.length > 0),
   );
   const isProjectEmpty = !hasAnyTrackContent;
+
+  const currentActiveClip = useMemo(() => {
+    return (project?.tracks?.video || []).find(
+      (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
+    );
+  }, [project?.tracks?.video, currentTime]);
+
+  const handleRelinkActiveClip = useCallback(async () => {
+    if (!currentActiveClip) return;
+    const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
+    // 1. Try zero-dialog reconnect first using the handle
+    let result = await reconnectLinkedMedia(lookupId, currentActiveClip.title);
+    // 2. If reconnect fails, open file picker
+    if (!result) {
+      result = await relinkMediaFile(lookupId, currentActiveClip.type as any);
+    }
+    if (result) {
+      currentActiveClip.isMissing = false;
+      currentActiveClip.needsPermission = false;
+      currentActiveClip.url = result.url;
+      if (onRelinkClip) {
+        onRelinkClip(currentActiveClip.id, currentActiveClip.type, result.url, lookupId);
+      }
+    }
+  }, [currentActiveClip, onRelinkClip]);
 
   const isLightBg = useMemo(() => {
     const bg = (project.canvasBackground || "#000000").toLowerCase();
@@ -392,6 +420,57 @@ function Player({
       }, 1800);
     }
   }, [onAddKeyframe, currentTime]);
+
+  // Active clip for keyframe navigation
+  const activeClip = useMemo(() => {
+    if (selectedClipId && selectedClipType) {
+      const trackKey = (
+        selectedClipType === "sticker" || selectedClipType === "stickers"
+          ? "stickers"
+          : selectedClipType === "text" || selectedClipType === "texts"
+            ? "text"
+            : selectedClipType === "caption" || selectedClipType === "captions"
+              ? "captions"
+              : "video"
+      ) as keyof typeof project.tracks;
+      const list = project.tracks[trackKey] || [];
+      const found = list.find((c: any) => c.id === selectedClipId);
+      if (found) return found;
+    }
+    return (project.tracks.video || []).find(
+      (c: any) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
+    );
+  }, [project.tracks, selectedClipId, selectedClipType, currentTime]);
+
+  const clipKeyframes = useMemo(() => {
+    return activeClip?.keyframes || [];
+  }, [activeClip?.keyframes]);
+
+  const hasKeyframesOnClip = clipKeyframes.length > 0;
+  const localClipTime = Math.max(0, currentTime - (activeClip?.startTime || 0));
+
+  const prevKeyframe = useMemo(() => {
+    return [...clipKeyframes].reverse().find((k: any) => k.time < localClipTime - 0.05);
+  }, [clipKeyframes, localClipTime]);
+
+  const nextKeyframe = useMemo(() => {
+    return clipKeyframes.find((k: any) => k.time > localClipTime + 0.05);
+  }, [clipKeyframes, localClipTime]);
+
+  const hasPrevKeyframe = !!prevKeyframe;
+  const hasNextKeyframe = !!nextKeyframe;
+
+  const handleJumpPrevKeyframe = useCallback(() => {
+    if (!prevKeyframe || !activeClip) return;
+    soundEngine.playSfx("pop");
+    onSeek(Math.max(0, (activeClip.startTime || 0) + prevKeyframe.time));
+  }, [prevKeyframe, activeClip, onSeek]);
+
+  const handleJumpNextKeyframe = useCallback(() => {
+    if (!nextKeyframe || !activeClip) return;
+    soundEngine.playSfx("pop");
+    onSeek(Math.max(0, (activeClip.startTime || 0) + nextKeyframe.time));
+  }, [nextKeyframe, activeClip, onSeek]);
 
   const stepFrame = (frames: number) => {
     if (totalDuration <= 0) {
@@ -764,6 +843,55 @@ function Player({
             </View>
           )}
 
+          {/* Linked File Access Floating Pill (Non-blocking, elegant) */}
+          {!isProjectEmpty && currentActiveClip && !(currentActiveClip as any).isMissing && (currentActiveClip as any).needsPermission && (
+            <TouchableOpacity
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: "rgba(10, 12, 17, 0.85)",
+                borderColor: "rgba(0, 242, 254, 0.5)",
+                borderWidth: 1,
+                borderRadius: 16,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                zIndex: 800,
+              }}
+              activeOpacity={0.85}
+              onPress={handleRelinkActiveClip}
+            >
+              <Ionicons name="link-outline" size={13} color="#00F2FE" />
+              <Text style={{ color: "#BAE6FD", fontSize: 11, fontWeight: "600" }}>
+                Linked File • Reconnect
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Genuine Missing Media Overlay: ONLY shown when file was truly deleted/not found */}
+          {!isProjectEmpty && currentActiveClip && (currentActiveClip as any).isMissing && (
+            <View style={styles.offlineMediaOverlay}>
+              <Ionicons name="alert-circle" size={32} color="#FF6B6B" />
+              <Text style={styles.offlineMediaTitle}>Media Offline</Text>
+              <Text style={styles.offlineMediaSubtitle} numberOfLines={2}>
+                "{currentActiveClip.title || 'Source file'}" was moved or removed from its disk location.
+              </Text>
+              {Platform.OS === 'web' && (
+                <TouchableOpacity
+                  style={styles.relinkBtn}
+                  activeOpacity={0.85}
+                  onPress={handleRelinkActiveClip}
+                >
+                  <Ionicons name="link-outline" size={15} color="#000000" />
+                  <Text style={styles.relinkBtnText}>Relink File</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {/* Empty State Overlay */}
           {isProjectEmpty && (
             <TouchableOpacity
@@ -841,6 +969,11 @@ function Player({
           hasKeyframeAtCurrentTime={hasKeyframeAtCurrentTime}
           handleKeyframePress={handleKeyframePress}
           onOpenKeyframeModal={onOpenKeyframeModal}
+          hasPrevKeyframe={hasPrevKeyframe}
+          hasNextKeyframe={hasNextKeyframe}
+          onJumpPrevKeyframe={handleJumpPrevKeyframe}
+          onJumpNextKeyframe={handleJumpNextKeyframe}
+          hasKeyframesOnClip={hasKeyframesOnClip}
           fullscreen={fullscreen}
           toggleFullscreen={toggleFullscreen}
           isMobile={isMobile}

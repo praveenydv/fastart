@@ -71,29 +71,28 @@ export interface ToolbarProps {
   onOpenAudioEffectsModal?: () => void;
   onOpenBlendModal?: () => void;
   onOpenHSLModal?: () => void;
+  onOpenTTSModal?: () => void;
   /** ID of the currently-open modal/panel — used to highlight the active toolbar button */
   activeToolId?: string;
   onCloseModal?: () => void;
   onBackToHome?: () => void;
 }
 
-// Global tools for whole video (when no clip is selected)
+// Global tools for whole video (when no clip is selected) - Matches CapCut
 const ROOT_TOOLS = [
-  { id: "media", title: "Media", icon: "folder-multiple-image" as const },
+  { id: "overlay", title: "Overlay", icon: "layers-outline" as const },
   { id: "audio", title: "Audio", icon: "music-note" as const },
   { id: "text", title: "Text", icon: "format-text" as const },
   { id: "captions", title: "Caption", icon: "subtitles-outline" as const },
-  { id: "stickers", title: "Sticker", icon: "emoticon-happy-outline" as const },
   { id: "effects", title: "Effect", icon: "auto-fix" as const },
   { id: "filters", title: "Filter", icon: "palette-outline" as const },
+  { id: "stickers", title: "Sticker", icon: "emoticon-happy-outline" as const },
   { id: "canvas", title: "Canvas", icon: "aspect-ratio" as const },
   { id: "background", title: "BG", icon: "image-outline" as const },
 ];
 
-// Clip-specific tools (when video clip is selected)
+// Clip-specific tools (when video clip is selected) - CapCut hierarchy
 const VIDEO_CLIP_TOOLS = [
-  { id: "split", title: "Split", icon: "content-cut" as const },
-  { id: "freeze", title: "Freeze", icon: "snowflake" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
   {
     id: "volume",
@@ -101,24 +100,23 @@ const VIDEO_CLIP_TOOLS = [
     icon: "volume-high" as const,
     requiresAudio: true,
   },
+  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
+  { id: "transform", title: "Transform", icon: "crop" as const },
+  { id: "cutout", title: "Cutout", icon: "account-outline" as const },
+  { id: "mask", title: "Mask", icon: "shape-outline" as const },
+  { id: "blend", title: "Blend", icon: "layers-outline" as const },
+  { id: "filters", title: "Filters", icon: "palette-outline" as const },
+  { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
+  { id: "effects", title: "Effect", icon: "auto-fix" as const },
+  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
+  { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
   {
     id: "audio_effects",
     title: "Voice FX",
     icon: "microphone-outline" as const,
     requiresAudio: true,
   },
-  { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
-  { id: "transform", title: "Transform", icon: "crop" as const },
-  { id: "blend", title: "Blend", icon: "layers-outline" as const },
-  { id: "mask", title: "Mask", icon: "shape-outline" as const },
-  { id: "cutout", title: "Cutout", icon: "account-outline" as const },
-  { id: "filters", title: "Filters", icon: "palette-outline" as const },
-  { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
-  { id: "adjust", title: "Enhance", icon: "tune" as const },
-  { id: "effects", title: "Effect", icon: "auto-fix" as const },
-  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
-  { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
-  { id: "opacity", title: "Opacity", icon: "opacity" as const },
   { id: "tracking", title: "Track & Blur", icon: "crosshairs-gps" as const },
   {
     id: "extract_audio",
@@ -133,56 +131,60 @@ const VIDEO_CLIP_TOOLS = [
     requiresAudio: true,
   },
   { id: "reverse", title: "Reverse", icon: "rewind" as const },
+  { id: "freeze", title: "Freeze", icon: "snowflake" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
 // Photo/Image-specific tools (tailored for still graphics, removing audio/speed)
 const PHOTO_CLIP_TOOLS = [
-  { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "transform", title: "Transform", icon: "crop" as const },
-  { id: "blend", title: "Blend", icon: "layers-outline" as const },
-  { id: "mask", title: "Mask", icon: "shape-outline" as const },
   { id: "cutout", title: "Cutout", icon: "account-outline" as const },
+  { id: "mask", title: "Mask", icon: "shape-outline" as const },
+  { id: "blend", title: "Blend", icon: "layers-outline" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
   { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
-  { id: "adjust", title: "Enhance", icon: "tune" as const },
   { id: "effects", title: "Effect", icon: "auto-fix" as const },
   { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "opacity", title: "Opacity", icon: "opacity" as const },
-  { id: "background", title: "BG", icon: "image-outline" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
 const TEXT_CLIP_TOOLS = [
-  { id: "split", title: "Split", icon: "content-cut" as const },
-  { id: "text", title: "Text", icon: "format-text" as const },
+  { id: "text", title: "Edit", icon: "format-text" as const },
+  { id: "tts", title: "TTS", icon: "microphone-outline" as const },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "tracking", title: "Track", icon: "crosshairs-gps" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
 const CAPTION_CLIP_TOOLS = [
-  { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "captions", title: "Captions", icon: "subtitles-outline" as const },
   { id: "text", title: "Style", icon: "format-text" as const },
+  { id: "tts", title: "TTS", icon: "microphone-outline" as const },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
 const STICKER_CLIP_TOOLS = [
-  { id: "split", title: "Split", icon: "content-cut" as const },
-  { id: "stickers", title: "Stickers", icon: "emoticon-happy-outline" as const },
+  {
+    id: "stickers",
+    title: "Stickers",
+    icon: "emoticon-happy-outline" as const,
+  },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "tracking", title: "Track", icon: "crosshairs-gps" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -190,9 +192,12 @@ const STICKER_CLIP_TOOLS = [
 const AUDIO_CLIP_TOOLS = [
   { id: "volume", title: "Volume", icon: "volume-high" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
-  { id: "audio_effects", title: "Voice FX", icon: "microphone-outline" as const },
+  {
+    id: "audio_effects",
+    title: "Voice FX",
+    icon: "microphone-outline" as const,
+  },
   { id: "denoise", title: "Denoise", icon: "ear-hearing" as const },
-  { id: "split", title: "Split", icon: "content-cut" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -243,6 +248,7 @@ export default function Toolbar({
   onOpenAudioEffectsModal,
   onOpenBlendModal,
   onOpenHSLModal,
+  onOpenTTSModal,
   activeToolId,
   onCloseModal,
   onBackToHome,
@@ -280,12 +286,36 @@ export default function Toolbar({
       return;
     }
     switch (toolId) {
+      case "edit":
+        if (!selectedClip) {
+          if (onSelectMainClip) onSelectMainClip();
+        } else if (
+          selectedClipType === "sticker" ||
+          selectedClipType === "stickers"
+        ) {
+          onOpenStickersModal();
+        } else if (
+          selectedClipType === "caption" ||
+          selectedClipType === "captions"
+        ) {
+          if (onOpenAutoCaptions) onOpenAutoCaptions();
+          else onOpenTextModal();
+        } else if (selectedClipType === "text") {
+          onOpenTextModal();
+        } else {
+          if (onOpenTransformModal) onOpenTransformModal("crop");
+        }
+        break;
+      case "overlay":
       case "media":
         if (isVertical && onSelectDesktopTab) {
           onSelectDesktopTab("media");
         } else {
           onOpenMediaPicker();
         }
+        break;
+      case "tts":
+        if (onOpenTTSModal) onOpenTTSModal();
         break;
       case "audio":
         if (isVertical && onSelectDesktopTab) {
@@ -296,16 +326,6 @@ export default function Toolbar({
         break;
       case "text":
         onOpenTextModal();
-        break;
-      case "edit":
-        if (selectedClipType === "sticker" || selectedClipType === "stickers") {
-          onOpenStickersModal();
-        } else if (selectedClipType === "caption" || selectedClipType === "captions") {
-          if (onOpenAutoCaptions) onOpenAutoCaptions();
-          else onOpenTextModal();
-        } else {
-          onOpenTextModal();
-        }
         break;
       case "captions":
         if (onOpenAutoCaptions) onOpenAutoCaptions();
@@ -335,8 +355,11 @@ export default function Toolbar({
       case "filters":
         onOpenFiltersModal();
         break;
-      case "transform":
       case "crop":
+        if (onOpenCropModal) onOpenCropModal();
+        else if (onOpenTransformModal) onOpenTransformModal("crop");
+        break;
+      case "transform":
         if (onOpenTransformModal) onOpenTransformModal("crop");
         else if (onOpenCropModal) onOpenCropModal();
         break;
@@ -401,27 +424,51 @@ export default function Toolbar({
   };
 
   const activeTools = React.useMemo(() => {
-    if (!selectedClip) return ROOT_TOOLS;
-    if (selectedClipType === "caption" || selectedClipType === "captions") {
-      return CAPTION_CLIP_TOOLS;
+    let list: Array<{
+      id: string;
+      title: string;
+      icon: any;
+      requiresAudio?: boolean;
+    }> = [];
+    if (!selectedClip) {
+      list = ROOT_TOOLS;
+    } else if (
+      selectedClipType === "caption" ||
+      selectedClipType === "captions"
+    ) {
+      list = CAPTION_CLIP_TOOLS;
+    } else if (selectedClipType === "text") {
+      list = TEXT_CLIP_TOOLS;
+    } else if (
+      selectedClipType === "sticker" ||
+      selectedClipType === "stickers"
+    ) {
+      list = STICKER_CLIP_TOOLS;
+    } else if (selectedClipType === "audio") {
+      list = AUDIO_CLIP_TOOLS;
+    } else if (
+      selectedClipType === "effects" ||
+      selectedClipType === "effect"
+    ) {
+      list = EFFECT_CLIP_TOOLS;
+    } else if (selectedClipType === "photo" || selectedClip?.type === "photo") {
+      list = PHOTO_CLIP_TOOLS;
+    } else {
+      list = VIDEO_CLIP_TOOLS.filter((t) => !t.requiresAudio || hasAudio);
     }
-    if (selectedClipType === "text") {
-      return TEXT_CLIP_TOOLS;
+
+    // Ensure split and adjust are removed from main toolbar
+    list = list.filter((t) => t.id !== "split" && t.id !== "adjust");
+
+    // On big screen (isVertical), remove audio and media/overlay because they are already present on the desktop panel!
+    if (isVertical) {
+      list = list.filter(
+        (t) => t.id !== "audio" && t.id !== "media" && t.id !== "overlay",
+      );
     }
-    if (selectedClipType === "sticker" || selectedClipType === "stickers") {
-      return STICKER_CLIP_TOOLS;
-    }
-    if (selectedClipType === "audio") {
-      return AUDIO_CLIP_TOOLS;
-    }
-    if (selectedClipType === "effects" || selectedClipType === "effect") {
-      return EFFECT_CLIP_TOOLS;
-    }
-    if (selectedClipType === "photo" || selectedClip?.type === "photo") {
-      return PHOTO_CLIP_TOOLS;
-    }
-    return VIDEO_CLIP_TOOLS.filter((t) => !t.requiresAudio || hasAudio);
-  }, [selectedClip, selectedClipType, hasAudio]);
+
+    return list;
+  }, [selectedClip, selectedClipType, hasAudio, isVertical]);
 
   // Desktop vertical toolbar
   if (isVertical) {
@@ -490,7 +537,9 @@ export default function Toolbar({
                 <MaterialCommunityIcons
                   name={item.icon}
                   size={20}
-                  color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"}
+                  color={
+                    isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"
+                  }
                 />
                 <Text
                   style={[

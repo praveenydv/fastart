@@ -13,7 +13,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { AudioClip, FastArtProject } from '../../types/project';
-import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import {
+  persistLargeMedia,
+  pickWebMedia,
+  persistNativeMediaCopy,
+} from '../../utils/largeMediaStorage';
 import { detectAudioBeats, toggleProjectBeatMarkers } from '../../utils/audioBeatDetector';
 
 import { SFX_ITEMS, SoundEffectItem, previewSoundEffect, createAudioClipFromSfx } from '../../utils/sfxLibrary';
@@ -40,75 +44,86 @@ export default function AudioModal({
   const [playingSfxId, setPlayingSfxId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const importedAudioAssets = React.useMemo(() => {
+    const assets = (project?.assets || []).filter((a) => a.type === 'audio');
+    if (assets.length > 0) return assets;
+    const trackAudios = project?.tracks?.audio || [];
+    const seen = new Set<string>();
+    const unique: any[] = [];
+    for (const a of trackAudios) {
+      const key = a.sourceMediaId || a.url || a.title;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(a);
+      }
+    }
+    return unique;
+  }, [project?.assets, project?.tracks?.audio]);
+
   // Upload custom audio file from device storage (MP3, WAV, M4A, AAC, OGG, FLAC)
+  // Web: Links directly to file location (zero bytes duplicate)
+  // App: Copies to permanent app storage
   const handleDeviceAudioUpload = async () => {
     try {
       if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac';
-        input.onchange = async (e: any) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
+        const picked = await pickWebMedia('audio');
+        if (!picked) return;
 
-          setIsLoading(true);
-          const fileName = file.name.replace(/\.[^/.]+$/, '');
-          const trackId = 'user-audio-' + Date.now();
+        setIsLoading(true);
+        const { file, handle, isLinked } = picked;
+        const fileName = file.name.replace(/\.[^/.]+$/, '');
+        const trackId = 'user-audio-' + Date.now();
 
-          const probe = new Audio(URL.createObjectURL(file));
-          let handled = false;
+        const probe = new Audio(URL.createObjectURL(file));
+        let handled = false;
 
-          const commitAudio = async (dur: number) => {
-            if (handled) return;
-            handled = true;
-            try {
-              const validDuration =
-                dur && !isNaN(dur) && isFinite(dur) && dur > 0
-                  ? Math.round(dur * 10) / 10
-                  : 15.0;
-
-              const saved = await persistLargeMedia(file, trackId, fileName, 'audio', {
-                duration: validDuration,
-              });
-
-              const audioClip: AudioClip = {
-                id: 'clip-a-' + Date.now(),
-                title: fileName,
-                artist: 'Device Audio',
-                duration: validDuration,
-                startTime: 0,
-                trimIn: 0,
-                trimOut: validDuration,
-                mediaDuration: validDuration,
-                volume: 1.0,
-                url: saved.url,
-              };
-
-              soundEngine.playSfx('pop');
-              onAddAudio(audioClip);
-              onClose();
-            } finally {
-              setIsLoading(false);
-            }
-          };
-
-          probe.onloadedmetadata = () => {
-            commitAudio(probe.duration);
-          };
-
-          probe.onerror = () => {
-            commitAudio(15.0);
-          };
-
-          setTimeout(() => {
-            commitAudio(probe.duration || 15.0);
-          }, 1000);
-        };
-        setTimeout(() => {
+        const commitAudio = async (dur: number) => {
+          if (handled) return;
+          handled = true;
           try {
-            input.click();
-          } catch (_) {}
-        }, 40);
+            const validDuration =
+              dur && !isNaN(dur) && isFinite(dur) && dur > 0
+                ? Math.round(dur * 10) / 10
+                : 15.0;
+
+            const saved = await persistLargeMedia(file, trackId, fileName, 'audio', {
+              duration: validDuration,
+              handle,
+              isLinked,
+            });
+
+            const audioClip: AudioClip = {
+              id: 'clip-a-' + Date.now(),
+              title: fileName,
+              artist: 'Device Audio',
+              duration: validDuration,
+              startTime: 0,
+              trimIn: 0,
+              trimOut: validDuration,
+              mediaDuration: validDuration,
+              volume: 1.0,
+              url: saved.url,
+            };
+
+            soundEngine.playSfx('pop');
+            onAddAudio(audioClip);
+            onClose();
+          } finally {
+            setIsLoading(false);
+          }
+        };
+
+        probe.onloadedmetadata = () => {
+          commitAudio(probe.duration);
+        };
+
+        probe.onerror = () => {
+          commitAudio(15.0);
+        };
+
+        setTimeout(() => {
+          commitAudio(probe.duration || 15.0);
+        }, 1000);
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -130,6 +145,14 @@ export default function AudioModal({
             const asset = result.assets[0];
             const dur = asset.duration ? asset.duration / 1000 : 15.0;
             const fileName = asset.fileName || 'Imported Audio';
+            const trackId = 'user-audio-' + Date.now();
+
+            // On Mobile: Copy to app's persistent Documents/media directory
+            const persistentUri = await persistNativeMediaCopy(
+              asset.uri,
+              trackId,
+              fileName
+            );
 
             const audioClip: AudioClip = {
               id: 'clip-a-' + Date.now(),
@@ -141,7 +164,7 @@ export default function AudioModal({
               trimOut: dur,
               mediaDuration: dur,
               volume: 1.0,
-              url: asset.uri,
+              url: persistentUri,
             };
             soundEngine.playSfx('pop');
             onAddAudio(audioClip);
@@ -327,6 +350,57 @@ export default function AudioModal({
                   {isLoading ? 'Importing Audio...' : 'Choose Audio File'}
                 </Text>
               </TouchableOpacity>
+
+              {/* Section: Already Imported Project Audio */}
+              {importedAudioAssets.length > 0 && (
+                <View style={styles.importedSection}>
+                  <View style={styles.importedHeaderRow}>
+                    <Text style={styles.importedSectionTitle}>IMPORTED IN PROJECT</Text>
+                    <Text style={styles.importedCountText}>{importedAudioAssets.length} items</Text>
+                  </View>
+
+                  <View style={styles.importedList}>
+                    {importedAudioAssets.map((asset, idx) => (
+                      <View key={asset.id || idx} style={styles.importedAudioCard}>
+                        <View style={styles.importedAudioIconBox}>
+                          <Ionicons name="musical-note" size={18} color="#00F2FE" />
+                        </View>
+                        <View style={styles.importedAudioInfo}>
+                          <Text style={styles.importedAudioTitle} numberOfLines={1}>
+                            {asset.title || asset.name || `Audio ${idx + 1}`}
+                          </Text>
+                          <Text style={styles.importedAudioSubtitle}>
+                            {asset.duration ? `${asset.duration.toFixed(1)}s` : '0.0s'} • Audio Asset
+                          </Text>
+                        </View>
+
+                        <TouchableOpacity
+                          style={styles.importedAddBtn}
+                          onPress={() => {
+                            soundEngine.playSfx("pop");
+                            onAddAudio({
+                              id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              sourceMediaId: asset.sourceMediaId || asset.id,
+                              title: asset.title || asset.name || "Audio Clip",
+                              url: asset.url,
+                              startTime: 0,
+                              duration: asset.duration || 5,
+                              volume: 1.0,
+                              fadeIn: 0,
+                              fadeOut: 0,
+                            });
+                            onClose();
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="add" size={14} color="#00F2FE" />
+                          <Text style={styles.importedAddBtnText}>Add</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           )}
 
@@ -724,5 +798,85 @@ const styles = StyleSheet.create({
   },
   beatsActiveBtnText: {
     color: '#FFFFFF',
+  },
+  importedSection: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#1F2637',
+    paddingTop: 16,
+    width: '100%',
+  },
+  importedHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  importedSectionTitle: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  importedCountText: {
+    color: '#64748B',
+    fontSize: 10,
+    fontFamily: 'monospace',
+  },
+  importedList: {
+    flexDirection: 'column',
+    gap: 8,
+    width: '100%',
+  },
+  importedAudioCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#121622',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    padding: 10,
+    gap: 10,
+  },
+  importedAudioIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importedAudioInfo: {
+    flex: 1,
+  },
+  importedAudioTitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  importedAudioSubtitle: {
+    color: '#64748B',
+    fontSize: 10,
+    fontFamily: 'monospace',
+  },
+  importedAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: '#00F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    gap: 3,
+  },
+  importedAddBtnText: {
+    color: '#00F2FE',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

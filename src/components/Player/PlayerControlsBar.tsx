@@ -16,6 +16,11 @@ interface PlayerControlsBarProps {
   hasKeyframeAtCurrentTime: boolean;
   handleKeyframePress: () => void;
   onOpenKeyframeModal?: () => void;
+  hasPrevKeyframe?: boolean;
+  hasNextKeyframe?: boolean;
+  onJumpPrevKeyframe?: () => void;
+  onJumpNextKeyframe?: () => void;
+  hasKeyframesOnClip?: boolean;
   fullscreen: boolean;
   toggleFullscreen: () => void;
   isMobile: boolean;
@@ -32,6 +37,11 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
   hasKeyframeAtCurrentTime,
   handleKeyframePress,
   onOpenKeyframeModal,
+  hasPrevKeyframe,
+  hasNextKeyframe,
+  onJumpPrevKeyframe,
+  onJumpNextKeyframe,
+  hasKeyframesOnClip,
   fullscreen,
   toggleFullscreen,
   isMobile,
@@ -149,18 +159,37 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           />
         </TouchableOpacity>
 
+        {/* Jump to Previous Keyframe */}
+        {hasKeyframesOnClip && (
+          <TouchableOpacity
+            style={[styles.smallBtn, !hasPrevKeyframe && { opacity: 0.3 }]}
+            onPress={onJumpPrevKeyframe}
+            disabled={!hasPrevKeyframe}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            accessibilityLabel="Previous Keyframe"
+          >
+            <Ionicons
+              name="caret-back"
+              size={13}
+              color={hasPrevKeyframe ? THEME_COLORS.accent : THEME_COLORS.textMuted}
+            />
+          </TouchableOpacity>
+        )}
+
+        {/* Toggle Keyframe at Playhead */}
         <TouchableOpacity
           style={[
             styles.smallBtn,
             styles.keyframeBtn,
             hasKeyframeAtCurrentTime && styles.keyframeActive,
           ]}
-          onPress={onOpenKeyframeModal || handleKeyframePress}
-          onLongPress={handleKeyframePress}
+          onPress={handleKeyframePress}
+          onLongPress={onOpenKeyframeModal}
           delayLongPress={350}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
           activeOpacity={0.7}
-          accessibilityLabel="Keyframe"
+          accessibilityLabel="Keyframe Toggle"
         >
           <Ionicons
             name={hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"}
@@ -182,6 +211,24 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
             />
           </View>
         </TouchableOpacity>
+
+        {/* Jump to Next Keyframe */}
+        {hasKeyframesOnClip && (
+          <TouchableOpacity
+            style={[styles.smallBtn, !hasNextKeyframe && { opacity: 0.3 }]}
+            onPress={onJumpNextKeyframe}
+            disabled={!hasNextKeyframe}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            accessibilityLabel="Next Keyframe"
+          >
+            <Ionicons
+              name="caret-forward"
+              size={13}
+              color={hasNextKeyframe ? THEME_COLORS.accent : THEME_COLORS.textMuted}
+            />
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.smallBtn, fullscreen && styles.smallBtnActive]}

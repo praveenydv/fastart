@@ -54,3 +54,9 @@ rust/**/target/
 *.so
 *.dylib
 rea-capcut
+
+# AI Models & Large Binary Runtimes (downloaded on demand or copied from node_modules)
+public/models/*.onnx
+public/onnxruntime/
+public/wasm/*.wasm
+assets/wasm/*.wasm

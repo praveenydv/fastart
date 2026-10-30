@@ -113,8 +113,12 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
               backgroundColor: clip.bgColor,
               borderColor: isSelected
                 ? clip.accentColor
-                : "rgba(255, 255, 255, 0.08)",
-              borderWidth: isSelected ? 1.5 : 0.5,
+                : (clip as any).isMissing
+                  ? "rgba(239, 68, 68, 0.7)"
+                  : (clip as any).needsPermission
+                    ? "rgba(0, 242, 254, 0.6)"
+                    : "rgba(255, 255, 255, 0.08)",
+              borderWidth: isSelected || (clip as any).isMissing || (clip as any).needsPermission ? 1.5 : 0.5,
             },
             isSelected && [
               styles.clipSelectedUniversal,
@@ -246,9 +250,32 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                   alignItems: "center",
                 }}
               >
-                <Text style={styles.clipTitleText} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.clipTitleText,
+                    (clip as any).isMissing && { color: "#FCA5A5" },
+                    (clip as any).needsPermission && { color: "#BAE6FD" },
+                  ]}
+                  numberOfLines={1}
+                >
                   {clip.title}
                 </Text>
+                {(clip as any).isMissing && (
+                  <Ionicons
+                    name="alert-circle"
+                    size={11}
+                    color="#EF4444"
+                    style={{ marginLeft: 3 }}
+                  />
+                )}
+                {!(clip as any).isMissing && (clip as any).needsPermission && (
+                  <Ionicons
+                    name="link-outline"
+                    size={11}
+                    color="#00F2FE"
+                    style={{ marginLeft: 3 }}
+                  />
+                )}
                 {clip.type === "video" && mediaHasAudioTrack(clip) && (
                   clip.rawClip?.volume === 0 || clip.rawClip?.muted ? (
                     <Ionicons
@@ -283,15 +310,28 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                   <Text style={styles.filterTagText}>LUT</Text>
                 </View>
               )}
+
+            {/* Cutout indicator */}
+            {clip.rawClip?.cutout?.enabled && (
+              <View style={[styles.filterTag, { backgroundColor: "rgba(0, 242, 254, 0.2)", borderColor: "rgba(0, 242, 254, 0.5)", flexDirection: "row", alignItems: "center" }]}>
+                <Ionicons name="sparkles" size={8} color="#00F2FE" style={{ marginRight: 2 }} />
+                <Text style={[styles.filterTagText, { color: "#00F2FE", fontWeight: "700" }]}>
+                  {clip.rawClip.cutout.mode === "auto" ? "AI CUT" : "CHROMA"}
+                </Text>
+              </View>
+            )}
           </View>
 
-          {/* Keyframe Diamond Markers */}
-          {clip.rawClip?.keyframes && clip.rawClip.keyframes.length > 0 && (
+          {/* Keyframe Diamond Markers (Transform & Mask) */}
+          {((clip.rawClip?.keyframes && clip.rawClip.keyframes.length > 0) ||
+            (clip.rawClip?.maskKeyframes && clip.rawClip.maskKeyframes.length > 0) ||
+            (clip.rawClip?.mask?.keyframes && clip.rawClip.mask.keyframes.length > 0)) && (
             <View
               style={[StyleSheet.absoluteFill, { zIndex: 60 }]}
               pointerEvents="none"
             >
-              {clip.rawClip.keyframes.map((kf: any, kfIdx: number) => {
+              {/* Transform Motion Keyframes (Gold/Yellow) */}
+              {(clip.rawClip?.keyframes || []).map((kf: any, kfIdx: number) => {
                 const kfPos = kf.time * pxPerSec;
                 if (kfPos < 0 || kfPos > width) return null;
                 const isPlayheadNear =
@@ -309,6 +349,31 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
                       style={[
                         styles.timelineKfMarkerInner,
                         isPlayheadNear && { backgroundColor: "#FFFFFF" },
+                      ]}
+                    />
+                  </View>
+                );
+              })}
+
+              {/* Mask Keyframes (Purple) */}
+              {(clip.rawClip?.maskKeyframes || clip.rawClip?.mask?.keyframes || []).map((mkf: any, mkfIdx: number) => {
+                const mkfPos = mkf.time * pxPerSec;
+                if (mkfPos < 0 || mkfPos > width) return null;
+                const isPlayheadNear =
+                  Math.abs(clip.startTime + mkf.time - currentTime) < 0.12;
+                return (
+                  <View
+                    key={`mkf-${mkfIdx}`}
+                    style={[
+                      (styles as any).timelineMaskKfMarker,
+                      { left: Math.max(2, Math.min(width - 16, mkfPos - 7)) },
+                      isPlayheadNear && (styles as any).timelineMaskKfMarkerActive,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.timelineKfMarkerInner,
+                        { backgroundColor: isPlayheadNear ? "#FFFFFF" : "#4A044E" },
                       ]}
                     />
                   </View>

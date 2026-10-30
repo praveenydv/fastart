@@ -3,7 +3,7 @@ import { View, Text, Platform } from "react-native";
 import { styles } from "./TimelineStyles";
 import { formatPlayheadTime } from "./timelineUtils";
 
-interface TimelinePlayheadProps {
+export interface TimelinePlayheadHeadProps {
   currentTime: number;
   pxPerSec: number;
   isScrubbingRuler: boolean;
@@ -11,41 +11,29 @@ interface TimelinePlayheadProps {
   handlePlayheadPointerDown: any;
 }
 
-export const TimelinePlayhead: React.FC<TimelinePlayheadProps> = ({
-  currentTime,
-  pxPerSec,
-  isScrubbingRuler,
-  playheadPanResponder,
-  handlePlayheadPointerDown,
-}) => {
-  return (
-    <View
-      style={[
-        styles.playheadLine,
-        {
-          left: 0,
-          transform: [{ translateX: currentTime * pxPerSec }],
-          ...(Platform.OS === "web"
-            ? {
-                willChange: "transform",
-                transform: `translate3d(${currentTime * pxPerSec}px, 0, 0)`,
-              }
-            : {}),
-        } as any,
-      ]}
-      pointerEvents="box-none"
-    >
-      {/* Floating real-time timecode badge while dragging */}
-      {isScrubbingRuler && (
-        <View style={styles.playheadTimePill}>
-          <Text style={styles.playheadTimeText} numberOfLines={1}>
-            {formatPlayheadTime(currentTime)}
-          </Text>
-        </View>
-      )}
-
+export const TimelinePlayheadHead: React.FC<TimelinePlayheadHeadProps> = React.memo(
+  ({
+    currentTime,
+    pxPerSec,
+    isScrubbingRuler,
+    playheadPanResponder,
+    handlePlayheadPointerDown,
+  }) => {
+    return (
       <View
-        style={styles.playheadHeadBox}
+        style={[
+          styles.playheadHeadInRuler,
+          {
+            left: 0,
+            transform: [{ translateX: currentTime * pxPerSec }],
+            ...(Platform.OS === "web"
+              ? {
+                  willChange: "transform",
+                  transform: `translate3d(${currentTime * pxPerSec}px, 0, 0)`,
+                }
+              : {}),
+          } as any,
+        ]}
         pointerEvents="auto"
         {...(Platform.OS !== "web"
           ? playheadPanResponder.panHandlers
@@ -54,22 +42,94 @@ export const TimelinePlayhead: React.FC<TimelinePlayheadProps> = ({
               onTouchStart: handlePlayheadPointerDown,
             })}
       >
-        <View
-          style={[
-            styles.diamondShape,
-            isScrubbingRuler && styles.diamondShapeActive,
-          ]}
-        />
-      </View>
+        {/* Floating real-time timecode badge while dragging */}
+        {isScrubbingRuler && (
+          <View style={styles.playheadTimePill}>
+            <Text style={styles.playheadTimeText} numberOfLines={1}>
+              {formatPlayheadTime(currentTime)}
+            </Text>
+          </View>
+        )}
 
+        <View style={styles.playheadHeadBox}>
+          <View
+            style={[
+              styles.diamondShape,
+              isScrubbingRuler && styles.diamondShapeActive,
+            ]}
+          />
+        </View>
+      </View>
+    );
+  },
+);
+
+export interface TimelinePlayheadNeedleProps {
+  currentTime: number;
+  pxPerSec: number;
+  isScrubbingRuler: boolean;
+}
+
+export const TimelinePlayheadNeedle: React.FC<TimelinePlayheadNeedleProps> = React.memo(
+  ({ currentTime, pxPerSec, isScrubbingRuler }) => {
+    return (
       <View
         style={[
-          styles.playheadNeedle,
-          isScrubbingRuler && styles.playheadNeedleActive,
+          styles.playheadNeedleLine,
+          {
+            left: 0,
+            transform: [{ translateX: currentTime * pxPerSec }],
+            ...(Platform.OS === "web"
+              ? {
+                  willChange: "transform",
+                  transform: `translate3d(${currentTime * pxPerSec}px, 0, 0)`,
+                }
+              : {}),
+          } as any,
         ]}
-        pointerEvents="none"
+        pointerEvents="box-none"
+      >
+        <View
+          style={[
+            styles.playheadNeedle,
+            isScrubbingRuler && styles.playheadNeedleActive,
+          ]}
+          pointerEvents="none"
+        />
+      </View>
+    );
+  },
+);
+
+export interface TimelinePlayheadProps extends TimelinePlayheadHeadProps {
+  showNeedle?: boolean;
+}
+
+export const TimelinePlayhead: React.FC<TimelinePlayheadProps> = ({
+  currentTime,
+  pxPerSec,
+  isScrubbingRuler,
+  playheadPanResponder,
+  handlePlayheadPointerDown,
+  showNeedle = true,
+}) => {
+  return (
+    <>
+      <TimelinePlayheadHead
+        currentTime={currentTime}
+        pxPerSec={pxPerSec}
+        isScrubbingRuler={isScrubbingRuler}
+        playheadPanResponder={playheadPanResponder}
+        handlePlayheadPointerDown={handlePlayheadPointerDown}
       />
-    </View>
+      {showNeedle && (
+        <TimelinePlayheadNeedle
+          currentTime={currentTime}
+          pxPerSec={pxPerSec}
+          isScrubbingRuler={isScrubbingRuler}
+        />
+      )}
+    </>
   );
 };
 

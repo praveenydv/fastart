@@ -1,21 +1,90 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { FastArtProject } from "../types/project";
-import { saveProject } from "../utils/storage";
+import {
+  saveProject,
+  getStorageItem,
+  setStorageItem,
+  removeStorageItem,
+} from "../utils/storage";
 import { soundEngine } from "../utils/audioEngine";
+
+function loadStack(key: string): FastArtProject[] {
+  try {
+    let raw = getStorageItem(key);
+    if (!raw && typeof window !== "undefined" && window.sessionStorage) {
+      raw = window.sessionStorage.getItem(key);
+    }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+function saveStack(key: string, stack: FastArtProject[]) {
+  try {
+    if (stack.length === 0) {
+      removeStorageItem(key);
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.removeItem(key);
+      }
+    } else {
+      const serialized = JSON.stringify(stack.slice(-20));
+      setStorageItem(key, serialized);
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.setItem(key, serialized);
+      }
+    }
+  } catch {}
+}
 
 interface UseProjectHistoryParams {
   projectRef: React.MutableRefObject<FastArtProject | null>;
   setProject: React.Dispatch<React.SetStateAction<FastArtProject | null>>;
   setProjects: React.Dispatch<React.SetStateAction<FastArtProject[]>>;
+  projectId?: string;
 }
 
 export function useProjectHistory({
   projectRef,
   setProject,
   setProjects,
+  projectId,
 }: UseProjectHistoryParams) {
-  const [historyStack, setHistoryStack] = useState<FastArtProject[]>([]);
-  const [redoStack, setRedoStack] = useState<FastArtProject[]>([]);
+  const activeProjectId = projectId || projectRef.current?.id || "";
+  const activeProjectRef = useRef(activeProjectId);
+
+  const [historyStack, setHistoryStack] = useState<FastArtProject[]>(() =>
+    activeProjectId ? loadStack(`@fastart_hist_${activeProjectId}`) : []
+  );
+  const [redoStack, setRedoStack] = useState<FastArtProject[]>(() =>
+    activeProjectId ? loadStack(`@fastart_redo_${activeProjectId}`) : []
+  );
+
+  // Restore history across project navigation, page reloads, and close/reopen
+  useEffect(() => {
+    if (!activeProjectId) return;
+    activeProjectRef.current = activeProjectId;
+    const histKey = `@fastart_hist_${activeProjectId}`;
+    const redoKey = `@fastart_redo_${activeProjectId}`;
+    const savedHist = loadStack(histKey);
+    const savedRedo = loadStack(redoKey);
+    setHistoryStack(savedHist);
+    setRedoStack(savedRedo);
+  }, [activeProjectId]);
+
+  // Persist undo stack to survive refresh, close, and reopen
+  useEffect(() => {
+    if (!activeProjectId || activeProjectRef.current !== activeProjectId) return;
+    saveStack(`@fastart_hist_${activeProjectId}`, historyStack);
+  }, [activeProjectId, historyStack]);
+
+  // Persist redo stack to survive refresh, close, and reopen
+  useEffect(() => {
+    if (!activeProjectId || activeProjectRef.current !== activeProjectId) return;
+    saveStack(`@fastart_redo_${activeProjectId}`, redoStack);
+  }, [activeProjectId, redoStack]);
 
   // Push state to undo stack with memory cap (max 20 snapshots)
   const updateProjectWithHistory = useCallback((updatedProject: any) => {

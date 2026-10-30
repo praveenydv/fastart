@@ -100,6 +100,8 @@ pub struct VideoClip {
     pub mask: Option<MaskConfig>,
     pub cutout: Option<CutoutConfig>,
     pub keyframes: Option<Vec<KeyframePoint>>,
+    #[serde(rename = "maskKeyframes", default)]
+    pub mask_keyframes: Option<Vec<MaskKeyframePoint>>,
     #[serde(rename = "trackIndex", default)]
     pub track_index: Option<i32>,
     #[serde(default)]
@@ -266,18 +268,30 @@ pub struct ClipTransform {
     #[serde(rename = "flipY")]
     pub flip_y: Option<bool>,
     pub opacity: Option<f64>,
+    pub mask: Option<MaskConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MaskConfig {
     pub shape: String, // "none" | "linear" | "mirror" | "circle" | "rectangle" | "heart" | "star"
     pub size: Option<f64>,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
     pub feather: Option<f64>,
     pub roundness: Option<f64>,
     pub inverted: Option<bool>,
     pub x: Option<f64>,
     pub y: Option<f64>,
     pub rotation: Option<f64>,
+    #[serde(default)]
+    pub keyframes: Option<Vec<MaskKeyframePoint>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MaskKeyframePoint {
+    pub time: f64,
+    pub mask: MaskConfig,
+    pub easing: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,6 +316,7 @@ pub struct KeyframePoint {
     pub transform: ClipTransform,
     #[serde(default = "default_one_f64")]
     pub opacity: f64,
+    pub mask: Option<MaskConfig>,
 }
 
 // ---------------------------------------------------------------------------

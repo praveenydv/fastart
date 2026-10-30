@@ -8,6 +8,7 @@ import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
+import { getInterpolatedMask } from "../../utils/keyframeEngine";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
@@ -83,20 +84,51 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         </View>
       )}
 
-      {/* Background Dynamic Blur Fill (Auto from video or photo) */}
+      {/* Background Dynamic Blur Fill (Live from active video or photo) */}
       {(() => {
         if (!isBlur) return null;
         const currentVid =
           activeVideos.find(
             (v) =>
               currentTime >= v.startTime &&
-              currentTime <= v.startTime + v.duration,
-          ) || activeVideos[0];
-        const mediaUri =
-          currentVid?.thumbnail ||
-          (currentVid?.type === "photo" ? currentVid?.url : null);
-        if (!mediaUri) return null;
+              currentTime <= v.startTime + v.duration &&
+              !v.cutout?.enabled,
+          ) || activeVideos.find((v) => !v.cutout?.enabled);
+        if (!currentVid) return null;
         const blurAmount = parseInt(rawBg.replace("blur:", ""), 10) || 25;
+
+        // 1. Live video player for video clips (not a frozen raw thumbnail)
+        if (currentVid.type === "video" && currentVid.url) {
+          return (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  overflow: "hidden",
+                  opacity: 0.75,
+                  transform: [{ scale: 1.45 }],
+                },
+                Platform.OS === "web"
+                  ? ({ filter: `blur(${blurAmount}px)` } as any)
+                  : null,
+              ]}
+              pointerEvents="none"
+            >
+              <NativeVideoClipPlayer
+                clip={currentVid}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+              />
+            </View>
+          );
+        }
+
+        // 2. Photo / image clip using genuine high-res live media URL
+        const mediaUri =
+          (currentVid?.type === "photo" ? currentVid?.url : null) ||
+          currentVid?.url ||
+          currentVid?.thumbnail;
+        if (!mediaUri) return null;
 
         return (
           <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} pointerEvents="none">
@@ -248,7 +280,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const cx = boxWidth / 2 + posX + motionX;
         const cy = canvasHeight / 2 + posY + motionY;
 
-        const mask = vid.mask || vid.transform?.mask;
+        const mask = kfT?.mask || getInterpolatedMask(vid, currentTime) || vid.mask || vid.transform?.mask;
         let maskBorderRadius: number | undefined = undefined;
         let hasMaskShape = false;
         let webMaskStyle: any = undefined;

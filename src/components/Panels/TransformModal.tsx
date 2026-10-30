@@ -132,18 +132,6 @@ export default function TransformModal({
     "crop" | "flip" | "rotate" | "stretch" | "angle"
   >(initialTab);
 
-  // Automatically activate interactive crop on player when crop tab is open
-  useEffect(() => {
-    if (visible && activeTab === "crop") {
-      setIsCroppingPreview?.(true);
-    } else {
-      setIsCroppingPreview?.(false);
-    }
-    return () => {
-      setIsCroppingPreview?.(false);
-    };
-  }, [visible, activeTab, setIsCroppingPreview]);
-
   // Crop states
   const [cropWidth, setCropWidth] = useState<number>(currentCrop?.width ?? 100);
   const [cropHeight, setCropHeight] = useState<number>(
@@ -212,6 +200,50 @@ export default function TransformModal({
 
     prevVisibleRef.current = visible;
   }, [visible, initialTab]);
+
+  // Activate on-player crop preview overlay whenever activeTab is "crop"
+  useEffect(() => {
+    if (visible && activeTab === "crop") {
+      setIsCroppingPreview?.(true);
+    } else {
+      setIsCroppingPreview?.(false);
+    }
+  }, [visible, activeTab, setIsCroppingPreview]);
+
+  // Clean up crop preview on modal unmount
+  useEffect(() => {
+    return () => {
+      setIsCroppingPreview?.(false);
+    };
+  }, [setIsCroppingPreview]);
+
+  // Sync crop sliders when currentCrop or currentTransform.crop updates from on-player dragging
+  useEffect(() => {
+    const crop = currentCrop || currentTransform?.crop;
+    if (crop) {
+      if (crop.width !== undefined && crop.width > 0) {
+        setCropWidth(Math.round(crop.width));
+      }
+      if (crop.height !== undefined && crop.height > 0) {
+        setCropHeight(Math.round(crop.height));
+      }
+      if (crop.x !== undefined) {
+        setCropX(Math.round(crop.x));
+      }
+      if (crop.y !== undefined) {
+        setCropY(Math.round(crop.y));
+      }
+    }
+  }, [
+    currentCrop?.x,
+    currentCrop?.y,
+    currentCrop?.width,
+    currentCrop?.height,
+    currentTransform?.crop?.x,
+    currentTransform?.crop?.y,
+    currentTransform?.crop?.width,
+    currentTransform?.crop?.height,
+  ]);
 
   const syncTransform = (overrides?: {
     crop?: CustomCrop | null;
@@ -653,8 +685,20 @@ export default function TransformModal({
         {/* 1. CROP SECTION */}
         {activeTab === "crop" && (
           <View style={styles.sectionContainer}>
-            {/* Aspect Ratio Presets */}
-            <Text style={styles.sectionLabel}>Aspect Ratio Presets</Text>
+            {/* Aspect Ratio Presets & Canvas Crop Button */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={styles.sectionLabel}>Aspect Ratio Presets</Text>
+              {onOpenScreenCrop && (
+                <TouchableOpacity
+                  onPress={onOpenScreenCrop}
+                  style={styles.openScreenCropBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="expand" size={12} color="#00F2FE" />
+                  <Text style={styles.openScreenCropBtnText}>Edit on Canvas</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1551,6 +1595,22 @@ const styles = StyleSheet.create({
     color: "#00F2FE",
     fontSize: 10,
     fontWeight: "700",
+  },
+  openScreenCropBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.3)",
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 5,
+  },
+  openScreenCropBtnText: {
+    color: "#00F2FE",
+    fontSize: 10.5,
+    fontWeight: "600",
   },
   overlay: {
     flex: 1,

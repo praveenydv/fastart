@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject, AudioClip } from '../../types/project';
-import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import { persistLargeMedia, pickWebMedia } from '../../utils/largeMediaStorage';
 import { addNotification } from '../../utils/storage';
 import { THEME_COLORS } from '../../constants/designConstants';
 
@@ -38,18 +38,6 @@ export interface DesktopMediaAudioPanelProps {
   onSwapPosition?: () => void;
   style?: any;
 }
-
-// Royalty-free BGM and SFX presets
-const AUDIO_PRESETS = [
-  { id: 'bgm-1', title: 'Upbeat Vlog Beat', duration: 18.5, category: 'Music', tone: 'Energetic' },
-  { id: 'bgm-2', title: 'Cinematic Ambient', duration: 24.0, category: 'Music', tone: 'Epic' },
-  { id: 'bgm-3', title: 'Chill Lo-Fi Sunset', duration: 20.0, category: 'Music', tone: 'Relaxed' },
-  { id: 'bgm-4', title: 'Cyberpunk Synth', duration: 16.0, category: 'Music', tone: 'Modern' },
-  { id: 'sfx-1', title: 'Smooth Whoosh Transition', duration: 1.2, category: 'SFX', tone: 'Air' },
-  { id: 'sfx-2', title: 'Deep Impact Hit', duration: 1.8, category: 'SFX', tone: 'Bass' },
-  { id: 'sfx-3', title: 'Camera Shutter Snap', duration: 0.8, category: 'SFX', tone: 'Mechanical' },
-  { id: 'sfx-4', title: 'Digital Pop & Click', duration: 0.5, category: 'SFX', tone: 'Minimal' },
-];
 
 // CapCut style text title templates
 const TEXT_TEMPLATES = [
@@ -113,62 +101,62 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   const [playingPreviewId, setPlayingPreviewId] = useState<string | null>(null);
 
   // Handle local device file upload (video / photo)
+  // Web: Links directly to file location (zero bytes duplicate)
   const handleDeviceUpload = async () => {
     try {
       if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'video/*,image/*';
-        input.onchange = async (e: any) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            setIsLoading(true);
-            try {
-              const isVideo = file.type.startsWith('video');
-              const mediaId = 'clip-' + Date.now();
-              const title = file.name.replace(/\.[^/.]+$/, '');
+        const picked = await pickWebMedia('all');
+        if (!picked) return;
 
-              const saved = await persistLargeMedia(file, mediaId, title, isVideo ? 'video' : 'photo');
+        setIsLoading(true);
+        try {
+          const { file, handle, isLinked } = picked;
+          const isVideo = file.type.startsWith('video');
+          const mediaId = 'clip-' + Date.now();
+          const title = file.name.replace(/\.[^/.]+$/, '');
 
-              const clip = {
-                id: mediaId,
-                sourceMediaId: mediaId,
-                title,
-                type: isVideo ? 'video' : 'photo',
-                url: saved.url,
-                thumbnail: saved.thumbnail,
-                duration: saved.duration || (isVideo ? 5.0 : 3.0),
-                startTime: currentTime || 0,
-                trimIn: 0,
-                trimOut: saved.duration || (isVideo ? 5.0 : 3.0),
-                mediaDuration: isVideo ? saved.duration : undefined,
-                speed: 1.0,
-                volume: 1.0,
-                filter: 'normal',
-                effect: 'none',
-                transform: { scale: 1, rotation: 0, x: 0, y: 0 },
-              };
+          const saved = await persistLargeMedia(file, mediaId, title, isVideo ? 'video' : 'photo', {
+            handle,
+            isLinked,
+          });
 
-              soundEngine.playSfx('pop');
-              onAddMedia(clip);
-              addNotification({
-                title: isVideo ? 'Video Imported' : 'Photo Imported',
-                message: `Added "${title}" to project at ${currentTime.toFixed(1)}s`,
-                type: 'success',
-              });
-            } catch (err: any) {
-              console.error('Failed to import media file:', err);
-              addNotification({
-                title: 'Import Failed',
-                message: err?.message || 'Could not load media file',
-                type: 'error',
-              });
-            } finally {
-              setIsLoading(false);
-            }
-          }
-        };
-        input.click();
+          const clip = {
+            id: mediaId,
+            sourceMediaId: mediaId,
+            title,
+            type: isVideo ? 'video' : 'photo',
+            url: saved.url,
+            thumbnail: saved.thumbnail,
+            duration: saved.duration || (isVideo ? 5.0 : 3.0),
+            startTime: currentTime || 0,
+            trimIn: 0,
+            trimOut: saved.duration || (isVideo ? 5.0 : 3.0),
+            mediaDuration: isVideo ? saved.duration : undefined,
+            speed: 1.0,
+            volume: 1.0,
+            filter: 'normal',
+            effect: 'none',
+            transform: { scale: 1, rotation: 0, x: 0, y: 0 },
+            isLinked,
+          };
+
+          soundEngine.playSfx('pop');
+          onAddMedia(clip);
+          addNotification({
+            title: isVideo ? 'Video Imported' : 'Photo Imported',
+            message: `Added "${title}" to project at ${currentTime.toFixed(1)}s`,
+            type: 'success',
+          });
+        } catch (err: any) {
+          console.error('Failed to import media file:', err);
+          addNotification({
+            title: 'Import Failed',
+            message: err?.message || 'Could not load media file',
+            type: 'error',
+          });
+        } finally {
+          setIsLoading(false);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -177,48 +165,53 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   };
 
   // Handle local device audio file upload
+  // Web: Links directly to audio file location and persists to storage
   const handleDeviceAudioUpload = async () => {
     try {
       if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'audio/*';
-        input.onchange = async (e: any) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            setIsLoading(true);
-            try {
-              const audioId = 'audio-' + Date.now();
-              const title = file.name.replace(/\.[^/.]+$/, '');
-              const url = URL.createObjectURL(file);
+        const picked = await pickWebMedia('audio');
+        if (!picked) return;
 
-              const clip: AudioClip = {
-                id: audioId,
-                title,
-                url,
-                duration: 10.0,
-                startTime: currentTime || 0,
-                trackIndex: 1,
-                volume: 1.0,
-                fadeIn: 0,
-                fadeOut: 0,
-              };
+        setIsLoading(true);
+        try {
+          const { file, handle, isLinked } = picked;
+          const audioId = 'audio-' + Date.now();
+          const title = file.name.replace(/\.[^/.]+$/, '');
 
-              soundEngine.playSfx('pop');
-              onAddAudio(clip);
-              addNotification({
-                title: 'Audio Imported',
-                message: `Added "${title}" to project at ${currentTime.toFixed(1)}s`,
-                type: 'success',
-              });
-            } catch (err: any) {
-              console.error('Failed to import audio:', err);
-            } finally {
-              setIsLoading(false);
-            }
-          }
-        };
-        input.click();
+          const saved = await persistLargeMedia(file, audioId, title, 'audio', {
+            handle,
+            isLinked,
+          });
+
+          const clip: AudioClip = {
+            id: audioId,
+            title,
+            url: saved.url,
+            duration: saved.duration || 10.0,
+            startTime: currentTime || 0,
+            trackIndex: 1,
+            volume: 1.0,
+            fadeIn: 0,
+            fadeOut: 0,
+          };
+
+          soundEngine.playSfx('pop');
+          onAddAudio(clip);
+          addNotification({
+            title: 'Audio Imported',
+            message: `Added "${title}" to project at ${currentTime.toFixed(1)}s`,
+            type: 'success',
+          });
+        } catch (err: any) {
+          console.error('Failed to import audio:', err);
+          addNotification({
+            title: 'Audio Import Failed',
+            message: err?.message || 'Could not load audio file',
+            type: 'error',
+          });
+        } finally {
+          setIsLoading(false);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -226,28 +219,33 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
     }
   };
 
-  // Add preset audio directly to timeline
-  const handleAddPresetAudio = (preset: typeof AUDIO_PRESETS[0]) => {
-    soundEngine.playSfx('pop');
-    const clip: AudioClip = {
-      id: `audio-${Date.now()}`,
-      title: preset.title,
-      duration: preset.duration || 10.0,
-      startTime: currentTime || 0,
-      trackIndex: 1,
-      volume: 1.0,
-      url: 'https://actions.google.com/sounds/v1/ambiences/outdoor_ambience.ogg',
-    };
-    onAddAudio(clip);
-    addNotification({
-      title: 'Audio Added',
-      message: `Added "${preset.title}" at ${currentTime.toFixed(1)}s`,
-      type: 'success',
+  const videoClips = useMemo(() => {
+    if (Array.isArray(project.assets)) {
+      return project.assets.filter((a) => a.type === 'video' || a.type === 'photo');
+    }
+    const map = new Map<string, any>();
+    (project.tracks?.video || []).forEach((c) => {
+      const key = c.sourceMediaId || c.url || c.id;
+      if (!map.has(key)) {
+        map.set(key, c);
+      }
     });
-  };
+    return Array.from(map.values());
+  }, [project.assets, project.tracks?.video]);
 
-  const videoClips = project.tracks?.video || [];
-  const audioClips = project.tracks?.audio || [];
+  const audioClips = useMemo(() => {
+    if (Array.isArray(project.assets)) {
+      return project.assets.filter((a) => a.type === 'audio');
+    }
+    const map = new Map<string, any>();
+    (project.tracks?.audio || []).forEach((c) => {
+      const key = c.sourceMediaId || c.url || c.id;
+      if (!map.has(key)) {
+        map.set(key, c);
+      }
+    });
+    return Array.from(map.values());
+  }, [project.assets, project.tracks?.audio]);
 
   if (isCollapsed) {
     return (
@@ -408,6 +406,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                             clip: {
                               ...clip,
                               id: `clip-${Date.now()}`,
+                              sourceMediaId: clip.sourceMediaId || clip.id,
                               duration: clip.duration || 4.0,
                             },
                           };
@@ -434,22 +433,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                         {clip.duration ? `${clip.duration.toFixed(1)}s` : '0.0s'}
                       </Text>
                     </View>
-
-                    {/* Corner Delete Button on Thumbnail */}
-                    {onDeleteMedia && (
-                      <TouchableOpacity
-                        style={styles.cardDeleteCornerBtn}
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          soundEngine.playSfx('cut');
-                          onDeleteMedia(clip.id, clip.type || 'video');
-                        }}
-                        activeOpacity={0.7}
-                        accessibilityLabel="Delete imported clip"
-                      >
-                        <Ionicons name="trash-outline" size={11} color="#FF6B6B" />
-                      </TouchableOpacity>
-                    )}
                   </View>
 
                   <View style={styles.mediaCardInfo}>
@@ -482,6 +465,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                             onAddMedia({
                               ...clip,
                               id: `clip-copy-${Date.now()}`,
+                              sourceMediaId: clip.sourceMediaId || clip.id,
                               startTime: currentTime,
                             });
                           }}
@@ -540,6 +524,24 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                   <View
                     key={audioClip.id || idx}
                     style={[styles.presetAudioCard, Platform.OS === 'web' && ({ cursor: 'grab' } as any)]}
+                    {...(Platform.OS === 'web'
+                      ? ({
+                          draggable: true,
+                          onDragStart: (e: any) => {
+                            const payload = {
+                              type: 'audio',
+                              clip: {
+                                ...audioClip,
+                                id: `audio-${Date.now()}`,
+                                sourceMediaId: audioClip.sourceMediaId || audioClip.id,
+                                duration: audioClip.duration || 10.0,
+                              },
+                            };
+                            e.dataTransfer.setData('application/fastart-clip', JSON.stringify(payload));
+                            e.dataTransfer.effectAllowed = 'copy';
+                          },
+                        } as any)
+                      : {})}
                   >
                     <TouchableOpacity
                       style={[styles.previewPlayCircle, isPlaying && styles.previewPlayCircleActive]}
@@ -586,6 +588,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                           onAddAudio({
                             ...audioClip,
                             id: `audio-copy-${Date.now()}`,
+                            sourceMediaId: audioClip.sourceMediaId || audioClip.id,
                             startTime: currentTime || 0,
                           });
                         }}
@@ -601,74 +604,17 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             </>
           )}
 
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>SOUNDTRACKS & SFX</Text>
-            <Text style={styles.sectionCount}>{AUDIO_PRESETS.length} tracks</Text>
-          </View>
-
-          {AUDIO_PRESETS.map((preset) => {
-            const isPlaying = playingPreviewId === preset.id;
-            return (
-              <View
-                key={preset.id}
-                style={[styles.presetAudioCard, Platform.OS === 'web' && ({ cursor: 'grab' } as any)]}
-                {...(Platform.OS === 'web'
-                  ? {
-                      draggable: true,
-                      onDragStart: (e: any) => {
-                        const payload = {
-                          type: 'audio',
-                          clip: {
-                            id: `audio-${Date.now()}`,
-                            title: preset.title,
-                            duration: preset.duration || 10.0,
-                            startTime: 0,
-                            trackIndex: 1,
-                            volume: 1.0,
-                            url: 'https://actions.google.com/sounds/v1/ambiences/outdoor_ambience.ogg',
-                          },
-                        };
-                        e.dataTransfer.setData('application/fastart-clip', JSON.stringify(payload));
-                        e.dataTransfer.effectAllowed = 'copy';
-                      },
-                    }
-                  : {})}
-              >
-                <TouchableOpacity
-                  style={[styles.previewPlayCircle, isPlaying && styles.previewPlayCircleActive]}
-                  onPress={() => {
-                    soundEngine.playSfx('click');
-                    setPlayingPreviewId(isPlaying ? null : preset.id);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={isPlaying ? 'pause' : 'play'}
-                    size={11}
-                    color={isPlaying ? '#000000' : THEME_COLORS.accent}
-                  />
-                </TouchableOpacity>
-
-                <View style={{ flex: 1, paddingHorizontal: 8 }}>
-                  <Text style={styles.presetTitle} numberOfLines={1}>
-                    {preset.title}
-                  </Text>
-                  <Text style={styles.presetMeta}>
-                    {preset.category} • {preset.duration}s • {preset.tone}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.addDirectBtn}
-                  onPress={() => handleAddPresetAudio(preset)}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Add to timeline"
-                >
-                  <Ionicons name="add" size={14} color="#000000" />
-                </TouchableOpacity>
+          {audioClips.length === 0 && (
+            <View style={styles.emptyAudioState}>
+              <View style={styles.emptyAudioIconCircle}>
+                <Ionicons name="musical-notes-outline" size={24} color="#64748B" />
               </View>
-            );
-          })}
+              <Text style={styles.emptyAudioTitle}>No Audio Files</Text>
+              <Text style={styles.emptyAudioSubtitle}>
+                Import audio files from your device to add music, soundtrack, or voiceover.
+              </Text>
+            </View>
+          )}
         </ScrollView>
       )}
 
@@ -1042,5 +988,36 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.textSecondary,
     fontSize: 9,
     marginTop: 1,
+  },
+  emptyAudioState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 32,
+    marginTop: 10,
+  },
+  emptyAudioIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#131826',
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyAudioTitle: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptyAudioSubtitle: {
+    color: '#64748B',
+    fontSize: 10.5,
+    lineHeight: 15,
+    textAlign: 'center',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { addNotification } from '../../utils/storage';
-import { persistLargeMedia } from '../../utils/largeMediaStorage';
+import {
+  persistLargeMedia,
+  pickWebMedia,
+  persistNativeMediaCopy,
+} from '../../utils/largeMediaStorage';
 import { FastArtProject } from '../../types/project';
 
 interface MediaPickerModalProps {
@@ -24,68 +28,78 @@ interface MediaPickerModalProps {
   onAddMedia: (clip: any) => void;
   project?: FastArtProject;
   onDeleteMedia?: (clipId: string, clipType?: string) => void;
+  isInline?: boolean;
 }
 
-export default function MediaPickerModal({ visible, onClose, onAddMedia, project, onDeleteMedia }: MediaPickerModalProps) {
+export default function MediaPickerModal({ visible, onClose, onAddMedia, project, onDeleteMedia, isInline = false }: MediaPickerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const projectClips = project?.tracks?.video || [];
+  const importedAssets = useMemo(() => {
+    if (Array.isArray(project?.assets)) {
+      return project.assets.filter((a) => a.type === 'video' || a.type === 'photo');
+    }
+    const map = new Map<string, any>();
+    (project?.tracks?.video || []).forEach((c) => {
+      const key = c.sourceMediaId || c.url || c.id;
+      if (!map.has(key)) {
+        map.set(key, c);
+      }
+    });
+    return Array.from(map.values());
+  }, [project?.assets, project?.tracks?.video]);
 
   // Handle local device file upload (video / photo)
+  // Web: Links directly to file location (zero bytes duplicate)
+  // App: Copies to permanent app storage
   const handleDeviceUpload = async () => {
     try {
       if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'video/*,image/*';
-        input.onchange = async (e: any) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            setIsLoading(true);
-            try {
-              const isVideo = file.type.startsWith('video');
-              const mediaId = 'clip-' + Date.now();
-              const title = file.name.replace(/\.[^/.]+$/, '');
+        const picked = await pickWebMedia('all');
+        if (!picked) return;
 
-              const saved = await persistLargeMedia(file, mediaId, title, isVideo ? 'video' : 'photo');
+        setIsLoading(true);
+        try {
+          const { file, handle, isLinked } = picked;
+          const isVideo = file.type.startsWith('video');
+          const mediaId = 'clip-' + Date.now();
+          const title = file.name.replace(/\.[^/.]+$/, '');
 
-              const clip = {
-                id: mediaId,
-                sourceMediaId: mediaId,
-                title,
-                type: isVideo ? 'video' : 'photo',
-                url: saved.url,
-                thumbnail: saved.thumbnail,
-                duration: saved.duration,
-                startTime: 0,
-                trimIn: 0,
-                trimOut: saved.duration,
-                mediaDuration: isVideo ? saved.duration : undefined,
-                speed: 1.0,
-                volume: 1.0,
-                filter: 'normal',
-                effect: 'none',
-                transform: { scale: 1, rotation: 0, x: 0, y: 0 },
-              };
+          const saved = await persistLargeMedia(file, mediaId, title, isVideo ? 'video' : 'photo', {
+            handle,
+            isLinked,
+          });
 
-              addNotification({
-                title: 'Media Added',
-                message: `Added "${clip.title}" to project timeline.`,
-                icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
-              });
+          const clip = {
+            id: mediaId,
+            sourceMediaId: mediaId,
+            title,
+            type: isVideo ? 'video' : 'photo',
+            url: saved.url,
+            thumbnail: saved.thumbnail,
+            duration: saved.duration,
+            startTime: 0,
+            trimIn: 0,
+            trimOut: saved.duration,
+            mediaDuration: isVideo ? saved.duration : undefined,
+            speed: 1.0,
+            volume: 1.0,
+            filter: 'normal',
+            effect: 'none',
+            transform: { scale: 1, rotation: 0, x: 0, y: 0 },
+            isLinked,
+          };
 
-              soundEngine.playSfx('pop');
-              onAddMedia(clip);
-              onClose();
-            } finally {
-              setIsLoading(false);
-            }
-          }
-        };
-        setTimeout(() => {
-          try {
-            input.click();
-          } catch (_) {}
-        }, 40);
+          addNotification({
+            title: 'Media Added',
+            message: `Added "${clip.title}" to project timeline.`,
+            icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
+          });
+
+          soundEngine.playSfx('pop');
+          onAddMedia(clip);
+          onClose();
+        } finally {
+          setIsLoading(false);
+        }
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -106,13 +120,21 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
           if (!result.canceled && result.assets?.[0]) {
             const asset = result.assets[0];
             const isVideo = asset.type === 'video';
+            const mediaId = 'clip-' + Date.now();
             const dur = asset.duration ? asset.duration / 1000 : isVideo ? 6.0 : 4.0;
 
-            let thumbnailUri: string | undefined = !isVideo ? asset.uri : undefined;
+            // On Mobile: Copy to app's persistent Documents/media directory
+            const persistentUri = await persistNativeMediaCopy(
+              asset.uri,
+              mediaId,
+              asset.fileName
+            );
+
+            let thumbnailUri: string | undefined = !isVideo ? persistentUri : undefined;
             if (isVideo) {
               try {
                 const { getThumbnailAsync } = await import('expo-video-thumbnails');
-                const thumb = await getThumbnailAsync(asset.uri, { time: 500 });
+                const thumb = await getThumbnailAsync(persistentUri, { time: 500 });
                 if (thumb && thumb.uri) {
                   thumbnailUri = thumb.uri;
                 }
@@ -122,11 +144,11 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
             }
 
             const clip = {
-              id: 'clip-' + Date.now(),
-              sourceMediaId: 'clip-' + Date.now(),
+              id: mediaId,
+              sourceMediaId: mediaId,
               title: asset.fileName || (isVideo ? 'Imported Video' : 'Imported Photo'),
               type: isVideo ? 'video' : 'photo',
-              url: asset.uri,
+              url: persistentUri,
               thumbnail: thumbnailUri,
               duration: dur,
               startTime: 0,
@@ -164,167 +186,196 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
     }
   };
 
+  if (!visible) return null;
+
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
+
+      {/* Standardized Header */}
+      {!isInline && (
+        <View style={styles.sheetHeader}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            activeOpacity={0.7}
+            accessibilityLabel="Cancel"
+          >
+            <Ionicons name="close" size={15} color="#94A3B8" />
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="images-outline" size={15} color="#00F2FE" />
+            <Text style={styles.sheetTitle}>Import Media</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={onClose}
+            style={[styles.closeBtn, { backgroundColor: '#00F2FE', borderColor: '#00F2FE' }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Done"
+          >
+            <Ionicons name="checkmark" size={15} color="#08090E" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
+        {/* Direct Device Upload Box */}
+        <View style={styles.uploadPromptContainer}>
+          <View style={styles.uploadIconOuterCircle}>
+            <View style={styles.uploadIconInnerCircle}>
+              <Ionicons name="cloud-upload" size={32} color="#00F2FE" />
+            </View>
+          </View>
+
+          <Text style={styles.uploadMainTitle}>Upload From Device</Text>
+          <Text style={styles.uploadSubtitle}>
+            Select video or photo from your device library to add directly to your project timeline.
+          </Text>
+
+          {/* Supported Format Pills */}
+          <View style={styles.formatPillsRow}>
+            <View style={styles.formatPill}>
+              <Ionicons name="videocam-outline" size={11} color="#00F2FE" />
+              <Text style={styles.formatPillText}>MP4 / MOV / WebM</Text>
+            </View>
+            <View style={styles.formatPill}>
+              <Ionicons name="image-outline" size={11} color="#00F2FE" />
+              <Text style={styles.formatPillText}>JPG / PNG / WebP</Text>
+            </View>
+          </View>
+
+          {/* Primary Direct Upload Button */}
+          <TouchableOpacity
+            style={styles.primaryUploadButton}
+            onPress={handleDeviceUpload}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#08090E" />
+            ) : (
+              <Ionicons name="add-circle" size={16} color="#08090E" />
+            )}
+            <Text style={styles.primaryUploadButtonText}>
+              {isLoading ? 'Importing Media...' : 'Choose File From Device'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Section: Already Imported Project Media */}
+        {importedAssets.length > 0 && (
+          <View style={styles.importedSection}>
+            <View style={styles.importedHeaderRow}>
+              <Text style={styles.importedSectionTitle}>IMPORTED IN PROJECT</Text>
+              <Text style={styles.importedCountText}>{importedAssets.length} items</Text>
+            </View>
+
+            <View style={styles.importedGrid}>
+              {importedAssets.map((clip, idx) => (
+                <View key={clip.id || idx} style={styles.importedCard}>
+                  <View style={styles.importedThumbBox}>
+                    {clip.thumbnail ? (
+                      <Image source={{ uri: clip.thumbnail }} style={styles.importedThumbImg} />
+                    ) : (
+                      <View style={styles.importedThumbFallback}>
+                        <Ionicons
+                          name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
+                          size={20}
+                          color="#00F2FE"
+                        />
+                      </View>
+                    )}
+                    <View style={styles.importedDurBadge}>
+                      <Text style={styles.importedDurText}>
+                        {clip.duration ? `${clip.duration.toFixed(1)}s` : '0.0s'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.importedCardInfo}>
+                    <Text style={styles.importedTitle} numberOfLines={1}>
+                      {clip.title || `Clip ${idx + 1}`}
+                    </Text>
+                    <View style={styles.importedMetaRow}>
+                      <Text style={styles.importedTypeTag}>
+                        {clip.type === 'photo' ? 'PHOTO' : 'VIDEO'}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                        {onDeleteMedia && (
+                          <TouchableOpacity
+                            style={styles.importedDeleteBtn}
+                            onPress={() => {
+                              soundEngine.playSfx('cut');
+                              onDeleteMedia(clip.id, clip.type || 'video');
+                            }}
+                            activeOpacity={0.7}
+                            accessibilityLabel="Delete clip from project assets"
+                          >
+                            <Ionicons name="trash-outline" size={12} color="#EF4444" />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={styles.importedAddBtn}
+                          onPress={() => {
+                            soundEngine.playSfx('pop');
+                            onAddMedia({
+                              ...clip,
+                              id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              sourceMediaId: clip.sourceMediaId || clip.id,
+                              startTime: 0,
+                            });
+                            onClose();
+                          }}
+                          activeOpacity={0.7}
+                          accessibilityLabel="Add to timeline"
+                        >
+                          <Ionicons name="add" size={13} color="#000000" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+
+  if (isInline) {
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
   return (
     <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
-
-          {/* Standardized Header */}
-          <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Cancel"
-            >
-              <Ionicons name="close" size={15} color="#94A3B8" />
-            </TouchableOpacity>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="images-outline" size={15} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Import Media</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE', borderColor: '#00F2FE' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Done"
-            >
-              <Ionicons name="checkmark" size={15} color="#08090E" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-            {/* Direct Device Upload Box */}
-            <View style={styles.uploadPromptContainer}>
-              <View style={styles.uploadIconOuterCircle}>
-                <View style={styles.uploadIconInnerCircle}>
-                  <Ionicons name="cloud-upload" size={32} color="#00F2FE" />
-                </View>
-              </View>
-
-              <Text style={styles.uploadMainTitle}>Upload From Device</Text>
-              <Text style={styles.uploadSubtitle}>
-                Select video or photo from your device library to add directly to your project timeline.
-              </Text>
-
-              {/* Supported Format Pills */}
-              <View style={styles.formatPillsRow}>
-                <View style={styles.formatPill}>
-                  <Ionicons name="videocam-outline" size={11} color="#00F2FE" />
-                  <Text style={styles.formatPillText}>MP4 / MOV / WebM</Text>
-                </View>
-                <View style={styles.formatPill}>
-                  <Ionicons name="image-outline" size={11} color="#00F2FE" />
-                  <Text style={styles.formatPillText}>JPG / PNG / WebP</Text>
-                </View>
-              </View>
-
-              {/* Primary Direct Upload Button */}
-              <TouchableOpacity
-                style={styles.primaryUploadButton}
-                onPress={handleDeviceUpload}
-                disabled={isLoading}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#08090E" />
-                ) : (
-                  <Ionicons name="add-circle" size={16} color="#08090E" />
-                )}
-                <Text style={styles.primaryUploadButtonText}>
-                  {isLoading ? 'Importing Media...' : 'Choose File From Device'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Section: Already Imported Project Media */}
-            {projectClips.length > 0 && (
-              <View style={styles.importedSection}>
-                <View style={styles.importedHeaderRow}>
-                  <Text style={styles.importedSectionTitle}>IMPORTED IN PROJECT</Text>
-                  <Text style={styles.importedCountText}>{projectClips.length} items</Text>
-                </View>
-
-                <View style={styles.importedGrid}>
-                  {projectClips.map((clip, idx) => (
-                    <View key={clip.id || idx} style={styles.importedCard}>
-                      <View style={styles.importedThumbBox}>
-                        {clip.thumbnail ? (
-                          <Image source={{ uri: clip.thumbnail }} style={styles.importedThumbImg} />
-                        ) : (
-                          <View style={styles.importedThumbFallback}>
-                            <Ionicons
-                              name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
-                              size={20}
-                              color="#00F2FE"
-                            />
-                          </View>
-                        )}
-                        <View style={styles.importedDurBadge}>
-                          <Text style={styles.importedDurText}>
-                            {clip.duration ? `${clip.duration.toFixed(1)}s` : '0.0s'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.importedCardInfo}>
-                        <Text style={styles.importedTitle} numberOfLines={1}>
-                          {clip.title || `Clip ${idx + 1}`}
-                        </Text>
-                        <View style={styles.importedMetaRow}>
-                          <Text style={styles.importedTypeTag}>
-                            {clip.type === 'photo' ? 'PHOTO' : 'VIDEO'}
-                          </Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                            {onDeleteMedia && (
-                              <TouchableOpacity
-                                style={styles.importedDeleteBtn}
-                                onPress={() => {
-                                  soundEngine.playSfx('cut');
-                                  onDeleteMedia(clip.id, clip.type || 'video');
-                                }}
-                                activeOpacity={0.7}
-                                accessibilityLabel="Delete clip"
-                              >
-                                <Ionicons name="trash-outline" size={12} color="#EF4444" />
-                              </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                              style={styles.importedAddBtn}
-                              onPress={() => {
-                                soundEngine.playSfx('pop');
-                                onAddMedia({
-                                  ...clip,
-                                  id: `clip-copy-${Date.now()}`,
-                                  startTime: 0,
-                                });
-                                onClose();
-                              }}
-                              activeOpacity={0.7}
-                              accessibilityLabel="Add to timeline"
-                            >
-                              <Ionicons name="add" size={13} color="#000000" />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </ScrollView>
-        </View>
+        {sheetContent}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#0F131D',
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 0,
+    borderRadius: 0,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',

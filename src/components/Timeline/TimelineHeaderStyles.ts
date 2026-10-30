@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { TRACK_ROW_HEIGHT } from "./timelineTypes";
 
 export const headerStyles = {
@@ -167,6 +168,17 @@ export const headerStyles = {
     flexDirection: "row" as const,
     width: "100%",
   },
+  stickyRulerBar: {
+    height: 26,
+    flexDirection: "row" as const,
+    width: "100%",
+    backgroundColor: "#0B0D13",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1A1E29",
+    zIndex: 50,
+    flexShrink: 0,
+    flexGrow: 0,
+  },
   leftHeadersColumn: {
     width: 48,
     backgroundColor: "#08090E",
@@ -179,14 +191,31 @@ export const headerStyles = {
     width: 38,
   },
   rulerCornerHeader: {
-    height: 24,
+    height: 26,
+    width: 48,
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
+    borderRightWidth: 1,
+    borderRightColor: "#1F2637",
     backgroundColor: "#08090E",
+    flexShrink: 0,
+  },
+  rulerCornerHeaderMobile: {
+    width: 38,
+  },
+  rulerHorizontalScroll: {
+    flex: 1,
+    height: 26,
+    backgroundColor: "#0B0D13",
+    ...(Platform.OS === "web"
+      ? ({
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+          overflowY: "hidden",
+        } as any)
+      : {}),
   },
   rulerCornerText: {
     color: "#64748B",
@@ -318,6 +347,31 @@ export const headerStyles = {
     userSelect: "none",
     touchAction: "none",
   } as any,
+  playheadHeadInRuler: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    width: 36,
+    height: 26,
+    marginLeft: -18,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    zIndex: 65,
+    cursor: "col-resize",
+    userSelect: "none",
+    touchAction: "none",
+  } as any,
+  playheadNeedleLine: {
+    position: "absolute" as const,
+    top: 0,
+    bottom: 0,
+    zIndex: 60,
+    elevation: 20,
+    alignItems: "center" as const,
+    width: 36,
+    marginLeft: -18,
+    pointerEvents: "box-none" as any,
+  },
   playheadHeadBox: {
     width: 36,
     height: 26,

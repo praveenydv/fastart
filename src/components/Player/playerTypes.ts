@@ -47,6 +47,12 @@ export interface PlayerProps {
   processingMessage?: string;
   activeModal?: string | null;
   onUpdateClipMotionTrack?: (track: MotionTrackConfig) => void;
+  onRelinkClip?: (
+    clipId: string,
+    clipType: string,
+    newUrl: string,
+    sourceMediaId?: string,
+  ) => void;
 }
 
 export interface CropPreset {

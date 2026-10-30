@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, PanResponder } from
 import { Ionicons } from "@expo/vector-icons";
 import { MaskConfig, MaskShape } from "../../types/project";
 import { soundEngine } from "../../utils/audioEngine";
+import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import { getPointerCoords } from "../Timeline";
 import { THEME_COLORS } from "../../constants/designConstants";
 
@@ -34,17 +35,22 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const containerRef = useRef<any>(null);
   const mask: MaskConfig = useMemo(() => {
     return (
+      getInterpolatedMask(targetClip, currentTime) ||
       targetClip?.mask ||
       targetClip?.transform?.mask || {
-        shape: "heart",
+        shape: "none",
         size: 60,
+        width: 60,
+        height: 60,
         feather: 0,
+        roundness: 16,
+        inverted: false,
         x: 0,
         y: 0,
         rotation: 0,
       }
     );
-  }, [targetClip]);
+  }, [targetClip, currentTime]);
 
   const [activeDrag, setActiveDrag] = useState<"move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather" | null>(null);
   const [localMask, setLocalMask] = useState<MaskConfig>(mask);
@@ -570,32 +576,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   };
 
   if (localMask.shape === "none") {
-    return (
-      <View
-        style={[
-          styles.maskContainer,
-          {
-            left: clipCx - (dw * clipScale) / 2,
-            top: clipCy - (dh * clipScale) / 2,
-            width: dw * clipScale,
-            height: dh * clipScale,
-            borderWidth: 1.5,
-            borderColor: THEME_COLORS.accent,
-            borderStyle: "dashed",
-            borderRadius: 8,
-            backgroundColor: "rgba(0, 229, 201, 0.05)",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "none",
-          },
-        ]}
-      >
-        <View style={[styles.hudPill, { pointerEvents: "none" }]}>
-          <Ionicons name="shapes-outline" size={14} color={THEME_COLORS.accent} />
-          <Text style={styles.hudTitle}>Select a mask shape below</Text>
-        </View>
-      </View>
-    );
+    return null;
   }
 
   return (

@@ -180,17 +180,24 @@ export function usePlayerCropGestures({
     if (isCroppingMode) {
       if (targetCropClip) {
         setCropTargetClipId(targetCropClip.id);
-        const existingCrop = targetCropClip.crop;
-        if (existingCrop && existingCrop.width > 0 && existingCrop.height > 0) {
-          setCropBox(existingCrop);
-        } else {
-          // Full size by default (100% width, 100% height)
-          setCropBox({
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-          });
+        const existingCrop =
+          targetCropClip.crop || targetCropClip.transform?.crop;
+        if (!cropDragState) {
+          if (
+            existingCrop &&
+            existingCrop.width > 0 &&
+            existingCrop.height > 0
+          ) {
+            setCropBox(existingCrop);
+          } else {
+            // Full size by default (100% width, 100% height)
+            setCropBox({
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 100,
+            });
+          }
         }
         if (rendererRef.current) {
           rendererRef.current.setPreviewCropMode(targetCropClip.id);
@@ -222,6 +229,10 @@ export function usePlayerCropGestures({
     targetCropClip?.crop?.y,
     targetCropClip?.crop?.width,
     targetCropClip?.crop?.height,
+    targetCropClip?.transform?.crop?.x,
+    targetCropClip?.transform?.crop?.y,
+    targetCropClip?.transform?.crop?.width,
+    targetCropClip?.transform?.crop?.height,
   ]);
 
   const handleCropDragStart = (
@@ -422,6 +433,19 @@ export function usePlayerCropGestures({
         pendingRaf = requestAnimationFrame(() => {
           pendingRaf = null;
           setCropBox(latestBox);
+          const targetId = cropTargetClipId || selectedClipId || activeVideos[0]?.id;
+          if (targetId && onUpdateClipCropRef.current) {
+            onUpdateClipCropRef.current(
+              targetId,
+              {
+                x: Math.round(latestBox.x),
+                y: Math.round(latestBox.y),
+                width: Math.round(latestBox.width),
+                height: Math.round(latestBox.height),
+              },
+              false,
+            );
+          }
         });
       }
     };

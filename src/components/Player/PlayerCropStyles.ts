@@ -6,17 +6,18 @@ export const cropStyles = {
   },
   cropBoxFrame: {
     position: "absolute" as any,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: "#FFFFFF",
     zIndex: 25,
-    boxShadow: "0 0 8px rgba(0, 0, 0, 0.5)" as any,
+    boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.7), 0 0 12px rgba(0, 242, 254, 0.45)" as any,
     touchAction: "none",
     willChange: "left, top, width, height" as any,
     transition: "none",
   } as any,
   cropGridLine: {
     position: "absolute" as any,
-    backgroundColor: "rgba(255, 255, 255, 0.35)",
+    backgroundColor: "rgba(255, 255, 255, 0.45)",
+    boxShadow: "0 0 1px rgba(0, 0, 0, 0.8)" as any,
   },
   cropGridLineH: {
     left: 0,
@@ -61,29 +62,29 @@ export const cropStyles = {
   } as any,
   cropCornerHitArea: {
     position: "absolute" as any,
-    width: 44,
-    height: 44,
+    width: 32,
+    height: 32,
     zIndex: 35,
     touchAction: "none",
   } as any,
   cropCornerTL: {
-    top: -14,
-    left: -14,
+    top: -3,
+    left: -3,
     cursor: "nwse-resize" as any,
   },
   cropCornerTR: {
-    top: -14,
-    right: -14,
+    top: -3,
+    right: -3,
     cursor: "nesw-resize" as any,
   },
   cropCornerBL: {
-    bottom: -14,
-    left: -14,
+    bottom: -3,
+    left: -3,
     cursor: "nesw-resize" as any,
   },
   cropCornerBR: {
-    bottom: -14,
-    right: -14,
+    bottom: -3,
+    right: -3,
     cursor: "nwse-resize" as any,
   },
   cropCornerArmH: {
@@ -92,6 +93,7 @@ export const cropStyles = {
     height: 4,
     backgroundColor: "#FFFFFF",
     borderRadius: 2,
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.8)" as any,
   },
   cropCornerArmV: {
     position: "absolute" as any,
@@ -99,6 +101,7 @@ export const cropStyles = {
     height: 18,
     backgroundColor: "#FFFFFF",
     borderRadius: 2,
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.8)" as any,
   },
   cropEdgeHitAreaH: {
     position: "absolute" as any,
@@ -124,6 +127,9 @@ export const cropStyles = {
     height: 5,
     borderRadius: 2.5,
     backgroundColor: "#FFFFFF",
+    borderWidth: 0.5,
+    borderColor: "#000000",
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.8)" as any,
   },
   cropEdgeHitAreaV: {
     position: "absolute" as any,
@@ -149,6 +155,9 @@ export const cropStyles = {
     height: 28,
     borderRadius: 2.5,
     backgroundColor: "#FFFFFF",
+    borderWidth: 0.5,
+    borderColor: "#000000",
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.8)" as any,
   },
   previewCropBarCard: {
     width: "100%",

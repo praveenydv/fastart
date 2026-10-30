@@ -64,6 +64,7 @@ export function useProjectClipMutations({
     selectedClip,
     selectedClipId,
     selectedClipType,
+    currentTimeRef,
     updateProjectWithHistory,
     startProcessing,
   });
@@ -486,7 +487,6 @@ export function useProjectClipMutations({
     triggerHaptic("warning", settings?.hapticFeedback !== false);
     updateProjectWithHistory(updated);
     setClipToDelete(null);
-    deleteMedia(clipId).catch(() => {});
   }, [project, clipToDelete, settings, setSelectedClipId, setSelectedClipType, updateProjectWithHistory, setClipToDelete]);
 
   // Duplicate selected clip with non-overlapping multi-track placement

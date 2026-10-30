@@ -17,6 +17,13 @@ export interface MaskConfig {
   x?: number; // offset x %
   y?: number; // offset y %
   rotation?: number; // mask angle
+  keyframes?: MaskKeyframePoint[];
+}
+
+export interface MaskKeyframePoint {
+  time: number;
+  mask: MaskConfig;
+  easing?: KeyframeEasing;
 }
 
 export interface CutoutConfig {
@@ -169,6 +176,7 @@ export interface KeyframePoint {
   transform: ClipTransform;
   opacity: number;
   easing?: KeyframeEasing;
+  mask?: MaskConfig;
 }
 
 export interface VideoClip {
@@ -214,11 +222,15 @@ export interface VideoClip {
   hslAdjustments?: HSLAdjustments;
   voiceEffect?: VoiceEffectId;
   keyframes?: KeyframePoint[];
+  maskKeyframes?: MaskKeyframePoint[];
   motionTrack?: MotionTrackConfig;
   animation?: ClipAnimationConfig | string;
   trackIndex?: number;
   layer?: number;
   isEnding?: boolean;
+  isMissing?: boolean;
+  needsPermission?: boolean;
+  isLinked?: boolean;
   peaks?: number[];
 }
 
@@ -257,6 +269,9 @@ export interface AudioClip {
   trackIndex?: number;
   peaks?: number[];
   voiceEffect?: VoiceEffectId;
+  isMissing?: boolean;
+  needsPermission?: boolean;
+  isLinked?: boolean;
 }
 
 export interface TextStyle {
@@ -362,6 +377,19 @@ export interface ProjectTracks {
   filters?: any[];
 }
 
+export interface ProjectAsset {
+  id: string;
+  sourceMediaId?: string;
+  title: string;
+  type: 'video' | 'photo' | 'audio';
+  url: string;
+  thumbnail?: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+  importedAt?: number;
+}
+
 export interface FastArtProject {
   id: string;
   title: string;
@@ -380,6 +408,7 @@ export interface FastArtProject {
   captionSettings?: any;
   filter?: string;
   customLut?: CustomLutConfig;
+  assets?: ProjectAsset[];
   tracks: ProjectTracks;
 }
 
@@ -395,6 +424,7 @@ export const createDefaultProject = (title = 'New Project'): FastArtProject => (
   isPlaying: false,
   zoom: 60,
   canvasBackground: '#000000',
+  assets: [],
   tracks: {
     video: [],
     audio: [],

@@ -128,6 +128,20 @@ export async function preloadClip(
       if (ctx.onFrameNeeded) ctx.onFrameNeeded();
     };
 
+    // Hardware-synchronized video frame delivery (zero duplicate draws, locked vsync)
+    const onRvfc = () => {
+      if (ctx.onFrameNeeded) ctx.onFrameNeeded();
+      if (!vid.paused && typeof (vid as any).requestVideoFrameCallback === "function") {
+        (vid as any).requestVideoFrameCallback(onRvfc);
+      }
+    };
+
+    vid.addEventListener("play", () => {
+      if (typeof (vid as any).requestVideoFrameCallback === "function") {
+        (vid as any).requestVideoFrameCallback(onRvfc);
+      }
+    });
+
     vid.addEventListener("loadeddata", trigger);
     vid.addEventListener("canplay", trigger);
     vid.addEventListener("seeked", trigger);
@@ -254,18 +268,26 @@ export function syncPlayback(
     }
 
     if (isPlaying) {
+      if (vid.seeking) {
+        // Active seek is currently in flight: do not interrupt decoder buffer
+        return;
+      }
+
       if (vid.paused) {
-        if (Math.abs(vid.currentTime - mediaTime) > 0.15) {
+        // Startup grace: only seek if drift is noticeably large (> 0.35s)
+        if (Math.abs(vid.currentTime - mediaTime) > 0.35) {
           vid.currentTime = Math.max(0, mediaTime);
         }
         vid.play().catch(() => {});
       } else {
         const drift = vid.currentTime - mediaTime;
-        if (Math.abs(drift) > 0.6) {
+        // Hard-seek only on massive drift (> 0.8s) to avoid decoder pipeline flushes
+        if (Math.abs(drift) > 0.8) {
           vid.currentTime = Math.max(0, mediaTime);
-        } else if (Math.abs(drift) > 0.06) {
-          const compRate = drift > 0 ? speed * 0.95 : speed * 1.05;
-          if (Math.abs(vid.playbackRate - compRate) > 0.02) {
+        } else if (Math.abs(drift) > 0.04) {
+          // Smooth micro-adjustment via playback rate
+          const compRate = drift > 0 ? speed * 0.96 : speed * 1.04;
+          if (Math.abs(vid.playbackRate - compRate) > 0.01) {
             vid.playbackRate = Math.max(0.1, Math.min(16, compRate));
           }
         } else {
@@ -278,7 +300,7 @@ export function syncPlayback(
       if (!vid.paused) {
         vid.pause();
       }
-      if (Math.abs(vid.currentTime - mediaTime) > 0.04) {
+      if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.04) {
         vid.currentTime = Math.max(0, mediaTime);
       }
     }

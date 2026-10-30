@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
+import { PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 
 export interface AnimationPresetItem {
   id: string;
@@ -65,6 +67,50 @@ export const ANIMATION_LOOP_PRESETS: AnimationPresetItem[] = [
 
 export const ANIMATION_COMBO_PRESETS = ANIMATION_LOOP_PRESETS;
 
+const getAnimPreviewStyle = (id: string, category: string): any => {
+  if (Platform.OS !== 'web') return null;
+  switch (id) {
+    case 'fade_in': return { animation: 'fastartFadeIn 1.5s ease-in-out infinite' };
+    case 'zoom_in': return { animation: 'fastartZoomIn 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite' };
+    case 'zoom_in_2': return { animation: 'fastartPopZoom 1.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite' };
+    case 'slide_right': return category === 'out'
+      ? { animation: 'fastartSlideRightOut 1.5s ease-in-out infinite' }
+      : { animation: 'fastartSlideRight 1.5s ease-in-out infinite' };
+    case 'slide_left': return category === 'out'
+      ? { animation: 'fastartSlideLeftOut 1.5s ease-in-out infinite' }
+      : { animation: 'fastartSlideLeft 1.5s ease-in-out infinite' };
+    case 'slide_up': return category === 'out'
+      ? { animation: 'fastartSlideUpOut 1.5s ease-in-out infinite' }
+      : { animation: 'fastartSlideUp 1.5s ease-in-out infinite' };
+    case 'slide_down': return category === 'out'
+      ? { animation: 'fastartSlideDownOut 1.5s ease-in-out infinite' }
+      : { animation: 'fastartSlideDown 1.5s ease-in-out infinite' };
+    case 'spin_in': return { animation: 'fastartSpinIn 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite' };
+    case 'bounce_in': return { animation: 'fastartBounceIn 1.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite' };
+    case 'wipe_right': return { animation: 'fastartWipeRight 1.5s ease-in-out infinite' };
+    case 'shake_in':
+    case 'shake_out': return { animation: 'fastartShakeIn 1.5s ease-in-out infinite' };
+    case 'blur_in': return { animation: 'fastartBlurIn 1.5s ease-in-out infinite' };
+    case 'fade_out': return { animation: 'fastartFadeOut 1.5s ease-in-out infinite' };
+    case 'zoom_out': return { animation: 'fastartZoomOut 1.5s ease-in-out infinite' };
+    case 'spin_out': return { animation: 'fastartSpinOut 1.6s ease-in-out infinite' };
+    case 'shrink_out': return { animation: 'fastartShrinkOut 1.5s ease-in-out infinite' };
+    case 'wipe_left': return { animation: 'fastartWipeRight 1.5s ease-in-out infinite' };
+    case 'dissolve': return { animation: 'fastartDissolve 1.5s ease-in-out infinite' };
+    case 'pulse': return { animation: 'fastartPulse 1.2s ease-in-out infinite' };
+    case 'bounce': return { animation: 'fastartBounceLoop 1.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite' };
+    case 'float': return { animation: 'fastartFloat 2s ease-in-out infinite' };
+    case 'wave': return { animation: 'fastartWave 1.4s ease-in-out infinite' };
+    case 'wobble': return { animation: 'fastartWobble 1.2s ease-in-out infinite' };
+    case 'pendulum': return { animation: 'fastartPendulum 1.4s ease-in-out infinite' };
+    case 'swing': return { animation: 'fastartSwing 1.4s ease-in-out infinite' };
+    case 'heartbeat': return { animation: 'fastartHeartbeat 1.2s ease-in-out infinite' };
+    case 'zoom_pulse': return { animation: 'fastartZoomPulse 1.4s ease-in-out infinite' };
+    case 'jitter': return { animation: 'fastartJitter 0.5s linear infinite' };
+    default: return null;
+  }
+};
+
 interface AnimationModalProps {
   visible: boolean;
   onClose: () => void;
@@ -85,6 +131,51 @@ export default function AnimationModal({
   isInline = false,
 }: AnimationModalProps) {
   const [activeCategory, setActiveCategory] = useState<'in' | 'out' | 'loop'>('in');
+
+  // Standardized prefix reference model image for consistent, clear motion previews
+  const previewThumb = PRESET_PREVIEW_IMAGE;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const styleId = 'fastart-animation-preview-styles';
+    if (document.getElementById(styleId)) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      @keyframes fastartFadeIn { 0% { opacity: 0.15; } 50%, 85% { opacity: 1; } 100% { opacity: 0.15; } }
+      @keyframes fastartFadeOut { 0% { opacity: 1; } 50%, 85% { opacity: 0.15; } 100% { opacity: 1; } }
+      @keyframes fastartZoomIn { 0% { transform: scale(0.3); opacity: 0.3; } 50%, 85% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.3); opacity: 0.3; } }
+      @keyframes fastartPopZoom { 0% { transform: scale(0.2); opacity: 0; } 45% { transform: scale(1.18); opacity: 1; } 60%, 85% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2); opacity: 0; } }
+      @keyframes fastartZoomOut { 0% { transform: scale(1); opacity: 1; } 50%, 85% { transform: scale(0.3); opacity: 0.2; } 100% { transform: scale(1); opacity: 1; } }
+      @keyframes fastartShrinkOut { 0% { transform: scale(1); opacity: 1; } 50%, 85% { transform: scale(0.12); opacity: 0.1; } 100% { transform: scale(1); opacity: 1; } }
+      @keyframes fastartSlideRight { 0% { transform: translateX(-24px); opacity: 0.2; } 50%, 85% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-24px); opacity: 0.2; } }
+      @keyframes fastartSlideLeft { 0% { transform: translateX(24px); opacity: 0.2; } 50%, 85% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(24px); opacity: 0.2; } }
+      @keyframes fastartSlideUp { 0% { transform: translateY(18px); opacity: 0.2; } 50%, 85% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(18px); opacity: 0.2; } }
+      @keyframes fastartSlideDown { 0% { transform: translateY(-18px); opacity: 0.2; } 50%, 85% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-18px); opacity: 0.2; } }
+      @keyframes fastartSlideRightOut { 0% { transform: translateX(0); opacity: 1; } 50%, 85% { transform: translateX(24px); opacity: 0.1; } 100% { transform: translateX(0); opacity: 1; } }
+      @keyframes fastartSlideLeftOut { 0% { transform: translateX(0); opacity: 1; } 50%, 85% { transform: translateX(-24px); opacity: 0.1; } 100% { transform: translateX(0); opacity: 1; } }
+      @keyframes fastartSlideDownOut { 0% { transform: translateY(0); opacity: 1; } 50%, 85% { transform: translateY(18px); opacity: 0.1; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes fastartSlideUpOut { 0% { transform: translateY(0); opacity: 1; } 50%, 85% { transform: translateY(-18px); opacity: 0.1; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes fastartSpinIn { 0% { transform: rotate(-180deg) scale(0.3); opacity: 0.2; } 50%, 85% { transform: rotate(0deg) scale(1); opacity: 1; } 100% { transform: rotate(-180deg) scale(0.3); opacity: 0.2; } }
+      @keyframes fastartSpinOut { 0% { transform: rotate(0deg) scale(1); opacity: 1; } 50%, 85% { transform: rotate(180deg) scale(0.2); opacity: 0.1; } 100% { transform: rotate(0deg) scale(1); opacity: 1; } }
+      @keyframes fastartBounceIn { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.15); } 60% { transform: scale(0.92); } 75%, 90% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.3); opacity: 0; } }
+      @keyframes fastartWipeRight { 0% { clip-path: inset(0 100% 0 0); } 50%, 85% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 100% 0 0); } }
+      @keyframes fastartShakeIn { 0% { transform: translateX(-6px); opacity: 0.3; } 20% { transform: translateX(6px); } 40% { transform: translateX(-4px); } 60% { transform: translateX(4px); } 75%, 90% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-6px); opacity: 0.3; } }
+      @keyframes fastartBlurIn { 0% { filter: blur(5px); opacity: 0.2; } 50%, 85% { filter: blur(0); opacity: 1; } 100% { filter: blur(5px); opacity: 0.2; } }
+      @keyframes fastartDissolve { 0% { opacity: 1; filter: contrast(1); } 50%, 85% { opacity: 0.1; filter: contrast(2) blur(2px); } 100% { opacity: 1; filter: contrast(1); } }
+      @keyframes fastartPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+      @keyframes fastartBounceLoop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+      @keyframes fastartFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+      @keyframes fastartWave { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
+      @keyframes fastartWobble { 0%, 100% { transform: translateX(0) rotate(0deg); } 25% { transform: translateX(-3px) rotate(-4deg); } 75% { transform: translateX(3px) rotate(4deg); } }
+      @keyframes fastartPendulum { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(15deg); } }
+      @keyframes fastartSwing { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(-12deg); } 70% { transform: rotate(12deg); } }
+      @keyframes fastartHeartbeat { 0%, 100% { transform: scale(1); } 14% { transform: scale(1.24); } 28% { transform: scale(1); } 42% { transform: scale(1.16); } 70% { transform: scale(1); } }
+      @keyframes fastartZoomPulse { 0%, 100% { transform: scale(0.92); } 50% { transform: scale(1.2); } }
+      @keyframes fastartJitter { 0% { transform: translate(0, 0); } 25% { transform: translate(-2px, 2px); } 50% { transform: translate(2px, -1px); } 75% { transform: translate(-1px, -2px); } 100% { transform: translate(1px, 2px); } }
+    `;
+    document.head.appendChild(styleEl);
+  }, []);
 
   // Helper to resolve target tracks key cleanly across all clip types
   const resolveTargetKey = (tracks: any) => {
@@ -359,6 +450,8 @@ export default function AnimationModal({
       <ScrollView style={styles.presetScroll} contentContainerStyle={styles.presetGrid} showsVerticalScrollIndicator={false}>
         {presets.map((item) => {
           const isSelected = activePresetId === item.id;
+          const isNone = item.id === 'none';
+
           return (
             <TouchableOpacity
               key={item.id}
@@ -366,13 +459,36 @@ export default function AnimationModal({
               onPress={() => handleSelectPreset(item.id)}
               activeOpacity={0.7}
             >
-              <View style={[styles.iconCircle, isSelected && styles.iconCircleActive]}>
-                <Ionicons
-                  name={item.icon}
-                  size={20}
-                  color={isSelected ? '#000000' : '#E4E4E7'}
-                />
+              <View style={styles.animStage}>
+                {isNone ? (
+                  <View style={styles.noneAnimBox}>
+                    <Ionicons name="close-circle-outline" size={22} color="#64748B" />
+                    <Text style={styles.noneAnimText}>None</Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* Animated Preview Subject executing live motion */}
+                    <View style={[styles.animSubjectBox, getAnimPreviewStyle(item.id, activeCategory)]}>
+                      <Image source={{ uri: previewThumb }} style={styles.animSubjectImg} resizeMode="cover" />
+                      <View style={styles.animSubjectOverlay} />
+                      <Ionicons name={item.icon} size={13} color="#FFFFFF" style={styles.animSubjectIcon} />
+                    </View>
+
+                    {/* Motion icon badge */}
+                    <View style={styles.motionBadge}>
+                      <Ionicons name={item.icon} size={9} color="#94A3B8" />
+                    </View>
+
+                    {/* Active checkmark */}
+                    {isSelected && (
+                      <View style={styles.activeCheckBadge}>
+                        <Ionicons name="checkmark" size={11} color="#000000" />
+                      </View>
+                    )}
+                  </>
+                )}
               </View>
+
               <Text
                 style={[styles.presetName, isSelected && styles.presetNameActive]}
                 numberOfLines={1}
@@ -554,17 +670,90 @@ const styles = StyleSheet.create({
   presetCard: {
     width: '31%',
     backgroundColor: '#161922',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    borderRadius: 8,
+    padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   presetCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
+  },
+  animStage: {
+    width: '100%',
+    height: 52,
+    borderRadius: 5,
+    backgroundColor: '#090B10',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: 4,
+  },
+  noneAnimBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  noneAnimText: {
+    color: '#64748B',
+    fontSize: 9.5,
+    fontWeight: '600',
+  },
+  animSubjectBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    overflow: 'hidden',
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E2433',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  animSubjectImg: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+  },
+  animSubjectOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  animSubjectIcon: {
+    zIndex: 2,
+  },
+  motionBadge: {
+    position: 'absolute',
+    bottom: 2,
+    left: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+  },
+  activeCheckBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    elevation: 3,
   },
   iconCircle: {
     width: 38,
@@ -580,7 +769,7 @@ const styles = StyleSheet.create({
   },
   presetName: {
     color: '#A1A1AA',
-    fontSize: 10.5,
+    fontSize: 9.5,
     fontWeight: '500',
     textAlign: 'center',
   },

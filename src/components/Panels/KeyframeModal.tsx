@@ -10,6 +10,7 @@ import { soundEngine } from "../../utils/audioEngine";
 import { ClipTransform, KeyframePoint } from "../../types/project";
 import {
   cleanAndSortKeyframes,
+  cleanAndSortMaskKeyframes,
   findKeyframeAtTime,
   getInterpolatedTransform,
 } from "../../utils/keyframeEngine";
@@ -36,6 +37,8 @@ export interface KeyframeModalProps {
   ) => void;
   onDeleteKeyframeAtTime?: (time: number) => void;
   onClearAllKeyframes?: () => void;
+  onDeleteMaskKeyframeAtTime?: (time: number) => void;
+  onClearAllMaskKeyframes?: () => void;
   isInline?: boolean;
 }
 
@@ -52,6 +55,8 @@ export default function KeyframeModal({
   onUpdateKeyframeTransform,
   onDeleteKeyframeAtTime,
   onClearAllKeyframes,
+  onDeleteMaskKeyframeAtTime,
+  onClearAllMaskKeyframes,
   isInline = false,
 }: KeyframeModalProps) {
   useEffect(() => {
@@ -67,6 +72,8 @@ export default function KeyframeModal({
 
   const rawKeyframes: KeyframePoint[] = selectedClip?.keyframes || [];
   const keyframes = cleanAndSortKeyframes(rawKeyframes);
+  const rawMaskKeyframes = selectedClip?.maskKeyframes || selectedClip?.mask?.keyframes || [];
+  const maskKeyframes = cleanAndSortMaskKeyframes(rawMaskKeyframes);
 
   const currentKeyframe = findKeyframeAtTime(keyframes, localTime, 0.12);
 
@@ -76,11 +83,17 @@ export default function KeyframeModal({
     selectedClipType,
   );
 
-  const activeTransform: ClipTransform = currentKeyframe?.transform || {
-    scale: interpolatedT?.scale ?? 1.0,
-    rotation: interpolatedT?.rotation ?? 0,
-    x: interpolatedT?.x ?? 0,
-    y: interpolatedT?.y ?? 0,
+  const activeTransform: ClipTransform = {
+    scale: currentKeyframe?.transform?.scale ?? interpolatedT?.scale ?? 1.0,
+    rotation: currentKeyframe?.transform?.rotation ?? interpolatedT?.rotation ?? 0,
+    x: currentKeyframe?.transform?.x ?? interpolatedT?.x ?? 0,
+    y: currentKeyframe?.transform?.y ?? interpolatedT?.y ?? 0,
+    mask:
+      currentKeyframe?.mask ||
+      currentKeyframe?.transform?.mask ||
+      interpolatedT?.mask ||
+      selectedClip?.mask ||
+      selectedClip?.transform?.mask,
   };
   const activeScale = activeTransform?.scale ?? 1.0;
   const activeRotation = activeTransform?.rotation ?? 0;
@@ -285,15 +298,18 @@ export default function KeyframeModal({
                   onUpdateKeyframeTransform={onUpdateKeyframeTransform}
                 />
 
-                {/* Stamped Keyframes List */}
+                {/* Stamped Keyframes List (Motion & Mask Tracks) */}
                 <KeyframePointsList
                   keyframes={keyframes}
+                  maskKeyframes={maskKeyframes}
                   localTime={localTime}
                   clipStart={clipStart}
                   formatSec={formatSec}
                   onJumpToKeyframe={handleJumpToKeyframe}
                   onDeleteKeyframeAtTime={onDeleteKeyframeAtTime}
+                  onDeleteMaskKeyframeAtTime={onDeleteMaskKeyframeAtTime}
                   onClearAllKeyframes={onClearAllKeyframes}
+                  onClearAllMaskKeyframes={onClearAllMaskKeyframes}
                 />
               </View>
             )}

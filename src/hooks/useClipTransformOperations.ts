@@ -4,6 +4,7 @@ import { clampClipTrimUpdates } from "../utils/mediaDuration";
 import { requestMediaThumbnail } from "../utils/mediaThumbnailGenerator";
 import {
   applyTransformUpdateToClip,
+  applyMaskUpdateToClip,
   getInterpolatedTransform,
 } from "../utils/keyframeEngine";
 
@@ -14,6 +15,7 @@ interface UseClipTransformOperationsParams {
   selectedClip: any;
   selectedClipId: string | null;
   selectedClipType: string;
+  currentTimeRef?: React.MutableRefObject<number>;
   updateProjectWithHistory: (proj: any) => void;
   startProcessing?: (msg: string, durationMs?: number) => void;
 }
@@ -25,6 +27,7 @@ export function useClipTransformOperations({
   selectedClip,
   selectedClipId,
   selectedClipType,
+  currentTimeRef,
   updateProjectWithHistory,
   startProcessing,
 }: UseClipTransformOperationsParams) {
@@ -55,11 +58,12 @@ export function useClipTransformOperations({
       const idx = list.findIndex((c) => c.id === clipId);
       if (idx < 0) return;
 
+      const activeTime = currentTimeRef?.current ?? current.currentTime ?? 0;
       list[idx] = applyTransformUpdateToClip(
         list[idx],
         clipType,
         transform,
-        current.currentTime || 0,
+        activeTime,
       );
 
       const updated = {
@@ -172,20 +176,26 @@ export function useClipTransformOperations({
 
   // Update clip mask
   const handleUpdateClipMask = useCallback(
-    (clipId: string, newMask: MaskConfig, isFinal = true) => {
+    (
+      clipId: string,
+      newMask: MaskConfig,
+      isFinal = true,
+      timeOverride?: number,
+    ) => {
       const current = projectRef.current;
       if (!current) return;
+      const activeTime =
+        typeof timeOverride === "number"
+          ? timeOverride
+          : (currentTimeRef?.current ?? current.currentTime ?? 0);
       const videoClips = [...(current.tracks.video || [])];
       const idx = videoClips.findIndex((c) => c.id === clipId);
       if (idx >= 0) {
-        videoClips[idx] = {
-          ...videoClips[idx],
-          mask: newMask,
-          transform: {
-            ...(videoClips[idx].transform || {}),
-            mask: newMask,
-          },
-        };
+        videoClips[idx] = applyMaskUpdateToClip(
+          videoClips[idx],
+          newMask,
+          activeTime,
+        );
         const updatedProject = {
           ...current,
           tracks: { ...current.tracks, video: videoClips },
@@ -197,7 +207,7 @@ export function useClipTransformOperations({
         }
       }
     },
-    [projectRef, setProject, updateProjectWithHistory],
+    [projectRef, setProject, updateProjectWithHistory, currentTimeRef],
   );
 
   // Draggable Trim Clip

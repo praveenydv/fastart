@@ -37,9 +37,55 @@ import {
   MediaSyncContext,
 } from "./renderer/rendererMediaSync";
 import { drawClip as renderClipItem, TransitionRenderState } from "./renderer/rendererClip";
-import { setOnMaskUpdated } from "../services/selfieSegmentationService";
+import { setOnMaskUpdated, registerMediaProvider } from "../services/selfieSegmentationService";
 
 export type { ExportFormat, ExportOptions, ExportResult };
+
+let activeVideoRenderer: VideoRenderer | null = null;
+let latestLiveSnapshot: string | null = null;
+
+export function getActiveVideoRenderer(): VideoRenderer | null {
+  return activeVideoRenderer;
+}
+
+export function getLivePlayerCanvasSnapshot(): string | null {
+  if (latestLiveSnapshot) return latestLiveSnapshot;
+  if (activeVideoRenderer && activeVideoRenderer.canvas) {
+    try {
+      latestLiveSnapshot = activeVideoRenderer.canvas.toDataURL("image/jpeg", 0.85);
+      return latestLiveSnapshot;
+    } catch {}
+  }
+  if (typeof document !== "undefined") {
+    const canvas = document.querySelector(".canvas-box canvas, canvas") as HTMLCanvasElement;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      try {
+        return canvas.toDataURL("image/jpeg", 0.85);
+      } catch {}
+    }
+  }
+  return null;
+}
+
+export function setLivePlayerCanvasSnapshot(uri: string | null) {
+  latestLiveSnapshot = uri;
+}
+
+export function getActiveMediaElement(urlOrId: string): HTMLVideoElement | HTMLImageElement | null {
+  if (!activeVideoRenderer || !urlOrId) return null;
+  const fromExact = activeVideoRenderer.videoElements.get(urlOrId);
+  if (fromExact) return fromExact;
+  for (const [key, el] of activeVideoRenderer.videoElements.entries()) {
+    if (key.includes(urlOrId) || urlOrId.includes(key)) {
+      return el;
+    }
+  }
+  return null;
+}
+
+if (typeof window !== "undefined") {
+  registerMediaProvider(getActiveMediaElement);
+}
 
 export class VideoRenderer {
   public canvas: HTMLCanvasElement | null;
@@ -72,6 +118,7 @@ export class VideoRenderer {
       this.ctx.imageSmoothingQuality = "high";
     }
     this.videoElements = new Map();
+    activeVideoRenderer = this;
 
     setOnMaskUpdated(() => {
       // If video is playing, animation loop already renders at 60fps; do NOT re-trigger!
@@ -467,8 +514,9 @@ export class VideoRenderer {
           const blurPx = parseInt(canvasBg.split(":")[1]) || 25;
           let media: any = null;
 
-          // 1. Check currently active video elements
+          // 1. Check currently active video elements (skip clips with cutout enabled)
           for (const vid of activeVideos) {
+            if (vid.cutout?.enabled) continue;
             const el = this.videoElements.get(vid.url);
             if (el) {
               if (el instanceof HTMLVideoElement && (el.readyState >= 1 || el.videoWidth > 0)) {
@@ -489,6 +537,7 @@ export class VideoRenderer {
           // 2. If no active video element is ready, check other clips from project.tracks.video
           if (!media && videoClips.length > 0) {
             for (const vid of videoClips) {
+              if (vid.cutout?.enabled) continue;
               const el = this.videoElements.get(vid.url);
               if (el) {
                 if (el instanceof HTMLVideoElement && (el.readyState >= 1 || el.videoWidth > 0)) {
@@ -686,6 +735,11 @@ export class VideoRenderer {
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1.0;
+      try {
+        if (!isPlaying && this.canvas && this.canvas.width > 0 && this.canvas.height > 0) {
+          latestLiveSnapshot = this.canvas.toDataURL("image/jpeg", 0.85);
+        }
+      } catch {}
     }
   }
 

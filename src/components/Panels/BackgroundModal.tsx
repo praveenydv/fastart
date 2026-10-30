@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject } from '../../types/project';
+import { getLivePlayerCanvasSnapshot } from '../../utils/videoRenderer';
+import { getMediaThumbnail } from '../../utils/mediaThumbnailGenerator';
 
 interface BackgroundModalProps {
   visible: boolean;
@@ -22,6 +24,8 @@ interface BackgroundModalProps {
   project: FastArtProject | null;
   onUpdateProject: (updates: Partial<FastArtProject>) => void;
   isInline?: boolean;
+  currentTime?: number;
+  selectedClip?: any;
 }
 
 export const BACKGROUND_COLORS = [
@@ -104,6 +108,8 @@ export default function BackgroundModal({
   project,
   onUpdateProject,
   isInline = false,
+  currentTime,
+  selectedClip,
 }: BackgroundModalProps) {
   if (!project) return null;
 
@@ -128,14 +134,48 @@ export default function BackgroundModal({
     }
   }, [rawBg, isBlur, isImage]);
 
-  // Find sample active media thumbnail to preview auto blur
+  // Live Frame capture from player canvas or active video at currentTime
+  const [liveCanvasSnap, setLiveCanvasSnap] = useState<string | null>(() => getLivePlayerCanvasSnapshot());
+
+  useEffect(() => {
+    const snap = getLivePlayerCanvasSnapshot();
+    if (snap) {
+      setLiveCanvasSnap(snap);
+    }
+  }, [visible, currentTime]);
+
+  const currentActiveVideo = React.useMemo(() => {
+    if (typeof currentTime === 'number' && project.tracks?.video) {
+      const active = project.tracks.video.find(
+        (v) => currentTime >= v.startTime && currentTime <= v.startTime + v.duration && !v.cutout?.enabled
+      );
+      if (active) return active;
+    }
+    return selectedClip || project.tracks?.video?.[0] || null;
+  }, [currentTime, project.tracks?.video, selectedClip]);
+
+  const livePreviewUri = React.useMemo(() => {
+    if (liveCanvasSnap) return liveCanvasSnap;
+    if (currentActiveVideo) {
+      if (currentActiveVideo.type === 'photo' && currentActiveVideo.url) {
+        return currentActiveVideo.url;
+      }
+      return (
+        getMediaThumbnail(currentActiveVideo) ||
+        currentActiveVideo.thumbnail ||
+        currentActiveVideo.url ||
+        null
+      );
+    }
+    return null;
+  }, [liveCanvasSnap, currentActiveVideo]);
+
+  // Use live frame as primary reference instead of raw/fixed Unsplash fallback
   const sampleMediaThumb =
+    livePreviewUri ||
     project.tracks?.video?.find((v) => v.thumbnail)?.thumbnail ||
     project.tracks?.video?.find((v) => v.type === 'photo')?.url ||
     project.tracks?.video?.[0]?.thumbnail ||
-    (project.tracks?.video?.[0]?.type === 'photo'
-      ? project.tracks?.video?.[0]?.url
-      : null) ||
     'https://images.unsplash.com/photo-1536240478700-b869070f9279?auto=format&fit=crop&w=400&q=80';
 
   const handleSelectBg = (bg: string) => {
@@ -438,6 +478,45 @@ export default function BackgroundModal({
                     </TouchableOpacity>
                   </View>
                 )}
+
+                {/* Live Canvas / Video Frame Option */}
+                {livePreviewUri ? (
+                  <>
+                    <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+                      Live Canvas / Video Frame
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.liveFrameCard,
+                        rawBg === `image:${livePreviewUri}` && styles.liveFrameCardActive,
+                      ]}
+                      onPress={() => handleSelectBg(`image:${livePreviewUri}`)}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: livePreviewUri }}
+                        style={styles.liveFrameThumb}
+                        resizeMode="cover"
+                      />
+                      <View style={{ flex: 1, paddingLeft: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <View style={styles.liveDot} />
+                          <Text style={styles.liveFrameTitle}>Use Current Live Frame</Text>
+                        </View>
+                        <Text style={styles.liveFrameSubtitle}>
+                          Fill canvas background from the live frame shown on screen
+                        </Text>
+                      </View>
+                      {rawBg === `image:${livePreviewUri}` ? (
+                        <View style={styles.liveSelectedBadge}>
+                          <Ionicons name="checkmark" size={12} color="#000000" />
+                        </View>
+                      ) : (
+                        <Ionicons name="add-circle-outline" size={20} color="#00F2FE" />
+                      )}
+                    </TouchableOpacity>
+                  </>
+                ) : null}
 
                 {/* Curated Aesthetic Wallpapers */}
                 <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
@@ -784,6 +863,51 @@ const styles = StyleSheet.create({
     borderColor: '#1F2637',
     padding: 6,
     marginTop: 8,
+  },
+  liveFrameCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#131826',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1.5,
+    borderColor: '#1F2637',
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  liveFrameCardActive: {
+    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+  },
+  liveFrameThumb: {
+    width: 60,
+    height: 44,
+    borderRadius: 6,
+    backgroundColor: '#08090E',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00F2FE',
+  },
+  liveFrameTitle: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  liveFrameSubtitle: {
+    color: '#94A3B8',
+    fontSize: 9.5,
+    marginTop: 2,
+  },
+  liveSelectedBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#00F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activeCustomImageThumb: {
     width: 38,
