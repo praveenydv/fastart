@@ -263,14 +263,22 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let motionY = 0;
         let motionScale = 1.0;
         let motionRot = 0;
-        // In CapCut, video layers NEVER slide or rotate when tracking an object for censor blur or pinning elements!
-        // The video ONLY moves if actionType is explicitly 'camera_center'.
-        if (vid.motionTrack && vid.motionTrack.enabled && vid.motionTrack.actionType === 'camera_center') {
-          const motion = applyMotionTracking(currentTime, vid.startTime, vid.duration, vid.motionTrack);
-          motionX = (motion.dx / 100) * boxWidth;
-          motionY = (motion.dy / 100) * canvasHeight;
-          motionScale = motion.dScale;
-          motionRot = motion.dRot;
+        // Video movement: Camera Center stabilization OR Pinned overlay video
+        const effectiveTrack = (vid.motionTrack && vid.motionTrack.enabled)
+          ? vid.motionTrack
+          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === vid.id)?.motionTrack;
+
+        if (effectiveTrack && effectiveTrack.enabled) {
+          const isCameraCenter = effectiveTrack.actionType === 'camera_center' && vid.motionTrack?.actionType === 'camera_center';
+          const isPinnedOverlay = effectiveTrack.pinnedClipId === vid.id;
+
+          if (isCameraCenter || isPinnedOverlay) {
+            const motion = applyMotionTracking(currentTime, vid.startTime, vid.duration, effectiveTrack);
+            motionX = (motion.dx / 100) * boxWidth;
+            motionY = (motion.dy / 100) * canvasHeight;
+            motionScale = motion.dScale;
+            motionRot = motion.dRot;
+          }
         }
 
         const effScale = baseScale * motionScale;
@@ -791,15 +799,18 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let motionY = 0;
         let motionScale = 1.0;
         let motionRot = 0;
-        if (cap.motionTrack && cap.motionTrack.enabled) {
+        const effectiveTrack = (cap.motionTrack && cap.motionTrack.enabled)
+          ? cap.motionTrack
+          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === cap.id)?.motionTrack;
+        if (effectiveTrack && effectiveTrack.enabled) {
           const motion = applyMotionTracking(
             currentTime,
             cap.startTime,
             cap.duration,
-            cap.motionTrack,
+            effectiveTrack,
           );
-          motionX = motion.dx;
-          motionY = motion.dy;
+          motionX = (motion.dx / 100) * boxWidth;
+          motionY = (motion.dy / 100) * canvasHeight;
           motionScale = motion.dScale;
           motionRot = motion.dRot;
         }

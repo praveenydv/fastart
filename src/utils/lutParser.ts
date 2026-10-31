@@ -9,63 +9,93 @@ export interface ParsedCubeLut {
 }
 
 /**
- * Parses Adobe / DaVinci Resolve .cube LUT file text content.
+ * High-Performance single-pass parser for Adobe / DaVinci Resolve .cube LUT file text content.
+ * Avoids splitting hundreds of thousands of lines into JS strings, operating directly on indices
+ * to prevent massive memory allocations and garbage collection pauses.
  */
 export function parseCubeLut(textContent: string, fileName?: string): ParsedCubeLut {
-  const lines = textContent.split(/\r?\n/);
   let title = fileName ? fileName.replace(/\.[^/.]+$/, "") : "Custom 3D LUT";
   let size = 33;
-  const values: number[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i].trim();
-    if (!rawLine || rawLine.startsWith('#')) continue;
-
-    const upper = rawLine.toUpperCase();
-    if (upper.startsWith('TITLE')) {
-      const match = rawLine.match(/TITLE\s+["']?([^"'\n\r]+)["']?/i);
-      if (match && match[1]) {
-        title = match[1].trim();
-      }
-      continue;
-    }
-
-    if (upper.startsWith('LUT_3D_SIZE')) {
-      const parts = rawLine.split(/\s+/);
-      if (parts.length >= 2) {
-        const parsedSize = parseInt(parts[1], 10);
-        if (!isNaN(parsedSize) && parsedSize > 1) {
-          size = parsedSize;
-        }
-      }
-      continue;
-    }
-
-    if (upper.startsWith('DOMAIN_MIN') || upper.startsWith('DOMAIN_MAX')) {
-      continue;
-    }
-
-    // Parse RGB float triples
-    const tokens = rawLine.split(/\s+/);
-    if (tokens.length >= 3) {
-      const r = parseFloat(tokens[0]);
-      const g = parseFloat(tokens[1]);
-      const b = parseFloat(tokens[2]);
-      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
-        values.push(r, g, b);
-      }
+  
+  // Fast first pass: look for TITLE and LUT_3D_SIZE in header without splitting entire string
+  const headerLimit = Math.min(textContent.length, 4096);
+  const headerSlice = textContent.slice(0, headerLimit);
+  
+  const titleMatch = headerSlice.match(/TITLE\s+["']?([^"'\r\n]+)["']?/i);
+  if (titleMatch && titleMatch[1]) {
+    title = titleMatch[1].trim();
+  }
+  
+  const sizeMatch = headerSlice.match(/LUT_3D_SIZE\s+(\d+)/i);
+  if (sizeMatch && sizeMatch[1]) {
+    const s = parseInt(sizeMatch[1], 10);
+    if (!isNaN(s) && s > 1) {
+      size = s;
     }
   }
 
-  const data = new Float32Array(values);
+  // Pre-allocate typed array based on detected size (size^3 * 3 floats)
+  const expectedFloats = size * size * size * 3;
+  let data = new Float32Array(expectedFloats);
+  let floatIndex = 0;
+
+  // Single-pass scanner over characters
+  const len = textContent.length;
+  let i = 0;
+
+  while (i < len) {
+    // Skip leading whitespace / carriage returns / newlines
+    while (i < len && (textContent.charCodeAt(i) <= 32)) {
+      i++;
+    }
+    if (i >= len) break;
+
+    // Check for comments or keywords
+    const ch = textContent.charCodeAt(i);
+    if (ch === 35 /* # */) {
+      // Skip line
+      while (i < len && textContent.charCodeAt(i) !== 10 /* \n */ && textContent.charCodeAt(i) !== 13 /* \r */) {
+        i++;
+      }
+      continue;
+    }
+
+    // Check if line starts with a letter (keyword like DOMAIN_MIN, TITLE, etc.)
+    if ((ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch === 95 /* _ */) {
+      // Skip entire keyword line
+      while (i < len && textContent.charCodeAt(i) !== 10 && textContent.charCodeAt(i) !== 13) {
+        i++;
+      }
+      continue;
+    }
+
+    // Parse float number directly
+    const startNum = i;
+    while (i < len && textContent.charCodeAt(i) > 32) {
+      i++;
+    }
+    const val = parseFloat(textContent.slice(startNum, i));
+    if (!isNaN(val)) {
+      if (floatIndex >= data.length) {
+        // Expand if file had more entries than expected
+        const expanded = new Float32Array(data.length * 2);
+        expanded.set(data);
+        data = expanded;
+      }
+      data[floatIndex++] = val;
+    }
+  }
+
+  // Shrink to actual parsed floats if needed
+  const finalData = floatIndex === data.length ? data : data.subarray(0, floatIndex);
 
   // Derive high-fidelity CSS canvas filter approximation from LUT samples
-  const cssFilter = deriveCssFilterFromLut(data, size);
+  const cssFilter = deriveCssFilterFromLut(finalData, size);
 
   return {
     title,
     size,
-    data,
+    data: finalData,
     cssFilter,
   };
 }
@@ -149,8 +179,28 @@ export const PRO_3D_LUTS: CustomLutConfig[] = [
     cssFilter: 'contrast(1.55) saturate(0.55) brightness(1.02)',
   },
   {
-    id: 'lut_teal_orange_film',
-    name: 'Hollywood 35mm',
-    cssFilter: 'contrast(1.35) saturate(1.4) hue-rotate(18deg) brightness(1.04)',
+    id: 'lut_teal_orange_pop',
+    name: 'Teal & Orange Pop',
+    cssFilter: 'contrast(1.35) saturate(1.4) hue-rotate(15deg) sepia(0.12)',
+  },
+  {
+    id: 'lut_noir_classic',
+    name: 'Noir Classic B&W',
+    cssFilter: 'contrast(1.45) saturate(0) brightness(0.95)',
+  },
+  {
+    id: 'lut_warm_sunset',
+    name: 'Golden Sunset',
+    cssFilter: 'contrast(1.15) saturate(1.3) brightness(1.05) sepia(0.25)',
+  },
+  {
+    id: 'lut_cyberpunk_neon',
+    name: 'Cyberpunk Neon',
+    cssFilter: 'contrast(1.4) saturate(1.6) hue-rotate(330deg)',
+  },
+  {
+    id: 'lut_moody_forest',
+    name: 'Moody Forest',
+    cssFilter: 'contrast(1.22) saturate(0.85) brightness(0.92) hue-rotate(40deg)',
   },
 ];

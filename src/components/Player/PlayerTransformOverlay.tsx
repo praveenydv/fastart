@@ -92,17 +92,25 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           let motionY = 0;
           let motionScale = 1.0;
           let motionRot = 0;
-          if (vid.motionTrack && vid.motionTrack.enabled && vid.motionTrack.actionType === 'camera_center') {
-            const motion = applyMotionTracking(
-              currentTime,
-              vid.startTime,
-              vid.duration,
-              vid.motionTrack,
-            );
-            motionX = (motion.dx / 100) * boxWidth;
-            motionY = (motion.dy / 100) * canvasHeight;
-            motionScale = motion.dScale;
-            motionRot = motion.dRot;
+          const effectiveTrack = vid.motionTrack?.enabled
+            ? vid.motionTrack
+            : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === vid.id)?.motionTrack;
+
+          if (effectiveTrack && effectiveTrack.enabled) {
+            const isCameraCenter = effectiveTrack.actionType === 'camera_center' && vid.motionTrack?.actionType === 'camera_center';
+            const isPinned = effectiveTrack.pinnedClipId === vid.id;
+            if (isCameraCenter || isPinned) {
+              const motion = applyMotionTracking(
+                currentTime,
+                vid.startTime,
+                vid.duration,
+                effectiveTrack,
+              );
+              motionX = (motion.dx / 100) * boxWidth;
+              motionY = (motion.dy / 100) * canvasHeight;
+              motionScale = motion.dScale;
+              motionRot = motion.dRot;
+            }
           }
           const s = (kfT?.scale ?? vid.transform?.scale ?? vid.scale ?? 1.0) * motionScale;
           const rot = (kfT?.rotation ?? vid.transform?.rotation ?? vid.rotation ?? 0) + motionRot;
@@ -184,15 +192,19 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           let motionY = 0;
           let motionScale = 1.0;
           let motionRot = 0;
-          if (cap.motionTrack && cap.motionTrack.enabled) {
+          const effectiveTrack = cap.motionTrack?.enabled
+            ? cap.motionTrack
+            : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === cap.id)?.motionTrack;
+
+          if (effectiveTrack && effectiveTrack.enabled) {
             const motion = applyMotionTracking(
               currentTime,
               cap.startTime,
               cap.duration,
-              cap.motionTrack,
+              effectiveTrack,
             );
-            motionX = motion.dx;
-            motionY = motion.dy;
+            motionX = (motion.dx / 100) * boxWidth;
+            motionY = (motion.dy / 100) * canvasHeight;
             motionScale = motion.dScale;
             motionRot = motion.dRot;
           }
@@ -200,8 +212,8 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           const rot = (kfT?.rotation ?? cap.rotation ?? 0) + motionRot + animRot;
           const rawX = kfT ? kfT.x : (cap.position?.x ?? 50);
           const rawY = kfT ? kfT.y : (cap.position?.y ?? 80);
-          const cx = (rawX / 100) * boxWidth + motionX + animOffsetX;
-          const cy = (rawY / 100) * canvasHeight + motionY + animOffsetY;
+          const cx = (rawX / 100) * boxWidth + animOffsetX + motionX;
+          const cy = (rawY / 100) * canvasHeight + animOffsetY + motionY;
           const { baseW, baseH } = getItemBaseDimensions("caption", cap);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -210,8 +222,8 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             type: "caption" as const,
             label: cap.text,
             pos: {
-              x: rawX + (motionX / safeBoxW) * 100,
-              y: rawY + (motionY / safeCanvasH) * 100,
+              x: rawX + ((animOffsetX + motionX) / safeBoxW) * 100,
+              y: rawY + ((animOffsetY + motionY) / safeCanvasH) * 100,
             },
             scale: s,
             rotation: rot,
@@ -276,12 +288,16 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           let motionY = 0;
           let motionScale = 1.0;
           let motionRot = 0;
-          if (txt.motionTrack && txt.motionTrack.enabled) {
+          const effectiveTrack = txt.motionTrack?.enabled
+            ? txt.motionTrack
+            : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === txt.id)?.motionTrack;
+
+          if (effectiveTrack && effectiveTrack.enabled) {
             const motion = applyMotionTracking(
               currentTime,
               txt.startTime,
               txt.duration,
-              txt.motionTrack,
+              effectiveTrack,
             );
             motionX = (motion.dx / 100) * boxWidth;
             motionY = (motion.dy / 100) * canvasHeight;
@@ -367,12 +383,16 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           let motionY = 0;
           let motionScale = 1.0;
           let motionRot = 0;
-          if (stk.motionTrack && stk.motionTrack.enabled) {
+          const effectiveTrack = stk.motionTrack?.enabled
+            ? stk.motionTrack
+            : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === stk.id)?.motionTrack;
+
+          if (effectiveTrack && effectiveTrack.enabled) {
             const motion = applyMotionTracking(
               currentTime,
               stk.startTime,
               stk.duration,
-              stk.motionTrack,
+              effectiveTrack,
             );
             motionX = (motion.dx / 100) * boxWidth;
             motionY = (motion.dy / 100) * canvasHeight;
@@ -383,7 +403,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           const rot = (kfT?.rotation ?? stk.rotation ?? 0) + motionRot + animRot;
           const rawX = kfT ? kfT.x : (stk.position?.x ?? 50);
           const rawY = kfT ? kfT.y : (stk.position?.y ?? 50);
-          const cx = (rawX / 100) * boxWidth + motionX + animOffsetX;
+          const cx = (rawX / 100) * boxWidth + animOffsetX + motionX;
           const cy = (rawY / 100) * canvasHeight + animOffsetY + motionY;
           const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
           const w = Math.round(baseW * s);
@@ -393,7 +413,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             type: "sticker" as const,
             label: stk.char,
             pos: {
-              x: rawX + (motionX / safeBoxW) * 100,
+              x: rawX + ((animOffsetX + motionX) / safeBoxW) * 100,
               y: rawY + ((animOffsetY + motionY) / safeCanvasH) * 100,
             },
             scale: s,

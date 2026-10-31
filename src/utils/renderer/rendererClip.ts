@@ -463,6 +463,69 @@ export function drawClip(
         ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
         ctx.restore();
       }
+
+      // Censor Blur & Pixelate Mosaic tracking overlay
+      if (clip.motionTrack && clip.motionTrack.enabled && clip.motionTrack.actionType === 'mosaic_censor') {
+        const track = clip.motionTrack;
+        const rect = track.targetRect || { x: 35, y: 30, width: 30, height: 30 };
+        const motion = applyMotionTracking(time, clip.startTime, clip.duration, track);
+
+        const centerNormX = Math.max(0, Math.min(1, (rect.x + rect.width / 2 + motion.dx) / 100));
+        const centerNormY = Math.max(0, Math.min(1, (rect.y + rect.height / 2 + motion.dy) / 100));
+        const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * motion.dScale));
+        const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * motion.dScale));
+
+        const boxPixelW = Math.max(16, Math.round(dw * boxNormW));
+        const boxPixelH = Math.max(16, Math.round(dh * boxNormH));
+        const boxX = -dw / 2 + Math.round(dw * centerNormX) - boxPixelW / 2;
+        const boxY = -dh / 2 + Math.round(dh * centerNormY) - boxPixelH / 2;
+
+        ctx.save();
+        const radius = track.mosaicRadius ?? 16;
+        const isPixelate = track.mosaicStyle !== 'blur';
+
+        if (isPixelate) {
+          const blockSize = Math.max(6, Math.round(radius * 0.75));
+          const smallW = Math.max(2, Math.round(boxPixelW / blockSize));
+          const smallH = Math.max(2, Math.round(boxPixelH / blockSize));
+          const off = renderCtx.ensureOffscreen(smallW, smallH);
+          const offCtx = off.getContext('2d');
+          if (offCtx) {
+            offCtx.imageSmoothingEnabled = false;
+            offCtx.drawImage(activeMedia, sx, sy, sw, sh, 0, 0, smallW, smallH);
+            ctx.save();
+            ctx.beginPath();
+            if ((ctx as any).roundRect) {
+              (ctx as any).roundRect(boxX, boxY, boxPixelW, boxPixelH, 4);
+            } else {
+              ctx.rect(boxX, boxY, boxPixelW, boxPixelH);
+            }
+            ctx.clip();
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(off, 0, 0, smallW, smallH, boxX, boxY, boxPixelW, boxPixelH);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.fillRect(boxX, boxY, boxPixelW, boxPixelH);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+            ctx.fillRect(boxX, boxY, boxPixelW, boxPixelH);
+          }
+        } else {
+          ctx.save();
+          ctx.beginPath();
+          const cornerR = Math.round(Math.min(boxPixelW, boxPixelH) / 4);
+          if ((ctx as any).roundRect) {
+            (ctx as any).roundRect(boxX, boxY, boxPixelW, boxPixelH, cornerR);
+          } else {
+            ctx.rect(boxX, boxY, boxPixelW, boxPixelH);
+          }
+          ctx.clip();
+          ctx.filter = `blur(${radius}px)`;
+          ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
     }
   } else {
     const hasError = Boolean(mediaEl && (mediaEl as any).error);

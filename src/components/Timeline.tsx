@@ -23,6 +23,7 @@ import { useTimelineScrubbing } from "./Timeline/useTimelineScrubbing";
 import { useTimelineDragTrim } from "./Timeline/useTimelineDragTrim";
 import { TimelineHeaderBar } from "./Timeline/TimelineHeaderBar";
 import { TimelineTracksView } from "./Timeline/TimelineTracksView";
+import { TimelineRuler } from "./Timeline/TimelineRuler";
 import TimelinePlayhead, {
   TimelinePlayheadHead,
   TimelinePlayheadNeedle,
@@ -396,46 +397,6 @@ export const Timeline: React.FC<TimelineProps> = ({
     return list;
   }, [totalDuration, pxPerSec]);
 
-  // Memoize rendered tick marks and beat markers to prevent re-evaluations during active playback
-  const renderedTicks = useMemo(() => {
-    return (
-      <>
-        {ticks.map((tk, i) => (
-          <View
-            key={i}
-            style={[styles.tickWrapper, { left: tk.time * pxPerSec }]}
-          >
-            <View
-              style={[
-                styles.tickLine,
-                tk.isMajor ? styles.tickLineMajor : null,
-              ]}
-            />
-            <Text style={[styles.tickText, tk.isMajor && styles.tickTextMajor]}>
-              {tk.label}
-            </Text>
-          </View>
-        ))}
-        {project?.beatMarkers &&
-          project.beatMarkers.map((beatTime, idx) => (
-            <View
-              key={`beat-${idx}`}
-              style={{
-                position: "absolute",
-                left: beatTime * pxPerSec - 3,
-                top: 3,
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: "#FFE600",
-                zIndex: 10,
-              }}
-            />
-          ))}
-      </>
-    );
-  }, [ticks, pxPerSec, project?.beatMarkers]);
-
   // Left track header cells (stable layout with ZERO layout displacement)
   const renderedTrackHeaders = useMemo(() => {
     const headers: React.ReactNode[] = [];
@@ -629,7 +590,12 @@ export const Timeline: React.FC<TimelineProps> = ({
               ? { onMouseDown: handleRulerPointerDown }
               : {})}
           >
-            {renderedTicks}
+            <TimelineRuler
+              width={timelineContentWidth}
+              ticks={ticks}
+              pxPerSec={pxPerSec}
+              beatMarkers={project?.beatMarkers}
+            />
 
             <TimelinePlayheadHead
               currentTime={currentTime}

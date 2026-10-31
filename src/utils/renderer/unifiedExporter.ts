@@ -2,6 +2,7 @@
 // Unified exporter shared across Web (WASM), Android (JNI), and iOS (FFI)
 // Automatically leverages native Rust core for 10x-50x faster exports with zero UI stalls
 
+import { Buffer } from "buffer";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import { FastArtProject } from "../../types/project";
@@ -96,33 +97,60 @@ export async function writeBinaryFileSafely(
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
+  try {
+    if (typeof Buffer !== "undefined") {
+      return Buffer.from(bytes).toString("base64");
+    }
+  } catch (_) {}
+
+  // High-speed chunked btoa fallback
+  if (typeof btoa === "function") {
+    let binary = "";
+    const chunkSize = 16384;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const sub = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+      binary += String.fromCharCode.apply(null, sub as any);
+    }
+    return btoa(binary);
+  }
+
+  // Pre-allocated chunk array fallback (avoids string concatenation heap thrashing)
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let base64 = "";
   const len = bytes.length;
+  const chunks: string[] = [];
   for (let i = 0; i < len; i += 3) {
     const b0 = bytes[i];
     const b1 = i + 1 < len ? bytes[i + 1] : 0;
     const b2 = i + 2 < len ? bytes[i + 2] : 0;
-    base64 += chars[b0 >> 2];
-    base64 += chars[((b0 & 3) << 4) | (b1 >> 4)];
-    base64 += i + 1 < len ? chars[((b1 & 15) << 2) | (b2 >> 6)] : "=";
-    base64 += i + 2 < len ? chars[b2 & 63] : "=";
+    chunks.push(
+      chars[b0 >> 2],
+      chars[((b0 & 3) << 4) | (b1 >> 4)],
+      i + 1 < len ? chars[((b1 & 15) << 2) | (b2 >> 6)] : "=",
+      i + 2 < len ? chars[b2 & 63] : "=",
+    );
   }
-  return base64;
+  return chunks.join("");
 }
 
 function base64ToUint8(b64: string): Uint8Array {
   try {
-    const bin = typeof atob !== "undefined" ? atob(b64) : "";
-    const len = bin.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = bin.charCodeAt(i);
+    if (typeof Buffer !== "undefined") {
+      const buf = Buffer.from(b64, "base64");
+      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     }
-    return bytes;
+    if (typeof atob === "function") {
+      const bin = atob(b64);
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = bin.charCodeAt(i);
+      }
+      return bytes;
+    }
   } catch {
     return new Uint8Array(0);
   }
+  return new Uint8Array(0);
 }
 
 // ---------------------------------------------------------------------------

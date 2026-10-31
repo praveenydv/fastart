@@ -497,7 +497,7 @@ export function drawClipWithCutout(
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = "medium";
 
   const success = rustCoreBridge.renderCutout(
     ctx,

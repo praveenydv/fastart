@@ -425,41 +425,53 @@ export function getInterpolatedMask(
         return last.mask || baseMask;
       }
 
-      for (let i = 0; i < maskKfs.length - 1; i++) {
-        const k1 = maskKfs[i];
-        const k2 = maskKfs[i + 1];
-        if (localTime >= k1.time && localTime <= k2.time) {
-          const span = k2.time - k1.time;
-          const progress = span > 0 ? (localTime - k1.time) / span : 0;
-          const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
-          let ease = progress;
-          if (easingType === "linear") {
-            ease = progress;
-          } else if (easingType === "easeIn") {
-            ease = progress * progress * progress;
-          } else if (easingType === "easeOut") {
-            ease = 1 - Math.pow(1 - progress, 3);
-          } else if (easingType === "easeInOut") {
-            ease =
-              progress < 0.5
-                ? 4 * progress * progress * progress
-                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-          } else if (easingType === "spring") {
-            ease =
-              1 +
-              Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
-          } else {
-            ease = progress * progress * (3 - 2 * progress);
-          }
-
-          const m1 = k1.mask || baseMask;
-          const m2 = k2.mask || baseMask;
-          if (!m1 && !m2) return undefined;
-          if (!m1) return m2;
-          if (!m2) return m1;
-
-          return interpolateMaskPair(m1, m2, ease, progress);
+      // Binary search for keyframe interval in O(log N)
+      let low = 0;
+      let high = maskKfs.length - 2;
+      let targetIdx = 0;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (maskKfs[mid].time <= localTime) {
+          targetIdx = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
         }
+      }
+
+      const k1 = maskKfs[targetIdx];
+      const k2 = maskKfs[targetIdx + 1];
+      if (k1 && k2) {
+        const span = k2.time - k1.time;
+        const progress = span > 0 ? (localTime - k1.time) / span : 0;
+        const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
+        let ease = progress;
+        if (easingType === "linear") {
+          ease = progress;
+        } else if (easingType === "easeIn") {
+          ease = progress * progress * progress;
+        } else if (easingType === "easeOut") {
+          ease = 1 - Math.pow(1 - progress, 3);
+        } else if (easingType === "easeInOut") {
+          ease =
+            progress < 0.5
+              ? 4 * progress * progress * progress
+              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        } else if (easingType === "spring") {
+          ease =
+            1 +
+            Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+        } else {
+          ease = progress * progress * (3 - 2 * progress);
+        }
+
+        const m1 = k1.mask || baseMask;
+        const m2 = k2.mask || baseMask;
+        if (!m1 && !m2) return undefined;
+        if (!m1) return m2;
+        if (!m2) return m1;
+
+        return interpolateMaskPair(m1, m2, ease, progress);
       }
     }
   }
@@ -635,86 +647,97 @@ export function getInterpolatedTransform(
     }
   }
 
-  // 2. Fallback / Advanced Custom Easing Keyframe Loop
-  for (let i = 0; i < kfs.length - 1; i++) {
-    const k1 = kfs[i];
-    const k2 = kfs[i + 1];
-    if (localTime >= k1.time && localTime <= k2.time) {
-      const span = k2.time - k1.time;
-      const progress = span > 0 ? (localTime - k1.time) / span : 0;
-
-      const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
-      let ease = progress;
-      if (easingType === "linear") {
-        ease = progress;
-      } else if (easingType === "easeIn") {
-        ease = progress * progress * progress;
-      } else if (easingType === "easeOut") {
-        ease = 1 - Math.pow(1 - progress, 3);
-      } else if (easingType === "easeInOut") {
-        ease =
-          progress < 0.5
-            ? 4 * progress * progress * progress
-            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-      } else if (easingType === "spring") {
-        ease =
-          1 +
-          Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
-      } else {
-        // Hermite smoothstep cubic ease curve
-        ease = progress * progress * (3 - 2 * progress);
-      }
-
-      const t1 = k1.transform || {};
-      const t2 = k2.transform || {};
-      const op1 = k1.opacity !== undefined ? k1.opacity : baseT.opacity;
-      const op2 = k2.opacity !== undefined ? k2.opacity : baseT.opacity;
-
-      const scale1 = t1.scale ?? baseT.scale;
-      const scale2 = t2.scale ?? baseT.scale;
-      const sx1 = t1.scaleX ?? baseT.scaleX ?? 1.0;
-      const sx2 = t2.scaleX ?? baseT.scaleX ?? 1.0;
-      const sy1 = t1.scaleY ?? baseT.scaleY ?? 1.0;
-      const sy2 = t2.scaleY ?? baseT.scaleY ?? 1.0;
-      const rx1 = t1.rotateX ?? baseT.rotateX ?? 0;
-      const rx2 = t2.rotateX ?? baseT.rotateX ?? 0;
-      const ry1 = t1.rotateY ?? baseT.rotateY ?? 0;
-      const ry2 = t2.rotateY ?? baseT.rotateY ?? 0;
-      const sk1 = t1.skewX ?? baseT.skewX ?? 0;
-      const sk2 = t2.skewX ?? baseT.skewX ?? 0;
-      const p1 = t1.perspective ?? baseT.perspective ?? 800;
-      const p2 = t2.perspective ?? baseT.perspective ?? 800;
-      const x1 = t1.x ?? baseT.x;
-      const x2 = t2.x ?? baseT.x;
-      const y1 = t1.y ?? baseT.y;
-      const y2 = t2.y ?? baseT.y;
-      const rot1 = t1.rotation ?? baseT.rotation;
-      const rot2 = t2.rotation ?? baseT.rotation;
-
-      // Calculate shortest rotational delta
-      let rotDiff = (rot2 - rot1) % 360;
-      if (rotDiff > 180) rotDiff -= 360;
-      if (rotDiff < -180) rotDiff += 360;
-      const interpolatedRot = (((rot1 + rotDiff * ease) % 360) + 360) % 360;
-
-      return {
-        x: x1 + (x2 - x1) * ease,
-        y: y1 + (y2 - y1) * ease,
-        scale: scale1 + (scale2 - scale1) * ease,
-        scaleX: sx1 + (sx2 - sx1) * ease,
-        scaleY: sy1 + (sy2 - sy1) * ease,
-        rotation: interpolatedRot,
-        rotateX: rx1 + (rx2 - rx1) * ease,
-        rotateY: ry1 + (ry2 - ry1) * ease,
-        skewX: sk1 + (sk2 - sk1) * ease,
-        skewY: 0,
-        perspective: p1 + (p2 - p1) * ease,
-        opacity: op1 + (op2 - op1) * ease,
-        flipX: t2.flipX !== undefined ? t2.flipX : (t1.flipX ?? baseT.flipX),
-        flipY: t2.flipY !== undefined ? t2.flipY : (t1.flipY ?? baseT.flipY),
-        mask: interpolatedMask,
-      };
+  // 2. Binary search for keyframe interval in O(log N)
+  let low = 0;
+  let high = kfs.length - 2;
+  let targetIdx = 0;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (kfs[mid].time <= localTime) {
+      targetIdx = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
     }
+  }
+
+  const k1 = kfs[targetIdx];
+  const k2 = kfs[targetIdx + 1];
+  if (k1 && k2) {
+    const span = k2.time - k1.time;
+    const progress = span > 0 ? (localTime - k1.time) / span : 0;
+
+    const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
+    let ease = progress;
+    if (easingType === "linear") {
+      ease = progress;
+    } else if (easingType === "easeIn") {
+      ease = progress * progress * progress;
+    } else if (easingType === "easeOut") {
+      ease = 1 - Math.pow(1 - progress, 3);
+    } else if (easingType === "easeInOut") {
+      ease =
+        progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    } else if (easingType === "spring") {
+      ease =
+        1 +
+        Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+    } else {
+      // Hermite smoothstep cubic ease curve
+      ease = progress * progress * (3 - 2 * progress);
+    }
+
+    const t1 = k1.transform || {};
+    const t2 = k2.transform || {};
+    const op1 = k1.opacity !== undefined ? k1.opacity : baseT.opacity;
+    const op2 = k2.opacity !== undefined ? k2.opacity : baseT.opacity;
+
+    const scale1 = t1.scale ?? baseT.scale;
+    const scale2 = t2.scale ?? baseT.scale;
+    const sx1 = t1.scaleX ?? baseT.scaleX ?? 1.0;
+    const sx2 = t2.scaleX ?? baseT.scaleX ?? 1.0;
+    const sy1 = t1.scaleY ?? baseT.scaleY ?? 1.0;
+    const sy2 = t2.scaleY ?? baseT.scaleY ?? 1.0;
+    const rx1 = t1.rotateX ?? baseT.rotateX ?? 0;
+    const rx2 = t2.rotateX ?? baseT.rotateX ?? 0;
+    const ry1 = t1.rotateY ?? baseT.rotateY ?? 0;
+    const ry2 = t2.rotateY ?? baseT.rotateY ?? 0;
+    const sk1 = t1.skewX ?? baseT.skewX ?? 0;
+    const sk2 = t2.skewX ?? baseT.skewX ?? 0;
+    const p1 = t1.perspective ?? baseT.perspective ?? 800;
+    const p2 = t2.perspective ?? baseT.perspective ?? 800;
+    const x1 = t1.x ?? baseT.x;
+    const x2 = t2.x ?? baseT.x;
+    const y1 = t1.y ?? baseT.y;
+    const y2 = t2.y ?? baseT.y;
+    const rot1 = t1.rotation ?? baseT.rotation;
+    const rot2 = t2.rotation ?? baseT.rotation;
+
+    // Calculate shortest rotational delta
+    let rotDiff = (rot2 - rot1) % 360;
+    if (rotDiff > 180) rotDiff -= 360;
+    if (rotDiff < -180) rotDiff += 360;
+    const interpolatedRot = (((rot1 + rotDiff * ease) % 360) + 360) % 360;
+
+    return {
+      x: x1 + (x2 - x1) * ease,
+      y: y1 + (y2 - y1) * ease,
+      scale: scale1 + (scale2 - scale1) * ease,
+      scaleX: sx1 + (sx2 - sx1) * ease,
+      scaleY: sy1 + (sy2 - sy1) * ease,
+      rotation: interpolatedRot,
+      rotateX: rx1 + (rx2 - rx1) * ease,
+      rotateY: ry1 + (ry2 - ry1) * ease,
+      skewX: sk1 + (sk2 - sk1) * ease,
+      skewY: 0,
+      perspective: p1 + (p2 - p1) * ease,
+      opacity: op1 + (op2 - op1) * ease,
+      flipX: t2.flipX !== undefined ? t2.flipX : (t1.flipX ?? baseT.flipX),
+      flipY: t2.flipY !== undefined ? t2.flipY : (t1.flipY ?? baseT.flipY),
+      mask: interpolatedMask,
+    };
   }
 
   return {

@@ -61,7 +61,8 @@
       "expo-font",
       "expo-video",
       "expo-speech-recognition",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-image"
     ]
   }
 }

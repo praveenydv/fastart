@@ -352,11 +352,21 @@ class RustCoreBridgeService {
       const inst = this.wasmInstance;
       const count = samples.length;
       const bytesPerFloat = 4;
+      const maxOutLen = 16384;
+      const neededBytes = count * bytesPerFloat + maxOutLen;
+      const isScratchpad = typeof inst.fastart_get_scratchpad === "function";
+      let basePtr = 0;
       let samplesPtr = 0;
       let outPtr = 0;
-      const maxOutLen = 16384;
       try {
-        samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
+        if (isScratchpad) {
+          basePtr = inst.fastart_get_scratchpad!(neededBytes);
+          samplesPtr = basePtr;
+          outPtr = basePtr + count * bytesPerFloat;
+        } else {
+          samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
+          outPtr = inst.fastart_alloc(maxOutLen);
+        }
 
         const memoryBuffer = inst.memory.buffer;
         const floatView = new Float32Array(memoryBuffer, samplesPtr, count);
@@ -365,8 +375,6 @@ class RustCoreBridgeService {
         } else {
           for (let i = 0; i < count; i++) floatView[i] = samples[i];
         }
-
-        outPtr = inst.fastart_alloc(maxOutLen);
 
         const written = inst.fastart_detect_beats_c(samplesPtr, count, sampleRate, outPtr, maxOutLen);
         const outBytes = new Uint8Array(inst.memory.buffer, outPtr, written);
@@ -378,11 +386,13 @@ class RustCoreBridgeService {
       } catch (wasmErr) {
         console.warn("[RustCoreBridge] WASM detectAudioBeats error:", wasmErr);
       } finally {
-        if (samplesPtr) {
-          try { inst.fastart_dealloc(samplesPtr, count * bytesPerFloat); } catch {}
-        }
-        if (outPtr) {
-          try { inst.fastart_dealloc(outPtr, maxOutLen); } catch {}
+        if (!isScratchpad) {
+          if (samplesPtr) {
+            try { inst.fastart_dealloc(samplesPtr, count * bytesPerFloat); } catch {}
+          }
+          if (outPtr) {
+            try { inst.fastart_dealloc(outPtr, maxOutLen); } catch {}
+          }
         }
       }
     }
@@ -416,10 +426,20 @@ class RustCoreBridgeService {
       const inst = this.wasmInstance;
       const count = samples.length;
       const bytesPerFloat = 4;
+      const neededBytes = (count + buckets) * bytesPerFloat;
+      const isScratchpad = typeof inst.fastart_get_scratchpad === "function";
+      let basePtr = 0;
       let samplesPtr = 0;
       let outPeaksPtr = 0;
       try {
-        samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
+        if (isScratchpad) {
+          basePtr = inst.fastart_get_scratchpad!(neededBytes);
+          samplesPtr = basePtr;
+          outPeaksPtr = basePtr + count * bytesPerFloat;
+        } else {
+          samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
+          outPeaksPtr = inst.fastart_alloc(buckets * bytesPerFloat);
+        }
 
         const floatView = new Float32Array(inst.memory.buffer, samplesPtr, count);
         if (samples instanceof Float32Array) {
@@ -428,7 +448,6 @@ class RustCoreBridgeService {
           for (let i = 0; i < count; i++) floatView[i] = samples[i];
         }
 
-        outPeaksPtr = inst.fastart_alloc(buckets * bytesPerFloat);
         const peakCount = inst.fastart_generate_waveform_c(samplesPtr, count, buckets, outPeaksPtr);
         const peaksView = new Float32Array(inst.memory.buffer, outPeaksPtr, peakCount);
         const peaks = Array.from(peaksView);
@@ -437,11 +456,13 @@ class RustCoreBridgeService {
       } catch (wasmErr) {
         console.warn("[RustCoreBridge] WASM generateWaveform error:", wasmErr);
       } finally {
-        if (samplesPtr) {
-          try { inst.fastart_dealloc(samplesPtr, count * bytesPerFloat); } catch {}
-        }
-        if (outPeaksPtr) {
-          try { inst.fastart_dealloc(outPeaksPtr, buckets * bytesPerFloat); } catch {}
+        if (!isScratchpad) {
+          if (samplesPtr) {
+            try { inst.fastart_dealloc(samplesPtr, count * bytesPerFloat); } catch {}
+          }
+          if (outPeaksPtr) {
+            try { inst.fastart_dealloc(outPeaksPtr, buckets * bytesPerFloat); } catch {}
+          }
         }
       }
     }
@@ -963,7 +984,8 @@ class RustCoreBridgeService {
     }
     let dx = pt.x - origin.x;
     let dy = pt.y - origin.y;
-    const dScale = trackScale ? (pt.scale || 1.0) : 1.0;
+    const originScale = origin.scale || 1.0;
+    const dScale = trackScale ? Math.max(0.2, Math.min(5.0, (pt.scale || 1.0) / originScale)) : 1.0;
     const rawRot = (pt.rotation || 0) - (origin.rotation || 0);
     const dRot = trackRotation ? Math.max(-15, Math.min(15, rawRot)) : 0;
     if (cameraCenter) {

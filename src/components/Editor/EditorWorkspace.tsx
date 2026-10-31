@@ -945,6 +945,21 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     }
   }, [activeModal]);
 
+  // Memoized main clip selector for toolbar
+  const handleSelectMainClip = useCallback(() => {
+    if (project?.tracks?.video && project.tracks.video.length > 0) {
+      const cur = currentTime || 0;
+      const target =
+        project.tracks.video.find(
+          (c) => cur >= c.startTime && cur <= c.startTime + c.duration,
+        ) || project.tracks.video[0];
+      if (target) {
+        setSelectedClipId(target.id);
+        setSelectedClipType("video");
+      }
+    }
+  }, [project?.tracks?.video, currentTime, setSelectedClipId, setSelectedClipType]);
+
   // Unified Toolbar renderer (horizontal at bottom for mobile, vertical on whole left for laptop)
   const renderToolbar = (
     orientation: "horizontal" | "vertical" = "horizontal",
@@ -955,19 +970,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       selectedClip={selectedClip}
       selectedClipType={selectedClipType}
       onDeselectClip={handleDeselectClip}
-      onSelectMainClip={() => {
-        if (project?.tracks?.video && project.tracks.video.length > 0) {
-          const cur = currentTime || 0;
-          const target =
-            project.tracks.video.find(
-              (c) => cur >= c.startTime && cur <= c.startTime + c.duration,
-            ) || project.tracks.video[0];
-          if (target) {
-            setSelectedClipId(target.id);
-            setSelectedClipType("video");
-          }
-        }
-      }}
+      onSelectMainClip={handleSelectMainClip}
       onSplitClip={handleSplitClip}
       onDeleteClip={handleDeleteClip}
       onDuplicateClip={handleDuplicateClip}

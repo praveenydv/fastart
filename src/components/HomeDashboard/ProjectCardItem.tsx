@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { theme } from '../../constants/theme';
@@ -67,7 +68,13 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
         {/* 16:9 Thumbnail Area */}
         <View style={styles.gridThumbContainer}>
           {thumbUrl ? (
-            <Image source={{ uri: thumbUrl }} style={styles.gridThumbnail} resizeMode="cover" />
+            <ExpoImage
+              source={{ uri: thumbUrl }}
+              style={styles.gridThumbnail}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+            />
           ) : (
             <View style={styles.gridPlaceholder}>
               <View style={styles.placeholderIconRing}>
@@ -149,7 +156,13 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
       {/* Thumbnail */}
       <View style={styles.listThumbWrapper}>
         {thumbUrl ? (
-          <Image source={{ uri: thumbUrl }} style={styles.listThumbnail} resizeMode="cover" />
+          <ExpoImage
+            source={{ uri: thumbUrl }}
+            style={styles.listThumbnail}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
         ) : (
           <View style={styles.listThumbnailPlaceholder}>
             <Ionicons name="film-outline" size={22} color="#64748B" />

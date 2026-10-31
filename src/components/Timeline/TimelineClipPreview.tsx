@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { View, Image, StyleSheet, Platform } from "react-native";
+import { View, StyleSheet, Platform } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { UnifiedClipItem } from "./timelineTypes";
 import {
   getMediaThumbnail,
@@ -111,10 +112,12 @@ export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
               idx < frameCount - 1 && previewStyles.frameDivider,
             ]}
           >
-            <Image
+            <ExpoImage
               source={{ uri: thumbUri }}
               style={previewStyles.frameImage}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={120}
               onError={handleImageError}
             />
           </View>

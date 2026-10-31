@@ -22,8 +22,8 @@ export function drawSticker(
 
   // Authoritative Keyframe Interpolation for Stickers
   const kf = getInterpolatedTransform(stk, time, "sticker");
-  const px = (kf.x ?? 50) * (w / 100) + motion.dx;
-  const py = (kf.y ?? 50) * (h / 100) + motion.dy;
+  const px = (kf.x ?? 50) * (w / 100) + (motion.dx / 100) * w;
+  const py = (kf.y ?? 50) * (h / 100) + (motion.dy / 100) * h;
   const elapsed = Math.max(0, time - stk.startTime);
   const duration = Math.max(0.5, stk.duration || 3.0);
 
@@ -212,8 +212,8 @@ export function drawTextOverlay(
   );
   // Authoritative Keyframe Interpolation for Text
   const kf = getInterpolatedTransform(txt, time, "text");
-  const px = (kf.x ?? 50) * (w / 100) + motion.dx;
-  const py = (kf.y ?? 50) * (h / 100) + motion.dy;
+  const px = (kf.x ?? 50) * (w / 100) + (motion.dx / 100) * w;
+  const py = (kf.y ?? 50) * (h / 100) + (motion.dy / 100) * h;
   const elapsed = Math.max(0, time - txt.startTime);
   const duration = Math.max(0.5, txt.duration || 3.0);
   const timeLeft = Math.max(0, duration - elapsed);
@@ -446,8 +446,8 @@ export function drawCaptionOverlay(
   // Authoritative Keyframe Interpolation for Captions
   const kf = getInterpolatedTransform(cap, time, "caption");
   // Default subtitle position is bottom center (y=82) if not specified
-  const px = (kf.x ?? 50) * (w / 100) + motion.dx;
-  const py = (kf.y ?? 82) * (h / 100) + motion.dy;
+  const px = (kf.x ?? 50) * (w / 100) + (motion.dx / 100) * w;
+  const py = (kf.y ?? 82) * (h / 100) + (motion.dy / 100) * h;
   const elapsed = Math.max(0, time - cap.startTime);
   const duration = Math.max(0.5, cap.duration || 3.0);
   const timeLeft = Math.max(0, duration - elapsed);

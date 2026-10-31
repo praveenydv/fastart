@@ -125,7 +125,8 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   const barGap = 1.5;
   // Identical 4px horizontal insets on both video and audio
   const horizontalInset = 4;
-  const availableWidth = Math.max(10, width - horizontalInset * 2);
+  // Quantize available width to nearest integer to avoid sub-pixel canvas redraw thrashing
+  const availableWidth = Math.max(10, Math.round(width - horizontalInset * 2));
 
   const peaks = useMemo(() => {
     if (!shouldRenderWaveform) return [];

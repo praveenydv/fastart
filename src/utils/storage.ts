@@ -68,7 +68,7 @@ const scheduleNativeDiskSync = () => {
     } finally {
       isSyncingDisk = false;
     }
-  }, 200);
+  }, 1200);
 };
 
 // Initialize storage engine on app start (IndexedDB on Web, Disk File on Mobile)

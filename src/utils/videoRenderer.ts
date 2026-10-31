@@ -397,7 +397,7 @@ export class VideoRenderer {
     ctx.save();
     try {
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = isPlaying ? "medium" : "high";
       ctx.scale(canvasW / w, canvasH / h);
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
@@ -757,6 +757,9 @@ export class VideoRenderer {
               };
           this.drawClip(ctx, clipToDraw, time, w, h, item.transitionState || null);
         } else if (item.kind === "caption") {
+        const effectiveTrack = item.clip.motionTrack?.enabled
+          ? item.clip.motionTrack
+          : project.tracks.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === item.clip.id)?.motionTrack;
         const clipToDraw: CaptionClip = isOverridden
           ? {
               ...item.clip,
@@ -764,10 +767,17 @@ export class VideoRenderer {
               scale: transientOverride!.scale,
               rotation: transientOverride!.rotation,
               keyframes: undefined,
+              motionTrack: effectiveTrack || item.clip.motionTrack,
             }
-          : item.clip;
+          : {
+              ...item.clip,
+              motionTrack: effectiveTrack || item.clip.motionTrack,
+            };
         this.drawCaptionOverlay(ctx, clipToDraw, time, w, h, isPlaying);
       } else if (item.kind === "text") {
+        const effectiveTrack = item.clip.motionTrack?.enabled
+          ? item.clip.motionTrack
+          : project.tracks.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === item.clip.id)?.motionTrack;
         const clipToDraw: TextClip = isOverridden
           ? {
               ...item.clip,
@@ -775,10 +785,17 @@ export class VideoRenderer {
               scale: transientOverride!.scale,
               rotation: transientOverride!.rotation,
               keyframes: undefined,
+              motionTrack: effectiveTrack || item.clip.motionTrack,
             }
-          : item.clip;
+          : {
+              ...item.clip,
+              motionTrack: effectiveTrack || item.clip.motionTrack,
+            };
         this.drawTextOverlay(ctx, clipToDraw, time, w, h, isPlaying);
       } else if (item.kind === "sticker") {
+        const effectiveTrack = item.clip.motionTrack?.enabled
+          ? item.clip.motionTrack
+          : project.tracks.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === item.clip.id)?.motionTrack;
         const clipToDraw: StickerClip = isOverridden
           ? {
               ...item.clip,
@@ -786,8 +803,12 @@ export class VideoRenderer {
               scale: transientOverride!.scale,
               rotation: transientOverride!.rotation,
               keyframes: undefined,
+              motionTrack: effectiveTrack || item.clip.motionTrack,
             }
-          : item.clip;
+          : {
+              ...item.clip,
+              motionTrack: effectiveTrack || item.clip.motionTrack,
+            };
         this.drawSticker(ctx, clipToDraw, time, w, h);
       } else if (item.kind === "effect") {
         if (item.clip && item.clip.type && item.clip.type !== "none" && item.clip.type !== "None") {

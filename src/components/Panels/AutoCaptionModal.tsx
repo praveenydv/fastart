@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  FlatList,
   TextInput,
   ActivityIndicator,
   Platform,
@@ -466,28 +467,36 @@ export default function AutoCaptionModal({
   };
 
   // =================== SUBTITLE CUE EDITING ===================
-  const handleUpdateCueText = (cueId: string, newText: string) => {
-    if (!currentProject || !onUpdateProject) return;
-    const updated = existingCaptions.map((cap) => {
-      if (cap.id === cueId) {
-        const words = generateWordTimings(newText, cap.startTime, cap.duration);
-        return { ...cap, text: newText, words };
-      }
-      return cap;
-    });
-    onUpdateProject({
-      tracks: { ...currentProject.tracks, captions: updated },
-    });
-  };
+  const handleUpdateCueText = useCallback(
+    (cueId: string, newText: string) => {
+      if (!currentProject || !onUpdateProject) return;
+      const list = currentProject?.tracks?.captions || [];
+      const updated = list.map((cap) => {
+        if (cap.id === cueId) {
+          const words = generateWordTimings(newText, cap.startTime, cap.duration);
+          return { ...cap, text: newText, words };
+        }
+        return cap;
+      });
+      onUpdateProject({
+        tracks: { ...currentProject.tracks, captions: updated },
+      });
+    },
+    [currentProject, onUpdateProject],
+  );
 
-  const handleDeleteCue = (cueId: string) => {
-    if (!currentProject || !onUpdateProject) return;
-    soundEngine.playSfx("pop");
-    const filtered = existingCaptions.filter((c) => c.id !== cueId);
-    onUpdateProject({
-      tracks: { ...currentProject.tracks, captions: filtered },
-    });
-  };
+  const handleDeleteCue = useCallback(
+    (cueId: string) => {
+      if (!currentProject || !onUpdateProject) return;
+      soundEngine.playSfx("pop");
+      const list = currentProject?.tracks?.captions || [];
+      const filtered = list.filter((c) => c.id !== cueId);
+      onUpdateProject({
+        tracks: { ...currentProject.tracks, captions: filtered },
+      });
+    },
+    [currentProject, onUpdateProject],
+  );
 
   const handleAddNewCueAtPlayhead = () => {
     if (!currentProject || !onUpdateProject) return;
@@ -887,137 +896,144 @@ export default function AutoCaptionModal({
           TAB 1: CAPTIONS CUE EDITOR & AUTO TRANSCRIBE
           ======================================================== */}
       {activeTab === "captions" && (
-        <ScrollView
+        <FlatList
           style={styles.bodyScroll}
           contentContainerStyle={{ paddingBottom: 28 }}
           showsVerticalScrollIndicator={true}
-        >
-          {/* Action Card: Auto Transcribe + Import SRT */}
-          <View style={styles.compactActionCard}>
-            {isGenerating ? (
-              <View style={styles.generatingRow}>
-                <ActivityIndicator size="small" color={THEME_COLORS.accent} />
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={styles.statusText} numberOfLines={1}>
-                    {statusText || "Generating captions..."}
-                  </Text>
-                  <View style={styles.progressBarBg}>
-                    <View
-                      style={[styles.progressBarFill, { width: `${progressPct}%` }]}
-                    />
+          data={existingCaptions}
+          keyExtractor={(item) => item.id}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== "web"}
+          ListHeaderComponent={
+            <>
+              {/* Action Card: Auto Transcribe + Import SRT */}
+              <View style={styles.compactActionCard}>
+                {isGenerating ? (
+                  <View style={styles.generatingRow}>
+                    <ActivityIndicator size="small" color={THEME_COLORS.accent} />
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <Text style={styles.statusText} numberOfLines={1}>
+                        {statusText || "Generating captions..."}
+                      </Text>
+                      <View style={styles.progressBarBg}>
+                        <View
+                          style={[styles.progressBarFill, { width: `${progressPct}%` }]}
+                        />
+                      </View>
+                    </View>
+                    <Text style={styles.pctText}>{progressPct}%</Text>
                   </View>
-                </View>
-                <Text style={styles.pctText}>{progressPct}%</Text>
-              </View>
-            ) : (
-              <View style={styles.actionCardContent}>
-                {/* Full-width primary Auto Transcribe button */}
-                <TouchableOpacity
-                  style={styles.transcribeBtn}
-                  onPress={handleGenerate}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="sparkles" size={14} color="#000000" />
-                  <Text style={styles.transcribeBtnText}>Auto Transcribe (AI FREE)</Text>
-                </TouchableOpacity>
+                ) : (
+                  <View style={styles.actionCardContent}>
+                    {/* Full-width primary Auto Transcribe button */}
+                    <TouchableOpacity
+                      style={styles.transcribeBtn}
+                      onPress={handleGenerate}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="sparkles" size={14} color="#000000" />
+                      <Text style={styles.transcribeBtnText}>Auto Transcribe (AI FREE)</Text>
+                    </TouchableOpacity>
 
-                {/* Import SRT / Script Button */}
-                <TouchableOpacity
-                  style={styles.importSrtRowBtn}
-                  onPress={handleImportSrtFile}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="cloud-upload-outline" size={13} color={THEME_COLORS.accent} />
-                  <Text style={styles.importSrtRowText}>Import .SRT or Dialogue Script</Text>
-                </TouchableOpacity>
+                    {/* Import SRT / Script Button */}
+                    <TouchableOpacity
+                      style={styles.importSrtRowBtn}
+                      onPress={handleImportSrtFile}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={13} color={THEME_COLORS.accent} />
+                      <Text style={styles.importSrtRowText}>Import .SRT or Dialogue Script</Text>
+                    </TouchableOpacity>
 
-                {/* Phrase Length Selector */}
-                <View style={styles.chunkSection}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.microTitle}>PHRASE LENGTH</Text>
-                    {existingCaptions.length > 0 && (
-                      <TouchableOpacity
-                        style={styles.rechunkActionBtn}
-                        onPress={handleRechunkTimelineCaptions}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="cut-outline" size={11} color={THEME_COLORS.accent} />
-                        <Text style={styles.rechunkActionText}>Re-chunk Timeline</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  <View style={styles.chunkChipsGroup}>
-                    {CHUNK_MODE_OPTIONS.map((opt) => {
-                      const isSelected = chunkMode === opt.value;
-                      return (
-                        <TouchableOpacity
-                          key={opt.value}
-                          style={[
-                            styles.chunkChip,
-                            isSelected && styles.chunkChipActive,
-                          ]}
-                          onPress={() => {
-                            soundEngine.playSfx("click");
-                            setChunkMode(opt.value as any);
-                            setMaxWordsPerCue(opt.maxWords);
-                            persistSettings({
-                              chunkMode: opt.value as any,
-                              maxWordsPerCue: opt.maxWords,
-                            });
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.chunkChipText,
-                              isSelected && styles.chunkChipTextActive,
-                            ]}
-                            numberOfLines={1}
+                    {/* Phrase Length Selector */}
+                    <View style={styles.chunkSection}>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.microTitle}>PHRASE LENGTH</Text>
+                        {existingCaptions.length > 0 && (
+                          <TouchableOpacity
+                            style={styles.rechunkActionBtn}
+                            onPress={handleRechunkTimelineCaptions}
+                            activeOpacity={0.7}
                           >
-                            {opt.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                            <Ionicons name="cut-outline" size={11} color={THEME_COLORS.accent} />
+                            <Text style={styles.rechunkActionText}>Re-chunk Timeline</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      <View style={styles.chunkChipsGroup}>
+                        {CHUNK_MODE_OPTIONS.map((opt) => {
+                          const isSelected = chunkMode === opt.value;
+                          return (
+                            <TouchableOpacity
+                              key={opt.value}
+                              style={[
+                                styles.chunkChip,
+                                isSelected && styles.chunkChipActive,
+                              ]}
+                              onPress={() => {
+                                soundEngine.playSfx("click");
+                                setChunkMode(opt.value as any);
+                                setMaxWordsPerCue(opt.maxWords);
+                                persistSettings({
+                                  chunkMode: opt.value as any,
+                                  maxWordsPerCue: opt.maxWords,
+                                });
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.chunkChipText,
+                                  isSelected && styles.chunkChipTextActive,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {opt.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
                   </View>
+                )}
+              </View>
+
+              {/* Cues List Header */}
+              <View style={styles.cuesListHeader}>
+                <Text style={styles.sectionHeaderTitle}>
+                  SUBTITLE CUES ({existingCaptions.length})
+                </Text>
+
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <TouchableOpacity
+                    style={styles.cueActionBtn}
+                    onPress={handleAddNewCueAtPlayhead}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={12} color={THEME_COLORS.accent} />
+                    <Text style={styles.cueActionText}>Add Cue</Text>
+                  </TouchableOpacity>
+
+                  {existingCaptions.length > 0 && (
+                    <TouchableOpacity
+                      style={[styles.cueActionBtn, { borderColor: THEME_COLORS.error }]}
+                      onPress={handleClearAllCaptions}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={11} color={THEME_COLORS.error} />
+                      <Text style={[styles.cueActionText, { color: THEME_COLORS.error }]}>
+                        Clear
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
-            )}
-          </View>
-
-          {/* Cues List Header */}
-          <View style={styles.cuesListHeader}>
-            <Text style={styles.sectionHeaderTitle}>
-              SUBTITLE CUES ({existingCaptions.length})
-            </Text>
-
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <TouchableOpacity
-                style={styles.cueActionBtn}
-                onPress={handleAddNewCueAtPlayhead}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={12} color={THEME_COLORS.accent} />
-                <Text style={styles.cueActionText}>Add Cue</Text>
-              </TouchableOpacity>
-
-              {existingCaptions.length > 0 && (
-                <TouchableOpacity
-                  style={[styles.cueActionBtn, { borderColor: THEME_COLORS.error }]}
-                  onPress={handleClearAllCaptions}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={11} color={THEME_COLORS.error} />
-                  <Text style={[styles.cueActionText, { color: THEME_COLORS.error }]}>
-                    Clear
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* Cues Content List */}
-          {existingCaptions.length === 0 ? (
+            </>
+          }
+          ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons
                 name="chatbubble-ellipses-outline"
@@ -1029,74 +1045,19 @@ export default function AutoCaptionModal({
                 Tap "Auto Transcribe" above to generate subtitles automatically, or import an SRT script.
               </Text>
             </View>
-          ) : (
-            <View style={styles.cuesList}>
-              {existingCaptions.map((cap, idx) => {
-                const isSelected = selectedClipId === cap.id;
-                const startStr = cap.startTime.toFixed(2);
-                const endStr = (cap.startTime + cap.duration).toFixed(2);
-
-                return (
-                  <View
-                    key={cap.id}
-                    style={[
-                      styles.cueCard,
-                      isSelected && styles.cueCardSelected,
-                    ]}
-                  >
-                    <View style={styles.cueMetaRow}>
-                      <View style={styles.cueTimeBadge}>
-                        <Text style={styles.cueTimeText}>
-                          #{idx + 1} · {startStr}s ➔ {endStr}s ({cap.duration.toFixed(1)}s)
-                        </Text>
-                      </View>
-
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        {onSeek && (
-                          <TouchableOpacity
-                            style={styles.cueIconBtn}
-                            onPress={() => {
-                              soundEngine.playSfx("click");
-                              onSeek(cap.startTime);
-                            }}
-                            accessibilityLabel="Play at cue"
-                          >
-                            <Ionicons
-                              name="play-circle-outline"
-                              size={14}
-                              color={THEME_COLORS.accent}
-                            />
-                          </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                          style={styles.cueIconBtn}
-                          onPress={() => handleDeleteCue(cap.id)}
-                          accessibilityLabel="Delete cue"
-                        >
-                          <Ionicons
-                            name="trash-outline"
-                            size={13}
-                            color={THEME_COLORS.error}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <TextInput
-                      style={styles.cueInput}
-                      value={cap.text}
-                      onChangeText={(txt) => handleUpdateCueText(cap.id, txt)}
-                      multiline
-                      placeholder="Subtitle dialogue text..."
-                      placeholderTextColor={THEME_COLORS.textMuted}
-                    />
-                  </View>
-                );
-              })}
-            </View>
+          }
+          renderItem={({ item, index }) => (
+            <CaptionCueItem
+              cap={item}
+              idx={index}
+              isSelected={selectedClipId === item.id}
+              onSeek={onSeek}
+              onDeleteCue={handleDeleteCue}
+              onUpdateCueText={handleUpdateCueText}
+            />
           )}
-        </ScrollView>
+          ItemSeparatorComponent={() => <View style={{ height: 5 }} />}
+        />
       )}
 
       {/* ========================================================
@@ -2784,4 +2745,91 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+});
+
+interface CaptionCueItemProps {
+  cap: CaptionClip;
+  idx: number;
+  isSelected: boolean;
+  onSeek?: (time: number) => void;
+  onDeleteCue: (cueId: string) => void;
+  onUpdateCueText: (cueId: string, text: string) => void;
+}
+
+const CaptionCueItem = React.memo(function CaptionCueItem({
+  cap,
+  idx,
+  isSelected,
+  onSeek,
+  onDeleteCue,
+  onUpdateCueText,
+}: CaptionCueItemProps) {
+  const [localText, setLocalText] = useState(cap.text);
+
+  useEffect(() => {
+    setLocalText(cap.text);
+  }, [cap.text]);
+
+  const startStr = cap.startTime.toFixed(2);
+  const endStr = (cap.startTime + cap.duration).toFixed(2);
+
+  return (
+    <View
+      style={[
+        styles.cueCard,
+        isSelected && styles.cueCardSelected,
+      ]}
+    >
+      <View style={styles.cueMetaRow}>
+        <View style={styles.cueTimeBadge}>
+          <Text style={styles.cueTimeText}>
+            #{idx + 1} · {startStr}s ➔ {endStr}s ({cap.duration.toFixed(1)}s)
+          </Text>
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {onSeek && (
+            <TouchableOpacity
+              style={styles.cueIconBtn}
+              onPress={() => {
+                soundEngine.playSfx("click");
+                onSeek(cap.startTime);
+              }}
+              accessibilityLabel="Play at cue"
+            >
+              <Ionicons
+                name="play-circle-outline"
+                size={14}
+                color={THEME_COLORS.accent}
+              />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.cueIconBtn}
+            onPress={() => onDeleteCue(cap.id)}
+            accessibilityLabel="Delete cue"
+          >
+            <Ionicons
+              name="trash-outline"
+              size={13}
+              color={THEME_COLORS.error}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <TextInput
+        style={styles.cueInput}
+        value={localText}
+        onChangeText={(txt) => {
+          setLocalText(txt);
+          onUpdateCueText(cap.id, txt);
+        }}
+        multiline
+        placeholder="Subtitle dialogue text..."
+        placeholderTextColor={THEME_COLORS.textMuted}
+      />
+    </View>
+  );
 });

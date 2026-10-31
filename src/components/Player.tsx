@@ -125,29 +125,55 @@ function Player({
   const isProjectEmpty = !hasAnyTrackContent;
 
   const currentActiveClip = useMemo(() => {
+    if (selectedClipId) {
+      const selectedVideo = (project?.tracks?.video || []).find((c) => c.id === selectedClipId);
+      if (selectedVideo && ((selectedVideo as any).needsPermission || (selectedVideo as any).isMissing)) {
+        return selectedVideo;
+      }
+    }
     return (project?.tracks?.video || []).find(
       (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
     );
-  }, [project?.tracks?.video, currentTime]);
+  }, [project?.tracks?.video, currentTime, selectedClipId]);
 
   const handleRelinkActiveClip = useCallback(async () => {
     if (!currentActiveClip) return;
     const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
+    const clipType = ("type" in currentActiveClip && (currentActiveClip as any).type) ? (currentActiveClip as any).type : "video";
     // 1. Try zero-dialog reconnect first using the handle
     let result = await reconnectLinkedMedia(lookupId, currentActiveClip.title);
     // 2. If reconnect fails, open file picker
     if (!result) {
-      result = await relinkMediaFile(lookupId, currentActiveClip.type as any);
+      result = await relinkMediaFile(lookupId, clipType as any);
     }
     if (result) {
-      currentActiveClip.isMissing = false;
-      currentActiveClip.needsPermission = false;
+      (currentActiveClip as any).isMissing = false;
+      (currentActiveClip as any).needsPermission = false;
       currentActiveClip.url = result.url;
       if (onRelinkClip) {
-        onRelinkClip(currentActiveClip.id, currentActiveClip.type, result.url, lookupId);
+        onRelinkClip(currentActiveClip.id, clipType, result.url, lookupId);
       }
+    } else if (Platform.OS !== "web" && onOpenMediaPicker) {
+      onOpenMediaPicker();
     }
-  }, [currentActiveClip, onRelinkClip]);
+  }, [currentActiveClip, onRelinkClip, onOpenMediaPicker]);
+
+  const handleChooseReplacementFile = useCallback(async () => {
+    if (!currentActiveClip) return;
+    const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
+    const clipType = ("type" in currentActiveClip && (currentActiveClip as any).type) ? (currentActiveClip as any).type : "video";
+    const res = await relinkMediaFile(lookupId, clipType as any);
+    if (res) {
+      (currentActiveClip as any).isMissing = false;
+      (currentActiveClip as any).needsPermission = false;
+      currentActiveClip.url = res.url;
+      if (onRelinkClip) {
+        onRelinkClip(currentActiveClip.id, clipType, res.url, lookupId);
+      }
+    } else if (Platform.OS !== "web" && onOpenMediaPicker) {
+      onOpenMediaPicker();
+    }
+  }, [currentActiveClip, onRelinkClip, onOpenMediaPicker]);
 
   const isLightBg = useMemo(() => {
     const bg = (project.canvasBackground || "#000000").toLowerCase();
@@ -251,7 +277,7 @@ function Player({
     });
   }, [project.tracks.video, currentTime, adjacentNextClipIds]);
 
-  // Buffered native videos: includes 1.5s lookahead pre-warming without overlapping adjacent cut clips
+  // Buffered native videos: includes 1.0s lookahead pre-warming with Hardware Decoder Safety Cap
   const bufferedNativeVideos = useMemo(() => {
     const list = project.tracks.video || [];
     if (list.length === 0) return [];
@@ -261,13 +287,25 @@ function Player({
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
       // 1. Actively inside playback
       if (hasAdjacentNext ? (currentTime >= start && currentTime < end) : (currentTime >= start && currentTime <= end)) return true;
-      // 2. Pre-warm upcoming clip within 1.5s before its cut
-      if (currentTime < start && start - currentTime <= 1.5) return true;
+      // 2. Pre-warm upcoming clip within 1.0s before its cut
+      if (currentTime < start && start - currentTime <= 1.0) return true;
       // 3. Tail-hold recently finished clip ONLY if there is no adjacent next clip on this track
-      if (!hasAdjacentNext && currentTime > end && currentTime - end <= 0.25) return true;
+      if (!hasAdjacentNext && currentTime > end && currentTime - end <= 0.2) return true;
       return false;
     });
-    return filtered.sort((a, b) => (a.trackIndex || 0) - (b.trackIndex || 0));
+
+    // Mobile Hardware Decoder Protection:
+    // Strictly cap to at most 3-4 concurrent native video decoders (MediaCodec / AVPlayer)
+    // Prioritize strictly active visible clips first, then immediately upcoming clips
+    filtered.sort((a, b) => {
+      const aActive = currentTime >= a.startTime && currentTime <= a.startTime + a.duration;
+      const bActive = currentTime >= b.startTime && currentTime <= b.startTime + b.duration;
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return (a.trackIndex || 0) - (b.trackIndex || 0);
+    });
+
+    return filtered.slice(0, 4);
   }, [project.tracks.video, currentTime, adjacentNextClipIds]);
 
   const activeEffects = useMemo(() => {
@@ -667,6 +705,7 @@ function Player({
                 }}
                 boxWidth={boxWidth}
                 canvasHeight={canvasHeight}
+                isScanning={targetTrackingClip.motionTrack?.trackingStatus === "tracking"}
                 isCompleted={
                   !!targetTrackingClip.motionTrack?.trajectory &&
                   targetTrackingClip.motionTrack.trajectory.length > 0
@@ -857,97 +896,161 @@ function Player({
           )}
 
           {/* Whole Player Reconnect & Relink Overlay */}
-          {!isProjectEmpty && currentActiveClip && ((currentActiveClip as any).needsPermission || (currentActiveClip as any).isMissing) && (
-            <View style={styles.offlineMediaOverlay}>
-              <View
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 26,
-                  backgroundColor: (currentActiveClip as any).isMissing
-                    ? "rgba(239, 68, 68, 0.15)"
-                    : "rgba(0, 242, 254, 0.12)",
-                  borderWidth: 1.5,
-                  borderColor: (currentActiveClip as any).isMissing
-                    ? "rgba(239, 68, 68, 0.4)"
-                    : "rgba(0, 242, 254, 0.4)",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  marginBottom: 8,
-                }}
-              >
-                <Ionicons
-                  name={(currentActiveClip as any).isMissing ? "alert-circle" : "link-outline"}
-                  size={26}
-                  color={(currentActiveClip as any).isMissing ? "#EF4444" : "#00F2FE"}
-                />
-              </View>
+          {!isProjectEmpty && currentActiveClip && ((currentActiveClip as any).needsPermission || (currentActiveClip as any).isMissing) && (() => {
+            const isMissing = Boolean((currentActiveClip as any).isMissing);
+            const isUltraCompact = boxWidth < 220 || canvasHeight < 190;
+            const isCompact = !isUltraCompact && (boxWidth < 300 || canvasHeight < 250);
+            const isNarrowCard = boxWidth < 240;
 
-              <Text style={[styles.offlineMediaTitle, !(currentActiveClip as any).isMissing && { color: "#FFFFFF" }]}>
-                {(currentActiveClip as any).isMissing ? "Media Offline" : "Linked Media"}
-              </Text>
+            const iconCircleSize = isUltraCompact ? 28 : isCompact ? 36 : 46;
+            const iconSize = isUltraCompact ? 14 : isCompact ? 18 : 22;
+            const cardPadH = isUltraCompact ? 8 : isCompact ? 12 : 16;
+            const cardPadV = isUltraCompact ? 8 : isCompact ? 10 : 14;
 
-              <Text style={styles.offlineMediaSubtitle} numberOfLines={2}>
-                {(currentActiveClip as any).isMissing
-                  ? `"${currentActiveClip.title || 'Source file'}" was moved or removed from its disk location.`
-                  : `"${currentActiveClip.title || 'Source file'}" is linked on your device. Click below to reconnect.`}
-              </Text>
+            const titleFontSize = isUltraCompact ? 11 : isCompact ? 12.5 : 14;
+            const subTitleFontSize = isUltraCompact ? 9.5 : isCompact ? 10.5 : 11.5;
+            const subTitleLines = isUltraCompact ? 1 : 2;
 
-              {Platform.OS === 'web' && (
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  <TouchableOpacity
-                    style={styles.relinkBtn}
-                    activeOpacity={0.85}
-                    onPress={handleRelinkActiveClip}
+            const clipTitle = currentActiveClip.title || "Source file";
+            const subTitleText = isUltraCompact
+              ? (isMissing ? `"${clipTitle}" missing` : `"${clipTitle}" needs link`)
+              : isCompact
+                ? (isMissing ? `"${clipTitle}" was moved or removed.` : `"${clipTitle}" linked. Click to reconnect.`)
+                : (isMissing
+                    ? `"${clipTitle}" was moved or removed from its disk location.`
+                    : `"${clipTitle}" is linked on your device. Click below to reconnect.`);
+
+            return (
+              <View style={styles.offlineMediaOverlay}>
+                <View
+                  style={[
+                    styles.offlineMediaCard,
+                    {
+                      paddingHorizontal: cardPadH,
+                      paddingVertical: cardPadV,
+                      borderColor: isMissing ? "rgba(239, 68, 68, 0.35)" : "rgba(0, 242, 254, 0.28)",
+                    },
+                  ]}
+                >
+                  <View
+                    style={{
+                      width: iconCircleSize,
+                      height: iconCircleSize,
+                      borderRadius: iconCircleSize / 2,
+                      backgroundColor: isMissing
+                        ? "rgba(239, 68, 68, 0.15)"
+                        : "rgba(0, 242, 254, 0.12)",
+                      borderWidth: 1.5,
+                      borderColor: isMissing
+                        ? "rgba(239, 68, 68, 0.45)"
+                        : "rgba(0, 242, 254, 0.4)",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginBottom: isUltraCompact ? 4 : isCompact ? 6 : 8,
+                    }}
                   >
                     <Ionicons
-                      name={(currentActiveClip as any).isMissing ? "folder-open-outline" : "flash"}
-                      size={14}
-                      color="#000000"
+                      name={isMissing ? "alert-circle" : "link-outline"}
+                      size={iconSize}
+                      color={isMissing ? "#EF4444" : "#00F2FE"}
                     />
-                    <Text style={styles.relinkBtnText}>
-                      {(currentActiveClip as any).isMissing ? "Relink File" : "Reconnect Media"}
-                    </Text>
-                  </TouchableOpacity>
+                  </View>
 
-                  {!(currentActiveClip as any).isMissing && (
+                  <Text
+                    style={[
+                      styles.offlineMediaTitle,
+                      { fontSize: titleFontSize },
+                      !isMissing && { color: "#FFFFFF" },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {isMissing ? "Media Offline" : "Linked Media"}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.offlineMediaSubtitle,
+                      {
+                        fontSize: subTitleFontSize,
+                        marginTop: isUltraCompact ? 2 : 4,
+                        lineHeight: subTitleFontSize * 1.35,
+                      },
+                    ]}
+                    numberOfLines={subTitleLines}
+                  >
+                    {subTitleText}
+                  </Text>
+
+                  <View
+                    style={{
+                      flexDirection: isNarrowCard ? "column" : "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: isUltraCompact ? 5 : 6,
+                      marginTop: isUltraCompact ? 6 : isCompact ? 8 : 12,
+                      width: isNarrowCard ? "100%" : "auto",
+                    }}
+                  >
                     <TouchableOpacity
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        backgroundColor: "rgba(255, 255, 255, 0.08)",
-                        borderColor: "rgba(255, 255, 255, 0.2)",
-                        borderWidth: 1,
-                        paddingHorizontal: 12,
-                        paddingVertical: 7,
-                        borderRadius: 20,
-                        marginTop: 12,
-                        gap: 5,
-                      }}
+                      style={[
+                        styles.relinkBtn,
+                        isMissing && { backgroundColor: "#EF4444" },
+                        isUltraCompact && { paddingHorizontal: 8, paddingVertical: 5 },
+                        isNarrowCard && { width: "100%" },
+                      ]}
                       activeOpacity={0.85}
-                      onPress={async () => {
-                        const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
-                        const res = await relinkMediaFile(lookupId, currentActiveClip.type as any);
-                        if (res) {
-                          currentActiveClip.isMissing = false;
-                          currentActiveClip.needsPermission = false;
-                          currentActiveClip.url = res.url;
-                          if (onRelinkClip) {
-                            onRelinkClip(currentActiveClip.id, currentActiveClip.type, res.url, lookupId);
-                          }
-                        }
-                      }}
+                      onPress={handleRelinkActiveClip}
                     >
-                      <Ionicons name="folder-open-outline" size={13} color="#94A3B8" />
-                      <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "600" }}>
-                        Choose File
+                      <Ionicons
+                        name={isMissing ? "folder-open-outline" : "flash"}
+                        size={isUltraCompact ? 11 : isCompact ? 12 : 14}
+                        color={isMissing ? "#FFFFFF" : "#000000"}
+                      />
+                      <Text
+                        style={[
+                          styles.relinkBtnText,
+                          isMissing && { color: "#FFFFFF" },
+                          isUltraCompact && { fontSize: 10.5 },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {isMissing
+                          ? (isUltraCompact ? "Relink" : "Relink File")
+                          : (isUltraCompact ? "Reconnect" : "Reconnect Media")}
                       </Text>
                     </TouchableOpacity>
-                  )}
+
+                    {!isMissing && (
+                      <TouchableOpacity
+                        style={[
+                          styles.relinkSecondaryBtn,
+                          isUltraCompact && { paddingHorizontal: 8, paddingVertical: 4.5 },
+                          isNarrowCard && { width: "100%" },
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={handleChooseReplacementFile}
+                      >
+                        <Ionicons
+                          name="folder-open-outline"
+                          size={isUltraCompact ? 11 : isCompact ? 12 : 13}
+                          color="#94A3B8"
+                        />
+                        <Text
+                          style={[
+                            styles.relinkSecondaryBtnText,
+                            isUltraCompact && { fontSize: 10 },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isUltraCompact ? "Browse" : "Choose File"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              )}
-            </View>
-          )}
+              </View>
+            );
+          })()}
 
           {/* Empty State Overlay */}
           {isProjectEmpty && (

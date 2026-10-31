@@ -526,10 +526,12 @@ export async function extractRealMediaAudioPeaks(
       const ctx = getSharedAudioContext();
       if (ctx) {
         try {
+          // Pass a cloned buffer slice because decodeAudioData detaches the passed ArrayBuffer in spec
+          const bufferToDecode = arrayBuf.slice(0);
           const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
             try {
               const res = ctx.decodeAudioData(
-                arrayBuf,
+                bufferToDecode,
                 (buf: AudioBuffer) => resolve(buf),
                 (err: any) => reject(err),
               );
@@ -556,6 +558,20 @@ export async function extractRealMediaAudioPeaks(
               2400,
               Math.max(800, Math.floor(duration * 50)),
             );
+
+            // Fast path 1: Try Rust native / WASM SIMD waveform generator
+            try {
+              if (await rustCoreBridge.isAvailable()) {
+                const rustPeaks = await rustCoreBridge.generateWaveform(ch0, numPoints);
+                if (rustPeaks && rustPeaks.length > 0) {
+                  setCachedMediaPeaks(url, rustPeaks, duration);
+                  if (clipId) setCachedMediaPeaks(clipId, rustPeaks, duration);
+                  return rustPeaks;
+                }
+              }
+            } catch (_) {}
+
+            // Fast path 2: Highly vectorized typed array sampling with strided window
             const blockSize = Math.floor(length / numPoints);
             const rawPeaks = new Float32Array(numPoints);
             let maxVal = 0.0001;

@@ -509,6 +509,77 @@ export default function App() {
     }
   }, [totalDuration]);
 
+  // Stable memoized callbacks for EditorWorkspace to preserve React.memo and prevent render thrashing
+  const handleOpenExport = useCallback(() => openModal("export"), [openModal]);
+  const handleBackToHome = useCallback(() => {
+    soundEngine.playSfx("pop");
+    setShowExitConfirmModal(true);
+  }, []);
+  const handleOpenKeyframeModal = useCallback(() => {
+    if (!selectedClipIdRef.current && projectRef.current) {
+      const curTime = currentTimeRef.current || 0;
+      const videoAtTime =
+        projectRef.current.tracks.video?.find(
+          (c) =>
+            curTime >= c.startTime &&
+            curTime <= c.startTime + c.duration,
+        ) || projectRef.current.tracks.video?.[0];
+      if (videoAtTime) {
+        setSelectedClipId(videoAtTime.id);
+        setSelectedClipType("video");
+      }
+    }
+    openModal("keyframe");
+  }, [openModal, setSelectedClipId, setSelectedClipType]);
+  const handleDeselectClip = useCallback(() => setSelectedClipId(null), [setSelectedClipId]);
+  const handleOpenSpeedModal = useCallback(() => {
+    ensureSelectedVideoClip();
+    openModal("speed");
+  }, [ensureSelectedVideoClip, openModal]);
+  const handleOpenVolumeModal = useCallback(() => {
+    const clip = ensureSelectedVideoClip();
+    if (clip && selectedClipType === "video" && !mediaHasAudioTrack(clip)) {
+      return;
+    }
+    openModal("volume");
+  }, [ensureSelectedVideoClip, selectedClipType, openModal]);
+  const handleOpenCropModal = useCallback(() => {
+    soundEngine.playSfx("click");
+    setIsCroppingPreview(true);
+  }, [setIsCroppingPreview]);
+  const handleOpenTransformModal = useCallback((tab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle') => {
+    ensureSelectedVideoClip();
+    setTransformInitialTab(tab || 'crop');
+    openModal("transform");
+  }, [ensureSelectedVideoClip, openModal]);
+  const handleOpenMaskModal = useCallback(() => {
+    ensureSelectedVideoClip();
+    openModal("mask");
+  }, [ensureSelectedVideoClip, openModal]);
+  const handleOpenAudioModal = useCallback(() => openModal("audio"), [openModal]);
+  const handleOpenTextModal = useCallback(() => openModal("text"), [openModal]);
+  const handleOpenFiltersModal = useCallback(() => openModal("filters"), [openModal]);
+  const handleOpenEffectsModal = useCallback(() => openModal("effects"), [openModal]);
+  const handleOpenStickersModal = useCallback(() => openModal("stickers"), [openModal]);
+  const handleOpenMediaPicker = useCallback(() => openModal("media"), [openModal]);
+  const handleOpenEnhance = useCallback(() => {
+    ensureSelectedVideoClip();
+    openModal("enhance");
+  }, [ensureSelectedVideoClip, openModal]);
+  const handleOpenAutoCut = useCallback(() => openModal("autocut"), [openModal]);
+  const handleOpenCanvasModal = useCallback(() => openModal("canvas"), [openModal]);
+  const handleOpenBackgroundModal = useCallback(() => openModal("background"), [openModal]);
+  const handleOpenCutoutModal = useCallback((mode?: 'auto' | 'chroma') => {
+    ensureSelectedVideoClip();
+    setCutoutInitialMode(mode);
+    openModal("cutout");
+  }, [ensureSelectedVideoClip, openModal]);
+  const handleOpenMotionTracking = useCallback(() => {
+    ensureSelectedVideoClip();
+    openModal("tracking");
+  }, [ensureSelectedVideoClip, openModal]);
+  const handleOpenAutoCaptions = useCallback(() => openModal("captions"), [openModal]);
+
   // Immediate flush of session and project data (for refresh, close, tab hide, app background)
   const flushSessionAndProject = useCallback(() => {
     const proj = projectRef.current;
@@ -865,27 +936,10 @@ export default function App() {
                   canRedo={redoStack.length > 0}
                   onUndo={handleUndo}
                   onRedo={handleRedo}
-                  onOpenExport={() => openModal("export")}
-                  onBackToHome={() => {
-                    soundEngine.playSfx("pop");
-                    setShowExitConfirmModal(true);
-                  }}
+                  onOpenExport={handleOpenExport}
+                  onBackToHome={handleBackToHome}
                   onAddKeyframe={handleAddKeyframe}
-                  onOpenKeyframeModal={() => {
-                    if (!selectedClipId && project) {
-                      const videoAtTime =
-                        project.tracks.video?.find(
-                          (c) =>
-                            currentTime >= c.startTime &&
-                            currentTime <= c.startTime + c.duration,
-                        ) || project.tracks.video?.[0];
-                      if (videoAtTime) {
-                        setSelectedClipId(videoAtTime.id);
-                        setSelectedClipType("video");
-                      }
-                    }
-                    openModal("keyframe");
-                  }}
+                  onOpenKeyframeModal={handleOpenKeyframeModal}
                   isKeyframeAtPlayhead={isKeyframeAtPlayhead}
                   activeModal={activeModal}
                   openModal={openModal}
@@ -905,58 +959,25 @@ export default function App() {
                   handleRotateClip={handleRotateClip}
                   handleToggleReverse={handleToggleReverse}
                   handleOpenTransitionsModal={handleOpenTransitionsModal}
-                  handleDeselectClip={() => setSelectedClipId(null)}
-                  handleOpenSpeedModal={() => {
-                    ensureSelectedVideoClip();
-                    openModal("speed");
-                  }}
-                  handleOpenVolumeModal={() => {
-                    const clip = ensureSelectedVideoClip();
-                    if (clip && selectedClipType === "video" && !mediaHasAudioTrack(clip)) {
-                      return;
-                    }
-                    openModal("volume");
-                  }}
-                  handleOpenCropModal={() => {
-                    soundEngine.playSfx("click");
-                    setIsCroppingPreview(true);
-                  }}
-                  handleOpenTransformModal={(tab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle') => {
-                    ensureSelectedVideoClip();
-                    setTransformInitialTab(tab || 'crop');
-                    openModal("transform");
-                  }}
-                  handleOpenMaskModal={() => {
-                    ensureSelectedVideoClip();
-                    openModal("mask");
-                  }}
-                  handleOpenAudioModal={() => openModal("audio")}
-                  handleOpenTextModal={() => openModal("text")}
-                  handleOpenFiltersModal={() => {
-                    openModal("filters");
-                  }}
-                  handleOpenEffectsModal={() => {
-                    openModal("effects");
-                  }}
-                  handleOpenStickersModal={() => openModal("stickers")}
-                  handleOpenMediaPicker={() => openModal("media")}
-                  handleOpenEnhance={() => {
-                    ensureSelectedVideoClip();
-                    openModal("enhance");
-                  }}
-                  handleOpenAutoCut={() => openModal("autocut")}
-                  handleOpenCanvasModal={() => openModal("canvas")}
-                  handleOpenBackgroundModal={() => openModal("background")}
-                  handleOpenCutoutModal={(mode?: 'auto' | 'chroma') => {
-                    ensureSelectedVideoClip();
-                    setCutoutInitialMode(mode);
-                    openModal("cutout");
-                  }}
-                  handleOpenMotionTracking={() => {
-                    ensureSelectedVideoClip();
-                    openModal("tracking");
-                  }}
-                  handleOpenAutoCaptions={() => openModal("captions")}
+                  handleDeselectClip={handleDeselectClip}
+                  handleOpenSpeedModal={handleOpenSpeedModal}
+                  handleOpenVolumeModal={handleOpenVolumeModal}
+                  handleOpenCropModal={handleOpenCropModal}
+                  handleOpenTransformModal={handleOpenTransformModal}
+                  handleOpenMaskModal={handleOpenMaskModal}
+                  handleOpenAudioModal={handleOpenAudioModal}
+                  handleOpenTextModal={handleOpenTextModal}
+                  handleOpenFiltersModal={handleOpenFiltersModal}
+                  handleOpenEffectsModal={handleOpenEffectsModal}
+                  handleOpenStickersModal={handleOpenStickersModal}
+                  handleOpenMediaPicker={handleOpenMediaPicker}
+                  handleOpenEnhance={handleOpenEnhance}
+                  handleOpenAutoCut={handleOpenAutoCut}
+                  handleOpenCanvasModal={handleOpenCanvasModal}
+                  handleOpenBackgroundModal={handleOpenBackgroundModal}
+                  handleOpenCutoutModal={handleOpenCutoutModal}
+                  handleOpenMotionTracking={handleOpenMotionTracking}
+                  handleOpenAutoCaptions={handleOpenAutoCaptions}
                   handleToggleDenoise={handleToggleDenoise}
                   handleExtractAudio={handleExtractAudioFromVideo}
                   isProcessing={isProcessing}

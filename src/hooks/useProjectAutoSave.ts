@@ -16,6 +16,9 @@ interface UseProjectAutoSaveProps {
  * Continuously monitors project state and guarantees all edits (cutouts, layer order,
  * transforms, texts, speeds, filters) are saved to storage without user intervention,
  * surviving browser refresh, tab closing, and modal interactions.
+ *
+ * Optimized to completely eliminate synchronous JSON.stringify calls on every frame/render,
+ * deferring serialization strictly to debounced background commit passes.
  */
 export function useProjectAutoSave({
   project,
@@ -68,24 +71,13 @@ export function useProjectAutoSave({
     [setProjects],
   );
 
-  // 1. Debounced save triggered on every project state change
+  // 1. Debounced save triggered on project state change
+  // High-performance: Zero synchronous JSON stringification on the render path!
   useEffect(() => {
     if (!project || !project.id) return;
 
-    // Fast reference check: skip stringification when object reference is unchanged
+    // Fast reference check: skip when reference is identical to last saved
     if (project === lastSavedObjRef.current) {
-      return;
-    }
-
-    let currentJson = "";
-    try {
-      currentJson = JSON.stringify(project);
-    } catch {
-      return;
-    }
-
-    if (currentJson === lastSavedJsonRef.current) {
-      lastSavedObjRef.current = project;
       return;
     }
 
@@ -113,12 +105,7 @@ export function useProjectAutoSave({
       if (!cur || !cur.id) return;
       if (cur === lastSavedObjRef.current) return;
       try {
-        const json = JSON.stringify(cur);
-        if (json !== lastSavedJsonRef.current) {
-          commitSave(cur);
-        } else {
-          lastSavedObjRef.current = cur;
-        }
+        commitSave(cur);
       } catch {}
     }, intervalMs);
 
@@ -168,4 +155,3 @@ export function useProjectAutoSave({
     triggerImmediateSave,
   };
 }
-

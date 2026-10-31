@@ -9,6 +9,7 @@ import {
 } from '../types/project';
 import { globalActiveVideoElements } from './renderer/rendererMediaSync';
 import { rustCoreBridge } from '../services/rustCoreBridge';
+import { getLiveMediaUrl } from './largeMediaStorage';
 
 export interface TrackProgressInfo {
   percent: number;
@@ -75,6 +76,9 @@ export class ObjectTrackerEngine {
     if (!pair) return null;
     const { ctx } = pair;
 
+    const maxTime = videoEl.duration > 0 ? Math.max(0, videoEl.duration - 0.05) : 999999;
+    const clampedTime = Math.max(0, Math.min(maxTime, timeSec));
+
     return new Promise((resolve) => {
       let isResolved = false;
 
@@ -91,8 +95,8 @@ export class ObjectTrackerEngine {
         }
       };
 
-      // If already at or very close to time
-      if (Math.abs(videoEl.currentTime - timeSec) < 0.04) {
+      // If already at or very close to desired time
+      if (Math.abs(videoEl.currentTime - clampedTime) < 0.035) {
         finishCapture();
         return;
       }
@@ -103,13 +107,19 @@ export class ObjectTrackerEngine {
       };
 
       videoEl.addEventListener('seeked', onSeeked);
-      videoEl.currentTime = Math.max(0, timeSec);
+      try {
+        videoEl.currentTime = clampedTime;
+      } catch (_) {
+        videoEl.removeEventListener('seeked', onSeeked);
+        finishCapture();
+        return;
+      }
 
       // Failsafe timeout in case seek stalls
       setTimeout(() => {
         videoEl.removeEventListener('seeked', onSeeked);
         finishCapture();
-      }, 150);
+      }, 160);
     });
   }
 
@@ -314,17 +324,61 @@ export class ObjectTrackerEngine {
 
     // Locate active video element or DOM video
     let activeVid: HTMLVideoElement | null = null;
+    let isTempVid = false;
+
     if (clip.url && globalActiveVideoElements.has(clip.url)) {
       activeVid = globalActiveVideoElements.get(clip.url) || null;
+    }
+    if (!activeVid && clip.id && globalActiveVideoElements.has(clip.id)) {
+      activeVid = globalActiveVideoElements.get(clip.id) || null;
+    }
+    if (!activeVid && clip.url) {
+      const liveUrl = await getLiveMediaUrl(clip.url);
+      if (liveUrl && globalActiveVideoElements.has(liveUrl)) {
+        activeVid = globalActiveVideoElements.get(liveUrl) || null;
+      }
     }
     if (!activeVid && typeof document !== 'undefined') {
       const vids = document.querySelectorAll('video');
       for (let i = 0; i < vids.length; i++) {
-        if (vids[i].videoWidth > 0) {
+        if (vids[i].videoWidth > 0 && !vids[i].paused) {
           activeVid = vids[i];
           break;
         }
       }
+      if (!activeVid && vids.length > 0) {
+        for (let i = 0; i < vids.length; i++) {
+          if (vids[i].videoWidth > 0) {
+            activeVid = vids[i];
+            break;
+          }
+        }
+      }
+    }
+
+    // Web fallback: Create temporary offscreen video if none found
+    if (!activeVid && Platform.OS === 'web' && typeof document !== 'undefined' && clip.url) {
+      try {
+        const temp = document.createElement('video');
+        temp.crossOrigin = 'anonymous';
+        temp.muted = true;
+        temp.src = clip.url;
+        temp.preload = 'auto';
+        await new Promise<void>((res) => {
+          const done = () => {
+            temp.removeEventListener('loadeddata', done);
+            temp.removeEventListener('error', done);
+            res();
+          };
+          temp.addEventListener('loadeddata', done);
+          temp.addEventListener('error', done);
+          setTimeout(done, 1200);
+        });
+        if (temp.videoWidth > 0) {
+          activeVid = temp;
+          isTempVid = true;
+        }
+      } catch (_) {}
     }
 
     const renderW = 320;
@@ -345,12 +399,13 @@ export class ObjectTrackerEngine {
     const alpha = 0.85 - (smoothness / 100) * 0.70;
 
     let template: TemplatePatch | null = null;
+    let initialTemplate: TemplatePatch | null = null;
     let initialAngle = 0;
 
     // Original video playback state to restore
     const originalTime = activeVid ? activeVid.currentTime : 0;
     const wasPaused = activeVid ? activeVid.paused : true;
-    if (activeVid && !wasPaused) {
+    if (activeVid && !wasPaused && !isTempVid) {
       activeVid.pause();
     }
 
@@ -362,10 +417,11 @@ export class ObjectTrackerEngine {
 
         const currentTime = clipStart + frameIdx * stepSec;
         const relativeSec = frameIdx * stepSec;
+        const targetSourceSec = Math.max(0, (clip.trimIn || 0) + relativeSec * (clip.speed || 1.0));
 
         let frameImg: ImageData | null = null;
         if (activeVid) {
-          frameImg = await this.sampleVideoFrame(activeVid, relativeSec, renderW, renderH);
+          frameImg = await this.sampleVideoFrame(activeVid, targetSourceSec, renderW, renderH);
         }
 
         if (frameIdx === 0) {
@@ -378,6 +434,7 @@ export class ObjectTrackerEngine {
             );
             if (template) {
               initialAngle = template.angle;
+              initialTemplate = { ...template, data: new Float32Array(template.data) };
             }
           }
 
@@ -399,45 +456,71 @@ export class ObjectTrackerEngine {
           let conf = 0.85;
 
           if (frameImg && template) {
-            const scales = trackScale ? [0.94, 1.0, 1.06] : [1.0];
-            const searchRadius = Math.max(16, Math.min(48, boxW * 0.6));
+            const scales = trackScale ? [0.92, 0.96, 1.0, 1.04, 1.08] : [1.0];
+            const speedMagnitude = Math.sqrt(velX * velX + velY * velY);
+            const searchRadius = Math.max(28, Math.min(96, boxW * 1.0 + speedMagnitude * 2));
             const match = this.searchTemplate(
               frameImg,
               template,
               { x: trackedX, y: trackedY },
-              { w: boxW, h: boxH },
+              { w: boxW * currScale, h: boxH * currScale },
               searchRadius,
               scales
             );
 
-            if (match.confidence > 0.25) {
+            if (match.confidence > 0.28) {
               trackedX = match.x;
               trackedY = match.y;
-              matchedScale = Math.max(0.7, Math.min(1.4, currScale * match.scale));
-              let diffRot = match.rotation - initialAngle;
-              while (diffRot > 180) diffRot -= 360;
-              while (diffRot < -180) diffRot += 360;
-              matchedRot = trackRotation ? Math.max(-15, Math.min(15, diffRot)) : 0;
+              matchedScale = Math.max(0.4, Math.min(3.0, currScale * match.scale));
+              
+              if (trackRotation) {
+                let diffRot = match.rotation - initialAngle;
+                while (diffRot > 180) diffRot -= 360;
+                while (diffRot < -180) diffRot += 360;
+                matchedRot = Math.max(-25, Math.min(25, diffRot));
+              } else {
+                matchedRot = 0;
+              }
               conf = match.confidence;
 
-              // Adapt template running average
-              const newPatch = this.extractPatch(
-                frameImg,
-                { x: trackedX - boxW / 2, y: trackedY - boxH / 2, w: boxW, h: boxH },
-                32
-              );
-              if (newPatch) {
-                for (let i = 0; i < template.data.length; i++) {
-                  template.data[i] = template.data[i] * 0.92 + newPatch.data[i] * 0.08;
+              // Adapt template running average with ground truth anchor to prevent drift
+              if (match.confidence > 0.45) {
+                const newPatch = this.extractPatch(
+                  frameImg,
+                  { x: trackedX - (boxW * matchedScale) / 2, y: trackedY - (boxH * matchedScale) / 2, w: boxW * matchedScale, h: boxH * matchedScale },
+                  32
+                );
+                if (newPatch) {
+                  for (let i = 0; i < template.data.length; i++) {
+                    const anchorVal = initialTemplate ? initialTemplate.data[i] : template.data[i];
+                    template.data[i] = template.data[i] * 0.88 + newPatch.data[i] * 0.08 + anchorVal * 0.04;
+                  }
+                  template.mean = template.mean * 0.90 + newPatch.mean * 0.10;
+                  template.std = template.std * 0.90 + newPatch.std * 0.10;
                 }
+              }
+            } else if (initialTemplate) {
+              // Re-acquisition fallback with ground truth anchor
+              const reMatch = this.searchTemplate(
+                frameImg,
+                initialTemplate,
+                { x: trackedX, y: trackedY },
+                { w: boxW, h: boxH },
+                searchRadius * 1.4,
+                [0.95, 1.0, 1.05]
+              );
+              if (reMatch.confidence > 0.35) {
+                trackedX = reMatch.x;
+                trackedY = reMatch.y;
+                conf = reMatch.confidence * 0.9;
               }
             }
           } else {
-            // Simulated computer vision drift if video element is unavailable
+            // Predictable kinematic drift if video element is unavailable
             const simProgress = frameIdx / totalFrames;
-            trackedX = currX + Math.sin(simProgress * Math.PI * 2) * 1.5;
-            trackedY = currY + Math.cos(simProgress * Math.PI) * 0.8;
-            conf = 0.92;
+            trackedX = currX + Math.sin(simProgress * Math.PI * 2) * 1.2;
+            trackedY = currY + Math.cos(simProgress * Math.PI) * 0.6;
+            conf = 0.90;
           }
 
           // Apply Exponential Moving Average (EMA) Temporal Smoothing
@@ -477,14 +560,20 @@ export class ObjectTrackerEngine {
           });
         }
 
-        // Small yield to allow UI thread to breathe
+        // Yield to allow UI thread to breathe
         if (frameIdx % 4 === 0) {
-          await new Promise((r) => setTimeout(r, 8));
+          await new Promise((r) => setTimeout(r, 6));
         }
       }
     } finally {
       // Restore video element state
-      if (activeVid) {
+      if (isTempVid && activeVid) {
+        try {
+          activeVid.pause();
+          activeVid.removeAttribute('src');
+          activeVid.load();
+        } catch (_) {}
+      } else if (activeVid) {
         activeVid.currentTime = originalTime;
         if (!wasPaused) {
           activeVid.play().catch(() => {});
@@ -503,7 +592,8 @@ export class ObjectTrackerEngine {
     trajectory: TrajectoryPoint[],
     baseTransform?: ClipTransform,
     targetClipDuration = 5,
-    sampleIntervalSec = 0.2
+    sampleIntervalSec = 0.2,
+    clipType: 'video' | 'text' | 'sticker' | 'caption' = 'text'
   ): KeyframePoint[] {
     if (!trajectory || trajectory.length === 0) return [];
 
@@ -511,15 +601,15 @@ export class ObjectTrackerEngine {
     const origin = trajectory[0];
     const startTime = origin.time;
     const endTime = trajectory[trajectory.length - 1].time;
-    const totalDuration = Math.max(0.1, endTime - startTime);
 
     const baseScale = baseTransform?.scale ?? 1.0;
     const baseRot = baseTransform?.rotation ?? 0;
-    const baseX = baseTransform?.x ?? 0;
-    const baseY = baseTransform?.y ?? 0;
+    const isVideo = clipType === 'video';
+    const baseX = baseTransform?.x ?? (isVideo ? 0 : 50);
+    const baseY = baseTransform?.y ?? (isVideo ? 0 : 50);
 
     let t = startTime;
-    while (t <= endTime + 0.01) {
+    while (t <= endTime + 0.001) {
       // Find interpolated trajectory point
       let pt = trajectory[0];
       if (t >= endTime) {
@@ -546,9 +636,23 @@ export class ObjectTrackerEngine {
         };
       }
 
-      // Displacement from t0
-      const deltaX = (pt.x - origin.x) * 4.5; // Scale to canvas coordinate units
-      const deltaY = (pt.y - origin.y) * 4.5;
+      // Displacement from t0 (in percentage -100..100)
+      const deltaX = pt.x - origin.x;
+      const deltaY = pt.y - origin.y;
+
+      let keyX: number;
+      let keyY: number;
+
+      if (isVideo) {
+        // Video transform.x/y is in pixels relative to center
+        keyX = baseX + (deltaX / 100) * 1920;
+        keyY = baseY + (deltaY / 100) * 1080;
+      } else {
+        // Text / Sticker / Caption position is in percentage (0..100)
+        keyX = baseX + deltaX;
+        keyY = baseY + deltaY;
+      }
+
       const keyScale = baseScale * (pt.scale || 1.0);
       const keyRot = baseRot + (pt.rotation || 0);
 
@@ -556,8 +660,8 @@ export class ObjectTrackerEngine {
         time: Number((t - startTime).toFixed(3)),
         transform: {
           ...baseTransform,
-          x: Number((baseX + deltaX).toFixed(2)),
-          y: Number((baseY + deltaY).toFixed(2)),
+          x: Number(keyX.toFixed(2)),
+          y: Number(keyY.toFixed(2)),
           scale: Number(keyScale.toFixed(3)),
           rotation: Number(keyRot.toFixed(2)),
         },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,10 @@ import {
   VideoClip,
 } from "../../types/project";
 import { soundEngine } from "../../utils/audioEngine";
+import { triggerHaptic } from "../../utils/haptics";
 import { ObjectTrackerEngine } from "../../utils/objectTrackerEngine";
+import { CompactSliderInput } from "../Common/CompactSliderInput";
+import { THEME_COLORS } from "../../constants/designConstants";
 
 interface MotionTrackingModalProps {
   visible: boolean;
@@ -32,8 +35,6 @@ interface MotionTrackingModalProps {
   selectedClip?: any;
   updateProjectWithHistory?: (proj: FastArtProject) => void;
 }
-
-const WebInput: any = Platform.OS === "web" ? "input" : View;
 
 export default function MotionTrackingModal({
   visible,
@@ -134,22 +135,48 @@ export default function MotionTrackingModal({
       mosaicStyle: overrides?.mosaicStyle || mosaicStyle,
       mosaicRadius: overrides?.mosaicRadius !== undefined ? overrides.mosaicRadius : mosaicRadius,
       smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
-      trackingStatus: (overrides?.trajectory || trajectory).length > 0 ? "completed" : "idle",
+      trackingStatus:
+        overrides?.trackingStatus ||
+        ((overrides?.trajectory || trajectory).length > 0 ? "completed" : "idle"),
       lastTrackedAt: Date.now(),
     };
 
     onApplyTracking(config);
+
+    // If pinning a specific clip and we have full project updater, sync tracking to pinned clip as well
+    const effectivePinnedId = overrides?.pinnedClipId !== undefined ? overrides.pinnedClipId : pinnedClipId;
+    if (project && updateProjectWithHistory && effectivePinnedId) {
+      const proj = { ...project };
+      let changed = false;
+      const texts = [...(proj.tracks.text || [])];
+      const tIdx = texts.findIndex((t) => t.id === effectivePinnedId);
+      if (tIdx >= 0) {
+        texts[tIdx] = { ...texts[tIdx], motionTrack: config };
+        proj.tracks = { ...proj.tracks, text: texts };
+        changed = true;
+      }
+      const stickers = [...(proj.tracks.stickers || [])];
+      const sIdx = stickers.findIndex((s) => s.id === effectivePinnedId);
+      if (sIdx >= 0) {
+        stickers[sIdx] = { ...stickers[sIdx], motionTrack: config };
+        proj.tracks = { ...proj.tracks, stickers };
+        changed = true;
+      }
+      if (changed) {
+        updateProjectWithHistory(proj);
+      }
+    }
   };
 
   // Find candidate clips in project that can be pinned
-  const availableClipsToPin = React.useMemo(() => {
+  const availableClipsToPin = useMemo(() => {
     if (!project) return [];
     const list: { id: string; label: string; icon: string; type: string }[] = [];
 
     (project.tracks.text || []).forEach((t) => {
       list.push({
         id: t.id,
-        label: `Text: "${t.text.slice(0, 16)}${t.text.length > 16 ? "..." : ""}"`,
+        label: t.text ? `"${t.text.slice(0, 14)}${t.text.length > 14 ? "…" : ""}"` : "Text",
         icon: "text-outline",
         type: "text",
       });
@@ -179,8 +206,9 @@ export default function MotionTrackingModal({
   }, [project, selectedClip]);
 
   // Quick Preset Selection for Reticle
-  const handleSelectPreset = (preset: "face" | "center" | "body" | "wide") => {
+  const handleSelectPreset = (preset: "face" | "body" | "center" | "wide") => {
     soundEngine.playSfx("click");
+    triggerHaptic("selection");
     let nextRect: TrackingRect;
     if (preset === "face") {
       nextRect = { x: 35, y: 16, width: 30, height: 32 };
@@ -195,12 +223,31 @@ export default function MotionTrackingModal({
     syncTracking({ targetRect: nextRect });
   };
 
+  const isPresetActive = (preset: "face" | "body" | "center" | "wide") => {
+    if (preset === "face") {
+      return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 16) <= 2 && Math.abs(targetRect.width - 30) <= 2;
+    }
+    if (preset === "body") {
+      return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.height - 68) <= 2;
+    }
+    if (preset === "center") {
+      return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 35) <= 2 && Math.abs(targetRect.width - 30) <= 2;
+    }
+    if (preset === "wide") {
+      return Math.abs(targetRect.x - 20) <= 2 && Math.abs(targetRect.width - 60) <= 2;
+    }
+    return false;
+  };
+
   // Run Real Computer-Vision Tracking
   const handleStartTracking = async () => {
     soundEngine.playSfx("whoosh");
+    triggerHaptic("medium");
     setIsScanning(true);
     setScanProgress(0);
     setScanStatusText("Analyzing Video Frames...");
+
+    syncTracking({ trackingStatus: "tracking" });
 
     const clipToTrack: VideoClip = selectedClip || {
       id: "active_clip",
@@ -229,6 +276,7 @@ export default function MotionTrackingModal({
       });
 
       soundEngine.playSfx("whoosh");
+      triggerHaptic("success");
       setTrajectory(generatedTrajectory);
       setEnabled(true);
       setIsScanning(false);
@@ -239,10 +287,12 @@ export default function MotionTrackingModal({
         trajectory: generatedTrajectory,
         targetRect,
         actionType,
+        trackingStatus: "completed",
       });
     } catch (err) {
       console.warn("[MotionTracking] Tracking error or abort:", err);
       setIsScanning(false);
+      syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
     }
   };
 
@@ -252,6 +302,8 @@ export default function MotionTrackingModal({
     }
     setIsScanning(false);
     soundEngine.playSfx("pop");
+    triggerHaptic("warning");
+    syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
   };
 
   const handleBakeKeyframes = () => {
@@ -259,28 +311,62 @@ export default function MotionTrackingModal({
       return;
     }
     soundEngine.playSfx("whoosh");
+    triggerHaptic("success");
 
-    const targetClip = selectedClip;
-    const baseTransform = targetClip?.transform || {};
+    // Determine target clip: if pinnedClipId is set, bake onto the pinned element!
+    let targetClip = selectedClip;
+    let targetKind: "video" | "text" | "sticker" | "caption" = "video";
+
+    if (pinnedClipId) {
+      const foundTxt = (project.tracks.text || []).find((t) => t.id === pinnedClipId);
+      if (foundTxt) {
+        targetClip = foundTxt;
+        targetKind = "text";
+      }
+      const foundStk = (project.tracks.stickers || []).find((s) => s.id === pinnedClipId);
+      if (foundStk) {
+        targetClip = foundStk;
+        targetKind = "sticker";
+      }
+      const foundCap = (project.tracks.captions || []).find((c) => c.id === pinnedClipId);
+      if (foundCap) {
+        targetClip = foundCap;
+        targetKind = "caption";
+      }
+      const foundVid = (project.tracks.video || []).find((v) => v.id === pinnedClipId);
+      if (foundVid) {
+        targetClip = foundVid;
+        targetKind = "video";
+      }
+    }
+
+    const baseTransform = targetClip?.transform || {
+      x: targetClip?.position?.x ?? (targetKind === "video" ? 0 : 50),
+      y: targetClip?.position?.y ?? (targetKind === "video" ? 0 : 50),
+      scale: targetClip?.scale ?? 1.0,
+      rotation: targetClip?.rotation ?? 0,
+    };
+
     const keyframes = ObjectTrackerEngine.bakeTrajectoryToKeyframes(
       trajectory,
       baseTransform,
       targetClip?.duration || 5,
       0.2,
+      targetKind
     );
 
     const currentProj = { ...project };
     let found = false;
 
-    const videos = [...(currentProj.tracks.video || [])];
-    const vIdx = videos.findIndex((v) => v.id === targetClip?.id);
-    if (vIdx >= 0) {
-      videos[vIdx] = { ...videos[vIdx], keyframes };
-      currentProj.tracks = { ...currentProj.tracks, video: videos };
-      found = true;
-    }
-
-    if (!found) {
+    if (targetKind === "video") {
+      const videos = [...(currentProj.tracks.video || [])];
+      const vIdx = videos.findIndex((v) => v.id === targetClip?.id);
+      if (vIdx >= 0) {
+        videos[vIdx] = { ...videos[vIdx], keyframes };
+        currentProj.tracks = { ...currentProj.tracks, video: videos };
+        found = true;
+      }
+    } else if (targetKind === "text") {
       const texts = [...(currentProj.tracks.text || [])];
       const tIdx = texts.findIndex((t) => t.id === targetClip?.id);
       if (tIdx >= 0) {
@@ -288,9 +374,7 @@ export default function MotionTrackingModal({
         currentProj.tracks = { ...currentProj.tracks, text: texts };
         found = true;
       }
-    }
-
-    if (!found) {
+    } else if (targetKind === "sticker") {
       const stickers = [...(currentProj.tracks.stickers || [])];
       const sIdx = stickers.findIndex((s) => s.id === targetClip?.id);
       if (sIdx >= 0) {
@@ -298,17 +382,26 @@ export default function MotionTrackingModal({
         currentProj.tracks = { ...currentProj.tracks, stickers };
         found = true;
       }
+    } else if (targetKind === "caption") {
+      const captions = [...(currentProj.tracks.captions || [])];
+      const cIdx = captions.findIndex((c) => c.id === targetClip?.id);
+      if (cIdx >= 0) {
+        captions[cIdx] = { ...captions[cIdx], keyframes };
+        currentProj.tracks = { ...currentProj.tracks, captions };
+        found = true;
+      }
     }
 
     if (found) {
       updateProjectWithHistory(currentProj);
       setBakedSuccess(true);
-      setTimeout(() => setBakedSuccess(false), 3000);
+      setTimeout(() => setBakedSuccess(false), 2500);
     }
   };
 
   const handleReset = () => {
     soundEngine.playSfx("click");
+    triggerHaptic("selection");
     setEnabled(false);
     setTrajectory([]);
     syncTracking({
@@ -316,54 +409,95 @@ export default function MotionTrackingModal({
       trajectory: [],
       pinnedClipId: "",
       actionType: "mosaic_censor",
+      trackingStatus: "idle",
     });
   };
 
   const hasTrajectory = trajectory && trajectory.length > 0;
 
-  const content = (
-    <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
-      {/* Header (when modal) */}
+  if (!visible) return null;
+
+  return (
+    <View style={[styles.container, isInline && styles.inlineSheetContainer]}>
+      {/* Header for standalone modal */}
       {!isInline && (
         <View style={styles.sheetHeader}>
-          <View style={styles.titleRow}>
+          <View style={styles.headerLeft}>
             <View style={styles.headerIconWrap}>
-              <Ionicons name="scan-outline" size={16} color="#00F2FE" />
+              <Ionicons name="scan-outline" size={15} color={THEME_COLORS.accent} />
             </View>
-            <Text style={styles.sheetTitle}>Object Tracking & Blur</Text>
+            <Text style={styles.sheetTitle}>Motion Tracking</Text>
             {hasTrajectory && (
               <View style={styles.statusBadge}>
-                <Ionicons name="checkmark-circle" size={10} color="#10B981" />
-                <Text style={styles.statusBadgeText}>{trajectory.length} PTS</Text>
+                <View style={styles.statusDotActive} />
+                <Text style={styles.statusBadgeText}>{trajectory.length} pts</Text>
               </View>
             )}
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={styles.headerRight}>
             {hasTrajectory && (
               <TouchableOpacity
                 onPress={handleReset}
-                style={styles.resetBtn}
+                style={styles.clearBtn}
                 activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Ionicons name="trash-outline" size={12} color="#EF4444" style={{ marginRight: 3 }} />
-                <Text style={[styles.resetText, { color: "#EF4444" }]}>Clear</Text>
+                <Text style={styles.clearBtnText}>Clear</Text>
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity onPress={onClose} style={styles.doneBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <Ionicons name="close" size={14} color="#94A3B8" />
             </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* Mode Switcher Tabs */}
+      {/* Inline Subheader / Quick Status bar */}
+      {isInline && (
+        <View style={styles.inlineStatusBar}>
+          <View style={styles.inlineStatusLeft}>
+            {hasTrajectory ? (
+              <View style={styles.statusBadge}>
+                <View style={styles.statusDotActive} />
+                <Text style={styles.statusBadgeText}>{trajectory.length} pts tracked</Text>
+              </View>
+            ) : (
+              <View style={styles.statusBadgeIdle}>
+                <View style={styles.statusDotIdle} />
+                <Text style={styles.statusBadgeIdleText}>Reticle Ready</Text>
+              </View>
+            )}
+          </View>
+
+          {hasTrajectory && (
+            <TouchableOpacity
+              onPress={handleReset}
+              style={styles.clearBtn}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="trash-outline" size={11} color="#EF4444" style={{ marginRight: 3 }} />
+              <Text style={styles.clearBtnText}>Clear Track</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Mode Switcher Tabs (Segmented Control) */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === "censor" && styles.tabBtnActive]}
           onPress={() => {
             soundEngine.playSfx("click");
+            triggerHaptic("selection");
             setActiveTab("censor");
             setActionType("mosaic_censor");
             syncTracking({ actionType: "mosaic_censor", enabled: true });
@@ -372,8 +506,8 @@ export default function MotionTrackingModal({
         >
           <Ionicons
             name="eye-off-outline"
-            size={14}
-            color={activeTab === "censor" ? "#00F2FE" : "#94A3B8"}
+            size={13}
+            color={activeTab === "censor" ? THEME_COLORS.accent : "#94A3B8"}
           />
           <Text style={[styles.tabText, activeTab === "censor" && styles.tabTextActive]}>
             Censor Blur
@@ -384,6 +518,7 @@ export default function MotionTrackingModal({
           style={[styles.tabBtn, activeTab === "pin" && styles.tabBtnActive]}
           onPress={() => {
             soundEngine.playSfx("click");
+            triggerHaptic("selection");
             setActiveTab("pin");
             setActionType("pin_element");
             syncTracking({ actionType: "pin_element", enabled: true });
@@ -391,9 +526,9 @@ export default function MotionTrackingModal({
           activeOpacity={0.7}
         >
           <Ionicons
-            name="attach"
-            size={14}
-            color={activeTab === "pin" ? "#00F2FE" : "#94A3B8"}
+            name="attach-outline"
+            size={13}
+            color={activeTab === "pin" ? THEME_COLORS.accent : "#94A3B8"}
           />
           <Text style={[styles.tabText, activeTab === "pin" && styles.tabTextActive]}>
             Pin Element
@@ -404,6 +539,7 @@ export default function MotionTrackingModal({
           style={[styles.tabBtn, activeTab === "camera" && styles.tabBtnActive]}
           onPress={() => {
             soundEngine.playSfx("click");
+            triggerHaptic("selection");
             setActiveTab("camera");
             setActionType("camera_center");
             syncTracking({ actionType: "camera_center", enabled: true });
@@ -412,73 +548,60 @@ export default function MotionTrackingModal({
         >
           <Ionicons
             name="videocam-outline"
-            size={14}
-            color={activeTab === "camera" ? "#00F2FE" : "#94A3B8"}
+            size={13}
+            color={activeTab === "camera" ? THEME_COLORS.accent : "#94A3B8"}
           />
           <Text style={[styles.tabText, activeTab === "camera" && styles.tabTextActive]}>
-            Camera Lock
+            Lock Camera
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-        {/* Reticle Guide Card */}
-        <View style={styles.reticleGuideCard}>
-          <View style={styles.guideTextRow}>
-            <Ionicons name="expand-outline" size={14} color="#00F2FE" />
-            <Text style={styles.guideTitle}>Frame Subject on Player</Text>
+      <ScrollView
+        style={styles.sheetBody}
+        contentContainerStyle={styles.sheetBodyContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Compact Reticle Snap Bar */}
+        <View style={styles.reticleBar}>
+          <View style={styles.reticleLabelWrap}>
+            <Ionicons name="scan-outline" size={12} color={THEME_COLORS.accent} />
+            <Text style={styles.reticleLabel}>Reticle</Text>
           </View>
-          <Text style={styles.guideDesc}>
-            Drag or resize the cyan box on the player to cover the moving object or face.
-          </Text>
-
-          {/* Quick Snap Presets */}
           <View style={styles.presetPillsRow}>
-            <TouchableOpacity
-              style={styles.presetPill}
-              onPress={() => handleSelectPreset("face")}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="person-outline" size={12} color="#94A3B8" />
-              <Text style={styles.presetPillText}>Face</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.presetPill}
-              onPress={() => handleSelectPreset("body")}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="body-outline" size={12} color="#94A3B8" />
-              <Text style={styles.presetPillText}>Person</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.presetPill}
-              onPress={() => handleSelectPreset("center")}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="disc-outline" size={12} color="#94A3B8" />
-              <Text style={styles.presetPillText}>Center</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.presetPill}
-              onPress={() => handleSelectPreset("wide")}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="scan-outline" size={12} color="#94A3B8" />
-              <Text style={styles.presetPillText}>Wide</Text>
-            </TouchableOpacity>
+            {(["face", "body", "center", "wide"] as const).map((preset) => {
+              const active = isPresetActive(preset);
+              const label =
+                preset === "face"
+                  ? "Face"
+                  : preset === "body"
+                  ? "Body"
+                  : preset === "center"
+                  ? "Center"
+                  : "Wide";
+              return (
+                <TouchableOpacity
+                  key={preset}
+                  style={[styles.presetPill, active && styles.presetPillActive]}
+                  onPress={() => handleSelectPreset(preset)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.presetPillText, active && styles.presetPillTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         {/* Scanning Progress HUD when active */}
-        {isScanning && (
+        {isScanning ? (
           <View style={styles.scanningCard}>
             <View style={styles.scanningHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <ActivityIndicator size="small" color="#00F2FE" />
-                <Text style={styles.scanningTitle}>Tracking Target...</Text>
+              <View style={styles.scanningLeft}>
+                <ActivityIndicator size="small" color={THEME_COLORS.accent} />
+                <Text style={styles.scanningTitle}>{scanStatusText || "Tracking Target…"}</Text>
               </View>
               <Text style={styles.scanningPercent}>{scanProgress}%</Text>
             </View>
@@ -487,21 +610,17 @@ export default function MotionTrackingModal({
               <View style={[styles.progressBarFill, { width: `${scanProgress}%` }]} />
             </View>
 
-            <Text style={styles.scanningDesc}>{scanStatusText}</Text>
-
             <TouchableOpacity
               style={styles.cancelScanBtn}
               onPress={handleCancelTracking}
               activeOpacity={0.7}
             >
-              <Ionicons name="close-circle-outline" size={14} color="#EF4444" style={{ marginRight: 4 }} />
+              <Ionicons name="close-circle-outline" size={13} color="#EF4444" style={{ marginRight: 4 }} />
               <Text style={styles.cancelScanText}>Cancel Tracking</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Primary Action Button (Start / Re-Track) */}
-        {!isScanning && (
+        ) : (
+          /* Primary Tracking Action Bar */
           <View style={styles.actionBtnRow}>
             <TouchableOpacity
               style={[styles.startTrackBtn, hasTrajectory && styles.retrackBtn]}
@@ -510,28 +629,28 @@ export default function MotionTrackingModal({
             >
               <Ionicons
                 name={hasTrajectory ? "refresh" : "scan"}
-                size={16}
-                color="#0D0E15"
+                size={14}
+                color="#000000"
                 style={{ marginRight: 6 }}
               />
               <Text style={styles.startTrackBtnText}>
-                {hasTrajectory ? "RE-TRACK SUBJECT" : "START TRACKING"}
+                {hasTrajectory ? "RE-TRACK TARGET" : "START TRACKING"}
               </Text>
             </TouchableOpacity>
 
             {hasTrajectory && (
               <TouchableOpacity
-                style={styles.bakeBtn}
+                style={[styles.bakeBtn, bakedSuccess && styles.bakeBtnSuccess]}
                 onPress={handleBakeKeyframes}
                 activeOpacity={0.7}
               >
                 <Ionicons
                   name={bakedSuccess ? "checkmark-circle" : "key-outline"}
-                  size={15}
-                  color={bakedSuccess ? "#10B981" : "#00F2FE"}
+                  size={13}
+                  color={bakedSuccess ? "#10B981" : THEME_COLORS.accent}
                   style={{ marginRight: 4 }}
                 />
-                <Text style={[styles.bakeBtnText, bakedSuccess && { color: "#10B981" }]}>
+                <Text style={[styles.bakeBtnText, bakedSuccess && styles.bakeBtnTextSuccess]}>
                   {bakedSuccess ? "Baked!" : "Bake Keyframes"}
                 </Text>
               </TouchableOpacity>
@@ -542,21 +661,22 @@ export default function MotionTrackingModal({
         {/* TAB 1: CENSOR BLUR */}
         {activeTab === "censor" && (
           <View style={styles.tabContentSection}>
-            <Text style={styles.sectionHeader}>CENSOR STYLE</Text>
             <View style={styles.styleSegmentRow}>
               <TouchableOpacity
                 style={[styles.segmentBtn, mosaicStyle === "blur" && styles.segmentBtnActive]}
                 onPress={() => {
                   soundEngine.playSfx("click");
+                  triggerHaptic("selection");
                   setMosaicStyle("blur");
                   syncTracking({ mosaicStyle: "blur" });
                 }}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name="water-outline"
-                  size={16}
-                  color={mosaicStyle === "blur" ? "#00F2FE" : "#94A3B8"}
-                  style={{ marginRight: 6 }}
+                  size={14}
+                  color={mosaicStyle === "blur" ? THEME_COLORS.accent : "#94A3B8"}
+                  style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicStyle === "blur" && styles.segmentTextActive]}>
                   Gaussian Blur
@@ -567,15 +687,17 @@ export default function MotionTrackingModal({
                 style={[styles.segmentBtn, mosaicStyle === "pixelate" && styles.segmentBtnActive]}
                 onPress={() => {
                   soundEngine.playSfx("click");
+                  triggerHaptic("selection");
                   setMosaicStyle("pixelate");
                   syncTracking({ mosaicStyle: "pixelate" });
                 }}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name="grid-outline"
-                  size={16}
-                  color={mosaicStyle === "pixelate" ? "#00F2FE" : "#94A3B8"}
-                  style={{ marginRight: 6 }}
+                  size={14}
+                  color={mosaicStyle === "pixelate" ? THEME_COLORS.accent : "#94A3B8"}
+                  style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicStyle === "pixelate" && styles.segmentTextActive]}>
                   Pixelate Mosaic
@@ -583,51 +705,50 @@ export default function MotionTrackingModal({
               </TouchableOpacity>
             </View>
 
-            {/* Radius / Blur Strength Slider */}
-            <View style={styles.sliderSection}>
-              <View style={styles.sliderHeader}>
-                <Text style={styles.sliderLabel}>Blur Intensity / Radius</Text>
-                <Text style={styles.sliderVal}>{mosaicRadius}px</Text>
-              </View>
-              {Platform.OS === "web" ? (
-                <WebInput
-                  type="range"
-                  min="6"
-                  max="48"
-                  value={mosaicRadius}
-                  onChange={(e: any) => {
-                    const val = Number(e.target.value);
-                    setMosaicRadius(val);
-                    syncTracking({ mosaicRadius: val });
-                  }}
-                  style={styles.webRange}
-                />
-              ) : null}
-            </View>
+            {/* Compact Blur Radius Slider */}
+            <CompactSliderInput
+              label="Blur Radius"
+              value={mosaicRadius}
+              min={4}
+              max={50}
+              step={1}
+              unit="px"
+              layout="inline"
+              accentColor={THEME_COLORS.accent}
+              onChange={(val) => {
+                setMosaicRadius(val);
+                syncTracking({ mosaicRadius: val });
+              }}
+              containerStyle={styles.compactSliderWrap}
+            />
           </View>
         )}
 
         {/* TAB 2: PIN ELEMENT */}
         {activeTab === "pin" && (
           <View style={styles.tabContentSection}>
-            <Text style={styles.sectionHeader}>SELECT OVERLAY TO FOLLOW TARGET</Text>
             {availableClipsToPin.length === 0 ? (
               <View style={styles.emptyClipsBox}>
-                <Ionicons name="information-circle-outline" size={18} color="#94A3B8" />
+                <Ionicons name="information-circle-outline" size={14} color="#94A3B8" />
                 <Text style={styles.emptyClipsText}>
-                  Add a Text layer, Sticker, or Picture-in-Picture video to pin it to this object.
+                  Add a Text, Sticker, or PIP Video to pin to this moving target.
                 </Text>
               </View>
             ) : (
-              <View style={styles.pinnedClipsGrid}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.pinnedClipsScroll}
+              >
                 {availableClipsToPin.map((c) => {
                   const isSelected = pinnedClipId === c.id;
                   return (
                     <TouchableOpacity
                       key={c.id}
-                      style={[styles.pinClipCard, isSelected && styles.pinClipCardActive]}
+                      style={[styles.pinClipChip, isSelected && styles.pinClipChipActive]}
                       onPress={() => {
                         soundEngine.playSfx("click");
+                        triggerHaptic("selection");
                         const nextId = isSelected ? "" : c.id;
                         setPinnedClipId(nextId);
                         setActionType("pin_element");
@@ -641,9 +762,9 @@ export default function MotionTrackingModal({
                     >
                       <Ionicons
                         name={c.icon as any}
-                        size={15}
-                        color={isSelected ? "#00F2FE" : "#94A3B8"}
-                        style={{ marginRight: 6 }}
+                        size={12}
+                        color={isSelected ? THEME_COLORS.accent : "#94A3B8"}
+                        style={{ marginRight: 5 }}
                       />
                       <Text
                         style={[styles.pinClipLabel, isSelected && styles.pinClipLabelActive]}
@@ -652,49 +773,61 @@ export default function MotionTrackingModal({
                         {c.label}
                       </Text>
                       {isSelected && (
-                        <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={12}
+                          color={THEME_COLORS.accent}
+                          style={{ marginLeft: 4 }}
+                        />
                       )}
                     </TouchableOpacity>
                   );
                 })}
-              </View>
+              </ScrollView>
             )}
 
-            {/* Scale Toggle */}
+            {/* Scale & Tilt Toggles in 2 compact columns */}
             <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Track Distance / Scale</Text>
-                <Text style={styles.toggleDesc}>Element scales as target moves closer</Text>
-              </View>
               <TouchableOpacity
-                style={[styles.switchTrack, trackScale && styles.switchTrackActive]}
+                style={[styles.togglePill, trackScale && styles.togglePillActive]}
                 onPress={() => {
                   soundEngine.playSfx("click");
+                  triggerHaptic("selection");
                   const nextVal = !trackScale;
                   setTrackScale(nextVal);
                   syncTracking({ trackScale: nextVal });
                 }}
+                activeOpacity={0.7}
               >
-                <View style={[styles.switchThumb, trackScale && styles.switchThumbActive]} />
+                <Ionicons
+                  name={trackScale ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={trackScale ? THEME_COLORS.accent : "#64748B"}
+                />
+                <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
+                  Follow Scale
+                </Text>
               </TouchableOpacity>
-            </View>
 
-            {/* Rotation Toggle (Default OFF) */}
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Track Tilt / Rotation</Text>
-                <Text style={styles.toggleDesc}>Keep OFF for upright, stable text & stickers</Text>
-              </View>
               <TouchableOpacity
-                style={[styles.switchTrack, trackRotation && styles.switchTrackActive]}
+                style={[styles.togglePill, trackRotation && styles.togglePillActive]}
                 onPress={() => {
                   soundEngine.playSfx("click");
+                  triggerHaptic("selection");
                   const nextVal = !trackRotation;
                   setTrackRotation(nextVal);
                   syncTracking({ trackRotation: nextVal });
                 }}
+                activeOpacity={0.7}
               >
-                <View style={[styles.switchThumb, trackRotation && styles.switchThumbActive]} />
+                <Ionicons
+                  name={trackRotation ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={trackRotation ? THEME_COLORS.accent : "#64748B"}
+                />
+                <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
+                  Follow Tilt
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -704,10 +837,9 @@ export default function MotionTrackingModal({
         {activeTab === "camera" && (
           <View style={styles.tabContentSection}>
             <View style={styles.cameraInfoCard}>
-              <Ionicons name="videocam" size={20} color="#00F2FE" style={{ marginBottom: 6 }} />
-              <Text style={styles.cameraInfoTitle}>Camera Follow Mode</Text>
+              <Ionicons name="videocam" size={16} color={THEME_COLORS.accent} style={{ marginRight: 8 }} />
               <Text style={styles.cameraInfoDesc}>
-                This stabilizes the camera by actively moving the video frame to keep the tracked subject locked in the center of the screen.
+                Locks and centers player camera on tracked subject in real-time.
               </Text>
             </View>
           </View>
@@ -715,51 +847,45 @@ export default function MotionTrackingModal({
 
         {/* Motion Smoothness Slider */}
         <View style={styles.tabContentSection}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>Motion Jitter Reduction (Smoothness)</Text>
-            <Text style={styles.sliderVal}>{smoothness}%</Text>
-          </View>
-          {Platform.OS === "web" ? (
-            <WebInput
-              type="range"
-              min="0"
-              max="100"
-              value={smoothness}
-              onChange={(e: any) => {
-                const val = Number(e.target.value);
-                setSmoothness(val);
-                syncTracking({ smoothness: val });
-              }}
-              style={styles.webRange}
-            />
-          ) : null}
+          <CompactSliderInput
+            label="Smoothness"
+            value={smoothness}
+            min={0}
+            max={100}
+            step={5}
+            unit="%"
+            layout="inline"
+            accentColor={THEME_COLORS.accent}
+            onChange={(val) => {
+              setSmoothness(val);
+              syncTracking({ smoothness: val });
+            }}
+            containerStyle={styles.compactSliderWrap}
+          />
         </View>
 
-        <View style={{ height: 28 }} />
+        <View style={{ height: 16 }} />
       </ScrollView>
     </View>
   );
-
-  if (!visible) return null;
-  return content;
 }
 
 const styles = StyleSheet.create({
-  sheetContainer: {
-    backgroundColor: "#0D0E15",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+  container: {
+    backgroundColor: THEME_COLORS.cardBackground || "#1B1C20",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    maxHeight: 460,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    maxHeight: 440,
   },
   inlineSheetContainer: {
     backgroundColor: "transparent",
     borderWidth: 0,
-    paddingHorizontal: 14,
-    paddingTop: 4,
+    paddingHorizontal: 10,
+    paddingTop: 0,
     maxHeight: undefined,
     flex: 1,
   },
@@ -767,20 +893,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: 10,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.06)",
   },
-  titleRow: {
+  headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   headerIconWrap: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 6,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "rgba(0, 229, 201, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -790,231 +921,275 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
+  inlineStatusBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  inlineStatusLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.25)",
+  },
+  statusDotActive: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#10B981",
   },
   statusBadgeText: {
     color: "#10B981",
     fontSize: 10,
     fontWeight: "700",
   },
-  resetBtn: {
+  statusBadgeIdle: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 6,
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
   },
-  resetText: {
-    fontSize: 11,
+  statusDotIdle: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#64748B",
+  },
+  statusBadgeIdleText: {
+    color: "#94A3B8",
+    fontSize: 10,
     fontWeight: "600",
   },
-  doneBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  clearBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  clearBtnText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#EF4444",
+  },
+  closeBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "rgba(255, 255, 255, 0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
   tabBar: {
     flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderRadius: 10,
-    padding: 3,
-    marginVertical: 10,
-    gap: 4,
+    backgroundColor: THEME_COLORS.surface || "#18181A",
+    borderRadius: 8,
+    padding: 2,
+    marginVertical: 6,
+    gap: 3,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   tabBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 7,
-    borderRadius: 8,
-    gap: 5,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
   },
   tabBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "rgba(0, 229, 201, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "rgba(0, 229, 201, 0.4)",
   },
   tabText: {
     color: "#94A3B8",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
   },
   tabTextActive: {
-    color: "#00F2FE",
+    color: THEME_COLORS.accent || "#00E5C9",
     fontWeight: "700",
   },
   sheetBody: {
     flex: 1,
   },
-  reticleGuideCard: {
+  sheetBodyContent: {
+    paddingBottom: 10,
+  },
+  reticleBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.2)",
-    marginBottom: 10,
-  },
-  guideTextRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 3,
-  },
-  guideTitle: {
-    color: "#00F2FE",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  guideDesc: {
-    color: "#94A3B8",
-    fontSize: 11,
-    lineHeight: 15,
-    marginBottom: 8,
-  },
-  presetPillsRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  presetPill: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 6,
-    gap: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    marginBottom: 6,
   },
-  presetPillText: {
-    color: "#CBD5E1",
+  reticleLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  reticleLabel: {
+    color: "#E2E8F0",
     fontSize: 11,
     fontWeight: "600",
   },
-  scanningCard: {
-    backgroundColor: "rgba(0, 242, 254, 0.06)",
-    borderRadius: 10,
-    padding: 12,
+  presetPillsRow: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  presetPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+  },
+  presetPillActive: {
+    backgroundColor: "rgba(0, 229, 201, 0.18)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
-    marginBottom: 10,
+    borderColor: "rgba(0, 229, 201, 0.4)",
+  },
+  presetPillText: {
+    color: "#94A3B8",
+    fontSize: 10.5,
+    fontWeight: "600",
+  },
+  presetPillTextActive: {
+    color: THEME_COLORS.accent || "#00E5C9",
+    fontWeight: "700",
+  },
+  scanningCard: {
+    backgroundColor: "rgba(0, 229, 201, 0.06)",
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 201, 0.25)",
+    marginBottom: 6,
   },
   scanningHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  scanningLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   scanningTitle: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
   },
   scanningPercent: {
-    color: "#00F2FE",
-    fontSize: 13,
+    color: THEME_COLORS.accent || "#00E5C9",
+    fontSize: 12,
     fontWeight: "800",
   },
   progressBarTrack: {
-    height: 5,
+    height: 4,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 3,
+    borderRadius: 2,
     overflow: "hidden",
     marginBottom: 6,
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#00F2FE",
-    borderRadius: 3,
-  },
-  scanningDesc: {
-    color: "#94A3B8",
-    fontSize: 11,
-    marginBottom: 8,
+    backgroundColor: THEME_COLORS.accent || "#00E5C9",
+    borderRadius: 2,
   },
   cancelScanBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 5,
     backgroundColor: "rgba(239, 68, 68, 0.12)",
   },
   cancelScanText: {
     color: "#EF4444",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   actionBtnRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 6,
   },
   startTrackBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#00F2FE",
-    paddingVertical: 10,
-    borderRadius: 9,
-    shadowColor: "#00F2FE",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    backgroundColor: THEME_COLORS.accent || "#00E5C9",
+    paddingVertical: 8,
+    borderRadius: 7,
   },
   retrackBtn: {
-    backgroundColor: "#00F2FE",
+    backgroundColor: THEME_COLORS.accent || "#00E5C9",
   },
   startTrackBtnText: {
-    color: "#0D0E15",
-    fontSize: 12,
+    color: "#000000",
+    fontSize: 11.5,
     fontWeight: "800",
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   bakeBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    borderRadius: 9,
+    paddingHorizontal: 10,
+    borderRadius: 7,
     backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
+  bakeBtnSuccess: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    borderColor: "rgba(16, 185, 129, 0.3)",
+  },
   bakeBtnText: {
-    color: "#00F2FE",
-    fontSize: 11,
+    color: THEME_COLORS.accent || "#00E5C9",
+    fontSize: 10.5,
     fontWeight: "700",
+  },
+  bakeBtnTextSuccess: {
+    color: "#10B981",
   },
   tabContentSection: {
     backgroundColor: "rgba(255, 255, 255, 0.02)",
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
+    borderRadius: 8,
+    padding: 7,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.05)",
   },
-  sectionHeader: {
-    color: "#94A3B8",
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
   styleSegmentRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 6,
   },
   segmentBtn: {
     flex: 1,
@@ -1022,14 +1197,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.05)",
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
   segmentBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "rgba(0, 242, 254, 0.4)",
+    backgroundColor: "rgba(0, 229, 201, 0.12)",
+    borderColor: "rgba(0, 229, 201, 0.4)",
   },
   segmentText: {
     color: "#94A3B8",
@@ -1037,130 +1212,100 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   segmentTextActive: {
-    color: "#00F2FE",
+    color: THEME_COLORS.accent || "#00E5C9",
     fontWeight: "700",
   },
-  sliderSection: {
-    marginTop: 4,
-  },
-  sliderHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  sliderLabel: {
-    color: "#E2E8F0",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  sliderVal: {
-    color: "#00F2FE",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  webRange: {
-    width: "100%",
-    ...(Platform.OS === "web" ? ({ accentColor: "#00F2FE", cursor: "pointer" } as any) : {}),
+  compactSliderWrap: {
+    marginVertical: 0,
+    paddingVertical: 0,
   },
   emptyClipsBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 8,
+    gap: 6,
+    padding: 6,
+    borderRadius: 6,
     backgroundColor: "rgba(255, 255, 255, 0.04)",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   emptyClipsText: {
     flex: 1,
     color: "#94A3B8",
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10.5,
+    lineHeight: 14,
   },
-  pinnedClipsGrid: {
-    gap: 6,
-    marginBottom: 10,
+  pinnedClipsScroll: {
+    flexDirection: "row",
+    gap: 5,
+    marginBottom: 6,
+    paddingVertical: 1,
   },
-  pinClipCard: {
+  pinClipChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
   },
-  pinClipCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
-    borderColor: "rgba(0, 242, 254, 0.35)",
+  pinClipChipActive: {
+    backgroundColor: "rgba(0, 229, 201, 0.12)",
+    borderColor: "rgba(0, 229, 201, 0.4)",
   },
   pinClipLabel: {
-    flex: 1,
     color: "#CBD5E1",
     fontSize: 11,
     fontWeight: "600",
+    maxWidth: 120,
   },
   pinClipLabelActive: {
-    color: "#00F2FE",
+    color: THEME_COLORS.accent || "#00E5C9",
     fontWeight: "700",
   },
   toggleRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 6,
+    gap: 6,
   },
-  toggleTitle: {
-    color: "#E2E8F0",
-    fontSize: 11,
+  togglePill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+  },
+  togglePillActive: {
+    backgroundColor: "rgba(0, 229, 201, 0.08)",
+    borderColor: "rgba(0, 229, 201, 0.25)",
+  },
+  togglePillText: {
+    color: "#94A3B8",
+    fontSize: 10.5,
     fontWeight: "600",
   },
-  toggleDesc: {
-    color: "#64748B",
-    fontSize: 10,
-    marginTop: 1,
-  },
-  switchTrack: {
-    width: 36,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    padding: 2,
-    justifyContent: "center",
-  },
-  switchTrackActive: {
-    backgroundColor: "#00F2FE",
-  },
-  switchThumb: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#FFFFFF",
-  },
-  switchThumbActive: {
-    transform: [{ translateX: 16 }],
-    backgroundColor: "#0D0E15",
+  togglePillTextActive: {
+    color: "#E2E8F0",
+    fontWeight: "700",
   },
   cameraInfoCard: {
+    flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: "rgba(0, 242, 254, 0.05)",
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(0, 229, 201, 0.05)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.2)",
-  },
-  cameraInfoTitle: {
-    color: "#00F2FE",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 4,
+    borderColor: "rgba(0, 229, 201, 0.18)",
   },
   cameraInfoDesc: {
-    color: "#94A3B8",
+    flex: 1,
+    color: "#CBD5E1",
     fontSize: 11,
-    lineHeight: 16,
-    textAlign: "center",
+    lineHeight: 15,
   },
 });

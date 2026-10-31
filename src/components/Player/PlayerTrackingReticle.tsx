@@ -156,8 +156,8 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
     })
   ).current;
 
-  // React Native Resize PanResponder (Bottom-Right)
-  const resizePanResponder = useRef(
+  // React Native Resize PanResponder (Bottom-Right SE)
+  const resizePanResponderSE = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
@@ -177,6 +177,93 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
 
         onChangeTargetRect({
           ...sr,
+          width: Number(newW.toFixed(2)),
+          height: Number(newH.toFixed(2)),
+        });
+      },
+    })
+  ).current;
+
+  // React Native Resize PanResponder (Bottom-Left SW)
+  const resizePanResponderSW = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startRectRef.current = { ...rectRef.current };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (bw <= 0 || bh <= 0) return;
+        const deltaXPercent = (gestureState.dx / bw) * 100;
+        const deltaHPercent = (gestureState.dy / bh) * 100;
+        const sr = startRectRef.current;
+
+        const candidateX = Math.max(0, Math.min(sr.x + sr.width - 8, sr.x + deltaXPercent));
+        const newW = sr.width + (sr.x - candidateX);
+        const maxH = 100 - sr.y;
+        const newH = Math.max(8, Math.min(maxH, sr.height + deltaHPercent));
+
+        onChangeTargetRect({
+          ...sr,
+          x: Number(candidateX.toFixed(2)),
+          width: Number(newW.toFixed(2)),
+          height: Number(newH.toFixed(2)),
+        });
+      },
+    })
+  ).current;
+
+  // React Native Resize PanResponder (Top-Right NE)
+  const resizePanResponderNE = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startRectRef.current = { ...rectRef.current };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (bw <= 0 || bh <= 0) return;
+        const deltaWPercent = (gestureState.dx / bw) * 100;
+        const deltaYPercent = (gestureState.dy / bh) * 100;
+        const sr = startRectRef.current;
+
+        const candidateY = Math.max(0, Math.min(sr.y + sr.height - 8, sr.y + deltaYPercent));
+        const newH = sr.height + (sr.y - candidateY);
+        const maxW = 100 - sr.x;
+        const newW = Math.max(8, Math.min(maxW, sr.width + deltaWPercent));
+
+        onChangeTargetRect({
+          ...sr,
+          y: Number(candidateY.toFixed(2)),
+          width: Number(newW.toFixed(2)),
+          height: Number(newH.toFixed(2)),
+        });
+      },
+    })
+  ).current;
+
+  // React Native Resize PanResponder (Top-Left NW)
+  const resizePanResponderNW = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startRectRef.current = { ...rectRef.current };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (bw <= 0 || bh <= 0) return;
+        const deltaXPercent = (gestureState.dx / bw) * 100;
+        const deltaYPercent = (gestureState.dy / bh) * 100;
+        const sr = startRectRef.current;
+
+        const candidateX = Math.max(0, Math.min(sr.x + sr.width - 8, sr.x + deltaXPercent));
+        const candidateY = Math.max(0, Math.min(sr.y + sr.height - 8, sr.y + deltaYPercent));
+        const newW = sr.width + (sr.x - candidateX);
+        const newH = sr.height + (sr.y - candidateY);
+
+        onChangeTargetRect({
+          x: Number(candidateX.toFixed(2)),
+          y: Number(candidateY.toFixed(2)),
           width: Number(newW.toFixed(2)),
           height: Number(newH.toFixed(2)),
         });
@@ -273,6 +360,7 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
         {/* Top-Left (NW) */}
         <View
           style={[styles.handle, styles.handleNW, { borderColor: accentColor }]}
+          {...resizePanResponderNW.panHandlers}
           {...webDragProps('nw')}
         >
           <View style={[styles.handleInner, { backgroundColor: accentColor }]} />
@@ -281,6 +369,7 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
         {/* Top-Right (NE) */}
         <View
           style={[styles.handle, styles.handleNE, { borderColor: accentColor }]}
+          {...resizePanResponderNE.panHandlers}
           {...webDragProps('ne')}
         >
           <View style={[styles.handleInner, { backgroundColor: accentColor }]} />
@@ -289,6 +378,7 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
         {/* Bottom-Left (SW) */}
         <View
           style={[styles.handle, styles.handleSW, { borderColor: accentColor }]}
+          {...resizePanResponderSW.panHandlers}
           {...webDragProps('sw')}
         >
           <View style={[styles.handleInner, { backgroundColor: accentColor }]} />
@@ -297,7 +387,7 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
         {/* Bottom-Right (SE) */}
         <View
           style={[styles.handle, styles.handleSE, { borderColor: accentColor }]}
-          {...resizePanResponder.panHandlers}
+          {...resizePanResponderSE.panHandlers}
           {...webDragProps('se')}
         >
           <View style={[styles.handleInner, { backgroundColor: accentColor }]} />

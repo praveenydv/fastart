@@ -153,15 +153,19 @@ export function useActiveTransformItem({
       let motionY = 0;
       let motionScale = 1.0;
       let motionRot = 0;
-      if (selectedCaption.motionTrack && selectedCaption.motionTrack.enabled) {
+      const effectiveTrack = selectedCaption.motionTrack?.enabled
+        ? selectedCaption.motionTrack
+        : project?.tracks?.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === selectedCaption.id)?.motionTrack;
+
+      if (effectiveTrack && effectiveTrack.enabled) {
         const motion = applyMotionTracking(
           currentTime,
           selectedCaption.startTime,
           selectedCaption.duration,
-          selectedCaption.motionTrack,
+          effectiveTrack,
         );
-        motionX = motion.dx;
-        motionY = motion.dy;
+        motionX = (motion.dx / 100) * safeBoxW;
+        motionY = (motion.dy / 100) * safeCanvasH;
         motionScale = motion.dScale;
         motionRot = motion.dRot;
       }
@@ -242,15 +246,19 @@ export function useActiveTransformItem({
       let motionY = 0;
       let motionScale = 1.0;
       let motionRot = 0;
-      if (selectedText.motionTrack && selectedText.motionTrack.enabled) {
+      const effectiveTrack = selectedText.motionTrack?.enabled
+        ? selectedText.motionTrack
+        : project?.tracks?.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === selectedText.id)?.motionTrack;
+
+      if (effectiveTrack && effectiveTrack.enabled) {
         const motion = applyMotionTracking(
           currentTime,
           selectedText.startTime,
           selectedText.duration,
-          selectedText.motionTrack,
+          effectiveTrack,
         );
-        motionX = motion.dx;
-        motionY = motion.dy;
+        motionX = (motion.dx / 100) * safeBoxW;
+        motionY = (motion.dy / 100) * safeCanvasH;
         motionScale = motion.dScale;
         motionRot = motion.dRot;
       }
@@ -332,15 +340,19 @@ export function useActiveTransformItem({
       let motionY = 0;
       let motionScale = 1.0;
       let motionRot = 0;
-      if (selectedSticker.motionTrack && selectedSticker.motionTrack.enabled) {
+      const effectiveTrack = selectedSticker.motionTrack?.enabled
+        ? selectedSticker.motionTrack
+        : project?.tracks?.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === selectedSticker.id)?.motionTrack;
+
+      if (effectiveTrack && effectiveTrack.enabled) {
         const motion = applyMotionTracking(
           currentTime,
           selectedSticker.startTime,
           selectedSticker.duration,
-          selectedSticker.motionTrack,
+          effectiveTrack,
         );
-        motionX = motion.dx;
-        motionY = motion.dy;
+        motionX = (motion.dx / 100) * safeBoxW;
+        motionY = (motion.dy / 100) * safeCanvasH;
         motionScale = motion.dScale;
         motionRot = motion.dRot;
       }
@@ -412,21 +424,26 @@ export function useActiveTransformItem({
       let motionY = 0;
       let motionScale = 1.0;
       let motionRot = 0;
-      if (
-        selectedVideo.motionTrack &&
-        selectedVideo.motionTrack.enabled &&
-        selectedVideo.motionTrack.actionType === "camera_center"
-      ) {
-        const motion = applyMotionTracking(
-          currentTime,
-          selectedVideo.startTime,
-          selectedVideo.duration,
-          selectedVideo.motionTrack,
-        );
-        motionX = (motion.dx / 100) * safeBoxW;
-        motionY = (motion.dy / 100) * safeCanvasH;
-        motionScale = motion.dScale;
-        motionRot = motion.dRot;
+      const effectiveTrack = selectedVideo.motionTrack?.enabled
+        ? selectedVideo.motionTrack
+        : project?.tracks?.video?.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === selectedVideo.id)?.motionTrack;
+
+      if (effectiveTrack && effectiveTrack.enabled) {
+        const isCameraCenter = effectiveTrack.actionType === "camera_center" && selectedVideo.motionTrack?.actionType === "camera_center";
+        const isPinnedOverlay = effectiveTrack.pinnedClipId === selectedVideo.id;
+
+        if (isCameraCenter || isPinnedOverlay) {
+          const motion = applyMotionTracking(
+            currentTime,
+            selectedVideo.startTime,
+            selectedVideo.duration,
+            effectiveTrack,
+          );
+          motionX = (motion.dx / 100) * safeBoxW;
+          motionY = (motion.dy / 100) * safeCanvasH;
+          motionScale = motion.dScale;
+          motionRot = motion.dRot;
+        }
       }
 
       const effScale = baseS * motionScale;
