@@ -51,7 +51,7 @@ function computeTargetPosition(
   previousInsertTrack: number | null = null,
   currentTime?: number,
 ) {
-  const rawTrackPos = initialTrack + deltaYPixels / TRACK_ROW_HEIGHT;
+  const rawTrackPos = initialTrack - deltaYPixels / TRACK_ROW_HEIGHT;
 
   // Other clips excluding the one being dragged
   const otherClips = allClips.filter((c) => c.id !== clipId);
@@ -158,11 +158,11 @@ function computeTargetPosition(
   const baseTrack = Math.floor(rawTrackPos);
   const fraction = rawTrackPos - baseTrack;
 
-  // 1. Moving to Top side (past or near the top of track 0)
-  const isDraggingAboveTop = rawTrackPos <= 0.15;
+  // 1. Moving to Top side (above highest active track in timeline)
+  const isDraggingAboveTop = rawTrackPos >= activeTrackCount - 0.15;
 
-  // 2. Moving to Bottom side (past or near the bottom of all tracks)
-  const isDraggingPastBottom = rawTrackPos >= activeTrackCount - 0.15;
+  // 2. Moving to Bottom side (below track 0 / main track)
+  const isDraggingPastBottom = rawTrackPos <= 0.15;
 
   // 3. Hovering between tracks (seam between baseTrack and baseTrack + 1)
   const isHoveringBetweenTracks =
@@ -178,12 +178,12 @@ function computeTargetPosition(
   if (activeTrackCount < MAX_TRACKS) {
     if (isDraggingAboveTop) {
       isInsertingNewTrack = true;
-      insertTrackIndex = 0;
-      targetTrack = 0;
-    } else if (isDraggingPastBottom) {
-      isInsertingNewTrack = true;
       insertTrackIndex = activeTrackCount;
       targetTrack = activeTrackCount;
+    } else if (isDraggingPastBottom) {
+      isInsertingNewTrack = true;
+      insertTrackIndex = 0;
+      targetTrack = 0;
     } else if (isHoveringBetweenTracks) {
       isInsertingNewTrack = true;
       insertTrackIndex = baseTrack + 1;
@@ -446,8 +446,8 @@ export function useTimelineClipDrag({
       }
 
       const deltaX = deltaXPixels / pxPerSecRef.current;
-      const minY = (-state.initialTrack - 1) * TRACK_ROW_HEIGHT;
-      const maxY = (activeTrackCount + 1 - state.initialTrack) * TRACK_ROW_HEIGHT;
+      const minY = (state.initialTrack - activeTrackCount - 1) * TRACK_ROW_HEIGHT;
+      const maxY = (state.initialTrack + 1) * TRACK_ROW_HEIGHT;
       const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
       const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
@@ -661,8 +661,8 @@ export function useTimelineClipDrag({
         }
 
         const deltaX = deltaXPixels / pxPerSecRef.current;
-        const minY = (-initialTrackIndex - 1) * TRACK_ROW_HEIGHT;
-        const maxY = (activeTrackCount + 1 - initialTrackIndex) * TRACK_ROW_HEIGHT;
+        const minY = (initialTrackIndex - activeTrackCount - 1) * TRACK_ROW_HEIGHT;
+        const maxY = (initialTrackIndex + 1) * TRACK_ROW_HEIGHT;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
         const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
@@ -792,8 +792,8 @@ export function useTimelineClipDrag({
 
         const deltaX = gestureState.dx / pxPerSecRef.current;
         const deltaYPixels = gestureState.dy;
-        const minY = (-info.initialTrack - 1) * TRACK_ROW_HEIGHT;
-        const maxY = (activeTrackCount + 1 - info.initialTrack) * TRACK_ROW_HEIGHT;
+        const minY = (info.initialTrack - activeTrackCount - 1) * TRACK_ROW_HEIGHT;
+        const maxY = (info.initialTrack + 1) * TRACK_ROW_HEIGHT;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
         const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =

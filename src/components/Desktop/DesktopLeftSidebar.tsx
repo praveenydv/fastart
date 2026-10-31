@@ -37,6 +37,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
     { id: 'speed', label: 'Speed', icon: 'speedometer-outline', type: 'ion' },
     { id: 'volume', label: 'Volume', icon: 'volume-high-outline', type: 'ion' },
     { id: 'cutout', label: 'Cutout', icon: 'person-outline', type: 'ion' },
+    { id: 'layer', label: 'Layer', icon: 'layers-outline', type: 'ion' },
     { id: 'canvas', label: 'Canvas', icon: 'aspect-ratio-outline', type: 'ion' },
     { id: 'background', label: 'Background', icon: 'image-outline', type: 'ion' },
     { id: 'captions', label: 'Captions', icon: 'chatbox-ellipses-outline', type: 'ion' },

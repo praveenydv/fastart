@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Platform } from "react-native";
 import { FastArtProject } from "../../types/project";
 import { UnifiedClipItem, MAX_TRACKS, TimelineDragState } from "./timelineTypes";
@@ -175,12 +175,12 @@ export function useTimelineClips({
     Math.max(1, persistentTrackCount + extraTracks),
   );
 
-  const handleAddTrack = () => {
+  const handleAddTrack = useCallback(() => {
     soundEngine.playSfx("click");
     setPersistentTrackCount((prev) => Math.min(MAX_TRACKS, prev + 1));
-  };
+  }, []);
 
-  const handleRemoveTrack = (trackIdx: number) => {
+  const handleRemoveTrack = useCallback((trackIdx: number) => {
     soundEngine.playSfx("click");
 
     // Shift all clips located on tracks after trackIdx down by 1 track
@@ -222,7 +222,16 @@ export function useTimelineClips({
 
     setPersistentTrackCount((prev) => Math.max(1, prev - 1));
     setExtraTracks((prev) => Math.max(0, prev - 1));
-  };
+  }, [
+    onUpdateProject,
+    videoClips,
+    audioClips,
+    captionClips,
+    textClips,
+    stickerClips,
+    effectClips,
+    project.tracks,
+  ]);
 
   const trackRows = useMemo(() => {
     const rows: UnifiedClipItem[][] = Array.from(

@@ -8,6 +8,25 @@ import {
 } from "../utils/storage";
 import { soundEngine } from "../utils/audioEngine";
 
+// High-performance structured clone of project snapshot without JSON.stringify/parse overhead
+export function cloneProjectSnapshot(project: FastArtProject): FastArtProject {
+  return {
+    ...project,
+    captionSettings: project.captionSettings ? { ...project.captionSettings } : undefined,
+    customLut: project.customLut ? { ...project.customLut } : undefined,
+    beatMarkers: project.beatMarkers ? [...project.beatMarkers] : undefined,
+    assets: project.assets ? project.assets.map((a) => ({ ...a })) : [],
+    tracks: {
+      video: project.tracks?.video ? project.tracks.video.map((c) => ({ ...c })) : [],
+      audio: project.tracks?.audio ? project.tracks.audio.map((c) => ({ ...c })) : [],
+      text: project.tracks?.text ? project.tracks.text.map((c) => ({ ...c })) : [],
+      stickers: project.tracks?.stickers ? project.tracks.stickers.map((c) => ({ ...c })) : [],
+      effects: project.tracks?.effects ? project.tracks.effects.map((c) => ({ ...c })) : [],
+      captions: project.tracks?.captions ? project.tracks.captions.map((c) => ({ ...c })) : [],
+    },
+  };
+}
+
 function loadStack(key: string): FastArtProject[] {
   try {
     let raw = getStorageItem(key);
@@ -22,6 +41,7 @@ function loadStack(key: string): FastArtProject[] {
   return [];
 }
 
+// Persist a compact undo slice (latest 3 states) to prevent storage thrashing while retaining recovery
 function saveStack(key: string, stack: FastArtProject[]) {
   try {
     if (stack.length === 0) {
@@ -30,7 +50,7 @@ function saveStack(key: string, stack: FastArtProject[]) {
         window.sessionStorage.removeItem(key);
       }
     } else {
-      const serialized = JSON.stringify(stack.slice(-20));
+      const serialized = JSON.stringify(stack.slice(-3));
       setStorageItem(key, serialized);
       if (typeof window !== "undefined" && window.sessionStorage) {
         window.sessionStorage.setItem(key, serialized);
@@ -97,7 +117,7 @@ export function useProjectHistory({
     };
     setHistoryStack((prev) => [
       ...prev.slice(-20),
-      JSON.parse(JSON.stringify(current)),
+      cloneProjectSnapshot(current),
     ]);
     setRedoStack([]);
     const saved = saveProject(fullProject);
@@ -127,7 +147,7 @@ export function useProjectHistory({
     if (JSON.stringify(current) !== JSON.stringify(snapshot)) {
       setHistoryStack((prev) => [
         ...prev.slice(-20),
-        JSON.parse(JSON.stringify(snapshot)),
+        cloneProjectSnapshot(snapshot),
       ]);
       setRedoStack([]);
       const saved = saveProject(current);

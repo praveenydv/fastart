@@ -3,8 +3,10 @@
  * Ensures video and audio clips can never be expanded beyond their actual media file lengths.
  */
 
+import { LruCache } from "./mediaThumbnailGenerator";
+
 // Shared memory cache for media durations (keyed by clip.url and clip.id)
-export const globalMediaDurationCache = new Map<string, number>();
+export const globalMediaDurationCache = new LruCache<string, number>(200);
 
 // Set a duration directly in cache (e.g. from VideoRenderer or Audio element)
 export function setCachedMediaDuration(key: string, duration: number): void {
@@ -24,15 +26,27 @@ export function probeAndCacheMediaDuration(url: string, id?: string, isAudio = f
     if (isAudio) {
       const audio = new Audio();
       audio.preload = "metadata";
-      const onMeta = () => {
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         inFlightProbes.delete(url);
+        try {
+          audio.onloadedmetadata = null;
+          audio.onerror = null;
+          audio.removeAttribute("src");
+          audio.load();
+        } catch {}
+      };
+      const onMeta = () => {
         if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
           globalMediaDurationCache.set(url, audio.duration);
           if (id) globalMediaDurationCache.set(id, audio.duration);
         }
+        cleanup();
       };
       audio.onloadedmetadata = onMeta;
-      audio.onerror = () => inFlightProbes.delete(url);
+      audio.onerror = cleanup;
       audio.src = url;
       if (audio.readyState >= 1 && audio.duration) {
         onMeta();
@@ -42,15 +56,27 @@ export function probeAndCacheMediaDuration(url: string, id?: string, isAudio = f
       video.preload = "metadata";
       video.muted = true;
       video.playsInline = true;
-      const onMeta = () => {
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         inFlightProbes.delete(url);
+        try {
+          video.onloadedmetadata = null;
+          video.onerror = null;
+          video.removeAttribute("src");
+          video.load();
+        } catch {}
+      };
+      const onMeta = () => {
         if (video.duration && !isNaN(video.duration) && isFinite(video.duration) && video.duration > 0) {
           globalMediaDurationCache.set(url, video.duration);
           if (id) globalMediaDurationCache.set(id, video.duration);
         }
+        cleanup();
       };
       video.onloadedmetadata = onMeta;
-      video.onerror = () => inFlightProbes.delete(url);
+      video.onerror = cleanup;
       video.src = url;
       if (video.readyState >= 1 && video.duration) {
         onMeta();

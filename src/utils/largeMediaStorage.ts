@@ -28,8 +28,29 @@ export interface StoredMediaRecord {
 
 // In-memory object URL cache to avoid redundant URL.createObjectURL allocations
 const objectUrlCache = new Map<string, string>();
-// Direct in-memory blob cache by URL to eliminate brittle fetch(blobUrl) errors completely
-const blobByUrlCache = new Map<string, Blob | File>();
+
+class BoundedBlobCache extends Map<string, Blob | File> {
+  private maxSize: number;
+  constructor(maxSize: number = 30) {
+    super();
+    this.maxSize = maxSize;
+  }
+  override set(key: string, value: Blob | File): this {
+    if (this.has(key)) {
+      this.delete(key);
+    } else if (this.size >= this.maxSize) {
+      const first = this.keys().next().value;
+      if (first !== undefined) {
+        this.delete(first);
+      }
+    }
+    super.set(key, value);
+    return this;
+  }
+}
+
+// Direct in-memory blob cache by URL (bounded to 30 media items to prevent RAM exhaustion)
+const blobByUrlCache = new BoundedBlobCache(30);
 // Direct in-memory FileSystemFileHandle cache to preserve transient user activation gestures across reconnects
 const memoryHandleCache = new Map<string, any>();
 
@@ -1030,6 +1051,7 @@ export async function deleteMedia(id: string): Promise<void> {
       URL.revokeObjectURL(cachedUrl);
     } catch (e) {}
     objectUrlCache.delete(id);
+    blobByUrlCache.delete(cachedUrl);
   }
 
   if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return;

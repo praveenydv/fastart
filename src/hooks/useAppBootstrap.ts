@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { soundEngine } from "../utils/audioEngine";
 import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia, setupAutoReconnectListener } from "../utils/largeMediaStorage";
+import { restoreClipMasksFromStorage } from "../services/selfieSegmentationService";
 import {
   FastArtProject,
   createDefaultProject,
@@ -110,6 +111,17 @@ export function useAppBootstrap({
               if (isMounted && hydrated) {
                 setProject(hydrated);
                 saveProject(hydrated);
+                // Preload all persistent cutout masks into RAM cache
+                if (hydrated.tracks?.video) {
+                  for (const c of hydrated.tracks.video) {
+                    if (c.cutout?.enabled) {
+                      restoreClipMasksFromStorage(c.id).catch(() => {});
+                      if (c.sourceMediaId) {
+                        restoreClipMasksFromStorage(c.sourceMediaId).catch(() => {});
+                      }
+                    }
+                  }
+                }
               }
             });
             const resumeTime =
@@ -136,11 +148,14 @@ export function useAppBootstrap({
           }
         }
 
-        rehydrateProjectsMedia(projs).then((hydratedProjs: any) => {
-          if (isMounted && hydratedProjs) {
-            setProjects(hydratedProjs);
-          }
-        });
+        // Lazy media rehydration: only rehydrate media library when on home screen to avoid startup I/O bottlenecks
+        if (route.screen !== "editor") {
+          rehydrateProjectsMedia(projs).then((hydratedProjs: any) => {
+            if (isMounted && hydratedProjs) {
+              setProjects(hydratedProjs);
+            }
+          });
+        }
 
         setupAutoReconnectListener((lookupId, liveUrl) => {
           if (!isMounted) return;
@@ -208,6 +223,16 @@ export function useAppBootstrap({
         if (hydrated) {
           setProject(hydrated);
           saveProject(hydrated);
+          if (hydrated.tracks?.video) {
+            for (const c of hydrated.tracks.video) {
+              if (c.cutout?.enabled) {
+                restoreClipMasksFromStorage(c.id).catch(() => {});
+                if (c.sourceMediaId) {
+                  restoreClipMasksFromStorage(c.sourceMediaId).catch(() => {});
+                }
+              }
+            }
+          }
         }
       });
       const session = loadLastSession();

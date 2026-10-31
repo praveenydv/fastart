@@ -71,7 +71,7 @@ export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
   const frameCount = useMemo(() => {
     if (width <= 0) return 0;
     const count = Math.max(1, Math.ceil(width / FRAME_WIDTH));
-    return isWeb ? count : Math.min(count, 20);
+    return isWeb ? count : Math.min(count, 8);
   }, [width]);
 
   if (!thumbUri || frameCount <= 0) {

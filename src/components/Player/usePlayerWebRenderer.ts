@@ -120,11 +120,15 @@ export function usePlayerWebRenderer({
     }
   }, [project.id]);
 
-  // Render frame on timestamp, project, or playback state change
+  // Render frame on timestamp, project, or paused state change
   useEffect(() => {
     if (rendererRef.current && canvasRef.current) {
       if (rendererRef.current.canvas !== canvasRef.current) {
         rendererRef.current.setCanvas(canvasRef.current);
+      }
+      // When playing, the hardware animation loop in usePlaybackLoop renders frames directly at 60fps
+      if (isPlaying) {
+        return;
       }
       rendererRef.current.renderFrame(
         project,

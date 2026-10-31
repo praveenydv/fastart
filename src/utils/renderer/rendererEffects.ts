@@ -159,7 +159,7 @@ export function drawClipWithMask(
 
   if (!maskClipCanvas) {
     maskClipCanvas = document.createElement("canvas");
-    maskClipCtx = maskClipCanvas.getContext("2d", { willReadFrequently: true });
+    maskClipCtx = maskClipCanvas.getContext("2d");
   }
   if (!maskClipCanvas || !maskClipCtx) {
     ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
@@ -213,7 +213,7 @@ export function drawClipWithMask(
   // 2. Prepare maskShapeCanvas
   if (!maskShapeCanvas) {
     maskShapeCanvas = document.createElement("canvas");
-    maskShapeCtx = maskShapeCanvas.getContext("2d", { willReadFrequently: true });
+    maskShapeCtx = maskShapeCanvas.getContext("2d");
   }
   if (!maskShapeCanvas || !maskShapeCtx) {
     ctx.drawImage(maskClipCanvas, -dw / 2, -dh / 2, dw, dh);
@@ -484,7 +484,7 @@ export function drawClipWithCutout(
   if (!activeCanvas || !activeCtx) {
     if (!fallbackCutoutCanvas) {
       fallbackCutoutCanvas = document.createElement("canvas");
-      fallbackCutoutCtx = fallbackCutoutCanvas.getContext("2d", { willReadFrequently: true });
+      fallbackCutoutCtx = fallbackCutoutCanvas.getContext("2d");
     }
     activeCanvas = fallbackCutoutCanvas;
     activeCtx = fallbackCutoutCtx;

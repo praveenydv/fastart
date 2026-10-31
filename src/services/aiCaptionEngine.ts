@@ -573,7 +573,10 @@ async function transcribeWithWhisper(
           transformers.env.backends.onnx.logLevel = "error";
         } catch (_) {}
         if (transformers.env.backends.onnx.wasm) {
-          transformers.env.backends.onnx.wasm.numThreads = 1;
+          const maxThreads = typeof navigator !== "undefined" && navigator.hardwareConcurrency
+            ? Math.min(4, Math.max(1, navigator.hardwareConcurrency))
+            : 2;
+          transformers.env.backends.onnx.wasm.numThreads = maxThreads;
         }
       }
     }

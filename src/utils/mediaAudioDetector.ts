@@ -4,11 +4,12 @@ import { Platform } from "react-native";
 import { getMediaBinaryBuffer } from "./largeMediaStorage";
 import { getStorageItem, setStorageItem } from "./storage";
 import { rustCoreBridge } from "../services/rustCoreBridge";
+import { LruCache } from "./mediaThumbnailGenerator";
 
 const STORAGE_PEAKS_PREFIX = "@fastart_peaks_";
-const mediaAudioPresenceCache = new Map<string, boolean>();
-const mediaPeaksCache = new Map<string, number[]>();
-const mediaAudioDurationCache = new Map<string, number>();
+const mediaAudioPresenceCache = new LruCache<string, boolean>(150);
+const mediaPeaksCache = new LruCache<string, number[]>(100);
+const mediaAudioDurationCache = new LruCache<string, number>(150);
 const inFlightDecodes = new Map<string, Promise<number[] | null>>();
 const listeners = new Set<() => void>();
 

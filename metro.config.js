@@ -12,6 +12,7 @@ const nativeBuildExclusions = [
   /.*\/modules\/.*\/\.cxx\/.*/,
   /.*\/rust\/target\/.*/,
   /.*\/\.gradle\/.*/,
+  /.*\/rea-capcut\/.*/,
 ];
 
 if (Array.isArray(config.resolver.blockList)) {

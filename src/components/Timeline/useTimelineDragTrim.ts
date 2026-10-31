@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { UnifiedClipItem } from "./timelineTypes";
 import { useTimelineClipDrag } from "./useTimelineClipDrag";
 import { useTimelineClipTrim } from "./useTimelineClipTrim";
@@ -100,25 +100,48 @@ export function useTimelineDragTrim({
     onTrimClip,
   });
 
-  return {
-    activeTrimming,
-    activeTrimDelta,
-    dragState,
-    setDragState,
-    isDraggingClip,
-    setIsDraggingClip,
-    clipMovePanResponder,
-    leftTrimPanResponder,
-    rightTrimPanResponder,
-    handleClipPress,
-    handleClipLongPress,
-    handleClipMouseDown,
-    handleClipTouchStart,
-    handleClipTouchMove,
-    handleClipTouchEnd,
-    handleClipTouchCancel,
-    cancelClipDrag,
-    handleLeftTrimStart,
-    handleRightTrimStart,
-  };
+  return useMemo(
+    () => ({
+      activeTrimming,
+      activeTrimDelta,
+      dragState,
+      setDragState,
+      isDraggingClip,
+      setIsDraggingClip,
+      clipMovePanResponder,
+      leftTrimPanResponder,
+      rightTrimPanResponder,
+      handleClipPress,
+      handleClipLongPress,
+      handleClipMouseDown,
+      handleClipTouchStart,
+      handleClipTouchMove,
+      handleClipTouchEnd,
+      handleClipTouchCancel,
+      cancelClipDrag,
+      handleLeftTrimStart,
+      handleRightTrimStart,
+    }),
+    [
+      activeTrimming,
+      activeTrimDelta,
+      dragState,
+      setDragState,
+      isDraggingClip,
+      setIsDraggingClip,
+      clipMovePanResponder,
+      leftTrimPanResponder,
+      rightTrimPanResponder,
+      handleClipPress,
+      handleClipLongPress,
+      handleClipMouseDown,
+      handleClipTouchStart,
+      handleClipTouchMove,
+      handleClipTouchEnd,
+      handleClipTouchCancel,
+      cancelClipDrag,
+      handleLeftTrimStart,
+      handleRightTrimStart,
+    ],
+  );
 }

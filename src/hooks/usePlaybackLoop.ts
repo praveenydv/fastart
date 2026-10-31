@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getActiveVideoRenderer } from "../utils/videoRenderer";
 
 interface UsePlaybackLoopParams {
   isPlaying: boolean;
@@ -22,6 +23,7 @@ export function usePlaybackLoop({
 }: UsePlaybackLoopParams) {
   const animFrameRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const lastReactUpdateRef = useRef<number>(0);
   const currentPosRef = useRef<number>(currentTimeRef.current || 0);
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
@@ -44,6 +46,7 @@ export function usePlaybackLoop({
     // Initialize playhead start position from external ref
     currentPosRef.current = currentTimeRef.current || 0;
     lastTimeRef.current = getNow();
+    lastReactUpdateRef.current = getNow();
 
     const loop = (now: number) => {
       if (!isPlayingRef.current || totalDurationRef.current <= 0) {
@@ -68,6 +71,7 @@ export function usePlaybackLoop({
 
       if (nextTime >= totalDurationRef.current) {
         currentPosRef.current = 0;
+        currentTimeRef.current = 0;
         if (animFrameRef.current !== null) {
           cancelAnimationFrame(animFrameRef.current);
           animFrameRef.current = null;
@@ -78,7 +82,20 @@ export function usePlaybackLoop({
       }
 
       currentPosRef.current = nextTime;
-      setCurrentTimeRef.current(nextTime);
+      currentTimeRef.current = nextTime;
+
+      // 1. Direct 60 FPS Hardware Canvas Render (bypasses React virtual DOM overhead)
+      const renderer = getActiveVideoRenderer();
+      if (renderer && renderer.onFrameNeeded) {
+        renderer.onFrameNeeded();
+      }
+
+      // 2. Throttled React state update for UI controls (~30 FPS, ~33ms)
+      // Completely eliminates "Maximum update depth exceeded" and CPU starvation
+      if (currentTimeStamp - lastReactUpdateRef.current >= 33) {
+        lastReactUpdateRef.current = currentTimeStamp;
+        setCurrentTimeRef.current(nextTime);
+      }
 
       animFrameRef.current = requestAnimationFrame(loop);
     };
@@ -90,6 +107,8 @@ export function usePlaybackLoop({
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
+      // On stop, ensure exact final playhead is committed to React state
+      setCurrentTimeRef.current(currentPosRef.current);
     };
   }, [isPlaying, totalDuration, currentTimeRef]);
 }

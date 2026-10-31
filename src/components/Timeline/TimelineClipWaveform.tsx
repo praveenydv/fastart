@@ -159,10 +159,29 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
     return null;
   }
 
-  const numBars = peaks.length;
+  // On Native, downsample peaks to avoid allocating hundreds of React Native View nodes
+  const effectivePeaks = useMemo(() => {
+    if (Platform.OS === "web" || peaks.length <= 48) return peaks;
+    const maxNativeBars = Math.min(peaks.length, Math.max(16, Math.floor(availableWidth / 6)), 54);
+    const bucketSize = peaks.length / maxNativeBars;
+    const sampled: number[] = new Array(maxNativeBars);
+    for (let i = 0; i < maxNativeBars; i++) {
+      const start = Math.floor(i * bucketSize);
+      const end = Math.min(peaks.length, Math.floor((i + 1) * bucketSize));
+      let maxP = 0;
+      for (let j = start; j < end; j++) {
+        if (peaks[j] > maxP) maxP = peaks[j];
+      }
+      sampled[i] = maxP;
+    }
+    return sampled;
+  }, [peaks, availableWidth]);
+
+  const numBars = effectivePeaks.length;
+  const effectiveBarWidth = Platform.OS === "web" ? barWidth : Math.max(2.5, Math.floor((availableWidth / Math.max(1, numBars)) * 0.6));
   const dynamicGap =
     numBars > 1
-      ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1))
+      ? Math.max(0.5, (availableWidth - numBars * effectiveBarWidth) / (numBars - 1))
       : 0;
 
   // Maximum bar height is 28px on both media and separate audio so waveforms match proportionally
@@ -254,12 +273,13 @@ const WebWaveformCanvas: React.FC<WebWaveformCanvasProps> = ({
           </View>
         ) : (
           <View style={styles.barsRow}>
-            {peaks.map((peak, idx) => (
+            {effectivePeaks.map((peak, idx) => (
               <View
                 key={idx}
                 style={[
                   styles.waveBar,
                   {
+                    width: effectiveBarWidth,
                     height: Math.max(
                       minBarHeight,
                       Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
@@ -324,12 +344,13 @@ const WebWaveformCanvas: React.FC<WebWaveformCanvasProps> = ({
             </View>
           ) : (
             <View style={styles.barsRowBottom}>
-              {peaks.map((peak, idx) => (
+              {effectivePeaks.map((peak, idx) => (
                 <View
                   key={idx}
                   style={[
                     styles.waveBar,
                     {
+                      width: effectiveBarWidth,
                       height: Math.max(
                         minBarHeight,
                         Math.min(10, Math.round(peak * 10)),

@@ -163,9 +163,9 @@ export default function CutoutModal({
 
   // Detect playhead movement / scrubbing and dynamically update active frame state
   useEffect(() => {
-    if (!clipId) return;
+    if (!clipId || isPlaying) return;
     const hasMask = hasFrameMask(clipId, frameIdx);
-    setCurrentFrameMatted(hasMask);
+    setCurrentFrameMatted((prev) => (prev !== hasMask ? hasMask : prev));
 
     // Auto-compute parked frame on scrub pause for instant feedback (never when clip is playing)
     if (
@@ -196,15 +196,16 @@ export default function CutoutModal({
 
   // Auto-restore persisted masks from IndexedDB if not in memory
   useEffect(() => {
-    if (!clipId) return;
+    if (!clipId || isPlaying) return;
     if (!hasClipMasks(clipId)) {
       restoreClipMasksFromStorage(clipId).then((restored) => {
         if (restored) {
-          setCurrentFrameMatted(hasFrameMask(clipId, frameIdx));
+          const has = hasFrameMask(clipId, frameIdx);
+          setCurrentFrameMatted((prev) => (prev !== has ? has : prev));
         }
       });
     }
-  }, [clipId, frameIdx]);
+  }, [clipId, isPlaying]);
 
   // Pre-warm WebGL GPU and neural background worker as soon as modal opens for instant < 20ms execution
   useEffect(() => {
@@ -296,7 +297,7 @@ export default function CutoutModal({
     const bg = currentCutout?.bgColor || "none";
     bgColorRef.current = bg;
     setBgColor(bg);
-  }, [visible, initialMode]); // Values are loaded once per modal session; updates must not reset active controls.
+  }, [visible, initialMode, selectedClip?.id, currentCutout?.enabled, currentCutout?.mode]);
 
   // Sync cutout — reads from refs so it always has fresh values
   const syncCutout = useCallback(

@@ -98,8 +98,8 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         if (!currentVid) return null;
         const blurAmount = parseInt(rawBg.replace("blur:", ""), 10) || 25;
 
-        // 1. Live video player for video clips (not a frozen raw thumbnail)
-        if (currentVid.type === "video" && currentVid.url) {
+        // 1. Live video player for video clips on Web only (avoids exhausting mobile hardware decoders)
+        if (Platform.OS === "web" && currentVid.type === "video" && currentVid.url) {
           return (
             <View
               style={[
@@ -124,11 +124,11 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           );
         }
 
-        // 2. Photo / image clip using genuine high-res live media URL
+        // 2. High-performance blurred media image fill (Native mobile & photo clips)
         const mediaUri =
           (currentVid?.type === "photo" ? currentVid?.url : null) ||
-          currentVid?.url ||
-          currentVid?.thumbnail;
+          currentVid?.thumbnail ||
+          currentVid?.url;
         if (!mediaUri) return null;
 
         return (

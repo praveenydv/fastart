@@ -47,6 +47,32 @@ export function useTimelineScrubbing({
   const onSeekRef = useRef(onSeek);
   onSeekRef.current = onSeek;
 
+  // Pre-indexed sorted snap points for O(log N) binary search snapping
+  const snapPoints = useMemo(() => {
+    if (!isSnappingEnabled) return [];
+    const points = new Set<number>([0]);
+    for (const c of allClips) {
+      points.add(Number(c.startTime.toFixed(3)));
+      points.add(Number((c.startTime + c.duration).toFixed(3)));
+      const kfs = c.rawClip?.keyframes;
+      if (Array.isArray(kfs)) {
+        for (const kf of kfs) {
+          points.add(Number((c.startTime + (kf.time || 0)).toFixed(3)));
+        }
+      }
+      const maskKfs = c.rawClip?.maskKeyframes || c.rawClip?.mask?.keyframes;
+      if (Array.isArray(maskKfs)) {
+        for (const mkf of maskKfs) {
+          points.add(Number((c.startTime + (mkf.time || 0)).toFixed(3)));
+        }
+      }
+    }
+    return Array.from(points).sort((a, b) => a - b);
+  }, [allClips, isSnappingEnabled]);
+
+  const snapPointsRef = useRef(snapPoints);
+  snapPointsRef.current = snapPoints;
+
   const performSeekWithSnap = useCallback((clickX: number) => {
     if (totalDurationRef.current <= 0) {
       onSeekRef.current(0);
@@ -56,50 +82,27 @@ export function useTimelineScrubbing({
     const maxDur = totalDurationRef.current;
     let newTime = Math.max(0, Math.min(maxDur, clickX / pxVal));
 
-    if (isSnappingEnabledRef.current) {
+    if (isSnappingEnabledRef.current && snapPointsRef.current.length > 0) {
       const snapThresholdSec = 10 / pxVal;
+      const pts = snapPointsRef.current;
+      let low = 0;
+      let high = pts.length - 1;
       let closestSnap: number | null = null;
       let minDiff = snapThresholdSec;
 
-      if (Math.abs(newTime) < minDiff) {
-        closestSnap = 0;
-        minDiff = Math.abs(newTime);
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        const diff = Math.abs(pts[mid] - newTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestSnap = pts[mid];
+        }
+        if (pts[mid] < newTime) {
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
       }
-
-      allClipsRef.current.forEach((c) => {
-        const diffStart = Math.abs(newTime - c.startTime);
-        if (diffStart < minDiff) {
-          closestSnap = c.startTime;
-          minDiff = diffStart;
-        }
-        const diffEnd = Math.abs(newTime - (c.startTime + c.duration));
-        if (diffEnd < minDiff) {
-          closestSnap = c.startTime + c.duration;
-          minDiff = diffEnd;
-        }
-        const kfs = c.rawClip?.keyframes;
-        if (kfs && Array.isArray(kfs)) {
-          kfs.forEach((kf: any) => {
-            const kfTime = c.startTime + (kf.time || 0);
-            const diffKf = Math.abs(newTime - kfTime);
-            if (diffKf < minDiff) {
-              closestSnap = kfTime;
-              minDiff = diffKf;
-            }
-          });
-        }
-        const maskKfs = c.rawClip?.maskKeyframes || c.rawClip?.mask?.keyframes;
-        if (maskKfs && Array.isArray(maskKfs)) {
-          maskKfs.forEach((mkf: any) => {
-            const mkfTime = c.startTime + (mkf.time || 0);
-            const diffMkf = Math.abs(newTime - mkfTime);
-            if (diffMkf < minDiff) {
-              closestSnap = mkfTime;
-              minDiff = diffMkf;
-            }
-          });
-        }
-      });
 
       if (closestSnap !== null) {
         newTime = closestSnap;

@@ -44,22 +44,31 @@ const getNativeFilePath = (): string | null => {
   return null;
 };
 
+let isSyncingDisk = false;
+
 // Schedule debounced background write to mobile native flash storage
 const scheduleNativeDiskSync = () => {
   if (Platform.OS === 'web') return;
   if (syncTimer) clearTimeout(syncTimer);
 
   syncTimer = setTimeout(async () => {
+    if (isSyncingDisk) {
+      scheduleNativeDiskSync();
+      return;
+    }
     const targetFile = getNativeFilePath();
     if (!targetFile) return;
 
     try {
+      isSyncingDisk = true;
       const payload = JSON.stringify(memoryStore);
       await FileSystemLegacy.writeAsStringAsync(targetFile, payload);
     } catch (err) {
       console.warn('FastArt native storage disk sync error:', err);
+    } finally {
+      isSyncingDisk = false;
     }
-  }, 150);
+  }, 200);
 };
 
 // Initialize storage engine on app start (IndexedDB on Web, Disk File on Mobile)

@@ -19,9 +19,6 @@ interface TimelineTracksViewProps {
   trackRows: UnifiedClipItem[][];
   activeTrackCount: number;
   timelineContentWidth: number;
-  rulerRef?: React.RefObject<any>;
-  rulerPanResponder?: any;
-  renderedTicks?: React.ReactNode;
   selectedClipId: string | null;
   pxPerSec: number;
   activeTrimming: any;
@@ -82,9 +79,6 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
   trackRows,
   activeTrackCount,
   timelineContentWidth,
-  rulerRef,
-  rulerPanResponder,
-  renderedTicks,
   selectedClipId,
   pxPerSec,
   activeTrimming,
@@ -116,10 +110,82 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
     return null;
   }, [dragState, trackRows]);
 
+  // Reversed track order: highest track index (top layer on player) renders at top of timeline;
+  // track 0 (main video/background on player) renders at bottom of timeline.
+  const reversedTrackIndices = useMemo(() => {
+    const indices: number[] = [];
+    for (let i = trackRows.length - 1; i >= 0; i--) {
+      indices.push(i);
+    }
+    return indices;
+  }, [trackRows.length]);
+
   return (
     <View style={[styles.tracksContainer, { width: timelineContentWidth }]}>
+      {/* Top Drop Target Lane when dragging near or past the top */}
+      {(() => {
+        if (!dragState || !dragState.isInsertingNewTrack || dragState.insertTrackIndex < activeTrackCount) return null;
+
+        return (
+          <View
+            key="drag-drop-top-target"
+            pointerEvents="none"
+            style={[
+              styles.universalTrackLane,
+              {
+                borderStyle: "dashed",
+                borderColor: "#00F2FE",
+                borderWidth: 1.5,
+                backgroundColor: "rgba(0, 242, 254, 0.12)",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                zIndex: 10,
+              },
+            ]}
+          >
+            <View
+              style={{
+                position: "absolute",
+                left: (dragState.targetStart ?? dragState.currentStart) * pxPerSec,
+                width: Math.max(
+                  24,
+                  (draggedClip ? draggedClip.duration : 1) * pxPerSec,
+                ),
+                top: 2,
+                bottom: 2,
+                borderRadius: 4,
+                borderWidth: 1.5,
+                borderStyle: "dashed",
+                borderColor: "#00F2FE",
+                backgroundColor: "rgba(0, 242, 254, 0.18)",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 8,
+              }}
+            >
+              <Ionicons name="add-circle" size={13} color="#00F2FE" style={{ marginRight: 4 }} />
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 10.5,
+                  fontWeight: "700",
+                  letterSpacing: 0.3,
+                }}
+                numberOfLines={1}
+              >
+                New Top Track (Layer {activeTrackCount + 1})
+              </Text>
+            </View>
+          </View>
+        );
+      })()}
+
       {/* Track Lanes */}
-      {trackRows.map((rowClips, trackIdx) => {
+      {reversedTrackIndices.map((trackIdx) => {
+        const rowClips = trackRows[trackIdx] || [];
         const isEmptyTrack = rowClips.length === 0;
         const isSourceOfDrag =
           dragState && rowClips.some((c) => c.id === dragState.clipId);
@@ -149,92 +215,93 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
 
               {/* Inter-Track Laser Seam Line (Zero vertical displacement, prominent glowing line) */}
               {dragState?.isInsertingNewTrack &&
-                (dragState?.insertTrackIndex === trackIdx ||
-                  (trackIdx === trackRows.length - 1 &&
-                    dragState?.insertTrackIndex >= activeTrackCount)) && (
-                  <View
-                    pointerEvents="none"
-                    style={{
-                      position: "absolute",
-                      ...(dragState.insertTrackIndex >= activeTrackCount &&
-                      trackIdx === trackRows.length - 1
-                        ? { bottom: -2 }
-                        : { top: -2 }),
-                      left: 0,
-                      right: 0,
-                      height: 4,
-                      backgroundColor: "#00F2FE",
-                      zIndex: 99999,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      ...(Platform.OS === "web"
-                        ? {
-                            boxShadow:
-                              "0 0 12px rgba(0, 242, 254, 0.8), 0 0 4px #FFFFFF",
-                          }
-                        : {}),
-                    }}
-                  >
+                (() => {
+                  const isTopBoundary =
+                    dragState.insertTrackIndex >= activeTrackCount &&
+                    trackIdx === activeTrackCount - 1;
+                  const isBottomBoundary =
+                    dragState.insertTrackIndex === 0 && trackIdx === 0;
+                  const isBetween =
+                    dragState.insertTrackIndex === trackIdx + 1;
+
+                  if (!isTopBoundary && !isBottomBoundary && !isBetween)
+                    return null;
+
+                  const isAtTop = isTopBoundary || isBetween;
+                  return (
                     <View
+                      pointerEvents="none"
                       style={{
                         position: "absolute",
-                        left: Math.max(
-                          12,
-                          (dragState.targetStart ?? dragState.currentStart) *
-                            pxPerSec,
-                        ),
-                        backgroundColor: "#08090E",
-                        borderWidth: 1.5,
-                        borderColor: "#00F2FE",
-                        borderRadius: 12,
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
+                        ...(isAtTop ? { top: -2 } : { bottom: -2 }),
+                        left: 0,
+                        right: 0,
+                        height: 4,
+                        backgroundColor: "#00F2FE",
+                        zIndex: 99999,
                         flexDirection: "row",
                         alignItems: "center",
-                        gap: 4,
-                        transform: [
-                          {
-                            translateY:
-                              dragState.insertTrackIndex >= activeTrackCount &&
-                              trackIdx === trackRows.length - 1
-                                ? 10
-                                : -10,
-                          },
-                        ],
                         ...(Platform.OS === "web"
                           ? {
-                              boxShadow: "0 0 12px rgba(0, 242, 254, 0.4)",
+                              boxShadow:
+                                "0 0 12px rgba(0, 242, 254, 0.8), 0 0 4px #FFFFFF",
                             }
                           : {}),
                       }}
                     >
-                      <Ionicons name="add-circle" size={13} color="#00F2FE" />
-                      <Text
+                      <View
                         style={{
-                          color: "#FFFFFF",
-                          fontSize: 10,
-                          fontWeight: "700",
-                          letterSpacing: 0.3,
+                          position: "absolute",
+                          left: Math.max(
+                            12,
+                            (dragState.targetStart ?? dragState.currentStart) *
+                              pxPerSec,
+                          ),
+                          backgroundColor: "#08090E",
+                          borderWidth: 1.5,
+                          borderColor: "#00F2FE",
+                          borderRadius: 12,
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                          transform: [
+                            {
+                              translateY: isAtTop ? -10 : 10,
+                            },
+                          ],
+                          ...(Platform.OS === "web"
+                            ? {
+                                boxShadow: "0 0 12px rgba(0, 242, 254, 0.4)",
+                              }
+                            : {}),
                         }}
                       >
-                        {dragState.insertTrackIndex === 0
-                          ? "Insert Track 1 (Top)"
-                          : dragState.insertTrackIndex >= activeTrackCount
-                            ? `Insert Track ${activeTrackCount + 1} (Bottom)`
-                            : `Insert Track ${dragState.insertTrackIndex + 1}`}
-                      </Text>
+                        <Ionicons name="add-circle" size={13} color="#00F2FE" />
+                        <Text
+                          style={{
+                            color: "#FFFFFF",
+                            fontSize: 10,
+                            fontWeight: "700",
+                            letterSpacing: 0.3,
+                          }}
+                        >
+                          {dragState.insertTrackIndex >= activeTrackCount
+                            ? `New Top Track (Layer ${activeTrackCount + 1})`
+                            : dragState.insertTrackIndex === 0
+                              ? "New Bottom Track (Background)"
+                              : `New Track ${dragState.insertTrackIndex + 1}`}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  );
+                })()}
 
-              {/* Target Drop Zone Ghost Indicator when dragging a clip over this track or onto seam */}
+              {/* Target Drop Zone Ghost Indicator when dragging a clip over this track */}
               {dragState &&
-                ((!dragState.isInsertingNewTrack &&
-                  dragState.currentTrack === trackIdx) ||
-                  (dragState.isInsertingNewTrack &&
-                    (dragState.insertTrackIndex === trackIdx ||
-                      (trackIdx === trackRows.length - 1 &&
-                        dragState.insertTrackIndex >= activeTrackCount)))) && (
+                !dragState.isInsertingNewTrack &&
+                dragState.currentTrack === trackIdx && (
                   <View
                     pointerEvents="none"
                     style={{
@@ -286,12 +353,12 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                       numberOfLines={1}
                     >
                       {dragState.isInsertingNewTrack
-                        ? dragState.insertTrackIndex === 0
-                          ? "New Track 1 (Top)"
-                          : dragState.insertTrackIndex >= activeTrackCount
-                            ? `New Track ${activeTrackCount + 1} (Bottom)`
+                        ? dragState.insertTrackIndex >= activeTrackCount
+                          ? `New Top Track (Layer ${activeTrackCount + 1})`
+                          : dragState.insertTrackIndex === 0
+                            ? "New Bottom Track (Background)"
                             : `New Track ${dragState.insertTrackIndex + 1}`
-                        : `Drop Position • Track ${trackIdx + 1}`}
+                        : `Drop Position • Track ${trackIdx + 1}${trackIdx === 0 ? " (Main/BG)" : ""}`}
                     </Text>
                   </View>
                 )}
@@ -299,7 +366,9 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
               {/* Empty track indicator & delete track button directly on the track lane */}
               {isEmptyTrack && !dragState && (
                 <View style={styles.emptyTrackLaneContainer} pointerEvents="box-none">
-                  <Text style={styles.emptyTrackLanePrompt}>Empty Track</Text>
+                  <Text style={styles.emptyTrackLanePrompt}>
+                    {trackIdx === 0 ? "Track 1 (Main / Background)" : `Empty Track ${trackIdx + 1}`}
+                  </Text>
                   {activeTrackCount > 1 && (
                     <TouchableOpacity
                       style={styles.removeEmptyTrackLaneBtn}
@@ -347,7 +416,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
 
                       const visualOffsetY = isBeingDragged
                         ? (dragState.dragOffsetY ??
-                          (dragState.currentTrack - trackIdx) * TRACK_ROW_HEIGHT)
+                          (trackIdx - dragState.currentTrack) * TRACK_ROW_HEIGHT)
                         : 0;
 
                       return (
@@ -767,9 +836,9 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
 
         const isBottomInsert =
           dragState.isInsertingNewTrack &&
-          (dragState.insertTrackIndex === null ||
-            dragState.insertTrackIndex === undefined ||
-            dragState.insertTrackIndex >= activeTrackCount);
+          (dragState.insertTrackIndex === 0 ||
+            dragState.insertTrackIndex === null ||
+            dragState.insertTrackIndex === undefined);
 
         return (
           <View
@@ -831,7 +900,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                 }}
                 numberOfLines={1}
               >
-                New Track {activeTrackCount + 1} (Bottom)
+                New Bottom Track (Background)
               </Text>
             </View>
           ) : (
@@ -845,7 +914,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                   letterSpacing: 0.3,
                 }}
               >
-                Drag here to add to new track
+                Drag here to add to new bottom track (Background)
               </Text>
             </>
           )}

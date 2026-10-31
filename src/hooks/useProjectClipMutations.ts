@@ -530,8 +530,39 @@ export function useProjectClipMutations({
                     ? 4
                     : 0;
 
-      // Place copied clip on a brand-new track directly below the existing one
-      const newTrackIndex = Math.min(MAX_TRACKS - 1, origTrack + 1);
+      // Find all visual clips overlapping temporally with original to determine overlay placement
+      const origStart = original.startTime || 0;
+      const origEnd = origStart + (original.duration || 3.0);
+      const allVisualClips = [
+        ...(project.tracks.video || []),
+        ...(project.tracks.text || []),
+        ...(project.tracks.captions || []),
+        ...(project.tracks.stickers || []),
+      ];
+
+      const overlappingClips = allVisualClips.filter((c: any) => {
+        if (c.id === original.id) return false;
+        const cStart = c.startTime || 0;
+        const cEnd = cStart + (c.duration || 3.0);
+        return origStart < cEnd - 0.05 && origEnd > cStart + 0.05;
+      });
+
+      // Find highest track and layer among overlapping clips so the copied overlay renders ON TOP of all existing clips and text
+      const maxTrack = overlappingClips.length > 0
+        ? Math.max(origTrack, ...overlappingClips.map((c: any) => (typeof c.trackIndex === "number" ? c.trackIndex : 0)))
+        : origTrack;
+
+      const maxLayer = overlappingClips.length > 0
+        ? Math.max(
+            typeof original.layer === "number" ? original.layer : origTrack + 1,
+            ...overlappingClips.map((c: any) =>
+              typeof c.layer === "number" ? c.layer : (typeof c.trackIndex === "number" ? c.trackIndex : 0) + 1
+            )
+          )
+        : (typeof original.layer === "number" ? original.layer : origTrack + 1);
+
+      const newTrackIndex = Math.min(MAX_TRACKS - 1, maxTrack + 1);
+      const newLayer = maxLayer + 1;
 
       const clone = {
         ...JSON.parse(JSON.stringify(original)),
@@ -539,6 +570,7 @@ export function useProjectClipMutations({
         sourceMediaId: original.sourceMediaId || original.id,
         startTime: original.startTime,
         trackIndex: newTrackIndex,
+        layer: newLayer,
         position: original.position
           ? {
               x: Math.min(85, (original.position.x || 50) + 5),
@@ -555,32 +587,22 @@ export function useProjectClipMutations({
         }
       }
 
-      // Shift all other clips across the project on tracks >= newTrackIndex down by 1
-      const shiftTrackDown = (c: any) => {
-        if (!c) return c;
-        const curTrk = typeof c.trackIndex === "number" ? c.trackIndex : 0;
-        if (curTrk >= newTrackIndex) {
-          return { ...c, trackIndex: Math.min(MAX_TRACKS - 1, curTrk + 1) };
-        }
-        return c;
-      };
-
       const updatedTracks: any = {
-        video: (project.tracks.video || []).map(shiftTrackDown),
-        audio: (project.tracks.audio || []).map(shiftTrackDown),
-        captions: (project.tracks.captions || []).map(shiftTrackDown),
-        text: (project.tracks.text || []).map(shiftTrackDown),
-        stickers: (project.tracks.stickers || []).map(shiftTrackDown),
-        effects: (project.tracks.effects || []).map(shiftTrackDown),
-        filters: (project.tracks.filters || []).map(shiftTrackDown),
+        video: project.tracks.video ? [...project.tracks.video] : [],
+        audio: project.tracks.audio ? [...project.tracks.audio] : [],
+        captions: project.tracks.captions ? [...project.tracks.captions] : [],
+        text: project.tracks.text ? [...project.tracks.text] : [],
+        stickers: project.tracks.stickers ? [...project.tracks.stickers] : [],
+        effects: project.tracks.effects ? [...project.tracks.effects] : [],
+        filters: project.tracks.filters ? [...project.tracks.filters] : [],
       };
 
       // Append clone to target list
       updatedTracks[key] = [...(updatedTracks[key] || []), clone];
 
       addNotification({
-        title: "Clip Copied",
-        message: `Placed on new Track ${newTrackIndex + 1} below existing clip.`,
+        title: "Clip Copied as Overlay",
+        message: `Placed on Track ${newTrackIndex + 1} (Layer ${newLayer}) on top of existing layers.`,
         icon: "copy-outline",
       });
 

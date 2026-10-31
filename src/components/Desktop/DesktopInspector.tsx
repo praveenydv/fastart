@@ -508,6 +508,51 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                       <Text style={styles.actionBtnText}>Reset</Text>
                     </TouchableOpacity>
                   </View>
+
+                  {/* Visual Layer Order */}
+                  <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: THEME_COLORS.borderSubtle, paddingTop: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="layers-outline" size={14} color="#00F2FE" />
+                        <Text style={styles.controlLabel}>Layer Order</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => onOpenModal?.('layer')}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                      >
+                        <Text style={{ fontSize: 11, color: '#00F2FE', fontWeight: '700' }}>Manage Layers</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#00F2FE" />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {[1, 2, 3, 4, 5].map((lvl) => {
+                        const curLyr = typeof selectedClip.layer === 'number' && selectedClip.layer > 0
+                          ? selectedClip.layer
+                          : (selectedClip.trackIndex || 0) + 1;
+                        const isActive = curLyr === lvl;
+                        return (
+                          <TouchableOpacity
+                            key={`insp-lyr-${lvl}`}
+                            style={[styles.chip, { flex: 1, paddingVertical: 6 }, isActive && styles.chipActive]}
+                            onPress={() => {
+                              soundEngine.playSfx('click');
+                              const tracks = { ...project.tracks };
+                              const targetList = (tracks as any)[selectedClipType] || tracks.video;
+                              const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
+                              if (idx >= 0) {
+                                targetList[idx] = { ...targetList[idx], layer: lvl, trackIndex: Math.min(9, lvl - 1) };
+                                onUpdateProject({ tracks });
+                              }
+                            }}
+                          >
+                            <Text style={[styles.chipText, isActive && styles.chipTextActive, { fontSize: 11 }]}>
+                              {lvl === 1 ? 'L1 (BG)' : `L${lvl}`}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
                 </View>
               </View>
             </ScrollView>

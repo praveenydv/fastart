@@ -110,8 +110,7 @@ export class VideoRenderer {
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? (canvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D | null) ||
-        canvas.getContext("2d")
+      ? (canvas.getContext("2d") as CanvasRenderingContext2D | null)
       : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
@@ -140,8 +139,7 @@ export class VideoRenderer {
   setCanvas(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? (canvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D | null) ||
-        canvas.getContext("2d")
+      ? (canvas.getContext("2d") as CanvasRenderingContext2D | null)
       : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
@@ -212,7 +210,7 @@ export class VideoRenderer {
     if (typeof document === "undefined" || !this.canvas) return null;
     if (!this.effectOffscreenCanvas) {
       this.effectOffscreenCanvas = document.createElement("canvas");
-      this.effectOffscreenCtx = this.effectOffscreenCanvas.getContext("2d", { willReadFrequently: true });
+      this.effectOffscreenCtx = this.effectOffscreenCanvas.getContext("2d");
     }
     const targetW = w && w > 0 ? Math.round(w) : this.canvas.width;
     const targetH = h && h > 0 ? Math.round(h) : this.canvas.height;
@@ -236,6 +234,7 @@ export class VideoRenderer {
       lastUsedTimestamp: this.lastUsedTimestamp,
       maxDecoders: this.maxDecoders,
       onFrameNeeded: this.onFrameNeeded,
+      isPlaying: this.isPlaying,
     };
   }
 
@@ -302,7 +301,7 @@ export class VideoRenderer {
   ) {
     if (!this.offscreenCanvas) {
       this.offscreenCanvas = document.createElement("canvas");
-      this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
+      this.offscreenCtx = this.offscreenCanvas.getContext("2d");
     }
     drawClipWithCutout(ctx, mediaEl, sx, sy, sw, sh, dx, dy, dw, dh, cutout, this.offscreenCanvas, this.offscreenCtx);
   }
@@ -397,6 +396,19 @@ export class VideoRenderer {
       }[] = [];
       const handledVideoIds = new Set<string>();
 
+      // Fast track partitioning for O(1) adjacent clip lookups
+      const clipsByTrack = new Map<number, VideoClip[]>();
+      for (let i = 0; i < videoClips.length; i++) {
+        const c = videoClips[i];
+        const tIdx = c.trackIndex || 0;
+        let trackList = clipsByTrack.get(tIdx);
+        if (!trackList) {
+          trackList = [];
+          clipsByTrack.set(tIdx, trackList);
+        }
+        trackList.push(c);
+      }
+
       // Check transitions between adjacent clips on the same track
       for (let i = 0; i < videoClips.length; i++) {
         const c = videoClips[i];
@@ -407,12 +419,13 @@ export class VideoRenderer {
             ? trans.duration || 0.5
             : 0;
 
+        const sameTrackClips = clipsByTrack.get(c.trackIndex || 0) || videoClips;
+
         // Is clip c currently in an active transition window leading into next clip?
         if (transDur > 0 && time >= cEnd - transDur && time <= cEnd) {
-          const nextClip = videoClips.find(
+          const nextClip = sameTrackClips.find(
             (other) =>
               other.id !== c.id &&
-              (other.trackIndex || 0) === (c.trackIndex || 0) &&
               Math.abs(other.startTime - cEnd) < 0.35,
           );
           const p = Math.max(0, Math.min(1, (time - (cEnd - transDur)) / transDur));
@@ -438,10 +451,9 @@ export class VideoRenderer {
         }
 
         // Standard active video playback window (exclusive end boundary when adjacent next clip exists to prevent cut bleed)
-        const hasAdjacentNext = videoClips.some(
+        const hasAdjacentNext = sameTrackClips.some(
           (other) =>
             other.id !== c.id &&
-            (other.trackIndex || 0) === (c.trackIndex || 0) &&
             Math.abs(other.startTime - cEnd) < 0.01,
         );
         const isActiveAtTime = hasAdjacentNext
@@ -740,11 +752,7 @@ export class VideoRenderer {
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1.0;
-      try {
-        if (!isPlaying && this.canvas && this.canvas.width > 0 && this.canvas.height > 0) {
-          latestLiveSnapshot = this.canvas.toDataURL("image/jpeg", 0.85);
-        }
-      } catch {}
+      latestLiveSnapshot = null;
     }
   }
 
@@ -758,7 +766,7 @@ export class VideoRenderer {
   ) {
     if (!this.offscreenCanvas && typeof document !== "undefined") {
       this.offscreenCanvas = document.createElement("canvas");
-      this.offscreenCtx = this.offscreenCanvas.getContext("2d", { willReadFrequently: true });
+      this.offscreenCtx = this.offscreenCanvas.getContext("2d");
     }
     renderClipItem(
       ctx,

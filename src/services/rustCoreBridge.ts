@@ -348,11 +348,14 @@ class RustCoreBridgeService {
 
     // 2. WebAssembly (Web)
     if (this.backendType === "web_wasm" && this.wasmInstance) {
+      const inst = this.wasmInstance;
+      const count = samples.length;
+      const bytesPerFloat = 4;
+      let samplesPtr = 0;
+      let outPtr = 0;
+      const maxOutLen = 16384;
       try {
-        const inst = this.wasmInstance;
-        const count = samples.length;
-        const bytesPerFloat = 4;
-        const samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
+        samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
 
         const memoryBuffer = inst.memory.buffer;
         const floatView = new Float32Array(memoryBuffer, samplesPtr, count);
@@ -362,21 +365,24 @@ class RustCoreBridgeService {
           for (let i = 0; i < count; i++) floatView[i] = samples[i];
         }
 
-        const maxOutLen = 16384;
-        const outPtr = inst.fastart_alloc(maxOutLen);
+        outPtr = inst.fastart_alloc(maxOutLen);
 
         const written = inst.fastart_detect_beats_c(samplesPtr, count, sampleRate, outPtr, maxOutLen);
         const outBytes = new Uint8Array(inst.memory.buffer, outPtr, written);
         const jsonStr = new TextDecoder().decode(outBytes);
-
-        inst.fastart_dealloc(samplesPtr, count * bytesPerFloat);
-        inst.fastart_dealloc(outPtr, maxOutLen);
 
         if (jsonStr) {
           return JSON.parse(jsonStr) as RustBeatResult;
         }
       } catch (wasmErr) {
         console.warn("[RustCoreBridge] WASM detectAudioBeats error:", wasmErr);
+      } finally {
+        if (samplesPtr) {
+          try { inst.fastart_dealloc(samplesPtr, count * bytesPerFloat); } catch {}
+        }
+        if (outPtr) {
+          try { inst.fastart_dealloc(outPtr, maxOutLen); } catch {}
+        }
       }
     }
 
@@ -406,11 +412,13 @@ class RustCoreBridgeService {
 
     // 2. WebAssembly (Web)
     if (this.backendType === "web_wasm" && this.wasmInstance) {
+      const inst = this.wasmInstance;
+      const count = samples.length;
+      const bytesPerFloat = 4;
+      let samplesPtr = 0;
+      let outPeaksPtr = 0;
       try {
-        const inst = this.wasmInstance;
-        const count = samples.length;
-        const bytesPerFloat = 4;
-        const samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
+        samplesPtr = inst.fastart_alloc(count * bytesPerFloat);
 
         const floatView = new Float32Array(inst.memory.buffer, samplesPtr, count);
         if (samples instanceof Float32Array) {
@@ -419,17 +427,21 @@ class RustCoreBridgeService {
           for (let i = 0; i < count; i++) floatView[i] = samples[i];
         }
 
-        const outPeaksPtr = inst.fastart_alloc(buckets * bytesPerFloat);
+        outPeaksPtr = inst.fastart_alloc(buckets * bytesPerFloat);
         const peakCount = inst.fastart_generate_waveform_c(samplesPtr, count, buckets, outPeaksPtr);
         const peaksView = new Float32Array(inst.memory.buffer, outPeaksPtr, peakCount);
         const peaks = Array.from(peaksView);
 
-        inst.fastart_dealloc(samplesPtr, count * bytesPerFloat);
-        inst.fastart_dealloc(outPeaksPtr, buckets * bytesPerFloat);
-
         return peaks;
       } catch (wasmErr) {
         console.warn("[RustCoreBridge] WASM generateWaveform error:", wasmErr);
+      } finally {
+        if (samplesPtr) {
+          try { inst.fastart_dealloc(samplesPtr, count * bytesPerFloat); } catch {}
+        }
+        if (outPeaksPtr) {
+          try { inst.fastart_dealloc(outPeaksPtr, buckets * bytesPerFloat); } catch {}
+        }
       }
     }
 
@@ -1977,48 +1989,51 @@ class RustCoreBridgeService {
         opView[i] = kf.opacity ?? base.opacity;
       }
 
-      inst.fastart_evaluate_keyframes_c(
-        base.x,
-        base.y,
-        base.scale,
-        base.rotation,
-        base.opacity,
-        tPtr,
-        xPtr,
-        yPtr,
-        scalePtr,
-        rotPtr,
-        opPtr,
-        count,
-        queryTime,
-        outXPtr,
-        outYPtr,
-        outScalePtr,
-        outRotPtr,
-        outOpPtr
-      );
+      let res = null;
+      try {
+        inst.fastart_evaluate_keyframes_c(
+          base.x,
+          base.y,
+          base.scale,
+          base.rotation,
+          base.opacity,
+          tPtr,
+          xPtr,
+          yPtr,
+          scalePtr,
+          rotPtr,
+          opPtr,
+          count,
+          queryTime,
+          outXPtr,
+          outYPtr,
+          outScalePtr,
+          outRotPtr,
+          outOpPtr
+        );
 
-      const memF64 = new Float64Array(inst.memory.buffer);
-      const res = {
-        x: memF64[outXPtr >> 3],
-        y: memF64[outYPtr >> 3],
-        scale: memF64[outScalePtr >> 3],
-        rotation: memF64[outRotPtr >> 3],
-        opacity: memF64[outOpPtr >> 3],
-      };
+        const memF64 = new Float64Array(inst.memory.buffer);
+        res = {
+          x: memF64[outXPtr >> 3],
+          y: memF64[outYPtr >> 3],
+          scale: memF64[outScalePtr >> 3],
+          rotation: memF64[outRotPtr >> 3],
+          opacity: memF64[outOpPtr >> 3],
+        };
+      } finally {
+        if (tPtr) inst.fastart_dealloc(tPtr, count * bytesPerF64);
+        if (xPtr) inst.fastart_dealloc(xPtr, count * bytesPerF64);
+        if (yPtr) inst.fastart_dealloc(yPtr, count * bytesPerF64);
+        if (scalePtr) inst.fastart_dealloc(scalePtr, count * bytesPerF64);
+        if (rotPtr) inst.fastart_dealloc(rotPtr, count * bytesPerF64);
+        if (opPtr) inst.fastart_dealloc(opPtr, count * bytesPerF64);
 
-      inst.fastart_dealloc(tPtr, count * bytesPerF64);
-      inst.fastart_dealloc(xPtr, count * bytesPerF64);
-      inst.fastart_dealloc(yPtr, count * bytesPerF64);
-      inst.fastart_dealloc(scalePtr, count * bytesPerF64);
-      inst.fastart_dealloc(rotPtr, count * bytesPerF64);
-      inst.fastart_dealloc(opPtr, count * bytesPerF64);
-
-      inst.fastart_dealloc(outXPtr, bytesPerF64);
-      inst.fastart_dealloc(outYPtr, bytesPerF64);
-      inst.fastart_dealloc(outScalePtr, bytesPerF64);
-      inst.fastart_dealloc(outRotPtr, bytesPerF64);
-      inst.fastart_dealloc(outOpPtr, bytesPerF64);
+        if (outXPtr) inst.fastart_dealloc(outXPtr, bytesPerF64);
+        if (outYPtr) inst.fastart_dealloc(outYPtr, bytesPerF64);
+        if (outScalePtr) inst.fastart_dealloc(outScalePtr, bytesPerF64);
+        if (outRotPtr) inst.fastart_dealloc(outRotPtr, bytesPerF64);
+        if (outOpPtr) inst.fastart_dealloc(outOpPtr, bytesPerF64);
+      }
 
       return res;
     } catch {

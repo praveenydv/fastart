@@ -250,7 +250,7 @@ interface EditorWorkspaceProps {
   handleAddAudio?: (clip: any) => void;
 }
 
-export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
+const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   project,
   currentTime,
   setCurrentTime,
@@ -2385,3 +2385,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
 });
+
+export const EditorWorkspace = React.memo(EditorWorkspaceComponent);
+export default EditorWorkspace;

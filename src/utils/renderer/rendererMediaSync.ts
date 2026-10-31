@@ -9,6 +9,7 @@ export interface MediaSyncContext {
   lastUsedTimestamp: Map<string, number>;
   maxDecoders: number;
   onFrameNeeded?: () => void;
+  isPlaying?: boolean;
 }
 
 // Global registry of active player video elements for 0ms frame extraction and split snapshots
@@ -141,7 +142,7 @@ export async function preloadClip(
     vid.src = clip.url;
 
     const trigger = () => {
-      if (ctx.onFrameNeeded) ctx.onFrameNeeded();
+      if (!ctx.isPlaying && ctx.onFrameNeeded) ctx.onFrameNeeded();
     };
 
     // Hardware-synchronized video frame delivery (zero duplicate draws, locked vsync)
@@ -271,8 +272,11 @@ export function syncPlayback(
     const vid = mediaEl as HTMLVideoElement;
 
     if (vid.duration && !isNaN(vid.duration) && isFinite(vid.duration) && vid.duration > 0) {
-      setCachedMediaDuration(activeClip.url, vid.duration);
-      if (activeClip.id) setCachedMediaDuration(activeClip.id, vid.duration);
+      if (!(vid as any)._durationCached) {
+        (vid as any)._durationCached = true;
+        setCachedMediaDuration(activeClip.url, vid.duration);
+        if (activeClip.id) setCachedMediaDuration(activeClip.id, vid.duration);
+      }
     }
 
     const clipLocalTime = Math.max(0, time - activeClip.startTime);
@@ -297,9 +301,8 @@ export function syncPlayback(
       : Math.max(0, rawMediaTime);
 
     const speed = Math.max(0.1, Math.min(16, effectiveSpeed));
-    if (vid.playbackRate !== speed) {
-      vid.playbackRate = speed;
-    }
+    const now = Date.now();
+    const lastHardSeek = (vid as any)._lastHardSeek || 0;
 
     if (isPlaying) {
       if (vid.seeking) {
@@ -308,25 +311,28 @@ export function syncPlayback(
       }
 
       if (vid.paused) {
-        // Startup sync: snap directly to mediaTime if drift > 0.02s before starting playback
-        if (Math.abs(vid.currentTime - mediaTime) > 0.02) {
+        // Startup sync: snap directly to mediaTime if drift > 0.04s before starting playback
+        if (Math.abs(vid.currentTime - mediaTime) > 0.04 && now - lastHardSeek > 400) {
+          (vid as any)._lastHardSeek = now;
           vid.currentTime = Math.max(0, mediaTime);
         }
         vid.play().catch(() => {});
       } else {
         const drift = vid.currentTime - mediaTime;
-        // Hard-seek if drift is noticeable (> 0.18s) to eliminate visible lag between duplicate clips
-        if (Math.abs(drift) > 0.18) {
+        // Only hard-seek during playback if drift is severe (> 0.65s) and not in cooldown
+        // This eliminates choppy playback and allows hardware decoding to run uninterrupted
+        if (Math.abs(drift) > 0.65 && now - lastHardSeek > 800) {
+          (vid as any)._lastHardSeek = now;
           vid.currentTime = Math.max(0, mediaTime);
-        } else if (Math.abs(drift) > 0.015) {
-          // Dynamic smooth micro-adjustment via playback rate to catch up in < 100ms
-          const compFactor = Math.max(0.75, Math.min(1.25, 1 - drift * 1.5));
+        } else if (Math.abs(drift) > 0.025) {
+          // Dynamic smooth micro-adjustment via playback rate to catch up in < 150ms without stutter
+          const compFactor = Math.max(0.85, Math.min(1.15, 1 - drift * 0.8));
           const compRate = speed * compFactor;
-          if (Math.abs(vid.playbackRate - compRate) > 0.005) {
+          if (Math.abs(vid.playbackRate - compRate) > 0.01) {
             vid.playbackRate = Math.max(0.1, Math.min(16, compRate));
           }
         } else {
-          if (vid.playbackRate !== speed) {
+          if (Math.abs(vid.playbackRate - speed) > 0.01) {
             vid.playbackRate = speed;
           }
         }
@@ -335,7 +341,8 @@ export function syncPlayback(
       if (!vid.paused) {
         vid.pause();
       }
-      if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.02) {
+      if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.03 && now - lastHardSeek > 150) {
+        (vid as any)._lastHardSeek = now;
         vid.currentTime = Math.max(0, mediaTime);
       }
     }

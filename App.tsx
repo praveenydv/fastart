@@ -18,7 +18,8 @@ import { EditorWorkspace } from "./src/components/Editor/EditorWorkspace";
 import { EditorModals } from "./src/components/Editor/EditorModals";
 import { ProjectStatusScreens } from "./src/components/Editor/ProjectStatusScreens";
 import { useAppBootstrap } from "./src/hooks/useAppBootstrap";
-import { useProjectHistory } from "./src/hooks/useProjectHistory";
+import { useProjectHistory, cloneProjectSnapshot } from "./src/hooks/useProjectHistory";
+import { useProjectAutoSave } from "./src/hooks/useProjectAutoSave";
 import { useProjectClipMutations } from "./src/hooks/useProjectClipMutations";
 import { useProjectMediaAdders } from "./src/hooks/useProjectMediaAdders";
 import { useProjectKeyframes } from "./src/hooks/useProjectKeyframes";
@@ -47,6 +48,10 @@ export default function App() {
   selectedClipIdRef.current = selectedClipId;
 
   const [selectedClipType, setSelectedClipType] = useState<string>("video");
+  const handleSelectClip = useCallback((id: string | null, type?: any) => {
+    setSelectedClipId(id);
+    if (type) setSelectedClipType(type);
+  }, []);
   const [zoom, setZoom] = useState(60);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
@@ -126,7 +131,7 @@ export default function App() {
     }
 
     if (PREVIEW_MODALS.has(modalName) && projectRef.current) {
-      modalInitialSnapshotRef.current = JSON.parse(JSON.stringify(projectRef.current));
+      modalInitialSnapshotRef.current = cloneProjectSnapshot(projectRef.current);
       initialHistoryLengthRef.current = historyStackRef.current.length;
     } else {
       modalInitialSnapshotRef.current = null;
@@ -205,6 +210,17 @@ export default function App() {
   });
   historyStackRef.current = historyStack;
 
+  // Continuous Auto-Save Engine:
+  // Automatically persists all project configs, edits, cutouts, and layer stacks every few seconds
+  // and synchronously upon window beforeunload/refresh.
+  useProjectAutoSave({
+    project,
+    projectRef,
+    setProjects,
+    debounceMs: 1500,
+    intervalMs: 4000,
+  });
+
   // Staged Preview Dispatcher:
   // When inside any modal (modalInitialSnapshotRef.current != null):
   // Updates are live, transient previews (zero history pollution, 60fps in-memory preview, no disk I/O).
@@ -226,7 +242,7 @@ export default function App() {
       commitPreview(modalInitialSnapshotRef.current);
       // Advance snapshot to current state so further tweaks can also be previewed / committed
       if (projectRef.current) {
-        modalInitialSnapshotRef.current = JSON.parse(JSON.stringify(projectRef.current));
+        modalInitialSnapshotRef.current = cloneProjectSnapshot(projectRef.current);
       }
     }
     soundEngine.playSfx("whoosh");
@@ -817,6 +833,7 @@ export default function App() {
               handleUpdateCaption={handleUpdateCaption}
               handleMoveClip={handleMoveClip}
               handleUpdateClipMask={handleUpdateClipMask}
+              handleSelectClip={handleSelectClip}
               isInline={isInline}
             />
           );

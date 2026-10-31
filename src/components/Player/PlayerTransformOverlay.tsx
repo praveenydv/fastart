@@ -83,8 +83,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {/* Unselected Clickable & Immediately Draggable Hit Areas for Active Videos */}
         {activeVideos.map((vid) => {
           if (selectedClipId === vid.id) return null;
-          const vidTrackZ =
-            (typeof vid.trackIndex === "number" ? vid.trackIndex : 0) * 100 + 10;
+          const vidLyr = typeof vid.layer === "number" && vid.layer > 0 ? vid.layer : undefined;
+          const vidTrackZ = vidLyr
+            ? vidLyr * 1000 + 10
+            : (typeof vid.trackIndex === "number" ? vid.trackIndex : 0) * 100 + 10;
           const kfT = getInterpolatedTransform(vid, currentTime, "video");
           let motionX = 0;
           let motionY = 0;
@@ -159,8 +161,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Captions */}
         {(activeCaptions || []).map((cap) => {
           if (cap.id === selectedClipId) return null;
-          const capTrackZ =
-            (typeof cap.trackIndex === "number" ? cap.trackIndex : 2) * 100 + 15;
+          const capLyr = typeof cap.layer === "number" && cap.layer > 0 ? cap.layer : undefined;
+          const capTrackZ = capLyr
+            ? capLyr * 1000 + 15
+            : (typeof cap.trackIndex === "number" ? cap.trackIndex : 2) * 100 + 15;
           const kfT = getInterpolatedTransform(cap, currentTime, "caption");
           const elapsed = Math.max(0, currentTime - cap.startTime);
           const animEval = evaluateClipAnimation(
@@ -249,8 +253,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Texts */}
         {activeTexts.map((txt) => {
           if (txt.id === selectedClipId) return null;
-          const txtTrackZ =
-            (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 100 + 20;
+          const txtLyr = typeof txt.layer === "number" && txt.layer > 0 ? txt.layer : undefined;
+          const txtTrackZ = txtLyr
+            ? txtLyr * 1000 + 20
+            : (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 100 + 20;
           const kfT = getInterpolatedTransform(txt, currentTime, "text");
           const elapsed = Math.max(0, currentTime - (txt.startTime || 0));
           const animEval = evaluateClipAnimation(
@@ -339,8 +345,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {/* Unselected Clickable & Immediately Draggable Hit Boxes for Active Stickers */}
         {activeStickers.map((stk) => {
           if (stk.id === selectedClipId) return null;
-          const stkTrackZ =
-            (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 100 + 25;
+          const stkLyr = typeof stk.layer === "number" && stk.layer > 0 ? stk.layer : undefined;
+          const stkTrackZ = stkLyr
+            ? stkLyr * 1000 + 25
+            : (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 100 + 25;
           const kfT = getInterpolatedTransform(stk, currentTime, "sticker");
           const elapsed = Math.max(0, currentTime - (stk.startTime || 0));
           const animEval = evaluateClipAnimation(

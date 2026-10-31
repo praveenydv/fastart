@@ -130,6 +130,7 @@ interface EditorModalsProps {
   ) => void;
   handleDeleteClip?: (targetId?: string, targetType?: string) => void;
   handleDeleteProjectAsset?: (assetId: string, type?: string) => void;
+  handleSelectClip?: (id: string, type: any) => void;
 }
 
 if (Platform.OS === "web" && typeof document !== "undefined") {
@@ -183,7 +184,7 @@ export const INLINE_MODAL_KEYS = new Set([
   'hsl',
 ]);
 
-export const EditorModals: React.FC<EditorModalsProps> = ({
+const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   activeModal,
   closeModal,
   onCancelModal,
@@ -992,3 +993,6 @@ const modalStyles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+export const EditorModals = React.memo(EditorModalsComponent);
+export default EditorModals;

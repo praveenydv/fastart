@@ -3,8 +3,27 @@ import { isImageClip } from "./mediaDuration";
 import { getLiveMediaUrl } from "./largeMediaStorage";
 import { globalActiveVideoElements } from "./renderer/rendererMediaSync";
 
-// In-memory thumbnail cache keyed by clipId or mediaUrl
-export const globalThumbnailCache = new Map<string, string>();
+// High-performance LRU cache bounded to prevent memory bloat
+export class LruCache<K, V> extends Map<K, V> {
+  private maxSize: number;
+  constructor(maxSize: number = 120) {
+    super();
+    this.maxSize = maxSize;
+  }
+  override set(key: K, value: V): this {
+    if (this.has(key)) {
+      this.delete(key);
+    } else if (this.size >= this.maxSize) {
+      const first = this.keys().next().value;
+      if (first !== undefined) this.delete(first);
+    }
+    super.set(key, value);
+    return this;
+  }
+}
+
+// In-memory thumbnail cache keyed by clipId or mediaUrl (bounded to 120 entries)
+export const globalThumbnailCache = new LruCache<string, string>(120);
 
 type ThumbnailListener = (clipId: string, thumbUrl: string) => void;
 const listeners = new Set<ThumbnailListener>();
@@ -102,24 +121,18 @@ export function isCanvasBlackOrEmpty(canvas: HTMLCanvasElement): boolean {
     const h = canvas.height;
     if (w <= 0 || h <= 0) return true;
 
-    // Sample 9 spread points across the canvas
-    const samplePoints: [number, number][] = [
-      [w * 0.5, h * 0.5],
-      [w * 0.25, h * 0.25],
-      [w * 0.75, h * 0.75],
-      [w * 0.5, h * 0.25],
-      [w * 0.5, h * 0.75],
-      [w * 0.25, h * 0.5],
-      [w * 0.75, h * 0.5],
-      [w * 0.35, h * 0.65],
-      [w * 0.65, h * 0.35],
-    ];
-
+    // Single-readback optimization: sample 4x4 patch near center (1 GPU flush instead of 9)
+    const sampleBoxSize = 4;
+    const startX = Math.max(0, Math.floor((w - sampleBoxSize) / 2));
+    const startY = Math.max(0, Math.floor((h - sampleBoxSize) / 2));
+    const imgData = ctx.getImageData(startX, startY, sampleBoxSize, sampleBoxSize).data;
     let coloredSamples = 0;
-    for (const [x, y] of samplePoints) {
-      const p = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-      // [r, g, b, a]
-      if (p[3] > 10 && (p[0] > 16 || p[1] > 16 || p[2] > 16)) {
+    for (let i = 0; i < imgData.length; i += 4) {
+      const r = imgData[i];
+      const g = imgData[i + 1];
+      const b = imgData[i + 2];
+      const a = imgData[i + 3];
+      if (a > 10 && (r > 16 || g > 16 || b > 16)) {
         coloredSamples++;
       }
     }

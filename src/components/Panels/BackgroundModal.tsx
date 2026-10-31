@@ -144,7 +144,7 @@ export default function BackgroundModal({
     if (snap) {
       setLiveCanvasSnap(snap);
     }
-  }, [visible, currentTime]);
+  }, [visible]);
 
   const currentActiveVideo = React.useMemo(() => {
     if (typeof currentTime === 'number' && project.tracks?.video) {

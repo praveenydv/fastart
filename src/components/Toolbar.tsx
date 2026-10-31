@@ -205,7 +205,7 @@ const EFFECT_CLIP_TOOLS = [
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
-export default function Toolbar({
+function ToolbarComponent({
   selectedClip,
   selectedClipType = "video",
   project,
@@ -810,3 +810,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
 });
+
+export const Toolbar = React.memo(ToolbarComponent);
+export default Toolbar;
