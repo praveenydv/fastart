@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -118,6 +118,11 @@ export default function BlendModeModal({
 }: BlendModeModalProps) {
   const [selectedMode, setSelectedMode] = useState<BlendMode>(currentMode);
   const [opacity, setOpacity] = useState<number>(currentOpacity);
+
+  useEffect(() => {
+    setSelectedMode(currentMode);
+    setOpacity(currentOpacity);
+  }, [currentMode, currentOpacity]);
 
   if (!visible) return null;
 

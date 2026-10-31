@@ -41,29 +41,36 @@ export function usePlayerViewport({ project, fullscreen }: UsePlayerViewportProp
     const el = viewportWrapperRef.current as unknown as HTMLElement;
     if (!el || typeof ResizeObserver === "undefined") return;
 
+    let rafId: number | null = null;
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setViewportDims((prev) => {
-            if (
-              prev &&
-              Math.abs(prev.width - width) < 2 &&
-              Math.abs(prev.height - height) < 2
-            ) {
-              return prev;
-            }
-            return {
-              width: Math.round(width),
-              height: Math.round(height),
-            };
-          });
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            setViewportDims((prev) => {
+              if (
+                prev &&
+                Math.abs(prev.width - width) < 3 &&
+                Math.abs(prev.height - height) < 3
+              ) {
+                return prev;
+              }
+              return {
+                width: Math.round(width),
+                height: Math.round(height),
+              };
+            });
+          }
         }
-      }
+      });
     });
 
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, []);
 
   const getAspectRatioDimensions = () => {

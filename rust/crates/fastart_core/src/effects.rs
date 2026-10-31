@@ -379,3 +379,143 @@ pub fn apply_vignette_raw(
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HslChannelConfig {
+    pub hue: f32,        // -180.0..180.0
+    pub saturation: f32, // -100.0..100.0
+    pub luminance: f32,  // -100.0..100.0
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct HslColorGrading {
+    pub red: HslChannelConfig,
+    pub orange: HslChannelConfig,
+    pub yellow: HslChannelConfig,
+    pub green: HslChannelConfig,
+    pub cyan: HslChannelConfig,
+    pub blue: HslChannelConfig,
+    pub purple: HslChannelConfig,
+    pub magenta: HslChannelConfig,
+}
+
+#[inline(always)]
+fn rgb_to_hsl_pixel(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let rf = r / 255.0;
+    let gf = g / 255.0;
+    let bf = b / 255.0;
+    let max = rf.max(gf).max(bf);
+    let min = rf.min(gf).min(bf);
+    let d = max - min;
+    let l = (max + min) * 0.5;
+
+    if d < 1e-5 {
+        return (0.0, 0.0, l);
+    }
+
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
+
+    let mut h = if (max - rf).abs() < 1e-5 {
+        (gf - bf) / d + (if gf < bf { 6.0 } else { 0.0 })
+    } else if (max - gf).abs() < 1e-5 {
+        (bf - rf) / d + 2.0
+    } else {
+        (rf - gf) / d + 4.0
+    };
+    h *= 60.0;
+
+    (h, s, l)
+}
+
+#[inline(always)]
+fn hsl_to_rgb_pixel(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+    if s < 1e-5 {
+        let val = (l * 255.0).clamp(0.0, 255.0) as u8;
+        return (val, val, val);
+    }
+
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
+    let p = 2.0 * l - q;
+    let hk = ((h % 360.0 + 360.0) % 360.0) / 360.0;
+
+    let hue2rgb = |t: f32| -> f32 {
+        let mut tc = t;
+        if tc < 0.0 { tc += 1.0; }
+        if tc > 1.0 { tc -= 1.0; }
+        if tc < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * tc
+        } else if tc < 1.0 / 2.0 {
+            q
+        } else if tc < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - tc) * 6.0
+        } else {
+            p
+        }
+    };
+
+    let r = (hue2rgb(hk + 1.0 / 3.0) * 255.0).clamp(0.0, 255.0) as u8;
+    let g = (hue2rgb(hk) * 255.0).clamp(0.0, 255.0) as u8;
+    let b = (hue2rgb(hk - 1.0 / 3.0) * 255.0).clamp(0.0, 255.0) as u8;
+
+    (r, g, b)
+}
+
+/// Applies 8-channel selective HSL color grading directly to raw RGBA pixel slice
+pub fn apply_hsl_color_grading_raw(pixels: &mut [u8], grading: &HslColorGrading) {
+    let centers: [(f32, &HslChannelConfig); 9] = [
+        (0.0, &grading.red),
+        (30.0, &grading.orange),
+        (60.0, &grading.yellow),
+        (120.0, &grading.green),
+        (180.0, &grading.cyan),
+        (240.0, &grading.blue),
+        (275.0, &grading.purple),
+        (315.0, &grading.magenta),
+        (360.0, &grading.red),
+    ];
+
+    for chunk in pixels.chunks_exact_mut(4) {
+        let (h, s, l) = rgb_to_hsl_pixel(chunk[0] as f32, chunk[1] as f32, chunk[2] as f32);
+
+        let mut idx = 0;
+        for k in 0..8 {
+            if h >= centers[k].0 && h <= centers[k + 1].0 {
+                idx = k;
+                break;
+            }
+        }
+
+        let c1 = &centers[idx];
+        let c2 = &centers[idx + 1];
+        let span = c2.0 - c1.0;
+        let factor2 = if span > 0.0 { (h - c1.0) / span } else { 0.0 };
+        let factor1 = 1.0 - factor2;
+
+        let dh = c1.1.hue * factor1 + c2.1.hue * factor2;
+        let ds = c1.1.saturation * factor1 + c2.1.saturation * factor2;
+        let dl = c1.1.luminance * factor1 + c2.1.luminance * factor2;
+
+        if dh.abs() < 1e-4 && ds.abs() < 1e-4 && dl.abs() < 1e-4 {
+            continue;
+        }
+
+        let new_h = (h + dh).rem_euclid(360.0);
+        let new_s = (s * (1.0 + ds / 100.0)).clamp(0.0, 1.0);
+        let lum_factor = 1.0 - (2.0 * l - 1.0).abs();
+        let new_l = (l + (dl / 100.0) * lum_factor).clamp(0.0, 1.0);
+
+        let (nr, ng, nb) = hsl_to_rgb_pixel(new_h, new_s, new_l);
+        chunk[0] = nr;
+        chunk[1] = ng;
+        chunk[2] = nb;
+    }
+}
+

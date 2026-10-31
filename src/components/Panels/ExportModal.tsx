@@ -64,18 +64,16 @@ export default function ExportModal({
   return (
     <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} transparent>
       <View style={[styles.modalOverlay, isDesktop && styles.modalOverlayDesktop]}>
-        {/* Clickable Backdrop Dismiss on Desktop */}
-        {isDesktop && (
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => {
-              if (status !== "rendering") {
-                onClose();
-              }
-            }}
-          />
-        )}
+        {/* Clickable Backdrop Dismiss for Desktop & Mobile */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => {
+            if (status !== "rendering") {
+              onClose();
+            }
+          }}
+        />
 
         <View style={[styles.sheetContainer, isDesktop && styles.sheetContainerDesktop]}>
           {/* Mobile Drag Handle */}
@@ -89,7 +87,7 @@ export default function ExportModal({
                   <View style={styles.desktopIconBadge}>
                     <Ionicons
                       name="cloud-download-outline"
-                      size={17}
+                      size={18}
                       color="#00F2FE"
                     />
                   </View>
@@ -99,19 +97,29 @@ export default function ExportModal({
                   </View>
                 </View>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    if (status === "rendering") {
-                      handleCancelExport();
-                    }
-                    onClose();
-                  }}
-                  style={styles.closeBtn}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Close"
-                >
-                  <Ionicons name="close" size={15} color="#94A3B8" />
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View style={styles.headerFormatBadge}>
+                    <Ionicons name={selectedFormatConfig.icon} size={12} color="#00F2FE" />
+                    <Text style={styles.headerFormatBadgeText}>
+                      {selectedFormatConfig.shortLabel}
+                      {mediaType !== "wav" && mediaType !== "png" ? ` • ${resolution}` : ""}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (status === "rendering") {
+                        handleCancelExport();
+                      }
+                      onClose();
+                    }}
+                    style={styles.closeBtn}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Close"
+                  >
+                    <Ionicons name="close" size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+                </View>
               </>
             ) : (
               <>
@@ -134,7 +142,7 @@ export default function ExportModal({
                 <View style={styles.headerTitleRow}>
                   <Ionicons
                     name="cloud-download-outline"
-                    size={15}
+                    size={16}
                     color="#00F2FE"
                   />
                   <Text style={styles.sheetTitle}>Export Video</Text>
@@ -147,7 +155,7 @@ export default function ExportModal({
                     activeOpacity={0.7}
                     accessibilityLabel="Start Export"
                   >
-                    <Ionicons name="checkmark" size={15} color="#08090E" />
+                    <Ionicons name="checkmark" size={16} color="#08090E" />
                   </TouchableOpacity>
                 ) : status === "done" ? (
                   <TouchableOpacity
@@ -156,10 +164,10 @@ export default function ExportModal({
                     activeOpacity={0.7}
                     accessibilityLabel="Done"
                   >
-                    <Ionicons name="checkmark" size={15} color="#08090E" />
+                    <Ionicons name="checkmark" size={16} color="#08090E" />
                   </TouchableOpacity>
                 ) : (
-                  <View style={{ width: 26 }} />
+                  <View style={{ width: 30 }} />
                 )}
               </>
             )}
@@ -184,6 +192,7 @@ export default function ExportModal({
                 totalDuration={totalDuration}
                 calculateEstimatedSize={calculateEstimatedSize}
                 onStartExport={handleStartExport}
+                isDesktop={isDesktop}
               />
             ) : (
               <ExportResultView
@@ -198,6 +207,7 @@ export default function ExportModal({
                 isSaving={isSaving}
                 errorMessage={errorMessage}
                 downloadDestination={downloadDestination}
+                exportFilename={exportFilename}
                 onDownload={() =>
                   triggerDirectDownload(exportedResult, exportedUrl)
                 }

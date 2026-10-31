@@ -8,8 +8,8 @@ import { NativeModules, Platform } from "react-native";
 import { FastArtProject, TrajectoryPoint, CutoutConfig } from "../types/project";
 
 export interface MaskProvider {
-  getFrameMask: (clipId: string, clipTime: number, fps?: number) => HTMLCanvasElement | null;
-  getHumanSegmentationMask: (clipId?: string, clipTime?: number) => HTMLCanvasElement | null;
+  getFrameMask: (clipId: string, clipTime: number, fps?: number, fallbackClipId?: string) => HTMLCanvasElement | null;
+  getHumanSegmentationMask: (clipId?: string, clipTime?: number, fallbackClipId?: string) => HTMLCanvasElement | null;
   requestHumanSegmentation: (mediaElement: any, clipId?: string, clipTime?: number) => void;
   hasClipMasks?: (clipId: string) => boolean;
 }
@@ -1229,10 +1229,25 @@ class RustCoreBridgeService {
             ? Math.max(0, media.currentTime)
             : 0;
 
-        const humanMask =
+        const fallbackId = (options as any).sourceMediaId;
+        let humanMask =
           options.clipId && activeMaskProvider
-            ? activeMaskProvider.getFrameMask(options.clipId, actualClipTime)
+            ? activeMaskProvider.getFrameMask(options.clipId, actualClipTime, undefined, fallbackId)
             : null;
+
+        if (!humanMask && fallbackId && activeMaskProvider) {
+          humanMask = activeMaskProvider.getFrameMask(fallbackId, actualClipTime);
+        }
+
+        if (!humanMask && activeMaskProvider) {
+          humanMask = activeMaskProvider.getHumanSegmentationMask(options.clipId, actualClipTime, fallbackId);
+          if (!humanMask && fallbackId) {
+            humanMask = activeMaskProvider.getHumanSegmentationMask(fallbackId, actualClipTime);
+          }
+          if (activeMaskProvider.requestHumanSegmentation) {
+            activeMaskProvider.requestHumanSegmentation(media as any, options.clipId, actualClipTime);
+          }
+        }
 
         if (humanMask) {
           const mediaW =
@@ -1558,8 +1573,14 @@ class RustCoreBridgeService {
     height: number = 512,
     outFloatBuffer?: Float32Array
   ): Float32Array {
-    const totalOutFloats = 512 * 512 * 3;
-    const dest = outFloatBuffer || new Float32Array(totalOutFloats);
+    const totalOutFloats = width * height * 3;
+    const isBufferValid =
+      outFloatBuffer &&
+      outFloatBuffer.length === totalOutFloats &&
+      outFloatBuffer.byteLength > 0 &&
+      outFloatBuffer.buffer &&
+      outFloatBuffer.buffer.byteLength > 0;
+    const dest = isBufferValid ? outFloatBuffer : new Float32Array(totalOutFloats);
     const inst = this.wasmInstance;
 
     if (inst && typeof inst.fastart_prepare_modnet_input_c === "function") {

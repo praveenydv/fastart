@@ -148,7 +148,11 @@ export function useAppBootstrap({
             if (!prev || !prev.tracks) return prev;
             let changed = false;
             const video = (prev.tracks.video || []).map((c: any) => {
-              const match = c.sourceMediaId === lookupId || c.id === lookupId;
+              const match =
+                c.sourceMediaId === lookupId ||
+                c.id === lookupId ||
+                (c.title && (c.title === lookupId || lookupId.includes(c.title))) ||
+                (c.name && (c.name === lookupId || lookupId.includes(c.name)));
               if (match && (c.needsPermission || c.isMissing || c.url !== liveUrl)) {
                 changed = true;
                 return { ...c, url: liveUrl, isMissing: false, needsPermission: false };
@@ -156,7 +160,11 @@ export function useAppBootstrap({
               return c;
             });
             const audio = (prev.tracks.audio || []).map((c: any) => {
-              const match = c.sourceMediaId === lookupId || c.id === lookupId;
+              const match =
+                c.sourceMediaId === lookupId ||
+                c.id === lookupId ||
+                (c.title && (c.title === lookupId || lookupId.includes(c.title))) ||
+                (c.name && (c.name === lookupId || lookupId.includes(c.name)));
               if (match && (c.needsPermission || c.isMissing || c.url !== liveUrl)) {
                 changed = true;
                 return { ...c, url: liveUrl, isMissing: false, needsPermission: false };

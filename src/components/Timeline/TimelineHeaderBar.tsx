@@ -5,11 +5,12 @@ import { styles } from "./TimelineStyles";
 
 interface TimelineHeaderBarProps {
   isResizingHeight: boolean;
-  handleResizeMouseDown: any;
-  handleResetResizeHeight: any;
-  handleResizeTouchStart: any;
-  handleResizeTouchMove: any;
-  handleResizeTouchEnd: any;
+  resizeHandleProps?: any;
+  handleResizeMouseDown?: any;
+  handleResetResizeHeight?: any;
+  handleResizeTouchStart?: any;
+  handleResizeTouchMove?: any;
+  handleResizeTouchEnd?: any;
   isMobile: boolean;
   activeClipInfo: {
     color: string;
@@ -35,6 +36,7 @@ interface TimelineHeaderBarProps {
 
 export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
   isResizingHeight,
+  resizeHandleProps,
   handleResizeMouseDown,
   handleResetResizeHeight,
   handleResizeTouchStart,
@@ -60,30 +62,36 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
 
   return (
     <>
-      {/* Interactive Top Drag-to-Resize Handle */}
-      <View
-        style={[
-          styles.resizeHandleBar,
-          isResizingHeight && styles.resizeHandleBarActive,
-        ]}
-        {...(Platform.OS === "web"
-          ? {
-              onMouseDown: handleResizeMouseDown,
-              onDoubleClick: handleResetResizeHeight,
-            }
-          : {})}
-        onTouchStart={handleResizeTouchStart}
-        onTouchMove={handleResizeTouchMove}
-        onTouchEnd={handleResizeTouchEnd}
-        accessibilityLabel="Drag up or down to adjust timeline height"
-      >
+      {/* Interactive Top Drag-to-Resize Handle (Desktop only; on mobile, handled universally in EditorWorkspace) */}
+      {!isMobile && (
         <View
           style={[
-            styles.resizeGripPill,
-            isResizingHeight && styles.resizeGripPillActive,
+            styles.resizeHandleBar,
+            isResizingHeight && styles.resizeHandleBarActive,
           ]}
-        />
-      </View>
+          {...(resizeHandleProps
+            ? resizeHandleProps
+            : {
+                ...(Platform.OS === "web"
+                  ? {
+                      onMouseDown: handleResizeMouseDown,
+                      onDoubleClick: handleResetResizeHeight,
+                    }
+                  : {}),
+                onTouchStart: handleResizeTouchStart,
+                onTouchMove: handleResizeTouchMove,
+                onTouchEnd: handleResizeTouchEnd,
+              })}
+          accessibilityLabel="Drag up or down to adjust timeline height"
+        >
+          <View
+            style={[
+              styles.resizeGripPill,
+              isResizingHeight && styles.resizeGripPillActive,
+            ]}
+          />
+        </View>
+      )}
 
       {/* Top Preference Bar: Multi-Track Info, Track Counter, Active Clip Details & Fluid Zoom Controls */}
       <View style={styles.timelineBar}>

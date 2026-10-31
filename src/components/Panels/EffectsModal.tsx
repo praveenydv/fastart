@@ -32,7 +32,7 @@ const getEffectFilterStyle = (type: string): any => {
   if (Platform.OS !== 'web') return null;
   switch (type) {
     case 'glitch':
-      return { filter: 'contrast(1.3) hue-rotate(90deg)' };
+      return { filter: 'contrast(1.3) hue-rotate(90deg)', animation: 'fastartGlitchSlice 0.8s infinite' };
     case 'vhs':
       return { filter: 'sepia(0.35) saturate(1.4) contrast(1.15)' };
     case 'rgb_split':
@@ -44,7 +44,7 @@ const getEffectFilterStyle = (type: string): any => {
     case 'crt_tv':
       return { filter: 'contrast(1.25) brightness(1.1)' };
     case 'zoom_pulse':
-      return { transform: [{ scale: 1.15 }] };
+      return { animation: 'fastartZoomPulseAnim 1.4s ease-in-out infinite' };
     case 'neon_edge':
     case 'ai_cyberpunk':
       return { filter: 'saturate(2.2) contrast(1.4)' };
@@ -65,7 +65,7 @@ const getEffectFilterStyle = (type: string): any => {
     case 'mirror':
       return { transform: [{ scaleX: -1 }] };
     case 'shake':
-      return { transform: [{ rotate: '-4deg' }, { scale: 1.08 }] };
+      return { animation: 'fastartShakeAnim 0.7s infinite' };
     case 'thermal':
       return { filter: 'invert(1) hue-rotate(180deg) saturate(3)' };
     case 'ai_matrix':
@@ -117,6 +117,45 @@ export default function EffectsModal({
 
   // Standardized prefix reference model image for consistent, high-clarity effect previews
   const previewThumb = PRESET_PREVIEW_IMAGE;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const styleId = 'fastart-effect-preview-styles';
+    if (document.getElementById(styleId)) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      @keyframes fastartGlitchSlice {
+        0%, 100% { transform: translate(0); }
+        20% { transform: translate(-2px, 1px) skewX(2deg); }
+        40% { transform: translate(2px, -1px) skewX(-2deg); }
+        60% { transform: translate(-1px, 2px); }
+        80% { transform: translate(1px, -1px); }
+      }
+      @keyframes fastartRecBlink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.2; }
+      }
+      @keyframes fastartZoomPulseAnim {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.15); }
+      }
+      @keyframes fastartStrobeFlash {
+        0%, 75%, 100% { opacity: 0; }
+        80%, 92% { opacity: 0.65; }
+      }
+      @keyframes fastartNeonEdgePulse {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; filter: drop-shadow(0 0 6px #00f2fe); }
+      }
+      @keyframes fastartShakeAnim {
+        0%, 100% { transform: translate(0); }
+        25% { transform: translate(-1.5px, 1px) rotate(-1deg); }
+        75% { transform: translate(1.5px, -1px) rotate(1deg); }
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -426,7 +465,7 @@ export default function EffectsModal({
                           {/* Visual effect overlays */}
                           {item.type === 'vhs' && (
                             <View style={styles.recBadge}>
-                              <View style={styles.recDot} />
+                              <View style={[styles.recDot, Platform.OS === 'web' ? ({ animation: 'fastartRecBlink 1s infinite' } as any) : null]} />
                               <Text style={styles.recText}>REC</Text>
                             </View>
                           )}
@@ -451,10 +490,12 @@ export default function EffectsModal({
                             </>
                           )}
                           {(item.type === 'neon_edge' || item.type === 'ai_cyberpunk') && (
-                            <View style={styles.neonBorder} />
+                            <View style={[styles.neonBorder, Platform.OS === 'web' ? ({ animation: 'fastartNeonEdgePulse 1.4s ease-in-out infinite' } as any) : null]} />
                           )}
                           {item.type === 'vignette' && <View style={styles.vignetteShadow} />}
-                          {item.type === 'flash' && <View style={styles.centerGlow} />}
+                          {item.type === 'flash' && (
+                            <View style={[styles.centerGlow, Platform.OS === 'web' ? ({ animation: 'fastartStrobeFlash 1.2s infinite' } as any) : null]} />
+                          )}
                           {(item.type === 'prism_leak' || item.type === 'sun_flare') && (
                             <View style={styles.lightLeakStripe} />
                           )}
@@ -477,6 +518,9 @@ export default function EffectsModal({
                       numberOfLines={1}
                     >
                       {item.name}
+                    </Text>
+                    <Text style={styles.effectDescText} numberOfLines={1}>
+                      {(item as any).desc || item.category}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -896,6 +940,22 @@ const styles = StyleSheet.create({
   effectLabelActive: {
     color: '#00F2FE',
     fontWeight: '700',
+  },
+  effectDescText: {
+    color: '#64748B',
+    fontSize: 7.5,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 1,
+    width: '100%',
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: 'block',
+        } as any)
+      : {}),
   },
   inlineApplyBtn: {
     flexDirection: 'row',

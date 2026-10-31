@@ -16,6 +16,7 @@ import {
 } from "../types/project";
 import { getMediaDuration } from "../utils/mediaDuration";
 import { soundEngine } from "../utils/audioEngine";
+import { isHslActive } from "../utils/hslEngine";
 
 import {
   extractRealMediaAudioPeaks,
@@ -772,19 +773,41 @@ export function useProjectFilterEffects({
       const targetId = resolveTargetClipId("video");
       if (!targetId) return;
 
+      const hasActive = isHslActive(adjustments);
+      const cleanAdj = hasActive ? adjustments : undefined;
+
+      let matched = false;
       const videoClips = (current.tracks.video || []).map((c) => {
         if (c.id === targetId) {
+          matched = true;
           return {
             ...c,
-            hslAdjustments: adjustments,
+            hslAdjustments: cleanAdj,
           };
         }
         return c;
       });
 
+      const overlayClips = ((current.tracks as any).overlay || []).map((c: any) => {
+        if (c.id === targetId) {
+          matched = true;
+          return {
+            ...c,
+            hslAdjustments: cleanAdj,
+          };
+        }
+        return c;
+      });
+
+      if (!matched) return;
+
       updateProjectWithHistory({
         ...current,
-        tracks: { ...current.tracks, video: videoClips },
+        tracks: {
+          ...current.tracks,
+          video: videoClips,
+          overlay: overlayClips,
+        },
       });
     },
     [project, projectRef, resolveTargetClipId, updateProjectWithHistory],

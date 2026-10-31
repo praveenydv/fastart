@@ -1,27 +1,92 @@
 import React, { useCallback } from "react";
-import { View, StyleSheet, Text, ActivityIndicator, TouchableOpacity, Platform, useWindowDimensions } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Text,
+  ActivityIndicator,
+  TouchableOpacity,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../Header";
 import Player from "../Player";
 import Timeline from "../Timeline";
 import Toolbar from "../Toolbar";
-import { DesktopMediaAudioPanel, DesktopResourceTab } from "../Desktop/DesktopMediaAudioPanel";
+import { useTimelineResize } from "../Timeline/useTimelineResize";
+import {
+  DesktopMediaAudioPanel,
+  DesktopResourceTab,
+} from "../Desktop/DesktopMediaAudioPanel";
 import { DesktopInspector } from "../Desktop/DesktopInspector";
 import { INLINE_MODAL_KEYS } from "./EditorModals";
 import { soundEngine } from "../../utils/audioEngine";
-import { FastArtProject, EffectClip, MotionTrackConfig } from "../../types/project";
+import {
+  FastArtProject,
+  EffectClip,
+  MotionTrackConfig,
+} from "../../types/project";
 import { allocateNewTrackForClip } from "../../utils/trackPlacement";
 import { THEME_COLORS } from "../../constants/designConstants";
 import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 import { reconnectLinkedMedia } from "../../utils/largeMediaStorage";
+import { ErrorBoundary } from "../Common/ErrorBoundary";
 
 const CLIP_TYPE_AVAILABLE_MENUS: Record<string, Set<string>> = {
-  text: new Set(["text", "edit", "tts", "animation", "keyframe", "tracking", "opacity"]),
-  caption: new Set(["captions", "caption", "text", "edit", "tts", "keyframe", "tracking", "animation", "opacity"]),
-  captions: new Set(["captions", "caption", "text", "edit", "tts", "keyframe", "tracking", "animation", "opacity"]),
-  sticker: new Set(["stickers", "sticker", "edit", "animation", "keyframe", "tracking", "opacity"]),
-  stickers: new Set(["stickers", "sticker", "edit", "animation", "keyframe", "tracking", "opacity"]),
-  audio: new Set(["volume", "speed", "denoise", "audio", "audio_effects", "voice_effects"]),
+  text: new Set([
+    "text",
+    "edit",
+    "animation",
+    "keyframe",
+    "tracking",
+    "opacity",
+  ]),
+  caption: new Set([
+    "captions",
+    "caption",
+    "text",
+    "edit",
+    "keyframe",
+    "tracking",
+    "animation",
+    "opacity",
+  ]),
+  captions: new Set([
+    "captions",
+    "caption",
+    "text",
+    "edit",
+    "keyframe",
+    "tracking",
+    "animation",
+    "opacity",
+  ]),
+  sticker: new Set([
+    "stickers",
+    "sticker",
+    "edit",
+    "animation",
+    "keyframe",
+    "tracking",
+    "opacity",
+  ]),
+  stickers: new Set([
+    "stickers",
+    "sticker",
+    "edit",
+    "animation",
+    "keyframe",
+    "tracking",
+    "opacity",
+  ]),
+  audio: new Set([
+    "volume",
+    "speed",
+    "denoise",
+    "audio",
+    "audio_effects",
+    "voice_effects",
+  ]),
   effects: new Set(["effects", "effect"]),
   effect: new Set(["effects", "effect"]),
   photo: new Set([
@@ -123,7 +188,12 @@ interface EditorWorkspaceProps {
     isFinal?: boolean,
   ) => void;
   handleUpdateClipCrop: (clipId: string, crop: any, isFinal?: boolean) => void;
-  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean, timeOverride?: number) => void;
+  handleUpdateClipMask?: (
+    clipId: string,
+    mask: any,
+    isFinal?: boolean,
+    timeOverride?: number,
+  ) => void;
   handleSplitClip: () => void;
   handleDuplicateClip: (targetId?: string, targetType?: string) => void;
   handleDeleteClip: (targetId?: string, targetType?: string) => void;
@@ -153,7 +223,9 @@ interface EditorWorkspaceProps {
   handleOpenSpeedModal: () => void;
   handleOpenVolumeModal: () => void;
   handleOpenCropModal: () => void;
-  handleOpenTransformModal?: (tab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle') => void;
+  handleOpenTransformModal?: (
+    tab?: "crop" | "flip" | "rotate" | "stretch" | "angle",
+  ) => void;
   handleOpenMaskModal: () => void;
   handleOpenAudioModal: () => void;
   handleOpenTextModal: () => void;
@@ -161,12 +233,11 @@ interface EditorWorkspaceProps {
   handleOpenEffectsModal: () => void;
   handleOpenStickersModal: () => void;
   handleOpenMediaPicker: () => void;
-  handleOpenTTS: () => void;
   handleOpenEnhance: () => void;
   handleOpenAutoCut: () => void;
   handleOpenCanvasModal: () => void;
   handleOpenBackgroundModal?: () => void;
-  handleOpenCutoutModal: (mode?: 'auto' | 'chroma') => void;
+  handleOpenCutoutModal: (mode?: "auto" | "chroma") => void;
   handleOpenMotionTracking: () => void;
   handleOpenAutoCaptions: () => void;
   handleToggleDenoise?: () => void;
@@ -237,7 +308,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   handleOpenEffectsModal,
   handleOpenStickersModal,
   handleOpenMediaPicker,
-  handleOpenTTS,
   handleOpenEnhance,
   handleOpenAutoCut,
   handleOpenCanvasModal,
@@ -262,15 +332,20 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       setSelectedClipId(clipId);
       let resolvedType = clipType || selectedClipType;
       if (!resolvedType && project) {
-        if (project.tracks.captions?.some((c) => c.id === clipId)) resolvedType = "caption";
-        else if (project.tracks.text?.some((c) => c.id === clipId)) resolvedType = "text";
-        else if (project.tracks.stickers?.some((c) => c.id === clipId)) resolvedType = "stickers";
+        if (project.tracks.captions?.some((c) => c.id === clipId))
+          resolvedType = "caption";
+        else if (project.tracks.text?.some((c) => c.id === clipId))
+          resolvedType = "text";
+        else if (project.tracks.stickers?.some((c) => c.id === clipId))
+          resolvedType = "stickers";
         else if (project.tracks.video?.some((c) => c.id === clipId)) {
           const v = project.tracks.video.find((c) => c.id === clipId);
-          resolvedType = (v?.type === "photo" || (v as any)?.isPhoto) ? "photo" : "video";
-        }
-        else if (project.tracks.audio?.some((c) => c.id === clipId)) resolvedType = "audio";
-        else if (project.tracks.effects?.some((c) => c.id === clipId)) resolvedType = "effects";
+          resolvedType =
+            v?.type === "photo" || (v as any)?.isPhoto ? "photo" : "video";
+        } else if (project.tracks.audio?.some((c) => c.id === clipId))
+          resolvedType = "audio";
+        else if (project.tracks.effects?.some((c) => c.id === clipId))
+          resolvedType = "effects";
       }
 
       const normalizedType =
@@ -295,7 +370,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         openModal(defaultMenu);
       }
     },
-    [project, selectedClipType, setSelectedClipId, setSelectedClipType, openModal]
+    [
+      project,
+      selectedClipType,
+      setSelectedClipId,
+      setSelectedClipType,
+      openModal,
+    ],
   );
 
   const handleCloseMenu = React.useCallback(() => {
@@ -331,7 +412,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         } else if (project.tracks.video?.some((c) => c.id === clipId)) {
           const v = project.tracks.video.find((c) => c.id === clipId);
           targetClip = v;
-          resolvedType = (v?.type === "photo" || (v as any)?.isPhoto) ? "photo" : "video";
+          resolvedType =
+            v?.type === "photo" || (v as any)?.isPhoto ? "photo" : "video";
         } else if (project.tracks.audio?.some((c) => c.id === clipId)) {
           resolvedType = "audio";
           targetClip = project.tracks.audio.find((c) => c.id === clipId);
@@ -362,10 +444,16 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       const currentModal = activeModalRef.current || activeModal;
       if (currentModal) {
         const availableMenus = CLIP_TYPE_AVAILABLE_MENUS[normalizedType];
-        let isToolSupported = availableMenus ? availableMenus.has(currentModal) : false;
+        let isToolSupported = availableMenus
+          ? availableMenus.has(currentModal)
+          : false;
 
         // Special audio check: if video clip has no audio track, audio-related tools are not available
-        if (normalizedType === "video" && targetClip && !mediaHasAudioTrack(targetClip)) {
+        if (
+          normalizedType === "video" &&
+          targetClip &&
+          !mediaHasAudioTrack(targetClip)
+        ) {
           if (
             currentModal === "volume" ||
             currentModal === "audio_effects" ||
@@ -385,7 +473,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         }
       }
     },
-    [project, activeModal, openModal, setSelectedClipId, setSelectedClipType]
+    [project, activeModal, openModal, setSelectedClipId, setSelectedClipType],
   );
 
   const resolveActiveClipId = React.useCallback(
@@ -395,16 +483,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       const cur = currentTime || 0;
       if (type === "audio") {
         const audio =
-          project.tracks?.audio?.find((c: any) => cur >= c.startTime && cur <= c.startTime + c.duration) ||
-          project.tracks?.audio?.[0];
+          project.tracks?.audio?.find(
+            (c: any) => cur >= c.startTime && cur <= c.startTime + c.duration,
+          ) || project.tracks?.audio?.[0];
         return audio ? audio.id : null;
       }
       const video =
-        project.tracks?.video?.find((c: any) => cur >= c.startTime && cur <= c.startTime + c.duration) ||
-        project.tracks?.video?.[0];
+        project.tracks?.video?.find(
+          (c: any) => cur >= c.startTime && cur <= c.startTime + c.duration,
+        ) || project.tracks?.video?.[0];
       return video ? video.id : null;
     },
-    [project, selectedClipId, currentTime]
+    [project, selectedClipId, currentTime],
   );
 
   const handleApplyFilter = React.useCallback(
@@ -417,8 +507,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         const isNone = filter === "none" || filter === "normal";
         const updatedVideos = (project.tracks?.video || []).map((c: any) =>
           c.id === selectedClipId
-            ? { ...c, filter: isNone ? undefined : filter, filterIntensity: safeIntensity }
-            : c
+            ? {
+                ...c,
+                filter: isNone ? undefined : filter,
+                filterIntensity: safeIntensity,
+              }
+            : c,
         );
         updateProjectWithHistory({
           ...project,
@@ -431,7 +525,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       }
 
       // 2. If an effect/filter clip is currently selected, update its filter!
-      if ((selectedClipType === "effects" || selectedClipType === "effect") && selectedClipId) {
+      if (
+        (selectedClipType === "effects" || selectedClipType === "effect") &&
+        selectedClipId
+      ) {
         const effectClips = [...(project.tracks?.effects || [])];
         const idx = effectClips.findIndex((e) => e.id === selectedClipId);
         if (idx >= 0) {
@@ -494,7 +591,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       if (setSelectedClipId) setSelectedClipId(newFilterClip.id);
       if (setSelectedClipType) setSelectedClipType("effects");
     },
-    [project, selectedClipId, selectedClipType, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType]
+    [
+      project,
+      selectedClipId,
+      selectedClipType,
+      currentTime,
+      updateProjectWithHistory,
+      setSelectedClipId,
+      setSelectedClipType,
+    ],
   );
 
   const handleApplySpeed = React.useCallback(
@@ -504,7 +609,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       const updatedVideos = (project.tracks?.video || []).map((c: any) =>
         c.id === targetId
           ? { ...c, speed, speedCurve: curve, keepPitch: pitch }
-          : c
+          : c,
       );
       updateProjectWithHistory({
         ...project,
@@ -514,22 +619,24 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         },
       });
     },
-    [project, resolveActiveClipId, updateProjectWithHistory]
+    [project, resolveActiveClipId, updateProjectWithHistory],
   );
 
   const handleApplyVolume = React.useCallback(
     (volume: number, fade?: { in: number; out: number }) => {
-      const targetId = resolveActiveClipId(selectedClipType === "audio" ? "audio" : "video");
+      const targetId = resolveActiveClipId(
+        selectedClipType === "audio" ? "audio" : "video",
+      );
       if (!targetId || !project) return;
       const updatedVideos = (project.tracks?.video || []).map((c: any) =>
         c.id === targetId
           ? { ...c, volume, fadeIn: fade?.in, fadeOut: fade?.out }
-          : c
+          : c,
       );
       const updatedAudios = (project.tracks?.audio || []).map((c: any) =>
         c.id === targetId
           ? { ...c, volume, fadeIn: fade?.in, fadeOut: fade?.out }
-          : c
+          : c,
       );
       updateProjectWithHistory({
         ...project,
@@ -540,7 +647,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         },
       });
     },
-    [project, selectedClipType, resolveActiveClipId, updateProjectWithHistory]
+    [project, selectedClipType, resolveActiveClipId, updateProjectWithHistory],
   );
 
   const handleAddText = React.useCallback(
@@ -562,7 +669,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         },
       });
     },
-    [currentTime, project, updateProjectWithHistory]
+    [currentTime, project, updateProjectWithHistory],
   );
 
   const handleAddSticker = React.useCallback(
@@ -583,16 +690,23 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         },
       });
     },
-    [currentTime, project, updateProjectWithHistory]
+    [currentTime, project, updateProjectWithHistory],
   );
 
   const handleAddEffect = React.useCallback(
     (nameOrPreset: any) => {
       if (!project) return;
 
-      const effType = typeof nameOrPreset === "string" ? nameOrPreset : (nameOrPreset?.type || nameOrPreset?.id);
+      const effType =
+        typeof nameOrPreset === "string"
+          ? nameOrPreset
+          : nameOrPreset?.type || nameOrPreset?.id;
       const isNone = !effType || effType === "none" || effType === "None";
-      const effInt = typeof nameOrPreset === "object" && nameOrPreset?.intensity !== undefined ? nameOrPreset.intensity : 0.8;
+      const effInt =
+        typeof nameOrPreset === "object" &&
+        nameOrPreset?.intensity !== undefined
+          ? nameOrPreset.intensity
+          : 0.8;
 
       // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the effect to that clip!
       if (selectedClipId && selectedClipType === "video") {
@@ -614,7 +728,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       }
 
       // 2. If an effect clip is already selected on timeline, update it!
-      if ((selectedClipType === "effects" || selectedClipType === "effect") && selectedClipId) {
+      if (
+        (selectedClipType === "effects" || selectedClipType === "effect") &&
+        selectedClipId
+      ) {
         const effectClips = [...(project.tracks?.effects || [])];
         const idx = effectClips.findIndex((e) => e.id === selectedClipId);
         if (idx >= 0) {
@@ -630,7 +747,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             effectClips[idx] = {
               ...effectClips[idx],
               type: effType,
-              name: (typeof nameOrPreset === "object" && nameOrPreset?.name) || effType || "Effect",
+              name:
+                (typeof nameOrPreset === "object" && nameOrPreset?.name) ||
+                effType ||
+                "Effect",
               intensity: effInt,
             };
             updateProjectWithHistory({
@@ -654,9 +774,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       const newEffect: EffectClip = {
         id: `eff_${Date.now()}`,
         type: effType || "Glitch",
-        name: (typeof nameOrPreset === "object" && nameOrPreset?.name) || effType || "Glitch",
+        name:
+          (typeof nameOrPreset === "object" && nameOrPreset?.name) ||
+          effType ||
+          "Glitch",
         startTime: Math.max(0, Number(desiredStart.toFixed(3))),
-        duration: (typeof nameOrPreset === "object" && nameOrPreset?.duration) || 3,
+        duration:
+          (typeof nameOrPreset === "object" && nameOrPreset?.duration) || 3,
         trackIndex: newTrackIndex,
         intensity: effInt,
       };
@@ -672,7 +796,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       if (setSelectedClipId) setSelectedClipId(newEffect.id);
       if (setSelectedClipType) setSelectedClipType("effects");
     },
-    [currentTime, project, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType]
+    [
+      currentTime,
+      project,
+      selectedClipId,
+      selectedClipType,
+      updateProjectWithHistory,
+      setSelectedClipId,
+      setSelectedClipType,
+    ],
   );
 
   // Determine platform layout via standard responsive dimensions hook
@@ -680,92 +812,131 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const isDesktop = windowWidth >= 768;
 
   // Desktop: track which left-panel tab is open
-  const [desktopTab, setDesktopTab] = React.useState<DesktopResourceTab>('media');
-  const [isMediaPanelCollapsed, setIsMediaPanelCollapsed] = React.useState(false);
-  const [isConfigPanelExpanded, setIsConfigPanelExpanded] = React.useState(true);
+  const [desktopTab, setDesktopTab] =
+    React.useState<DesktopResourceTab>("media");
+  const [isMediaPanelCollapsed, setIsMediaPanelCollapsed] =
+    React.useState(false);
+  const [isConfigPanelExpanded, setIsConfigPanelExpanded] =
+    React.useState(true);
   const [configPanelWidth, setConfigPanelWidth] = React.useState(320);
   const [mediaPanelWidth, setMediaPanelWidth] = React.useState(260);
-  const [desktopPanelOrder, setDesktopPanelOrder] = React.useState<'config_left' | 'media_left'>('media_left');
+  const [desktopPanelOrder, setDesktopPanelOrder] = React.useState<
+    "config_left" | "media_left"
+  >("media_left");
 
-  const handleConfigResizeStart = React.useCallback((e: any) => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const startX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
-    const startWidth = configPanelWidth;
+  const handleConfigResizeStart = React.useCallback(
+    (e: any) => {
+      if (Platform.OS !== "web" || typeof window === "undefined") return;
+      const startX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+      const startWidth = configPanelWidth;
 
-    const onMove = (moveEv: any) => {
-      const currentX = moveEv.clientX || (moveEv.touches && moveEv.touches[0]?.clientX) || 0;
-      const delta = desktopPanelOrder === 'config_left' ? (currentX - startX) : (startX - currentX);
-      const nextW = Math.max(220, Math.min(520, startWidth + delta));
-      setConfigPanelWidth(nextW);
-    };
+      const onMove = (moveEv: any) => {
+        const currentX =
+          moveEv.clientX || (moveEv.touches && moveEv.touches[0]?.clientX) || 0;
+        const delta =
+          desktopPanelOrder === "config_left"
+            ? currentX - startX
+            : startX - currentX;
+        const nextW = Math.max(220, Math.min(520, startWidth + delta));
+        setConfigPanelWidth(nextW);
+      };
 
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
-    };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onUp);
+      };
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove);
-    window.addEventListener('touchend', onUp);
-  }, [configPanelWidth, desktopPanelOrder]);
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      window.addEventListener("touchmove", onMove);
+      window.addEventListener("touchend", onUp);
+    },
+    [configPanelWidth, desktopPanelOrder],
+  );
 
-  const handleMediaResizeStart = React.useCallback((e: any) => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const startX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
-    const startWidth = mediaPanelWidth;
+  const handleMediaResizeStart = React.useCallback(
+    (e: any) => {
+      if (Platform.OS !== "web" || typeof window === "undefined") return;
+      const startX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+      const startWidth = mediaPanelWidth;
 
-    const onMove = (moveEv: any) => {
-      const currentX = moveEv.clientX || (moveEv.touches && moveEv.touches[0]?.clientX) || 0;
-      const delta = desktopPanelOrder === 'config_left' ? (startX - currentX) : (currentX - startX);
-      const nextW = Math.max(200, Math.min(520, startWidth + delta));
-      setMediaPanelWidth(nextW);
-    };
+      const onMove = (moveEv: any) => {
+        const currentX =
+          moveEv.clientX || (moveEv.touches && moveEv.touches[0]?.clientX) || 0;
+        const delta =
+          desktopPanelOrder === "config_left"
+            ? startX - currentX
+            : currentX - startX;
+        const nextW = Math.max(200, Math.min(520, startWidth + delta));
+        setMediaPanelWidth(nextW);
+      };
 
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
-    };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onUp);
+      };
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove);
-    window.addEventListener('touchend', onUp);
-  }, [mediaPanelWidth, desktopPanelOrder]);
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      window.addEventListener("touchmove", onMove);
+      window.addEventListener("touchend", onUp);
+    },
+    [mediaPanelWidth, desktopPanelOrder],
+  );
 
-  const hasDesktopRightPanel = isDesktop && !!activeModal && INLINE_MODAL_KEYS.has(activeModal);
-  const isMobileInlineActive = !isDesktop && !!activeModal && INLINE_MODAL_KEYS.has(activeModal);
+  const hasDesktopRightPanel =
+    isDesktop && !!activeModal && INLINE_MODAL_KEYS.has(activeModal);
+  const isMobileInlineActive =
+    !isDesktop && !!activeModal && INLINE_MODAL_KEYS.has(activeModal);
 
-  // Keep modal container height identical to timeline height to prevent layout shifts
-  const [currentTimelineHeight, setCurrentTimelineHeight] = React.useState<number>(() => {
-    if (Platform.OS === "web" && typeof window !== "undefined" && window.localStorage) {
-      try {
-        const saved = window.localStorage.getItem("fastart_timeline_height");
-        if (saved) {
-          const parsed = parseFloat(saved);
-          if (!isNaN(parsed) && parsed >= 74 && parsed <= 500) return parsed;
-        }
-      } catch (_) {}
-    }
-    return 200;
+  // Unified timeline & dock height resize logic
+  const {
+    timelineHeight: currentTimelineHeight,
+    setTimelineHeight: setCurrentTimelineHeight,
+    isResizingHeight: isTimelineResizing,
+    resizeHandleProps: timelineResizeProps,
+    handleResetResizeHeight,
+  } = useTimelineResize({
+    isMobile: !isDesktop,
+    windowHeight,
   });
 
   // Label for active config panel
   const getConfigPanelTitle = () => {
     const TITLES: Record<string, string> = {
-      audio: '🎵 Audio Studio', filters: '🎨 Filters & LUTs', transform: '⚙️ Transform', mask: '🔶 Mask',
-      speed: '⚡ Speed', volume: '🔊 Volume & Fade', text: '✏️ Text', stickers: '🎭 Stickers',
-      effects: '✨ Effects', captions: '💬 Captions', transitions: '↔️ Transitions',
-      enhance: '💎 AI Enhance', autocut: '✂️ AutoCut', canvas: '📐 Canvas', background: '🖼️ Background',
-      keyframe: '◆ Keyframe', tts: '🗣️ Text to Speech', cutout: '✂️ Cutout', tracking: '🎯 Tracking & Blur',
-      layer: '📑 Layer Order', opacity: '👁️ Opacity', animation: '🎬 Animation', audio_effects: '🎙️ Audio FX',
-      voice_effects: '🎙️ Voice FX', blend: '🎨 Blend Mode', hsl: '🌈 HSL Color',
+      media: "📁 Media",
+      overlay: "📁 Media",
+      audio: "🎵 Audio Studio",
+      filters: "🎨 Filters & LUTs",
+      transform: "⚙️ Transform",
+      mask: "🔶 Mask",
+      speed: "⚡ Speed",
+      volume: "🔊 Volume & Fade",
+      text: "✏️ Text",
+      stickers: "🎭 Stickers",
+      effects: "✨ Effects",
+      captions: "💬 Captions",
+      transitions: "↔️ Transitions",
+      enhance: "💎 AI Enhance",
+      autocut: "✂️ AutoCut",
+      canvas: "📐 Canvas",
+      background: "🖼️ Background",
+      keyframe: "◆ Keyframe",
+      cutout: "✂️ Cutout",
+      tracking: "🎯 Tracking & Blur",
+      layer: "📑 Layer Order",
+      opacity: "👁️ Opacity",
+      animation: "🎬 Animation",
+      audio_effects: "🎙️ Audio FX",
+      voice_effects: "🎙️ Voice FX",
+      blend: "🎨 Blend Mode",
+      hsl: "🌈 HSL Color",
     };
-    return activeModal ? (TITLES[activeModal] || activeModal) : '';
+    return activeModal ? TITLES[activeModal] || activeModal : "";
   };
   // Auto-expand config panel when switching tools
   React.useEffect(() => {
@@ -775,7 +946,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   }, [activeModal]);
 
   // Unified Toolbar renderer (horizontal at bottom for mobile, vertical on whole left for laptop)
-  const renderToolbar = (orientation: "horizontal" | "vertical" = "horizontal") => (
+  const renderToolbar = (
+    orientation: "horizontal" | "vertical" = "horizontal",
+  ) => (
     <Toolbar
       orientation={orientation}
       activeToolId={activeModal || undefined}
@@ -786,8 +959,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         if (project?.tracks?.video && project.tracks.video.length > 0) {
           const cur = currentTime || 0;
           const target =
-            project.tracks.video.find((c) => cur >= c.startTime && cur <= c.startTime + c.duration) ||
-            project.tracks.video[0];
+            project.tracks.video.find(
+              (c) => cur >= c.startTime && cur <= c.startTime + c.duration,
+            ) || project.tracks.video[0];
           if (target) {
             setSelectedClipId(target.id);
             setSelectedClipType("video");
@@ -815,20 +989,28 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       onOpenEnhance={handleOpenEnhance}
       onOpenAutoCut={handleOpenAutoCut}
       onOpenCanvasModal={handleOpenCanvasModal}
-      onOpenBackgroundModal={handleOpenBackgroundModal || (() => openModal("background"))}
+      onOpenBackgroundModal={
+        handleOpenBackgroundModal || (() => openModal("background"))
+      }
       onOpenCutoutModal={handleOpenCutoutModal}
       onOpenMotionTracking={handleOpenMotionTracking}
       onOpenKeyframeModal={onOpenKeyframeModal}
       onOpenAutoCaptions={handleOpenAutoCaptions}
-      onOpenTransitionsModal={() => handleOpenTransitionsModal(selectedClipId || "")}
+      onOpenTransitionsModal={() =>
+        handleOpenTransitionsModal(selectedClipId || "")
+      }
       onToggleDenoise={handleToggleDenoise}
       onExtractAudio={handleExtractAudio}
       project={project}
       onApplyFilter={handleApplyFilter}
       onApplySpeed={handleApplySpeed}
       onApplyVolume={handleApplyVolume}
-      onApplyRatio={(ratio) => updateProjectWithHistory({ ...project, aspectRatio: ratio })}
-      onApplyCanvasBg={(bg) => updateProjectWithHistory({ ...project, canvasBackground: bg })}
+      onApplyRatio={(ratio) =>
+        updateProjectWithHistory({ ...project, aspectRatio: ratio })
+      }
+      onApplyCanvasBg={(bg) =>
+        updateProjectWithHistory({ ...project, canvasBackground: bg })
+      }
       onAddText={(txt, col) => handleAddText(txt, col)}
       onAddSticker={(stk) => handleAddSticker(stk)}
       onAddEffect={(eff) => handleAddEffect(eff)}
@@ -841,7 +1023,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       onOpenAudioEffectsModal={() => openModal("audio_effects")}
       onOpenBlendModal={() => openModal("blend")}
       onOpenHSLModal={() => openModal("hsl")}
-      onOpenTTSModal={handleOpenTTS}
       onCloseModal={handleCloseMenu}
       onBackToHome={onBackToHome}
     />
@@ -850,6 +1031,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   // Build the multi-track timeline
   const renderTimelineOnly = () => (
     <Timeline
+      timelineHeight={currentTimelineHeight}
+      isResizingHeight={isTimelineResizing}
+      resizeHandleProps={timelineResizeProps}
+      handleResetResizeHeight={handleResetResizeHeight}
       project={project}
       currentTime={currentTime}
       totalDuration={totalDuration}
@@ -881,7 +1066,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         if (idx >= 0) {
           const newDur = Math.max(0.05, (list[idx].duration || 0) + delta);
           list[idx] = { ...list[idx], duration: Number(newDur.toFixed(3)) };
-          updateProjectWithHistory({ ...project, tracks: { ...project.tracks, [key]: list } as any });
+          updateProjectWithHistory({
+            ...project,
+            tracks: { ...project.tracks, [key]: list } as any,
+          });
         }
       }}
       onUpdateProject={updateProjectWithHistory}
@@ -922,25 +1110,40 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const handleUpdateClipMotionTrack = (track: MotionTrackConfig) => {
     if (!project || !selectedClipId) return;
     const current = { ...project };
-    const vIdx = (current.tracks.video || []).findIndex((v) => v.id === selectedClipId);
+    const vIdx = (current.tracks.video || []).findIndex(
+      (v) => v.id === selectedClipId,
+    );
     if (vIdx >= 0) {
       const video = [...current.tracks.video];
       video[vIdx] = { ...video[vIdx], motionTrack: track };
-      updateProjectWithHistory({ ...current, tracks: { ...current.tracks, video } });
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, video },
+      });
       return;
     }
-    const tIdx = (current.tracks.text || []).findIndex((t) => t.id === selectedClipId);
+    const tIdx = (current.tracks.text || []).findIndex(
+      (t) => t.id === selectedClipId,
+    );
     if (tIdx >= 0) {
       const text = [...current.tracks.text];
       text[tIdx] = { ...text[tIdx], motionTrack: track };
-      updateProjectWithHistory({ ...current, tracks: { ...current.tracks, text } });
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, text },
+      });
       return;
     }
-    const sIdx = (current.tracks.stickers || []).findIndex((s) => s.id === selectedClipId);
+    const sIdx = (current.tracks.stickers || []).findIndex(
+      (s) => s.id === selectedClipId,
+    );
     if (sIdx >= 0) {
       const stickers = [...current.tracks.stickers];
       stickers[sIdx] = { ...stickers[sIdx], motionTrack: track };
-      updateProjectWithHistory({ ...current, tracks: { ...current.tracks, stickers } });
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, stickers },
+      });
       return;
     }
   };
@@ -952,100 +1155,144 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     sourceMediaId?: string,
   ) => {
     if (!project) return;
-    const key = (clipType === "audio" ? "audio" : "video") as "video" | "audio";
-    const list = [...(((project.tracks as any)[key] as any[]) || [])];
-    const idx = list.findIndex((c) => c.id === clipId);
-    if (idx >= 0) {
-      list[idx] = {
-        ...list[idx],
-        url: newUrl,
-        sourceMediaId: sourceMediaId || list[idx].sourceMediaId || clipId,
-        isMissing: false,
-        needsPermission: false,
-      };
+    let changed = false;
+    const targetSourceId = sourceMediaId || clipId;
+
+    const updatedVideo = (project.tracks.video || []).map((c: any) => {
+      const match =
+        c.id === clipId ||
+        c.sourceMediaId === targetSourceId ||
+        (sourceMediaId && c.sourceMediaId === sourceMediaId);
+      if (match) {
+        changed = true;
+        return {
+          ...c,
+          url: newUrl,
+          sourceMediaId: targetSourceId,
+          isMissing: false,
+          needsPermission: false,
+        };
+      }
+      return c;
+    });
+
+    const updatedAudio = (project.tracks.audio || []).map((c: any) => {
+      const match =
+        c.id === clipId ||
+        c.sourceMediaId === targetSourceId ||
+        (sourceMediaId && c.sourceMediaId === sourceMediaId);
+      if (match) {
+        changed = true;
+        return {
+          ...c,
+          url: newUrl,
+          sourceMediaId: targetSourceId,
+          isMissing: false,
+          needsPermission: false,
+        };
+      }
+      return c;
+    });
+
+    if (changed) {
       updateProjectWithHistory({
         ...project,
-        tracks: { ...project.tracks, [key]: list },
+        tracks: {
+          ...project.tracks,
+          video: updatedVideo,
+          audio: updatedAudio,
+        },
       });
     }
   };
 
   // Player JSX shared between desktop and mobile
   const renderPlayer = () => (
-    <Player
-      project={project}
-      currentTime={currentTime}
-      isPlaying={isPlaying}
-      totalDuration={totalDuration}
-      fullscreen={isFullscreen}
-      isProcessing={isProcessing}
-      processingMessage={processingMessage}
-      onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
-      onTogglePlay={() => {
-        if (totalDuration <= 0) {
-          soundEngine.playSfx("click");
-          setIsPlaying(false);
-          setCurrentTime(0);
-          return;
-        }
-        soundEngine.playSfx("click");
-        if (!isPlaying) {
-          const needsPermClips = [
-            ...(project?.tracks?.video || []),
-            ...(project?.tracks?.audio || []),
-          ].filter((c: any) => c.needsPermission);
-          for (const c of needsPermClips) {
-            const lookupId = c.sourceMediaId || c.id;
-            reconnectLinkedMedia(lookupId, c.title).then((res) => {
-              if (res) {
-                handleRelinkClip(c.id, (c as any).type || "video", res.url, lookupId);
-              }
-            });
-          }
-          if (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration) {
+    <ErrorBoundary fallbackTitle="Player Preview">
+      <Player
+        project={project}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        totalDuration={totalDuration}
+        fullscreen={isFullscreen}
+        isProcessing={isProcessing}
+        processingMessage={processingMessage}
+        onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+        onTogglePlay={() => {
+          if (totalDuration <= 0) {
+            soundEngine.playSfx("click");
+            setIsPlaying(false);
             setCurrentTime(0);
+            return;
           }
+          soundEngine.playSfx("click");
+          if (!isPlaying) {
+            const needsPermClips = [
+              ...(project?.tracks?.video || []),
+              ...(project?.tracks?.audio || []),
+            ].filter((c: any) => c.needsPermission);
+            for (const c of needsPermClips) {
+              const lookupId = c.sourceMediaId || c.id;
+              reconnectLinkedMedia(lookupId, c.title).then((res) => {
+                if (res) {
+                  handleRelinkClip(
+                    c.id,
+                    (c as any).type || "video",
+                    res.url,
+                    lookupId,
+                  );
+                }
+              });
+            }
+            if (
+              currentTime >= totalDuration - 0.05 ||
+              currentTime >= totalDuration
+            ) {
+              setCurrentTime(0);
+            }
+          }
+          setIsPlaying(!isPlaying);
+        }}
+        onSeek={(t) => setCurrentTime(t)}
+        onAddKeyframe={onAddKeyframe}
+        onOpenKeyframeModal={onOpenKeyframeModal}
+        hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
+        onOpenMediaPicker={() => openModal("media")}
+        selectedClipId={selectedClipId}
+        selectedClipType={selectedClipType}
+        onSelectClip={(id, type) => handleSelectClipWithMenuSwitch(id, type)}
+        onUpdateClipTransform={handleUpdateClipTransform}
+        onOpenEditModal={handleOpenEditModal}
+        onDeleteClip={(clipId, clipType) => {
+          soundEngine.playSfx("click");
+          handleDeleteClip(clipId, clipType);
+        }}
+        onDuplicateClip={(clipId, clipType) => {
+          soundEngine.playSfx("click");
+          handleDuplicateClip(clipId, clipType);
+        }}
+        onSplitClip={handleSplitClip}
+        onOpenCropModal={handleOpenCropModal}
+        onOpenMaskModal={handleOpenMaskModal}
+        onOpenAnimationModal={() => openModal("animation")}
+        isCroppingPreview={isCroppingPreview}
+        onToggleCropPreview={setIsCroppingPreview}
+        onUpdateClipCrop={handleUpdateClipCrop}
+        isMaskingPreview={activeModal === "mask"}
+        onToggleMaskPreview={(val) => {
+          if (!val) {
+            handleCloseMenu();
+          }
+        }}
+        onUpdateClipMask={(clipId, mask, isFinal) =>
+          handleUpdateClipMask &&
+          handleUpdateClipMask(clipId, mask, isFinal, currentTime)
         }
-        setIsPlaying(!isPlaying);
-      }}
-      onSeek={(t) => setCurrentTime(t)}
-      onAddKeyframe={onAddKeyframe}
-      onOpenKeyframeModal={onOpenKeyframeModal}
-      hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
-      onOpenMediaPicker={() => openModal("media")}
-      selectedClipId={selectedClipId}
-      selectedClipType={selectedClipType}
-      onSelectClip={(id, type) => handleSelectClipWithMenuSwitch(id, type)}
-      onUpdateClipTransform={handleUpdateClipTransform}
-      onOpenEditModal={handleOpenEditModal}
-      onDeleteClip={(clipId, clipType) => {
-        soundEngine.playSfx("click");
-        handleDeleteClip(clipId, clipType);
-      }}
-      onDuplicateClip={(clipId, clipType) => {
-        soundEngine.playSfx("click");
-        handleDuplicateClip(clipId, clipType);
-      }}
-      onSplitClip={handleSplitClip}
-      onOpenCropModal={handleOpenCropModal}
-      onOpenMaskModal={handleOpenMaskModal}
-      onOpenAnimationModal={() => openModal("animation")}
-      isCroppingPreview={isCroppingPreview}
-      onToggleCropPreview={setIsCroppingPreview}
-      onUpdateClipCrop={handleUpdateClipCrop}
-      isMaskingPreview={activeModal === "mask"}
-      onToggleMaskPreview={(val) => {
-        if (!val) {
-          handleCloseMenu();
-        }
-      }}
-      onUpdateClipMask={(clipId, mask, isFinal) =>
-        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal, currentTime)
-      }
-      activeModal={activeModal}
-      onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
-      onRelinkClip={handleRelinkClip}
-    />
+        activeModal={activeModal}
+        onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
+        onRelinkClip={handleRelinkClip}
+      />
+    </ErrorBoundary>
   );
 
   // ─────────────────────────────────────────────
@@ -1056,11 +1303,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   if (isDesktop && !isFullscreen) {
     const addMediaFn = (clip: any) => {
       if (handleAddMedia) handleAddMedia(clip);
-      else updateProjectWithHistory({ ...project, tracks: { ...project.tracks, video: [...(project.tracks?.video || []), clip] } });
+      else
+        updateProjectWithHistory({
+          ...project,
+          tracks: {
+            ...project.tracks,
+            video: [...(project.tracks?.video || []), clip],
+          },
+        });
     };
     const addAudioFn = (clip: any) => {
       if (handleAddAudio) handleAddAudio(clip);
-      else updateProjectWithHistory({ ...project, tracks: { ...project.tracks, audio: [...(project.tracks?.audio || []), clip] } });
+      else
+        updateProjectWithHistory({
+          ...project,
+          tracks: {
+            ...project.tracks,
+            audio: [...(project.tracks?.audio || []), clip],
+          },
+        });
     };
 
     return (
@@ -1087,19 +1348,22 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
           {/* Middle Row: Config Panel & Media Panel & Player with Draggable Splitters */}
           <View style={styles.desktopPlayerRow}>
-            {desktopPanelOrder === 'config_left' ? (
+            {desktopPanelOrder === "config_left" ? (
               <>
                 {/* [1] Config / Inspector Panel (LEFT) */}
                 {isConfigPanelExpanded ? (
                   hasDesktopRightPanel ? (
                     <View
-                      style={[styles.desktopConfigPanel, { width: configPanelWidth }]}
-                      {...(Platform.OS === 'web'
+                      style={[
+                        styles.desktopConfigPanel,
+                        { width: configPanelWidth },
+                      ]}
+                      {...(Platform.OS === "web"
                         ? {
                             onDragOver: (e: any) => e.preventDefault(),
                             onDrop: (e: any) => {
                               e.preventDefault();
-                              setDesktopPanelOrder('media_left');
+                              setDesktopPanelOrder("media_left");
                             },
                           }
                         : {})}
@@ -1107,28 +1371,48 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       {/* Config Panel Header */}
                       <View style={styles.desktopConfigPanelHeader}>
                         <View
-                          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, cursor: 'grab' as any }}
-                          {...(Platform.OS === 'web'
+                          style={{
+                            flex: 1,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 6,
+                            cursor: "grab" as any,
+                          }}
+                          {...(Platform.OS === "web"
                             ? {
                                 draggable: true,
                                 onDragStart: (e: any) => {
-                                  e.dataTransfer?.setData('text/plain', 'panel_config');
+                                  e.dataTransfer?.setData(
+                                    "text/plain",
+                                    "panel_config",
+                                  );
                                 },
                               }
                             : {})}
                         >
-                          <Ionicons name="reorder-two" size={15} color="#71717A" />
-                          <Text style={styles.desktopConfigPanelTitle} numberOfLines={1}>
+                          <Ionicons
+                            name="reorder-two"
+                            size={15}
+                            color="#71717A"
+                          />
+                          <Text
+                            style={styles.desktopConfigPanelTitle}
+                            numberOfLines={1}
+                          >
                             {getConfigPanelTitle()}
                           </Text>
                         </View>
                         <TouchableOpacity
                           style={styles.desktopPanelIconBtn}
-                          onPress={() => setDesktopPanelOrder('media_left')}
+                          onPress={() => setDesktopPanelOrder("media_left")}
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           accessibilityLabel="Swap panels: Media Left, Tool Right"
                         >
-                          <Ionicons name="swap-horizontal" size={14} color="#71717A" />
+                          <Ionicons
+                            name="swap-horizontal"
+                            size={14}
+                            color="#71717A"
+                          />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.desktopPanelIconBtn}
@@ -1136,10 +1420,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           accessibilityLabel="Collapse tool panel"
                         >
-                          <Ionicons name="chevron-back" size={15} color="#71717A" />
+                          <Ionicons
+                            name="chevron-back"
+                            size={15}
+                            color="#71717A"
+                          />
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.desktopPanelIconBtn, { marginLeft: 2 }]}
+                          style={[
+                            styles.desktopPanelIconBtn,
+                            { marginLeft: 2 },
+                          ]}
                           onPress={handleCloseMenu}
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           accessibilityLabel="Close tool"
@@ -1159,18 +1450,30 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       selectedClip={selectedClip}
                       selectedClipType={selectedClipType}
                       currentTime={currentTime}
-                      onUpdateProject={(updates) => updateProjectWithHistory(updates)}
-                      onUpdateClipTransform={(clipId, transform, isFinal) =>
-                        handleUpdateClipTransform(clipId, selectedClipType, transform as any, isFinal)
+                      onUpdateProject={(updates) =>
+                        updateProjectWithHistory(updates)
                       }
-                      onUpdateClipCrop={(clipId, crop) => handleUpdateClipCrop(clipId, crop, true)}
+                      onUpdateClipTransform={(clipId, transform, isFinal) =>
+                        handleUpdateClipTransform(
+                          clipId,
+                          selectedClipType,
+                          transform as any,
+                          isFinal,
+                        )
+                      }
+                      onUpdateClipCrop={(clipId, crop) =>
+                        handleUpdateClipCrop(clipId, crop, true)
+                      }
                       onUpdateClipMask={(clipId, mask, isFinal) =>
-                        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal, currentTime)
+                        handleUpdateClipMask &&
+                        handleUpdateClipMask(clipId, mask, isFinal, currentTime)
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
                       }
-                      onApplySpeed={(speed, curve) => handleApplySpeed(speed, curve)}
+                      onApplySpeed={(speed, curve) =>
+                        handleApplySpeed(speed, curve)
+                      }
                       onApplyFilter={handleApplyFilter}
                       onDeleteClip={() => handleDeleteClip()}
                       onDuplicateClip={() => handleDuplicateClip()}
@@ -1188,9 +1491,20 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                     onPress={() => setIsConfigPanelExpanded(true)}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="chevron-forward" size={14} color={THEME_COLORS.accent} />
-                    <Text style={styles.desktopConfigPanelCollapsedLabel} numberOfLines={6}>
-                      {hasDesktopRightPanel ? getConfigPanelTitle() : (selectedClip ? (selectedClip.title || 'Clip') : 'Inspector')}
+                    <Ionicons
+                      name="chevron-forward"
+                      size={14}
+                      color={THEME_COLORS.accent}
+                    />
+                    <Text
+                      style={styles.desktopConfigPanelCollapsedLabel}
+                      numberOfLines={6}
+                    >
+                      {hasDesktopRightPanel
+                        ? getConfigPanelTitle()
+                        : selectedClip
+                          ? selectedClip.title || "Clip"
+                          : "Inspector"}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -1199,28 +1513,36 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 {isConfigPanelExpanded && (
                   <View
                     style={styles.desktopResizeSplitter}
-                    {...(Platform.OS === 'web' ? { onMouseDown: handleConfigResizeStart, onTouchStart: handleConfigResizeStart } : {})}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseDown: handleConfigResizeStart,
+                          onTouchStart: handleConfigResizeStart,
+                        }
+                      : {})}
                   >
                     <View style={styles.resizeHandleBar} />
                   </View>
                 )}
 
                 {/* [2] Player (CENTER) */}
-                <View style={styles.desktopPlayerArea}>
-                  {renderPlayer()}
-                </View>
+                <View style={styles.desktopPlayerArea}>{renderPlayer()}</View>
 
                 {/* Resizer Splitter between Center Player & Right Media Panel */}
                 {!isMediaPanelCollapsed && (
                   <View
                     style={styles.desktopResizeSplitter}
-                    {...(Platform.OS === 'web' ? { onMouseDown: handleMediaResizeStart, onTouchStart: handleMediaResizeStart } : {})}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseDown: handleMediaResizeStart,
+                          onTouchStart: handleMediaResizeStart,
+                        }
+                      : {})}
                   >
                     <View style={styles.resizeHandleBar} />
                   </View>
                 )}
 
-                {/* [3] Media & Resource Library Panel (RIGHT) */}
+                {/* [3] Media & Resource Library Panel (RIGHT) - Default Opened */}
                 <DesktopMediaAudioPanel
                   project={project}
                   activeTab={desktopTab}
@@ -1230,19 +1552,23 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   onAddText={(txt, col) => handleAddText(txt, col)}
                   onAddSticker={(stk) => handleAddSticker(stk)}
                   onAddEffect={(eff) => handleAddEffect(eff)}
-                  onAddTransition={(trId) => handleOpenTransitionsModal(selectedClipId || '')}
+                  onAddTransition={(trId) =>
+                    handleOpenTransitionsModal(selectedClipId || "")
+                  }
                   currentTime={currentTime}
                   onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
                   width={mediaPanelWidth}
                   position="right"
-                  onSwapPosition={() => setDesktopPanelOrder('media_left')}
+                  onSwapPosition={() => setDesktopPanelOrder("media_left")}
                   isCollapsed={isMediaPanelCollapsed}
-                  onToggleCollapse={() => setIsMediaPanelCollapsed((prev) => !prev)}
+                  onToggleCollapse={() =>
+                    setIsMediaPanelCollapsed((prev) => !prev)
+                  }
                 />
               </>
             ) : (
               <>
-                {/* [1] Media & Resource Library Panel (LEFT) - CapCut Default */}
+                {/* [1] Media & Resource Library Panel (LEFT) - Default Opened */}
                 <DesktopMediaAudioPanel
                   project={project}
                   activeTab={desktopTab}
@@ -1252,52 +1578,72 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   onAddText={(txt, col) => handleAddText(txt, col)}
                   onAddSticker={(stk) => handleAddSticker(stk)}
                   onAddEffect={(eff) => handleAddEffect(eff)}
-                  onAddTransition={(trId) => handleOpenTransitionsModal(selectedClipId || '')}
+                  onAddTransition={(trId) =>
+                    handleOpenTransitionsModal(selectedClipId || "")
+                  }
                   currentTime={currentTime}
                   onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
                   width={mediaPanelWidth}
                   position="left"
-                  onSwapPosition={() => setDesktopPanelOrder('config_left')}
+                  onSwapPosition={() => setDesktopPanelOrder("config_left")}
                   isCollapsed={isMediaPanelCollapsed}
-                  onToggleCollapse={() => setIsMediaPanelCollapsed((prev) => !prev)}
+                  onToggleCollapse={() =>
+                    setIsMediaPanelCollapsed((prev) => !prev)
+                  }
                 />
 
                 {/* Resizer Splitter between Left Media Panel & Center Player */}
                 {!isMediaPanelCollapsed && (
                   <View
                     style={styles.desktopResizeSplitter}
-                    {...(Platform.OS === 'web' ? { onMouseDown: handleMediaResizeStart, onTouchStart: handleMediaResizeStart } : {})}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseDown: handleMediaResizeStart,
+                          onTouchStart: handleMediaResizeStart,
+                        }
+                      : {})}
                   >
                     <View style={styles.resizeHandleBar} />
                   </View>
                 )}
 
                 {/* [2] Player (CENTER) */}
-                <View style={styles.desktopPlayerArea}>
-                  {renderPlayer()}
-                </View>
+                <View style={styles.desktopPlayerArea}>{renderPlayer()}</View>
 
                 {/* Resizer Splitter between Center Player & Right Config/Inspector Panel */}
                 {isConfigPanelExpanded && (
                   <View
                     style={styles.desktopResizeSplitter}
-                    {...(Platform.OS === 'web' ? { onMouseDown: handleConfigResizeStart, onTouchStart: handleConfigResizeStart } : {})}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseDown: handleConfigResizeStart,
+                          onTouchStart: handleConfigResizeStart,
+                        }
+                      : {})}
                   >
                     <View style={styles.resizeHandleBar} />
                   </View>
                 )}
 
-                {/* [3] Config / Inspector Panel (RIGHT) - CapCut Parity */}
+                {/* [3] Config / Inspector Panel (RIGHT) */}
                 {isConfigPanelExpanded ? (
                   hasDesktopRightPanel ? (
                     <View
-                      style={[styles.desktopConfigPanel, { width: configPanelWidth, borderRightWidth: 0, borderLeftWidth: 1, borderLeftColor: THEME_COLORS.borderSubtle }]}
-                      {...(Platform.OS === 'web'
+                      style={[
+                        styles.desktopConfigPanel,
+                        {
+                          width: configPanelWidth,
+                          borderRightWidth: 0,
+                          borderLeftWidth: 1,
+                          borderLeftColor: THEME_COLORS.borderSubtle,
+                        },
+                      ]}
+                      {...(Platform.OS === "web"
                         ? {
                             onDragOver: (e: any) => e.preventDefault(),
                             onDrop: (e: any) => {
                               e.preventDefault();
-                              setDesktopPanelOrder('config_left');
+                              setDesktopPanelOrder("config_left");
                             },
                           }
                         : {})}
@@ -1305,28 +1651,48 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       {/* Config Panel Header */}
                       <View style={styles.desktopConfigPanelHeader}>
                         <View
-                          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, cursor: 'grab' as any }}
-                          {...(Platform.OS === 'web'
+                          style={{
+                            flex: 1,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 6,
+                            cursor: "grab" as any,
+                          }}
+                          {...(Platform.OS === "web"
                             ? {
                                 draggable: true,
                                 onDragStart: (e: any) => {
-                                  e.dataTransfer?.setData('text/plain', 'panel_config');
+                                  e.dataTransfer?.setData(
+                                    "text/plain",
+                                    "panel_config",
+                                  );
                                 },
                               }
                             : {})}
                         >
-                          <Ionicons name="reorder-two" size={15} color="#71717A" />
-                          <Text style={styles.desktopConfigPanelTitle} numberOfLines={1}>
+                          <Ionicons
+                            name="reorder-two"
+                            size={15}
+                            color="#71717A"
+                          />
+                          <Text
+                            style={styles.desktopConfigPanelTitle}
+                            numberOfLines={1}
+                          >
                             {getConfigPanelTitle()}
                           </Text>
                         </View>
                         <TouchableOpacity
                           style={styles.desktopPanelIconBtn}
-                          onPress={() => setDesktopPanelOrder('config_left')}
+                          onPress={() => setDesktopPanelOrder("config_left")}
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           accessibilityLabel="Swap panels: Tool Left, Media Right"
                         >
-                          <Ionicons name="swap-horizontal" size={14} color="#71717A" />
+                          <Ionicons
+                            name="swap-horizontal"
+                            size={14}
+                            color="#71717A"
+                          />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.desktopPanelIconBtn}
@@ -1334,10 +1700,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           accessibilityLabel="Collapse tool panel"
                         >
-                          <Ionicons name="chevron-forward" size={15} color="#71717A" />
+                          <Ionicons
+                            name="chevron-forward"
+                            size={15}
+                            color="#71717A"
+                          />
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.desktopPanelIconBtn, { marginLeft: 2 }]}
+                          style={[
+                            styles.desktopPanelIconBtn,
+                            { marginLeft: 2 },
+                          ]}
                           onPress={handleCloseMenu}
                           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           accessibilityLabel="Close tool"
@@ -1357,18 +1730,30 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       selectedClip={selectedClip}
                       selectedClipType={selectedClipType}
                       currentTime={currentTime}
-                      onUpdateProject={(updates) => updateProjectWithHistory(updates)}
-                      onUpdateClipTransform={(clipId, transform, isFinal) =>
-                        handleUpdateClipTransform(clipId, selectedClipType, transform as any, isFinal)
+                      onUpdateProject={(updates) =>
+                        updateProjectWithHistory(updates)
                       }
-                      onUpdateClipCrop={(clipId, crop) => handleUpdateClipCrop(clipId, crop, true)}
+                      onUpdateClipTransform={(clipId, transform, isFinal) =>
+                        handleUpdateClipTransform(
+                          clipId,
+                          selectedClipType,
+                          transform as any,
+                          isFinal,
+                        )
+                      }
+                      onUpdateClipCrop={(clipId, crop) =>
+                        handleUpdateClipCrop(clipId, crop, true)
+                      }
                       onUpdateClipMask={(clipId, mask, isFinal) =>
-                        handleUpdateClipMask && handleUpdateClipMask(clipId, mask, isFinal, currentTime)
+                        handleUpdateClipMask &&
+                        handleUpdateClipMask(clipId, mask, isFinal, currentTime)
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
                       }
-                      onApplySpeed={(speed, curve) => handleApplySpeed(speed, curve)}
+                      onApplySpeed={(speed, curve) =>
+                        handleApplySpeed(speed, curve)
+                      }
                       onApplyFilter={handleApplyFilter}
                       onDeleteClip={() => handleDeleteClip()}
                       onDuplicateClip={() => handleDuplicateClip()}
@@ -1382,13 +1767,31 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   )
                 ) : (
                   <TouchableOpacity
-                    style={[styles.desktopConfigPanelCollapsed, { borderRightWidth: 0, borderLeftWidth: 1, borderLeftColor: THEME_COLORS.borderSubtle }]}
+                    style={[
+                      styles.desktopConfigPanelCollapsed,
+                      {
+                        borderRightWidth: 0,
+                        borderLeftWidth: 1,
+                        borderLeftColor: THEME_COLORS.borderSubtle,
+                      },
+                    ]}
                     onPress={() => setIsConfigPanelExpanded(true)}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="chevron-back" size={14} color={THEME_COLORS.accent} />
-                    <Text style={styles.desktopConfigPanelCollapsedLabel} numberOfLines={6}>
-                      {hasDesktopRightPanel ? getConfigPanelTitle() : (selectedClip ? (selectedClip.title || 'Clip') : 'Inspector')}
+                    <Ionicons
+                      name="chevron-back"
+                      size={14}
+                      color={THEME_COLORS.accent}
+                    />
+                    <Text
+                      style={styles.desktopConfigPanelCollapsedLabel}
+                      numberOfLines={6}
+                    >
+                      {hasDesktopRightPanel
+                        ? getConfigPanelTitle()
+                        : selectedClip
+                          ? selectedClip.title || "Clip"
+                          : "Inspector"}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -1397,9 +1800,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           </View>
 
           {/* ⑤ Bottom: Full-width Timeline */}
-          <View style={styles.desktopTimelineArea}>
-            {renderTimelineOnly()}
-          </View>
+          <View style={styles.desktopTimelineArea}>{renderTimelineOnly()}</View>
         </View>
       </View>
     );
@@ -1436,11 +1837,40 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         {renderPlayer()}
       </View>
 
-      {/* Below Player: Timeline OR Selected menu configuration */}
+      {/* Below Player: Timeline AND Selected menu configuration */}
       {!isFullscreen && (
         <View style={styles.mobileBottomArea}>
-          {isMobileInlineActive ? (
-            <View style={[styles.mobileInlineConfigArea, { height: Math.min(Math.round(windowHeight * 0.52), Math.max(220, currentTimelineHeight)) }]}>
+          {/* Universal Drag Resize Handle: Always visible whether timeline or modal is open */}
+          <View
+            style={[
+              styles.mobileResizeHandle,
+              isTimelineResizing && styles.mobileResizeHandleActive,
+            ]}
+            {...timelineResizeProps}
+            accessibilityLabel="Drag up or down to adjust height"
+          >
+            <View
+              style={[
+                styles.mobileResizePill,
+                isTimelineResizing && styles.mobileResizePillActive,
+              ]}
+            />
+          </View>
+
+          {isMobileInlineActive && (
+            <View
+              style={[
+                styles.mobileInlineConfigArea,
+                {
+                  height: currentTimelineHeight,
+                },
+                Platform.OS === "web" &&
+                  ({
+                    animation:
+                      "fastartInlineEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+                  } as any),
+              ]}
+            >
               {/* Mobile menu modal header bar with close/back and done to restore timeline */}
               <View style={styles.mobileInlineHeader}>
                 <TouchableOpacity
@@ -1465,15 +1895,21 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   <Ionicons name="checkmark" size={18} color="#00E5FF" />
                 </TouchableOpacity>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
                 {renderModals ? renderModals(true) : null}
               </View>
             </View>
-          ) : (
-            <View style={styles.mobileTimelineArea}>
-              {renderTimelineOnly()}
-            </View>
           )}
+
+          <View
+            style={[
+              styles.mobileTimelineArea,
+              { height: currentTimelineHeight },
+              isMobileInlineActive && { display: "none" },
+            ]}
+          >
+            {renderTimelineOnly()}
+          </View>
 
           {/* Bottom: Menus bar */}
           {renderToolbar("horizontal")}
@@ -1857,11 +2293,37 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     backgroundColor: "#08090E",
   },
+  mobileResizeHandle: {
+    height: 18,
+    width: "100%",
+    backgroundColor: "#08090E",
+    borderTopWidth: 1,
+    borderTopColor: "#1F2637",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    cursor: "row-resize",
+    userSelect: "none",
+    touchAction: "none",
+    zIndex: 50,
+  } as any,
+  mobileResizeHandleActive: {
+    backgroundColor: "#131826",
+    borderTopColor: "rgba(0, 242, 254, 0.4)",
+  },
+  mobileResizePill: {
+    width: 36,
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: "#4B5563",
+  },
+  mobileResizePillActive: {
+    backgroundColor: "#00F2FE",
+    width: 44,
+  },
   mobileInlineConfigArea: {
     width: "100%",
     backgroundColor: "#0F131D",
-    borderTopWidth: 1,
-    borderTopColor: "#1F2637",
+    borderTopWidth: 0,
     overflow: "hidden" as any,
   },
   mobileInlineHeader: {

@@ -4,7 +4,7 @@
 import { Platform } from 'react-native';
 
 const DB_NAME = 'fastart_media_db';
-const DB_VERSION = 3;
+const DB_VERSION = 5;
 const STORE_MEDIA = 'media_files';
 const STORE_MASKS = 'cutout_masks';
 const STORE_PROJECTS = 'projects_data';
@@ -30,6 +30,17 @@ export interface StoredMediaRecord {
 const objectUrlCache = new Map<string, string>();
 // Direct in-memory blob cache by URL to eliminate brittle fetch(blobUrl) errors completely
 const blobByUrlCache = new Map<string, Blob | File>();
+// Direct in-memory FileSystemFileHandle cache to preserve transient user activation gestures across reconnects
+const memoryHandleCache = new Map<string, any>();
+
+export function cacheMediaHandle(id: string, handle: any, name?: string): void {
+  if (!handle) return;
+  memoryHandleCache.set(id, handle);
+  if (name) {
+    memoryHandleCache.set(name, handle);
+    memoryHandleCache.set(name.toLowerCase(), handle);
+  }
+}
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -81,7 +92,16 @@ function getIndexedDB(): Promise<IDBDatabase> {
         }
         resolve(db);
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        // Fallback: If version mismatch, open without version argument to safely read existing DB
+        if (request.error?.name === 'VersionError') {
+          const fallbackReq = indexedDB.open(DB_NAME);
+          fallbackReq.onsuccess = () => resolve(fallbackReq.result);
+          fallbackReq.onerror = () => reject(fallbackReq.error);
+          return;
+        }
+        reject(request.error);
+      };
     });
   }
   return dbPromise;
@@ -148,6 +168,7 @@ export async function pickWebMedia(
       if (handles && handles.length > 0) {
         const handle = handles[0];
         const file = await handle.getFile();
+        cacheMediaHandle(file.name, handle);
         return { file, handle, isLinked: true };
       }
       return null;
@@ -280,7 +301,46 @@ export async function reconnectLinkedMedia(
   mediaId: string,
   hintName?: string
 ): Promise<{ url: string; title: string } | null> {
-  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return null;
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+
+  // 1. FAST ZERO-DELAY IN-MEMORY PATH: Use handle directly from memoryHandleCache with active user gesture!
+  const fastHandle =
+    memoryHandleCache.get(mediaId) ||
+    (hintName ? memoryHandleCache.get(hintName) : null) ||
+    (hintName ? memoryHandleCache.get(hintName.toLowerCase()) : null);
+
+  if (fastHandle) {
+    try {
+      let hasPerm = false;
+      const permStatus =
+        typeof fastHandle.queryPermission === 'function'
+          ? await fastHandle.queryPermission({ mode: 'read' })
+          : 'granted';
+
+      if (permStatus === 'granted') {
+        hasPerm = true;
+      } else if (typeof fastHandle.requestPermission === 'function') {
+        // Invoked immediately in the user gesture callback — guaranteed fresh activation!
+        const reqStatus = await fastHandle.requestPermission({ mode: 'read' });
+        hasPerm = reqStatus === 'granted';
+      }
+
+      if (hasPerm) {
+        const file = await fastHandle.getFile();
+        if (file) {
+          const live = URL.createObjectURL(file);
+          objectUrlCache.set(mediaId, live);
+          objectUrlCache.set(live, live);
+          blobByUrlCache.set(live, file);
+          return { url: live, title: file.name || hintName || 'Media' };
+        }
+      }
+    } catch (fastErr) {
+      console.warn('[reconnectLinkedMedia] Fast memory handle check:', fastErr);
+    }
+  }
+
+  // 2. Fallback path via IndexedDB query
   try {
     const db = await getIndexedDB();
     const all = await getAllStoredMedia();
@@ -301,6 +361,10 @@ export async function reconnectLinkedMedia(
     }
 
     if (!record) return null;
+
+    if (record.handle) {
+      cacheMediaHandle(record.id, record.handle, record.name);
+    }
 
     // If record already has a blob, create and cache URL immediately
     if (record.blob) {
@@ -335,16 +399,6 @@ export async function reconnectLinkedMedia(
         objectUrlCache.set(live, live);
         if (record.id) objectUrlCache.set(record.id, live);
         blobByUrlCache.set(live, file);
-
-        // Permanently cache blob in record so that all future refreshes load instantly
-        try {
-          const tx = db.transaction(STORE_MEDIA, 'readwrite');
-          const store = tx.objectStore(STORE_MEDIA);
-          record.blob = file;
-          store.put(record);
-        } catch (saveErr) {
-          console.warn('[reconnectLinkedMedia] Failed to cache blob into record:', saveErr);
-        }
 
         return { url: live, title: record.name };
       }
@@ -449,6 +503,9 @@ export async function persistLargeMedia(
   }
 
   const isLinked = !!metadata?.handle || metadata?.isLinked === true;
+  if (metadata?.handle) {
+    cacheMediaHandle(id, metadata.handle, name);
+  }
 
   // Save to IndexedDB if on web
   if (Platform.OS === 'web' && typeof indexedDB !== 'undefined') {
@@ -1000,7 +1057,15 @@ export async function getAllStoredMedia(): Promise<StoredMediaRecord[]> {
       const tx = db.transaction(STORE_MEDIA, 'readonly');
       const store = tx.objectStore(STORE_MEDIA);
       const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
+      req.onsuccess = () => {
+        const list = req.result || [];
+        for (const r of list) {
+          if (r.handle) {
+            cacheMediaHandle(r.id, r.handle, r.name);
+          }
+        }
+        resolve(list);
+      };
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
@@ -1069,6 +1134,16 @@ export async function estimateMediaStorageUsage(): Promise<{ totalBytes: number;
 export async function rehydrateProjectMedia(project: any): Promise<any> {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return project;
   if (!project || !project.tracks) return project;
+
+  // Pre-load all stored media records and cache handles into memoryHandleCache
+  try {
+    const all = await getAllStoredMedia();
+    for (const r of all) {
+      if (r.handle) {
+        cacheMediaHandle(r.id, r.handle, r.name);
+      }
+    }
+  } catch {}
 
   let hasChanges = false;
   const updatedVideo = await Promise.all(
@@ -1194,9 +1269,30 @@ export function setupAutoReconnectListener(
     window.removeEventListener('keydown', tryReconnectAll, true);
 
     try {
+      // 1. Fast in-memory handles reconnection directly with the active user gesture
+      for (const [id, handle] of memoryHandleCache.entries()) {
+        try {
+          if (typeof handle.requestPermission === 'function') {
+            const req = await handle.requestPermission({ mode: 'read' });
+            if (req === 'granted') {
+              const file = await handle.getFile();
+              if (file) {
+                const live = URL.createObjectURL(file);
+                objectUrlCache.set(id, live);
+                objectUrlCache.set(live, live);
+                blobByUrlCache.set(live, file);
+                if (onReconnected) onReconnected(id, live);
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Also check all stored media in DB
       const all = await getAllStoredMedia();
       for (const record of all) {
         if (record.handle && !record.blob) {
+          cacheMediaHandle(record.id, record.handle, record.name);
           const res = await reconnectLinkedMedia(record.id, record.name);
           if (res && onReconnected) {
             onReconnected(record.id, res.url);

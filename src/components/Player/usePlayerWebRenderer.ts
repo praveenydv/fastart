@@ -64,8 +64,13 @@ export function usePlayerWebRenderer({
   // Prune unused media elements when video track clips change
   useEffect(() => {
     if (rendererRef.current && project.tracks.video) {
-      const activeUrls = new Set(project.tracks.video.map((c) => c.url));
-      rendererRef.current.pruneUnusedMedia(activeUrls);
+      const activeKeys = new Set<string>();
+      project.tracks.video.forEach((c) => {
+        if (c.id) activeKeys.add(c.id);
+        if (c.url) activeKeys.add(c.url);
+        if (c.sourceMediaId) activeKeys.add(c.sourceMediaId);
+      });
+      rendererRef.current.pruneUnusedMedia(activeKeys);
       project.tracks.video.forEach((clip) => {
         rendererRef.current?.preloadClip(clip);
       });

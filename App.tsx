@@ -13,6 +13,7 @@ import SplashScreen from "./src/components/SplashScreen";
 import ConfirmExitModal from "./src/components/ConfirmExitModal";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { useAppRouter } from "./src/utils/router";
+import { ErrorBoundary } from "./src/components/Common/ErrorBoundary";
 import { EditorWorkspace } from "./src/components/Editor/EditorWorkspace";
 import { EditorModals } from "./src/components/Editor/EditorModals";
 import { ProjectStatusScreens } from "./src/components/Editor/ProjectStatusScreens";
@@ -481,15 +482,16 @@ export default function App() {
     setIsPlaying,
     totalDuration,
     setCurrentTime,
+    currentTimeRef,
   });
 
   // Clamp currentTime to 0 and stop playback whenever timeline is empty or duration is 0
   useEffect(() => {
     if (totalDuration <= 0) {
-      if (isPlaying) setIsPlaying(false);
-      if (currentTime !== 0) setCurrentTime(0);
+      setIsPlaying((p) => (p ? false : p));
+      setCurrentTime((c) => (c !== 0 ? 0 : c));
     }
-  }, [totalDuration, isPlaying, currentTime, setIsPlaying, setCurrentTime]);
+  }, [totalDuration]);
 
   // Immediate flush of session and project data (for refresh, close, tab hide, app background)
   const flushSessionAndProject = useCallback(() => {
@@ -745,6 +747,7 @@ export default function App() {
               route={route}
               totalDuration={totalDuration}
               currentTime={currentTime}
+              isPlaying={isPlaying}
               setCurrentTime={setCurrentTime}
               selectedClipId={selectedClipId}
               selectedClip={selectedClip}
@@ -821,7 +824,8 @@ export default function App() {
           return (
             <>
               {(route.screen === "editor" || route.screen === "export") && project && (
-                <EditorWorkspace
+                <ErrorBoundary fallbackTitle="Editor Workspace Error">
+                  <EditorWorkspace
                   project={project}
                   currentTime={currentTime}
                   setCurrentTime={setCurrentTime}
@@ -919,7 +923,6 @@ export default function App() {
                   }}
                   handleOpenStickersModal={() => openModal("stickers")}
                   handleOpenMediaPicker={() => openModal("media")}
-                  handleOpenTTS={() => openModal("tts")}
                   handleOpenEnhance={() => {
                     ensureSelectedVideoClip();
                     openModal("enhance");
@@ -945,7 +948,8 @@ export default function App() {
                   handleAddMedia={handleAddMedia}
                   handleAddAudio={handleAddAudio}
                 />
-              )}
+              </ErrorBoundary>
+            )}
 
               {/* OVERLAY / FULLSCREEN MODALS (media picker, audio picker, export, settings, notifications, delete confirm) */}
               {renderSharedModals(false)}

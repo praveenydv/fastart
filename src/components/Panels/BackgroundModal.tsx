@@ -16,6 +16,7 @@ import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject } from '../../types/project';
 import { getLivePlayerCanvasSnapshot } from '../../utils/videoRenderer';
 import { getMediaThumbnail } from '../../utils/mediaThumbnailGenerator';
+import { CustomColorPickerButton } from '../Common/CustomColorPickerButton';
 
 interface BackgroundModalProps {
   visible: boolean;
@@ -138,6 +139,7 @@ export default function BackgroundModal({
   const [liveCanvasSnap, setLiveCanvasSnap] = useState<string | null>(() => getLivePlayerCanvasSnapshot());
 
   useEffect(() => {
+    if (!visible) return;
     const snap = getLivePlayerCanvasSnapshot();
     if (snap) {
       setLiveCanvasSnap(snap);
@@ -402,6 +404,21 @@ export default function BackgroundModal({
                       </TouchableOpacity>
                     );
                   })}
+
+                  {/* Custom Color Palette Button */}
+                  <View style={[styles.colorItem, { justifyContent: 'center', alignItems: 'center' }]}>
+                    <CustomColorPickerButton
+                      value={rawBg}
+                      presets={BACKGROUND_COLORS}
+                      onColorChange={(color) => {
+                        handleSelectBg(color);
+                        setCustomHexInput(color.toUpperCase());
+                      }}
+                      size={28}
+                      shape="circle"
+                      accessibilityLabel="Pick custom background color"
+                    />
+                  </View>
                 </ScrollView>
 
                 {/* Custom Hex Color Picker Input */}

@@ -32,6 +32,7 @@ import {
   setStorageItem,
 } from "../../utils/storage";
 import { THEME_COLORS, DESIGN_CONSTANTS } from "../../constants/designConstants";
+import { CustomColorPickerButton } from "../Common/CustomColorPickerButton";
 
 interface AutoCaptionModalProps {
   visible: boolean;
@@ -1393,6 +1394,17 @@ export default function AutoCaptionModal({
                         </TouchableOpacity>
                       );
                     })}
+                    <CustomColorPickerButton
+                      value={highlightColor}
+                      presets={HIGHLIGHT_COLOR_SWATCHES}
+                      onColorChange={(col) => {
+                        setHighlightColor(col);
+                        persistSettings({ highlightColor: col });
+                      }}
+                      size={24}
+                      shape="circle"
+                      accessibilityLabel="Pick custom highlight color"
+                    />
                   </View>
                 </>
               )}
@@ -1579,6 +1591,17 @@ export default function AutoCaptionModal({
                     </TouchableOpacity>
                   );
                 })}
+                <CustomColorPickerButton
+                  value={textColor}
+                  presets={TEXT_COLOR_SWATCHES}
+                  onColorChange={(col) => {
+                    setTextColor(col);
+                    persistSettings({ textColor: col });
+                  }}
+                  size={24}
+                  shape="circle"
+                  accessibilityLabel="Pick custom caption text color"
+                />
               </View>
 
               {/* Stroke Widths */}
@@ -1643,6 +1666,17 @@ export default function AutoCaptionModal({
                       </TouchableOpacity>
                     );
                   })}
+                  <CustomColorPickerButton
+                    value={strokeColor}
+                    presets={STROKE_COLOR_SWATCHES}
+                    onColorChange={(col) => {
+                      setStrokeColor(col);
+                      persistSettings({ strokeColor: col });
+                    }}
+                    size={24}
+                    shape="circle"
+                    accessibilityLabel="Pick custom caption stroke color"
+                  />
                 </View>
               )}
             </View>

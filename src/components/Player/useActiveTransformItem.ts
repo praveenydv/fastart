@@ -3,6 +3,7 @@ import { ActiveTransformItem, TransientTransformState } from "./playerTypes";
 import { getItemBaseDimensions } from "./playerUtils";
 import { FastArtProject } from "../../types/project";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
+import { evaluateClipAnimation } from "../../utils/animationEngine";
 
 interface UseActiveTransformItemProps {
   isCroppingMode: boolean;
@@ -46,6 +47,7 @@ export function useActiveTransformItem({
 
     const safeBoxW = Math.max(1, boxWidth || 360);
     const safeCanvasH = Math.max(1, canvasHeight || 640);
+    const previewScale = Math.max(0.2, safeBoxW / 360);
 
     const isCaptionType =
       !selectedClipType ||
@@ -66,9 +68,9 @@ export function useActiveTransformItem({
       selectedClipType === "videos";
 
     const selectedCaption = isCaptionType
-      ? (activeCaptions?.find((c) => c.id === selectedClipId) ||
+      ? activeCaptions?.find((c) => c.id === selectedClipId) ||
         project?.tracks?.captions?.find((c) => c.id === selectedClipId) ||
-        null)
+        null
       : null;
 
     const selectedText = isTextType
@@ -109,7 +111,8 @@ export function useActiveTransformItem({
     if (selectedCaption) {
       const isCapActive =
         currentTime >= (selectedCaption.startTime ?? 0) &&
-        currentTime <= (selectedCaption.startTime ?? 0) + (selectedCaption.duration ?? 0);
+        currentTime <=
+          (selectedCaption.startTime ?? 0) + (selectedCaption.duration ?? 0);
       if (!isCapActive) return null;
 
       const { baseW, baseH } = getItemBaseDimensions(
@@ -128,16 +131,23 @@ export function useActiveTransformItem({
         ? activeTransient!.rotation
         : (kfT?.rotation ?? selectedCaption.rotation ?? 0);
 
-      const elapsed = Math.max(0, currentTime - (selectedCaption.startTime || 0));
-      const anim = (selectedCaption.animation || "none").toLowerCase();
-      let animScale = 1.0;
-      if (anim === "bounce" && elapsed < 0.35) {
-        const p = elapsed / 0.35;
-        animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
-      } else if (anim === "zoomin" && elapsed < 0.3) {
-        const p = elapsed / 0.3;
-        animScale = 0.4 + p * 0.6;
-      }
+      const elapsed = Math.max(
+        0,
+        currentTime - (selectedCaption.startTime || 0),
+      );
+      const animEval = evaluateClipAnimation(
+        selectedCaption.animation,
+        elapsed,
+        selectedCaption.duration || 3.0,
+        safeBoxW,
+        safeCanvasH,
+        previewScale,
+        selectedCaption.text,
+      );
+      const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+      const animOffsetX = animEval.offsetX;
+      const animOffsetY = animEval.offsetY;
+      const animRot = animEval.rotation;
 
       let motionX = 0;
       let motionY = 0;
@@ -157,19 +167,23 @@ export function useActiveTransformItem({
       }
 
       const effScale = baseS * animScale * motionScale;
-      const effRot = rot + motionRot;
+      const effRot = rot + motionRot + animRot;
       const rawX = isTransCap
         ? activeTransient!.x
-        : (kfT ? kfT.x : (selectedCaption.position?.x ?? 50));
+        : kfT
+          ? kfT.x
+          : (selectedCaption.position?.x ?? 50);
       const rawY = isTransCap
         ? activeTransient!.y
-        : (kfT ? kfT.y : (selectedCaption.position?.y ?? 80));
+        : kfT
+          ? kfT.y
+          : (selectedCaption.position?.y ?? 80);
 
       const pos = isTransCap
         ? { x: rawX, y: rawY }
         : {
-            x: rawX + (motionX / safeBoxW) * 100,
-            y: rawY + (motionY / safeCanvasH) * 100,
+            x: rawX + ((animOffsetX + motionX) / safeBoxW) * 100,
+            y: rawY + ((animOffsetY + motionY) / safeCanvasH) * 100,
           };
 
       return {
@@ -189,7 +203,8 @@ export function useActiveTransformItem({
     if (selectedText) {
       const isTxtActive =
         currentTime >= (selectedText.startTime ?? 0) &&
-        currentTime <= (selectedText.startTime ?? 0) + (selectedText.duration ?? 0);
+        currentTime <=
+          (selectedText.startTime ?? 0) + (selectedText.duration ?? 0);
       if (!isTxtActive) return null;
 
       const { baseW, baseH } = getItemBaseDimensions(
@@ -209,26 +224,19 @@ export function useActiveTransformItem({
         : (kfT?.rotation ?? selectedText.rotation ?? 0);
 
       const elapsed = Math.max(0, currentTime - (selectedText.startTime || 0));
-      let animScale = 1.0;
-      let animOffsetX = 0;
-      let animOffsetY = 0;
-      const anim = (selectedText.animation || "none").toLowerCase();
-
-      if (anim === "bounce" && elapsed < 0.4) {
-        const p = elapsed / 0.4;
-        animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
-      } else if (anim === "zoomin" && elapsed < 0.35) {
-        const p = elapsed / 0.35;
-        animScale = 0.4 + p * 0.6;
-      } else if (anim === "pulse") {
-        animScale = 1.0 + Math.sin(elapsed * 6) * 0.08;
-      } else if (anim === "shake") {
-        if (elapsed < 0.8) {
-          animOffsetX = Math.sin(elapsed * 40) * 4;
-        }
-      } else if (anim === "wave") {
-        animOffsetY = Math.sin(elapsed * 4) * 6;
-      }
+      const animEval = evaluateClipAnimation(
+        selectedText.animation,
+        elapsed,
+        selectedText.duration || 3.0,
+        safeBoxW,
+        safeCanvasH,
+        previewScale,
+        selectedText.text,
+      );
+      const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+      const animOffsetX = animEval.offsetX;
+      const animOffsetY = animEval.offsetY;
+      const animRot = animEval.rotation;
 
       let motionX = 0;
       let motionY = 0;
@@ -248,13 +256,17 @@ export function useActiveTransformItem({
       }
 
       const effScale = baseS * animScale * motionScale;
-      const effRot = rot + motionRot;
+      const effRot = rot + motionRot + animRot;
       const rawX = isTransText
         ? activeTransient!.x
-        : (kfT ? kfT.x : (selectedText.position?.x ?? 50));
+        : kfT
+          ? kfT.x
+          : (selectedText.position?.x ?? 50);
       const rawY = isTransText
         ? activeTransient!.y
-        : (kfT ? kfT.y : (selectedText.position?.y ?? 35));
+        : kfT
+          ? kfT.y
+          : (selectedText.position?.y ?? 35);
 
       const pos = isTransText
         ? { x: rawX, y: rawY }
@@ -280,7 +292,8 @@ export function useActiveTransformItem({
     if (selectedSticker) {
       const isStkActive =
         currentTime >= (selectedSticker.startTime ?? 0) &&
-        currentTime <= (selectedSticker.startTime ?? 0) + (selectedSticker.duration ?? 0);
+        currentTime <=
+          (selectedSticker.startTime ?? 0) + (selectedSticker.duration ?? 0);
       if (!isStkActive) return null;
 
       const { baseW, baseH } = getItemBaseDimensions(
@@ -299,21 +312,21 @@ export function useActiveTransformItem({
         ? activeTransient!.rotation
         : (kfT?.rotation ?? selectedSticker.rotation ?? 0);
 
-      const elapsed = Math.max(0, currentTime - (selectedSticker.startTime || 0));
-      let animScale = 1.0;
-      let animOffsetY = 0;
-      const anim = selectedSticker.animation || "none";
-
-      if (anim === "bounce") {
-        animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;
-      } else if (anim === "pulse") {
-        animScale = 1.0 + Math.sin(elapsed * 6) * 0.1;
-      } else if (anim === "wave") {
-        animOffsetY = Math.sin(elapsed * 4) * 8;
-      } else if (anim === "pop" && elapsed < 0.3) {
-        const p = elapsed / 0.3;
-        animScale = 0.3 + p * 0.85;
-      }
+      const elapsed = Math.max(
+        0,
+        currentTime - (selectedSticker.startTime || 0),
+      );
+      const animEval = evaluateClipAnimation(
+        selectedSticker.animation,
+        elapsed,
+        selectedSticker.duration || 3.0,
+        safeBoxW,
+        safeCanvasH,
+        previewScale,
+      );
+      const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+      const animOffsetY = animEval.offsetY;
+      const animRot = animEval.rotation;
 
       let motionX = 0;
       let motionY = 0;
@@ -333,13 +346,17 @@ export function useActiveTransformItem({
       }
 
       const effScale = baseS * animScale * motionScale;
-      const effRot = rot + motionRot;
+      const effRot = rot + motionRot + animRot;
       const rawX = isTransStk
         ? activeTransient!.x
-        : (kfT ? kfT.x : (selectedSticker.position?.x ?? 50));
+        : kfT
+          ? kfT.x
+          : (selectedSticker.position?.x ?? 50);
       const rawY = isTransStk
         ? activeTransient!.y
-        : (kfT ? kfT.y : (selectedSticker.position?.y ?? 50));
+        : kfT
+          ? kfT.y
+          : (selectedSticker.position?.y ?? 50);
 
       const pos = isTransStk
         ? { x: rawX, y: rawY }
@@ -365,7 +382,8 @@ export function useActiveTransformItem({
     if (selectedVideo) {
       const isVidActive =
         currentTime >= (selectedVideo.startTime ?? 0) &&
-        currentTime <= (selectedVideo.startTime ?? 0) + (selectedVideo.duration ?? 0);
+        currentTime <=
+          (selectedVideo.startTime ?? 0) + (selectedVideo.duration ?? 0);
       if (!isVidActive) return null;
 
       const { baseW, baseH } = getItemBaseDimensions(
@@ -379,16 +397,26 @@ export function useActiveTransformItem({
         : null;
       const baseS = isTransVid
         ? activeTransient!.scale
-        : (kfT?.scale ?? selectedVideo.transform?.scale ?? selectedVideo.scale ?? 1.0);
+        : (kfT?.scale ??
+          selectedVideo.transform?.scale ??
+          selectedVideo.scale ??
+          1.0);
       const rot = isTransVid
         ? activeTransient!.rotation
-        : (kfT?.rotation ?? selectedVideo.transform?.rotation ?? selectedVideo.rotation ?? 0);
+        : (kfT?.rotation ??
+          selectedVideo.transform?.rotation ??
+          selectedVideo.rotation ??
+          0);
 
       let motionX = 0;
       let motionY = 0;
       let motionScale = 1.0;
       let motionRot = 0;
-      if (selectedVideo.motionTrack && selectedVideo.motionTrack.enabled && selectedVideo.motionTrack.actionType === 'camera_center') {
+      if (
+        selectedVideo.motionTrack &&
+        selectedVideo.motionTrack.enabled &&
+        selectedVideo.motionTrack.actionType === "camera_center"
+      ) {
         const motion = applyMotionTracking(
           currentTime,
           selectedVideo.startTime,
@@ -403,8 +431,16 @@ export function useActiveTransformItem({
 
       const effScale = baseS * motionScale;
       const effRot = rot + motionRot;
-      const rawX = isTransVid ? activeTransient!.x : (kfT ? kfT.x : (selectedVideo.transform?.x || 0));
-      const rawY = isTransVid ? activeTransient!.y : (kfT ? kfT.y : (selectedVideo.transform?.y || 0));
+      const rawX = isTransVid
+        ? activeTransient!.x
+        : kfT
+          ? kfT.x
+          : selectedVideo.transform?.x || 0;
+      const rawY = isTransVid
+        ? activeTransient!.y
+        : kfT
+          ? kfT.y
+          : selectedVideo.transform?.y || 0;
 
       const pos = isTransVid
         ? {

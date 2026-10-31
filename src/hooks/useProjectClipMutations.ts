@@ -5,12 +5,14 @@ import { soundEngine } from "../utils/audioEngine";
 import { triggerHaptic } from "../utils/haptics";
 import { deleteMedia } from "../utils/largeMediaStorage";
 import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
+import { MAX_TRACKS } from "../components/Timeline/timelineTypes";
 import { addNotification } from "../utils/storage";
 import {
   requestMediaThumbnail,
   captureActiveFrameNow,
   globalThumbnailCache,
 } from "../utils/mediaThumbnailGenerator";
+import { cloneClipMasks } from "../services/selfieSegmentationService";
 import { useClipTransformOperations } from "./useClipTransformOperations";
 
 interface UseProjectClipMutationsParams {
@@ -528,10 +530,15 @@ export function useProjectClipMutations({
                     ? 4
                     : 0;
 
+      // Place copied clip on a brand-new track directly below the existing one
+      const newTrackIndex = Math.min(MAX_TRACKS - 1, origTrack + 1);
+
       const clone = {
         ...JSON.parse(JSON.stringify(original)),
         id: `clip-${clipType[0]}-${Date.now()}`,
         sourceMediaId: original.sourceMediaId || original.id,
+        startTime: original.startTime,
+        trackIndex: newTrackIndex,
         position: original.position
           ? {
               x: Math.min(85, (original.position.x || 50) + 5),
@@ -540,36 +547,46 @@ export function useProjectClipMutations({
           : undefined,
       };
 
-      if (clipType === "video" && origTrack === 0) {
-        clone.startTime = original.startTime + original.duration;
-        clone.trackIndex = 0;
-        list.splice(idx + 1, 0, clone);
-        let t = 0;
-        list.forEach((c) => {
-          c.startTime = t;
-          t += c.duration;
-        });
-      } else {
-        const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
-          project,
-          original.startTime,
-        );
-        clone.startTime = original.startTime;
-        clone.trackIndex = newTrackIndex;
-        addNotification({
-          title: "Clip Duplicated",
-          message: `Placed on Track ${newTrackIndex + 1}.`,
-          icon: "copy-outline",
-        });
-        list.push(clone);
+      // Clone neural cutout masks immediately so copied overlay is in 100% sync
+      if (original.id) {
+        cloneClipMasks(original.id, clone.id);
+        if (original.sourceMediaId) {
+          cloneClipMasks(original.sourceMediaId, clone.id);
+        }
       }
+
+      // Shift all other clips across the project on tracks >= newTrackIndex down by 1
+      const shiftTrackDown = (c: any) => {
+        if (!c) return c;
+        const curTrk = typeof c.trackIndex === "number" ? c.trackIndex : 0;
+        if (curTrk >= newTrackIndex) {
+          return { ...c, trackIndex: Math.min(MAX_TRACKS - 1, curTrk + 1) };
+        }
+        return c;
+      };
+
+      const updatedTracks: any = {
+        video: (project.tracks.video || []).map(shiftTrackDown),
+        audio: (project.tracks.audio || []).map(shiftTrackDown),
+        captions: (project.tracks.captions || []).map(shiftTrackDown),
+        text: (project.tracks.text || []).map(shiftTrackDown),
+        stickers: (project.tracks.stickers || []).map(shiftTrackDown),
+        effects: (project.tracks.effects || []).map(shiftTrackDown),
+        filters: (project.tracks.filters || []).map(shiftTrackDown),
+      };
+
+      // Append clone to target list
+      updatedTracks[key] = [...(updatedTracks[key] || []), clone];
+
+      addNotification({
+        title: "Clip Copied",
+        message: `Placed on new Track ${newTrackIndex + 1} below existing clip.`,
+        icon: "copy-outline",
+      });
 
       const updated = {
         ...project,
-        tracks: {
-          ...project.tracks,
-          [key]: list,
-        },
+        tracks: updatedTracks,
       };
       setSelectedClipId(clone.id);
       setSelectedClipType(clipType);

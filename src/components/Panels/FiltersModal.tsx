@@ -293,26 +293,51 @@ export default function FiltersModal({
                         activeOpacity={0.7}
                       >
                         <View style={styles.colorPreview}>
-                          <Image
-                            source={{ uri: previewThumb }}
-                            style={[
-                              styles.previewImage,
-                              Platform.OS === 'web'
-                                ? ({ filter: `contrast(1.22) saturate(1.28) ${lut.id.includes('warm') ? 'sepia(0.35)' : lut.id.includes('cold') ? 'hue-rotate(180deg)' : ''}` } as any)
-                                : null,
-                            ]}
-                            resizeMode="cover"
-                          />
-                          <View
-                            style={[
-                              StyleSheet.absoluteFill,
-                              {
-                                backgroundColor: sampleColor,
-                                opacity: 0.2,
-                                mixBlendMode: 'color' as any,
-                              },
-                            ]}
-                          />
+                          <View style={styles.splitFilterBox}>
+                            {/* Left Half: Before (Original) */}
+                            <View style={styles.splitLeftHalf}>
+                              <Image
+                                source={{ uri: previewThumb }}
+                                style={styles.splitImgLeft}
+                                resizeMode="cover"
+                              />
+                              <View style={styles.splitBadgeLeft}>
+                                <Text style={styles.splitBadgeText}>ORIG</Text>
+                              </View>
+                            </View>
+
+                            {/* Right Half: After (3D LUT Grade) */}
+                            <View style={styles.splitRightHalf}>
+                              <Image
+                                source={{ uri: previewThumb }}
+                                style={[
+                                  styles.splitImgRight,
+                                  Platform.OS === 'web'
+                                    ? ({ filter: `contrast(1.22) saturate(1.28) ${lut.id.includes('warm') ? 'sepia(0.35)' : lut.id.includes('cold') ? 'hue-rotate(180deg)' : ''}` } as any)
+                                    : null,
+                                ]}
+                                resizeMode="cover"
+                              />
+                              <View
+                                style={[
+                                  StyleSheet.absoluteFill,
+                                  {
+                                    backgroundColor: sampleColor,
+                                    opacity: 0.2,
+                                    mixBlendMode: 'color' as any,
+                                  },
+                                ]}
+                              />
+                              <View style={styles.splitBadgeRight}>
+                                <Text style={styles.splitBadgeText}>LUT</Text>
+                              </View>
+                            </View>
+
+                            {/* Center Split Divider */}
+                            <View style={styles.splitDividerLine}>
+                              <View style={styles.splitDividerHandle} />
+                            </View>
+                          </View>
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
                               <Ionicons name="checkmark" size={12} color="#000000" />
@@ -327,7 +352,9 @@ export default function FiltersModal({
                           >
                             {lut.name}
                           </Text>
-                          <Text style={styles.categoryTag}>3D LUT</Text>
+                          <Text style={styles.filterDescText} numberOfLines={1}>
+                            Professional 3D Cube Color Grade
+                          </Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -354,27 +381,58 @@ export default function FiltersModal({
                         activeOpacity={0.7}
                       >
                         <View style={styles.colorPreview}>
-                          <Image
-                            source={{ uri: previewThumb }}
-                            style={[
-                              styles.previewImage,
-                              Platform.OS === 'web' && item.css && item.css !== 'none'
-                                ? ({ filter: item.css } as any)
-                                : null,
-                            ]}
-                            resizeMode="cover"
-                          />
-                          {!isItemNormal && (
-                            <View
-                              style={[
-                                StyleSheet.absoluteFill,
-                                {
-                                  backgroundColor: sampleColor,
-                                  opacity: 0.18,
-                                  mixBlendMode: 'color' as any,
-                                },
-                              ]}
+                          {isItemNormal ? (
+                            <Image
+                              source={{ uri: previewThumb }}
+                              style={styles.previewImage}
+                              resizeMode="cover"
                             />
+                          ) : (
+                            <View style={styles.splitFilterBox}>
+                              {/* Left Half: Before (Original) */}
+                              <View style={styles.splitLeftHalf}>
+                                <Image
+                                  source={{ uri: previewThumb }}
+                                  style={styles.splitImgLeft}
+                                  resizeMode="cover"
+                                />
+                                <View style={styles.splitBadgeLeft}>
+                                  <Text style={styles.splitBadgeText}>ORIG</Text>
+                                </View>
+                              </View>
+
+                              {/* Right Half: After (Filtered) */}
+                              <View style={styles.splitRightHalf}>
+                                <Image
+                                  source={{ uri: previewThumb }}
+                                  style={[
+                                    styles.splitImgRight,
+                                    Platform.OS === 'web' && item.css && item.css !== 'none'
+                                      ? ({ filter: item.css } as any)
+                                      : null,
+                                  ]}
+                                  resizeMode="cover"
+                                />
+                                <View
+                                  style={[
+                                    StyleSheet.absoluteFill,
+                                    {
+                                      backgroundColor: sampleColor,
+                                      opacity: 0.18,
+                                      mixBlendMode: 'color' as any,
+                                    },
+                                  ]}
+                                />
+                                <View style={styles.splitBadgeRight}>
+                                  <Text style={styles.splitBadgeText}>FX</Text>
+                                </View>
+                              </View>
+
+                              {/* Center Split Divider Line */}
+                              <View style={styles.splitDividerLine}>
+                                <View style={styles.splitDividerHandle} />
+                              </View>
+                            </View>
                           )}
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
@@ -390,7 +448,9 @@ export default function FiltersModal({
                           >
                             {item.name}
                           </Text>
-                          <Text style={styles.categoryTag}>{item.category}</Text>
+                          <Text style={styles.filterDescText} numberOfLines={1}>
+                            {(item as any).desc || item.category}
+                          </Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -648,6 +708,99 @@ const styles = StyleSheet.create({
   filterNameActive: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  filterDescText: {
+    color: '#64748B',
+    fontSize: 7.5,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 1,
+    width: '100%',
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: 'block',
+        } as any)
+      : {}),
+  },
+  splitFilterBox: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  splitLeftHalf: {
+    width: '50%',
+    height: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  splitRightHalf: {
+    width: '50%',
+    height: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  splitImgLeft: {
+    width: 90,
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  splitImgRight: {
+    width: 90,
+    height: '100%',
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  splitBadgeLeft: {
+    position: 'absolute',
+    bottom: 2,
+    left: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    zIndex: 3,
+  },
+  splitBadgeRight: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0, 242, 254, 0.35)',
+    borderWidth: 0.5,
+    borderColor: '#00F2FE',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    zIndex: 3,
+  },
+  splitBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 6.5,
+    fontWeight: '800',
+  },
+  splitDividerLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  splitDividerHandle: {
+    width: 5,
+    height: 9,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
   },
   categoryTag: {
     display: 'none' as any,

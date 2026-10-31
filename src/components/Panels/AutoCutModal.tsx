@@ -30,6 +30,7 @@ interface AutoCutModalProps {
   onClose: () => void;
   onAutoCutGenerated: (project: FastArtProject) => void;
   currentProject?: FastArtProject | null;
+  isInline?: boolean;
 }
 
 const WebInput: any = Platform.OS === 'web' ? 'input' : View;
@@ -41,6 +42,7 @@ export default function AutoCutModal({
   onClose,
   onAutoCutGenerated,
   currentProject,
+  isInline = false,
 }: AutoCutModalProps) {
   const [availableVideos, setAvailableVideos] = useState<any[]>([]);
   const [availableMusic, setAvailableMusic] = useState<any[]>(STOCK_SOUNDTRACKS);
@@ -215,49 +217,44 @@ export default function AutoCutModal({
     onClose();
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType={Platform.OS === "web" ? "fade" : "slide"}
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.sheetContainer}>
-          {/* Sheet Handle */}
-          <View style={styles.sheetHandle} />
+  const sheetContent = (
+    <View style={[styles.sheetContainer, isInline && styles.inlineSheetContainer]}>
+      {/* Sheet Handle */}
+      {!isInline && <View style={styles.sheetHandle} />}
 
-          {/* Standardized Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => {
-                soundEngine.playSfx('click');
-                onClose();
-              }}
-              style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Cancel changes"
-            >
-              <Ionicons name="close" size={17} color="#EF4444" />
-            </TouchableOpacity>
+      {/* Standardized Header */}
+      {!isInline && (
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => {
+              soundEngine.playSfx('click');
+              onClose();
+            }}
+            style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Cancel changes"
+          >
+            <Ionicons name="close" size={17} color="#EF4444" />
+          </TouchableOpacity>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <View style={styles.headerIconCircle}>
-                <Ionicons name="flash" size={15} color="#00F2FE" />
-              </View>
-              <Text style={styles.headerTitle}>AutoCut Reel</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={styles.headerIconCircle}>
+              <Ionicons name="flash" size={15} color="#00F2FE" />
             </View>
-
-            <TouchableOpacity
-              onPress={handleGenerate}
-              style={[styles.closeBtn, { backgroundColor: '#00F2FE' }, selectedClips.length === 0 && { opacity: 0.4 }]}
-              disabled={selectedClips.length === 0}
-              activeOpacity={0.7}
-              accessibilityLabel="Generate Reel"
-            >
-              <Ionicons name="checkmark" size={18} color="#000000" />
-            </TouchableOpacity>
+            <Text style={styles.headerTitle}>AutoCut Reel</Text>
           </View>
+
+          <TouchableOpacity
+            onPress={handleGenerate}
+            style={[styles.closeBtn, { backgroundColor: '#00F2FE' }, selectedClips.length === 0 && { opacity: 0.4 }]}
+            disabled={selectedClips.length === 0}
+            activeOpacity={0.7}
+            accessibilityLabel="Generate Reel"
+          >
+            <Ionicons name="checkmark" size={18} color="#000000" />
+          </TouchableOpacity>
+        </View>
+      )}
 
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
             {/* Step 1: Template Selection */}
@@ -475,6 +472,23 @@ export default function AutoCutModal({
             </TouchableOpacity>
           </View>
         </View>
+  );
+
+  if (!visible) return null;
+
+  if (isInline) {
+    return <View style={styles.inlineWrapper}>{sheetContent}</View>;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType={Platform.OS === "web" ? "fade" : "slide"}
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        {sheetContent}
       </View>
     </Modal>
   );

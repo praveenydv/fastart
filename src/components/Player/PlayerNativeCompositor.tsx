@@ -9,6 +9,7 @@ import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
+import { buildHslCssFilter } from "../../utils/hslEngine";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
@@ -515,9 +516,11 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               : undefined;
 
           const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
+          const hslFilter = buildHslCssFilter(vid.hslAdjustments);
+          const filterStr = [clipBlur > 0 ? `blur(${clipBlur}px)` : "", hslFilter].filter(Boolean).join(" ");
           const webBlurStyle =
-            Platform.OS === "web" && clipBlur > 0
-              ? ({ filter: `blur(${clipBlur}px)` } as any)
+            Platform.OS === "web" && filterStr
+              ? ({ filter: filterStr } as any)
               : undefined;
 
           return (
@@ -576,9 +579,11 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
             : undefined;
 
         const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
+        const hslFilter = buildHslCssFilter(vid.hslAdjustments);
+        const filterStr = [clipBlur > 0 ? `blur(${clipBlur}px)` : "", hslFilter].filter(Boolean).join(" ");
         const webBlurStyle =
-          Platform.OS === "web" && clipBlur > 0
-            ? ({ filter: `blur(${clipBlur}px)` } as any)
+          Platform.OS === "web" && filterStr
+            ? ({ filter: filterStr } as any)
             : undefined;
 
         return (

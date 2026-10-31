@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Platform } from "react-native";
 import { FastArtProject } from "../../types/project";
 import { setCachedMediaDuration } from "../../utils/mediaDuration";
@@ -36,10 +36,8 @@ export function usePlayerAudioSync({
     };
   }>({});
 
-  useEffect(() => {
-    if (Platform.OS !== "web" || typeof window === "undefined") return;
-
-    // 1. Gather all active sound sources: dedicated audio tracks + video clips with verified audio
+  // 1. Memoize sound sources (audio tracks + video tracks with detected audio)
+  const allSoundSources = useMemo(() => {
     const rawAudioClips = (project.tracks.audio || []).map((a) => ({
       id: a.id,
       sourceClipId: a.id,
@@ -72,10 +70,16 @@ export function usePlayerAudioSync({
         isFromVideo: true,
       }));
 
-    const allSoundSources = [...rawAudioClips, ...videoAudioClips];
+    return [...rawAudioClips, ...videoAudioClips];
+  }, [project.tracks.audio, project.tracks.video, project.aiDenoise, audioPresenceTick]);
+
+  // 2. Audio Elements & Web Audio Nodes lifecycle (only when sound sources change)
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+
     const activeIds = new Set(allSoundSources.map((a) => a.id));
 
-    // Cleanup and release hardware audio decoders for removed tracks
+    // Release hardware audio decoders for removed tracks
     Object.keys(audioElementsRef.current).forEach((id) => {
       if (!activeIds.has(id)) {
         const el = audioElementsRef.current[id];
@@ -101,13 +105,11 @@ export function usePlayerAudioSync({
         }
       } catch {}
     }
-    if (actx && actx.state === "suspended" && isPlaying) {
-      actx.resume().catch(() => {});
-    }
 
     allSoundSources.forEach((clip) => {
       let el = audioElementsRef.current[clip.id];
-      if (!el || el.src !== clip.url) {
+      const existingUrl = (el as any)?._fastartUrl || "";
+      if (!el || existingUrl !== clip.url) {
         if (el) {
           try {
             el.pause();
@@ -117,6 +119,7 @@ export function usePlayerAudioSync({
           delete audioNodesRef.current[clip.id];
         }
         el = new Audio();
+        (el as any)._fastartUrl = clip.url;
         if (clip.url.startsWith("http") && !clip.url.includes("localhost") && !clip.url.includes("127.0.0.1")) {
           el.crossOrigin = "anonymous";
         }
@@ -202,6 +205,30 @@ export function usePlayerAudioSync({
           // If media element source creation fails (e.g. cross-origin restrictions), fallback to direct element volume
         }
       }
+    });
+
+    return () => {
+      // Cleanup on unmount
+      Object.values(audioElementsRef.current).forEach((el: any) => {
+        try {
+          el.pause();
+        } catch {}
+      });
+    };
+  }, [allSoundSources]);
+
+  // 3. High-performance Playback Time Synchronization and Volume/DSP control
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+
+    const actx = audioCtxRef.current;
+    if (actx && actx.state === "suspended" && isPlaying) {
+      actx.resume().catch(() => {});
+    }
+
+    allSoundSources.forEach((clip) => {
+      const el = audioElementsRef.current[clip.id];
+      if (!el) return;
 
       const clipStart = clip.startTime || 0;
       const clipEnd = clipStart + (clip.duration || 0);
@@ -294,7 +321,7 @@ export function usePlayerAudioSync({
         });
       }
     };
-  }, [isPlaying, project.tracks.audio, project.tracks.video, currentTime, project.aiDenoise, audioPresenceTick]);
+  }, [isPlaying, currentTime, allSoundSources]);
 
   return { audioElementsRef };
 }

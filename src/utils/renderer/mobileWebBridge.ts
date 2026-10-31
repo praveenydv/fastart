@@ -118,6 +118,101 @@ export function generateCanvasBridgeHtml(
         }
       }
 
+      function getHslFilter(hsl) {
+        if (!hsl || typeof hsl !== "object") return "";
+        var totalWeight = 0, weightedHue = 0, weightedSat = 0, weightedLum = 0;
+        var dominantSat = 0, dominantLum = 0, dominantHue = 0;
+        var maxSat = 0, maxLum = 0, maxHue = 0;
+        var weights = { red: 0.16, orange: 0.12, yellow: 0.18, green: 0.22, cyan: 0.12, blue: 0.10, purple: 0.05, magenta: 0.05 };
+
+        for (var k in hsl) {
+          var cfg = hsl[k];
+          if (!cfg) continue;
+          var h = cfg.hue || 0, s = cfg.saturation || 0, l = cfg.luminance || 0;
+          if (h === 0 && s === 0 && l === 0) continue;
+          var w = weights[k] || 0.1;
+          totalWeight += w;
+          weightedHue += h * w;
+          weightedSat += s * w;
+          weightedLum += l * w;
+          if (Math.abs(s) > maxSat) { maxSat = Math.abs(s); dominantSat = s; }
+          if (Math.abs(l) > maxLum) { maxLum = Math.abs(l); dominantLum = l; }
+          if (Math.abs(h) > maxHue) { maxHue = Math.abs(h); dominantHue = h; }
+        }
+        if (totalWeight <= 0) return "";
+        var effH = (weightedHue / totalWeight) * 0.65 + dominantHue * 0.35;
+        var effS = (weightedSat / totalWeight) * 0.60 + dominantSat * 0.40;
+        var effL = (weightedLum / totalWeight) * 0.65 + dominantLum * 0.35;
+        var parts = [];
+        if (Math.abs(effH) >= 0.5) parts.push("hue-rotate(" + effH.toFixed(1) + "deg)");
+        var sMult = Math.max(0, Math.min(3.5, 1.0 + (effS / 100) * 1.35));
+        if (Math.abs(sMult - 1.0) >= 0.015) parts.push("saturate(" + sMult.toFixed(3) + ")");
+        var bMult = Math.max(0.15, Math.min(2.5, 1.0 + (effL / 100) * 0.85));
+        if (Math.abs(bMult - 1.0) >= 0.015) parts.push("brightness(" + bMult.toFixed(3) + ")");
+        return parts.join(" ");
+      }
+
+      function interpolateClipKeyframes(clip, curTime, defaultX, defaultY) {
+        var basePos = clip.position || {};
+        var baseT = clip.transform || {};
+        var bx = basePos.x !== undefined ? basePos.x : (baseT.x !== undefined ? baseT.x : defaultX);
+        var by = basePos.y !== undefined ? basePos.y : (baseT.y !== undefined ? baseT.y : defaultY);
+        var bs = clip.scale !== undefined ? clip.scale : (baseT.scale !== undefined ? baseT.scale : 1.0);
+        var br = clip.rotation !== undefined ? clip.rotation : (baseT.rotation !== undefined ? baseT.rotation : 0);
+        var bo = clip.opacity !== undefined ? clip.opacity : 1.0;
+
+        var kfs = clip.keyframes;
+        if (!kfs || !Array.isArray(kfs) || kfs.length === 0) {
+          return { x: bx, y: by, scale: bs, rotation: br, opacity: bo };
+        }
+        var localTime = Math.max(0, curTime - (clip.startTime || 0));
+        var valid = kfs.filter(function(k) { return k && typeof k.time === "number"; }).sort(function(a,b){ return a.time - b.time; });
+        if (valid.length === 0) return { x: bx, y: by, scale: bs, rotation: br, opacity: bo };
+
+        if (localTime <= valid[0].time) {
+          var t0 = valid[0].transform || {};
+          return {
+            x: t0.x !== undefined ? t0.x : bx,
+            y: t0.y !== undefined ? t0.y : by,
+            scale: t0.scale !== undefined ? t0.scale : bs,
+            rotation: t0.rotation !== undefined ? t0.rotation : br,
+            opacity: valid[0].opacity !== undefined ? valid[0].opacity : bo,
+          };
+        }
+        if (localTime >= valid[valid.length - 1].time) {
+          var tLast = valid[valid.length - 1].transform || {};
+          return {
+            x: tLast.x !== undefined ? tLast.x : bx,
+            y: tLast.y !== undefined ? tLast.y : by,
+            scale: tLast.scale !== undefined ? tLast.scale : bs,
+            rotation: tLast.rotation !== undefined ? tLast.rotation : br,
+            opacity: valid[valid.length - 1].opacity !== undefined ? valid[valid.length - 1].opacity : bo,
+          };
+        }
+        for (var i = 0; i < valid.length - 1; i++) {
+          var k1 = valid[i], k2 = valid[i + 1];
+          if (localTime >= k1.time && localTime <= k2.time) {
+            var span = k2.time - k1.time;
+            var progress = span > 0 ? (localTime - k1.time) / span : 0;
+            var ease = progress * progress * (3 - 2 * progress);
+            var t1 = k1.transform || {}, t2 = k2.transform || {};
+            var x1 = t1.x !== undefined ? t1.x : bx, x2 = t2.x !== undefined ? t2.x : bx;
+            var y1 = t1.y !== undefined ? t1.y : by, y2 = t2.y !== undefined ? t2.y : by;
+            var s1 = t1.scale !== undefined ? t1.scale : bs, s2 = t2.scale !== undefined ? t2.scale : bs;
+            var r1 = t1.rotation !== undefined ? t1.rotation : br, r2 = t2.rotation !== undefined ? t2.rotation : br;
+            var o1 = k1.opacity !== undefined ? k1.opacity : bo, o2 = k2.opacity !== undefined ? k2.opacity : bo;
+            return {
+              x: x1 + (x2 - x1) * ease,
+              y: y1 + (y2 - y1) * ease,
+              scale: s1 + (s2 - s1) * ease,
+              rotation: r1 + (r2 - r1) * ease,
+              opacity: o1 + (o2 - o1) * ease,
+            };
+          }
+        }
+        return { x: bx, y: by, scale: bs, rotation: br, opacity: bo };
+      }
+
       // Apply Visual Effect on Canvas Context
       function applyCanvasEffect(eff, time, w, h) {
         const type = (eff.type || "").toLowerCase().replace(/[-_]/g, "");
@@ -360,8 +455,10 @@ export function generateCanvasBridgeHtml(
         for (const vid of activeVideos) {
           ctx.save();
           const el = mediaMap.get(vid.url) || mediaMap.get(vid.id);
-          const filterStr = getCssFilter(vid.filter || vid.effect);
-          if (filterStr !== "none") ctx.filter = filterStr;
+          const baseFilter = getCssFilter(vid.filter || vid.effect);
+          const hslFilter = getHslFilter(vid.hslAdjustments);
+          const combinedFilter = (baseFilter !== "none" ? baseFilter + " " : "") + hslFilter;
+          if (combinedFilter.trim()) ctx.filter = combinedFilter.trim();
 
           const baseScale = vid.scale || vid.transform?.scale || 1.0;
           const posX = vid.transform?.x || 0;
@@ -419,7 +516,9 @@ export function generateCanvasBridgeHtml(
         for (const txt of activeTexts) {
           ctx.save();
           const elapsed = Math.max(0, time - (txt.startTime || 0));
-          const anim = (txt.animation || "none").toLowerCase().replace(/[-_]/g, "");
+          const animRaw = txt.animation || "none";
+          const animStr = typeof animRaw === "string" ? animRaw : (animRaw.preset || animRaw.inPreset || animRaw.loopPreset || "none");
+          const anim = String(animStr || "none").toLowerCase().replace(/[-_]/g, "");
           let animScale = 1.0;
           let animOffsetY = 0;
           if (anim === "bounce" && elapsed < 0.4) {
@@ -430,10 +529,17 @@ export function generateCanvasBridgeHtml(
             animScale = 0.4 + Math.sin((elapsed / 0.4) * (Math.PI / 2)) * 0.6;
           }
 
-          const fontSize = Math.round((txt.fontSize || 38) * (width / 360) * (txt.scale || 1.0) * animScale);
-          const pos = txt.position || { x: 50, y: 50 };
-          const posX = (pos.x / 100) * width;
-          const posY = (pos.y / 100) * height + animOffsetY;
+          const kf = interpolateClipKeyframes(txt, time, 50, 50);
+          const fontSize = Math.round((txt.fontSize || 38) * (width / 360) * kf.scale * animScale);
+          const posX = (kf.x / 100) * width;
+          const posY = (kf.y / 100) * height + animOffsetY;
+
+          ctx.globalAlpha = Math.max(0, Math.min(1, kf.opacity));
+          if (kf.rotation) {
+            ctx.translate(posX, posY);
+            ctx.rotate((kf.rotation * Math.PI) / 180);
+            ctx.translate(-posX, -posY);
+          }
 
           ctx.font = (txt.bold ? "bold " : "") + (txt.italic ? "italic " : "") + fontSize + "px " + (txt.fontFamily || "sans-serif");
           ctx.textAlign = (txt.textAlign || "center").toLowerCase();
@@ -470,12 +576,20 @@ export function generateCanvasBridgeHtml(
         for (const cap of activeCaptions) {
           ctx.save();
           const capText = cap.text || "";
-          const fontSize = Math.round(36 * (width / 360) * (cap.scale || 1.0));
+          const kf = interpolateClipKeyframes(cap, time, 50, 78);
+          const fontSize = Math.round(36 * (width / 360) * kf.scale);
           ctx.font = "800 " + fontSize + "px sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          const posX = width / 2;
-          const posY = height * 0.78;
+          const posX = (kf.x / 100) * width;
+          const posY = (kf.y / 100) * height;
+
+          ctx.globalAlpha = Math.max(0, Math.min(1, kf.opacity));
+          if (kf.rotation) {
+            ctx.translate(posX, posY);
+            ctx.rotate((kf.rotation * Math.PI) / 180);
+            ctx.translate(-posX, -posY);
+          }
 
           // Background pill
           const textMetrics = ctx.measureText(capText);
@@ -499,11 +613,17 @@ export function generateCanvasBridgeHtml(
         // 5. Sticker Overlays
         for (const st of activeStickers) {
           ctx.save();
-          const pos = st.position || { x: 50, y: 50 };
-          const posX = (pos.x / 100) * width;
-          const posY = (pos.y / 100) * height;
-          const stScale = (st.scale || 1.0) * (width / 360);
+          const kf = interpolateClipKeyframes(st, time, 50, 50);
+          const posX = (kf.x / 100) * width;
+          const posY = (kf.y / 100) * height;
+          const stScale = kf.scale * (width / 360);
           const label = st.char || st.name || st.emoji || "★";
+          ctx.globalAlpha = Math.max(0, Math.min(1, kf.opacity));
+          if (kf.rotation) {
+            ctx.translate(posX, posY);
+            ctx.rotate((kf.rotation * Math.PI) / 180);
+            ctx.translate(-posX, -posY);
+          }
           ctx.font = Math.round(54 * stScale) + "px sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";

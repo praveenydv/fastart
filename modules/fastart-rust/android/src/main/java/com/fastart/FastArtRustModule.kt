@@ -2,18 +2,17 @@ package com.fastart
 
 import android.util.Base64
 import android.util.Log
-import com.facebook.react.bridge.*
-import java.util.concurrent.Executors
+import expo.modules.kotlin.functions.Coroutine
+import expo.modules.kotlin.modules.Module
+import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
  * FastArt Native Rust Bridge for Android.
- * Loads the bare-metal compiled libfastart_jni.so library
+ * Uses modern Expo Modules API (Kotlin DSL).
+ * Loads the compiled libfastart_jni.so library if available
  * and exposes SIMD multi-threaded Rust functions directly to React Native JavaScript.
  */
-class FastArtRustModule(private val reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
-
-    private val executor = Executors.newFixedThreadPool(4)
+class FastArtRustModule : Module() {
 
     companion object {
         private const val TAG = "FastArtRust"
@@ -38,76 +37,37 @@ class FastArtRustModule(private val reactContext: ReactApplicationContext) :
         @JvmStatic external fun nativeRenderSnapshot(projectJson: String, timeSec: Double, width: Int, height: Int): ByteArray
     }
 
-    override fun getName(): String = "FastArtRust"
+    override fun definition() = ModuleDefinition {
+        Name("FastArtRust")
 
-    @ReactMethod
-    fun isAvailable(promise: Promise) {
-        promise.resolve(isLoaded)
-    }
-
-    @ReactMethod
-    fun detectBeats(samplesArray: ReadableArray, sampleRate: Int, promise: Promise) {
-        if (!isLoaded) {
-            promise.reject("NATIVE_NOT_LOADED", "Rust native library not loaded")
-            return
+        AsyncFunction("isAvailable") {
+            isLoaded
         }
 
-        executor.execute {
-            try {
-                val size = samplesArray.size()
-                val floatArr = FloatArray(size) { samplesArray.getDouble(it).toFloat() }
-                val jsonResult = nativeDetectBeats(floatArr, sampleRate)
-                promise.resolve(jsonResult)
-            } catch (e: Exception) {
-                promise.reject("BEAT_DETECTION_ERROR", e.message, e)
+        AsyncFunction("detectBeats") Coroutine { samplesArray: List<Double>, sampleRate: Int ->
+            if (!isLoaded) {
+                throw Exception("Rust native library not loaded")
             }
-        }
-    }
-
-    @ReactMethod
-    fun generateWaveform(samplesArray: ReadableArray, buckets: Int, promise: Promise) {
-        if (!isLoaded) {
-            promise.reject("NATIVE_NOT_LOADED", "Rust native library not loaded")
-            return
+            val floatArr = FloatArray(samplesArray.size) { samplesArray[it].toFloat() }
+            nativeDetectBeats(floatArr, sampleRate)
         }
 
-        executor.execute {
-            try {
-                val size = samplesArray.size()
-                val floatArr = FloatArray(size) { samplesArray.getDouble(it).toFloat() }
-                val peaks = nativeGenerateWaveform(floatArr, buckets)
-                val writableArray = Arguments.createArray()
-                for (peak in peaks) {
-                    writableArray.pushDouble(peak.toDouble())
-                }
-                promise.resolve(writableArray)
-            } catch (e: Exception) {
-                promise.reject("WAVEFORM_ERROR", e.message, e)
+        AsyncFunction("generateWaveform") Coroutine { samplesArray: List<Double>, buckets: Int ->
+            if (!isLoaded) {
+                throw Exception("Rust native library not loaded")
             }
-        }
-    }
-
-    @ReactMethod
-    fun renderSnapshot(
-        projectJson: String,
-        timeSec: Double,
-        width: Int,
-        height: Int,
-        promise: Promise
-    ) {
-        if (!isLoaded) {
-            promise.reject("NATIVE_NOT_LOADED", "Rust native library not loaded")
-            return
+            val floatArr = FloatArray(samplesArray.size) { samplesArray[it].toFloat() }
+            val peaks = nativeGenerateWaveform(floatArr, buckets)
+            peaks.map { it.toDouble() }
         }
 
-        executor.execute {
-            try {
-                val pngBytes = nativeRenderSnapshot(projectJson, timeSec, width, height)
-                val base64 = Base64.encodeToString(pngBytes, Base64.NO_WRAP)
-                promise.resolve("data:image/png;base64,$base64")
-            } catch (e: Exception) {
-                promise.reject("RENDER_ERROR", e.message, e)
+        AsyncFunction("renderSnapshot") Coroutine { projectJson: String, timeSec: Double, width: Int, height: Int ->
+            if (!isLoaded) {
+                throw Exception("Rust native library not loaded")
             }
+            val pngBytes = nativeRenderSnapshot(projectJson, timeSec, width, height)
+            val base64 = Base64.encodeToString(pngBytes, Base64.NO_WRAP)
+            "data:image/png;base64,$base64"
         }
     }
 }

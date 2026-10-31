@@ -9,6 +9,7 @@ import {
   STROKE_WIDTH_OPTIONS,
 } from "./textModalConstants";
 import { styles } from "./TextModalStyles";
+import { CustomColorPickerButton } from "../../Common/CustomColorPickerButton";
 
 interface TextStyleTabProps {
   selectedColor: string;
@@ -72,6 +73,15 @@ export default function TextStyleTab({
               </TouchableOpacity>
             );
           })}
+          <CustomColorPickerButton
+            value={selectedColor}
+            presets={COLOR_SWATCHES}
+            onColorChange={setSelectedColor}
+            size={32}
+            shape="circle"
+            style={{ marginRight: 9 }}
+            accessibilityLabel="Pick custom text color"
+          />
         </ScrollView>
       </View>
 
@@ -121,6 +131,15 @@ export default function TextStyleTab({
               </TouchableOpacity>
             );
           })}
+          <CustomColorPickerButton
+            value={selectedBg}
+            presets={BG_SWATCHES}
+            onColorChange={setSelectedBg}
+            size={32}
+            shape="circle"
+            style={{ marginRight: 9 }}
+            accessibilityLabel="Pick custom text background color"
+          />
         </ScrollView>
       </View>
 
@@ -285,6 +304,20 @@ export default function TextStyleTab({
               </TouchableOpacity>
             );
           })}
+          <CustomColorPickerButton
+            value={selectedStrokeColor || "none"}
+            presets={STROKE_COLOR_SWATCHES}
+            onColorChange={(color) => {
+              setSelectedStrokeColor(color);
+              if (!selectedStrokeWidth || selectedStrokeWidth === 0) {
+                setSelectedStrokeWidth(2.5);
+              }
+            }}
+            size={32}
+            shape="circle"
+            style={{ marginRight: 9 }}
+            accessibilityLabel="Pick custom outline color"
+          />
         </ScrollView>
       </View>
     </View>

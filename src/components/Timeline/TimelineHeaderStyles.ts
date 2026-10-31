@@ -11,7 +11,7 @@ export const headerStyles = {
     overflow: "hidden" as any,
   },
   resizeHandleBar: {
-    height: 8,
+    height: 12,
     width: "100%",
     backgroundColor: "#08090E",
     borderTopWidth: 1,
@@ -26,15 +26,17 @@ export const headerStyles = {
   } as any,
   resizeHandleBarActive: {
     backgroundColor: "#131826",
+    borderTopColor: "rgba(0, 242, 254, 0.4)",
   },
   resizeGripPill: {
-    width: 32,
-    height: 2.5,
+    width: 36,
+    height: 3,
     borderRadius: 2,
-    backgroundColor: "#3F3F46",
+    backgroundColor: "#4B5563",
   },
   resizeGripPillActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
+    width: 44,
   },
   timelineBar: {
     height: 32,

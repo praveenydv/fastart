@@ -189,5 +189,28 @@ mod tests {
         assert_eq!(out_rgba[0], 0);
         assert_eq!(out_rgba[1000 * 4 + 3], 255);
     }
+
+    #[test]
+    fn test_hsl_color_grading() {
+        let mut pixels = vec![
+            255, 0, 0, 255,   // Pure Red
+            0, 255, 0, 255,   // Pure Green
+            0, 0, 255, 255,   // Pure Blue
+        ];
+
+        let mut grading = HslColorGrading::default();
+        // Shift red hue by +60 deg -> becomes Yellow
+        grading.red.hue = 60.0;
+        // Desaturate blue completely
+        grading.blue.saturation = -100.0;
+
+        apply_hsl_color_grading_raw(&mut pixels, &grading);
+
+        // Red (px 0) shifted towards yellow: green channel should be significantly elevated
+        assert!(pixels[1] > 200, "Red shifted towards yellow should have green > 200, got {}", pixels[1]);
+
+        // Blue (px 2) desaturated: red and green should rise towards gray
+        assert!(pixels[8] > 50 && pixels[9] > 50, "Desaturated blue should have neutral components, got R:{} G:{}", pixels[8], pixels[9]);
+    }
 }
 

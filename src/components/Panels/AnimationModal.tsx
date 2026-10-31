@@ -21,48 +21,48 @@ export interface AnimationPresetItem {
 }
 
 export const ANIMATION_IN_PRESETS: AnimationPresetItem[] = [
-  { id: 'none', name: 'None', category: 'in', icon: 'close-circle-outline' },
-  { id: 'fade_in', name: 'Fade In', category: 'in', icon: 'arrow-up-circle-outline' },
-  { id: 'zoom_in', name: 'Zoom In', category: 'in', icon: 'expand-outline' },
-  { id: 'zoom_in_2', name: 'Pop Zoom', category: 'in', icon: 'sparkles-outline' },
-  { id: 'slide_right', name: 'Slide Right', category: 'in', icon: 'arrow-forward-outline' },
-  { id: 'slide_left', name: 'Slide Left', category: 'in', icon: 'arrow-back-outline' },
-  { id: 'slide_up', name: 'Slide Up', category: 'in', icon: 'arrow-up-outline' },
-  { id: 'slide_down', name: 'Slide Down', category: 'in', icon: 'arrow-down-outline' },
-  { id: 'spin_in', name: 'Spin In', category: 'in', icon: 'refresh-outline' },
-  { id: 'bounce_in', name: 'Bounce In', category: 'in', icon: 'flash-outline' },
-  { id: 'wipe_right', name: 'Wipe In', category: 'in', icon: 'swap-horizontal-outline' },
-  { id: 'shake_in', name: 'Shake In', category: 'in', icon: 'pulse-outline' },
-  { id: 'blur_in', name: 'Blur In', category: 'in', icon: 'water-outline' },
+  { id: 'none', name: 'None', description: 'No animation', category: 'in', icon: 'close-circle-outline' },
+  { id: 'fade_in', name: 'Fade In', description: 'Smooth opacity reveal', category: 'in', icon: 'arrow-up-circle-outline' },
+  { id: 'zoom_in', name: 'Zoom In', description: 'Punches in from center', category: 'in', icon: 'expand-outline' },
+  { id: 'zoom_in_2', name: 'Pop Zoom', description: 'Spring bounce punch-in', category: 'in', icon: 'sparkles-outline' },
+  { id: 'slide_right', name: 'Slide Right', description: 'Enters from left edge', category: 'in', icon: 'arrow-forward-outline' },
+  { id: 'slide_left', name: 'Slide Left', description: 'Enters from right edge', category: 'in', icon: 'arrow-back-outline' },
+  { id: 'slide_up', name: 'Slide Up', description: 'Rises up from bottom', category: 'in', icon: 'arrow-up-outline' },
+  { id: 'slide_down', name: 'Slide Down', description: 'Drops down from top', category: 'in', icon: 'arrow-down-outline' },
+  { id: 'spin_in', name: 'Spin In', description: 'Rotates 360° into position', category: 'in', icon: 'refresh-outline' },
+  { id: 'bounce_in', name: 'Bounce In', description: 'Elastic rebound entrance', category: 'in', icon: 'flash-outline' },
+  { id: 'wipe_right', name: 'Wipe In', description: 'Linear directional wipe', category: 'in', icon: 'swap-horizontal-outline' },
+  { id: 'shake_in', name: 'Shake In', description: 'Impact tremor entrance', category: 'in', icon: 'pulse-outline' },
+  { id: 'blur_in', name: 'Blur In', description: 'Soft focus into sharp clarity', category: 'in', icon: 'water-outline' },
 ];
 
 export const ANIMATION_OUT_PRESETS: AnimationPresetItem[] = [
-  { id: 'none', name: 'None', category: 'out', icon: 'close-circle-outline' },
-  { id: 'fade_out', name: 'Fade Out', category: 'out', icon: 'arrow-down-circle-outline' },
-  { id: 'zoom_out', name: 'Zoom Out', category: 'out', icon: 'contract-outline' },
-  { id: 'slide_left', name: 'Slide Left', category: 'out', icon: 'arrow-back-outline' },
-  { id: 'slide_right', name: 'Slide Right', category: 'out', icon: 'arrow-forward-outline' },
-  { id: 'slide_down', name: 'Slide Down', category: 'out', icon: 'arrow-down-outline' },
-  { id: 'slide_up', name: 'Slide Up', category: 'out', icon: 'arrow-up-outline' },
-  { id: 'spin_out', name: 'Spin Out', category: 'out', icon: 'refresh-outline' },
-  { id: 'shrink_out', name: 'Shrink', category: 'out', icon: 'remove-circle-outline' },
-  { id: 'wipe_left', name: 'Wipe Out', category: 'out', icon: 'swap-horizontal-outline' },
-  { id: 'shake_out', name: 'Shake Out', category: 'out', icon: 'pulse-outline' },
-  { id: 'dissolve', name: 'Dissolve', category: 'out', icon: 'color-filter-outline' },
+  { id: 'none', name: 'None', description: 'No animation', category: 'out', icon: 'close-circle-outline' },
+  { id: 'fade_out', name: 'Fade Out', description: 'Gradual opacity fade', category: 'out', icon: 'arrow-down-circle-outline' },
+  { id: 'zoom_out', name: 'Zoom Out', description: 'Shrinks into distance', category: 'out', icon: 'contract-outline' },
+  { id: 'slide_left', name: 'Slide Left', description: 'Exits towards left edge', category: 'out', icon: 'arrow-back-outline' },
+  { id: 'slide_right', name: 'Slide Right', description: 'Exits towards right edge', category: 'out', icon: 'arrow-forward-outline' },
+  { id: 'slide_down', name: 'Slide Down', description: 'Drops out of frame', category: 'out', icon: 'arrow-down-outline' },
+  { id: 'slide_up', name: 'Slide Up', description: 'Floats up out of frame', category: 'out', icon: 'arrow-up-outline' },
+  { id: 'spin_out', name: 'Spin Out', description: 'Rotates while shrinking', category: 'out', icon: 'refresh-outline' },
+  { id: 'shrink_out', name: 'Shrink', description: 'Scales down to a point', category: 'out', icon: 'remove-circle-outline' },
+  { id: 'wipe_left', name: 'Wipe Out', description: 'Linear horizontal exit wipe', category: 'out', icon: 'swap-horizontal-outline' },
+  { id: 'shake_out', name: 'Shake Out', description: 'Vibrating impact exit', category: 'out', icon: 'pulse-outline' },
+  { id: 'dissolve', name: 'Dissolve', description: 'Grainy film dissolve exit', category: 'out', icon: 'color-filter-outline' },
 ];
 
 export const ANIMATION_LOOP_PRESETS: AnimationPresetItem[] = [
-  { id: 'none', name: 'None', category: 'loop', icon: 'close-circle-outline' },
-  { id: 'pulse', name: 'Pulse', category: 'loop', icon: 'heart-outline' },
-  { id: 'bounce', name: 'Bounce', category: 'loop', icon: 'flash-outline' },
-  { id: 'float', name: 'Float', category: 'loop', icon: 'cloud-outline' },
-  { id: 'wave', name: 'Wave', category: 'loop', icon: 'water-outline' },
-  { id: 'wobble', name: 'Wobble', category: 'loop', icon: 'radio-outline' },
-  { id: 'pendulum', name: 'Pendulum', category: 'loop', icon: 'timer-outline' },
-  { id: 'swing', name: 'Swing', category: 'loop', icon: 'repeat-outline' },
-  { id: 'heartbeat', name: 'Heartbeat', category: 'loop', icon: 'fitness-outline' },
-  { id: 'zoom_pulse', name: 'Zoom Pulse', category: 'loop', icon: 'expand-outline' },
-  { id: 'jitter', name: 'Jitter', category: 'loop', icon: 'flash-outline' },
+  { id: 'none', name: 'None', description: 'No animation', category: 'loop', icon: 'close-circle-outline' },
+  { id: 'pulse', name: 'Pulse', description: 'Continuous rhythmic scale', category: 'loop', icon: 'heart-outline' },
+  { id: 'bounce', name: 'Bounce', description: 'Up and down elastic hop', category: 'loop', icon: 'flash-outline' },
+  { id: 'float', name: 'Float', description: 'Gentle weightless wave', category: 'loop', icon: 'cloud-outline' },
+  { id: 'wave', name: 'Wave', description: 'Playful side-to-side tilt', category: 'loop', icon: 'water-outline' },
+  { id: 'wobble', name: 'Wobble', description: 'Elastic wobble shake', category: 'loop', icon: 'radio-outline' },
+  { id: 'pendulum', name: 'Pendulum', description: 'Clockwise pendulum swing', category: 'loop', icon: 'timer-outline' },
+  { id: 'swing', name: 'Swing', description: 'Dynamic rotational swing', category: 'loop', icon: 'repeat-outline' },
+  { id: 'heartbeat', name: 'Heartbeat', description: 'Double impact pulse thump', category: 'loop', icon: 'fitness-outline' },
+  { id: 'zoom_pulse', name: 'Zoom Pulse', description: 'Bass-drop zoom punch', category: 'loop', icon: 'expand-outline' },
+  { id: 'jitter', name: 'Jitter', description: 'High-energy chaotic vibration', category: 'loop', icon: 'flash-outline' },
 ];
 
 export const ANIMATION_COMBO_PRESETS = ANIMATION_LOOP_PRESETS;
@@ -188,10 +188,21 @@ export default function AnimationModal({
   };
 
   // Parse existing animation config
-  const existingAnim = selectedClip?.animation;
-  const inPreset = existingAnim?.inPreset || (existingAnim?.type === 'in' ? existingAnim?.preset : (existingAnim?.preset?.endsWith('_in') ? existingAnim.preset : 'none'));
-  const outPreset = existingAnim?.outPreset || (existingAnim?.type === 'out' ? existingAnim?.preset : (existingAnim?.preset?.endsWith('_out') ? existingAnim.preset : 'none'));
-  const loopPreset = existingAnim?.loopPreset || existingAnim?.comboPreset || (existingAnim?.type === 'loop' || existingAnim?.type === 'combo' ? existingAnim?.preset : 'none');
+  const rawAnim = selectedClip?.animation;
+  const existingAnim = typeof rawAnim === 'object' && rawAnim !== null
+    ? rawAnim
+    : (typeof rawAnim === 'string' && rawAnim !== 'none'
+        ? {
+            preset: rawAnim,
+            inPreset: rawAnim.endsWith('_in') ? rawAnim : undefined,
+            outPreset: rawAnim.endsWith('_out') ? rawAnim : undefined,
+            loopPreset: (!rawAnim.endsWith('_in') && !rawAnim.endsWith('_out')) ? rawAnim : undefined,
+          }
+        : undefined);
+
+  const inPreset = existingAnim?.inPreset || (existingAnim?.type === 'in' ? existingAnim?.preset : (existingAnim?.preset?.endsWith('_in') ? existingAnim.preset : undefined));
+  const outPreset = existingAnim?.outPreset || (existingAnim?.type === 'out' ? existingAnim?.preset : (existingAnim?.preset?.endsWith('_out') ? existingAnim.preset : undefined));
+  const loopPreset = existingAnim?.loopPreset || existingAnim?.comboPreset || (existingAnim?.type === 'loop' || existingAnim?.type === 'combo' ? existingAnim?.preset : (!inPreset && !outPreset && existingAnim?.preset ? existingAnim.preset : undefined));
 
   const [inDuration, setInDuration] = useState<number>(existingAnim?.inDuration || existingAnim?.duration || 0.5);
   const [outDuration, setOutDuration] = useState<number>(existingAnim?.outDuration || existingAnim?.duration || 0.5);
@@ -304,7 +315,8 @@ export default function AnimationModal({
     const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
     if (idx < 0) return;
 
-    const currentAnim = targetList[idx].animation || {};
+    const currentRaw = targetList[idx].animation;
+    const currentAnim = typeof currentRaw === 'object' && currentRaw !== null ? currentRaw : {};
     targetList[idx] = {
       ...targetList[idx],
       animation: {
@@ -494,6 +506,9 @@ export default function AnimationModal({
                 numberOfLines={1}
               >
                 {item.name}
+              </Text>
+              <Text style={styles.animDescText} numberOfLines={1}>
+                {item.description || item.category}
               </Text>
             </TouchableOpacity>
           );
@@ -776,5 +791,21 @@ const styles = StyleSheet.create({
   presetNameActive: {
     color: '#00F2FE',
     fontWeight: '700',
+  },
+  animDescText: {
+    color: '#64748B',
+    fontSize: 7.5,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 1,
+    width: '100%',
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          display: 'block',
+        } as any)
+      : {}),
   },
 });

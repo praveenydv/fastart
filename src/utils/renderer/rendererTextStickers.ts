@@ -2,6 +2,7 @@ import { StickerClip, TextClip, CaptionClip } from "../../types/project";
 import { applyMotionTracking } from "./rendererEffects";
 import { generateWordTimings } from "../srtParser";
 import { evaluateClipAnimation } from "../animationEngine";
+import { getInterpolatedTransform } from "../keyframeEngine";
 
 export function drawSticker(
   ctx: CanvasRenderingContext2D,
@@ -18,8 +19,11 @@ export function drawSticker(
     stk.duration,
     stk.motionTrack,
   );
-  const px = (stk.position?.x ?? 50) * (w / 100) + motion.dx;
-  const py = (stk.position?.y ?? 50) * (h / 100) + motion.dy;
+
+  // Authoritative Keyframe Interpolation for Stickers
+  const kf = getInterpolatedTransform(stk, time, "sticker");
+  const px = (kf.x ?? 50) * (w / 100) + motion.dx;
+  const py = (kf.y ?? 50) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - stk.startTime);
   const duration = Math.max(0.5, stk.duration || 3.0);
 
@@ -33,15 +37,36 @@ export function drawSticker(
   );
 
   const animScale = (animEval.scaleX + animEval.scaleY) / 2;
-  const scale = (stk.scale || 1.0) * motion.dScale * animScale;
-  const rot = (stk.rotation || 0) + motion.dRot + animEval.rotation;
-  const alpha = animEval.alpha;
+  const scale = (kf.scale ?? 1.0) * (kf.scaleX ?? 1.0) * motion.dScale * animScale;
+  const rot = (kf.rotation ?? 0) + motion.dRot + animEval.rotation;
+  const alpha = (kf.opacity ?? 1.0) * animEval.alpha;
   const offsetX = animEval.offsetX;
   const offsetY = animEval.offsetY;
 
   ctx.translate(px + offsetX, py + offsetY);
   ctx.rotate((rot * Math.PI) / 180);
-  ctx.scale(scale, scale);
+
+  // 3D rotation / skew / perspective
+  const rotX = kf.rotateX || 0;
+  const rotY = kf.rotateY || 0;
+  const skewX = kf.skewX || 0;
+  const skewY = kf.skewY || 0;
+  if (rotX !== 0 || rotY !== 0 || skewX !== 0 || skewY !== 0) {
+    const radRotX = (rotX * Math.PI) / 180;
+    const radRotY = (rotY * Math.PI) / 180;
+    const radSkewX = (skewX * Math.PI) / 180;
+    const radSkewY = (skewY * Math.PI) / 180;
+    const cosX = Math.max(0.05, Math.cos(radRotX));
+    const cosY = Math.max(0.05, Math.cos(radRotY));
+    ctx.scale(cosY, cosX);
+    if (skewX !== 0 || skewY !== 0) {
+      ctx.transform(1, Math.tan(radSkewY), Math.tan(radSkewX), 1, 0, 0);
+    }
+  }
+
+  const flipFactorX = kf.flipX ? -1 : 1;
+  const flipFactorY = kf.flipY ? -1 : 1;
+  ctx.scale(scale * flipFactorX, scale * flipFactorY);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
   const charText = stk.char || "🔥";
@@ -102,8 +127,10 @@ export function drawTextOverlay(
     txt.duration,
     txt.motionTrack,
   );
-  const px = (txt.position?.x ?? 50) * (w / 100) + motion.dx;
-  const py = (txt.position?.y ?? 50) * (h / 100) + motion.dy;
+  // Authoritative Keyframe Interpolation for Text
+  const kf = getInterpolatedTransform(txt, time, "text");
+  const px = (kf.x ?? 50) * (w / 100) + motion.dx;
+  const py = (kf.y ?? 50) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - txt.startTime);
   const duration = Math.max(0.5, txt.duration || 3.0);
   const timeLeft = Math.max(0, duration - elapsed);
@@ -119,20 +146,41 @@ export function drawTextOverlay(
 
   let displayText = animEval.displayText ?? (txt.text || "");
   const animScale = (animEval.scaleX + animEval.scaleY) / 2;
-  let scale = (txt.scale || 1.0) * motion.dScale * animScale;
-  let alpha = animEval.alpha;
+  let scale = (kf.scale ?? 1.0) * (kf.scaleX ?? 1.0) * motion.dScale * animScale;
+  let alpha = (kf.opacity ?? 1.0) * animEval.alpha;
   let xOffset = animEval.offsetX;
   let yOffset = animEval.offsetY;
-  let rot = (txt.rotation || 0) + (motion ? motion.dRot : 0) + animEval.rotation;
+  let rot = (kf.rotation ?? 0) + (motion ? motion.dRot : 0) + animEval.rotation;
 
   // When paused in editor, guarantee full visibility and clean frame alignment
   if (!isPlaying && (!txt.animation || txt.animation === "none")) {
-    alpha = 1.0;
+    alpha = kf.opacity ?? 1.0;
   }
 
   ctx.translate(px + xOffset, py + yOffset);
   ctx.rotate((rot * Math.PI) / 180);
-  ctx.scale(scale, scale);
+
+  // 3D rotation / skew / perspective
+  const rotX = kf.rotateX || 0;
+  const rotY = kf.rotateY || 0;
+  const skewX = kf.skewX || 0;
+  const skewY = kf.skewY || 0;
+  if (rotX !== 0 || rotY !== 0 || skewX !== 0 || skewY !== 0) {
+    const radRotX = (rotX * Math.PI) / 180;
+    const radRotY = (rotY * Math.PI) / 180;
+    const radSkewX = (skewX * Math.PI) / 180;
+    const radSkewY = (skewY * Math.PI) / 180;
+    const cosX = Math.max(0.05, Math.cos(radRotX));
+    const cosY = Math.max(0.05, Math.cos(radRotY));
+    ctx.scale(cosY, cosX);
+    if (skewX !== 0 || skewY !== 0) {
+      ctx.transform(1, Math.tan(radSkewY), Math.tan(radSkewX), 1, 0, 0);
+    }
+  }
+
+  const flipFactorX = kf.flipX ? -1 : 1;
+  const flipFactorY = kf.flipY ? -1 : 1;
+  ctx.scale(scale * flipFactorX, scale * flipFactorY);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
   const style = txt.style || {};
@@ -338,9 +386,11 @@ export function drawCaptionOverlay(
     cap.motionTrack,
   );
 
+  // Authoritative Keyframe Interpolation for Captions
+  const kf = getInterpolatedTransform(cap, time, "caption");
   // Default subtitle position is bottom center (y=82) if not specified
-  const px = (cap.position?.x ?? 50) * (w / 100) + motion.dx;
-  const py = (cap.position?.y ?? 82) * (h / 100) + motion.dy;
+  const px = (kf.x ?? 50) * (w / 100) + motion.dx;
+  const py = (kf.y ?? 82) * (h / 100) + motion.dy;
   const elapsed = Math.max(0, time - cap.startTime);
   const duration = Math.max(0.5, cap.duration || 3.0);
   const timeLeft = Math.max(0, duration - elapsed);
@@ -356,15 +406,36 @@ export function drawCaptionOverlay(
   );
 
   const animScale = (animEval.scaleX + animEval.scaleY) / 2;
-  const scale = (cap.scale || 1.0) * motion.dScale * animScale;
-  const alpha = animEval.alpha;
+  const scale = (kf.scale ?? 1.0) * (kf.scaleX ?? 1.0) * motion.dScale * animScale;
+  const alpha = (kf.opacity ?? 1.0) * animEval.alpha;
   const xOffset = animEval.offsetX;
   const yOffset = animEval.offsetY;
 
   ctx.translate(px + xOffset, py + yOffset);
-  const rot = (cap.rotation || 0) + motion.dRot + animEval.rotation;
+  const rot = (kf.rotation ?? 0) + motion.dRot + animEval.rotation;
   ctx.rotate((rot * Math.PI) / 180);
-  ctx.scale(scale, scale);
+
+  // 3D rotation / skew / perspective
+  const rotX = kf.rotateX || 0;
+  const rotY = kf.rotateY || 0;
+  const skewX = kf.skewX || 0;
+  const skewY = kf.skewY || 0;
+  if (rotX !== 0 || rotY !== 0 || skewX !== 0 || skewY !== 0) {
+    const radRotX = (rotX * Math.PI) / 180;
+    const radRotY = (rotY * Math.PI) / 180;
+    const radSkewX = (skewX * Math.PI) / 180;
+    const radSkewY = (skewY * Math.PI) / 180;
+    const cosX = Math.max(0.05, Math.cos(radRotX));
+    const cosY = Math.max(0.05, Math.cos(radRotY));
+    ctx.scale(cosY, cosX);
+    if (skewX !== 0 || skewY !== 0) {
+      ctx.transform(1, Math.tan(radSkewY), Math.tan(radSkewX), 1, 0, 0);
+    }
+  }
+
+  const flipFactorX = kf.flipX ? -1 : 1;
+  const flipFactorY = kf.flipY ? -1 : 1;
+  ctx.scale(scale * flipFactorX, scale * flipFactorY);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
   const style = cap.style || {};

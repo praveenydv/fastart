@@ -71,7 +71,6 @@ export interface ToolbarProps {
   onOpenAudioEffectsModal?: () => void;
   onOpenBlendModal?: () => void;
   onOpenHSLModal?: () => void;
-  onOpenTTSModal?: () => void;
   /** ID of the currently-open modal/panel — used to highlight the active toolbar button */
   activeToolId?: string;
   onCloseModal?: () => void;
@@ -80,7 +79,7 @@ export interface ToolbarProps {
 
 // Global tools for whole video (when no clip is selected) - Matches CapCut
 const ROOT_TOOLS = [
-  { id: "overlay", title: "Overlay", icon: "layers-outline" as const },
+  { id: "media", title: "Media", icon: "folder-open-outline" as const },
   { id: "audio", title: "Audio", icon: "music-note" as const },
   { id: "text", title: "Text", icon: "format-text" as const },
   { id: "captions", title: "Caption", icon: "subtitles-outline" as const },
@@ -155,7 +154,6 @@ const PHOTO_CLIP_TOOLS = [
 
 const TEXT_CLIP_TOOLS = [
   { id: "text", title: "Edit", icon: "format-text" as const },
-  { id: "tts", title: "TTS", icon: "microphone-outline" as const },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "tracking", title: "Track", icon: "crosshairs-gps" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
@@ -167,7 +165,6 @@ const TEXT_CLIP_TOOLS = [
 const CAPTION_CLIP_TOOLS = [
   { id: "captions", title: "Captions", icon: "subtitles-outline" as const },
   { id: "text", title: "Style", icon: "format-text" as const },
-  { id: "tts", title: "TTS", icon: "microphone-outline" as const },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "opacity", title: "Opacity", icon: "opacity" as const },
@@ -248,7 +245,6 @@ export default function Toolbar({
   onOpenAudioEffectsModal,
   onOpenBlendModal,
   onOpenHSLModal,
-  onOpenTTSModal,
   activeToolId,
   onCloseModal,
   onBackToHome,
@@ -313,9 +309,6 @@ export default function Toolbar({
         } else {
           onOpenMediaPicker();
         }
-        break;
-      case "tts":
-        if (onOpenTTSModal) onOpenTTSModal();
         break;
       case "audio":
         if (isVertical && onSelectDesktopTab) {
@@ -460,7 +453,7 @@ export default function Toolbar({
     // Ensure split and adjust are removed from main toolbar
     list = list.filter((t) => t.id !== "split" && t.id !== "adjust");
 
-    // On big screen (isVertical), remove audio and media/overlay because they are already present on the desktop panel!
+    // On big screen (isVertical), remove audio and media/overlay as they are default opened on the desktop panel
     if (isVertical) {
       list = list.filter(
         (t) => t.id !== "audio" && t.id !== "media" && t.id !== "overlay",

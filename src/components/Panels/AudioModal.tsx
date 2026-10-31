@@ -18,9 +18,6 @@ import {
   pickWebMedia,
   persistNativeMediaCopy,
 } from '../../utils/largeMediaStorage';
-import { detectAudioBeats, toggleProjectBeatMarkers } from '../../utils/audioBeatDetector';
-
-import { SFX_ITEMS, SoundEffectItem, previewSoundEffect, createAudioClipFromSfx } from '../../utils/sfxLibrary';
 
 interface AudioModalProps {
   visible: boolean;
@@ -39,9 +36,6 @@ export default function AudioModal({
   onUpdateProject,
   isInline = false,
 }: AudioModalProps) {
-  const [activeTab, setActiveTab] = useState<'device' | 'sfx' | 'beats'>('device');
-  const [sfxCategory, setSfxCategory] = useState<'all' | 'transitions' | 'impacts' | 'social' | 'foley'>('all');
-  const [playingSfxId, setPlayingSfxId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const importedAudioAssets = React.useMemo(() => {
@@ -184,38 +178,7 @@ export default function AudioModal({
     }
   };
 
-  const handlePreviewSfx = (item: SoundEffectItem) => {
-    setPlayingSfxId(item.id);
-    previewSoundEffect(item);
-    setTimeout(() => {
-      setPlayingSfxId(null);
-    }, item.duration * 1000 + 100);
-  };
-
-  const handleAddSfxToTimeline = async (item: SoundEffectItem) => {
-    soundEngine.playSfx('pop');
-    const playhead = project?.currentTime || 0;
-    const clip = await createAudioClipFromSfx(item, playhead);
-    onAddAudio(clip);
-    onClose();
-  };
-
-  const hasBeats = Boolean(project?.beatMarkers && project.beatMarkers.length > 0);
-
-  const handleToggleBeats = async () => {
-    if (!project || !onUpdateProject) return;
-    soundEngine.playSfx('click');
-    const res = await detectAudioBeats(project);
-    const updated = toggleProjectBeatMarkers(project, res.beats);
-    onUpdateProject(updated);
-    soundEngine.playSfx('pop');
-  };
-
   if (!visible) return null;
-
-  const filteredSfx = SFX_ITEMS.filter(
-    (s) => sfxCategory === 'all' || s.category === sfxCategory
-  );
 
   return (
     <View style={styles.inlineWrapper}>
@@ -239,282 +202,106 @@ export default function AudioModal({
           </View>
         )}
 
-        {/* 3-Way Segmented Tabs */}
-        <View style={styles.segmentedTabBar}>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'device' && styles.tabBtnActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('device');
-            }}
-          >
-            <Ionicons
-              name="folder-outline"
-              size={13}
-              color={activeTab === 'device' ? '#00F2FE' : '#A1A1AA'}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === 'device' && styles.tabBtnTextActive,
-              ]}
-            >
-              Device Music
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'sfx' && styles.tabBtnActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('sfx');
-            }}
-          >
-            <Ionicons
-              name="sparkles-outline"
-              size={13}
-              color={activeTab === 'sfx' ? '#00F2FE' : '#A1A1AA'}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === 'sfx' && styles.tabBtnTextActive,
-              ]}
-            >
-              Sound FX
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'beats' && styles.tabBtnActive]}
-            onPress={() => {
-              soundEngine.playSfx('click');
-              setActiveTab('beats');
-            }}
-          >
-            <Ionicons
-              name="pulse-outline"
-              size={13}
-              color={activeTab === 'beats' ? '#00F2FE' : '#A1A1AA'}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === 'beats' && styles.tabBtnTextActive,
-              ]}
-            >
-              Beat Sync
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-          {activeTab === 'device' && (
-            <View style={styles.uploadPromptContainer}>
-              <View style={styles.uploadIconOuterCircle}>
-                <View style={styles.uploadIconInnerCircle}>
-                  <Ionicons name="musical-notes" size={28} color="#00F2FE" />
-                </View>
-              </View>
+          {/* Full-Width Import Action Button */}
+          <TouchableOpacity
+            style={styles.fullWidthUploadButton}
+            onPress={handleDeviceAudioUpload}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#00F2FE" />
+            ) : (
+              <Ionicons name="musical-notes-outline" size={16} color="#00F2FE" />
+            )}
+            <Text style={styles.fullWidthUploadButtonText}>
+              {isLoading ? 'Importing Audio...' : '+ Import Audio File'}
+            </Text>
+          </TouchableOpacity>
 
-              <Text style={styles.uploadMainTitle}>Upload Audio From Device</Text>
-              <Text style={styles.uploadSubtitle}>
-                Select MP3, WAV, M4A, AAC, or FLAC audio files from your device to add directly to your project.
-              </Text>
-
-              {/* Supported Format Pills */}
-              <View style={styles.formatPillsRow}>
-                <View style={styles.formatPill}>
-                  <Ionicons name="musical-note" size={12} color="#00F2FE" />
-                  <Text style={styles.formatPillText}>MP3 / WAV</Text>
-                </View>
-                <View style={styles.formatPill}>
-                  <Ionicons name="musical-note" size={12} color="#00F2FE" />
-                  <Text style={styles.formatPillText}>M4A / AAC / FLAC</Text>
-                </View>
-              </View>
-
-              {/* Primary Direct Upload Button */}
-              <TouchableOpacity
-                style={styles.primaryUploadButton}
-                onPress={handleDeviceAudioUpload}
-                disabled={isLoading}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#08090E" />
-                ) : (
-                  <Ionicons name="cloud-upload" size={16} color="#08090E" />
-                )}
-                <Text style={styles.primaryUploadButtonText}>
-                  {isLoading ? 'Importing Audio...' : 'Choose Audio File'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Section: Already Imported Project Audio */}
-              {importedAudioAssets.length > 0 && (
-                <View style={styles.importedSection}>
-                  <View style={styles.importedHeaderRow}>
-                    <Text style={styles.importedSectionTitle}>IMPORTED IN PROJECT</Text>
-                    <Text style={styles.importedCountText}>{importedAudioAssets.length} items</Text>
-                  </View>
-
-                  <View style={styles.importedList}>
-                    {importedAudioAssets.map((asset, idx) => (
-                      <View key={asset.id || idx} style={styles.importedAudioCard}>
-                        <View style={styles.importedAudioIconBox}>
-                          <Ionicons name="musical-note" size={18} color="#00F2FE" />
-                        </View>
-                        <View style={styles.importedAudioInfo}>
-                          <Text style={styles.importedAudioTitle} numberOfLines={1}>
-                            {asset.title || asset.name || `Audio ${idx + 1}`}
-                          </Text>
-                          <Text style={styles.importedAudioSubtitle}>
-                            {asset.duration ? `${asset.duration.toFixed(1)}s` : '0.0s'} • Audio Asset
-                          </Text>
-                        </View>
-
-                        <TouchableOpacity
-                          style={styles.importedAddBtn}
-                          onPress={() => {
-                            soundEngine.playSfx("pop");
-                            onAddAudio({
-                              id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                              sourceMediaId: asset.sourceMediaId || asset.id,
-                              title: asset.title || asset.name || "Audio Clip",
-                              url: asset.url,
-                              startTime: 0,
-                              duration: asset.duration || 5,
-                              volume: 1.0,
-                              fadeIn: 0,
-                              fadeOut: 0,
-                            });
-                            onClose();
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="add" size={14} color="#00F2FE" />
-                          <Text style={styles.importedAddBtnText}>Add</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
+          {/* Section: Project Imported Audio */}
+          <View style={styles.importedSection}>
+            <View style={styles.importedHeaderRow}>
+              <Text style={styles.importedSectionTitle}>PROJECT AUDIO</Text>
+              <Text style={styles.importedCountText}>{importedAudioAssets.length} tracks</Text>
             </View>
-          )}
 
-          {activeTab === 'sfx' && (
-            <View style={styles.sfxContainer}>
-              {/* Category Filter Pills */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.sfxFilterScroll}
-                contentContainerStyle={styles.sfxFilterRow}
-              >
-                {[
-                  { id: 'all', label: 'All FX' },
-                  { id: 'transitions', label: 'Transitions' },
-                  { id: 'impacts', label: 'Impacts' },
-                  { id: 'social', label: 'Memes & Social' },
-                  { id: 'foley', label: 'Foley & Clicks' },
-                ].map((cat) => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[
-                      styles.sfxFilterPill,
-                      sfxCategory === cat.id && styles.sfxFilterPillActive,
-                    ]}
-                    onPress={() => {
-                      soundEngine.playSfx('click');
-                      setSfxCategory(cat.id as any);
-                    }}
+            {importedAudioAssets.length === 0 ? (
+              <View style={styles.emptyStateBox}>
+                <Ionicons name="musical-note-outline" size={24} color="#64748B" />
+                <Text style={styles.emptyStateTitle}>No audio tracks imported yet</Text>
+                <Text style={styles.emptyStateSubtitle}>Click + Import above to add audio files</Text>
+              </View>
+            ) : (
+              <View style={styles.importedList}>
+                {importedAudioAssets.map((asset, idx) => (
+                  <View
+                    key={asset.id || idx}
+                    style={[styles.importedAudioCard, Platform.OS === 'web' && ({ cursor: 'grab' } as any)]}
+                    {...(Platform.OS === 'web'
+                      ? {
+                          draggable: true,
+                          onDragStart: (e: any) => {
+                            const payload = {
+                              type: 'audio',
+                              clip: {
+                                id: `audio-${Date.now()}`,
+                                sourceMediaId: asset.sourceMediaId || asset.id,
+                                title: asset.title || asset.name || "Audio Clip",
+                                url: asset.url,
+                                startTime: 0,
+                                duration: asset.duration || 5,
+                                volume: 1.0,
+                                fadeIn: 0,
+                                fadeOut: 0,
+                              },
+                            };
+                            e.dataTransfer?.setData('application/fastart-clip', JSON.stringify(payload));
+                            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+                          },
+                        }
+                      : {})}
                   >
-                    <Text
-                      style={[
-                        styles.sfxFilterText,
-                        sfxCategory === cat.id && styles.sfxFilterTextActive,
-                      ]}
-                    >
-                      {cat.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {/* SFX Cards List */}
-              <View style={styles.sfxList}>
-                {filteredSfx.map((sfx) => (
-                  <View key={sfx.id} style={styles.sfxCard}>
-                    <TouchableOpacity
-                      style={styles.sfxPlayBtn}
-                      onPress={() => handlePreviewSfx(sfx)}
-                    >
-                      <Ionicons
-                        name={playingSfxId === sfx.id ? 'volume-high' : 'play'}
-                        size={16}
-                        color={sfx.color}
-                      />
-                    </TouchableOpacity>
-
-                    <View style={styles.sfxInfo}>
-                      <Text style={styles.sfxName}>{sfx.name}</Text>
-                      <Text style={styles.sfxMeta}>
-                        {sfx.categoryLabel} • {sfx.duration}s
+                    <View style={styles.importedAudioIconBox}>
+                      <Ionicons name="musical-note" size={16} color="#00F2FE" />
+                    </View>
+                    <View style={styles.importedAudioInfo}>
+                      <Text style={styles.importedAudioTitle} numberOfLines={1}>
+                        {asset.title || asset.name || `Audio ${idx + 1}`}
+                      </Text>
+                      <Text style={styles.importedAudioSubtitle}>
+                        {asset.duration ? `${asset.duration.toFixed(1)}s` : '0.0s'} • Audio Track
                       </Text>
                     </View>
 
                     <TouchableOpacity
-                      style={styles.sfxAddBtn}
-                      onPress={() => handleAddSfxToTimeline(sfx)}
+                      style={styles.importedAddBtn}
+                      onPress={() => {
+                        soundEngine.playSfx("pop");
+                        onAddAudio({
+                          id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          sourceMediaId: asset.sourceMediaId || asset.id,
+                          title: asset.title || asset.name || "Audio Clip",
+                          url: asset.url,
+                          startTime: 0,
+                          duration: asset.duration || 5,
+                          volume: 1.0,
+                          fadeIn: 0,
+                          fadeOut: 0,
+                        });
+                        onClose();
+                      }}
+                      activeOpacity={0.7}
                     >
-                      <Ionicons name="add" size={14} color="#00F2FE" />
-                      <Text style={styles.sfxAddText}>Add</Text>
+                      <Ionicons name="add" size={13} color="#000000" />
+                      <Text style={styles.importedAddBtnText}>Add</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
               </View>
-            </View>
-          )}
-
-          {activeTab === 'beats' && (
-            <View style={styles.beatsTabContent}>
-              <View style={styles.uploadIconOuterCircle}>
-                <View style={styles.uploadIconInnerCircle}>
-                  <Ionicons name="pulse" size={28} color="#00F2FE" />
-                </View>
-              </View>
-
-              <Text style={styles.uploadMainTitle}>AI Beat Snapping</Text>
-              <Text style={styles.uploadSubtitle}>
-                Automatically analyze tempo across all active audio tracks and place magnetic amber snap markers along the timeline ruler.
-              </Text>
-
-              <TouchableOpacity
-                onPress={handleToggleBeats}
-                style={[
-                  styles.primaryUploadButton,
-                  hasBeats && styles.beatsActiveBtn,
-                ]}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={hasBeats ? 'checkmark-circle' : 'pulse'}
-                  size={16}
-                  color={hasBeats ? '#FFFFFF' : '#08090E'}
-                />
-                <Text
-                  style={[
-                    styles.primaryUploadButtonText,
-                    hasBeats && styles.beatsActiveBtnText,
-                  ]}
-                >
-                  {hasBeats ? 'Beat Markers Active (Tap to Disable)' : 'Detect Audio Beats (124 BPM)'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            )}
+          </View>
         </ScrollView>
       </View>
     </View>
@@ -566,244 +353,52 @@ const styles = StyleSheet.create({
   },
   sheetBody: {
     paddingHorizontal: 12,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
-  uploadPromptContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 10,
-  },
-  uploadIconOuterCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  uploadIconInnerCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(0, 242, 254, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadMainTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  uploadSubtitle: {
-    color: '#64748B',
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-    maxWidth: 280,
-    marginBottom: 14,
-  },
-  formatPillsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 16,
-  },
-  formatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#131826',
-    borderWidth: 1,
-    borderColor: '#1F2637',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  formatPillText: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  primaryUploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#00F2FE',
-    borderRadius: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 20,
+  fullWidthUploadButton: {
     width: '100%',
-    maxWidth: 280,
-  },
-  primaryUploadButtonText: {
-    color: '#08090E',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  beatsUtilityBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#131826',
-    borderWidth: 1,
-    borderColor: '#1F2637',
-  },
-  beatsUtilityBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
-  },
-  beatsUtilityBtnText: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
-  },
-  beatsUtilityBtnTextActive: {
-    color: '#00F2FE',
-    fontWeight: '700',
-  },
-  segmentedTabBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#0B0D13',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
     gap: 8,
-  },
-  tabBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 7,
-    borderRadius: 8,
     backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#1F2637',
-    gap: 5,
-  },
-  tabBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
-  },
-  tabBtnText: {
-    fontSize: 11,
-    color: '#A1A1AA',
-    fontWeight: '600',
-  },
-  tabBtnTextActive: {
-    color: '#00F2FE',
-    fontWeight: '700',
-  },
-  sfxContainer: {
-    paddingBottom: 20,
-  },
-  sfxFilterScroll: {
+    borderColor: 'rgba(0, 242, 254, 0.4)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
-  sfxFilterRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  sfxFilterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: '#131826',
-    borderWidth: 1,
-    borderColor: '#1F2637',
-  },
-  sfxFilterPillActive: {
-    backgroundColor: '#00F2FE',
-    borderColor: '#00F2FE',
-  },
-  sfxFilterText: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  sfxFilterTextActive: {
-    color: '#08090E',
-    fontWeight: '700',
-  },
-  sfxList: {
-    gap: 8,
-  },
-  sfxCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#131826',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#1F2637',
-    gap: 10,
-  },
-  sfxPlayBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sfxInfo: {
-    flex: 1,
-  },
-  sfxName: {
+  fullWidthUploadButtonText: {
+    color: '#00F2FE',
     fontSize: 12.5,
     fontWeight: '700',
-    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
-  sfxMeta: {
-    fontSize: 10,
-    color: '#71717A',
-    marginTop: 2,
-  },
-  sfxAddBtn: {
-    flexDirection: 'row',
+  emptyStateBox: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.3)',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 3,
+    borderColor: '#1F2637',
+    borderStyle: 'dashed',
+    gap: 4,
   },
-  sfxAddText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#00F2FE',
+  emptyStateTitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
-  beatsTabContent: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 12,
-  },
-  beatsActiveBtn: {
-    backgroundColor: '#10B981',
-  },
-  beatsActiveBtnText: {
-    color: '#FFFFFF',
+  emptyStateSubtitle: {
+    color: '#64748B',
+    fontSize: 10.5,
   },
   importedSection: {
-    marginTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#1F2637',
-    paddingTop: 16,
+    marginTop: 6,
     width: '100%',
   },
   importedHeaderRow: {

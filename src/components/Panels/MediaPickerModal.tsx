@@ -222,60 +222,61 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
       )}
 
       <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
-        {/* Direct Device Upload Box */}
-        <View style={styles.uploadPromptContainer}>
-          <View style={styles.uploadIconOuterCircle}>
-            <View style={styles.uploadIconInnerCircle}>
-              <Ionicons name="cloud-upload" size={32} color="#00F2FE" />
-            </View>
-          </View>
-
-          <Text style={styles.uploadMainTitle}>Upload From Device</Text>
-          <Text style={styles.uploadSubtitle}>
-            Select video or photo from your device library to add directly to your project timeline.
+        {/* Full-Width Import Action Button */}
+        <TouchableOpacity
+          style={styles.fullWidthUploadButton}
+          onPress={handleDeviceUpload}
+          disabled={isLoading}
+          activeOpacity={0.8}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#00F2FE" />
+          ) : (
+            <Ionicons name="cloud-upload-outline" size={16} color="#00F2FE" />
+          )}
+          <Text style={styles.fullWidthUploadButtonText}>
+            {isLoading ? 'Importing Media...' : '+ Import Video / Photo'}
           </Text>
+        </TouchableOpacity>
 
-          {/* Supported Format Pills */}
-          <View style={styles.formatPillsRow}>
-            <View style={styles.formatPill}>
-              <Ionicons name="videocam-outline" size={11} color="#00F2FE" />
-              <Text style={styles.formatPillText}>MP4 / MOV / WebM</Text>
-            </View>
-            <View style={styles.formatPill}>
-              <Ionicons name="image-outline" size={11} color="#00F2FE" />
-              <Text style={styles.formatPillText}>JPG / PNG / WebP</Text>
-            </View>
+        {/* Section: Project Assets */}
+        <View style={styles.importedSection}>
+          <View style={styles.importedHeaderRow}>
+            <Text style={styles.importedSectionTitle}>PROJECT ASSETS</Text>
+            <Text style={styles.importedCountText}>{importedAssets.length} items</Text>
           </View>
 
-          {/* Primary Direct Upload Button */}
-          <TouchableOpacity
-            style={styles.primaryUploadButton}
-            onPress={handleDeviceUpload}
-            disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#08090E" />
-            ) : (
-              <Ionicons name="add-circle" size={16} color="#08090E" />
-            )}
-            <Text style={styles.primaryUploadButtonText}>
-              {isLoading ? 'Importing Media...' : 'Choose File From Device'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Section: Already Imported Project Media */}
-        {importedAssets.length > 0 && (
-          <View style={styles.importedSection}>
-            <View style={styles.importedHeaderRow}>
-              <Text style={styles.importedSectionTitle}>IMPORTED IN PROJECT</Text>
-              <Text style={styles.importedCountText}>{importedAssets.length} items</Text>
+          {importedAssets.length === 0 ? (
+            <View style={styles.emptyStateBox}>
+              <Ionicons name="film-outline" size={24} color="#64748B" />
+              <Text style={styles.emptyStateTitle}>No media imported yet</Text>
+              <Text style={styles.emptyStateSubtitle}>Click + Import above to add video or photos</Text>
             </View>
-
+          ) : (
             <View style={styles.importedGrid}>
               {importedAssets.map((clip, idx) => (
-                <View key={clip.id || idx} style={styles.importedCard}>
+                <View
+                  key={clip.id || idx}
+                  style={[styles.importedCard, Platform.OS === 'web' && ({ cursor: 'grab' } as any)]}
+                  {...(Platform.OS === 'web'
+                    ? {
+                        draggable: true,
+                        onDragStart: (e: any) => {
+                          const payload = {
+                            type: 'media',
+                            clip: {
+                              ...clip,
+                              id: `clip-${Date.now()}`,
+                              sourceMediaId: clip.sourceMediaId || clip.id,
+                              duration: clip.duration || 4.0,
+                            },
+                          };
+                          e.dataTransfer?.setData('application/fastart-clip', JSON.stringify(payload));
+                          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+                        },
+                      }
+                    : {})}
+                >
                   <View style={styles.importedThumbBox}>
                     {clip.thumbnail ? (
                       <Image source={{ uri: clip.thumbnail }} style={styles.importedThumbImg} />
@@ -283,7 +284,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                       <View style={styles.importedThumbFallback}>
                         <Ionicons
                           name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
-                          size={20}
+                          size={18}
                           color="#00F2FE"
                         />
                       </View>
@@ -303,7 +304,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                       <Text style={styles.importedTypeTag}>
                         {clip.type === 'photo' ? 'PHOTO' : 'VIDEO'}
                       </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         {onDeleteMedia && (
                           <TouchableOpacity
                             style={styles.importedDeleteBtn}
@@ -340,8 +341,8 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                 </View>
               ))}
             </View>
-          </View>
-        )}
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -426,98 +427,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetBody: {
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-  },
-  uploadPromptContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
     paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  uploadIconOuterCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(0, 242, 254, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  uploadIconInnerCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadMainTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  uploadSubtitle: {
-    color: '#94A3B8',
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-    maxWidth: 280,
-    marginBottom: 16,
-  },
-  formatPillsRow: {
+  fullWidthUploadButton: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    marginBottom: 20,
-  },
-  formatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
     backgroundColor: '#131826',
     borderWidth: 1,
-    borderColor: '#1F2637',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  formatPillText: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  primaryUploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#00F2FE',
+    borderColor: 'rgba(0, 242, 254, 0.4)',
     borderRadius: 8,
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    width: '100%',
-    maxWidth: 280,
-    shadowColor: '#00F2FE',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
-  primaryUploadButtonText: {
-    color: '#08090E',
+  fullWidthUploadButtonText: {
+    color: '#00F2FE',
     fontSize: 12.5,
-    fontWeight: '800',
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  emptyStateBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1F2637',
+    borderStyle: 'dashed',
+    gap: 4,
+  },
+  emptyStateTitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  emptyStateSubtitle: {
+    color: '#64748B',
+    fontSize: 10.5,
   },
   importedSection: {
-    marginTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#1F2637',
-    paddingTop: 16,
+    marginTop: 6,
   },
   importedHeaderRow: {
     flexDirection: 'row',

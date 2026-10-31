@@ -283,8 +283,8 @@ export class VideoRenderer {
     drawLoadingPreview(ctx, clip, localTime, w, h, hasError);
   }
 
-  applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: string, customLut?: any) {
-    applyColorFilter(ctx, filterId, customLut);
+  applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: string, customLut?: any, hslAdjustments?: any) {
+    applyColorFilter(ctx, filterId, customLut, hslAdjustments);
   }
 
   drawClipWithCutout(
@@ -517,7 +517,7 @@ export class VideoRenderer {
           // 1. Check currently active video elements (skip clips with cutout enabled)
           for (const vid of activeVideos) {
             if (vid.cutout?.enabled) continue;
-            const el = this.videoElements.get(vid.url);
+            const el = this.videoElements.get(vid.id) || this.videoElements.get(vid.url);
             if (el) {
               if (el instanceof HTMLVideoElement && (el.readyState >= 1 || el.videoWidth > 0)) {
                 media = el;
@@ -538,7 +538,7 @@ export class VideoRenderer {
           if (!media && videoClips.length > 0) {
             for (const vid of videoClips) {
               if (vid.cutout?.enabled) continue;
-              const el = this.videoElements.get(vid.url);
+              const el = this.videoElements.get(vid.id) || this.videoElements.get(vid.url);
               if (el) {
                 if (el instanceof HTMLVideoElement && (el.readyState >= 1 || el.videoWidth > 0)) {
                   media = el;
@@ -681,6 +681,8 @@ export class VideoRenderer {
                   mask: transientOverride!.mask !== undefined ? transientOverride!.mask : (item.clip.transform?.mask || item.clip.mask),
                 },
                 mask: transientOverride!.mask !== undefined ? transientOverride!.mask : (item.clip.mask || item.clip.transform?.mask),
+                keyframes: undefined,
+                maskKeyframes: undefined,
               }
             : {
                 ...item.clip,
@@ -695,6 +697,7 @@ export class VideoRenderer {
               position: { x: transientOverride!.x, y: transientOverride!.y },
               scale: transientOverride!.scale,
               rotation: transientOverride!.rotation,
+              keyframes: undefined,
             }
           : item.clip;
         this.drawCaptionOverlay(ctx, clipToDraw, time, w, h, isPlaying);
@@ -705,6 +708,7 @@ export class VideoRenderer {
               position: { x: transientOverride!.x, y: transientOverride!.y },
               scale: transientOverride!.scale,
               rotation: transientOverride!.rotation,
+              keyframes: undefined,
             }
           : item.clip;
         this.drawTextOverlay(ctx, clipToDraw, time, w, h, isPlaying);
@@ -715,6 +719,7 @@ export class VideoRenderer {
               position: { x: transientOverride!.x, y: transientOverride!.y },
               scale: transientOverride!.scale,
               rotation: transientOverride!.rotation,
+              keyframes: undefined,
             }
           : item.clip;
         this.drawSticker(ctx, clipToDraw, time, w, h);

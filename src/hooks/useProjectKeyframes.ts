@@ -8,6 +8,7 @@ import {
   findMaskKeyframeAtTime,
   getInterpolatedTransform,
   getInterpolatedMask,
+  updateClipInProject,
 } from "../utils/keyframeEngine";
 
 interface UseProjectKeyframesParams {
@@ -23,14 +24,6 @@ interface UseProjectKeyframesParams {
   updateProjectWithHistory: (proj: any) => void;
   openModal: (modal: string) => void;
 }
-
-const getTrackKey = (type: string): "video" | "audio" | "text" | "stickers" | "effects" => {
-  if (type === "sticker" || type === "stickers") return "stickers";
-  if (type === "effect" || type === "effects") return "effects";
-  if (type === "text" || type === "texts") return "text";
-  if (type === "audio") return "audio";
-  return "video"; // video, photo, etc.
-};
 
 export function useProjectKeyframes({
   project,
@@ -198,28 +191,28 @@ export function useProjectKeyframes({
 
     updatedMaskKfs = cleanAndSortMaskKeyframes(updatedMaskKfs);
 
-    const videoList = [...(project?.tracks?.video || [])];
-    const idx = videoList.findIndex((c) => c.id === targetId);
-    if (idx >= 0) {
-      const updatedMask = {
-        ...(videoList[idx].mask || {}),
-        keyframes: updatedMaskKfs,
-      } as MaskConfig;
-
-      videoList[idx] = {
-        ...videoList[idx],
-        maskKeyframes: updatedMaskKfs,
-        mask: updatedMask,
-        transform: {
-          ...(videoList[idx].transform || {}),
-          mask: updatedMask,
+    if (project && targetId) {
+      const updatedProject = updateClipInProject(
+        project,
+        targetId,
+        (clip) => {
+          const updatedMask = {
+            ...(clip.mask || {}),
+            keyframes: updatedMaskKfs,
+          } as MaskConfig;
+          return {
+            ...clip,
+            maskKeyframes: updatedMaskKfs,
+            mask: updatedMask,
+            transform: {
+              ...(clip.transform || {}),
+              mask: updatedMask,
+            },
+          };
         },
-      };
-
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...(project?.tracks || {}), video: videoList },
-      });
+        "video",
+      );
+      updateProjectWithHistory(updatedProject);
     }
 
     return { action: actionType, time: activeTime };
@@ -236,60 +229,60 @@ export function useProjectKeyframes({
   ]);
 
   const handleDeleteMaskKeyframeAtTime = useCallback((time: number) => {
-    if (!selectedClip || !project) return;
+    if (!selectedClip || !project || !selectedClipId) return;
     const rawMaskKfs = cleanAndSortMaskKeyframes(
       selectedClip.maskKeyframes || selectedClip.mask?.keyframes || [],
     );
     const updated = cleanAndSortMaskKeyframes(
       rawMaskKfs.filter((k) => Math.abs(k.time - time) >= 0.12),
     );
-    const videoList = [...(project.tracks.video || [])];
-    const idx = videoList.findIndex((c) => c.id === selectedClipId);
-    if (idx >= 0) {
-      const updatedMask = {
-        ...(videoList[idx].mask || {}),
-        keyframes: updated,
-      } as MaskConfig;
-      videoList[idx] = {
-        ...videoList[idx],
-        maskKeyframes: updated,
-        mask: updatedMask,
-        transform: {
-          ...(videoList[idx].transform || {}),
+    const updatedProject = updateClipInProject(
+      project,
+      selectedClipId,
+      (clip) => {
+        const updatedMask = {
+          ...(clip.mask || {}),
+          keyframes: updated,
+        } as MaskConfig;
+        return {
+          ...clip,
+          maskKeyframes: updated,
           mask: updatedMask,
-        },
-      };
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, video: videoList },
-      });
-    }
-  }, [selectedClip, project, selectedClipId, updateProjectWithHistory]);
+          transform: {
+            ...(clip.transform || {}),
+            mask: updatedMask,
+          },
+        };
+      },
+      selectedClipType,
+    );
+    updateProjectWithHistory(updatedProject);
+  }, [selectedClip, project, selectedClipId, selectedClipType, updateProjectWithHistory]);
 
   const handleClearAllMaskKeyframes = useCallback(() => {
-    if (!selectedClip || !project) return;
-    const videoList = [...(project.tracks.video || [])];
-    const idx = videoList.findIndex((c) => c.id === selectedClipId);
-    if (idx >= 0) {
-      const updatedMask = {
-        ...(videoList[idx].mask || {}),
-        keyframes: [],
-      } as MaskConfig;
-      videoList[idx] = {
-        ...videoList[idx],
-        maskKeyframes: [],
-        mask: updatedMask,
-        transform: {
-          ...(videoList[idx].transform || {}),
+    if (!selectedClip || !project || !selectedClipId) return;
+    const updatedProject = updateClipInProject(
+      project,
+      selectedClipId,
+      (clip) => {
+        const updatedMask = {
+          ...(clip.mask || {}),
+          keyframes: [],
+        } as MaskConfig;
+        return {
+          ...clip,
+          maskKeyframes: [],
           mask: updatedMask,
-        },
-      };
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, video: videoList },
-      });
-    }
-  }, [selectedClip, project, selectedClipId, updateProjectWithHistory]);
+          transform: {
+            ...(clip.transform || {}),
+            mask: updatedMask,
+          },
+        };
+      },
+      selectedClipType,
+    );
+    updateProjectWithHistory(updatedProject);
+  }, [selectedClip, project, selectedClipId, selectedClipType, updateProjectWithHistory]);
 
   const handleJumpPrevKeyframe = useCallback(() => {
     if (!prevKeyframe || !activeClip) return;
@@ -385,15 +378,17 @@ export function useProjectKeyframes({
 
     updatedKf = cleanAndSortKeyframes(updatedKf);
 
-    const key = getTrackKey(targetType);
-    const list = [...(((project?.tracks as any)?.[key] as any[]) || [])];
-    const idx = list.findIndex((c) => c.id === targetId);
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], keyframes: updatedKf };
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...(project?.tracks || {}), [key]: list } as any,
-      });
+    if (project && targetId) {
+      const updatedProject = updateClipInProject(
+        project,
+        targetId,
+        (clip) => ({
+          ...clip,
+          keyframes: updatedKf,
+        }),
+        targetType,
+      );
+      updateProjectWithHistory(updatedProject);
     }
 
     return { action: actionType, time: currentTime };
@@ -416,7 +411,7 @@ export function useProjectKeyframes({
     opacity?: number,
     easing?: any,
   ) => {
-    if (!selectedClip || !project) return;
+    if (!selectedClip || !project || !selectedClipId) return;
     const rawKeyframes: any[] = selectedClip.keyframes || [];
     const existingIndex = rawKeyframes.findIndex(
       (k) => Math.abs(k.time - time) < 0.12,
@@ -475,55 +470,87 @@ export function useProjectKeyframes({
       }
     }
 
-    const key = getTrackKey(selectedClipType);
-    const list = [...(((project.tracks as any)?.[key] as any[]) || [])];
-    const idx = list.findIndex((c) => c.id === selectedClipId);
-    if (idx >= 0) {
-      list[idx] = {
-        ...list[idx],
-        transform: { ...(list[idx].transform || {}), ...transform },
-        opacity: opacity !== undefined ? opacity : (list[idx].opacity ?? 1.0),
-        keyframes: updatedKf,
-        ...(updatedMaskKfs ? { maskKeyframes: updatedMaskKfs } : {}),
-      };
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, [key]: list } as any,
-      });
-    }
+    const updatedProject = updateClipInProject(
+      project,
+      selectedClipId,
+      (clip) => {
+        const isOverlayOrText =
+          selectedClipType === "text" ||
+          selectedClipType === "texts" ||
+          selectedClipType === "caption" ||
+          selectedClipType === "captions" ||
+          selectedClipType === "sticker" ||
+          selectedClipType === "stickers" ||
+          clip.text !== undefined ||
+          clip.char !== undefined;
+
+        const mutated: any = {
+          ...clip,
+          transform: { ...(clip.transform || {}), ...transform },
+          opacity: opacity !== undefined ? opacity : (clip.opacity ?? 1.0),
+          keyframes: updatedKf,
+          ...(updatedMaskKfs ? { maskKeyframes: updatedMaskKfs } : {}),
+        };
+
+        if (isOverlayOrText) {
+          if (transform.x !== undefined || transform.y !== undefined) {
+            mutated.position = {
+              x: transform.x !== undefined ? transform.x : (clip.position?.x ?? 50),
+              y:
+                transform.y !== undefined
+                  ? transform.y
+                  : (clip.position?.y ??
+                    (selectedClipType === "caption" || selectedClipType === "captions"
+                      ? 82
+                      : 50)),
+            };
+          }
+          if (transform.scale !== undefined) {
+            mutated.scale = transform.scale;
+          }
+          if (transform.rotation !== undefined) {
+            mutated.rotation = transform.rotation;
+          }
+        }
+
+        return mutated;
+      },
+      selectedClipType,
+    );
+    updateProjectWithHistory(updatedProject);
   }, [selectedClip, project, selectedClipType, selectedClipId, updateProjectWithHistory]);
 
   const handleDeleteKeyframeAtTime = useCallback((time: number) => {
-    if (!selectedClip || !project) return;
+    if (!selectedClip || !project || !selectedClipId) return;
     const rawKeyframes: any[] = selectedClip.keyframes || [];
     const updatedKf = cleanAndSortKeyframes(
       rawKeyframes.filter((k) => Math.abs(k.time - time) >= 0.12),
     );
 
-    const key = getTrackKey(selectedClipType);
-    const list = [...(((project.tracks as any)?.[key] as any[]) || [])];
-    const idx = list.findIndex((c) => c.id === selectedClipId);
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], keyframes: updatedKf };
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, [key]: list } as any,
-      });
-    }
+    const updatedProject = updateClipInProject(
+      project,
+      selectedClipId,
+      (clip) => ({
+        ...clip,
+        keyframes: updatedKf,
+      }),
+      selectedClipType,
+    );
+    updateProjectWithHistory(updatedProject);
   }, [selectedClip, project, selectedClipType, selectedClipId, updateProjectWithHistory]);
 
   const handleClearAllKeyframes = useCallback(() => {
-    if (!selectedClip || !project) return;
-    const key = getTrackKey(selectedClipType);
-    const list = [...(((project.tracks as any)?.[key] as any[]) || [])];
-    const idx = list.findIndex((c) => c.id === selectedClipId);
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], keyframes: [] };
-      updateProjectWithHistory({
-        ...project,
-        tracks: { ...project.tracks, [key]: list } as any,
-      });
-    }
+    if (!selectedClip || !project || !selectedClipId) return;
+    const updatedProject = updateClipInProject(
+      project,
+      selectedClipId,
+      (clip) => ({
+        ...clip,
+        keyframes: [],
+      }),
+      selectedClipType,
+    );
+    updateProjectWithHistory(updatedProject);
   }, [selectedClip, project, selectedClipType, selectedClipId, updateProjectWithHistory]);
 
   return {

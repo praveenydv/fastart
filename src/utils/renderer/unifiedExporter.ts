@@ -153,7 +153,7 @@ export async function exportFastArtProject(
   const targetDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || "";
 
   // -------------------------------------------------------------------------
-  // 1. Snapshot PNG Export (Hardware Rust Accelerated)
+  // 1. Snapshot PNG Export (Hardware Rust Accelerated + Canvas Fallback)
   // -------------------------------------------------------------------------
   if (format === "png") {
     onProgress?.(30, currentTime, duration);
@@ -169,12 +169,18 @@ export async function exportFastArtProject(
           onProgress?.(100, currentTime, duration);
 
           if (Platform.OS === "web") {
+            let blob: Blob = new Blob([]);
+            try {
+              const res = await fetch(rustDataUri);
+              blob = await res.blob();
+            } catch {}
             return {
-              blob: new Blob([]),
+              blob,
               videoUrl: rustDataUri,
               mimeType: "image/png",
               format: "png",
               extension: "png",
+              fileSize: blob.size,
             };
           }
 
@@ -197,51 +203,94 @@ export async function exportFastArtProject(
     } catch (err) {
       console.warn("[unifiedExporter] Rust snapshot fallback:", err);
     }
+
+    // Web Canvas fallback for snapshot
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      try {
+        let renderer = existingRenderer;
+        if (!renderer || !renderer.canvas) {
+          const offscreenCanvas = document.createElement("canvas");
+          offscreenCanvas.width = snapW;
+          offscreenCanvas.height = snapH;
+          const { VideoRenderer } = require("../videoRenderer");
+          renderer = new VideoRenderer(offscreenCanvas);
+          for (const clip of project.tracks?.video || []) {
+            await renderer.preloadClip(clip);
+          }
+        }
+        await renderer.renderFrame(currentTime, baseW, baseH);
+        const dataUrl = renderer.canvas.toDataURL("image/png");
+        let blob: Blob = new Blob([]);
+        try {
+          const res = await fetch(dataUrl);
+          blob = await res.blob();
+        } catch {}
+        onProgress?.(100, currentTime, duration);
+        return {
+          blob,
+          videoUrl: dataUrl,
+          mimeType: "image/png",
+          format: "png",
+          extension: "png",
+          fileSize: blob.size,
+        };
+      } catch (canvasErr) {
+        console.warn("[unifiedExporter] Canvas PNG snapshot fallback failed:", canvasErr);
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
-  // 2. Studio Audio Mixdown (WAV) in Rust
+  // 2. Studio Audio Mixdown (WAV) in Rust + Pure-JS PCM Fallback
   // -------------------------------------------------------------------------
   if (format === "wav") {
     onProgress?.(30, 0, duration);
+    let wavBytes: Uint8Array | null = null;
 
     try {
       const isRustReady = await rustCoreBridge.isAvailable();
       if (isRustReady) {
-        onProgress?.(70, 0, duration);
-        const wavBytes = await rustCoreBridge.exportProjectWav(project, 44100, duration);
-        if (wavBytes && wavBytes.length > 44) {
-          onProgress?.(100, duration, duration);
-
-          if (Platform.OS === "web" && typeof URL !== "undefined") {
-            const blob = new Blob([wavBytes as any], { type: "audio/wav" });
-            const videoUrl = URL.createObjectURL(blob);
-            return {
-              blob,
-              videoUrl,
-              mimeType: "audio/wav",
-              format: "wav",
-              extension: "wav",
-              fileSize: wavBytes.length,
-            };
-          }
-
-          const filename = `${cleanTitle}_audio_${Date.now()}.wav`;
-          const targetFileUri = `${targetDir}${filename}`;
-          const writtenSize = await writeBinaryFileSafely(targetFileUri, wavBytes);
-
-          return {
-            blob: new Blob([]),
-            videoUrl: targetFileUri,
-            mimeType: "audio/wav",
-            format: "wav",
-            extension: "wav",
-            fileSize: writtenSize,
-          };
-        }
+        onProgress?.(60, 0, duration);
+        wavBytes = await rustCoreBridge.exportProjectWav(project, 44100, duration);
       }
     } catch (err) {
-      console.warn("[unifiedExporter] Rust WAV fallback:", err);
+      console.warn("[unifiedExporter] Rust WAV export error, falling back to pure-JS mixer:", err);
+    }
+
+    if (!wavBytes || wavBytes.length <= 44) {
+      onProgress?.(75, 0, duration);
+      const { exportProjectAudioToWavBytes } = require("../audioExporter");
+      wavBytes = await exportProjectAudioToWavBytes(project, duration, 44100);
+    }
+
+    if (wavBytes && wavBytes.length > 44) {
+      onProgress?.(100, duration, duration);
+
+      if (Platform.OS === "web" && typeof URL !== "undefined") {
+        const blob = new Blob([wavBytes as any], { type: "audio/wav" });
+        const videoUrl = URL.createObjectURL(blob);
+        return {
+          blob,
+          videoUrl,
+          mimeType: "audio/wav",
+          format: "wav",
+          extension: "wav",
+          fileSize: wavBytes.length,
+        };
+      }
+
+      const filename = `${cleanTitle}_audio_${Date.now()}.wav`;
+      const targetFileUri = `${targetDir}${filename}`;
+      const writtenSize = await writeBinaryFileSafely(targetFileUri, wavBytes);
+
+      return {
+        blob: new Blob([]),
+        videoUrl: targetFileUri,
+        mimeType: "audio/wav",
+        format: "wav",
+        extension: "wav",
+        fileSize: writtenSize,
+      };
     }
   }
 
@@ -361,6 +410,9 @@ export async function exportFastArtProject(
     } catch (err) {
       console.warn("[unifiedExporter] Native Rust MP4 export:", err);
     }
+
+    // When native Rust engine is unavailable, signal to engage headless mobile canvas bridge
+    throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
   }
 
   throw new Error(`Export format ${format} could not be rendered.`);

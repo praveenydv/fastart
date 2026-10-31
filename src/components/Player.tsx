@@ -843,51 +843,95 @@ function Player({
             </View>
           )}
 
-          {/* Linked File Access Floating Pill (Non-blocking, elegant) */}
-          {!isProjectEmpty && currentActiveClip && !(currentActiveClip as any).isMissing && (currentActiveClip as any).needsPermission && (
-            <TouchableOpacity
-              style={{
-                position: "absolute",
-                top: 12,
-                right: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                backgroundColor: "rgba(10, 12, 17, 0.85)",
-                borderColor: "rgba(0, 242, 254, 0.5)",
-                borderWidth: 1,
-                borderRadius: 16,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                zIndex: 800,
-              }}
-              activeOpacity={0.85}
-              onPress={handleRelinkActiveClip}
-            >
-              <Ionicons name="link-outline" size={13} color="#00F2FE" />
-              <Text style={{ color: "#BAE6FD", fontSize: 11, fontWeight: "600" }}>
-                Linked File • Reconnect
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Genuine Missing Media Overlay: ONLY shown when file was truly deleted/not found */}
-          {!isProjectEmpty && currentActiveClip && (currentActiveClip as any).isMissing && (
+          {/* Whole Player Reconnect & Relink Overlay */}
+          {!isProjectEmpty && currentActiveClip && ((currentActiveClip as any).needsPermission || (currentActiveClip as any).isMissing) && (
             <View style={styles.offlineMediaOverlay}>
-              <Ionicons name="alert-circle" size={32} color="#FF6B6B" />
-              <Text style={styles.offlineMediaTitle}>Media Offline</Text>
-              <Text style={styles.offlineMediaSubtitle} numberOfLines={2}>
-                "{currentActiveClip.title || 'Source file'}" was moved or removed from its disk location.
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                  backgroundColor: (currentActiveClip as any).isMissing
+                    ? "rgba(239, 68, 68, 0.15)"
+                    : "rgba(0, 242, 254, 0.12)",
+                  borderWidth: 1.5,
+                  borderColor: (currentActiveClip as any).isMissing
+                    ? "rgba(239, 68, 68, 0.4)"
+                    : "rgba(0, 242, 254, 0.4)",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <Ionicons
+                  name={(currentActiveClip as any).isMissing ? "alert-circle" : "link-outline"}
+                  size={26}
+                  color={(currentActiveClip as any).isMissing ? "#EF4444" : "#00F2FE"}
+                />
+              </View>
+
+              <Text style={[styles.offlineMediaTitle, !(currentActiveClip as any).isMissing && { color: "#FFFFFF" }]}>
+                {(currentActiveClip as any).isMissing ? "Media Offline" : "Linked Media"}
               </Text>
+
+              <Text style={styles.offlineMediaSubtitle} numberOfLines={2}>
+                {(currentActiveClip as any).isMissing
+                  ? `"${currentActiveClip.title || 'Source file'}" was moved or removed from its disk location.`
+                  : `"${currentActiveClip.title || 'Source file'}" is linked on your device. Click below to reconnect.`}
+              </Text>
+
               {Platform.OS === 'web' && (
-                <TouchableOpacity
-                  style={styles.relinkBtn}
-                  activeOpacity={0.85}
-                  onPress={handleRelinkActiveClip}
-                >
-                  <Ionicons name="link-outline" size={15} color="#000000" />
-                  <Text style={styles.relinkBtnText}>Relink File</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <TouchableOpacity
+                    style={styles.relinkBtn}
+                    activeOpacity={0.85}
+                    onPress={handleRelinkActiveClip}
+                  >
+                    <Ionicons
+                      name={(currentActiveClip as any).isMissing ? "folder-open-outline" : "flash"}
+                      size={14}
+                      color="#000000"
+                    />
+                    <Text style={styles.relinkBtnText}>
+                      {(currentActiveClip as any).isMissing ? "Relink File" : "Reconnect Media"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {!(currentActiveClip as any).isMissing && (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "rgba(255, 255, 255, 0.08)",
+                        borderColor: "rgba(255, 255, 255, 0.2)",
+                        borderWidth: 1,
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 20,
+                        marginTop: 12,
+                        gap: 5,
+                      }}
+                      activeOpacity={0.85}
+                      onPress={async () => {
+                        const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
+                        const res = await relinkMediaFile(lookupId, currentActiveClip.type as any);
+                        if (res) {
+                          currentActiveClip.isMissing = false;
+                          currentActiveClip.needsPermission = false;
+                          currentActiveClip.url = res.url;
+                          if (onRelinkClip) {
+                            onRelinkClip(currentActiveClip.id, currentActiveClip.type, res.url, lookupId);
+                          }
+                        }
+                      }}
+                    >
+                      <Ionicons name="folder-open-outline" size={13} color="#94A3B8" />
+                      <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "600" }}>
+                        Choose File
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
             </View>
           )}

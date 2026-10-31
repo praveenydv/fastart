@@ -8,6 +8,7 @@ import {
   applyColorFilter,
   applyEffectOverlay,
   applyMotionTracking,
+  evaluateSpeedCurve,
 } from "./rendererEffects";
 
 export interface ClipRenderContext {
@@ -307,13 +308,13 @@ export function drawClip(
 
   ctx.scale(scaleX, scaleY);
 
-  applyColorFilter(ctx, clip.filter, clip.customLut);
+  applyColorFilter(ctx, clip.filter, clip.customLut, clip.hslAdjustments);
 
-  if (!renderCtx.videoElements.has(clip.url)) {
+  if (!renderCtx.videoElements.has(clip.id) && !renderCtx.videoElements.has(clip.url)) {
     renderCtx.preloadClip(clip);
   }
 
-  const mediaEl = renderCtx.videoElements.get(clip.url);
+  const mediaEl = renderCtx.videoElements.get(clip.id) || renderCtx.videoElements.get(clip.url);
   const isImage = mediaEl instanceof HTMLImageElement || (mediaEl && (mediaEl as any).tagName === "IMG");
   const isVideo = mediaEl instanceof HTMLVideoElement || (mediaEl && (mediaEl as any).tagName === "VIDEO");
 
@@ -393,12 +394,23 @@ export function drawClip(
     }
 
     const mask = getInterpolatedMask(clip, time) || clip.mask || clip.transform?.mask;
+    const clipLocalTime = Math.max(0, time - clip.startTime);
+    let effectiveSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+    if (clip.speedCurve) {
+      effectiveSpeed = evaluateSpeedCurve(
+        clip.speedCurve,
+        clipLocalTime / Math.max(0.1, clip.duration),
+      );
+    }
+    const elapsedClipTime = clipLocalTime * effectiveSpeed;
+
     const rawCutout = clip.cutout || clip.transform?.cutout;
     const cutout = rawCutout
       ? {
           ...rawCutout,
           clipId: clip.id,
-          clipTime: Math.max(0, time - clip.startTime),
+          sourceMediaId: clip.sourceMediaId,
+          clipTime: elapsedClipTime,
         }
       : rawCutout;
 

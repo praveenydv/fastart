@@ -142,7 +142,7 @@ export type VoiceEffectId =
   | 'vinyl'
   | 'helium';
 
-export type KeyframeEasing = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'spring';
+export type KeyframeEasing = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'spring' | 'smooth';
 
 export interface ClipTransform {
   scale?: number;

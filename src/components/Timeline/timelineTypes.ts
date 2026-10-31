@@ -1,6 +1,6 @@
 import { FastArtProject } from "../../types/project";
 
-export const MAX_TRACKS = 10;
+export const MAX_TRACKS = 25;
 export const TRACK_ROW_HEIGHT = 48;
 export const MIN_CLIP_DURATION = 0.05; // 50 milliseconds precision
 
@@ -116,6 +116,10 @@ export interface TimelineProps {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  timelineHeight?: number;
+  isResizingHeight?: boolean;
+  resizeHandleProps?: any;
+  handleResetResizeHeight?: () => void;
   onTimelineHeightChange?: (height: number) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   settings?: any;

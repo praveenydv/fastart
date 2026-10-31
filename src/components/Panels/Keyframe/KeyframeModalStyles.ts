@@ -277,6 +277,69 @@ export const styles = StyleSheet.create({
     color: "#00F2FE",
     fontWeight: "800",
   },
+  // Animation Easing Curve Grid & Cards
+  easingBadge: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.28)",
+  },
+  easingBadgeText: {
+    color: "#00F2FE",
+    fontSize: 10.5,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  easingGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 8,
+    marginTop: 8,
+  },
+  easingCard: {
+    width: "31.8%",
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0A0D15",
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E2638",
+    gap: 6,
+    overflow: "hidden",
+  },
+  easingCardActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "#00F2FE",
+    borderWidth: 1.5,
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  easingCardText: {
+    color: "#94A3B8",
+    fontSize: 10.5,
+    fontWeight: "600",
+    letterSpacing: -0.1,
+    ...(Platform.OS === "web"
+      ? ({
+          whiteSpace: "nowrap",
+          userSelect: "none",
+        } as any)
+      : {}),
+  },
+  easingCardTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
   // Nudge Pad
   nudgePad: {
     alignItems: "center",

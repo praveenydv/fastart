@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CutoutConfig } from "../../types/project";
 import { soundEngine } from "../../utils/audioEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
+import { CustomColorPickerButton } from "../Common/CustomColorPickerButton";
 import {
   processVideoFrameByFrame,
   renderCutoutToVideoBlob,
@@ -23,6 +24,8 @@ import {
   getClipBakedFps,
   processClipStudioCutout,
   updateActiveFrameMatteParams,
+  initSelfieSegmentation,
+  initStudioNeuralEngine,
 } from "../../services/selfieSegmentationService";
 import { rustCoreBridge } from "../../services/rustCoreBridge";
 import { getActiveMediaElement } from "../../utils/videoRenderer";
@@ -83,6 +86,7 @@ interface CutoutModalProps {
   isInline?: boolean;
   selectedClip?: any;
   currentTime?: number;
+  isPlaying?: boolean;
   onReplaceClipWithMedia?: (
     clipId: string,
     newUrl: string,
@@ -107,6 +111,7 @@ export default function CutoutModal({
   isInline = false,
   selectedClip,
   currentTime = 0,
+  isPlaying = false,
   onReplaceClipWithMedia,
 }: CutoutModalProps) {
   // Cutout state
@@ -121,18 +126,18 @@ export default function CutoutModal({
 
   // Frame-by-frame processing state
   const [isProcessingFrames, setIsProcessingFrames] = useState<boolean>(false);
-  const [isProcessingActiveFrame, setIsProcessingActiveFrame] = useState<boolean>(false);
+  const [isProcessingActiveFrame, setIsProcessingActiveFrame] =
+    useState<boolean>(false);
   const [activeFrameMatted, setActiveFrameMatted] = useState<boolean>(false);
   const [frameProgress, setFrameProgress] = useState<number>(0);
   const [processedFrames, setProcessedFrames] = useState<number>(0);
   const [totalFramesToProcess, setTotalFramesToProcess] = useState<number>(0);
   const [finishTab, setFinishTab] = useState<"bg" | "outline">("bg");
   const abortCtrlRef = useRef<AbortController | null>(null);
-  const customBgInputRef = useRef<any>(null);
-  const customStrokeInputRef = useRef<any>(null);
 
   const [currentFrameMatted, setCurrentFrameMatted] = useState<boolean>(false);
-  const [settingsChangedSinceBake, setSettingsChangedSinceBake] = useState<boolean>(false);
+  const [settingsChangedSinceBake, setSettingsChangedSinceBake] =
+    useState<boolean>(false);
   const [isReplacingClip, setIsReplacingClip] = useState<boolean>(false);
   const lastMattedTimeRef = useRef<number | null>(null);
   const previousClipUrlRef = useRef<string | null>(selectedClip?.url || null);
@@ -140,21 +145,54 @@ export default function CutoutModal({
   const bakedShadowRef = useRef<number>(shadow);
 
   const clipId = selectedClip?.id || "";
-  const isVideoClip = selectedClip?.type === "video" || !!selectedClip?.duration;
+  const isVideoClip =
+    selectedClip?.type === "video" || !!selectedClip?.duration;
   const isAlreadyProcessed = clipId ? hasClipMasks(clipId) : false;
   const currentProcessedCount = clipId ? getClipProcessedCount(clipId) : 0;
 
   const clipStart = selectedClip?.startTime || 0;
   const localTime = Math.max(0, (currentTime || 0) - clipStart);
+  const effectiveSpeed = Math.max(0.1, Math.min(16, selectedClip?.speed || 1.0));
+  const elapsedClipTime = localTime * effectiveSpeed;
+  const trimIn = selectedClip?.trimIn || 0;
+  const mediaTime = selectedClip?.reverse
+    ? Math.max(0, (selectedClip.trimOut || selectedClip.duration) - elapsedClipTime)
+    : trimIn + elapsedClipTime;
   const bakedFps = getClipBakedFps(clipId);
-  const frameIdx = Math.max(0, Math.floor(localTime * bakedFps));
+  const frameIdx = Math.max(0, Math.floor(elapsedClipTime * bakedFps));
 
   // Detect playhead movement / scrubbing and dynamically update active frame state
   useEffect(() => {
     if (!clipId) return;
     const hasMask = hasFrameMask(clipId, frameIdx);
     setCurrentFrameMatted(hasMask);
-  }, [currentTime, clipId, frameIdx]);
+
+    // Auto-compute parked frame on scrub pause for instant feedback (never when clip is playing)
+    if (
+      visible &&
+      enabled &&
+      !isPlaying &&
+      cutoutMode === "auto" &&
+      !hasMask &&
+      !isProcessingFrames &&
+      !isProcessingActiveFrame
+    ) {
+      const timer = setTimeout(() => {
+        handleProcessActiveFrame();
+      }, 180);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    currentTime,
+    clipId,
+    frameIdx,
+    visible,
+    enabled,
+    isPlaying,
+    cutoutMode,
+    isProcessingFrames,
+    isProcessingActiveFrame,
+  ]);
 
   // Auto-restore persisted masks from IndexedDB if not in memory
   useEffect(() => {
@@ -167,6 +205,14 @@ export default function CutoutModal({
       });
     }
   }, [clipId, frameIdx]);
+
+  // Pre-warm WebGL GPU and neural background worker as soon as modal opens for instant < 20ms execution
+  useEffect(() => {
+    if (visible && Platform.OS === "web") {
+      initSelfieSegmentation().catch(() => {});
+      initStudioNeuralEngine().catch(() => {});
+    }
+  }, [visible]);
 
   // Invalidate masks if the clip's media URL was replaced on the timeline
   useEffect(() => {
@@ -478,14 +524,19 @@ export default function CutoutModal({
     soundEngine.playSfx("click");
     setIsProcessingActiveFrame(true);
 
+    // Yield to the browser paint loop so the loading spinner renders immediately
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 16)));
+
     try {
-      let activeEl: any = getActiveMediaElement(selectedClip?.url || clipId);
+      let activeEl: any =
+        getActiveMediaElement(clipId) ||
+        getActiveMediaElement(selectedClip?.url || "");
 
       const ok = await processClipStudioCutout(
         activeEl || selectedClip?.url || clipId,
         clipId,
         frameIdx,
-        localTime,
+        mediaTime,
         intensityRef.current / 100,
         shadowRef.current / 100,
       );
@@ -516,8 +567,13 @@ export default function CutoutModal({
       enabledRef.current = true;
       setCutoutMode(mode);
       cutoutModeRef.current = mode;
-      const effectiveMode: "chroma" | "auto" = mode === "auto" ? "auto" : "chroma";
+      const effectiveMode: "chroma" | "auto" =
+        mode === "auto" ? "auto" : "chroma";
       syncCutout({ enabled: true, mode: effectiveMode });
+
+      if (mode === "auto" && clipId && !hasFrameMask(clipId, frameIdx)) {
+        handleProcessActiveFrame();
+      }
     }
   };
 
@@ -533,6 +589,9 @@ export default function CutoutModal({
     setFrameProgress(0);
     const abortCtrl = new AbortController();
     abortCtrlRef.current = abortCtrl;
+
+    // Yield to the browser paint loop so the progress dialog displays immediately
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 16)));
 
     if (replace) {
       clearClipMasks(clipId);
@@ -609,7 +668,10 @@ export default function CutoutModal({
         {/* Sleek Segmented Mode Switcher */}
         <View style={s.modeSegmentedBar}>
           <TouchableOpacity
-            style={[s.modeSegmentItem, cutoutMode === "none" && s.modeSegmentItemActive]}
+            style={[
+              s.modeSegmentItem,
+              cutoutMode === "none" && s.modeSegmentItemActive,
+            ]}
             onPress={() => {
               soundEngine.playSfx("click");
               setCutoutMode("none");
@@ -627,7 +689,12 @@ export default function CutoutModal({
               size={13}
               color={cutoutMode === "none" ? "#00F2FE" : "#94A3B8"}
             />
-            <Text style={[s.modeSegmentText, cutoutMode === "none" && s.modeSegmentTextActive]}>
+            <Text
+              style={[
+                s.modeSegmentText,
+                cutoutMode === "none" && s.modeSegmentTextActive,
+              ]}
+            >
               None
             </Text>
           </TouchableOpacity>
@@ -641,11 +708,12 @@ export default function CutoutModal({
               soundEngine.playSfx("click");
               setCutoutMode("auto");
               cutoutModeRef.current = "auto";
-              // Only enable if the clip already has baked masks or a previewed mask
-              const isReady = hasClipMasks(clipId);
-              setEnabled(isReady);
-              enabledRef.current = isReady;
-              syncCutout({ enabled: isReady, mode: "auto" });
+              setEnabled(true);
+              enabledRef.current = true;
+              syncCutout({ enabled: true, mode: "auto" });
+              if (clipId && !hasFrameMask(clipId, frameIdx) && !isPlaying) {
+                handleProcessActiveFrame();
+              }
             }}
             activeOpacity={0.8}
             accessibilityRole="tab"
@@ -701,9 +769,14 @@ export default function CutoutModal({
 
         {cutoutMode === "none" ? (
           <View style={s.compactNoneBox}>
-            <Ionicons name="shield-checkmark-outline" size={14} color="#00F2FE" />
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={14}
+              color="#00F2FE"
+            />
             <Text style={s.compactNoneText}>
-              Original video background is preserved. Select Auto Cutout or Chroma Key above to remove background.
+              Original video background is preserved. Select Auto Cutout or
+              Chroma Key above to remove background.
             </Text>
           </View>
         ) : (
@@ -714,7 +787,8 @@ export default function CutoutModal({
                   <Text style={s.sectionHeader}>SCREEN COLOR</Text>
                   <View style={s.compactPresetGroup}>
                     {CHROMA_QUICK_PRESETS.map((p) => {
-                      const isSelected = keyColor.toLowerCase() === p.color.toLowerCase();
+                      const isSelected =
+                        keyColor.toLowerCase() === p.color.toLowerCase();
                       return (
                         <TouchableOpacity
                           key={p.color}
@@ -734,22 +808,44 @@ export default function CutoutModal({
                             <Ionicons
                               name="checkmark"
                               size={10}
-                              color={p.color === "#FFFFFF" || p.color === "#00FF00" ? "#000000" : "#FFFFFF"}
+                              color={
+                                p.color === "#FFFFFF" || p.color === "#00FF00"
+                                  ? "#000000"
+                                  : "#FFFFFF"
+                              }
                             />
                           )}
                         </TouchableOpacity>
                       );
                     })}
+                    <CustomColorPickerButton
+                      value={keyColor}
+                      presets={CHROMA_QUICK_PRESETS}
+                      onColorChange={updateKeyColor}
+                      size={18}
+                      shape="square"
+                      accessibilityLabel="Pick custom screen color"
+                    />
                   </View>
                 </View>
 
                 <View style={s.compactPickerTrigger}>
                   <TouchableOpacity
-                    style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      flex: 1,
+                    }}
                     onPress={handleOpenEyeDropper}
                     activeOpacity={0.8}
                   >
-                    <View style={[s.compactColorSwatch, { backgroundColor: keyColor }]} />
+                    <View
+                      style={[
+                        s.compactColorSwatch,
+                        { backgroundColor: keyColor },
+                      ]}
+                    />
                     <Text style={s.compactHex}>{keyColor.toUpperCase()}</Text>
                     <View style={s.dropperIconBadge}>
                       <Ionicons name="eyedrop" size={12} color="#00F2FE" />
@@ -758,13 +854,21 @@ export default function CutoutModal({
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[s.dropperIconBadge, { backgroundColor: "rgba(16, 185, 129, 0.12)", borderColor: "rgba(16, 185, 129, 0.3)" }]}
+                    style={[
+                      s.dropperIconBadge,
+                      {
+                        backgroundColor: "rgba(16, 185, 129, 0.12)",
+                        borderColor: "rgba(16, 185, 129, 0.3)",
+                      },
+                    ]}
                     onPress={handleAutoDetectBackdrop}
                     activeOpacity={0.8}
                     accessibilityLabel="Auto-detect backdrop color"
                   >
                     <Ionicons name="sparkles" size={12} color="#10B981" />
-                    <Text style={[s.dropperBadgeText, { color: "#10B981" }]}>Auto Detect</Text>
+                    <Text style={[s.dropperBadgeText, { color: "#10B981" }]}>
+                      Auto Detect
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
@@ -784,7 +888,14 @@ export default function CutoutModal({
                   />
                 )}
 
-                {renderSlider("Tolerance", intensity, "%", 1, 100, updateIntensity)}
+                {renderSlider(
+                  "Tolerance",
+                  intensity,
+                  "%",
+                  1,
+                  100,
+                  updateIntensity,
+                )}
                 {renderSlider("Softness", shadow, "%", 0, 100, updateShadow)}
               </>
             ) : (
@@ -798,18 +909,36 @@ export default function CutoutModal({
 
                   {isProcessingFrames || isReplacingClip ? (
                     <View style={s.statusPillProcessing}>
-                      <ActivityIndicator size="small" color="#00F2FE" style={{ transform: [{ scale: 0.65 }] }} />
-                      <Text style={s.statusPillTextProcessing}>{frameProgress}%</Text>
+                      <ActivityIndicator
+                        size="small"
+                        color="#00F2FE"
+                        style={{ transform: [{ scale: 0.65 }] }}
+                      />
+                      <Text style={s.statusPillTextProcessing}>
+                        {frameProgress}%
+                      </Text>
                     </View>
                   ) : isAlreadyProcessed ? (
                     <View style={s.statusPillSuccess}>
-                      <Ionicons name="checkmark-circle" size={10} color="#10B981" />
-                      <Text style={s.statusPillTextSuccess}>{currentProcessedCount} frames removed</Text>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={10}
+                        color="#10B981"
+                      />
+                      <Text style={s.statusPillTextSuccess}>
+                        {currentProcessedCount} frames removed
+                      </Text>
                     </View>
-                  ) : currentFrameMatted ? (
+                  ) : enabled ? (
                     <View style={s.statusPillSuccess}>
-                      <Ionicons name="checkmark-circle" size={10} color="#10B981" />
-                      <Text style={s.statusPillTextSuccess}>Preview active</Text>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={10}
+                        color="#10B981"
+                      />
+                      <Text style={s.statusPillTextSuccess}>
+                        Cutout Active
+                      </Text>
                     </View>
                   ) : (
                     <Text style={s.statusPillMuted}>Ready to preview</Text>
@@ -820,7 +949,14 @@ export default function CutoutModal({
                 {(isProcessingFrames || isReplacingClip) && (
                   <View style={s.compactProcessingBanner}>
                     <View style={s.compactProcessingHeader}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          flex: 1,
+                        }}
+                      >
                         <ActivityIndicator size="small" color="#00F2FE" />
                         <Text style={s.compactProgressPct} numberOfLines={1}>
                           {isReplacingClip
@@ -828,12 +964,20 @@ export default function CutoutModal({
                             : `Removing background... ${frameProgress}% (${processedFrames}/${totalFramesToProcess})`}
                         </Text>
                       </View>
-                      <TouchableOpacity onPress={handleCancelProcessing} style={s.compactCancelBtn}>
+                      <TouchableOpacity
+                        onPress={handleCancelProcessing}
+                        style={s.compactCancelBtn}
+                      >
                         <Text style={s.compactCancelText}>Cancel</Text>
                       </TouchableOpacity>
                     </View>
                     <View style={s.progressBarTrack}>
-                      <View style={[s.progressBarFill, { width: `${frameProgress}%` }]} />
+                      <View
+                        style={[
+                          s.progressBarFill,
+                          { width: `${frameProgress}%` },
+                        ]}
+                      />
                     </View>
                   </View>
                 )}
@@ -841,39 +985,6 @@ export default function CutoutModal({
                 {/* Main Action Controls */}
                 {!isProcessingFrames && !isReplacingClip && (
                   <View style={s.actionsContainer}>
-                    {/* Status Banner */}
-                    {isAlreadyProcessed ? (
-                      <View style={s.activeOnTimelineBanner}>
-                        <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                        <Text style={s.activeOnTimelineText}>
-                          Background removed for full video ({currentProcessedCount} frames). Active for playback & export.
-                        </Text>
-                      </View>
-                    ) : currentFrameMatted ? (
-                      <View style={s.activeOnTimelineBanner}>
-                        <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
-                        <Text style={s.activeOnTimelineText}>
-                          Preview active on current frame. Scrubbing shows original video.
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={s.subtleHintRow}>
-                        <Ionicons name="information-circle-outline" size={12} color="#64748B" />
-                        <Text style={s.subtleHintText}>
-                          Applies neural AI background removal with active threshold & softness.
-                        </Text>
-                      </View>
-                    )}
-
-                    {settingsChangedSinceBake && (
-                      <View style={s.settingsChangedBanner}>
-                        <Ionicons name="information-circle" size={13} color="#00F2FE" />
-                        <Text style={s.settingsChangedText}>
-                          Settings modified. Tap "Reprocess Preview" or "Reprocess Full Video" to update.
-                        </Text>
-                      </View>
-                    )}
-
                     {/* Always Consistent 3 Actions: Preview, Full Video, and Reset */}
                     <View style={{ gap: 8 }}>
                       {/* 1. Full Video Action Button */}
@@ -890,15 +1001,21 @@ export default function CutoutModal({
                           />
                           <Text style={s.heroBtnText}>
                             {isAlreadyProcessed
-                              ? "Reprocess Full Video"
+                              ? "Reprocess Video"
                               : "Remove Background (Full Video)"}
                           </Text>
                         </TouchableOpacity>
                       )}
 
                       {/* Row with Preview and Reset Options */}
-                      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                        {/* 2. Preview Action Button */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        {/* 2. Preview Action Button - Clean, stable label that never flickers during playback */}
                         <TouchableOpacity
                           onPress={handleProcessActiveFrame}
                           style={[s.secondaryActionBtn, { flex: 1.2 }]}
@@ -909,20 +1026,21 @@ export default function CutoutModal({
                             <ActivityIndicator size="small" color="#00F2FE" />
                           ) : (
                             <Ionicons
-                              name={currentFrameMatted ? "refresh" : "eye-outline"}
+                              name="eye-outline"
                               size={14}
                               color="#00F2FE"
                             />
                           )}
                           <Text
-                            style={[s.secondaryActionText, { color: "#00F2FE" }]}
+                            style={[
+                              s.secondaryActionText,
+                              { color: "#00F2FE" },
+                            ]}
                             numberOfLines={1}
                           >
                             {isProcessingActiveFrame
                               ? "Processing..."
-                              : currentFrameMatted
-                              ? "Reprocess Preview"
-                              : "Preview Current Frame"}
+                              : "Preview Frame"}
                           </Text>
                         </TouchableOpacity>
 
@@ -931,13 +1049,23 @@ export default function CutoutModal({
                           onPress={handleReset}
                           style={[
                             s.secondaryActionBtn,
-                            { flex: 0.8, borderColor: "rgba(148, 163, 184, 0.25)" },
+                            {
+                              flex: 0.8,
+                              borderColor: "rgba(148, 163, 184, 0.25)",
+                            },
                           ]}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="reload-outline" size={13} color="#94A3B8" />
+                          <Ionicons
+                            name="reload-outline"
+                            size={13}
+                            color="#94A3B8"
+                          />
                           <Text
-                            style={[s.secondaryActionText, { color: "#94A3B8" }]}
+                            style={[
+                              s.secondaryActionText,
+                              { color: "#94A3B8" },
+                            ]}
                             numberOfLines={1}
                           >
                             Reset Cutout
@@ -948,8 +1076,22 @@ export default function CutoutModal({
 
                     {/* Threshold and Softness Tuning Sliders */}
                     <View style={{ marginTop: 6 }}>
-                      {renderSlider("Cutout Threshold", intensity, "%", 1, 100, updateIntensity)}
-                      {renderSlider("Edge Softness", shadow, "%", 0, 100, updateShadow)}
+                      {renderSlider(
+                        "Cutout Threshold",
+                        intensity,
+                        "%",
+                        1,
+                        100,
+                        updateIntensity,
+                      )}
+                      {renderSlider(
+                        "Edge Softness",
+                        shadow,
+                        "%",
+                        0,
+                        100,
+                        updateShadow,
+                      )}
                     </View>
                   </View>
                 )}
@@ -958,30 +1100,52 @@ export default function CutoutModal({
           </View>
         )}
 
-        {(cutoutMode === "chroma" || currentFrameMatted || isAlreadyProcessed) && (
+        {(cutoutMode !== "none") && (
           <View style={s.sectionBox}>
             <View style={s.finishSegmentRow}>
               <View style={s.finishTabGroup}>
                 <TouchableOpacity
-                  style={[s.finishTabBtn, finishTab === "bg" && s.finishTabBtnActive]}
+                  style={[
+                    s.finishTabBtn,
+                    finishTab === "bg" && s.finishTabBtnActive,
+                  ]}
                   onPress={() => setFinishTab("bg")}
                   activeOpacity={0.8}
                 >
-                  <Text style={[s.finishTabText, finishTab === "bg" && s.finishTabTextActive]}>Background</Text>
+                  <Text
+                    style={[
+                      s.finishTabText,
+                      finishTab === "bg" && s.finishTabTextActive,
+                    ]}
+                  >
+                    Background
+                  </Text>
                   {bgColor !== "none" && <View style={s.activeDot} />}
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[s.finishTabBtn, finishTab === "outline" && s.finishTabBtnActive]}
+                  style={[
+                    s.finishTabBtn,
+                    finishTab === "outline" && s.finishTabBtnActive,
+                  ]}
                   onPress={() => setFinishTab("outline")}
                   activeOpacity={0.8}
                 >
-                  <Text style={[s.finishTabText, finishTab === "outline" && s.finishTabTextActive]}>Outline</Text>
+                  <Text
+                    style={[
+                      s.finishTabText,
+                      finishTab === "outline" && s.finishTabTextActive,
+                    ]}
+                  >
+                    Outline
+                  </Text>
                   {strokeColor !== "none" && <View style={s.activeDot} />}
                 </TouchableOpacity>
               </View>
 
-              {(finishTab === "bg" ? bgColor !== "none" : strokeColor !== "none") && (
+              {(finishTab === "bg"
+                ? bgColor !== "none"
+                : strokeColor !== "none") && (
                 <TouchableOpacity
                   onPress={() => {
                     if (finishTab === "bg") updateBgColor("none");
@@ -997,13 +1161,17 @@ export default function CutoutModal({
             {finishTab === "bg" ? (
               <View style={s.compactSwatchRow}>
                 {QUICK_BG_COLORS.map((preset) => {
-                  const isSelected = bgColor.toUpperCase() === preset.color.toUpperCase();
+                  const isSelected =
+                    bgColor.toUpperCase() === preset.color.toUpperCase();
                   return (
                     <TouchableOpacity
                       key={preset.color}
                       style={[
                         s.colorSwatch,
-                        { backgroundColor: preset.color === "none" ? "#202832" : preset.color },
+                        {
+                          backgroundColor:
+                            preset.color === "none" ? "#202832" : preset.color,
+                        },
                         preset.color === "none" && s.transparentSwatch,
                         isSelected && s.colorSwatchSelected,
                       ]}
@@ -1019,34 +1187,14 @@ export default function CutoutModal({
                 })}
 
                 {/* Custom Color Palette Button */}
-                <TouchableOpacity
-                  style={[
-                    s.colorSwatch,
-                    s.customSwatchBtn,
-                    bgColor !== "none" && !QUICK_BG_COLORS.some((p) => p.color.toUpperCase() === bgColor.toUpperCase()) && s.colorSwatchSelected,
-                  ]}
-                  onPress={() => customBgInputRef.current?.click()}
-                  activeOpacity={0.8}
+                <CustomColorPickerButton
+                  value={bgColor}
+                  presets={QUICK_BG_COLORS}
+                  onColorChange={updateBgColor}
+                  size={24}
+                  shape="square"
                   accessibilityLabel="Pick custom background color"
-                >
-                  <Ionicons name="color-palette-outline" size={13} color="#00F2FE" />
-                </TouchableOpacity>
-
-                {Platform.OS === "web" && (
-                  <WebInput
-                    ref={customBgInputRef}
-                    type="color"
-                    value={bgColor === "none" ? "#000000" : bgColor}
-                    onChange={(e: any) => updateBgColor(e.target.value)}
-                    style={{
-                      position: "absolute",
-                      opacity: 0,
-                      width: 1,
-                      height: 1,
-                      pointerEvents: "none",
-                    }}
-                  />
-                )}
+                />
               </View>
             ) : (
               <>
@@ -1058,7 +1206,10 @@ export default function CutoutModal({
                         key={sp.color}
                         style={[
                           s.colorSwatch,
-                          { backgroundColor: sp.color === "none" ? "#202832" : sp.color },
+                          {
+                            backgroundColor:
+                              sp.color === "none" ? "#202832" : sp.color,
+                          },
                           sp.color === "none" && s.transparentSwatch,
                           isSelected && s.colorSwatchSelected,
                         ]}
@@ -1077,39 +1228,26 @@ export default function CutoutModal({
                   })}
 
                   {/* Custom Stroke Palette Button */}
-                  <TouchableOpacity
-                    style={[
-                      s.colorSwatch,
-                      s.customSwatchBtn,
-                      strokeColor !== "none" && !QUICK_STROKE_COLORS.some((sp) => sp.color === strokeColor) && s.colorSwatchSelected,
-                    ]}
-                    onPress={() => customStrokeInputRef.current?.click()}
-                    activeOpacity={0.8}
+                  <CustomColorPickerButton
+                    value={strokeColor}
+                    presets={QUICK_STROKE_COLORS}
+                    onColorChange={updateStrokeColor}
+                    size={24}
+                    shape="square"
                     accessibilityLabel="Pick custom outline color"
-                  >
-                    <Ionicons name="color-palette-outline" size={13} color="#00F2FE" />
-                  </TouchableOpacity>
-
-                  {Platform.OS === "web" && (
-                    <WebInput
-                      ref={customStrokeInputRef}
-                      type="color"
-                      value={strokeColor === "none" ? "#FFFFFF" : strokeColor}
-                      onChange={(e: any) => updateStrokeColor(e.target.value)}
-                      style={{
-                        position: "absolute",
-                        opacity: 0,
-                        width: 1,
-                        height: 1,
-                        pointerEvents: "none",
-                      }}
-                    />
-                  )}
+                  />
                 </View>
 
-                {strokeColor !== "none" && (
-                  renderSlider("Outline Width", strokeWidth, "px", 1, 20, updateStrokeWidth, 1)
-                )}
+                {strokeColor !== "none" &&
+                  renderSlider(
+                    "Outline Width",
+                    strokeWidth,
+                    "px",
+                    1,
+                    20,
+                    updateStrokeWidth,
+                    1,
+                  )}
               </>
             )}
           </View>
@@ -1129,14 +1267,27 @@ export default function CutoutModal({
             <Text style={s.sheetTitle}>Cutout</Text>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <TouchableOpacity
               onPress={handleReset}
-              style={[s.resetBtn, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
+              style={[
+                s.resetBtn,
+                {
+                  paddingHorizontal: 10,
+                  height: 26,
+                  flexDirection: "row",
+                  alignItems: "center",
+                },
+              ]}
               activeOpacity={0.7}
               accessibilityLabel="Reset cutout"
             >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
+              <Ionicons
+                name="refresh-outline"
+                size={12}
+                color="#00F2FE"
+                style={{ marginRight: 3 }}
+              />
               <Text style={[s.resetText, { fontSize: 11 }]}>Reset</Text>
             </TouchableOpacity>
 
@@ -1351,6 +1502,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingTop: 3,
+    marginBottom: 6,
     paddingHorizontal: 2,
   },
   subtleHintText: {

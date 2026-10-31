@@ -39,20 +39,29 @@ export function cleanupMedia(
 
 export function pruneUnusedMedia(
   ctx: MediaSyncContext,
-  activeUrls: Set<string>,
+  activeKeys: Set<string>,
 ) {
-  ctx.videoElements.forEach((el, url) => {
-    if (!activeUrls.has(url)) {
-      if (el instanceof HTMLVideoElement) {
-        try {
-          el.pause();
-          el.removeAttribute("src");
-          el.load();
-        } catch (e) {}
+  // Collect all elements that are still referenced by any active key
+  const stillNeededElements = new Set<HTMLVideoElement | HTMLImageElement>();
+  activeKeys.forEach((key) => {
+    const el = ctx.videoElements.get(key);
+    if (el) stillNeededElements.add(el);
+  });
+
+  ctx.videoElements.forEach((el, key) => {
+    if (!activeKeys.has(key)) {
+      if (!stillNeededElements.has(el)) {
+        if (el instanceof HTMLVideoElement) {
+          try {
+            el.pause();
+            el.removeAttribute("src");
+            el.load();
+          } catch (e) {}
+        }
       }
-      ctx.videoElements.delete(url);
-      globalActiveVideoElements.delete(url);
-      ctx.lastUsedTimestamp.delete(url);
+      ctx.videoElements.delete(key);
+      globalActiveVideoElements.delete(key);
+      ctx.lastUsedTimestamp.delete(key);
     }
   });
 }
@@ -62,7 +71,8 @@ export async function preloadClip(
   clip: VideoClip,
 ): Promise<HTMLVideoElement | HTMLImageElement | null> {
   if (typeof window === "undefined") return null;
-  ctx.lastUsedTimestamp.set(clip.url, Date.now());
+  const elementKey = clip.id || clip.url;
+  ctx.lastUsedTimestamp.set(elementKey, Date.now());
 
   // Preload clip thumbnail immediately for instant preview rendering & fallback
   if (clip.thumbnail && !ctx.thumbnailElements.has(clip.id)) {
@@ -74,7 +84,13 @@ export async function preloadClip(
     ctx.thumbnailElements.set(clip.id, thumb);
   }
 
-  if (ctx.videoElements.has(clip.url)) {
+  if (ctx.videoElements.has(elementKey)) {
+    return ctx.videoElements.get(elementKey)!;
+  }
+  if (
+    ctx.videoElements.has(clip.url) &&
+    !Array.from(ctx.videoElements.keys()).some((k) => k !== clip.url && k !== elementKey)
+  ) {
     return ctx.videoElements.get(clip.url)!;
   }
 
@@ -171,7 +187,15 @@ export async function preloadClip(
     });
     vid.load();
 
-    ctx.videoElements.set(clip.url, vid);
+    ctx.videoElements.set(elementKey, vid);
+    if (clip.id) {
+      ctx.videoElements.set(clip.id, vid);
+      globalActiveVideoElements.set(clip.id, vid);
+    }
+    if (!ctx.videoElements.has(clip.url)) {
+      ctx.videoElements.set(clip.url, vid);
+    }
+    globalActiveVideoElements.set(elementKey, vid);
     globalActiveVideoElements.set(clip.url, vid);
     return vid;
   } else {
@@ -187,9 +211,10 @@ export async function preloadClip(
         const lookupId = clip.sourceMediaId || clip.id;
         const freshUrl = await getLiveMediaUrl(lookupId);
         if (freshUrl && freshUrl !== clip.url) {
+          ctx.videoElements.delete(elementKey);
           ctx.videoElements.delete(clip.url);
           clip.url = freshUrl;
-          ctx.videoElements.set(freshUrl, img);
+          ctx.videoElements.set(elementKey, img);
           img.src = freshUrl;
           return;
         }
@@ -204,7 +229,10 @@ export async function preloadClip(
       }
     };
     img.src = clip.url;
-    ctx.videoElements.set(clip.url, img);
+    ctx.videoElements.set(elementKey, img);
+    if (!ctx.videoElements.has(clip.url)) {
+      ctx.videoElements.set(clip.url, img);
+    }
     return img;
   }
 }
@@ -217,11 +245,17 @@ export function syncPlayback(
 ) {
   if (typeof window === "undefined") return;
 
-  const activeUrls = new Set(activeClips.filter((c) => c.type === "video").map((c) => c.url));
+  const activeKeys = new Set<string>();
+  activeClips.forEach((c) => {
+    if (c.type === "video") {
+      activeKeys.add(c.id || c.url);
+      activeKeys.add(c.url);
+    }
+  });
 
   // 1. Pause any video that is NOT in activeClips
-  ctx.videoElements.forEach((el, url) => {
-    if (el instanceof HTMLVideoElement && !activeUrls.has(url)) {
+  ctx.videoElements.forEach((el, key) => {
+    if (el instanceof HTMLVideoElement && !activeKeys.has(key)) {
       if (!el.paused) {
         el.pause();
       }
@@ -232,7 +266,7 @@ export function syncPlayback(
   activeClips.forEach((activeClip) => {
     if (activeClip.type !== "video") return;
 
-    const mediaEl = ctx.videoElements.get(activeClip.url);
+    const mediaEl = ctx.videoElements.get(activeClip.id) || ctx.videoElements.get(activeClip.url);
     if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
     const vid = mediaEl as HTMLVideoElement;
 
@@ -274,20 +308,21 @@ export function syncPlayback(
       }
 
       if (vid.paused) {
-        // Startup grace: only seek if drift is noticeably large (> 0.35s)
-        if (Math.abs(vid.currentTime - mediaTime) > 0.35) {
+        // Startup sync: snap directly to mediaTime if drift > 0.02s before starting playback
+        if (Math.abs(vid.currentTime - mediaTime) > 0.02) {
           vid.currentTime = Math.max(0, mediaTime);
         }
         vid.play().catch(() => {});
       } else {
         const drift = vid.currentTime - mediaTime;
-        // Hard-seek only on massive drift (> 0.8s) to avoid decoder pipeline flushes
-        if (Math.abs(drift) > 0.8) {
+        // Hard-seek if drift is noticeable (> 0.18s) to eliminate visible lag between duplicate clips
+        if (Math.abs(drift) > 0.18) {
           vid.currentTime = Math.max(0, mediaTime);
-        } else if (Math.abs(drift) > 0.04) {
-          // Smooth micro-adjustment via playback rate
-          const compRate = drift > 0 ? speed * 0.96 : speed * 1.04;
-          if (Math.abs(vid.playbackRate - compRate) > 0.01) {
+        } else if (Math.abs(drift) > 0.015) {
+          // Dynamic smooth micro-adjustment via playback rate to catch up in < 100ms
+          const compFactor = Math.max(0.75, Math.min(1.25, 1 - drift * 1.5));
+          const compRate = speed * compFactor;
+          if (Math.abs(vid.playbackRate - compRate) > 0.005) {
             vid.playbackRate = Math.max(0.1, Math.min(16, compRate));
           }
         } else {
@@ -300,10 +335,13 @@ export function syncPlayback(
       if (!vid.paused) {
         vid.pause();
       }
-      if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.04) {
+      if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.02) {
         vid.currentTime = Math.max(0, mediaTime);
       }
     }
     ctx.lastUsedTimestamp.set(activeClip.url, Date.now());
+    if (activeClip.id) {
+      ctx.lastUsedTimestamp.set(activeClip.id, Date.now());
+    }
   });
 }

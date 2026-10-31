@@ -73,6 +73,92 @@ export default function TransitionsModal({
   const [duration, setDuration] = useState(activeTransition?.duration || 0.5);
   const [selectedType, setSelectedType] = useState<string>(activeTransition?.type || 'none');
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const styleId = 'fastart-transition-preview-styles';
+    if (document.getElementById(styleId)) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      @keyframes transDissolve {
+        0%, 30% { opacity: 0; }
+        60%, 85% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @keyframes transSlideLeft {
+        0%, 30% { transform: translateX(100%); opacity: 0.3; }
+        60%, 85% { transform: translateX(0%); opacity: 1; }
+        100% { transform: translateX(100%); opacity: 0.3; }
+      }
+      @keyframes transSlideRight {
+        0%, 30% { transform: translateX(-100%); opacity: 0.3; }
+        60%, 85% { transform: translateX(0%); opacity: 1; }
+        100% { transform: translateX(-100%); opacity: 0.3; }
+      }
+      @keyframes transPushUp {
+        0%, 30% { transform: translateY(100%); opacity: 0.3; }
+        60%, 85% { transform: translateY(0%); opacity: 1; }
+        100% { transform: translateY(100%); opacity: 0.3; }
+      }
+      @keyframes transPushDown {
+        0%, 30% { transform: translateY(-100%); opacity: 0.3; }
+        60%, 85% { transform: translateY(0%); opacity: 1; }
+        100% { transform: translateY(-100%); opacity: 0.3; }
+      }
+      @keyframes transZoomIn {
+        0%, 30% { transform: scale(0.2); opacity: 0; }
+        60%, 85% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(0.2); opacity: 0; }
+      }
+      @keyframes transZoomOut {
+        0%, 30% { transform: scale(1.6); opacity: 0; }
+        60%, 85% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(1.6); opacity: 0; }
+      }
+      @keyframes transFlashWhite {
+        0%, 30% { opacity: 0; }
+        45% { opacity: 1; filter: brightness(2.5); }
+        60%, 85% { opacity: 1; filter: brightness(1); }
+        100% { opacity: 0; }
+      }
+      @keyframes transFadeBlack {
+        0%, 30% { opacity: 0; }
+        45% { opacity: 1; filter: brightness(0); }
+        60%, 85% { opacity: 1; filter: brightness(1); }
+        100% { opacity: 0; }
+      }
+      @keyframes transGlitch {
+        0%, 30% { opacity: 0; transform: none; }
+        45% { opacity: 0.8; transform: skewX(-10deg) scale(1.05); filter: hue-rotate(90deg); }
+        55% { opacity: 0.9; transform: skewX(10deg) scale(0.95); filter: hue-rotate(-90deg); }
+        65%, 85% { opacity: 1; transform: none; filter: none; }
+        100% { opacity: 0; }
+      }
+      @keyframes transSpinCw {
+        0%, 30% { transform: rotate(-180deg) scale(0.25); opacity: 0; }
+        60%, 85% { transform: rotate(0deg) scale(1); opacity: 1; }
+        100% { transform: rotate(-180deg) scale(0.25); opacity: 0; }
+      }
+      @keyframes transSpinCcw {
+        0%, 30% { transform: rotate(180deg) scale(0.25); opacity: 0; }
+        60%, 85% { transform: rotate(0deg) scale(1); opacity: 1; }
+        100% { transform: rotate(180deg) scale(0.25); opacity: 0; }
+      }
+      @keyframes transLightLeak {
+        0%, 30% { opacity: 0; }
+        48% { opacity: 1; filter: brightness(1.6) sepia(0.5); }
+        60%, 85% { opacity: 1; filter: none; }
+        100% { opacity: 0; }
+      }
+      @keyframes transCut {
+        0%, 48% { opacity: 0; }
+        50%, 85% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }, []);
+
   const durations = [0.3, 0.5, 0.8, 1.0];
 
   const handleSelect = (item: any) => {
@@ -189,20 +275,47 @@ export default function TransitionsModal({
                           <Text style={styles.noneStageText}>None</Text>
                         </View>
                       ) : (
-                        <View style={styles.splitBlockContainer}>
-                          <View style={styles.splitClipA}>
-                            <Text style={styles.clipLabel}>A</Text>
+                        <View style={styles.transStageInner}>
+                          {/* Base Clip A */}
+                          <View style={styles.clipLayerA}>
+                            <Image
+                              source={{ uri: PRESET_PREVIEW_IMAGE }}
+                              style={[
+                                styles.clipImg,
+                                Platform.OS === 'web' ? ({ filter: 'sepia(0.35) contrast(1.1) brightness(0.85)' } as any) : null,
+                              ]}
+                              resizeMode="cover"
+                            />
+                            <View style={styles.clipTagA}>
+                              <Text style={styles.clipTagText}>A</Text>
+                            </View>
                           </View>
-                          <View style={[styles.transIconCenter, isActive && styles.transIconCenterActive]}>
+
+                          {/* Incoming Clip B executing live transition */}
+                          <View style={[styles.clipLayerB, getTransitionAnimStyle(item.id)]}>
+                            <Image
+                              source={{ uri: PRESET_PREVIEW_IMAGE }}
+                              style={[
+                                styles.clipImg,
+                                Platform.OS === 'web' ? ({ filter: 'contrast(1.25) saturate(1.4)' } as any) : null,
+                              ]}
+                              resizeMode="cover"
+                            />
+                            <View style={styles.clipTagB}>
+                              <Text style={styles.clipTagText}>B</Text>
+                            </View>
+                          </View>
+
+                          {/* Center transition icon indicator */}
+                          <View style={[styles.transPillCenter, isActive && styles.transPillCenterActive]}>
                             <Ionicons
                               name={getTransitionIcon(item.id)}
-                              size={13}
-                              color={isActive ? '#00F2FE' : '#E2E8F0'}
+                              size={12}
+                              color={isActive ? '#00F2FE' : '#FFFFFF'}
                             />
                           </View>
-                          <View style={styles.splitClipB}>
-                            <Text style={styles.clipLabel}>B</Text>
-                          </View>
+
+                          {/* Active badge */}
                           {isActive && (
                             <View style={styles.activeCheckBadge}>
                               <Ionicons name="checkmark" size={10} color="#000000" />
@@ -219,6 +332,9 @@ export default function TransitionsModal({
                       numberOfLines={1}
                     >
                       {item.name}
+                    </Text>
+                    <Text style={styles.transitionDescText} numberOfLines={1}>
+                      {(item as any).desc || 'Transition'}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -399,56 +515,76 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '600',
   },
-  splitBlockContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  transStageInner: {
     width: '100%',
     height: '100%',
-    paddingHorizontal: 4,
-    gap: 2,
     position: 'relative',
+    overflow: 'hidden',
   },
-  splitClipA: {
-    flex: 1,
-    height: 36,
-    borderRadius: 4,
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#334155',
-    alignItems: 'center',
-    justifyContent: 'center',
+  clipLayerA: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1,
   },
-  splitClipB: {
-    flex: 1,
-    height: 36,
-    borderRadius: 4,
-    backgroundColor: '#0F2338',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-    alignItems: 'center',
-    justifyContent: 'center',
+  clipLayerB: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 2,
   },
-  clipLabel: {
-    color: '#64748B',
-    fontSize: 9,
+  clipImg: {
+    width: '100%',
+    height: '100%',
+  },
+  clipTagA: {
+    position: 'absolute',
+    bottom: 2,
+    left: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    zIndex: 4,
+  },
+  clipTagB: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    backgroundColor: 'rgba(0, 242, 254, 0.25)',
+    borderWidth: 0.5,
+    borderColor: '#00F2FE',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
+    zIndex: 4,
+  },
+  clipTagText: {
+    color: '#FFFFFF',
+    fontSize: 7.5,
     fontWeight: '800',
   },
-  transIconCenter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#0A0E17',
+  transPillCenter: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -10 }, { translateY: -10 }],
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(8, 9, 14, 0.85)',
     borderWidth: 1,
     borderColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
-    marginHorizontal: -6,
+    zIndex: 5,
   },
-  transIconCenterActive: {
+  transPillCenterActive: {
     borderColor: '#00F2FE',
-    backgroundColor: '#0E2433',
+    backgroundColor: 'rgba(0, 242, 254, 0.25)',
+  },
+  transitionDescText: {
+    color: '#64748B',
+    fontSize: 7.5,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 1,
   },
   activeCheckBadge: {
     position: 'absolute',

@@ -16,6 +16,8 @@ interface UseTimelineClipTrimParams {
   pxPerSec: number;
   isHapticEnabled: boolean;
   isTrimmingActiveRef: React.MutableRefObject<boolean>;
+  isSnappingEnabled?: boolean;
+  currentTime?: number;
   onTrimClip?: (
     clipId: string,
     updates: {
@@ -35,6 +37,8 @@ export function useTimelineClipTrim({
   pxPerSec,
   isHapticEnabled,
   isTrimmingActiveRef,
+  isSnappingEnabled = false,
+  currentTime = -1,
   onTrimClip,
 }: UseTimelineClipTrimParams) {
   const [activeTrimming, setActiveTrimming] = useState<{
@@ -57,6 +61,10 @@ export function useTimelineClipTrim({
   pxPerSecRef.current = pxPerSec;
   const isHapticEnabledRef = useRef(isHapticEnabled);
   isHapticEnabledRef.current = isHapticEnabled;
+  const isSnappingEnabledRef = useRef(isSnappingEnabled);
+  isSnappingEnabledRef.current = isSnappingEnabled;
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
   const onTrimClipRef = useRef(onTrimClip);
   onTrimClipRef.current = onTrimClip;
 
@@ -107,6 +115,9 @@ export function useTimelineClipTrim({
           info.trackIndex,
           deltaX,
           allClipsRef.current,
+          isSnappingEnabledRef.current,
+          pxPerSecRef.current,
+          currentTimeRef.current,
         );
 
         setActiveTrimDelta({
@@ -209,6 +220,9 @@ export function useTimelineClipTrim({
           info.trackIndex,
           deltaX,
           allClipsRef.current,
+          isSnappingEnabledRef.current,
+          pxPerSecRef.current,
+          currentTimeRef.current,
         );
 
         setActiveTrimDelta({
@@ -325,6 +339,9 @@ export function useTimelineClipTrim({
           trackIndex,
           deltaX,
           allClipsRef.current,
+          isSnappingEnabledRef.current,
+          pxPerSecRef.current,
+          currentTimeRef.current,
         );
 
         latestUpdates = updates;
@@ -418,6 +435,9 @@ export function useTimelineClipTrim({
           trackIndex,
           deltaX,
           allClipsRef.current,
+          isSnappingEnabledRef.current,
+          pxPerSecRef.current,
+          currentTimeRef.current,
         );
 
         latestUpdates = updates;

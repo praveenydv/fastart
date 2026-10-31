@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -53,6 +53,10 @@ export default function HSLAdjustModal({
   const [adjustments, setAdjustments] = useState<HSLAdjustments>(
     initialAdjustments || {}
   );
+
+  useEffect(() => {
+    setAdjustments(initialAdjustments || {});
+  }, [initialAdjustments]);
 
   if (!visible) return null;
 
@@ -180,6 +184,7 @@ export default function HSLAdjustModal({
                     {hasMod && <View style={styles.swatchModIndicator} />}
                   </View>
                   <Text
+                    numberOfLines={1}
                     style={[
                       styles.swatchLabel,
                       isSelected && styles.swatchLabelSelected,
@@ -452,41 +457,53 @@ const styles = StyleSheet.create({
   },
   swatchRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
     marginBottom: 16,
-    backgroundColor: '#171926',
+    backgroundColor: '#13151F',
     borderRadius: 14,
-    padding: 10,
+    padding: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   swatchBtn: {
-    alignItems: 'center',
-    padding: 4,
-    borderRadius: 8,
-  },
-  swatchBtnSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  swatchDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    marginBottom: 4,
+    flexBasis: '22%',
+    flexGrow: 1,
+    minWidth: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 7,
+    paddingHorizontal: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  swatchBtnSelected: {
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderColor: '#00F2FE',
+  },
+  swatchDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    marginBottom: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   swatchModIndicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#000000',
   },
   swatchLabel: {
     fontSize: 10,
-    color: '#71717A',
+    color: '#94A3B8',
     fontWeight: '600',
   },
   swatchLabelSelected: {

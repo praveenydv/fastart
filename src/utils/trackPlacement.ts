@@ -1,4 +1,5 @@
 import { FastArtProject } from "../types/project";
+import { MAX_TRACKS } from "../components/Timeline/timelineTypes";
 
 export function getAllTrackClips(proj: FastArtProject): {
   id: string;
@@ -111,9 +112,9 @@ export function allocateClipPlacement(
     return { trackIndex: preferredTrack, startTime: start };
   }
 
-  // 2. Space is NOT enough on preferred track! Check other tracks (up to 10 tracks, 0-9)
+  // 2. Space is NOT enough on preferred track! Check other tracks (up to MAX_TRACKS)
   const otherTracks: number[] = [];
-  for (let t = 0; t < 10; t++) {
+  for (let t = 0; t < MAX_TRACKS; t++) {
     if (t !== preferredTrack) {
       otherTracks.push(t);
     }
@@ -138,7 +139,7 @@ export function allocateClipPlacement(
     }
   }
 
-  // 3. All 10 tracks occupied at desiredStart!
+  // 3. All tracks occupied at desiredStart!
   return null;
 }
 
@@ -158,17 +159,17 @@ export function allocateNewTrackForClip(
   // Find the next unoccupied track lane
   const usedTracks = new Set(allClips.map((c) => c.trackIndex));
   let targetTrack = 0;
-  while (usedTracks.has(targetTrack) && targetTrack < 9) {
+  while (usedTracks.has(targetTrack) && targetTrack < MAX_TRACKS - 1) {
     targetTrack++;
   }
 
   if (usedTracks.has(targetTrack)) {
     const maxTrack = Math.max(...usedTracks);
-    targetTrack = Math.min(9, maxTrack + 1);
+    targetTrack = Math.min(MAX_TRACKS - 1, maxTrack + 1);
   }
 
   return {
-    trackIndex: Math.min(9, targetTrack),
+    trackIndex: Math.min(MAX_TRACKS - 1, targetTrack),
     startTime: start,
   };
 }

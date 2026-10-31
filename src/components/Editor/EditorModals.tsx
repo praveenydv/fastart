@@ -19,7 +19,6 @@ import AutoCutModal from "../Panels/AutoCutModal";
 import CanvasModal from "../Panels/CanvasModal";
 import BackgroundModal from "../Panels/BackgroundModal";
 import AIEnhanceModal from "../Panels/AIEnhanceModal";
-import TextToSpeechModal from "../Panels/TextToSpeechModal";
 import CutoutModal from "../Panels/CutoutModal";
 import MaskModal from "../Panels/MaskModal";
 import MotionTrackingModal from "../Panels/MotionTrackingModal";
@@ -53,6 +52,7 @@ interface EditorModalsProps {
   route: any;
   totalDuration: number;
   currentTime: number;
+  isPlaying?: boolean;
   setCurrentTime: (t: number) => void;
   selectedClipId?: string | null;
   selectedClip: any;
@@ -132,6 +132,29 @@ interface EditorModalsProps {
   handleDeleteProjectAsset?: (assetId: string, type?: string) => void;
 }
 
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  const styleId = "fastart-modal-animations";
+  if (!document.getElementById(styleId)) {
+    const styleEl = document.createElement("style");
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      @keyframes fastartInlineEnter {
+        0% { opacity: 0; transform: translateY(4px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fastartBackdropFadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+      @keyframes fastartSheetSlideUp {
+        0% { opacity: 0; transform: translateY(28px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+}
+
 export const INLINE_MODAL_KEYS = new Set([
   'media',
   'audio',
@@ -150,7 +173,6 @@ export const INLINE_MODAL_KEYS = new Set([
   'canvas',
   'background',
   'keyframe',
-  'tts',
   'cutout',
   'tracking',
   'opacity',
@@ -172,6 +194,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
   route,
   totalDuration,
   currentTime,
+  isPlaying,
   setCurrentTime,
   selectedClipId,
   selectedClip,
@@ -244,10 +267,10 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
 
   useEffect(() => {
     if (activeModal && isInline && Platform.OS !== "web") {
-      fadeAnim.setValue(0.85);
+      fadeAnim.setValue(0);
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 150,
+        duration: 160,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();
@@ -311,6 +334,7 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           isInline={isInline}
           selectedClip={selectedClip}
           currentTime={currentTime}
+          isPlaying={isPlaying}
         />
       )}
 
@@ -625,20 +649,6 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "tts" && (
-        <TextToSpeechModal
-          visible={true}
-          onClose={handleCancel}
-          onAddAudio={handleAddAudio}
-          initialScript={
-            selectedClipType === "text" && selectedClip
-              ? (selectedClip as TextClip).text
-              : undefined
-          }
-          isInline={isInline}
-        />
-      )}
-
       {/* Modern Sleek Keyframe Animation Studio Modal */}
       {activeModal === "keyframe" && (() => {
         let effectiveClip = selectedClip;
@@ -854,10 +864,13 @@ export const EditorModals: React.FC<EditorModalsProps> = ({
           {
             flex: 1,
             width: "100%",
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
             opacity: fadeAnim,
           },
           Platform.OS === "web" && ({
-            animation: "fastartFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
+            animation: "fastartInlineEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
           } as any),
         ]}
       >

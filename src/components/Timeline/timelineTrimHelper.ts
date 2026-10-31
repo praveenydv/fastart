@@ -9,6 +9,9 @@ export function computeLeftTrimUpdates(
   trackIndex: number,
   deltaX: number,
   allClips: UnifiedClipItem[],
+  isSnappingEnabled = false,
+  pxPerSec = 50,
+  currentTime = -1,
 ) {
   const isUnlimited = isExtendableClip(targetClip, targetClip.type);
   const mediaDur = isUnlimited
@@ -55,8 +58,45 @@ export function computeLeftTrimUpdates(
   const minDurationDelta = isFinite(maxClipAllowedDur) ? -(maxClipAllowedDur - initialDur) : -Infinity;
   const minDelta = Math.max(minTrackDelta, minMediaDelta, minDurationDelta);
 
-  const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaX));
-  const newStart = Math.max(minAllowedStart, initialStart + clampedDelta);
+  let clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaX));
+  let candidateStart = Math.max(minAllowedStart, initialStart + clampedDelta);
+
+  if (isSnappingEnabled) {
+    const snapThreshold = 20 / pxPerSec;
+    let bestSnap = candidateStart;
+    let bestDist = snapThreshold;
+
+    if (currentTime >= 0 && Math.abs(candidateStart - currentTime) < bestDist) {
+      bestSnap = currentTime;
+      bestDist = Math.abs(candidateStart - currentTime);
+    }
+    if (Math.abs(candidateStart) < bestDist) {
+      bestSnap = 0;
+      bestDist = Math.abs(candidateStart);
+    }
+    allClips.forEach((other) => {
+      if (other.id === targetClip.id) return;
+      if (Math.abs(candidateStart - other.startTime) < bestDist) {
+        bestSnap = other.startTime;
+        bestDist = Math.abs(candidateStart - other.startTime);
+      }
+      const otherEnd = other.startTime + other.duration;
+      if (Math.abs(candidateStart - otherEnd) < bestDist) {
+        bestSnap = otherEnd;
+        bestDist = Math.abs(candidateStart - otherEnd);
+      }
+    });
+
+    if (bestSnap !== candidateStart) {
+      const snapDelta = bestSnap - initialStart;
+      if (snapDelta >= minDelta && snapDelta <= maxDelta && bestSnap >= minAllowedStart) {
+        clampedDelta = snapDelta;
+        candidateStart = bestSnap;
+      }
+    }
+  }
+
+  const newStart = candidateStart;
   const newDur = Math.max(MIN_CLIP_DURATION, Math.min(maxClipAllowedDur, initialDur - clampedDelta));
   const newTrimIn = isMediaClip
     ? Math.max(minAllowedTrimIn, initialTrimIn + clampedDelta * speed)
@@ -78,6 +118,9 @@ export function computeRightTrimUpdates(
   trackIndex: number,
   deltaX: number,
   allClips: UnifiedClipItem[],
+  isSnappingEnabled = false,
+  pxPerSec = 50,
+  currentTime = -1,
 ) {
   const isUnlimited = isExtendableClip(targetClip, targetClip.type);
   const mediaDur = isUnlimited
@@ -127,13 +170,46 @@ export function computeRightTrimUpdates(
   const maxAllowedDur = Math.min(maxTrackDur, maxMediaDur, maxClipAllowedDur);
 
   const rawDur = initialDur + deltaX;
-  const newDur = Math.max(
+  let candidateDur = Math.max(
     MIN_CLIP_DURATION,
     Math.min(maxAllowedDur, rawDur),
   );
+
+  if (isSnappingEnabled) {
+    const snapThreshold = 20 / pxPerSec;
+    const candidateEnd = initialStart + candidateDur;
+    let bestSnap = candidateEnd;
+    let bestDist = snapThreshold;
+
+    if (currentTime >= 0 && Math.abs(candidateEnd - currentTime) < bestDist) {
+      bestSnap = currentTime;
+      bestDist = Math.abs(candidateEnd - currentTime);
+    }
+    allClips.forEach((other) => {
+      if (other.id === targetClip.id) return;
+      const otherEnd = other.startTime + other.duration;
+      if (Math.abs(candidateEnd - otherEnd) < bestDist) {
+        bestSnap = otherEnd;
+        bestDist = Math.abs(candidateEnd - otherEnd);
+      }
+      if (Math.abs(candidateEnd - other.startTime) < bestDist) {
+        bestSnap = other.startTime;
+        bestDist = Math.abs(candidateEnd - other.startTime);
+      }
+    });
+
+    if (bestSnap !== candidateEnd) {
+      const snapDur = bestSnap - initialStart;
+      if (snapDur >= MIN_CLIP_DURATION && snapDur <= maxAllowedDur) {
+        candidateDur = snapDur;
+      }
+    }
+  }
+
+  const newDur = candidateDur;
   const newTrimOut = isMediaClip
     ? Math.min(maxAllowedTrimOut, currentTrimIn + newDur * speed)
-    : Math.max(MIN_CLIP_DURATION, initialTrimOut + deltaX);
+    : Math.max(MIN_CLIP_DURATION, initialTrimOut + (newDur - initialDur));
 
   return {
     duration: Number(newDur.toFixed(3)),

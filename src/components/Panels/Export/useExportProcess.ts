@@ -143,20 +143,43 @@ export function useExportProcess(
       const renderDuration = Math.max(totalDuration || 2.0, 1.0);
       updateProgressMonotonic(5);
 
-      const result = await exportFastArtProject(
-        project,
-        {
-          fps,
-          duration: renderDuration,
-          format: mediaType,
-          currentTime: project?.currentTime || 0,
-          resolution,
-          isCancelled: () => isCancelledRef.current,
-        },
-        (pct) => {
-          updateProgressMonotonic(pct);
+      let result: ExportResult | null = null;
+      try {
+        result = await exportFastArtProject(
+          project,
+          {
+            fps,
+            duration: renderDuration,
+            format: mediaType,
+            currentTime: project?.currentTime || 0,
+            resolution,
+            isCancelled: () => isCancelledRef.current,
+          },
+          (pct) => {
+            updateProgressMonotonic(pct);
+          }
+        );
+      } catch (nativeErr: any) {
+        if (isCancelledRef.current || nativeErr?.message === "Export cancelled") {
+          throw nativeErr;
         }
-      );
+
+        // On Native Mobile (iOS/Android): If native Rust is unlinked or falls back, engage headless DomWebView canvas bridge
+        if (
+          Platform.OS !== "web" &&
+          (mediaType === "mp4" || mediaType === "webm") &&
+          (nativeErr?.message === "NATIVE_BRIDGE_FALLBACK_REQUIRED" ||
+            nativeErr?.message?.includes("could not be rendered"))
+        ) {
+          console.log("[useExportProcess] Native Rust unavailable, engaging Headless Canvas WebView bridge fallback...");
+          setIsMobileCanvasRendering(true);
+          result = await new Promise<ExportResult>((resolve, reject) => {
+            mobileCanvasResolverRef.current = { resolve, reject };
+          });
+        } else {
+          throw nativeErr;
+        }
+      }
 
       if (isCancelledRef.current || !result) return;
 

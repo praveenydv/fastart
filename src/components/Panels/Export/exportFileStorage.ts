@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { BinaryFileWriter } from "../../../utils/renderer/mobileExporter";
 import {
   Asset,
@@ -94,6 +95,20 @@ export async function executeDirectDownload({
     resolution,
   });
 
+  const mime =
+    activeResult?.mimeType ||
+    (mediaType === "mp4"
+      ? "video/mp4"
+      : mediaType === "webm"
+      ? "video/webm"
+      : mediaType === "png"
+      ? "image/png"
+      : mediaType === "wav"
+      ? "audio/wav"
+      : mediaType === "gif"
+      ? "image/gif"
+      : "application/octet-stream");
+
   // --- 1. WEB DIRECT DOWNLOAD ---
   if (Platform.OS === "web" && typeof window !== "undefined") {
     try {
@@ -107,10 +122,42 @@ export async function executeDirectDownload({
         }
       }
 
-      // Modern File System Access API
+      // Mobile Web (iOS Safari, Android Chrome): Web Share API with direct Camera Roll / Photos save
+      const isMobileWeb =
+        typeof navigator !== "undefined" &&
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+      if (isMobileWeb && (navigator as any).canShare && blob && blob.size > 0) {
+        try {
+          const shareFile = new (window as any).File([blob], filename, { type: mime });
+          if ((navigator as any).canShare({ files: [shareFile] })) {
+            await (navigator as any).share({
+              files: [shareFile],
+              title: filename,
+            });
+            soundEngine.playSfx("pop");
+
+            const destPath = `Camera Roll / ${filename}`;
+            await triggerDownloadNotification({
+              filename,
+              destinationPath: destPath,
+              projectId: project?.id,
+              projectTitle: project?.title,
+              fileSize: blob.size,
+            });
+            onSavedSuccess(filename, destPath);
+            return;
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === "AbortError") {
+            return; // User dismissed share sheet
+          }
+          console.warn("[exportFileStorage] Mobile Web Share API error:", shareErr);
+        }
+      }
+
+      // Modern File System Access API (Desktop Chrome, Edge)
       if ("showSaveFilePicker" in window && blob && blob.size > 0) {
         try {
-          const mime = activeResult?.mimeType || "application/octet-stream";
           const handle = await (window as any).showSaveFilePicker({
             suggestedName: filename,
             types: [
@@ -146,11 +193,17 @@ export async function executeDirectDownload({
       }
 
       // Classic Browser Download Anchor
-      const downloadBlob =
-        blob && blob.size > 0
-          ? new Blob([blob], { type: "application/octet-stream" })
-          : new Blob([], { type: "application/octet-stream" });
-      const downloadUrl = URL.createObjectURL(downloadBlob);
+      let downloadUrl = targetUrl;
+      let shouldRevoke = false;
+
+      if (!downloadUrl || (!downloadUrl.startsWith("blob:") && !downloadUrl.startsWith("data:"))) {
+        const downloadBlob =
+          blob && blob.size > 0
+            ? (blob.type === mime ? blob : new Blob([blob], { type: mime }))
+            : new Blob([], { type: mime });
+        downloadUrl = URL.createObjectURL(downloadBlob);
+        shouldRevoke = true;
+      }
 
       const a = document.createElement("a");
       a.style.display = "none";
@@ -181,7 +234,9 @@ export async function executeDirectDownload({
         if (document.body.contains(a)) {
           document.body.removeChild(a);
         }
-        URL.revokeObjectURL(downloadUrl);
+        if (shouldRevoke && downloadUrl) {
+          URL.revokeObjectURL(downloadUrl);
+        }
       }, 3000);
     } catch (err) {
       console.warn("Web download error:", err);
@@ -209,162 +264,189 @@ export async function executeDirectDownload({
       let savedPath = Platform.OS === "ios" ? "Photos & Files" : "Gallery / FastArt";
       let hasPermission = false;
 
-      try {
-        const permStatus = await getPermissionsAsync();
-        if (permStatus.granted) {
-          hasPermission = true;
-        } else {
-          const req = await requestPermissionsAsync();
-          hasPermission = req.granted;
-        }
-      } catch (permErr) {
+      // Special handling for standalone audio soundtrack (WAV):
+      // Mobile Camera Roll/Photos rejects .wav audio files, so route directly through native system share / Files sheet
+      if (mediaType === "wav") {
         try {
-          const legacyReq = await MediaLibraryLegacy.requestPermissionsAsync();
-          hasPermission = legacyReq.granted;
-        } catch (e) {
-          console.warn("Permission check error:", e);
-        }
-      }
-
-      if (hasPermission) {
-        try {
-          if (Asset && typeof Asset.create === "function") {
-            const asset = await Asset.create(fileToSave);
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(fileToSave, {
+              mimeType: "audio/wav",
+              dialogTitle: filename,
+              UTI: "com.microsoft.waveform-audio",
+            });
             savedSuccess = true;
-            savedPath =
-              Platform.OS === "ios"
-                ? `Photos / ${filename}`
-                : (asset as any)?.uri
-                ? `Gallery / DCIM / FastArt / ${filename}`
-                : "Gallery / FastArt";
+            savedPath = Platform.OS === "ios" ? "Files / Shared" : "Device Audio / Shared";
           }
-        } catch (createErr) {
-          console.warn("Asset.create failed, trying legacy save:", createErr);
+        } catch (wavShareErr) {
+          console.warn("WAV sharing error:", wavShareErr);
+        }
+      } else {
+        try {
+          const permStatus = await getPermissionsAsync();
+          if (permStatus.granted) {
+            hasPermission = true;
+          } else {
+            const req = await requestPermissionsAsync();
+            hasPermission = req.granted;
+          }
+        } catch (permErr) {
+          try {
+            const legacyReq = await MediaLibraryLegacy.requestPermissionsAsync();
+            hasPermission = legacyReq.granted;
+          } catch (e) {
+            console.warn("Permission check error:", e);
+          }
         }
 
-        if (!savedSuccess) {
+        if (hasPermission) {
           try {
-            if (MediaLibraryLegacy?.saveToLibraryAsync) {
-              await MediaLibraryLegacy.saveToLibraryAsync(fileToSave);
+            if (Asset && typeof Asset.create === "function") {
+              const asset = await Asset.create(fileToSave);
               savedSuccess = true;
               savedPath =
                 Platform.OS === "ios"
-                  ? "Photos / FastArt"
-                  : "Gallery / Photos / FastArt";
-            } else if (MediaLibraryLegacy?.createAssetAsync) {
-              const asset = await MediaLibraryLegacy.createAssetAsync(fileToSave);
-              savedSuccess = true;
-              savedPath =
-                asset?.uri ||
-                (Platform.OS === "ios"
-                  ? "Photos / FastArt"
-                  : "Gallery / DCIM / FastArt");
+                  ? `Photos / ${filename}`
+                  : (asset as any)?.uri
+                  ? `Gallery / DCIM / FastArt / ${filename}`
+                  : "Gallery / FastArt";
             }
-          } catch (legacyErr) {
-            console.warn("Legacy saveToLibraryAsync error:", legacyErr);
+          } catch (createErr) {
+            console.warn("Asset.create failed, trying legacy save:", createErr);
+          }
+
+          if (!savedSuccess) {
+            try {
+              if (MediaLibraryLegacy?.saveToLibraryAsync) {
+                await MediaLibraryLegacy.saveToLibraryAsync(fileToSave);
+                savedSuccess = true;
+                savedPath =
+                  Platform.OS === "ios"
+                    ? "Photos / FastArt"
+                    : "Gallery / Photos / FastArt";
+              } else if (MediaLibraryLegacy?.createAssetAsync) {
+                const asset = await MediaLibraryLegacy.createAssetAsync(fileToSave);
+                savedSuccess = true;
+                savedPath =
+                  asset?.uri ||
+                  (Platform.OS === "ios"
+                    ? "Photos / FastArt"
+                    : "Gallery / DCIM / FastArt");
+              }
+            } catch (legacyErr) {
+              console.warn("Legacy saveToLibraryAsync error:", legacyErr);
+            }
           }
         }
-      }
 
-      // Android StorageAccessFramework Fallback (Downloads folder picker)
-      if (
-        !savedSuccess &&
-        Platform.OS === "android" &&
-        FileSystem.StorageAccessFramework
-      ) {
-        try {
-          const perm =
-            await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-          if (perm.granted) {
-            const mime =
-              activeResult?.mimeType ||
-              (mediaType === "mp4"
-                ? "video/mp4"
-                : mediaType === "png"
-                ? "image/png"
-                : "application/octet-stream");
-            const createdUri =
-              await FileSystem.StorageAccessFramework.createFileAsync(
-                perm.directoryUri,
-                filename,
-                mime
-              );
+        // Android StorageAccessFramework Fallback (Downloads folder picker)
+        if (
+          !savedSuccess &&
+          Platform.OS === "android" &&
+          FileSystem.StorageAccessFramework
+        ) {
+          try {
+            const perm =
+              await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+            if (perm.granted) {
+              const createdUri =
+                await FileSystem.StorageAccessFramework.createFileAsync(
+                  perm.directoryUri,
+                  filename,
+                  mime
+                );
 
-            // Stream file directly to SAF createdUri with zero monolithic heap allocations
-            let copied = false;
+              // Stream file directly to SAF createdUri with zero monolithic heap allocations
+              let copied = false;
 
-            // Strategy 1: Native SAF copyAsync (zero memory overhead, native Java stream transfer)
-            try {
-              if ((FileSystem as any).StorageAccessFramework?.copyAsync) {
-                await (FileSystem as any).StorageAccessFramework.copyAsync({
-                  from: fileToSave,
-                  to: createdUri,
-                });
-                copied = true;
-              } else if (FileSystem.copyAsync) {
-                await FileSystem.copyAsync({
-                  from: fileToSave,
-                  to: createdUri,
-                });
-                copied = true;
-              }
-            } catch (copyErr) {
-              console.warn("SAF native copy failed, trying streams:", copyErr);
-            }
-
-            // Strategy 2: WebStreams file pipe
-            if (!copied) {
+              // Strategy 1: Native SAF copyAsync (zero memory overhead, native Java stream transfer)
               try {
-                const srcFile = new File(fileToSave);
-                const destFile = new File(createdUri);
-                await srcFile.readableStream().pipeTo(destFile.writableStream());
-                copied = true;
-              } catch (streamErr) {
-                console.warn("SAF stream pipe failed, falling back to chunked writer:", streamErr);
-              }
-            }
-
-            // Strategy 3: Binary bytes write
-            if (!copied) {
-              try {
-                const srcFile = new File(fileToSave);
-                const bytes = await srcFile.bytes();
-                const writer = new BinaryFileWriter(createdUri);
-                await writer.write(bytes);
-                await writer.close();
-                copied = true;
-              } catch (bytesErr) {
-                console.warn("SAF binary copy failed, falling back to chunked Base64:", bytesErr);
-              }
-            }
-
-            if (!copied) {
-              // Legacy chunked read/write
-              const info = await FileSystem.getInfoAsync(fileToSave);
-              const size = (info as any).size || 0;
-              const CHUNK = 512 * 1024;
-              if (size > 0) {
-                for (let pos = 0; pos < size; pos += CHUNK) {
-                  const b64 = await FileSystem.readAsStringAsync(fileToSave, {
-                    encoding: FileSystem.EncodingType.Base64,
-                    position: pos,
-                    length: Math.min(CHUNK, size - pos),
+                if ((FileSystem as any).StorageAccessFramework?.copyAsync) {
+                  await (FileSystem as any).StorageAccessFramework.copyAsync({
+                    from: fileToSave,
+                    to: createdUri,
                   });
-                  await FileSystem.writeAsStringAsync(createdUri, b64, {
-                    encoding: FileSystem.EncodingType.Base64,
-                    append: pos > 0,
+                  copied = true;
+                } else if (FileSystem.copyAsync) {
+                  await FileSystem.copyAsync({
+                    from: fileToSave,
+                    to: createdUri,
                   });
+                  copied = true;
+                }
+              } catch (copyErr) {
+                console.warn("SAF native copy failed, trying streams:", copyErr);
+              }
+
+              // Strategy 2: WebStreams file pipe
+              if (!copied) {
+                try {
+                  const srcFile = new File(fileToSave);
+                  const destFile = new File(createdUri);
+                  await srcFile.readableStream().pipeTo(destFile.writableStream());
+                  copied = true;
+                } catch (streamErr) {
+                  console.warn("SAF stream pipe failed, falling back to chunked writer:", streamErr);
                 }
               }
-            }
 
-            if (copied) {
-              savedSuccess = true;
-              savedPath = "Device Downloads / " + filename;
+              // Strategy 3: Binary bytes write
+              if (!copied) {
+                try {
+                  const srcFile = new File(fileToSave);
+                  const bytes = await srcFile.bytes();
+                  const writer = new BinaryFileWriter(createdUri);
+                  await writer.write(bytes);
+                  await writer.close();
+                  copied = true;
+                } catch (bytesErr) {
+                  console.warn("SAF binary copy failed, falling back to chunked Base64:", bytesErr);
+                }
+              }
+
+              if (!copied) {
+                // Legacy chunked read/write
+                const info = await FileSystem.getInfoAsync(fileToSave);
+                const size = (info as any).size || 0;
+                const CHUNK = 512 * 1024;
+                if (size > 0) {
+                  for (let pos = 0; pos < size; pos += CHUNK) {
+                    const b64 = await FileSystem.readAsStringAsync(fileToSave, {
+                      encoding: FileSystem.EncodingType.Base64,
+                      position: pos,
+                      length: Math.min(CHUNK, size - pos),
+                    });
+                    await FileSystem.writeAsStringAsync(createdUri, b64, {
+                      encoding: FileSystem.EncodingType.Base64,
+                      append: pos > 0,
+                    });
+                  }
+                }
+              }
+
+              if (copied) {
+                savedSuccess = true;
+                savedPath = "Device Downloads / " + filename;
+              }
             }
+          } catch (safErr) {
+            console.warn("StorageAccessFramework save error:", safErr);
           }
-        } catch (safErr) {
-          console.warn("StorageAccessFramework save error:", safErr);
+        }
+
+        // Native Sharing Fallback (Files, AirDrop, Drive, Messaging)
+        if (!savedSuccess) {
+          try {
+            if (await Sharing.isAvailableAsync()) {
+              await Sharing.shareAsync(fileToSave, {
+                mimeType: mime,
+                dialogTitle: filename,
+              });
+              savedSuccess = true;
+              savedPath = Platform.OS === "ios" ? "Files / Shared" : "Device / Shared";
+            }
+          } catch (shareFallbackErr) {
+            console.warn("Native sharing fallback error:", shareFallbackErr);
+          }
         }
       }
 

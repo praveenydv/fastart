@@ -25,6 +25,7 @@ import {
 import { THEME_COLORS } from '../../constants/designConstants';
 import { FILTER_PRESETS } from '../../constants/sampleMedia';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { CustomColorPickerButton } from '../Common/CustomColorPickerButton';
 
 interface DesktopInspectorProps {
   project: FastArtProject;
@@ -249,6 +250,14 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                   </TouchableOpacity>
                 );
               })}
+              <CustomColorPickerButton
+                value={project.canvasBackground || '#000000'}
+                presets={bgColors}
+                onColorChange={(col) => onUpdateProject({ canvasBackground: col })}
+                size={24}
+                shape="circle"
+                accessibilityLabel="Pick custom canvas background color"
+              />
             </View>
           </View>
 

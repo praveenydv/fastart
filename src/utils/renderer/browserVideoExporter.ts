@@ -41,6 +41,17 @@ export async function exportBrowserVideo(
   // Inherit preloaded media cache from this renderer so clips render immediately
   exportRenderer.videoElements = new Map(renderer.videoElements);
 
+  // Guarantee all project clips are preloaded before recording begins
+  for (const clip of project.tracks?.video || []) {
+    if (!exportRenderer.videoElements.has(clip.url)) {
+      try {
+        await exportRenderer.preloadClip(clip);
+      } catch (e) {
+        console.warn("[browserVideoExporter] Preload clip error:", e);
+      }
+    }
+  }
+
   const exportLogicalW =
     logicalWidth && logicalWidth > 0
       ? logicalWidth
@@ -89,7 +100,10 @@ export async function exportBrowserVideo(
   let targetExtension = "webm";
 
   if (format === "mp4") {
-    if (isSupported("video/mp4;codecs=avc1")) {
+    if (isSupported("video/mp4;codecs=avc1.42E01E,mp4a.40.2")) {
+      mimeType = "video/mp4;codecs=avc1.42E01E,mp4a.40.2";
+      targetExtension = "mp4";
+    } else if (isSupported("video/mp4;codecs=avc1")) {
       mimeType = "video/mp4;codecs=avc1";
       targetExtension = "mp4";
     } else if (isSupported("video/mp4")) {
@@ -110,8 +124,12 @@ export async function exportBrowserVideo(
     }
   } else {
     targetExtension = "webm";
-    if (isSupported("video/webm;codecs=vp9")) {
+    if (isSupported("video/webm;codecs=vp9,opus")) {
+      mimeType = "video/webm;codecs=vp9,opus";
+    } else if (isSupported("video/webm;codecs=vp9")) {
       mimeType = "video/webm;codecs=vp9";
+    } else if (isSupported("video/webm;codecs=vp8,opus")) {
+      mimeType = "video/webm;codecs=vp8,opus";
     } else if (isSupported("video/webm;codecs=vp8")) {
       mimeType = "video/webm;codecs=vp8";
     } else {
@@ -153,6 +171,11 @@ export async function exportBrowserVideo(
       (project.tracks.video && project.tracks.video.length > 0);
     if (AudioCtxClass && hasAudio) {
       audioCtx = new AudioCtxClass();
+      if (audioCtx.state === "suspended") {
+        try {
+          await audioCtx.resume();
+        } catch (e) {}
+      }
       const audioDest = audioCtx.createMediaStreamDestination();
       const audioBlob = await exportProjectAudioToWav(
         project,
@@ -169,7 +192,6 @@ export async function exportBrowserVideo(
         if (audioTracks && audioTracks.length > 0) {
           stream.addTrack(audioTracks[0]);
         }
-        audioSourceNode.start(0);
       }
     }
   } catch (audioErr) {
@@ -190,10 +212,14 @@ export async function exportBrowserVideo(
   };
 
   return new Promise(async (resolve, reject) => {
+    let isAborted = false;
+
     mediaRecorder.onstop = () => {
+      if (isAborted) return;
       if (audioSourceNode) {
         try {
           audioSourceNode.stop();
+          audioSourceNode.disconnect();
         } catch (e) {}
       }
       if (audioCtx) {
@@ -220,9 +246,11 @@ export async function exportBrowserVideo(
     };
 
     mediaRecorder.onerror = (err: any) => {
+      if (isAborted) return;
       if (audioSourceNode) {
         try {
           audioSourceNode.stop();
+          audioSourceNode.disconnect();
         } catch (e) {}
       }
       if (audioCtx) {
@@ -247,6 +275,8 @@ export async function exportBrowserVideo(
 
     // Start recording with 100ms timeslice to ensure continuous chunk buffer delivery
     mediaRecorder.start(100);
+
+    // Audio node begins strictly at frame 0 synchronized with recorder start
     if (audioSourceNode) {
       try {
         audioSourceNode.start(0);
@@ -257,8 +287,9 @@ export async function exportBrowserVideo(
     let completed = false;
 
     const renderTick = () => {
-      if (completed) return;
+      if (completed || isAborted) return;
       if (options.isCancelled?.()) {
+        isAborted = true;
         completed = true;
         try {
           if (typeof mediaRecorder.stop === "function" && mediaRecorder.state === "recording") {
@@ -268,6 +299,7 @@ export async function exportBrowserVideo(
         if (audioSourceNode) {
           try {
             audioSourceNode.stop();
+            audioSourceNode.disconnect();
           } catch {}
         }
         if (audioCtx) {
@@ -321,4 +353,3 @@ export async function exportBrowserVideo(
     requestAnimationFrame(renderTick);
   });
 }
-

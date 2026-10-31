@@ -95,6 +95,8 @@ export function useTimelineDragTrim({
     pxPerSec,
     isHapticEnabled,
     isTrimmingActiveRef,
+    isSnappingEnabled,
+    currentTime,
     onTrimClip,
   });
 

@@ -5,6 +5,7 @@ interface UsePlaybackLoopParams {
   setIsPlaying: (playing: boolean) => void;
   totalDuration: number;
   setCurrentTime: React.Dispatch<React.SetStateAction<number>>;
+  currentTimeRef: React.MutableRefObject<number>;
 }
 
 const getNow = () =>
@@ -17,65 +18,78 @@ export function usePlaybackLoop({
   setIsPlaying,
   totalDuration,
   setCurrentTime,
+  currentTimeRef,
 }: UsePlaybackLoopParams) {
-  const animFrameRef = useRef<any>(null);
-  const lastTimeRef = useRef<any>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number>(0);
+  const currentPosRef = useRef<number>(currentTimeRef.current || 0);
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const totalDurationRef = useRef(totalDuration);
+  totalDurationRef.current = totalDuration;
+  const setIsPlayingRef = useRef(setIsPlaying);
+  setIsPlayingRef.current = setIsPlaying;
+  const setCurrentTimeRef = useRef(setCurrentTime);
+  setCurrentTimeRef.current = setCurrentTime;
 
   useEffect(() => {
-    // If timeline has no clips or 0 duration, immediately cancel playback and freeze at 0
-    if (totalDuration <= 0) {
-      if (animFrameRef.current) {
+    if (!isPlaying || totalDuration <= 0) {
+      if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
-      if (isPlaying) {
-        setIsPlaying(false);
-      }
-      setCurrentTime(0);
       return;
     }
 
-    if (isPlaying) {
-      lastTimeRef.current = getNow();
-      const loop = (now: number) => {
-        if (totalDuration <= 0) {
-          setIsPlaying(false);
-          setCurrentTime(0);
-          return;
+    // Initialize playhead start position from external ref
+    currentPosRef.current = currentTimeRef.current || 0;
+    lastTimeRef.current = getNow();
+
+    const loop = (now: number) => {
+      if (!isPlayingRef.current || totalDurationRef.current <= 0) {
+        if (animFrameRef.current !== null) {
+          cancelAnimationFrame(animFrameRef.current);
+          animFrameRef.current = null;
         }
-
-        const currentTimeStamp =
-          typeof now === "number" ? now : getNow();
-        const delta = Math.min(
-          0.1,
-          Math.max(
-            0.001,
-            (currentTimeStamp - (lastTimeRef.current || currentTimeStamp)) / 1000,
-          ),
-        );
-        lastTimeRef.current = currentTimeStamp;
-
-        setCurrentTime((prev) => {
-          const next = prev + delta;
-          if (next >= totalDuration) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return next;
-        });
-
-        animFrameRef.current = requestAnimationFrame(loop);
-      };
-      animFrameRef.current = requestAnimationFrame(loop);
-    } else {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
+        return;
       }
-    }
+
+      // Check if user jumped or scrubbed during playback
+      if (Math.abs((currentTimeRef.current || 0) - currentPosRef.current) > 0.4) {
+        currentPosRef.current = currentTimeRef.current || 0;
+      }
+
+      const currentTimeStamp = typeof now === "number" ? now : getNow();
+      const rawDelta = (currentTimeStamp - (lastTimeRef.current || currentTimeStamp)) / 1000;
+      const delta = Math.min(0.1, Math.max(0.0005, rawDelta));
+      lastTimeRef.current = currentTimeStamp;
+
+      const nextTime = currentPosRef.current + delta;
+
+      if (nextTime >= totalDurationRef.current) {
+        currentPosRef.current = 0;
+        if (animFrameRef.current !== null) {
+          cancelAnimationFrame(animFrameRef.current);
+          animFrameRef.current = null;
+        }
+        setIsPlayingRef.current(false);
+        setCurrentTimeRef.current(0);
+        return;
+      }
+
+      currentPosRef.current = nextTime;
+      setCurrentTimeRef.current(nextTime);
+
+      animFrameRef.current = requestAnimationFrame(loop);
+    };
+
+    animFrameRef.current = requestAnimationFrame(loop);
+
     return () => {
-      if (animFrameRef.current) {
+      if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
       }
     };
-  }, [isPlaying, totalDuration, setCurrentTime, setIsPlaying]);
+  }, [isPlaying, totalDuration, currentTimeRef]);
 }

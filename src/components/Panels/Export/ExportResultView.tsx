@@ -22,6 +22,7 @@ interface ExportResultViewProps {
   onReExport: () => void;
   onClose: () => void;
   onCancelExport?: () => void;
+  exportFilename?: string;
 }
 
 export default function ExportResultView({
@@ -41,26 +42,27 @@ export default function ExportResultView({
   onReExport,
   onClose,
   onCancelExport,
+  exportFilename,
 }: ExportResultViewProps) {
   if (status === "rendering") {
     return (
       <View style={styles.progressContainer}>
-        <ActivityIndicator
-          size="large"
-          color="#00F2FE"
-          style={{ marginBottom: 16 }}
-        />
-        <Text style={styles.progressPercent}>{progress}%</Text>
+        <View style={styles.progressRadialBox}>
+          <Text style={styles.progressPercent}>{progress}%</Text>
+        </View>
+
         <Text style={styles.progressStatusText}>
           {getProgressStatusMessage()}
         </Text>
+
         <View style={styles.progressBarTrack}>
           <View
             style={[styles.progressBarFill, { width: `${progress}%` }]}
           />
         </View>
+
         <Text style={styles.formatProgressNotice}>
-          Generating {selectedFormatConfig.label} ({selectedFormatConfig.ext}) with all edits
+          Encoding {selectedFormatConfig.label} ({selectedFormatConfig.ext}) with all edits
         </Text>
 
         {onCancelExport && (
@@ -70,7 +72,7 @@ export default function ExportResultView({
             activeOpacity={0.7}
             accessibilityLabel="Cancel Export"
           >
-            <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+            <Ionicons name="close-circle-outline" size={16} color="#EF4444" />
             <Text style={styles.cancelExportBtnText}>Cancel Export</Text>
           </TouchableOpacity>
         )}
@@ -99,50 +101,84 @@ export default function ExportResultView({
         return isWeb ? "✓ Downloaded (Save Copy)" : "✓ Saved to Device (Save Copy)";
       }
       return isWeb
-        ? `Download File (${selectedFormatConfig.shortLabel})`
-        : `Save to Device (${selectedFormatConfig.shortLabel})`;
+        ? `Download ${selectedFormatConfig.shortLabel} File`
+        : `Save ${selectedFormatConfig.shortLabel} to Device`;
     };
 
     const getHintText = () => {
       if (isSaved) {
         if (isWeb) {
-          return "✓ File downloaded successfully. Accessible in your Downloads folder.";
+          return "✓ File downloaded successfully to your computer's Downloads directory.";
         }
         if (isIOS) {
-          return "✓ File saved successfully. Accessible in your Photos & Files app.";
+          return "✓ File saved successfully to your Photos & Files app.";
         }
         if (isAndroid) {
-          return "✓ File saved to device storage. Accessible in your Gallery & Files.";
+          return "✓ File saved to device storage and accessible in Gallery.";
         }
         return "✓ File saved successfully to your device.";
       }
       if (isWeb) {
-        return "Tap the button above to download directly to your computer.";
+        return "Click above to download the rendered file directly to your computer.";
       }
       if (isIOS) {
-        return "Tap the button above to save directly to your Photos & Files.";
+        return "Tap above to save directly to your Camera Roll and Files app.";
       }
       if (isAndroid) {
-        return "Tap the button above to save directly to your Gallery & Files.";
+        return "Tap above to save directly to your Device Gallery and FastArt folder.";
       }
-      return "Tap the button above to save directly to your device.";
+      return "Tap above to save directly to your device storage.";
     };
 
     return (
       <View style={styles.doneContainer}>
+        {/* Glowing Success Emblem */}
         <View style={styles.successIconBox}>
-          <Ionicons name="checkmark-circle" size={48} color="#00F2FE" />
+          <Ionicons name="checkmark" size={36} color="#00F2FE" />
         </View>
-        <Text style={styles.doneTitle}>Export Ready!</Text>
+
+        <Text style={styles.doneTitle}>Export Complete!</Text>
         <Text style={styles.doneSubtext}>
-          Successfully rendered all text, stickers & video layers as{" "}
-          <Text style={{ color: "#00F2FE", fontWeight: "800" }}>
-            {selectedFormatConfig.label} ({selectedFormatConfig.ext})
-          </Text>
-          {mediaType !== "png" && mediaType !== "wav"
-            ? ` in ${resolution} @ ${fps}fps`
-            : ""}
+          {exportFilename ? (
+            <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
+              {exportFilename}{selectedFormatConfig.ext}{" "}
+            </Text>
+          ) : null}
+          is rendered and ready for playback or sharing.
         </Text>
+
+        {/* Technical Metadata Strip */}
+        <View style={styles.doneMetaCard}>
+          <View style={styles.doneMetaItem}>
+            <Text style={styles.doneMetaLabel}>Format</Text>
+            <Text style={styles.doneMetaValue}>{selectedFormatConfig.shortLabel}</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          {mediaType !== "wav" && (
+            <>
+              <View style={styles.doneMetaItem}>
+                <Text style={styles.doneMetaLabel}>Resolution</Text>
+                <Text style={styles.doneMetaValue}>{resolution}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+            </>
+          )}
+          {mediaType !== "png" && mediaType !== "wav" && (
+            <>
+              <View style={styles.doneMetaItem}>
+                <Text style={styles.doneMetaLabel}>FPS</Text>
+                <Text style={styles.doneMetaValue}>{fps} fps</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+            </>
+          )}
+          <View style={styles.doneMetaItem}>
+            <Text style={styles.doneMetaLabel}>Status</Text>
+            <Text style={[styles.doneMetaValue, { color: "#10B981" }]}>
+              {isSaved ? "Saved" : "Ready"}
+            </Text>
+          </View>
+        </View>
 
         {/* 1. Primary Direct Download Button */}
         <TouchableOpacity
@@ -160,13 +196,11 @@ export default function ExportResultView({
           ) : (
             <Ionicons
               name={isSaved ? "checkmark-done" : "cloud-download"}
-              size={18}
+              size={19}
               color="#08090E"
             />
           )}
-          <Text style={styles.downloadBtnText}>
-            {getButtonText()}
-          </Text>
+          <Text style={styles.downloadBtnText}>{getButtonText()}</Text>
         </TouchableOpacity>
 
         {/* 2. Download Location Info Card */}
@@ -178,21 +212,19 @@ export default function ExportResultView({
           <Text style={styles.downloadLocationPath} numberOfLines={2}>
             {finalLocation}
           </Text>
-          <Text style={styles.downloadLocationHint}>
-            {getHintText()}
-          </Text>
+          <Text style={styles.downloadLocationHint}>{getHintText()}</Text>
         </View>
 
-        {/* 3. Clean Secondary Actions */}
-        <TouchableOpacity style={styles.reExportBtn} onPress={onReExport}>
+        {/* 3. Secondary Actions */}
+        <TouchableOpacity style={styles.reExportBtn} onPress={onReExport} activeOpacity={0.7}>
           <Ionicons name="refresh-outline" size={15} color="#94A3B8" />
           <Text style={styles.reExportBtnText}>
-            Choose Another Format / Re-Export
+            Export In Another Format
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.doneDismissBtn} onPress={onClose}>
-          <Text style={styles.doneDismissText}>Done / Back to Editor</Text>
+        <TouchableOpacity style={styles.doneDismissBtn} onPress={onClose} activeOpacity={0.7}>
+          <Text style={styles.doneDismissText}>Done / Return to Editor</Text>
         </TouchableOpacity>
       </View>
     );
@@ -201,15 +233,15 @@ export default function ExportResultView({
   if (status === "error") {
     return (
       <View style={styles.doneContainer}>
-        <View style={styles.successIconBox}>
-          <Ionicons name="alert-circle" size={48} color="#EF4444" />
+        <View style={[styles.successIconBox, { borderColor: "rgba(239, 68, 68, 0.4)", backgroundColor: "rgba(239, 68, 68, 0.12)" }]}>
+          <Ionicons name="alert" size={32} color="#EF4444" />
         </View>
         <Text style={styles.doneTitle}>Export Issue</Text>
         <Text style={styles.doneSubtext}>
           {errorMessage ||
             "Unable to encode video in the selected format. Please try PNG cover or GIF."}
         </Text>
-        <TouchableOpacity style={styles.downloadBtn} onPress={onReExport}>
+        <TouchableOpacity style={styles.downloadBtn} onPress={onReExport} activeOpacity={0.8}>
           <Ionicons name="refresh-outline" size={18} color="#08090E" />
           <Text style={styles.downloadBtnText}>Try Another Format</Text>
         </TouchableOpacity>

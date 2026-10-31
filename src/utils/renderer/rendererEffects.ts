@@ -1,5 +1,6 @@
-import { VideoClip, EffectClip } from "../../types/project";
+import { VideoClip, EffectClip, HSLAdjustments } from "../../types/project";
 import { rustCoreBridge } from "../../services/rustCoreBridge";
+import { buildHslCssFilter } from "../hslEngine";
 
 export function evaluateSpeedCurve(curveInput: any, progress: number): number {
   if (!curveInput) return 1.0;
@@ -399,47 +400,57 @@ export function drawLoadingPreview(
   ctx.restore();
 }
 
-export function applyColorFilter(ctx: CanvasRenderingContext2D, filterId?: string, customLut?: any) {
+export function applyColorFilter(
+  ctx: CanvasRenderingContext2D,
+  filterId?: string,
+  customLut?: any,
+  hslAdjustments?: HSLAdjustments
+) {
+  let baseFilter = "none";
   if (customLut && customLut.cssFilter) {
-    ctx.filter = customLut.cssFilter;
-    return;
+    baseFilter = customLut.cssFilter;
+  } else if (filterId && filterId !== "none" && filterId !== "normal") {
+    if (filterId === "teal_orange") {
+      baseFilter = "contrast(1.25) saturate(1.35) hue-rotate(15deg)";
+    } else if (filterId === "vintage") {
+      baseFilter = "sepia(0.35) contrast(0.95) brightness(1.08)";
+    } else if (filterId === "cyberpunk") {
+      baseFilter = "hue-rotate(290deg) contrast(1.4) saturate(1.85)";
+    } else if (filterId === "noir") {
+      baseFilter = "grayscale(1) contrast(1.45) brightness(0.92)";
+    } else if (filterId === "warm_sunset") {
+      baseFilter = "sepia(0.22) saturate(1.45) brightness(1.08)";
+    } else if (filterId === "cold_moody") {
+      baseFilter = "hue-rotate(185deg) saturate(0.85) contrast(1.2)";
+    } else if (filterId === "emerald") {
+      baseFilter = "hue-rotate(95deg) saturate(1.25) contrast(1.12)";
+    } else if (filterId === "vhs_retro") {
+      baseFilter = "contrast(1.3) saturate(1.6) brightness(1.05)";
+    } else if (filterId === "pastel_dream") {
+      baseFilter = "brightness(1.15) saturate(1.2) contrast(0.9)";
+    } else if (filterId === "cinematic_warm") {
+      baseFilter = "sepia(0.3) saturate(1.35) contrast(1.15)";
+    } else if (filterId === "matrix_code") {
+      baseFilter = "hue-rotate(80deg) saturate(1.8) contrast(1.3)";
+    } else if (filterId === "sepia_antique") {
+      baseFilter = "sepia(0.85) contrast(1.1) brightness(0.95)";
+    } else if (filterId === "high_contrast") {
+      baseFilter = "contrast(1.5) saturate(1.3) brightness(1.02)";
+    } else if (filterId === "polaroid_fade") {
+      baseFilter = "contrast(0.9) saturate(0.8) brightness(1.12) sepia(0.15)";
+    } else if (filterId === "solar_pop") {
+      baseFilter = "saturate(2.0) contrast(1.2)";
+    }
   }
 
-  if (!filterId || filterId === "none" || filterId === "normal") {
-    ctx.filter = "none";
-    return;
-  }
+  const hslFilter = buildHslCssFilter(hslAdjustments);
 
-  if (filterId === "teal_orange") {
-    ctx.filter = "contrast(1.25) saturate(1.35) hue-rotate(15deg)";
-  } else if (filterId === "vintage") {
-    ctx.filter = "sepia(0.35) contrast(0.95) brightness(1.08)";
-  } else if (filterId === "cyberpunk") {
-    ctx.filter = "hue-rotate(290deg) contrast(1.4) saturate(1.85)";
-  } else if (filterId === "noir") {
-    ctx.filter = "grayscale(1) contrast(1.45) brightness(0.92)";
-  } else if (filterId === "warm_sunset") {
-    ctx.filter = "sepia(0.22) saturate(1.45) brightness(1.08)";
-  } else if (filterId === "cold_moody") {
-    ctx.filter = "hue-rotate(185deg) saturate(0.85) contrast(1.2)";
-  } else if (filterId === "emerald") {
-    ctx.filter = "hue-rotate(95deg) saturate(1.25) contrast(1.12)";
-  } else if (filterId === "vhs_retro") {
-    ctx.filter = "contrast(1.3) saturate(1.6) brightness(1.05)";
-  } else if (filterId === "pastel_dream") {
-    ctx.filter = "brightness(1.15) saturate(1.2) contrast(0.9)";
-  } else if (filterId === "cinematic_warm") {
-    ctx.filter = "sepia(0.3) saturate(1.35) contrast(1.15)";
-  } else if (filterId === "matrix_code") {
-    ctx.filter = "hue-rotate(80deg) saturate(1.8) contrast(1.3)";
-  } else if (filterId === "sepia_antique") {
-    ctx.filter = "sepia(0.85) contrast(1.1) brightness(0.95)";
-  } else if (filterId === "high_contrast") {
-    ctx.filter = "contrast(1.5) saturate(1.3) brightness(1.02)";
-  } else if (filterId === "polaroid_fade") {
-    ctx.filter = "contrast(0.9) saturate(0.8) brightness(1.12) sepia(0.15)";
-  } else if (filterId === "solar_pop") {
-    ctx.filter = "saturate(2.0) contrast(1.2)";
+  if (baseFilter !== "none" && hslFilter) {
+    ctx.filter = `${baseFilter} ${hslFilter}`;
+  } else if (baseFilter !== "none") {
+    ctx.filter = baseFilter;
+  } else if (hslFilter) {
+    ctx.filter = hslFilter;
   } else {
     ctx.filter = "none";
   }

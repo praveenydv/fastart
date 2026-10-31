@@ -49,6 +49,7 @@ function computeTargetPosition(
   isHapticEnabled: boolean,
   wasInsertingNewTrack: boolean = false,
   previousInsertTrack: number | null = null,
+  currentTime?: number,
 ) {
   const rawTrackPos = initialTrack + deltaYPixels / TRACK_ROW_HEIGHT;
 
@@ -57,26 +58,70 @@ function computeTargetPosition(
 
   let desiredStart = Math.max(0, initialStart + deltaX);
 
-  // Snapping against all other clips and time 0
+  // Magnetic Snapping against all other clips, playhead, and timeline bounds
   if (isSnappingEnabled) {
-    const snapThresholdSec = 12 / pxPerSec;
+    const snapThresholdSec = 24 / pxPerSec;
     let bestSnap = desiredStart;
     let snapDist = snapThresholdSec;
 
+    // 1. Snap to Timeline Start (0)
     if (Math.abs(desiredStart) < snapDist) {
       bestSnap = 0;
       snapDist = Math.abs(desiredStart);
     }
 
+    // 2. Snap to Playhead / Current Time
+    if (typeof currentTime === "number" && currentTime >= 0) {
+      if (Math.abs(desiredStart - currentTime) < snapDist) {
+        bestSnap = currentTime;
+        snapDist = Math.abs(desiredStart - currentTime);
+      }
+      if (Math.abs(desiredStart + duration - currentTime) < snapDist) {
+        bestSnap = Math.max(0, currentTime - duration);
+        snapDist = Math.abs(desiredStart + duration - currentTime);
+      }
+    }
+
+    // 3. Multi-track Magnetic Snapping:
+    // Pass 1: Start-to-Start alignment (highest priority for multi-track synchronization!)
+    // Prioritizes matching clip starts across all tracks, giving counterpart clips (sharing URL or sourceMediaId) priority
+    const draggingClip = allClips.find((c) => c.id === clipId);
+    const draggingSourceId = draggingClip?.rawClip?.sourceMediaId || draggingClip?.rawClip?.id || clipId;
+    const draggingUrl = draggingClip?.rawClip?.url;
+
+    otherClips.forEach((other) => {
+      const otherSourceId = other.rawClip?.sourceMediaId || other.rawClip?.id || other.id;
+      const isCounterpart =
+        (draggingSourceId && otherSourceId && draggingSourceId === otherSourceId) ||
+        (draggingUrl && other.rawClip?.url && draggingUrl === other.rawClip.url);
+
+      const effectiveThreshold = isCounterpart ? snapThresholdSec * 1.5 : snapThresholdSec;
+      const diff = Math.abs(desiredStart - other.startTime);
+
+      if (diff < effectiveThreshold && diff < snapDist) {
+        bestSnap = other.startTime;
+        snapDist = diff;
+      }
+    });
+
+    // Pass 2: Other edge alignments (Start-to-End, End-to-Start, End-to-End)
     otherClips.forEach((other) => {
       const otherEnd = other.startTime + other.duration;
+
+      // Start-to-End: Sequential snap
       if (Math.abs(desiredStart - otherEnd) < snapDist) {
         bestSnap = otherEnd;
         snapDist = Math.abs(desiredStart - otherEnd);
       }
+      // End-to-Start: Snap my end to other's start
       if (Math.abs(desiredStart + duration - other.startTime) < snapDist) {
         bestSnap = Math.max(0, other.startTime - duration);
         snapDist = Math.abs(desiredStart + duration - other.startTime);
+      }
+      // End-to-End: Align ends across tracks
+      if (Math.abs(desiredStart + duration - otherEnd) < snapDist) {
+        bestSnap = Math.max(0, otherEnd - duration);
+        snapDist = Math.abs(desiredStart + duration - otherEnd);
       }
     });
 
@@ -109,73 +154,54 @@ function computeTargetPosition(
     return !otherClips.some((c) => c.effectiveTrackIndex === t);
   };
 
-  // Seam detection between tracks (Clipchamp-style deliberate drag between tracks)
+  // Seam and boundary detection for track insertion
   const baseTrack = Math.floor(rawTrackPos);
   const fraction = rawTrackPos - baseTrack;
 
-  // The user is deliberately hovering right on the boundary between baseTrack and baseTrack + 1
-  // Do NOT insert a new track if the track just above (baseTrack) or just below (baseTrack + 1) is already empty!
+  // 1. Moving to Top side (past or near the top of track 0)
+  const isDraggingAboveTop = rawTrackPos <= 0.15;
+
+  // 2. Moving to Bottom side (past or near the bottom of all tracks)
+  const isDraggingPastBottom = rawTrackPos >= activeTrackCount - 0.15;
+
+  // 3. Hovering between tracks (seam between baseTrack and baseTrack + 1)
   const isHoveringBetweenTracks =
     baseTrack >= 0 &&
     baseTrack < activeTrackCount - 1 &&
-    fraction >= 0.38 &&
-    fraction <= 0.62 &&
-    !isTrackEmpty(baseTrack) &&
-    !isTrackEmpty(baseTrack + 1);
-
-  // Dragging into the top area above all active tracks (only if track 0 is not empty)
-  const isDraggingAboveTop =
-    rawTrackPos <= -0.2 &&
-    !isTrackEmpty(0);
-
-  // Dragging into the bottom area below all active tracks
-  // Do NOT insert a new track if the track just above it (activeTrackCount - 1) is already empty!
-  const isDraggingPastBottom =
-    rawTrackPos >= activeTrackCount - 0.2 &&
-    !isTrackEmpty(activeTrackCount - 1);
+    fraction >= 0.28 &&
+    fraction <= 0.72;
 
   let isInsertingNewTrack = false;
   let insertTrackIndex: number | null = null;
   let targetTrack = nearestTrack;
 
   if (activeTrackCount < MAX_TRACKS) {
-    if (isDraggingPastBottom) {
-      isInsertingNewTrack = true;
-      insertTrackIndex = activeTrackCount;
-      targetTrack = activeTrackCount;
-    } else if (isDraggingAboveTop) {
+    if (isDraggingAboveTop) {
       isInsertingNewTrack = true;
       insertTrackIndex = 0;
       targetTrack = 0;
+    } else if (isDraggingPastBottom) {
+      isInsertingNewTrack = true;
+      insertTrackIndex = activeTrackCount;
+      targetTrack = activeTrackCount;
     } else if (isHoveringBetweenTracks) {
       isInsertingNewTrack = true;
       insertTrackIndex = baseTrack + 1;
       targetTrack = baseTrack + 1;
     } else if (wasInsertingNewTrack) {
-      const proposedTrack =
-        previousInsertTrack !== null ? previousInsertTrack : baseTrack + 1;
-      const hasEmptyAbove = proposedTrack > 0 && isTrackEmpty(proposedTrack - 1);
-      const hasEmptyBelow =
-        proposedTrack < activeTrackCount && isTrackEmpty(proposedTrack);
-
-      // Hysteresis: only exit when cursor moves clearly back into the body of a track
-      const isClearlyInsideTrack = fraction < 0.22 || fraction > 0.78;
+      // Hysteresis: smoothly maintain insertion until cursor is unambiguously inside a track body
+      const isClearlyInsideTrack = fraction < 0.20 || fraction > 0.80;
       if (
-        hasEmptyAbove ||
-        hasEmptyBelow ||
-        (isClearlyInsideTrack &&
-          rawTrackPos < activeTrackCount - 0.45 &&
-          rawTrackPos > 0.2)
+        isClearlyInsideTrack &&
+        rawTrackPos > 0.25 &&
+        rawTrackPos < activeTrackCount - 0.25
       ) {
         isInsertingNewTrack = false;
-        targetTrack = hasEmptyAbove
-          ? proposedTrack - 1
-          : hasEmptyBelow
-            ? proposedTrack
-            : nearestTrack;
+        targetTrack = nearestTrack;
       } else {
         isInsertingNewTrack = true;
-        insertTrackIndex = proposedTrack;
+        insertTrackIndex =
+          previousInsertTrack !== null ? previousInsertTrack : baseTrack + 1;
         targetTrack = insertTrackIndex;
       }
     }
@@ -439,6 +465,7 @@ export function useTimelineClipDrag({
           isHapticEnabledRef.current,
           previousIsInsertingRef.current,
           previousInsertTrackRef.current,
+          currentTimeRef.current,
         );
 
       const hasChangedState =
@@ -653,6 +680,7 @@ export function useTimelineClipDrag({
             isHapticEnabledRef.current,
             previousIsInsertingRef.current,
             previousInsertTrackRef.current,
+            currentTimeRef.current,
           );
 
         const hasChangedState =
@@ -783,6 +811,7 @@ export function useTimelineClipDrag({
             isHapticEnabledRef.current,
             previousIsInsertingRef.current,
             previousInsertTrackRef.current,
+            currentTimeRef.current,
           );
 
         const hasChangedState =

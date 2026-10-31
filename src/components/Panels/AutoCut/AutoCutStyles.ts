@@ -1,6 +1,22 @@
 import { StyleSheet, Platform } from 'react-native';
 
 export const styles = StyleSheet.create({
+  inlineWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#0F131D',
+  },
+  inlineSheetContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 0,
+    paddingBottom: 0,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',

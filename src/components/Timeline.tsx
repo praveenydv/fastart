@@ -61,6 +61,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   canRedo,
   onUndo,
   onRedo,
+  timelineHeight: externalTimelineHeight,
+  isResizingHeight: externalIsResizingHeight,
+  resizeHandleProps: externalResizeHandleProps,
+  handleResetResizeHeight: externalResetResizeHeight,
   onTimelineHeightChange,
   onOpenEditModal,
   onUpdateProject,
@@ -90,18 +94,30 @@ export const Timeline: React.FC<TimelineProps> = ({
   });
 
   // User timeline height & resize logic
-  const {
-    timelineHeight,
-    isResizingHeight,
-    handleResizeMouseDown,
-    handleResetResizeHeight,
-    handleResizeTouchStart,
-    handleResizeTouchMove,
-    handleResizeTouchEnd,
-  } = useTimelineResize({
+  const internalResize = useTimelineResize({
     activeTrackCount,
     isMobile,
   });
+
+  const timelineHeight =
+    externalTimelineHeight !== undefined
+      ? externalTimelineHeight
+      : internalResize.timelineHeight;
+
+  const isResizingHeight =
+    externalIsResizingHeight !== undefined
+      ? externalIsResizingHeight
+      : internalResize.isResizingHeight;
+
+  const resizeHandleProps =
+    externalResizeHandleProps !== undefined
+      ? externalResizeHandleProps
+      : internalResize.resizeHandleProps;
+
+  const handleResetResizeHeight =
+    externalResetResizeHeight !== undefined
+      ? externalResetResizeHeight
+      : internalResize.handleResetResizeHeight;
 
   useEffect(() => {
     if (onTimelineHeightChange) {
@@ -559,11 +575,12 @@ export const Timeline: React.FC<TimelineProps> = ({
       {/* Top Preference & Active Clip Info Bar */}
       <TimelineHeaderBar
         isResizingHeight={isResizingHeight}
-        handleResizeMouseDown={handleResizeMouseDown}
+        resizeHandleProps={resizeHandleProps}
+        handleResizeMouseDown={internalResize.handleResizeMouseDown}
         handleResetResizeHeight={handleResetResizeHeight}
-        handleResizeTouchStart={handleResizeTouchStart}
-        handleResizeTouchMove={handleResizeTouchMove}
-        handleResizeTouchEnd={handleResizeTouchEnd}
+        handleResizeTouchStart={internalResize.handleResizeTouchStart}
+        handleResizeTouchMove={internalResize.handleResizeTouchMove}
+        handleResizeTouchEnd={internalResize.handleResizeTouchEnd}
         isMobile={isMobile}
         activeClipInfo={activeClipInfo}
         pxPerSec={pxPerSec}

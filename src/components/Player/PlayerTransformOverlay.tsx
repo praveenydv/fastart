@@ -5,6 +5,7 @@ import { soundEngine } from "../../utils/audioEngine";
 import { styles } from "./PlayerStyles";
 import { ActiveTransformItem } from "./playerTypes";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
+import { evaluateClipAnimation } from "../../utils/animationEngine";
 
 interface PlayerTransformOverlayProps {
   selectedClipId?: string | null;
@@ -162,15 +163,19 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             (typeof cap.trackIndex === "number" ? cap.trackIndex : 2) * 100 + 15;
           const kfT = getInterpolatedTransform(cap, currentTime, "caption");
           const elapsed = Math.max(0, currentTime - cap.startTime);
-          const anim = (cap.animation || "none").toLowerCase();
-          let animScale = 1.0;
-          if (anim === "bounce" && elapsed < 0.35) {
-            const p = elapsed / 0.35;
-            animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
-          } else if (anim === "zoomin" && elapsed < 0.3) {
-            const p = elapsed / 0.3;
-            animScale = 0.4 + p * 0.6;
-          }
+          const animEval = evaluateClipAnimation(
+            cap.animation,
+            elapsed,
+            cap.duration || 3.0,
+            boxWidth,
+            canvasHeight,
+            1.0,
+            cap.text
+          );
+          const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+          const animOffsetX = animEval.offsetX;
+          const animOffsetY = animEval.offsetY;
+          const animRot = animEval.rotation;
           let motionX = 0;
           let motionY = 0;
           let motionScale = 1.0;
@@ -188,11 +193,11 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             motionRot = motion.dRot;
           }
           const s = (kfT?.scale ?? cap.scale ?? 1.0) * animScale * motionScale;
-          const rot = (kfT?.rotation ?? cap.rotation ?? 0) + motionRot;
+          const rot = (kfT?.rotation ?? cap.rotation ?? 0) + motionRot + animRot;
           const rawX = kfT ? kfT.x : (cap.position?.x ?? 50);
           const rawY = kfT ? kfT.y : (cap.position?.y ?? 80);
-          const cx = (rawX / 100) * boxWidth + motionX;
-          const cy = (rawY / 100) * canvasHeight + motionY;
+          const cx = (rawX / 100) * boxWidth + motionX + animOffsetX;
+          const cy = (rawY / 100) * canvasHeight + motionY + animOffsetY;
           const { baseW, baseH } = getItemBaseDimensions("caption", cap);
           const w = Math.round(baseW * s);
           const h = Math.round(baseH * s);
@@ -248,25 +253,19 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             (typeof txt.trackIndex === "number" ? txt.trackIndex : 2) * 100 + 20;
           const kfT = getInterpolatedTransform(txt, currentTime, "text");
           const elapsed = Math.max(0, currentTime - (txt.startTime || 0));
-          let animScale = 1.0;
-          let animOffsetX = 0;
-          let animOffsetY = 0;
-          const anim = (txt.animation || "none").toLowerCase();
-          if (anim === "bounce" && elapsed < 0.4) {
-            const p = elapsed / 0.4;
-            animScale = 0.5 + Math.sin(p * Math.PI) * 0.7;
-          } else if (anim === "zoomin" && elapsed < 0.35) {
-            const p = elapsed / 0.35;
-            animScale = 0.4 + p * 0.6;
-          } else if (anim === "pulse") {
-            animScale = 1.0 + Math.sin(elapsed * 6) * 0.08;
-          } else if (anim === "shake") {
-            if (elapsed < 0.8) {
-              animOffsetX = Math.sin(elapsed * 40) * 4;
-            }
-          } else if (anim === "wave") {
-            animOffsetY = Math.sin(elapsed * 4) * 6;
-          }
+          const animEval = evaluateClipAnimation(
+            txt.animation,
+            elapsed,
+            txt.duration || 3.0,
+            boxWidth,
+            canvasHeight,
+            1.0,
+            txt.text
+          );
+          const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+          const animOffsetX = animEval.offsetX;
+          const animOffsetY = animEval.offsetY;
+          const animRot = animEval.rotation;
           let motionX = 0;
           let motionY = 0;
           let motionScale = 1.0;
@@ -284,7 +283,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             motionRot = motion.dRot;
           }
           const s = (kfT?.scale ?? txt.scale ?? 1.0) * animScale * motionScale;
-          const rot = (kfT?.rotation ?? txt.rotation ?? 0) + motionRot;
+          const rot = (kfT?.rotation ?? txt.rotation ?? 0) + motionRot + animRot;
           const rawX = kfT ? kfT.x : (txt.position?.x ?? 50);
           const rawY = kfT ? kfT.y : (txt.position?.y ?? 35);
           const cx = (rawX / 100) * boxWidth + animOffsetX + motionX;
@@ -344,19 +343,18 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             (typeof stk.trackIndex === "number" ? stk.trackIndex : 3) * 100 + 25;
           const kfT = getInterpolatedTransform(stk, currentTime, "sticker");
           const elapsed = Math.max(0, currentTime - (stk.startTime || 0));
-          let animScale = 1.0;
-          let animOffsetY = 0;
-          const anim = stk.animation || "none";
-          if (anim === "bounce") {
-            animScale = 1.0 + Math.sin(elapsed * 4) * 0.08;
-          } else if (anim === "pulse") {
-            animScale = 1.0 + Math.sin(elapsed * 6) * 0.1;
-          } else if (anim === "wave") {
-            animOffsetY = Math.sin(elapsed * 4) * 8;
-          } else if (anim === "pop" && elapsed < 0.3) {
-            const p = elapsed / 0.3;
-            animScale = 0.3 + p * 0.85;
-          }
+          const animEval = evaluateClipAnimation(
+            stk.animation,
+            elapsed,
+            stk.duration || 3.0,
+            boxWidth,
+            canvasHeight,
+            1.0
+          );
+          const animScale = (animEval.scaleX + animEval.scaleY) / 2;
+          const animOffsetX = animEval.offsetX;
+          const animOffsetY = animEval.offsetY;
+          const animRot = animEval.rotation;
           let motionX = 0;
           let motionY = 0;
           let motionScale = 1.0;
@@ -374,10 +372,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
             motionRot = motion.dRot;
           }
           const s = (kfT?.scale ?? stk.scale ?? 1.2) * animScale * motionScale;
-          const rot = (kfT?.rotation ?? stk.rotation ?? 0) + motionRot;
+          const rot = (kfT?.rotation ?? stk.rotation ?? 0) + motionRot + animRot;
           const rawX = kfT ? kfT.x : (stk.position?.x ?? 50);
           const rawY = kfT ? kfT.y : (stk.position?.y ?? 50);
-          const cx = (rawX / 100) * boxWidth + motionX;
+          const cx = (rawX / 100) * boxWidth + motionX + animOffsetX;
           const cy = (rawY / 100) * canvasHeight + animOffsetY + motionY;
           const { baseW, baseH } = getItemBaseDimensions("sticker", stk);
           const w = Math.round(baseW * s);

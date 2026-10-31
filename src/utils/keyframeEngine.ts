@@ -1,4 +1,4 @@
-import { ClipTransform, KeyframePoint, MaskConfig, MaskKeyframePoint } from "../types/project";
+import { ClipTransform, KeyframePoint, MaskConfig, MaskKeyframePoint, FastArtProject } from "../types/project";
 import { rustCoreBridge } from "../services/rustCoreBridge";
 
 export interface ResolvedTransform {
@@ -45,17 +45,19 @@ export function getBaseTransform(
     };
   }
 
+  const isCaption = clipType === "caption" || clipType === "captions";
   const isTextOrSticker =
     clipType === "text" ||
     clipType === "texts" ||
     clipType === "sticker" ||
     clipType === "stickers" ||
+    isCaption ||
     !!clip.text ||
     !!clip.char;
 
   const defaultScale = clip.char ? 1.2 : 1.0;
-  const defaultX = isTextOrSticker ? (clip.char ? 50 : 50) : 0;
-  const defaultY = isTextOrSticker ? (clip.char ? 50 : 35) : 0;
+  const defaultX = isTextOrSticker ? 50 : 0;
+  const defaultY = isTextOrSticker ? (isCaption ? 82 : 50) : 0;
 
   const t = clip.transform || {};
   const pos = clip.position || {};
@@ -252,8 +254,8 @@ export function cleanAndSortKeyframes(
   for (const kf of sorted) {
     const cleanTime = Math.max(0, Number(kf.time.toFixed(3)));
     const cleanTransform: ClipTransform = {
-      x: Number.isFinite(kf.transform?.x) ? Number(kf.transform.x) : 0,
-      y: Number.isFinite(kf.transform?.y) ? Number(kf.transform.y) : 0,
+      ...(Number.isFinite(kf.transform?.x) ? { x: Number(kf.transform.x) } : {}),
+      ...(Number.isFinite(kf.transform?.y) ? { y: Number(kf.transform.y) } : {}),
       scale: Number.isFinite(kf.transform?.scale)
         ? Math.max(0.1, Math.min(10.0, Number(kf.transform.scale)))
         : 1.0,
@@ -889,5 +891,91 @@ export function applyMaskUpdateToClip(
     ...clip,
     mask: newMask,
     transform: updatedTransform,
+  };
+}
+
+export interface ClipSearchResult {
+  trackKey: string;
+  index: number;
+  clip: any;
+}
+
+/**
+ * Universal clip resolver across all project tracks (video, overlay, text, captions, stickers, audio, effects).
+ * Makes keyframes, transforms, and mutations effortlessly work for ANY feature without duplicated lookup logic.
+ */
+export function findClipInProject(
+  project: FastArtProject | null | undefined,
+  clipId: string | null | undefined,
+  preferredType?: string,
+): ClipSearchResult | null {
+  if (!project || !project.tracks || !clipId) return null;
+
+  // 1. Try preferred candidate tracks first
+  if (preferredType) {
+    const norm = preferredType.toLowerCase();
+    const candidateKeys: string[] =
+      norm === "caption" || norm === "captions"
+        ? ["captions", "text"]
+        : norm === "sticker" || norm === "stickers"
+          ? ["stickers"]
+          : norm === "text" || norm === "texts"
+            ? ["text", "captions"]
+            : norm === "overlay"
+              ? ["overlay", "video"]
+              : norm === "audio"
+                ? ["audio"]
+                : ["video", "overlay"];
+
+    for (const key of candidateKeys) {
+      const list = (project.tracks as any)[key];
+      if (Array.isArray(list)) {
+        const idx = list.findIndex((c: any) => c && c.id === clipId);
+        if (idx !== -1) {
+          return { trackKey: key, index: idx, clip: list[idx] };
+        }
+      }
+    }
+  }
+
+  // 2. Comprehensive search across ALL project tracks
+  const allKeys = ["video", "overlay", "text", "captions", "stickers", "audio", "effects", "filters"];
+  for (const key of allKeys) {
+    const list = (project.tracks as any)[key];
+    if (Array.isArray(list)) {
+      const idx = list.findIndex((c: any) => c && c.id === clipId);
+      if (idx !== -1) {
+        return { trackKey: key, index: idx, clip: list[idx] };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Universal clip mutator in project tracks.
+ * Seamlessly applies immutable updates to any clip on any track (video, text, captions, stickers, etc.).
+ */
+export function updateClipInProject(
+  project: FastArtProject,
+  clipId: string,
+  mutator: (clip: any) => any,
+  preferredType?: string,
+): FastArtProject {
+  const match = findClipInProject(project, clipId, preferredType);
+  if (!match) return project;
+
+  const { trackKey, index, clip } = match;
+  const updatedClip = mutator(clip);
+  const currentList = [...((project.tracks as any)[trackKey] || [])];
+  currentList[index] = updatedClip;
+
+  return {
+    ...project,
+    tracks: {
+      ...project.tracks,
+      [trackKey]: currentList,
+    },
   };
 }

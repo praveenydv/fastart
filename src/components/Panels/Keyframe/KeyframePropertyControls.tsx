@@ -276,18 +276,30 @@ export default function KeyframePropertyControls({
             <Ionicons name="pulse" size={14} color="#00F2FE" />
             <Text style={styles.propName}>Animation Curve / Easing</Text>
           </View>
-          <Text style={[styles.propValue, { color: "#00F2FE", fontWeight: "700" }]}>
-            {activeEasing}
-          </Text>
+          <View style={styles.easingBadge}>
+            <Text style={styles.easingBadgeText}>
+              {activeEasing === "easeInOut"
+                ? "Ease In-Out"
+                : activeEasing === "easeIn"
+                ? "Ease In"
+                : activeEasing === "easeOut"
+                ? "Ease Out"
+                : activeEasing === "spring"
+                ? "Spring"
+                : activeEasing === "smooth"
+                ? "Smooth"
+                : "Linear"}
+            </Text>
+          </View>
         </View>
 
-        <View style={[styles.presetRow, { flexWrap: "wrap", gap: 6, marginTop: 6 }]}>
+        <View style={styles.easingGrid}>
           {(
             [
               { id: "linear", label: "Linear", icon: "remove" },
-              { id: "easeInOut", label: "Ease In-Out", icon: "swap-horizontal" },
               { id: "easeIn", label: "Ease In", icon: "trending-down" },
               { id: "easeOut", label: "Ease Out", icon: "trending-up" },
+              { id: "easeInOut", label: "Ease In-Out", icon: "swap-horizontal" },
               { id: "spring", label: "Spring", icon: "sparkles" },
               { id: "smooth", label: "Smooth", icon: "water" },
             ] as const
@@ -297,23 +309,23 @@ export default function KeyframePropertyControls({
               <TouchableOpacity
                 key={c.id}
                 style={[
-                  styles.presetChip,
-                  { paddingHorizontal: 10, paddingVertical: 6, height: 28 },
-                  isSelected && styles.presetChipActive,
+                  styles.easingCard,
+                  isSelected && styles.easingCardActive,
                 ]}
                 onPress={() => handleUpdateEasing(c.id as KeyframeEasing)}
                 activeOpacity={0.7}
               >
                 <Ionicons
                   name={c.icon as any}
-                  size={12}
+                  size={14}
                   color={isSelected ? "#00F2FE" : "#94A3B8"}
-                  style={{ marginRight: 4 }}
                 />
                 <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                   style={[
-                    styles.presetChipText,
-                    isSelected && styles.presetChipTextActive,
+                    styles.easingCardText,
+                    isSelected && styles.easingCardTextActive,
                   ]}
                 >
                   {c.label}
