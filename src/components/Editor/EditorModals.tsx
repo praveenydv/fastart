@@ -286,6 +286,10 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   if (!isInline && activeModal && INLINE_MODAL_KEYS.has(activeModal)) {
     return null;
   }
+  // When isInline is false and no modal is active and no deletion prompt is open, exit immediately
+  if (!isInline && !activeModal && !clipToDelete) {
+    return null;
+  }
 
   const renderedContent = (
     <>

@@ -33,6 +33,8 @@ export function usePlayerAudioSync({
       lowpass: any;
       compressor: any;
       gain: any;
+      lastDenoise?: boolean;
+      lastVol?: number;
     };
   }>({});
 
@@ -270,21 +272,27 @@ export function usePlayerAudioSync({
 
         if (nodes && actx) {
           const now = actx.currentTime;
-          // Apply active Denoise DSP filtering or transparent bypass
-          if (clip.denoise) {
-            nodes.highpass.frequency.setTargetAtTime(55, now, 0.02);
-            nodes.presence.gain.setTargetAtTime(1.2, now, 0.02);
-            nodes.lowpass.frequency.setTargetAtTime(19000, now, 0.02);
-            nodes.compressor.threshold.setTargetAtTime(-6, now, 0.02);
-            nodes.compressor.ratio.setTargetAtTime(1.5, now, 0.02);
-          } else {
-            nodes.highpass.frequency.setTargetAtTime(10, now, 0.02);
-            nodes.presence.gain.setTargetAtTime(0, now, 0.02);
-            nodes.lowpass.frequency.setTargetAtTime(22000, now, 0.02);
-            nodes.compressor.threshold.setTargetAtTime(0, now, 0.02);
-            nodes.compressor.ratio.setTargetAtTime(1, now, 0.02);
+          // Apply active Denoise DSP filtering only when configuration actually changes
+          if (nodes.lastDenoise !== clip.denoise) {
+            nodes.lastDenoise = clip.denoise;
+            if (clip.denoise) {
+              nodes.highpass.frequency.setTargetAtTime(55, now, 0.02);
+              nodes.presence.gain.setTargetAtTime(1.2, now, 0.02);
+              nodes.lowpass.frequency.setTargetAtTime(19000, now, 0.02);
+              nodes.compressor.threshold.setTargetAtTime(-6, now, 0.02);
+              nodes.compressor.ratio.setTargetAtTime(1.5, now, 0.02);
+            } else {
+              nodes.highpass.frequency.setTargetAtTime(10, now, 0.02);
+              nodes.presence.gain.setTargetAtTime(0, now, 0.02);
+              nodes.lowpass.frequency.setTargetAtTime(22000, now, 0.02);
+              nodes.compressor.threshold.setTargetAtTime(0, now, 0.02);
+              nodes.compressor.ratio.setTargetAtTime(1, now, 0.02);
+            }
           }
-          nodes.gain.gain.setTargetAtTime(targetVol, now, 0.02);
+          if (nodes.lastVol === undefined || Math.abs(nodes.lastVol - targetVol) > 0.005) {
+            nodes.lastVol = targetVol;
+            nodes.gain.gain.setTargetAtTime(targetVol, now, 0.02);
+          }
           el.muted = false;
         } else {
           // Direct element volume fallback

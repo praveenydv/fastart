@@ -479,12 +479,22 @@ export function useTimelineClipTrim({
     [isTrimmingActiveRef],
   );
 
-  return {
-    activeTrimming,
-    activeTrimDelta,
-    leftTrimPanResponder,
-    rightTrimPanResponder,
-    handleLeftTrimStart,
-    handleRightTrimStart,
-  };
+  return useMemo(
+    () => ({
+      activeTrimming,
+      activeTrimDelta,
+      leftTrimPanResponder,
+      rightTrimPanResponder,
+      handleLeftTrimStart,
+      handleRightTrimStart,
+    }),
+    [
+      activeTrimming,
+      activeTrimDelta,
+      leftTrimPanResponder,
+      rightTrimPanResponder,
+      handleLeftTrimStart,
+      handleRightTrimStart,
+    ],
+  );
 }

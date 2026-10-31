@@ -111,6 +111,89 @@ export function drawSticker(
   ctx.restore();
 }
 
+// Fast bounded cache for multi-line wrapped text measurements to avoid repeated ctx.measureText CPU stalls
+const textLinesCache = new Map<string, { lines: string[]; textWidth: number; textHeight: number }>();
+const wordWidthCache = new Map<string, number>();
+
+function getCachedWordWidth(
+  ctx: CanvasRenderingContext2D,
+  word: string,
+  fontSize: number,
+  fontFamily: string,
+  fontWeight: string,
+): number {
+  const key = `${word}_${fontSize}_${fontFamily}_${fontWeight}`;
+  const cached = wordWidthCache.get(key);
+  if (cached !== undefined) return cached;
+  const w = ctx.measureText(word).width;
+  if (wordWidthCache.size >= 500) {
+    const firstKey = wordWidthCache.keys().next().value;
+    if (firstKey) wordWidthCache.delete(firstKey);
+  }
+  wordWidthCache.set(key, w);
+  return w;
+}
+
+function getWrappedLines(
+  ctx: CanvasRenderingContext2D,
+  displayText: string,
+  fontSize: number,
+  fontFamily: string,
+  fontWeight: string,
+  maxAllowedW: number,
+): { lines: string[]; textWidth: number; textHeight: number } {
+  const cacheKey = `${displayText}_${fontSize}_${fontFamily}_${fontWeight}_${Math.round(maxAllowedW)}`;
+  const cached = textLinesCache.get(cacheKey);
+  if (cached) return cached;
+
+  const rawParagraphs = displayText.split("\n");
+  const lines: string[] = [];
+
+  for (const para of rawParagraphs) {
+    const words = para.split(" ");
+    let curLine = "";
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const testLine = curLine ? `${curLine} ${word}` : word;
+      const testMetrics = ctx.measureText(testLine);
+
+      if (testMetrics.width > maxAllowedW && curLine) {
+        lines.push(curLine);
+        curLine = word;
+      } else {
+        curLine = testLine;
+      }
+    }
+    if (curLine) {
+      lines.push(curLine);
+    }
+  }
+
+  const effectiveLines = lines.length > 0 ? lines : [displayText];
+  const lineHeight = fontSize * 1.35;
+  const totalTextHeight = effectiveLines.length * lineHeight;
+
+  let maxLineWidth = 0;
+  for (const line of effectiveLines) {
+    const lw = ctx.measureText(line).width;
+    if (lw > maxLineWidth) maxLineWidth = lw;
+  }
+
+  const result = {
+    lines: effectiveLines,
+    textWidth: maxLineWidth,
+    textHeight: totalTextHeight,
+  };
+
+  if (textLinesCache.size >= 250) {
+    const firstKey = textLinesCache.keys().next().value;
+    if (firstKey) textLinesCache.delete(firstKey);
+  }
+  textLinesCache.set(cacheKey, result);
+  return result;
+}
+
 export function drawTextOverlay(
   ctx: CanvasRenderingContext2D,
   txt: TextClip,
@@ -193,43 +276,17 @@ export function drawTextOverlay(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  // Automatic multi-line word wrapping so long text never spills outside canvas
+  // Fast cached multi-line word wrapping so long text never spills outside canvas
   const maxAllowedW = Math.max(120 * previewScale, (w * 0.88) / Math.max(0.1, scale));
-  const rawParagraphs = displayText.split("\n");
-  const lines: string[] = [];
-
-  for (const para of rawParagraphs) {
-    const words = para.split(" ");
-    let curLine = "";
-
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i];
-      const testLine = curLine ? `${curLine} ${word}` : word;
-      const testMetrics = ctx.measureText(testLine);
-
-      if (testMetrics.width > maxAllowedW && curLine) {
-        lines.push(curLine);
-        curLine = word;
-      } else {
-        curLine = testLine;
-      }
-    }
-    if (curLine) {
-      lines.push(curLine);
-    }
-  }
-
-  const effectiveLines = lines.length > 0 ? lines : [displayText];
+  const { lines: effectiveLines, textWidth, textHeight } = getWrappedLines(
+    ctx,
+    displayText,
+    fontSize,
+    fontFamily,
+    fontWeight,
+    maxAllowedW,
+  );
   const lineHeight = fontSize * 1.35;
-  const totalTextHeight = effectiveLines.length * lineHeight;
-
-  let maxLineWidth = 0;
-  for (const line of effectiveLines) {
-    const lw = ctx.measureText(line).width;
-    if (lw > maxLineWidth) maxLineWidth = lw;
-  }
-  const textWidth = maxLineWidth;
-  const textHeight = totalTextHeight;
 
   // Draw Background Pill or Box if present
   if (style.backgroundColor && style.backgroundColor !== "transparent") {
@@ -474,7 +531,7 @@ export function drawCaptionOverlay(
   const strokeWidth = Math.max(0.5, (style.strokeWidth ?? 3.5) * previewScale);
 
   // Measure word widths and lay them out into wrapped lines
-  const spaceWidth = ctx.measureText(" ").width;
+  const spaceWidth = getCachedWordWidth(ctx, " ", fontSize, fontFamily, fontWeight);
   const maxAllowedW = Math.max(140 * previewScale, (w * 0.9) / Math.max(0.1, scale));
 
   interface MeasuredWord {
@@ -494,7 +551,7 @@ export function drawCaptionOverlay(
 
   for (let i = 0; i < wordsList.length; i++) {
     const item = wordsList[i];
-    const wWidth = ctx.measureText(item.word).width;
+    const wWidth = getCachedWordWidth(ctx, item.word, fontSize, fontFamily, fontWeight);
     const isWordActive = time >= item.start && time < item.end;
 
     // Check if adding this word exceeds line width
@@ -524,9 +581,10 @@ export function drawCaptionOverlay(
     });
   }
 
+  const rawWidth = getCachedWordWidth(ctx, rawText, fontSize, fontFamily, fontWeight);
   const effectiveLines = lines.length > 0 ? lines : [{
-    words: [{ word: rawText, width: ctx.measureText(rawText).width, isActive: true }],
-    lineWidth: ctx.measureText(rawText).width,
+    words: [{ word: rawText, width: rawWidth, isActive: true }],
+    lineWidth: rawWidth,
   }];
 
   const lineHeight = fontSize * 1.35;

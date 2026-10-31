@@ -106,6 +106,21 @@ export class VideoRenderer {
   public previewCropClipId: string | null = null;
   public isPlaying: boolean = false;
   private maskFramePending: boolean = false;
+  private blurCanvas: HTMLCanvasElement | null = null;
+  private blurCtx: CanvasRenderingContext2D | null = null;
+  private _activeVideoItems: Array<{
+    clip: VideoClip;
+    trackIndex: number;
+    transitionState?: TransitionRenderState | null;
+  }> = [];
+  private _handledVideoIds = new Set<string>();
+  private _clipsByTrack = new Map<number, VideoClip[]>();
+  private _visualItems: Array<{
+    kind: "video" | "caption" | "text" | "sticker" | "effect";
+    clip: any;
+    trackIndex: number;
+    transitionState?: TransitionRenderState | null;
+  }> = [];
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -243,6 +258,12 @@ export class VideoRenderer {
     this.bgImageElements.clear();
     this.offscreenCanvas = null;
     this.offscreenCtx = null;
+    this.blurCanvas = null;
+    this.blurCtx = null;
+    this._activeVideoItems.length = 0;
+    this._handledVideoIds.clear();
+    this._clipsByTrack.clear();
+    this._visualItems.length = 0;
     this.canvas = null;
     this.ctx = null;
   }
@@ -388,16 +409,15 @@ export class VideoRenderer {
       const stickerClips = project.tracks.stickers || [];
       const effectClips = project.tracks.effects || [];
 
-      // Collect active video clips and detect any active cross-clip transitions
-      const activeVideoItems: {
-        clip: VideoClip;
-        trackIndex: number;
-        transitionState?: TransitionRenderState | null;
-      }[] = [];
-      const handledVideoIds = new Set<string>();
+      // Collect active video clips and detect any active cross-clip transitions using preallocated buffers
+      const activeVideoItems = this._activeVideoItems;
+      activeVideoItems.length = 0;
+      const handledVideoIds = this._handledVideoIds;
+      handledVideoIds.clear();
 
       // Fast track partitioning for O(1) adjacent clip lookups
-      const clipsByTrack = new Map<number, VideoClip[]>();
+      const clipsByTrack = this._clipsByTrack;
+      clipsByTrack.clear();
       for (let i = 0; i < videoClips.length; i++) {
         const c = videoClips[i];
         const tIdx = c.trackIndex || 0;
@@ -592,6 +612,31 @@ export class VideoRenderer {
             const finalX = (w - finalW) / 2;
             const finalY = (h - finalH) / 2;
 
+            // Fast downscaled offscreen blur to eliminate full-resolution Gaussian blur CPU stalls
+            if (typeof document !== "undefined") {
+              if (!this.blurCanvas) {
+                this.blurCanvas = document.createElement("canvas");
+                this.blurCanvas.width = 160;
+                this.blurCanvas.height = 90;
+                this.blurCtx = this.blurCanvas.getContext("2d");
+              }
+              const bCtx = this.blurCtx;
+              if (bCtx) {
+                bCtx.imageSmoothingEnabled = true;
+                bCtx.imageSmoothingQuality = "low";
+                bCtx.clearRect(0, 0, 160, 90);
+                bCtx.filter = `blur(${Math.max(2, Math.round(blurPx / 8))}px) brightness(0.72) saturate(1.2)`;
+                bCtx.drawImage(media as any, 0, 0, 160, 90);
+
+                ctx.save();
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = "high";
+                ctx.drawImage(this.blurCanvas, finalX, finalY, finalW, finalH);
+                ctx.restore();
+                return;
+              }
+            }
+
             ctx.save();
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = "high";
@@ -635,41 +680,50 @@ export class VideoRenderer {
         return;
       }
 
-      type VisualItem =
-        | { kind: "video"; clip: VideoClip; trackIndex: number; transitionState?: TransitionRenderState | null }
-        | { kind: "caption"; clip: CaptionClip; trackIndex: number }
-        | { kind: "text"; clip: TextClip; trackIndex: number }
-        | { kind: "sticker"; clip: StickerClip; trackIndex: number }
-        | { kind: "effect"; clip: EffectClip; trackIndex: number };
+      const visualItems = this._visualItems;
+      visualItems.length = 0;
 
-      const visualItems: VisualItem[] = [
-        ...activeVideoItems.map((item) => ({
-          kind: "video" as const,
+      for (let i = 0; i < activeVideoItems.length; i++) {
+        const item = activeVideoItems[i];
+        visualItems.push({
+          kind: "video",
           clip: item.clip,
           trackIndex: (typeof item.clip.trackIndex === "number" ? item.clip.trackIndex : 0) * 100,
           transitionState: item.transitionState,
-        })),
-        ...activeCaptions.map((c) => ({
-          kind: "caption" as const,
+        });
+      }
+      for (let i = 0; i < activeCaptions.length; i++) {
+        const c = activeCaptions[i];
+        visualItems.push({
+          kind: "caption",
           clip: c,
           trackIndex: (typeof c.trackIndex === "number" ? c.trackIndex : 2) * 100 + 2,
-        })),
-        ...activeTexts.map((t) => ({
-          kind: "text" as const,
+        });
+      }
+      for (let i = 0; i < activeTexts.length; i++) {
+        const t = activeTexts[i];
+        visualItems.push({
+          kind: "text",
           clip: t,
           trackIndex: (typeof t.trackIndex === "number" ? t.trackIndex : 2) * 100 + 3,
-        })),
-        ...activeStickers.map((s) => ({
-          kind: "sticker" as const,
+        });
+      }
+      for (let i = 0; i < activeStickers.length; i++) {
+        const s = activeStickers[i];
+        visualItems.push({
+          kind: "sticker",
           clip: s,
           trackIndex: (typeof s.trackIndex === "number" ? s.trackIndex : 3) * 100 + 4,
-        })),
-        ...activeEffects.map((e) => ({
-          kind: "effect" as const,
+        });
+      }
+      for (let i = 0; i < activeEffects.length; i++) {
+        const e = activeEffects[i];
+        visualItems.push({
+          kind: "effect",
           clip: e,
           trackIndex: (typeof e.trackIndex === "number" ? e.trackIndex : 4) * 100 + 5,
-        })),
-      ];
+        });
+      }
 
       visualItems.sort((a, b) => a.trackIndex - b.trackIndex);
 

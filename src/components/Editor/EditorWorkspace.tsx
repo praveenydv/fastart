@@ -1028,6 +1028,64 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     />
   );
 
+  const handleOpenMediaModal = useCallback(() => openModal("media"), [openModal]);
+  const handleOpenTextModalCb = useCallback(() => openModal("text"), [openModal]);
+  const handleOpenAudioModalCb = useCallback(() => openModal("audio"), [openModal]);
+  const handleOpenEffectsModalCb = useCallback(() => openModal("effects"), [openModal]);
+  const handleOpenStickersModalCb = useCallback(() => openModal("stickers"), [openModal]);
+
+  const handleAdjustDuration = useCallback(
+    (delta: number) => {
+      if (!selectedClipId) return;
+      const key = (
+        selectedClipType === "caption" || selectedClipType === "captions"
+          ? "captions"
+          : selectedClipType === "sticker" || selectedClipType === "stickers"
+            ? "stickers"
+            : selectedClipType
+      ) as keyof typeof project.tracks;
+      const list = [...((project.tracks as any)[key] || [])];
+      const idx = list.findIndex((c: any) => c.id === selectedClipId);
+      if (idx >= 0) {
+        const newDur = Math.max(0.05, (list[idx].duration || 0) + delta);
+        list[idx] = { ...list[idx], duration: Number(newDur.toFixed(3)) };
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, [key]: list } as any,
+        });
+      }
+    },
+    [selectedClipId, selectedClipType, project, updateProjectWithHistory],
+  );
+
+  const handleAddMediaCb = useCallback(
+    (clip: any) => {
+      if (handleAddMedia) handleAddMedia(clip);
+      else {
+        const videos = [...(project.tracks?.video || []), clip];
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, video: videos },
+        });
+      }
+    },
+    [handleAddMedia, project, updateProjectWithHistory],
+  );
+
+  const handleAddAudioCb = useCallback(
+    (clip: any) => {
+      if (handleAddAudio) handleAddAudio(clip);
+      else {
+        const audios = [...(project.tracks?.audio || []), clip];
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, audio: audios },
+        });
+      }
+    },
+    [handleAddAudio, project, updateProjectWithHistory],
+  );
+
   // Build the multi-track timeline
   const renderTimelineOnly = () => (
     <Timeline
@@ -1039,39 +1097,21 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       currentTime={currentTime}
       totalDuration={totalDuration}
       isPlaying={isPlaying}
-      onSeek={(t) => setCurrentTime(t)}
+      onSeek={setCurrentTime}
       selectedClipId={selectedClipId}
       selectedClipType={selectedClipType}
-      onSelectClip={(id, type) => handleSelectClipWithMenuSwitch(id, type)}
+      onSelectClip={handleSelectClipWithMenuSwitch}
       onTrimClip={handleTrimClip}
       onMoveClip={handleMoveClip}
       onOpenTransitions={handleOpenTransitionsModal}
-      onOpenMediaPicker={() => openModal("media")}
-      onOpenTextModal={() => openModal("text")}
-      onOpenAudioModal={() => openModal("audio")}
-      onOpenEffectsModal={() => openModal("effects")}
-      onOpenStickersModal={() => openModal("stickers")}
+      onOpenMediaPicker={handleOpenMediaModal}
+      onOpenTextModal={handleOpenTextModalCb}
+      onOpenAudioModal={handleOpenAudioModalCb}
+      onOpenEffectsModal={handleOpenEffectsModalCb}
+      onOpenStickersModal={handleOpenStickersModalCb}
       zoom={zoom}
-      onZoomChange={(newZoom) => setZoom(newZoom)}
-      onAdjustDuration={(delta) => {
-        if (!selectedClipId) return;
-        const key =
-          selectedClipType === "caption" || selectedClipType === "captions"
-            ? "captions"
-            : selectedClipType === "sticker" || selectedClipType === "stickers"
-              ? "stickers"
-              : selectedClipType;
-        const list = [...((project.tracks as any)[key] || [])];
-        const idx = list.findIndex((c: any) => c.id === selectedClipId);
-        if (idx >= 0) {
-          const newDur = Math.max(0.05, (list[idx].duration || 0) + delta);
-          list[idx] = { ...list[idx], duration: Number(newDur.toFixed(3)) };
-          updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, [key]: list } as any,
-          });
-        }
-      }}
+      onZoomChange={setZoom}
+      onAdjustDuration={handleAdjustDuration}
       onUpdateProject={updateProjectWithHistory}
       onSplitClip={handleSplitClip}
       onDuplicateClip={handleDuplicateClip}
@@ -1084,26 +1124,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       onRedo={onRedo}
       onTimelineHeightChange={setCurrentTimelineHeight}
       onOpenEditModal={handleOpenEditModal}
-      onAddMedia={(clip) => {
-        if (handleAddMedia) handleAddMedia(clip);
-        else {
-          const videos = [...(project.tracks?.video || []), clip];
-          updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, video: videos },
-          });
-        }
-      }}
-      onAddAudio={(clip) => {
-        if (handleAddAudio) handleAddAudio(clip);
-        else {
-          const audios = [...(project.tracks?.audio || []), clip];
-          updateProjectWithHistory({
-            ...project,
-            tracks: { ...project.tracks, audio: audios },
-          });
-        }
-      }}
+      onAddMedia={handleAddMediaCb}
+      onAddAudio={handleAddAudioCb}
     />
   );
 

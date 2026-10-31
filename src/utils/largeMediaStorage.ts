@@ -730,7 +730,7 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
     try {
       const b = blobByUrlCache.get(url)!;
       const buf = await b.arrayBuffer();
-      if (buf && buf.byteLength > 0) return buf.slice(0);
+      if (buf && buf.byteLength > 0) return buf;
     } catch (_) {}
   }
 
@@ -752,7 +752,7 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
       const resp = await fetch(url);
       if (resp.ok) {
         const buf = await resp.arrayBuffer();
-        if (buf && buf.byteLength > 0) return buf.slice(0);
+        if (buf && buf.byteLength > 0) return buf;
       }
     } catch (_) {}
 

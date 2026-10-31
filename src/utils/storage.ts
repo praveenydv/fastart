@@ -253,8 +253,18 @@ const sanitizeProject = (proj: any): FastArtProject => {
   };
 };
 
-// --- Projects Persistence ---
+// --- Projects Persistence with In-Memory Cache for 0ms operations ---
+let cachedProjectsList: FastArtProject[] | null = null;
+
+export const invalidateProjectsCache = (): void => {
+  cachedProjectsList = null;
+};
+
 export const loadAllProjects = (): FastArtProject[] => {
+  if (cachedProjectsList !== null) {
+    return cachedProjectsList;
+  }
+
   try {
     // 1. Try modern storage key
     let raw = getStorageItem(PROJECTS_STORAGE_KEY);
@@ -273,9 +283,12 @@ export const loadAllProjects = (): FastArtProject[] => {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         if (parsed.length > 0) {
-          return parsed.map(sanitizeProject);
+          const sanitizedList = parsed.map(sanitizeProject);
+          cachedProjectsList = sanitizedList;
+          return sanitizedList;
         }
         // User explicitly deleted all projects, return empty list
+        cachedProjectsList = [];
         return [];
       }
     }
@@ -295,6 +308,7 @@ export const loadAllProjects = (): FastArtProject[] => {
 
 export const saveAllProjects = (projects: FastArtProject[]): void => {
   try {
+    cachedProjectsList = projects;
     const sanitized = projects.map(sanitizeProject);
     const json = JSON.stringify(sanitized);
     setStorageItem(PROJECTS_STORAGE_KEY, json);

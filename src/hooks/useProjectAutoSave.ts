@@ -59,11 +59,6 @@ export function useProjectAutoSave({
         const saved = saveProject(targetProject);
         lastSavedObjRef.current = saved;
         lastSavedJsonRef.current = JSON.stringify(saved);
-        if (!isSync) {
-          setProjects((prev) =>
-            prev.map((p) => (p.id === saved.id ? saved : p)),
-          );
-        }
         setSaveStatus("saved");
       } catch (err) {
         console.warn("[AutoSave] Error persisting project:", err);

@@ -529,7 +529,7 @@ export async function extractRealMediaAudioPeaks(
           const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
             try {
               const res = ctx.decodeAudioData(
-                arrayBuf.slice(0),
+                arrayBuf,
                 (buf: AudioBuffer) => resolve(buf),
                 (err: any) => reject(err),
               );

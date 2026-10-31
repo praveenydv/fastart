@@ -38,6 +38,7 @@ let internalMaskCtx: CanvasRenderingContext2D | null = null;
 
 interface WasmExports {
   memory: WebAssembly.Memory;
+  fastart_get_scratchpad?: (size: number) => number;
   fastart_alloc: (size: number) => number;
   fastart_dealloc: (ptr: number, size: number) => void;
   fastart_detect_beats_c: (
@@ -999,7 +1000,10 @@ class RustCoreBridgeService {
       const bKey = parseInt(hex.slice(4, 6), 16) || 0;
 
       const totalBytes = width * height * 4;
-      const pixelsPtr = inst.fastart_alloc(totalBytes);
+      const isScratchpad = typeof inst.fastart_get_scratchpad === "function";
+      const pixelsPtr = isScratchpad
+        ? inst.fastart_get_scratchpad!(totalBytes)
+        : inst.fastart_alloc(totalBytes);
       if (!pixelsPtr) return false;
 
       // Copy input pixels to WebAssembly linear memory
@@ -1021,7 +1025,9 @@ class RustCoreBridgeService {
       // Read back processed pixels with despilled RGB and smooth Hermite alpha
       pixels.set(new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes));
 
-      inst.fastart_dealloc(pixelsPtr, totalBytes);
+      if (!isScratchpad) {
+        inst.fastart_dealloc(pixelsPtr, totalBytes);
+      }
       return true;
     } catch (err) {
       console.warn("[RustCoreBridge] processChromaCutout error:", err);
@@ -1395,13 +1401,19 @@ class RustCoreBridgeService {
 
     try {
       const totalBytes = width * height * 4;
-      const ptr = inst.fastart_alloc(totalBytes);
+      let ptr = 0;
+      let isScratch = false;
+      if (typeof inst.fastart_get_scratchpad === "function") {
+        ptr = inst.fastart_get_scratchpad(totalBytes);
+        isScratch = ptr !== 0;
+      }
+      if (!ptr) ptr = inst.fastart_alloc(totalBytes);
       if (!ptr) return false;
 
       new Uint8Array(inst.memory.buffer, ptr, totalBytes).set(pixels);
       inst.fastart_apply_color_adjustments_c(ptr, width, height, brightness, contrast, saturation);
       pixels.set(new Uint8Array(inst.memory.buffer, ptr, totalBytes));
-      inst.fastart_dealloc(ptr, totalBytes);
+      if (!isScratch) inst.fastart_dealloc(ptr, totalBytes);
       return true;
     } catch {
       return false;
@@ -1423,13 +1435,19 @@ class RustCoreBridgeService {
 
     try {
       const totalBytes = width * height * 4;
-      const ptr = inst.fastart_alloc(totalBytes);
+      let ptr = 0;
+      let isScratch = false;
+      if (typeof inst.fastart_get_scratchpad === "function") {
+        ptr = inst.fastart_get_scratchpad(totalBytes);
+        isScratch = ptr !== 0;
+      }
+      if (!ptr) ptr = inst.fastart_alloc(totalBytes);
       if (!ptr) return false;
 
       new Uint8Array(inst.memory.buffer, ptr, totalBytes).set(pixels);
       inst.fastart_apply_vignette_c(ptr, width, height, intensity, radius);
       pixels.set(new Uint8Array(inst.memory.buffer, ptr, totalBytes));
-      inst.fastart_dealloc(ptr, totalBytes);
+      if (!isScratch) inst.fastart_dealloc(ptr, totalBytes);
       return true;
     } catch {
       return false;
@@ -1508,12 +1526,27 @@ class RustCoreBridgeService {
     if (inst) {
       try {
         const totalBytes = width * height * 4;
-        const rgbaPtr = inst.fastart_alloc(totalBytes);
-        const maskPtr = inst.fastart_alloc(totalBytes);
+        let rgbaPtr = 0;
+        let maskPtr = 0;
+        let isScratch = false;
+
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const scratchPtr = inst.fastart_get_scratchpad(totalBytes * 2);
+          if (scratchPtr) {
+            rgbaPtr = scratchPtr;
+            maskPtr = scratchPtr + totalBytes;
+            isScratch = true;
+          }
+        }
+
         if (!rgbaPtr || !maskPtr) {
-          if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, totalBytes);
-          if (maskPtr) inst.fastart_dealloc(maskPtr, totalBytes);
-          return false;
+          rgbaPtr = inst.fastart_alloc(totalBytes);
+          maskPtr = inst.fastart_alloc(totalBytes);
+          if (!rgbaPtr || !maskPtr) {
+            if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, totalBytes);
+            if (maskPtr) inst.fastart_dealloc(maskPtr, totalBytes);
+            return false;
+          }
         }
 
         new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes).set(rgbaPixels);
@@ -1530,8 +1563,10 @@ class RustCoreBridgeService {
         );
 
         rgbaPixels.set(new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes));
-        inst.fastart_dealloc(rgbaPtr, totalBytes);
-        inst.fastart_dealloc(maskPtr, totalBytes);
+        if (!isScratch) {
+          inst.fastart_dealloc(rgbaPtr, totalBytes);
+          inst.fastart_dealloc(maskPtr, totalBytes);
+        }
         return true;
       } catch (e) {
         console.warn("[RustCoreBridge] refineCutoutMatte error:", e);
@@ -1599,6 +1634,20 @@ class RustCoreBridgeService {
       try {
         const inBytes = width * height * 4;
         const outBytes = totalOutFloats * 4;
+        const totalNeeded = inBytes + outBytes;
+
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+          if (scratchPtr) {
+            const rgbaPtr = scratchPtr;
+            const tensorPtr = scratchPtr + inBytes;
+            new Uint8Array(inst.memory.buffer, rgbaPtr, inBytes).set(rgbaPixels);
+            inst.fastart_prepare_modnet_input_c(rgbaPtr, width, height, tensorPtr);
+            dest.set(new Float32Array(inst.memory.buffer, tensorPtr, totalOutFloats));
+            return dest;
+          }
+        }
+
         const rgbaPtr = inst.fastart_alloc(inBytes);
         const tensorPtr = inst.fastart_alloc(outBytes);
 
@@ -1638,6 +1687,21 @@ class RustCoreBridgeService {
       try {
         const inLen = alpha.length;
         const maxOutLen = inLen + 1024;
+        const total = inLen + maxOutLen;
+
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const basePtr = inst.fastart_get_scratchpad(total);
+          if (basePtr) {
+            const inPtr = basePtr;
+            const outPtr = basePtr + inLen;
+            new Uint8Array(inst.memory.buffer, inPtr, inLen).set(alpha);
+            const outLen = inst.fastart_pack_alpha_rle_c(inPtr, inLen, outPtr, maxOutLen);
+            const result = new Uint8Array(outLen);
+            result.set(new Uint8Array(inst.memory.buffer, outPtr, outLen));
+            return result;
+          }
+        }
+
         const inPtr = inst.fastart_alloc(inLen);
         const outPtr = inst.fastart_alloc(maxOutLen);
         if (inPtr && outPtr) {
@@ -1683,6 +1747,20 @@ class RustCoreBridgeService {
     if (inst && typeof inst.fastart_unpack_alpha_rle_c === "function") {
       try {
         const rleLen = rle.length;
+        const total = rleLen + outLen;
+
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const basePtr = inst.fastart_get_scratchpad(total);
+          if (basePtr) {
+            const inPtr = basePtr;
+            const outPtr = basePtr + rleLen;
+            new Uint8Array(inst.memory.buffer, inPtr, rleLen).set(rle);
+            inst.fastart_unpack_alpha_rle_c(inPtr, rleLen, outPtr, outLen);
+            dest.set(new Uint8Array(inst.memory.buffer, outPtr, outLen));
+            return dest;
+          }
+        }
+
         const inPtr = inst.fastart_alloc(rleLen);
         const outPtr = inst.fastart_alloc(outLen);
         if (inPtr && outPtr) {
@@ -1729,6 +1807,20 @@ class RustCoreBridgeService {
     if (inst && typeof inst.fastart_process_modnet_output_c === "function") {
       try {
         const inBytes = totalPixels * 4;
+        const total = inBytes + totalBytes;
+
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const basePtr = inst.fastart_get_scratchpad(total);
+          if (basePtr) {
+            const alphaPtr = basePtr;
+            const rgbaPtr = basePtr + inBytes;
+            new Float32Array(inst.memory.buffer, alphaPtr, totalPixels).set(rawAlpha);
+            inst.fastart_process_modnet_output_c(alphaPtr, rgbaPtr, threshold, feather);
+            dest.set(new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes));
+            return dest;
+          }
+        }
+
         const alphaPtr = inst.fastart_alloc(inBytes);
         const rgbaPtr = inst.fastart_alloc(totalBytes);
 
@@ -1954,18 +2046,45 @@ class RustCoreBridgeService {
     try {
       const count = keyframes.length;
       const bytesPerF64 = 8;
-      const tPtr = inst.fastart_alloc(count * bytesPerF64);
-      const xPtr = inst.fastart_alloc(count * bytesPerF64);
-      const yPtr = inst.fastart_alloc(count * bytesPerF64);
-      const scalePtr = inst.fastart_alloc(count * bytesPerF64);
-      const rotPtr = inst.fastart_alloc(count * bytesPerF64);
-      const opPtr = inst.fastart_alloc(count * bytesPerF64);
+      const totalBytes = count * bytesPerF64 * 6 + bytesPerF64 * 5;
 
-      const outXPtr = inst.fastart_alloc(bytesPerF64);
-      const outYPtr = inst.fastart_alloc(bytesPerF64);
-      const outScalePtr = inst.fastart_alloc(bytesPerF64);
-      const outRotPtr = inst.fastart_alloc(bytesPerF64);
-      const outOpPtr = inst.fastart_alloc(bytesPerF64);
+      let tPtr = 0, xPtr = 0, yPtr = 0, scalePtr = 0, rotPtr = 0, opPtr = 0;
+      let outXPtr = 0, outYPtr = 0, outScalePtr = 0, outRotPtr = 0, outOpPtr = 0;
+      let isScratch = false;
+
+      if (typeof inst.fastart_get_scratchpad === "function") {
+        const scratchPtr = inst.fastart_get_scratchpad(totalBytes);
+        if (scratchPtr) {
+          isScratch = true;
+          const stride = count * bytesPerF64;
+          tPtr = scratchPtr;
+          xPtr = tPtr + stride;
+          yPtr = xPtr + stride;
+          scalePtr = yPtr + stride;
+          rotPtr = scalePtr + stride;
+          opPtr = rotPtr + stride;
+          outXPtr = opPtr + stride;
+          outYPtr = outXPtr + bytesPerF64;
+          outScalePtr = outYPtr + bytesPerF64;
+          outRotPtr = outScalePtr + bytesPerF64;
+          outOpPtr = outRotPtr + bytesPerF64;
+        }
+      }
+
+      if (!isScratch) {
+        tPtr = inst.fastart_alloc(count * bytesPerF64);
+        xPtr = inst.fastart_alloc(count * bytesPerF64);
+        yPtr = inst.fastart_alloc(count * bytesPerF64);
+        scalePtr = inst.fastart_alloc(count * bytesPerF64);
+        rotPtr = inst.fastart_alloc(count * bytesPerF64);
+        opPtr = inst.fastart_alloc(count * bytesPerF64);
+
+        outXPtr = inst.fastart_alloc(bytesPerF64);
+        outYPtr = inst.fastart_alloc(bytesPerF64);
+        outScalePtr = inst.fastart_alloc(bytesPerF64);
+        outRotPtr = inst.fastart_alloc(bytesPerF64);
+        outOpPtr = inst.fastart_alloc(bytesPerF64);
+      }
 
       if (!tPtr || !xPtr || !yPtr || !scalePtr || !rotPtr || !opPtr) {
         return null;
@@ -2021,18 +2140,20 @@ class RustCoreBridgeService {
           opacity: memF64[outOpPtr >> 3],
         };
       } finally {
-        if (tPtr) inst.fastart_dealloc(tPtr, count * bytesPerF64);
-        if (xPtr) inst.fastart_dealloc(xPtr, count * bytesPerF64);
-        if (yPtr) inst.fastart_dealloc(yPtr, count * bytesPerF64);
-        if (scalePtr) inst.fastart_dealloc(scalePtr, count * bytesPerF64);
-        if (rotPtr) inst.fastart_dealloc(rotPtr, count * bytesPerF64);
-        if (opPtr) inst.fastart_dealloc(opPtr, count * bytesPerF64);
+        if (!isScratch) {
+          if (tPtr) inst.fastart_dealloc(tPtr, count * bytesPerF64);
+          if (xPtr) inst.fastart_dealloc(xPtr, count * bytesPerF64);
+          if (yPtr) inst.fastart_dealloc(yPtr, count * bytesPerF64);
+          if (scalePtr) inst.fastart_dealloc(scalePtr, count * bytesPerF64);
+          if (rotPtr) inst.fastart_dealloc(rotPtr, count * bytesPerF64);
+          if (opPtr) inst.fastart_dealloc(opPtr, count * bytesPerF64);
 
-        if (outXPtr) inst.fastart_dealloc(outXPtr, bytesPerF64);
-        if (outYPtr) inst.fastart_dealloc(outYPtr, bytesPerF64);
-        if (outScalePtr) inst.fastart_dealloc(outScalePtr, bytesPerF64);
-        if (outRotPtr) inst.fastart_dealloc(outRotPtr, bytesPerF64);
-        if (outOpPtr) inst.fastart_dealloc(outOpPtr, bytesPerF64);
+          if (outXPtr) inst.fastart_dealloc(outXPtr, bytesPerF64);
+          if (outYPtr) inst.fastart_dealloc(outYPtr, bytesPerF64);
+          if (outScalePtr) inst.fastart_dealloc(outScalePtr, bytesPerF64);
+          if (outRotPtr) inst.fastart_dealloc(outRotPtr, bytesPerF64);
+          if (outOpPtr) inst.fastart_dealloc(outOpPtr, bytesPerF64);
+        }
       }
 
       return res;

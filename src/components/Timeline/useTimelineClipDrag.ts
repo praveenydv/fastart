@@ -895,19 +895,36 @@ export function useTimelineClipDrag({
     });
   }, [activeTrackCount]);
 
-  return {
-    dragState,
-    setDragState,
-    isDraggingClip,
-    setIsDraggingClip,
-    clipMovePanResponder,
-    handleClipPress,
-    handleClipLongPress,
-    handleClipMouseDown,
-    handleClipTouchStart,
-    handleClipTouchMove,
-    handleClipTouchEnd,
-    handleClipTouchCancel,
-    cancelClipDrag,
-  };
+  return useMemo(
+    () => ({
+      dragState,
+      setDragState,
+      isDraggingClip,
+      setIsDraggingClip,
+      clipMovePanResponder,
+      handleClipPress,
+      handleClipLongPress,
+      handleClipMouseDown,
+      handleClipTouchStart,
+      handleClipTouchMove,
+      handleClipTouchEnd,
+      handleClipTouchCancel,
+      cancelClipDrag,
+    }),
+    [
+      dragState,
+      setDragState,
+      isDraggingClip,
+      setIsDraggingClip,
+      clipMovePanResponder,
+      handleClipPress,
+      handleClipLongPress,
+      handleClipMouseDown,
+      handleClipTouchStart,
+      handleClipTouchMove,
+      handleClipTouchEnd,
+      handleClipTouchCancel,
+      cancelClipDrag,
+    ],
+  );
 }

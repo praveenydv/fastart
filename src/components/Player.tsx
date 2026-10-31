@@ -213,25 +213,43 @@ function Player({
       ),
     [project.tracks.stickers, currentTime],
   );
+
+  // Precomputed set of video clip IDs that have adjacent next clips on the same track.
+  // Calculated once per track topology change instead of running O(N^2) loops 60 times a second.
+  const adjacentNextClipIds = useMemo(() => {
+    const vids = project.tracks.video || [];
+    const set = new Set<string>();
+    if (vids.length <= 1) return set;
+    for (let i = 0; i < vids.length; i++) {
+      const v = vids[i];
+      const end = v.startTime + v.duration;
+      const track = v.trackIndex || 0;
+      for (let j = 0; j < vids.length; j++) {
+        if (i !== j) {
+          const other = vids[j];
+          if ((other.trackIndex || 0) === track && Math.abs(other.startTime - end) < 0.01) {
+            set.add(v.id);
+            break;
+          }
+        }
+      }
+    }
+    return set;
+  }, [project.tracks.video]);
+
   // Visible active videos (strictly within active playback interval, used for transform & overlays)
   const activeVideos = useMemo(() => {
     const vids = project.tracks.video || [];
     return vids.filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
-      // If another clip on the same track begins at this clip's end, make end boundary exclusive
-      const hasAdjacentNext = vids.some(
-        (other) =>
-          other.id !== v.id &&
-          (other.trackIndex || 0) === (v.trackIndex || 0) &&
-          Math.abs(other.startTime - end) < 0.01,
-      );
+      const hasAdjacentNext = adjacentNextClipIds.has(v.id);
       if (hasAdjacentNext) {
         return currentTime >= start && currentTime < end;
       }
       return currentTime >= start && currentTime <= end;
     });
-  }, [project.tracks.video, currentTime]);
+  }, [project.tracks.video, currentTime, adjacentNextClipIds]);
 
   // Buffered native videos: includes 1.5s lookahead pre-warming without overlapping adjacent cut clips
   const bufferedNativeVideos = useMemo(() => {
@@ -240,12 +258,7 @@ function Player({
     const filtered = list.filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
-      const hasAdjacentNext = list.some(
-        (other) =>
-          other.id !== v.id &&
-          (other.trackIndex || 0) === (v.trackIndex || 0) &&
-          Math.abs(other.startTime - end) < 0.01,
-      );
+      const hasAdjacentNext = adjacentNextClipIds.has(v.id);
       // 1. Actively inside playback
       if (hasAdjacentNext ? (currentTime >= start && currentTime < end) : (currentTime >= start && currentTime <= end)) return true;
       // 2. Pre-warm upcoming clip within 1.5s before its cut
@@ -255,7 +268,7 @@ function Player({
       return false;
     });
     return filtered.sort((a, b) => (a.trackIndex || 0) - (b.trackIndex || 0));
-  }, [project.tracks.video, currentTime]);
+  }, [project.tracks.video, currentTime, adjacentNextClipIds]);
 
   const activeEffects = useMemo(() => {
     const trackEffs = (project.tracks.effects || []).filter(

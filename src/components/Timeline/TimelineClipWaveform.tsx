@@ -17,6 +17,62 @@ interface TimelineClipWaveformProps {
   isSelected?: boolean;
 }
 
+interface WebWaveformCanvasProps {
+  peaks: number[];
+  availableWidth: number;
+  height: number;
+  barColor: string;
+  isBottomAnchored?: boolean;
+}
+
+const WebWaveformCanvasComponent: React.FC<WebWaveformCanvasProps> = ({
+  peaks,
+  availableWidth,
+  height,
+  barColor,
+  isBottomAnchored = false,
+}) => {
+  const canvasRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext ? canvas.getContext("2d") : null;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, availableWidth, height);
+    ctx.fillStyle = barColor;
+
+    const numBars = peaks.length;
+    const barWidth = 2.0;
+    const dynamicGap =
+      numBars > 1 ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1)) : 0;
+    const minH = 2;
+
+    for (let i = 0; i < numBars; i++) {
+      const h = Math.max(minH, Math.min(height, Math.round(peaks[i] * height)));
+      const x = i * (barWidth + dynamicGap);
+      const y = isBottomAnchored ? height - h : (height - h) / 2;
+      ctx.fillRect(x, y, barWidth, h);
+    }
+  }, [peaks, availableWidth, height, barColor, isBottomAnchored]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={availableWidth}
+      height={height}
+      style={{
+        width: availableWidth,
+        height,
+        display: "block",
+        pointerEvents: "none",
+      }}
+    />
+  );
+};
+
+const WebWaveformCanvas = React.memo(WebWaveformCanvasComponent);
+
 const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   clip,
   width,
@@ -187,60 +243,6 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   // Maximum bar height is 28px on both media and separate audio so waveforms match proportionally
   const maxBarHeight = 28;
   const minBarHeight = 3;
-
-interface WebWaveformCanvasProps {
-  peaks: number[];
-  availableWidth: number;
-  height: number;
-  barColor: string;
-  isBottomAnchored?: boolean;
-}
-
-const WebWaveformCanvas: React.FC<WebWaveformCanvasProps> = ({
-  peaks,
-  availableWidth,
-  height,
-  barColor,
-  isBottomAnchored = false,
-}) => {
-  const canvasRef = React.useRef<any>(null);
-
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext ? canvas.getContext("2d") : null;
-    if (!ctx) return;
-    ctx.clearRect(0, 0, availableWidth, height);
-    ctx.fillStyle = barColor;
-
-    const numBars = peaks.length;
-    const barWidth = 2.0;
-    const dynamicGap =
-      numBars > 1 ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1)) : 0;
-    const minH = 2;
-
-    for (let i = 0; i < numBars; i++) {
-      const h = Math.max(minH, Math.min(height, Math.round(peaks[i] * height)));
-      const x = i * (barWidth + dynamicGap);
-      const y = isBottomAnchored ? height - h : (height - h) / 2;
-      ctx.fillRect(x, y, barWidth, h);
-    }
-  }, [peaks, availableWidth, height, barColor, isBottomAnchored]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={availableWidth}
-      height={height}
-      style={{
-        width: availableWidth,
-        height,
-        display: "block",
-        pointerEvents: "none",
-      }}
-    />
-  );
-};
 
   // Audio clip: full-height centered waveform across the whole clip
   if (isAudio) {

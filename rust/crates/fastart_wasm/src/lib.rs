@@ -3,6 +3,28 @@ use std::slice;
 
 use fastart_core::{FastArtEngine, FastArtProject};
 
+static mut SCRATCHPAD: Option<Vec<u8>> = None;
+
+/// Initializes or returns a persistent scratchpad buffer in WebAssembly linear memory
+/// to eliminate per-call malloc/free churn and garbage collection pauses.
+#[no_mangle]
+pub extern "C" fn fastart_get_scratchpad(size: usize) -> *mut u8 {
+    unsafe {
+        if let Some(ref mut buf) = SCRATCHPAD {
+            if buf.len() < size {
+                buf.resize(size, 0);
+            }
+            buf.as_mut_ptr()
+        } else {
+            let initial_size = size.max(16 * 1024 * 1024); // 16MB default scratchpad
+            let mut buf = vec![0u8; initial_size];
+            let ptr = buf.as_mut_ptr();
+            SCRATCHPAD = Some(buf);
+            ptr
+        }
+    }
+}
+
 /// Memory allocator for WebAssembly linear memory
 #[no_mangle]
 pub extern "C" fn fastart_alloc(size: usize) -> *mut u8 {
