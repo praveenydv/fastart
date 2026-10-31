@@ -880,7 +880,10 @@ export function extractVideoMetadata(
     const url = typeof fileOrBlob === 'string' ? fileOrBlob : URL.createObjectURL(fileOrBlob);
     const vid = document.createElement('video');
     vid.muted = true;
+    vid.defaultMuted = true;
     vid.playsInline = true;
+    vid.setAttribute('playsinline', 'true');
+    vid.setAttribute('webkit-playsinline', 'true');
     vid.preload = 'metadata'; // Fast header-only load: avoids buffering the full multi-GB video
     vid.style.position = 'fixed';
     vid.style.top = '-9999px';
@@ -890,7 +893,18 @@ export function extractVideoMetadata(
     vid.style.opacity = '0';
     vid.style.pointerEvents = 'none';
 
+    try {
+      document.body.appendChild(vid);
+    } catch (e) {}
+
+    let resolved = false;
+    let thumbTimer: any = null;
+    let knownDuration = 0;
+    let knownWidth = 1920;
+    let knownHeight = 1080;
+
     const cleanup = () => {
+      if (thumbTimer) clearTimeout(thumbTimer);
       try {
         vid.pause();
         vid.removeAttribute('src');
@@ -901,28 +915,25 @@ export function extractVideoMetadata(
       } catch (e) {}
     };
 
-    let resolved = false;
     const finish = (duration: number, width: number, height: number, thumbnail = '') => {
       if (resolved) return;
       resolved = true;
       cleanup();
-      resolve({ duration, width, height, thumbnail });
+      const finalDuration = duration > 0 ? duration : (knownDuration > 0 ? knownDuration : 6.0);
+      const finalWidth = width > 0 ? width : knownWidth;
+      const finalHeight = height > 0 ? height : knownHeight;
+      resolve({ duration: finalDuration, width: finalWidth, height: finalHeight, thumbnail });
     };
 
+    // 15-second safety timeout for large 20+ minute or 4K video files
     const timeout = setTimeout(() => {
-      finish(
-        vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0,
-        vid.videoWidth || 1920,
-        vid.videoHeight || 1080
-      );
-    }, 1200);
+      const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0
+        ? Number(vid.duration.toFixed(2))
+        : (knownDuration > 0 ? knownDuration : 6.0);
+      finish(dur, vid.videoWidth || knownWidth, vid.videoHeight || knownHeight);
+    }, 15000);
 
-    vid.onloadedmetadata = () => {
-      const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
-      vid.currentTime = Math.min(0.2, Math.max(0, dur * 0.1));
-    };
-
-    vid.onseeked = () => {
+    const tryCaptureThumbnail = () => {
       let thumb = '';
       try {
         const vw = vid.videoWidth || 640;
@@ -941,14 +952,59 @@ export function extractVideoMetadata(
       } catch (e) {}
 
       clearTimeout(timeout);
-      const dur = vid.duration && isFinite(vid.duration) && vid.duration > 0 ? Number(vid.duration.toFixed(2)) : 6.0;
-      finish(dur, vid.videoWidth || 1920, vid.videoHeight || 1080, thumb);
+      finish(knownDuration, knownWidth, knownHeight, thumb);
+    };
+
+    vid.onloadedmetadata = () => {
+      if (vid.videoWidth > 0) knownWidth = vid.videoWidth;
+      if (vid.videoHeight > 0) knownHeight = vid.videoHeight;
+
+      if (vid.duration && isFinite(vid.duration) && vid.duration > 0) {
+        knownDuration = Number(vid.duration.toFixed(2));
+      }
+
+      // Handle Chromium infinite duration quirk for blob / streamed video
+      if (vid.duration === Infinity) {
+        vid.currentTime = 1e10;
+        vid.ontimeupdate = () => {
+          vid.ontimeupdate = null;
+          if (vid.duration && isFinite(vid.duration) && vid.duration > 0) {
+            knownDuration = Number(vid.duration.toFixed(2));
+          }
+          vid.currentTime = Math.min(0.5, Math.max(0, knownDuration * 0.05));
+        };
+        return;
+      }
+
+      if (knownDuration > 0) {
+        // Thumbnail seek attempt with tight 2.5s timeout
+        thumbTimer = setTimeout(() => {
+          clearTimeout(timeout);
+          finish(knownDuration, knownWidth, knownHeight, '');
+        }, 2500);
+
+        try {
+          vid.currentTime = Math.min(0.5, Math.max(0, knownDuration * 0.05));
+        } catch (e) {
+          clearTimeout(timeout);
+          finish(knownDuration, knownWidth, knownHeight, '');
+        }
+      }
+    };
+
+    vid.onseeked = () => {
+      if (thumbTimer) clearTimeout(thumbTimer);
+      tryCaptureThumbnail();
     };
 
     vid.onerror = () => {
       clearTimeout(timeout);
-      finish(6.0, 1920, 1080, '');
+      if (thumbTimer) clearTimeout(thumbTimer);
+      finish(knownDuration > 0 ? knownDuration : 6.0, knownWidth, knownHeight, '');
     };
+
+    // Assign source to begin metadata loading
+    vid.src = url;
   });
 }
 
@@ -958,7 +1014,8 @@ export function extractAudioMetadata(fileOrBlob: Blob | File | string): Promise<
     if (typeof window === 'undefined') return resolve({ duration: 15.0 });
 
     const url = typeof fileOrBlob === 'string' ? fileOrBlob : URL.createObjectURL(fileOrBlob);
-    const audio = new Audio(url);
+    const audio = new Audio();
+    audio.preload = 'metadata';
 
     let resolved = false;
     const finish = (duration: number) => {
@@ -966,12 +1023,18 @@ export function extractAudioMetadata(fileOrBlob: Blob | File | string): Promise<
       resolved = true;
       try {
         audio.pause();
-        audio.src = '';
+        audio.removeAttribute('src');
+        audio.load();
       } catch (e) {}
       resolve({ duration });
     };
 
-    const timeout = setTimeout(() => finish(15.0), 3000);
+    const timeout = setTimeout(() => {
+      const dur = audio.duration && isFinite(audio.duration) && audio.duration > 0
+        ? Number(audio.duration.toFixed(2))
+        : 15.0;
+      finish(dur);
+    }, 15000);
 
     audio.onloadedmetadata = () => {
       clearTimeout(timeout);
@@ -985,6 +1048,8 @@ export function extractAudioMetadata(fileOrBlob: Blob | File | string): Promise<
       clearTimeout(timeout);
       finish(15.0);
     };
+
+    audio.src = url;
   });
 }
 
@@ -1174,11 +1239,12 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
       const isBlob = clip.url && clip.url.startsWith('blob:');
       const isKnown = isBlob && objectUrlCache.has(clip.url);
 
+      let clipResult = clip;
       if (!isKnown) {
         const freshUrl = await getLiveMediaUrl(lookupId, clip.title || clip.name);
         if (freshUrl && freshUrl !== clip.url) {
           hasChanges = true;
-          return {
+          clipResult = {
             ...clip,
             sourceMediaId: clip.sourceMediaId || lookupId,
             url: freshUrl,
@@ -1212,7 +1278,27 @@ export async function rehydrateProjectMedia(project: any): Promise<any> {
           };
         }
       }
-      return clip;
+
+      // Auto-heal clips where duration was previously defaulted to 6.0s due to the metadata bug
+      if (clipResult.type === 'video' && clipResult.url && !clipResult.isMissing && !clipResult.needsPermission) {
+        const isDefaultDuration = Math.abs((clipResult.duration || 0) - 6.0) < 0.05 && (clipResult.trimIn || 0) === 0;
+        if (isDefaultDuration) {
+          try {
+            const meta = await extractVideoMetadata(clipResult.url);
+            if (meta.duration && meta.duration > 6.1) {
+              hasChanges = true;
+              return {
+                ...clipResult,
+                duration: meta.duration,
+                trimOut: meta.duration,
+                mediaDuration: meta.duration,
+              };
+            }
+          } catch (e) {}
+        }
+      }
+
+      return clipResult;
     })
   );
 

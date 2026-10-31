@@ -39,6 +39,12 @@ const WebWaveformCanvasComponent: React.FC<WebWaveformCanvasProps> = ({
     if (!canvas) return;
     const ctx = canvas.getContext ? canvas.getContext("2d") : null;
     if (!ctx) return;
+
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    canvas.width = Math.max(1, Math.floor(availableWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
+    ctx.scale(dpr, dpr);
+
     ctx.clearRect(0, 0, availableWidth, height);
     ctx.fillStyle = barColor;
 

@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { EFFECT_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
@@ -457,10 +457,12 @@ export default function EffectsModal({
                         </View>
                       ) : (
                         <>
-                          <Image
+                          <ExpoImage
                             source={{ uri: previewThumb }}
                             style={[styles.previewImg, getEffectFilterStyle(item.type)]}
-                            resizeMode="cover"
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={120}
                           />
                           {/* Visual effect overlays */}
                           {item.type === 'vhs' && (

@@ -1658,7 +1658,13 @@ export async function renderCutoutToVideoBlob(
     video.preload = "auto";
     video.src = videoUrl;
 
+    let stream: any = null;
     const cleanup = () => {
+      try {
+        if (stream) {
+          stream.getTracks().forEach((t: any) => t.stop());
+        }
+      } catch {}
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -1678,7 +1684,7 @@ export async function renderCutoutToVideoBlob(
         return;
       }
 
-      const stream = (outCanvas as any).captureStream ? (outCanvas as any).captureStream(fps) : null;
+      stream = (outCanvas as any).captureStream ? (outCanvas as any).captureStream(fps) : null;
       if (!stream) {
         cleanup();
         resolve(null);
@@ -1728,6 +1734,7 @@ export async function renderCutoutToVideoBlob(
         if (signal?.aborted || currentRenderFrame >= totalRenderFrames) {
           recorder.onstop = () => {
             const blob = new Blob(chunks, { type: mimeType });
+            chunks.length = 0;
             const newVideoUrl = URL.createObjectURL(blob);
             cleanup();
             resolve({

@@ -59,6 +59,8 @@ function NativeAudioPlayerInstance({
   const lastSeekTargetRef = React.useRef<number>(-1);
   const lastSeekTimestampRef = React.useRef<number>(0);
   const isPlayingRef = React.useRef<boolean>(false);
+  const wasPlayingRef = React.useRef<boolean>(false);
+  const pauseTimestampRef = React.useRef<number>(0);
   const targetAudioTimeRef = React.useRef<number>(targetAudioTime);
   targetAudioTimeRef.current = targetAudioTime;
 
@@ -114,16 +116,25 @@ function NativeAudioPlayerInstance({
   useEffect(() => {
     if (!player) return;
     const curTarget = targetAudioTimeRef.current;
+    const now = Date.now();
     try {
       if (isPlaying && isInside) {
+        wasPlayingRef.current = true;
+        pauseTimestampRef.current = 0;
         if (Math.abs(player.currentTime - curTarget) > 0.4) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
         player.play();
       } else {
+        const wasPlaying = wasPlayingRef.current;
+        if (wasPlaying && !isPlaying) {
+          pauseTimestampRef.current = now;
+        }
+        wasPlayingRef.current = isPlaying && isInside;
         player.pause();
-        if (!isPlaying && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
+        const isWithinPauseGracePeriod = !isPlaying && now - pauseTimestampRef.current < 250;
+        if (!isPlaying && !isWithinPauseGracePeriod && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
@@ -135,6 +146,7 @@ function NativeAudioPlayerInstance({
   useEffect(() => {
     if (!player || isPlaying) return;
     const now = Date.now();
+    if (now - pauseTimestampRef.current < 250) return;
     try {
       if (
         Math.abs(lastSeekTargetRef.current - targetAudioTime) > 0.03 &&

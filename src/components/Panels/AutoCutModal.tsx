@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { openMediaService, OpenAudioItem, OpenMediaItem } from '../../services/openMediaService';
@@ -51,6 +51,19 @@ export default function AutoCutModal({
   const [selectedTemplate, setSelectedTemplate] = useState<string>('viral_beat');
   const [clipPace, setClipPace] = useState<'fast' | 'medium' | 'smooth'>('fast');
   const [customClips, setCustomClips] = useState<any[]>([]);
+  const customBlobUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    return () => {
+      // Clean up temporary blob URLs on unmount to prevent memory leaks
+      customBlobUrlsRef.current.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      });
+      customBlobUrlsRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -186,6 +199,7 @@ export default function AutoCutModal({
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const blobUrl = URL.createObjectURL(file);
+      customBlobUrlsRef.current.push(blobUrl);
       const newClip = {
         id: `custom-upload-${Date.now()}-${i}`,
         title: file.name.replace(/\.[^/.]+$/, ''),
@@ -339,10 +353,12 @@ export default function AutoCutModal({
                       activeOpacity={0.8}
                     >
                       {clip.thumbnailUrl ? (
-                        <Image
+                        <ExpoImage
                           source={{ uri: clip.thumbnailUrl }}
                           style={styles.clipThumb}
-                          resizeMode="cover"
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={120}
                         />
                       ) : (
                         <View style={styles.clipThumbPlaceholder}>

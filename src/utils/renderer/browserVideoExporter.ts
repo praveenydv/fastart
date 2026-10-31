@@ -239,6 +239,11 @@ export async function exportBrowserVideo(
 
     mediaRecorder.onstop = () => {
       if (isAborted) return;
+      if (stream) {
+        try {
+          stream.getTracks().forEach((track: any) => track.stop());
+        } catch (e) {}
+      }
       if (audioSourceNode) {
         try {
           audioSourceNode.stop();
@@ -257,6 +262,7 @@ export async function exportBrowserVideo(
         recordedChunks.length > 0
           ? new Blob(recordedChunks, { type: mimeType })
           : new Blob([], { type: mimeType });
+      recordedChunks.length = 0;
       const videoUrl = URL.createObjectURL(finalBlob);
       resolve({
         blob: finalBlob,
@@ -270,6 +276,11 @@ export async function exportBrowserVideo(
 
     mediaRecorder.onerror = (err: any) => {
       if (isAborted) return;
+      if (stream) {
+        try {
+          stream.getTracks().forEach((track: any) => track.stop());
+        } catch (e) {}
+      }
       if (audioSourceNode) {
         try {
           audioSourceNode.stop();
@@ -284,6 +295,7 @@ export async function exportBrowserVideo(
       if (typeof exportRenderer.cleanup === "function") {
         exportRenderer.cleanup();
       }
+      recordedChunks.length = 0;
       reject(err);
     };
 
@@ -314,6 +326,11 @@ export async function exportBrowserVideo(
       if (options.isCancelled?.()) {
         isAborted = true;
         completed = true;
+        if (stream) {
+          try {
+            stream.getTracks().forEach((track: any) => track.stop());
+          } catch (e) {}
+        }
         try {
           if (typeof mediaRecorder.stop === "function" && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
@@ -333,6 +350,7 @@ export async function exportBrowserVideo(
         if (typeof exportRenderer.cleanup === "function") {
           exportRenderer.cleanup();
         }
+        recordedChunks.length = 0;
         reject(new Error("Export cancelled"));
         return;
       }

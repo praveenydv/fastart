@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { getMediaBinaryBuffer } from "./largeMediaStorage";
 import { getStorageItem, setStorageItem } from "./storage";
 import { rustCoreBridge } from "../services/rustCoreBridge";
-import { LruCache } from "./mediaThumbnailGenerator";
+import { LruCache } from "./lruCache";
 
 const STORAGE_PEAKS_PREFIX = "@fastart_peaks_";
 const mediaAudioPresenceCache = new LruCache<string, boolean>(150);

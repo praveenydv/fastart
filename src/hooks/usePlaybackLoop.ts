@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { getActiveVideoRenderer } from "../utils/videoRenderer";
+import { getActiveVideoRenderer, pauseActiveVideoRenderer } from "../utils/videoRenderer";
+import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
 
 interface UsePlaybackLoopParams {
   isPlaying: boolean;
@@ -76,6 +77,8 @@ export function usePlaybackLoop({
           cancelAnimationFrame(animFrameRef.current);
           animFrameRef.current = null;
         }
+        pauseActiveVideoRenderer();
+        pauseAllAudio();
         setIsPlayingRef.current(false);
         setCurrentTimeRef.current(0);
         return;

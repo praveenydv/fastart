@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -121,52 +121,69 @@ export default function MotionTrackingModal({
   }, [visible, currentTrack]);
 
   // Synchronize updates to parent clip
-  const syncTracking = (overrides?: Partial<MotionTrackConfig>) => {
-    const config: MotionTrackConfig = {
-      enabled: overrides?.enabled !== undefined ? overrides.enabled : enabled,
-      mode: "object_track",
-      intensity: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
-      targetRect: overrides?.targetRect || targetRect,
-      trajectory: overrides?.trajectory || trajectory,
-      actionType: overrides?.actionType || actionType,
-      pinnedClipId: overrides?.pinnedClipId !== undefined ? overrides.pinnedClipId : pinnedClipId,
-      trackScale: overrides?.trackScale !== undefined ? overrides.trackScale : trackScale,
-      trackRotation: overrides?.trackRotation !== undefined ? overrides.trackRotation : trackRotation,
-      mosaicStyle: overrides?.mosaicStyle || mosaicStyle,
-      mosaicRadius: overrides?.mosaicRadius !== undefined ? overrides.mosaicRadius : mosaicRadius,
-      smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
-      trackingStatus:
-        overrides?.trackingStatus ||
-        ((overrides?.trajectory || trajectory).length > 0 ? "completed" : "idle"),
-      lastTrackedAt: Date.now(),
-    };
+  const syncTracking = useCallback(
+    (overrides?: Partial<MotionTrackConfig>) => {
+      const config: MotionTrackConfig = {
+        enabled: overrides?.enabled !== undefined ? overrides.enabled : enabled,
+        mode: "object_track",
+        intensity: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
+        targetRect: overrides?.targetRect || targetRect,
+        trajectory: overrides?.trajectory || trajectory,
+        actionType: overrides?.actionType || actionType,
+        pinnedClipId: overrides?.pinnedClipId !== undefined ? overrides.pinnedClipId : pinnedClipId,
+        trackScale: overrides?.trackScale !== undefined ? overrides.trackScale : trackScale,
+        trackRotation: overrides?.trackRotation !== undefined ? overrides.trackRotation : trackRotation,
+        mosaicStyle: overrides?.mosaicStyle || mosaicStyle,
+        mosaicRadius: overrides?.mosaicRadius !== undefined ? overrides.mosaicRadius : mosaicRadius,
+        smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
+        trackingStatus:
+          overrides?.trackingStatus ||
+          ((overrides?.trajectory || trajectory).length > 0 ? "completed" : "idle"),
+        lastTrackedAt: Date.now(),
+      };
 
-    onApplyTracking(config);
+      onApplyTracking(config);
 
-    // If pinning a specific clip and we have full project updater, sync tracking to pinned clip as well
-    const effectivePinnedId = overrides?.pinnedClipId !== undefined ? overrides.pinnedClipId : pinnedClipId;
-    if (project && updateProjectWithHistory && effectivePinnedId) {
-      const proj = { ...project };
-      let changed = false;
-      const texts = [...(proj.tracks.text || [])];
-      const tIdx = texts.findIndex((t) => t.id === effectivePinnedId);
-      if (tIdx >= 0) {
-        texts[tIdx] = { ...texts[tIdx], motionTrack: config };
-        proj.tracks = { ...proj.tracks, text: texts };
-        changed = true;
+      // If pinning a specific clip and we have full project updater, sync tracking to pinned clip as well
+      const effectivePinnedId = overrides?.pinnedClipId !== undefined ? overrides.pinnedClipId : pinnedClipId;
+      if (project && updateProjectWithHistory && effectivePinnedId) {
+        const proj = { ...project };
+        let changed = false;
+        const texts = [...(proj.tracks.text || [])];
+        const tIdx = texts.findIndex((t) => t.id === effectivePinnedId);
+        if (tIdx >= 0) {
+          texts[tIdx] = { ...texts[tIdx], motionTrack: config };
+          proj.tracks = { ...proj.tracks, text: texts };
+          changed = true;
+        }
+        const stickers = [...(proj.tracks.stickers || [])];
+        const sIdx = stickers.findIndex((s) => s.id === effectivePinnedId);
+        if (sIdx >= 0) {
+          stickers[sIdx] = { ...stickers[sIdx], motionTrack: config };
+          proj.tracks = { ...proj.tracks, stickers };
+          changed = true;
+        }
+        if (changed) {
+          updateProjectWithHistory(proj);
+        }
       }
-      const stickers = [...(proj.tracks.stickers || [])];
-      const sIdx = stickers.findIndex((s) => s.id === effectivePinnedId);
-      if (sIdx >= 0) {
-        stickers[sIdx] = { ...stickers[sIdx], motionTrack: config };
-        proj.tracks = { ...proj.tracks, stickers };
-        changed = true;
-      }
-      if (changed) {
-        updateProjectWithHistory(proj);
-      }
-    }
-  };
+    },
+    [
+      enabled,
+      smoothness,
+      targetRect,
+      trajectory,
+      actionType,
+      pinnedClipId,
+      trackScale,
+      trackRotation,
+      mosaicStyle,
+      mosaicRadius,
+      onApplyTracking,
+      project,
+      updateProjectWithHistory,
+    ],
+  );
 
   // Find candidate clips in project that can be pinned
   const availableClipsToPin = useMemo(() => {
@@ -206,41 +223,47 @@ export default function MotionTrackingModal({
   }, [project, selectedClip]);
 
   // Quick Preset Selection for Reticle
-  const handleSelectPreset = (preset: "face" | "body" | "center" | "wide") => {
-    soundEngine.playSfx("click");
-    triggerHaptic("selection");
-    let nextRect: TrackingRect;
-    if (preset === "face") {
-      nextRect = { x: 35, y: 16, width: 30, height: 32 };
-    } else if (preset === "body") {
-      nextRect = { x: 35, y: 15, width: 30, height: 68 };
-    } else if (preset === "center") {
-      nextRect = { x: 35, y: 35, width: 30, height: 30 };
-    } else {
-      nextRect = { x: 20, y: 20, width: 60, height: 60 };
-    }
-    setTargetRect(nextRect);
-    syncTracking({ targetRect: nextRect });
-  };
+  const handleSelectPreset = useCallback(
+    (preset: "face" | "body" | "center" | "wide") => {
+      soundEngine.playSfx("click");
+      triggerHaptic("selection");
+      let nextRect: TrackingRect;
+      if (preset === "face") {
+        nextRect = { x: 35, y: 16, width: 30, height: 32 };
+      } else if (preset === "body") {
+        nextRect = { x: 35, y: 15, width: 30, height: 68 };
+      } else if (preset === "center") {
+        nextRect = { x: 35, y: 35, width: 30, height: 30 };
+      } else {
+        nextRect = { x: 20, y: 20, width: 60, height: 60 };
+      }
+      setTargetRect(nextRect);
+      syncTracking({ targetRect: nextRect });
+    },
+    [syncTracking],
+  );
 
-  const isPresetActive = (preset: "face" | "body" | "center" | "wide") => {
-    if (preset === "face") {
-      return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 16) <= 2 && Math.abs(targetRect.width - 30) <= 2;
-    }
-    if (preset === "body") {
-      return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.height - 68) <= 2;
-    }
-    if (preset === "center") {
-      return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 35) <= 2 && Math.abs(targetRect.width - 30) <= 2;
-    }
-    if (preset === "wide") {
-      return Math.abs(targetRect.x - 20) <= 2 && Math.abs(targetRect.width - 60) <= 2;
-    }
-    return false;
-  };
+  const isPresetActive = useCallback(
+    (preset: "face" | "body" | "center" | "wide") => {
+      if (preset === "face") {
+        return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 16) <= 2 && Math.abs(targetRect.width - 30) <= 2;
+      }
+      if (preset === "body") {
+        return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.height - 68) <= 2;
+      }
+      if (preset === "center") {
+        return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 35) <= 2 && Math.abs(targetRect.width - 30) <= 2;
+      }
+      if (preset === "wide") {
+        return Math.abs(targetRect.x - 20) <= 2 && Math.abs(targetRect.width - 60) <= 2;
+      }
+      return false;
+    },
+    [targetRect],
+  );
 
   // Run Real Computer-Vision Tracking
-  const handleStartTracking = async () => {
+  const handleStartTracking = useCallback(async () => {
     soundEngine.playSfx("whoosh");
     triggerHaptic("medium");
     setIsScanning(true);
@@ -294,9 +317,18 @@ export default function MotionTrackingModal({
       setIsScanning(false);
       syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
     }
-  };
+  }, [
+    selectedClip,
+    targetRect,
+    smoothness,
+    trackScale,
+    trackRotation,
+    actionType,
+    trajectory.length,
+    syncTracking,
+  ]);
 
-  const handleCancelTracking = () => {
+  const handleCancelTracking = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -304,9 +336,9 @@ export default function MotionTrackingModal({
     soundEngine.playSfx("pop");
     triggerHaptic("warning");
     syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
-  };
+  }, [trajectory.length, syncTracking]);
 
-  const handleBakeKeyframes = () => {
+  const handleBakeKeyframes = useCallback(() => {
     if (!trajectory || trajectory.length === 0 || !project || !updateProjectWithHistory) {
       return;
     }
@@ -397,9 +429,15 @@ export default function MotionTrackingModal({
       setBakedSuccess(true);
       setTimeout(() => setBakedSuccess(false), 2500);
     }
-  };
+  }, [
+    trajectory,
+    project,
+    updateProjectWithHistory,
+    selectedClip,
+    pinnedClipId,
+  ]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     soundEngine.playSfx("click");
     triggerHaptic("selection");
     setEnabled(false);
@@ -411,7 +449,7 @@ export default function MotionTrackingModal({
       actionType: "mosaic_censor",
       trackingStatus: "idle",
     });
-  };
+  }, [syncTracking]);
 
   const hasTrajectory = trajectory && trajectory.length > 0;
 

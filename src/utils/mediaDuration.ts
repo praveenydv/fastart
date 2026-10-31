@@ -3,7 +3,7 @@
  * Ensures video and audio clips can never be expanded beyond their actual media file lengths.
  */
 
-import { LruCache } from "./mediaThumbnailGenerator";
+import { LruCache } from "./lruCache";
 
 // Shared memory cache for media durations (keyed by clip.url and clip.id)
 export const globalMediaDurationCache = new LruCache<string, number>(200);

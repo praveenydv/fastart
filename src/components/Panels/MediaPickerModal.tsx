@@ -9,8 +9,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
@@ -279,7 +279,13 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                 >
                   <View style={styles.importedThumbBox}>
                     {clip.thumbnail ? (
-                      <Image source={{ uri: clip.thumbnail }} style={styles.importedThumbImg} />
+                      <ExpoImage
+                        source={{ uri: clip.thumbnail }}
+                        style={styles.importedThumbImg}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={120}
+                      />
                     ) : (
                       <View style={styles.importedThumbFallback}>
                         <Ionicons

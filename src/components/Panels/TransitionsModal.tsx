@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { TRANSITION_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
@@ -278,13 +278,15 @@ export default function TransitionsModal({
                         <View style={styles.transStageInner}>
                           {/* Base Clip A */}
                           <View style={styles.clipLayerA}>
-                            <Image
+                            <ExpoImage
                               source={{ uri: PRESET_PREVIEW_IMAGE }}
                               style={[
                                 styles.clipImg,
                                 Platform.OS === 'web' ? ({ filter: 'sepia(0.35) contrast(1.1) brightness(0.85)' } as any) : null,
                               ]}
-                              resizeMode="cover"
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
                             />
                             <View style={styles.clipTagA}>
                               <Text style={styles.clipTagText}>A</Text>
@@ -293,13 +295,15 @@ export default function TransitionsModal({
 
                           {/* Incoming Clip B executing live transition */}
                           <View style={[styles.clipLayerB, getTransitionAnimStyle(item.id)]}>
-                            <Image
+                            <ExpoImage
                               source={{ uri: PRESET_PREVIEW_IMAGE }}
                               style={[
                                 styles.clipImg,
                                 Platform.OS === 'web' ? ({ filter: 'contrast(1.25) saturate(1.4)' } as any) : null,
                               ]}
-                              resizeMode="cover"
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
                             />
                             <View style={styles.clipTagB}>
                               <Text style={styles.clipTagText}>B</Text>

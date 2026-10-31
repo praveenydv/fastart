@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
@@ -481,7 +481,13 @@ export default function AnimationModal({
                   <>
                     {/* Animated Preview Subject executing live motion */}
                     <View style={[styles.animSubjectBox, getAnimPreviewStyle(item.id, activeCategory)]}>
-                      <Image source={{ uri: previewThumb }} style={styles.animSubjectImg} resizeMode="cover" />
+                      <ExpoImage
+                        source={{ uri: previewThumb }}
+                        style={styles.animSubjectImg}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={120}
+                      />
                       <View style={styles.animSubjectOverlay} />
                       <Ionicons name={item.icon} size={13} color="#FFFFFF" style={styles.animSubjectIcon} />
                     </View>

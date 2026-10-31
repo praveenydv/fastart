@@ -2,25 +2,9 @@ import { Platform } from "react-native";
 import { isImageClip } from "./mediaDuration";
 import { getLiveMediaUrl } from "./largeMediaStorage";
 import { globalActiveVideoElements } from "./renderer/rendererMediaSync";
+import { LruCache } from "./lruCache";
 
-// High-performance LRU cache bounded to prevent memory bloat
-export class LruCache<K, V> extends Map<K, V> {
-  private maxSize: number;
-  constructor(maxSize: number = 120) {
-    super();
-    this.maxSize = maxSize;
-  }
-  override set(key: K, value: V): this {
-    if (this.has(key)) {
-      this.delete(key);
-    } else if (this.size >= this.maxSize) {
-      const first = this.keys().next().value;
-      if (first !== undefined) this.delete(first);
-    }
-    super.set(key, value);
-    return this;
-  }
-}
+export { LruCache };
 
 // In-memory thumbnail cache keyed by clipId or mediaUrl (bounded to 120 entries)
 export const globalThumbnailCache = new LruCache<string, string>(120);

@@ -34,6 +34,7 @@ import {
   pruneUnusedMedia,
   preloadClip,
   syncPlayback,
+  pauseAllMedia,
   MediaSyncContext,
 } from "./renderer/rendererMediaSync";
 import { drawClip as renderClipItem, TransitionRenderState } from "./renderer/rendererClip";
@@ -46,6 +47,12 @@ let latestLiveSnapshot: string | null = null;
 
 export function getActiveVideoRenderer(): VideoRenderer | null {
   return activeVideoRenderer;
+}
+
+export function pauseActiveVideoRenderer() {
+  if (activeVideoRenderer) {
+    activeVideoRenderer.pauseAll();
+  }
 }
 
 export function getLivePlayerCanvasSnapshot(): string | null {
@@ -115,7 +122,18 @@ export class VideoRenderer {
   }> = [];
   private _handledVideoIds = new Set<string>();
   private _clipsByTrack = new Map<number, VideoClip[]>();
+  private _activeVideosScratch: VideoClip[] = [];
+  private _activeCaptionsScratch: any[] = [];
+  private _activeTextsScratch: any[] = [];
+  private _activeStickersScratch: any[] = [];
+  private _activeEffectsScratch: any[] = [];
   private _visualItems: Array<{
+    kind: "video" | "caption" | "text" | "sticker" | "effect";
+    clip: any;
+    trackIndex: number;
+    transitionState?: TransitionRenderState | null;
+  }> = [];
+  private _visualItemPool: Array<{
     kind: "video" | "caption" | "text" | "sticker" | "effect";
     clip: any;
     trackIndex: number;
@@ -264,6 +282,12 @@ export class VideoRenderer {
     this._handledVideoIds.clear();
     this._clipsByTrack.clear();
     this._visualItems.length = 0;
+    this._visualItemPool.length = 0;
+    this._activeVideosScratch.length = 0;
+    this._activeCaptionsScratch.length = 0;
+    this._activeTextsScratch.length = 0;
+    this._activeStickersScratch.length = 0;
+    this._activeEffectsScratch.length = 0;
     this.canvas = null;
     this.ctx = null;
   }
@@ -278,6 +302,11 @@ export class VideoRenderer {
 
   syncPlayback(activeClips: VideoClip[], time: number, isPlaying: boolean) {
     syncPlayback(this.getMediaSyncContext(), activeClips, time, isPlaying);
+  }
+
+  pauseAll() {
+    this.isPlaying = false;
+    pauseAllMedia(this.getMediaSyncContext());
   }
 
   evaluateSpeedCurve(curve: any[], progress: number): number {

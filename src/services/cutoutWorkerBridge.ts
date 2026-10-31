@@ -175,6 +175,9 @@ class CutoutWorkerBridge {
       const blob = new Blob([workerScript], { type: "application/javascript" });
       const blobUrl = URL.createObjectURL(blob);
       const w = new Worker(blobUrl);
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {}
 
       w.onmessage = (e) => {
         const { id, success, rawAlpha, error } = e.data;

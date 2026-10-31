@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Image, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoClip } from '../types/project';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -73,10 +74,12 @@ function NativeVideoClipPlayerComponent({
 
   // Photo or image clip
   return (
-    <Image
+    <ExpoImage
       source={{ uri: mediaUri }}
       style={styles.fullMedia}
-      resizeMode="contain"
+      contentFit="contain"
+      cachePolicy="memory-disk"
+      transition={120}
     />
   );
 }
@@ -102,6 +105,8 @@ function VideoClipRenderer({
   const lastSeekTargetRef = React.useRef<number>(-1);
   const lastSeekTimestampRef = React.useRef<number>(0);
   const isPlayingRef = React.useRef<boolean>(false);
+  const wasPlayingRef = React.useRef<boolean>(false);
+  const pauseTimestampRef = React.useRef<number>(0);
   const targetMediaTimeRef = React.useRef<number>(targetMediaTime);
   targetMediaTimeRef.current = targetMediaTime;
 
@@ -154,8 +159,11 @@ function VideoClipRenderer({
   useEffect(() => {
     if (!player || hasError) return;
     const curTarget = targetMediaTimeRef.current;
+    const now = Date.now();
     try {
       if (isPlaying && isInside) {
+        wasPlayingRef.current = true;
+        pauseTimestampRef.current = 0;
         // If drifted excessively (> 0.4s), re-seek, otherwise start immediately for 0-latency cut transition
         if (Math.abs(player.currentTime - curTarget) > 0.4) {
           player.currentTime = curTarget;
@@ -163,11 +171,17 @@ function VideoClipRenderer({
         }
         player.play();
       } else {
+        const wasPlaying = wasPlayingRef.current;
+        if (wasPlaying && !isPlaying) {
+          pauseTimestampRef.current = now;
+        }
+        wasPlayingRef.current = isPlaying && isInside;
         // Stay paused and hold pre-warmed frame
         player.pause();
-        // If not actively playing (e.g. scrubbing or pre-warming), seek to target frame.
+        const isWithinPauseGracePeriod = !isPlaying && now - pauseTimestampRef.current < 250;
+        // If not actively playing and outside the pause settling window, seek to target frame.
         // During active playback when clip reaches its cut (isRecent), do not re-seek — preserve rendered final frame!
-        if (!isPlaying && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
+        if (!isPlaying && !isWithinPauseGracePeriod && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
@@ -179,6 +193,7 @@ function VideoClipRenderer({
   useEffect(() => {
     if (!player || hasError || isPlaying) return;
     const now = Date.now();
+    if (now - pauseTimestampRef.current < 250) return;
     try {
       if (
         Math.abs(lastSeekTargetRef.current - targetMediaTime) > 0.03 &&
@@ -209,10 +224,12 @@ function VideoClipRenderer({
   if (hasError) {
     if (fallbackThumbnail) {
       return (
-        <Image
+        <ExpoImage
           source={{ uri: fallbackThumbnail }}
           style={styles.fullMedia}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={120}
         />
       );
     }

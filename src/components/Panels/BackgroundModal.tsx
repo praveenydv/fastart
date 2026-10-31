@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Image,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { soundEngine } from '../../utils/audioEngine';
@@ -475,10 +475,12 @@ export default function BackgroundModal({
                 {/* Active Custom Image Indicator if user uploaded */}
                 {isImage && (
                   <View style={styles.activeCustomImageContainer}>
-                    <Image
+                    <ExpoImage
                       source={{ uri: rawBg.replace('image:', '') }}
                       style={styles.activeCustomImageThumb}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={120}
                     />
                     <View style={{ flex: 1, paddingLeft: 10 }}>
                       <Text style={styles.activeCustomImageText}>Active Image Background</Text>
@@ -510,10 +512,12 @@ export default function BackgroundModal({
                       onPress={() => handleSelectBg(`image:${livePreviewUri}`)}
                       activeOpacity={0.8}
                     >
-                      <Image
+                      <ExpoImage
                         source={{ uri: livePreviewUri }}
                         style={styles.liveFrameThumb}
-                        resizeMode="cover"
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={120}
                       />
                       <View style={{ flex: 1, paddingLeft: 12 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -553,10 +557,12 @@ export default function BackgroundModal({
                         onPress={() => handleSelectBg(wp.id)}
                         activeOpacity={0.8}
                       >
-                        <Image
+                        <ExpoImage
                           source={{ uri }}
                           style={styles.wallpaperCardImage}
-                          resizeMode="cover"
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={120}
                         />
                         <View style={styles.wallpaperCardOverlay}>
                           <Text style={styles.wallpaperCardTitle} numberOfLines={1}>
@@ -607,7 +613,7 @@ export default function BackgroundModal({
                               <Ionicons name="ban-outline" size={20} color="#71717A" />
                             </View>
                           ) : (
-                            <Image
+                            <ExpoImage
                               source={{ uri: sampleMediaThumb }}
                               style={[
                                 styles.blurThumbImage,
@@ -616,7 +622,9 @@ export default function BackgroundModal({
                                   : null,
                               ]}
                               blurRadius={b.px}
-                              resizeMode="cover"
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
                             />
                           )}
                           {isSelected && (

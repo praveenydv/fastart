@@ -30,6 +30,8 @@ import { allocateNewTrackForClip } from "../../utils/trackPlacement";
 import { THEME_COLORS } from "../../constants/designConstants";
 import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 import { reconnectLinkedMedia } from "../../utils/largeMediaStorage";
+import { pauseActiveVideoRenderer } from "../../utils/videoRenderer";
+import { pauseAllAudio } from "../Player/usePlayerAudioSync";
 import { ErrorBoundary } from "../Common/ErrorBoundary";
 
 const CLIP_TYPE_AVAILABLE_MENUS: Record<string, Set<string>> = {
@@ -1246,12 +1248,18 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         onTogglePlay={() => {
           if (totalDuration <= 0) {
             soundEngine.playSfx("click");
+            pauseActiveVideoRenderer();
+            pauseAllAudio();
             setIsPlaying(false);
             setCurrentTime(0);
             return;
           }
           soundEngine.playSfx("click");
-          if (!isPlaying) {
+          if (isPlaying) {
+            pauseActiveVideoRenderer();
+            pauseAllAudio();
+            setIsPlaying(false);
+          } else {
             const needsPermClips = [
               ...(project?.tracks?.video || []),
               ...(project?.tracks?.audio || []),
@@ -1275,8 +1283,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
             ) {
               setCurrentTime(0);
             }
+            setIsPlaying(true);
           }
-          setIsPlaying(!isPlaying);
         }}
         onSeek={(t) => setCurrentTime(t)}
         onAddKeyframe={onAddKeyframe}

@@ -10,6 +10,18 @@ interface UsePlayerAudioSyncProps {
   isPlaying: boolean;
 }
 
+// Global registry of active Web Audio elements for 0ms instantaneous hardware pause
+export const globalActiveAudioElements = new Set<HTMLAudioElement>();
+
+export function pauseAllAudio() {
+  if (typeof window === "undefined") return;
+  globalActiveAudioElements.forEach((el) => {
+    try {
+      el.pause();
+    } catch {}
+  });
+}
+
 export function usePlayerAudioSync({
   project,
   currentTime,
@@ -37,6 +49,8 @@ export function usePlayerAudioSync({
       lastVol?: number;
     };
   }>({});
+  const wasPlayingRef = useRef<boolean>(false);
+  const pauseTimestampRef = useRef<number>(0);
 
   // 1. Memoize sound sources (audio tracks + video tracks with detected audio)
   const allSoundSources = useMemo(() => {
@@ -85,11 +99,14 @@ export function usePlayerAudioSync({
     Object.keys(audioElementsRef.current).forEach((id) => {
       if (!activeIds.has(id)) {
         const el = audioElementsRef.current[id];
-        try {
-          el.pause();
-          el.removeAttribute("src");
-          el.load();
-        } catch {}
+        if (el) {
+          globalActiveAudioElements.delete(el);
+          try {
+            el.pause();
+            el.removeAttribute("src");
+            el.load();
+          } catch {}
+        }
         delete audioElementsRef.current[id];
         delete audioNodesRef.current[id];
       }
@@ -113,6 +130,7 @@ export function usePlayerAudioSync({
       const existingUrl = (el as any)?._fastartUrl || "";
       if (!el || existingUrl !== clip.url) {
         if (el) {
+          globalActiveAudioElements.delete(el);
           try {
             el.pause();
             el.removeAttribute("src");
@@ -121,6 +139,8 @@ export function usePlayerAudioSync({
           delete audioNodesRef.current[clip.id];
         }
         el = new Audio();
+        el.loop = false;
+        globalActiveAudioElements.add(el);
         (el as any)._fastartUrl = clip.url;
         if (clip.url.startsWith("http") && !clip.url.includes("localhost") && !clip.url.includes("127.0.0.1")) {
           el.crossOrigin = "anonymous";
@@ -212,6 +232,7 @@ export function usePlayerAudioSync({
     return () => {
       // Cleanup on unmount
       Object.values(audioElementsRef.current).forEach((el: any) => {
+        globalActiveAudioElements.delete(el);
         try {
           el.pause();
         } catch {}
@@ -222,6 +243,14 @@ export function usePlayerAudioSync({
   // 3. High-performance Playback Time Synchronization and Volume/DSP control
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
+
+    const now = Date.now();
+    const wasPlaying = wasPlayingRef.current;
+    if (wasPlaying && !isPlaying) {
+      pauseTimestampRef.current = now;
+    }
+    wasPlayingRef.current = isPlaying;
+    const isWithinPauseGracePeriod = !isPlaying && now - pauseTimestampRef.current < 250;
 
     const actx = audioCtxRef.current;
     if (actx && actx.state === "suspended" && isPlaying) {
@@ -313,9 +342,13 @@ export function usePlayerAudioSync({
         el.play().catch(() => {});
       } else {
         el.pause();
-        if (isInside) {
+        // If we just paused from active playback, hold the exact audio playhead: DO NOT rewind to lagging state!
+        // Only seek if the user is scrubbing while paused (outside the pause settling window).
+        if (!isWithinPauseGracePeriod && isInside) {
           const audioOffset = (currentTime - clipStart) * effSpeed + (clip.trimIn || 0);
-          el.currentTime = Math.max(0, audioOffset);
+          if (Math.abs(el.currentTime - audioOffset) > 0.04) {
+            el.currentTime = Math.max(0, audioOffset);
+          }
         }
       }
     });

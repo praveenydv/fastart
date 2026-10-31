@@ -71,6 +71,8 @@ export function useTimelineClipTrim({
   const trimStartInfoRef = useRef<any>(null);
   const activeTrimDeltaRef = useRef(activeTrimDelta);
   activeTrimDeltaRef.current = activeTrimDelta;
+  const panTrimRafRef = useRef<number | null>(null);
+  const latestPanTrimUpdatesRef = useRef<any>(null);
 
   // Universal Left Trim PanResponder (Android, iOS & Web)
   const leftTrimPanResponder = useMemo(() => {
@@ -120,17 +122,28 @@ export function useTimelineClipTrim({
           currentTimeRef.current,
         );
 
+        latestPanTrimUpdatesRef.current = updates;
         setActiveTrimDelta({
           clipId: info.clipId,
           side: "left",
           startTime: updates.startTime,
           duration: updates.duration,
         });
-        if (onTrimClipRef.current) {
-          onTrimClipRef.current(info.clipId, updates, false);
+
+        if (panTrimRafRef.current === null) {
+          panTrimRafRef.current = requestAnimationFrame(() => {
+            panTrimRafRef.current = null;
+            if (onTrimClipRef.current && latestPanTrimUpdatesRef.current) {
+              onTrimClipRef.current(info.clipId, latestPanTrimUpdatesRef.current, false);
+            }
+          });
         }
       },
       onPanResponderRelease: () => {
+        if (panTrimRafRef.current !== null) {
+          cancelAnimationFrame(panTrimRafRef.current);
+          panTrimRafRef.current = null;
+        }
         const info = trimStartInfoRef.current;
         const activeDelta = activeTrimDeltaRef.current;
         if (info && activeDelta && onTrimClipRef.current) {
@@ -169,6 +182,10 @@ export function useTimelineClipTrim({
         }, 50);
       },
       onPanResponderTerminate: () => {
+        if (panTrimRafRef.current !== null) {
+          cancelAnimationFrame(panTrimRafRef.current);
+          panTrimRafRef.current = null;
+        }
         setActiveTrimDelta(null);
         setActiveTrimming(null);
         trimStartInfoRef.current = null;
@@ -225,17 +242,28 @@ export function useTimelineClipTrim({
           currentTimeRef.current,
         );
 
+        latestPanTrimUpdatesRef.current = updates;
         setActiveTrimDelta({
           clipId: info.clipId,
           side: "right",
           startTime: info.initialStart,
           duration: updates.duration,
         });
-        if (onTrimClipRef.current) {
-          onTrimClipRef.current(info.clipId, updates, false);
+
+        if (panTrimRafRef.current === null) {
+          panTrimRafRef.current = requestAnimationFrame(() => {
+            panTrimRafRef.current = null;
+            if (onTrimClipRef.current && latestPanTrimUpdatesRef.current) {
+              onTrimClipRef.current(info.clipId, latestPanTrimUpdatesRef.current, false);
+            }
+          });
         }
       },
       onPanResponderRelease: () => {
+        if (panTrimRafRef.current !== null) {
+          cancelAnimationFrame(panTrimRafRef.current);
+          panTrimRafRef.current = null;
+        }
         const info = trimStartInfoRef.current;
         const activeDelta = activeTrimDeltaRef.current;
         if (info && activeDelta && onTrimClipRef.current) {
@@ -278,6 +306,10 @@ export function useTimelineClipTrim({
         }, 50);
       },
       onPanResponderTerminate: () => {
+        if (panTrimRafRef.current !== null) {
+          cancelAnimationFrame(panTrimRafRef.current);
+          panTrimRafRef.current = null;
+        }
         setActiveTrimDelta(null);
         setActiveTrimming(null);
         trimStartInfoRef.current = null;

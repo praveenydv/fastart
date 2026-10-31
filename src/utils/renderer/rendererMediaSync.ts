@@ -166,6 +166,18 @@ export async function preloadClip(
       if (vid.duration && !isNaN(vid.duration) && isFinite(vid.duration) && vid.duration > 0) {
         setCachedMediaDuration(clip.url, vid.duration);
         if (clip.id) setCachedMediaDuration(clip.id, vid.duration);
+        if (!clip.mediaDuration || (clip.mediaDuration <= 6.01 && vid.duration > 6.01)) {
+          clip.mediaDuration = vid.duration;
+        }
+        if (
+          Math.abs((clip.duration || 0) - 6.0) < 0.05 &&
+          (clip.trimIn || 0) === 0 &&
+          Math.abs((clip.trimOut || 0) - 6.0) < 0.05 &&
+          vid.duration > 6.01
+        ) {
+          clip.duration = vid.duration;
+          clip.trimOut = vid.duration;
+        }
       }
       trigger();
     });
@@ -238,6 +250,23 @@ export async function preloadClip(
   }
 }
 
+export function pauseAllMedia(ctx: MediaSyncContext) {
+  if (typeof window === "undefined") return;
+  ctx.isPlaying = false;
+  const now = Date.now();
+  ctx.videoElements.forEach((el) => {
+    if (el instanceof HTMLVideoElement) {
+      (el as any)._wasPlayingBeforePause = true;
+      (el as any)._pauseTimestamp = now;
+      if (!el.paused) {
+        try {
+          el.pause();
+        } catch {}
+      }
+    }
+  });
+}
+
 export function syncPlayback(
   ctx: MediaSyncContext,
   activeClips: VideoClip[],
@@ -245,6 +274,7 @@ export function syncPlayback(
   isPlaying: boolean,
 ) {
   if (typeof window === "undefined") return;
+  ctx.isPlaying = isPlaying;
 
   const activeKeys = new Set<string>();
   activeClips.forEach((c) => {
@@ -305,6 +335,8 @@ export function syncPlayback(
     const lastHardSeek = (vid as any)._lastHardSeek || 0;
 
     if (isPlaying) {
+      (vid as any)._wasPlayingBeforePause = false;
+      (vid as any)._pauseTimestamp = 0;
       if (vid.seeking) {
         // Active seek is currently in flight: do not interrupt decoder buffer
         return;
@@ -338,12 +370,21 @@ export function syncPlayback(
         }
       }
     } else {
+      const wasPlaying = (vid as any)._wasPlayingBeforePause || false;
       if (!vid.paused) {
         vid.pause();
+        (vid as any)._wasPlayingBeforePause = true;
+        (vid as any)._pauseTimestamp = now;
       }
-      if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.03 && now - lastHardSeek > 150) {
-        (vid as any)._lastHardSeek = now;
-        vid.currentTime = Math.max(0, mediaTime);
+      // If the video was playing and just paused, preserve the rendered frame: DO NOT rewind to lagging state!
+      // Only seek if the user is scrubbing while paused and we are past the pause transition window (250ms).
+      const isWithinPauseGracePeriod = wasPlaying && (now - ((vid as any)._pauseTimestamp || 0) < 250);
+      if (!isWithinPauseGracePeriod) {
+        (vid as any)._wasPlayingBeforePause = false;
+        if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.04 && now - lastHardSeek > 100) {
+          (vid as any)._lastHardSeek = now;
+          vid.currentTime = Math.max(0, mediaTime);
+        }
       }
     }
     ctx.lastUsedTimestamp.set(activeClip.url, Date.now());

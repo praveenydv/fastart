@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FILTER_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
@@ -296,10 +296,12 @@ export default function FiltersModal({
                           <View style={styles.splitFilterBox}>
                             {/* Left Half: Before (Original) */}
                             <View style={styles.splitLeftHalf}>
-                              <Image
+                              <ExpoImage
                                 source={{ uri: previewThumb }}
                                 style={styles.splitImgLeft}
-                                resizeMode="cover"
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                transition={120}
                               />
                               <View style={styles.splitBadgeLeft}>
                                 <Text style={styles.splitBadgeText}>ORIG</Text>
@@ -308,7 +310,7 @@ export default function FiltersModal({
 
                             {/* Right Half: After (3D LUT Grade) */}
                             <View style={styles.splitRightHalf}>
-                              <Image
+                              <ExpoImage
                                 source={{ uri: previewThumb }}
                                 style={[
                                   styles.splitImgRight,
@@ -316,7 +318,9 @@ export default function FiltersModal({
                                     ? ({ filter: `contrast(1.22) saturate(1.28) ${lut.id.includes('warm') ? 'sepia(0.35)' : lut.id.includes('cold') ? 'hue-rotate(180deg)' : ''}` } as any)
                                     : null,
                                 ]}
-                                resizeMode="cover"
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                transition={120}
                               />
                               <View
                                 style={[
@@ -382,19 +386,23 @@ export default function FiltersModal({
                       >
                         <View style={styles.colorPreview}>
                           {isItemNormal ? (
-                            <Image
+                            <ExpoImage
                               source={{ uri: previewThumb }}
                               style={styles.previewImage}
-                              resizeMode="cover"
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
                             />
                           ) : (
                             <View style={styles.splitFilterBox}>
                               {/* Left Half: Before (Original) */}
                               <View style={styles.splitLeftHalf}>
-                                <Image
+                                <ExpoImage
                                   source={{ uri: previewThumb }}
                                   style={styles.splitImgLeft}
-                                  resizeMode="cover"
+                                  contentFit="cover"
+                                  cachePolicy="memory-disk"
+                                  transition={120}
                                 />
                                 <View style={styles.splitBadgeLeft}>
                                   <Text style={styles.splitBadgeText}>ORIG</Text>
@@ -403,7 +411,7 @@ export default function FiltersModal({
 
                               {/* Right Half: After (Filtered) */}
                               <View style={styles.splitRightHalf}>
-                                <Image
+                                <ExpoImage
                                   source={{ uri: previewThumb }}
                                   style={[
                                     styles.splitImgRight,
@@ -411,7 +419,9 @@ export default function FiltersModal({
                                       ? ({ filter: item.css } as any)
                                       : null,
                                   ]}
-                                  resizeMode="cover"
+                                  contentFit="cover"
+                                  cachePolicy="memory-disk"
+                                  transition={120}
                                 />
                                 <View
                                   style={[

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import { soundEngine } from "../utils/audioEngine";
+import { pauseActiveVideoRenderer } from "../utils/videoRenderer";
+import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
 
 interface UseKeyboardShortcutsParams {
   selectedClipId: string | null;
@@ -65,18 +67,26 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         if (totalDuration <= 0) {
           soundEngine.playSfx("click");
+          pauseActiveVideoRenderer();
+          pauseAllAudio();
           setIsPlaying(false);
           setCurrentTime(0);
           return;
         }
         soundEngine.playSfx("click");
-        if (
-          !isPlaying &&
-          (currentTime >= totalDuration - 0.05 || currentTime >= totalDuration)
-        ) {
-          setCurrentTime(0);
+        if (isPlaying) {
+          pauseActiveVideoRenderer();
+          pauseAllAudio();
+          setIsPlaying(false);
+        } else {
+          if (
+            currentTime >= totalDuration - 0.05 ||
+            currentTime >= totalDuration
+          ) {
+            setCurrentTime(0);
+          }
+          setIsPlaying(true);
         }
-        setIsPlaying((p) => !p);
         return;
       }
 

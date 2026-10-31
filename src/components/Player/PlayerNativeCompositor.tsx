@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { styles } from "./PlayerStyles";
@@ -77,10 +78,12 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
       {/* Background Custom Image Fill */}
       {isImage && (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} pointerEvents="none">
-          <Image
+          <ExpoImage
             source={{ uri: rawBg.replace('image:', '') }}
             style={StyleSheet.absoluteFill}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
           />
         </View>
       )}
@@ -133,7 +136,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
 
         return (
           <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} pointerEvents="none">
-            <Image
+            <ExpoImage
               source={{ uri: mediaUri }}
               style={[
                 StyleSheet.absoluteFill,
@@ -141,7 +144,9 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                 Platform.OS === 'web' ? ({ filter: `blur(${blurAmount}px)` } as any) : null,
               ]}
               blurRadius={blurAmount}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
             />
           </View>
         );

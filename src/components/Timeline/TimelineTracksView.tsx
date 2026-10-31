@@ -652,11 +652,13 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                         <TimelineClipPreview clip={clip} width={width} />
 
                         {/* Audio Waveform visualization (renders in audio clips & video clips with audio) */}
-                        <TimelineClipWaveform
-                          clip={clip}
-                          width={width}
-                          isSelected={isSelected || isBeingDragged}
-                        />
+                        {(clip.type === "video" || clip.type === "audio") && (
+                          <TimelineClipWaveform
+                            clip={clip}
+                            width={width}
+                            isSelected={isSelected || isBeingDragged}
+                          />
+                        )}
 
                         {/* Inner Content by Clip Type */}
                         <View

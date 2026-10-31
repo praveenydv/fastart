@@ -1075,15 +1075,35 @@ class RustCoreBridgeService {
     try {
       const totalPixels = width * height;
       const guideBytes = totalPixels * 4;
+      const totalNeeded = guideBytes + totalPixels * 2;
 
-      const guidePtr = inst.fastart_alloc(guideBytes);
-      const maskPtr = inst.fastart_alloc(totalPixels);
-      const outPtr = inst.fastart_alloc(totalPixels);
+      let guidePtr = 0;
+      let maskPtr = 0;
+      let outPtr = 0;
+      let isScratch = false;
+
+      if (inst.fastart_get_scratchpad) {
+        const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+        if (scratchPtr) {
+          isScratch = true;
+          guidePtr = scratchPtr;
+          maskPtr = guidePtr + guideBytes;
+          outPtr = maskPtr + totalPixels;
+        }
+      }
+
+      if (!isScratch) {
+        guidePtr = inst.fastart_alloc(guideBytes);
+        maskPtr = inst.fastart_alloc(totalPixels);
+        outPtr = inst.fastart_alloc(totalPixels);
+      }
 
       if (!guidePtr || !maskPtr || !outPtr) {
-        if (guidePtr) inst.fastart_dealloc(guidePtr, guideBytes);
-        if (maskPtr) inst.fastart_dealloc(maskPtr, totalPixels);
-        if (outPtr) inst.fastart_dealloc(outPtr, totalPixels);
+        if (!isScratch) {
+          if (guidePtr) inst.fastart_dealloc(guidePtr, guideBytes);
+          if (maskPtr) inst.fastart_dealloc(maskPtr, totalPixels);
+          if (outPtr) inst.fastart_dealloc(outPtr, totalPixels);
+        }
         return null;
       }
 
@@ -1104,9 +1124,11 @@ class RustCoreBridgeService {
         new Uint8Array(inst.memory.buffer, outPtr, totalPixels)
       );
 
-      inst.fastart_dealloc(guidePtr, guideBytes);
-      inst.fastart_dealloc(maskPtr, totalPixels);
-      inst.fastart_dealloc(outPtr, totalPixels);
+      if (!isScratch) {
+        inst.fastart_dealloc(guidePtr, guideBytes);
+        inst.fastart_dealloc(maskPtr, totalPixels);
+        inst.fastart_dealloc(outPtr, totalPixels);
+      }
 
       return refined;
     } catch (err) {
@@ -1132,13 +1154,31 @@ class RustCoreBridgeService {
     try {
       const totalPixels = width * height;
       const pixelsBytes = totalPixels * 4;
+      const totalNeeded = pixelsBytes + totalPixels;
 
-      const pixelsPtr = inst.fastart_alloc(pixelsBytes);
-      const maskPtr = inst.fastart_alloc(totalPixels);
+      let pixelsPtr = 0;
+      let maskPtr = 0;
+      let isScratch = false;
+
+      if (inst.fastart_get_scratchpad) {
+        const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+        if (scratchPtr) {
+          isScratch = true;
+          pixelsPtr = scratchPtr;
+          maskPtr = pixelsPtr + pixelsBytes;
+        }
+      }
+
+      if (!isScratch) {
+        pixelsPtr = inst.fastart_alloc(pixelsBytes);
+        maskPtr = inst.fastart_alloc(totalPixels);
+      }
 
       if (!pixelsPtr || !maskPtr) {
-        if (pixelsPtr) inst.fastart_dealloc(pixelsPtr, pixelsBytes);
-        if (maskPtr) inst.fastart_dealloc(maskPtr, totalPixels);
+        if (!isScratch) {
+          if (pixelsPtr) inst.fastart_dealloc(pixelsPtr, pixelsBytes);
+          if (maskPtr) inst.fastart_dealloc(maskPtr, totalPixels);
+        }
         return false;
       }
 
@@ -1156,8 +1196,10 @@ class RustCoreBridgeService {
 
       pixels.set(new Uint8Array(inst.memory.buffer, pixelsPtr, pixelsBytes));
 
-      inst.fastart_dealloc(pixelsPtr, pixelsBytes);
-      inst.fastart_dealloc(maskPtr, totalPixels);
+      if (!isScratch) {
+        inst.fastart_dealloc(pixelsPtr, pixelsBytes);
+        inst.fastart_dealloc(maskPtr, totalPixels);
+      }
       return true;
     } catch (err) {
       console.warn("[RustCoreBridge] applyMatte error:", err);
@@ -1178,12 +1220,41 @@ class RustCoreBridgeService {
 
     try {
       const totalBytes = width * height * 4;
-      const pixelsPtr = inst.fastart_alloc(totalBytes);
-      const outRPtr = inst.fastart_alloc(1);
-      const outGPtr = inst.fastart_alloc(1);
-      const outBPtr = inst.fastart_alloc(1);
+      const totalNeeded = totalBytes + 4;
 
-      if (!pixelsPtr || !outRPtr || !outGPtr || !outBPtr) return null;
+      let pixelsPtr = 0;
+      let outRPtr = 0;
+      let outGPtr = 0;
+      let outBPtr = 0;
+      let isScratch = false;
+
+      if (inst.fastart_get_scratchpad) {
+        const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+        if (scratchPtr) {
+          isScratch = true;
+          pixelsPtr = scratchPtr;
+          outRPtr = pixelsPtr + totalBytes;
+          outGPtr = outRPtr + 1;
+          outBPtr = outGPtr + 1;
+        }
+      }
+
+      if (!isScratch) {
+        pixelsPtr = inst.fastart_alloc(totalBytes);
+        outRPtr = inst.fastart_alloc(1);
+        outGPtr = inst.fastart_alloc(1);
+        outBPtr = inst.fastart_alloc(1);
+      }
+
+      if (!pixelsPtr || !outRPtr || !outGPtr || !outBPtr) {
+        if (!isScratch) {
+          if (pixelsPtr) inst.fastart_dealloc(pixelsPtr, totalBytes);
+          if (outRPtr) inst.fastart_dealloc(outRPtr, 1);
+          if (outGPtr) inst.fastart_dealloc(outGPtr, 1);
+          if (outBPtr) inst.fastart_dealloc(outBPtr, 1);
+        }
+        return null;
+      }
 
       new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes).set(pixels);
 
@@ -1206,10 +1277,12 @@ class RustCoreBridgeService {
         result = { r, g, b, hex };
       }
 
-      inst.fastart_dealloc(pixelsPtr, totalBytes);
-      inst.fastart_dealloc(outRPtr, 1);
-      inst.fastart_dealloc(outGPtr, 1);
-      inst.fastart_dealloc(outBPtr, 1);
+      if (!isScratch) {
+        inst.fastart_dealloc(pixelsPtr, totalBytes);
+        inst.fastart_dealloc(outRPtr, 1);
+        inst.fastart_dealloc(outGPtr, 1);
+        inst.fastart_dealloc(outBPtr, 1);
+      }
 
       return result;
     } catch (err) {
@@ -1942,20 +2015,55 @@ class RustCoreBridgeService {
       const frameBytes = fw * fh * 4;
       const templateLen = dim * dim;
       const scalesCount = scales.length;
+      const totalNeeded = frameBytes + templateLen * 4 + scalesCount * 4 + 32;
 
-      const framePtr = inst.fastart_alloc(frameBytes);
-      const templatePtr = inst.fastart_alloc(templateLen * 4);
-      const scalesPtr = inst.fastart_alloc(scalesCount * 4);
-      const outBestXPtr = inst.fastart_alloc(4);
-      const outBestYPtr = inst.fastart_alloc(4);
-      const outBestScalePtr = inst.fastart_alloc(4);
-      const outBestAnglePtr = inst.fastart_alloc(4);
-      const outBestScorePtr = inst.fastart_alloc(4);
+      let framePtr = 0;
+      let templatePtr = 0;
+      let scalesPtr = 0;
+      let outBestXPtr = 0;
+      let outBestYPtr = 0;
+      let outBestScalePtr = 0;
+      let outBestAnglePtr = 0;
+      let outBestScorePtr = 0;
+      let isScratch = false;
+
+      if (inst.fastart_get_scratchpad) {
+        const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+        if (scratchPtr) {
+          isScratch = true;
+          framePtr = scratchPtr;
+          templatePtr = framePtr + frameBytes;
+          scalesPtr = templatePtr + templateLen * 4;
+          outBestXPtr = scalesPtr + scalesCount * 4;
+          outBestYPtr = outBestXPtr + 4;
+          outBestScalePtr = outBestYPtr + 4;
+          outBestAnglePtr = outBestScalePtr + 4;
+          outBestScorePtr = outBestAnglePtr + 4;
+        }
+      }
+
+      if (!isScratch) {
+        framePtr = inst.fastart_alloc(frameBytes);
+        templatePtr = inst.fastart_alloc(templateLen * 4);
+        scalesPtr = inst.fastart_alloc(scalesCount * 4);
+        outBestXPtr = inst.fastart_alloc(4);
+        outBestYPtr = inst.fastart_alloc(4);
+        outBestScalePtr = inst.fastart_alloc(4);
+        outBestAnglePtr = inst.fastart_alloc(4);
+        outBestScorePtr = inst.fastart_alloc(4);
+      }
 
       if (!framePtr || !templatePtr || !scalesPtr) {
-        if (framePtr) inst.fastart_dealloc(framePtr, frameBytes);
-        if (templatePtr) inst.fastart_dealloc(templatePtr, templateLen * 4);
-        if (scalesPtr) inst.fastart_dealloc(scalesPtr, scalesCount * 4);
+        if (!isScratch) {
+          if (framePtr) inst.fastart_dealloc(framePtr, frameBytes);
+          if (templatePtr) inst.fastart_dealloc(templatePtr, templateLen * 4);
+          if (scalesPtr) inst.fastart_dealloc(scalesPtr, scalesCount * 4);
+          if (outBestXPtr) inst.fastart_dealloc(outBestXPtr, 4);
+          if (outBestYPtr) inst.fastart_dealloc(outBestYPtr, 4);
+          if (outBestScalePtr) inst.fastart_dealloc(outBestScalePtr, 4);
+          if (outBestAnglePtr) inst.fastart_dealloc(outBestAnglePtr, 4);
+          if (outBestScorePtr) inst.fastart_dealloc(outBestScorePtr, 4);
+        }
         return null;
       }
 
@@ -1994,14 +2102,16 @@ class RustCoreBridgeService {
       const bestAngle = memF32[outBestAnglePtr >> 2];
       const bestScore = memF32[outBestScorePtr >> 2];
 
-      inst.fastart_dealloc(framePtr, frameBytes);
-      inst.fastart_dealloc(templatePtr, templateLen * 4);
-      inst.fastart_dealloc(scalesPtr, scalesCount * 4);
-      inst.fastart_dealloc(outBestXPtr, 4);
-      inst.fastart_dealloc(outBestYPtr, 4);
-      inst.fastart_dealloc(outBestScalePtr, 4);
-      inst.fastart_dealloc(outBestAnglePtr, 4);
-      inst.fastart_dealloc(outBestScorePtr, 4);
+      if (!isScratch) {
+        inst.fastart_dealloc(framePtr, frameBytes);
+        inst.fastart_dealloc(templatePtr, templateLen * 4);
+        inst.fastart_dealloc(scalesPtr, scalesCount * 4);
+        inst.fastart_dealloc(outBestXPtr, 4);
+        inst.fastart_dealloc(outBestYPtr, 4);
+        inst.fastart_dealloc(outBestScalePtr, 4);
+        inst.fastart_dealloc(outBestAnglePtr, 4);
+        inst.fastart_dealloc(outBestScorePtr, 4);
+      }
 
       return {
         x: bestX,

@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Image,
   ActivityIndicator,
   TextInput,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject, AudioClip } from '../../types/project';
@@ -418,7 +418,13 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                 >
                   <View style={styles.thumbnailBox}>
                     {clip.thumbnail ? (
-                      <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailImg} />
+                      <ExpoImage
+                        source={{ uri: clip.thumbnail }}
+                        style={styles.thumbnailImg}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={120}
+                      />
                     ) : (
                       <View style={styles.thumbPlaceholder}>
                         <Ionicons

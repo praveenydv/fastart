@@ -31,6 +31,8 @@ export function usePlayerWebRenderer({
   boxWidthRef.current = boxWidth;
   const canvasHeightRef = useRef(canvasHeight);
   canvasHeightRef.current = canvasHeight;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
 
   // Initialize VideoRenderer for Web
   useEffect(() => {
@@ -41,7 +43,7 @@ export function usePlayerWebRenderer({
           rendererRef.current.renderFrame(
             projectRef.current,
             currentTimeRef.current,
-            isPlaying,
+            isPlayingRef.current,
             boxWidthRef.current,
             canvasHeightRef.current,
           );
@@ -119,6 +121,13 @@ export function usePlayerWebRenderer({
       });
     }
   }, [project.id]);
+
+  // Instantly pause hardware decoders when playback stops
+  useEffect(() => {
+    if (!isPlaying && rendererRef.current) {
+      rendererRef.current.pauseAll();
+    }
+  }, [isPlaying]);
 
   // Render frame on timestamp, project, or paused state change
   useEffect(() => {

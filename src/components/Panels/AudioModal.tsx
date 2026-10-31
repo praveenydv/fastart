@@ -68,12 +68,23 @@ export default function AudioModal({
         const fileName = file.name.replace(/\.[^/.]+$/, '');
         const trackId = 'user-audio-' + Date.now();
 
-        const probe = new Audio(URL.createObjectURL(file));
+        const probeUrl = URL.createObjectURL(file);
+        const probe = new Audio(probeUrl);
         let handled = false;
+
+        const cleanupProbe = () => {
+          try {
+            probe.onloadedmetadata = null;
+            probe.onerror = null;
+            probe.src = '';
+            URL.revokeObjectURL(probeUrl);
+          } catch {}
+        };
 
         const commitAudio = async (dur: number) => {
           if (handled) return;
           handled = true;
+          cleanupProbe();
           try {
             const validDuration =
               dur && !isNaN(dur) && isFinite(dur) && dur > 0

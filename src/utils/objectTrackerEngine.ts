@@ -47,6 +47,7 @@ interface TemplatePatch {
 export class ObjectTrackerEngine {
   private static offscreenCanvas: HTMLCanvasElement | null = null;
   private static offscreenCtx: CanvasRenderingContext2D | null = null;
+  private static patchScratch = new Float32Array(32 * 32);
 
   private static getCanvas(w = 320, h = 180): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
@@ -129,7 +130,8 @@ export class ObjectTrackerEngine {
   private static extractPatch(
     imgData: ImageData,
     rect: { x: number; y: number; w: number; h: number },
-    targetDim = 32
+    targetDim = 32,
+    intoBuffer?: Float32Array
   ): TemplatePatch | null {
     const { width: fw, height: fh, data } = imgData;
     const rx = Math.max(0, Math.min(fw - 2, Math.round(rect.x)));
@@ -137,7 +139,7 @@ export class ObjectTrackerEngine {
     const rw = Math.max(4, Math.min(fw - rx, Math.round(rect.w)));
     const rh = Math.max(4, Math.min(fh - ry, Math.round(rect.h)));
 
-    const patch = new Float32Array(targetDim * targetDim);
+    const patch = intoBuffer || new Float32Array(targetDim * targetDim);
     let sum = 0;
     let sumSq = 0;
 
@@ -268,7 +270,8 @@ export class ObjectTrackerEngine {
           const candidate = this.extractPatch(
             imgData,
             { x: sx - halfW, y: sy - halfH, w: bw, h: bh },
-            template.width
+            template.width,
+            this.patchScratch
           );
           if (!candidate) continue;
 

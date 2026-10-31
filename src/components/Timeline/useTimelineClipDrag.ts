@@ -281,6 +281,8 @@ export function useTimelineClipDrag({
   const clipDragStartInfoRef = useRef<any>(null);
   const dragStateRef = useRef(dragState);
   dragStateRef.current = dragState;
+  const panDragRafRef = useRef<number | null>(null);
+  const latestDragStateRef = useRef<TimelineDragState | null>(null);
   const lastTapRef = useRef({ time: 0, clipId: "" });
 
   // Touch tracking state for mobile gesture handling
@@ -827,7 +829,7 @@ export function useTimelineClipDrag({
         previousIsInsertingRef.current = isInsertingNewTrack;
         previousInsertTrackRef.current = insertTrackIndex;
 
-        setDragState({
+        const nextState: TimelineDragState = {
           clipId: info.clipId,
           currentStart: rawStart,
           targetStart: clampedStart,
@@ -836,13 +838,29 @@ export function useTimelineClipDrag({
           isInsertingNewTrack,
           insertTrackIndex,
           hasOverlap,
-        });
+        };
+        latestDragStateRef.current = nextState;
+        dragStateRef.current = nextState;
+
+        if (panDragRafRef.current === null) {
+          panDragRafRef.current = requestAnimationFrame(() => {
+            panDragRafRef.current = null;
+            if (latestDragStateRef.current) {
+              setDragState(latestDragStateRef.current);
+            }
+          });
+        }
       },
       onPanResponderRelease: () => {
+        if (panDragRafRef.current !== null) {
+          cancelAnimationFrame(panDragRafRef.current);
+          panDragRafRef.current = null;
+        }
         const info = clipDragStartInfoRef.current;
         const currentDrag = dragStateRef.current;
         setIsDraggingClip(false);
         setDragState(null);
+        latestDragStateRef.current = null;
         clipDragStartInfoRef.current = null;
         previousIsInsertingRef.current = false;
         previousInsertTrackRef.current = null;
@@ -886,8 +904,13 @@ export function useTimelineClipDrag({
         }
       },
       onPanResponderTerminate: () => {
+        if (panDragRafRef.current !== null) {
+          cancelAnimationFrame(panDragRafRef.current);
+          panDragRafRef.current = null;
+        }
         setIsDraggingClip(false);
         setDragState(null);
+        latestDragStateRef.current = null;
         clipDragStartInfoRef.current = null;
         previousIsInsertingRef.current = false;
         previousInsertTrackRef.current = null;
