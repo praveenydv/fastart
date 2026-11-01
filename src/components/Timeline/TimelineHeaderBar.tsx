@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Platform } from "react-native";
+import { View, Text, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./TimelineStyles";
 
@@ -104,6 +105,33 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
               </Text>
             </View>
           </View>
+
+          {/* Quick Mobile Split Button when Clip is Selected */}
+          {isMobile && hasSelectedClip && onSplitClip && (
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                {
+                  paddingHorizontal: 7,
+                  height: 22,
+                  backgroundColor: "rgba(0, 229, 201, 0.12)",
+                  borderColor: "rgba(0, 229, 201, 0.35)",
+                },
+              ]}
+              onPress={onSplitClip}
+              accessibilityLabel="Split clip at playhead"
+            >
+              <Ionicons name="cut-outline" size={11} color="#00E5C9" />
+              <Text
+                style={[
+                  styles.actionBtnText,
+                  { color: "#00E5C9", fontSize: 10, fontWeight: "600" },
+                ]}
+              >
+                Split
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Undo / Redo Quick Actions (Desktop only - mobile has top header undo/redo) */}
           {!isMobile && (onUndo || onRedo) && (
@@ -219,7 +247,10 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
         <View style={styles.zoomControls}>
           <TouchableOpacity
             style={styles.zoomBtn}
-            onPress={() => onZoomChange(Math.max(20, pxPerSec - 25))}
+            onPress={() => {
+              const step = pxPerSec > 100 ? 25 : pxPerSec > 50 ? 15 : pxPerSec > 20 ? 10 : pxPerSec > 8 ? 4 : pxPerSec > 3 ? 2 : 1;
+              onZoomChange(Math.max(1, pxPerSec - step));
+            }}
             activeOpacity={0.7}
             accessibilityLabel="Zoom Out"
           >
@@ -230,7 +261,10 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
 
           <TouchableOpacity
             style={styles.zoomBtn}
-            onPress={() => onZoomChange(Math.min(1000, pxPerSec + 25))}
+            onPress={() => {
+              const step = pxPerSec < 4 ? 2 : pxPerSec < 8 ? 4 : pxPerSec < 20 ? 5 : pxPerSec < 50 ? 10 : pxPerSec < 100 ? 15 : 25;
+              onZoomChange(Math.min(1000, pxPerSec + step));
+            }}
             activeOpacity={0.7}
             accessibilityLabel="Zoom In"
           >

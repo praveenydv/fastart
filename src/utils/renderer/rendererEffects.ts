@@ -42,7 +42,10 @@ export function applyMotionTracking(
       motionTrack.trackScale !== false,
       motionTrack.trackRotation === true,
       motionTrack.actionType === 'camera_center',
-      motionTrack.anchorTime
+      motionTrack.anchorTime,
+      motionTrack.cameraFitToScreen !== false,
+      motionTrack.cameraZoom ?? 1.25,
+      motionTrack.cameraLockCenter !== false,
     );
   }
   return rustCoreBridge.evaluateMotionTrack(

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { View, Text, Platform } from "react-native";
 import { styles } from "./TimelineStyles";
 import { formatPlayheadTime } from "./timelineUtils";
+import { playheadCoordinator } from "../../utils/playheadCoordinator";
 
 export interface TimelinePlayheadHeadProps {
   currentTime: number;
@@ -19,8 +20,29 @@ export const TimelinePlayheadHead: React.FC<TimelinePlayheadHeadProps> = React.m
     playheadPanResponder,
     handlePlayheadPointerDown,
   }) => {
+    const headRef = useRef<any>(null);
+    const pxPerSecRef = useRef(pxPerSec);
+    pxPerSecRef.current = pxPerSec;
+
+    useEffect(() => {
+      return playheadCoordinator.subscribe((time) => {
+        const x = time * pxPerSecRef.current;
+        if (Platform.OS === "web") {
+          const domNode = headRef.current?._inputRef || headRef.current;
+          if (domNode && domNode.style) {
+            domNode.style.transform = `translate3d(${x}px, 0, 0)`;
+          }
+        } else if (headRef.current && typeof headRef.current.setNativeProps === "function") {
+          headRef.current.setNativeProps({
+            style: { transform: [{ translateX: x }] },
+          });
+        }
+      });
+    }, []);
+
     return (
       <View
+        ref={headRef}
         style={[
           styles.playheadHeadInRuler,
           {
@@ -72,8 +94,29 @@ export interface TimelinePlayheadNeedleProps {
 
 export const TimelinePlayheadNeedle: React.FC<TimelinePlayheadNeedleProps> = React.memo(
   ({ currentTime, pxPerSec, isScrubbingRuler }) => {
+    const needleRef = useRef<any>(null);
+    const pxPerSecRef = useRef(pxPerSec);
+    pxPerSecRef.current = pxPerSec;
+
+    useEffect(() => {
+      return playheadCoordinator.subscribe((time) => {
+        const x = time * pxPerSecRef.current;
+        if (Platform.OS === "web") {
+          const domNode = needleRef.current?._inputRef || needleRef.current;
+          if (domNode && domNode.style) {
+            domNode.style.transform = `translate3d(${x}px, 0, 0)`;
+          }
+        } else if (needleRef.current && typeof needleRef.current.setNativeProps === "function") {
+          needleRef.current.setNativeProps({
+            style: { transform: [{ translateX: x }] },
+          });
+        }
+      });
+    }, []);
+
     return (
       <View
+        ref={needleRef}
         style={[
           styles.playheadNeedleLine,
           {

@@ -62,7 +62,7 @@ function computeTargetPosition(
 
   // Magnetic Snapping against all other clips, playhead, and timeline bounds
   if (isSnappingEnabled) {
-    const snapThresholdSec = 24 / pxPerSec;
+    const snapThresholdSec = Math.min(1.5, 24 / pxPerSec);
     let bestSnap = desiredStart;
     let snapDist = snapThresholdSec;
 
@@ -633,8 +633,10 @@ export function useTimelineClipDrag({
           previousIsInsertingRef.current = false;
           previousInsertTrackRef.current = null;
         };
-        window.addEventListener("mouseup", cleanup, { once: true });
-        window.addEventListener("touchend", cleanup, { once: true });
+        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+          window.addEventListener("mouseup", cleanup, { once: true });
+          window.addEventListener("touchend", cleanup, { once: true });
+        }
       }
     },
     [onSelectClip],
@@ -776,8 +778,10 @@ export function useTimelineClipDrag({
         }
       };
 
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      }
     },
     [activeTrackCount, isTrimmingActiveRef, onSelectClip],
   );

@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { Buffer } from 'buffer';
 import {
   FastArtProject,
   VideoClip,
@@ -52,6 +53,9 @@ export class ObjectTrackerEngine {
   private static offscreenCanvas: HTMLCanvasElement | null = null;
   private static offscreenCtx: CanvasRenderingContext2D | null = null;
   private static patchScratch = new Float32Array(32 * 32);
+  private static _cachedThumbnails: any = null;
+  private static _cachedFS: any = null;
+  private static _cachedJpegJs: any = null;
 
   private static getCanvas(w = 320, h = 180): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
@@ -66,6 +70,80 @@ export class ObjectTrackerEngine {
     }
     if (!this.offscreenCtx) return null;
     return { canvas: this.offscreenCanvas, ctx: this.offscreenCtx };
+  }
+
+  /**
+   * High-accuracy native frame sampler for React Native iOS/Android via expo-video-thumbnails + jpeg-js
+   */
+  private static async sampleNativeVideoFrame(
+    uri: string,
+    timeSec: number,
+    renderW = 320,
+    renderH = 180
+  ): Promise<ImageData | null> {
+    if (Platform.OS === 'web' || !uri) return null;
+    try {
+      if (!this._cachedThumbnails) {
+        this._cachedThumbnails = await import('expo-video-thumbnails');
+      }
+      if (!this._cachedFS) {
+        this._cachedFS = await import('expo-file-system/legacy').catch(() => import('expo-file-system'));
+      }
+      if (!this._cachedJpegJs) {
+        this._cachedJpegJs = await import('jpeg-js');
+      }
+
+      const seekMs = Math.max(10, Math.round(timeSec * 1000));
+      const thumb = await this._cachedThumbnails.getThumbnailAsync(uri, {
+        time: seekMs,
+        quality: 0.45,
+      });
+      if (!thumb?.uri) return null;
+
+      const FS = this._cachedFS;
+      const b64 = await FS.readAsStringAsync(thumb.uri, {
+        encoding: FS.EncodingType?.Base64 || 'base64',
+      });
+      if (!b64) return null;
+
+      const bytes = Buffer.from(b64, 'base64');
+      const decoded = this._cachedJpegJs.decode(bytes, {
+        useTArray: true,
+        formatAsRGBA: true,
+        maxMemoryUsageInMB: 64,
+      });
+      if (!decoded?.data || decoded.width <= 0 || decoded.height <= 0) return null;
+
+      const srcData = decoded.data as Uint8Array;
+      const sw = decoded.width;
+      const sh = decoded.height;
+      const outData = new Uint8ClampedArray(renderW * renderH * 4);
+
+      for (let y = 0; y < renderH; y++) {
+        const sy = Math.min(sh - 1, Math.floor((y / renderH) * sh));
+        const outRow = y * renderW * 4;
+        const srcRow = sy * sw * 4;
+        for (let x = 0; x < renderW; x++) {
+          const sx = Math.min(sw - 1, Math.floor((x / renderW) * sw));
+          const outIdx = outRow + x * 4;
+          const srcIdx = srcRow + sx * 4;
+          outData[outIdx] = srcData[srcIdx];
+          outData[outIdx + 1] = srcData[srcIdx + 1];
+          outData[outIdx + 2] = srcData[srcIdx + 2];
+          outData[outIdx + 3] = 255;
+        }
+      }
+
+      return {
+        data: outData,
+        width: renderW,
+        height: renderH,
+        colorSpace: 'srgb',
+      } as ImageData;
+    } catch (e) {
+      console.warn('[ObjectTrackerEngine] Native frame extraction warning:', e);
+      return null;
+    }
   }
 
   /**
@@ -576,12 +654,19 @@ export class ObjectTrackerEngine {
     const trajectory: TrajectoryPoint[] = new Array(totalFrames);
 
     try {
+      // Unified high-precision frame fetcher (web videoEl OR native mobile via expo-video-thumbnails)
+      const fetchFrameAtTime = async (timeSec: number): Promise<ImageData | null> => {
+        const sourceSec = getSourceSecForTime(timeSec);
+        if (Platform.OS === 'web' && activeVid) {
+          return await this.sampleVideoFrame(activeVid, sourceSec, renderW, renderH);
+        } else if (effectiveUrl) {
+          return await this.sampleNativeVideoFrame(effectiveUrl, sourceSec, renderW, renderH);
+        }
+        return null;
+      };
+
       // Step 1: Sample frame at anchor time and extract initial anchor template
-      const anchorSourceSec = getSourceSecForTime(anchorTimelineTime);
-      let anchorFrameImg: ImageData | null = null;
-      if (activeVid) {
-        anchorFrameImg = await this.sampleVideoFrame(activeVid, anchorSourceSec, renderW, renderH);
-      }
+      let anchorFrameImg: ImageData | null = await fetchFrameAtTime(anchorTimelineTime);
 
       let initialTemplate: TemplatePatch | null = null;
       let initialAngle = 0;
@@ -622,11 +707,7 @@ export class ObjectTrackerEngine {
           template: TemplatePatch | null;
         }
       ) => {
-        const fSourceSec = getSourceSecForTime(fTime);
-        let frameImg: ImageData | null = null;
-        if (activeVid) {
-          frameImg = await this.sampleVideoFrame(activeVid, fSourceSec, renderW, renderH);
-        }
+        let frameImg: ImageData | null = await fetchFrameAtTime(fTime);
 
         let trackedX = state.currX + state.velX;
         let trackedY = state.currY + state.velY;

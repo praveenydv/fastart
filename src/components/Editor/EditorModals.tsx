@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import MediaPickerModal from "../Panels/MediaPickerModal";
@@ -20,6 +21,7 @@ import CanvasModal from "../Panels/CanvasModal";
 import BackgroundModal from "../Panels/BackgroundModal";
 import AIEnhanceModal from "../Panels/AIEnhanceModal";
 import CutoutModal from "../Panels/CutoutModal";
+import MobileCutoutBridgeView from "../Panels/Cutout/MobileCutoutBridgeView";
 import MaskModal from "../Panels/MaskModal";
 import MotionTrackingModal from "../Panels/MotionTrackingModal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
@@ -889,6 +891,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         onConfirm={handleConfirmDeleteClip}
         onCancel={() => setClipToDelete(null)}
       />
+      {Platform.OS !== "web" && <MobileCutoutBridgeView />}
     </>
   );
 

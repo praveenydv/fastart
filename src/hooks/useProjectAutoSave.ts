@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Platform } from "react-native";
+import { Platform, AppState } from "react-native";
 import { FastArtProject } from "../types/project";
 import { saveProject } from "../utils/storage";
 
@@ -132,15 +132,36 @@ export function useProjectAutoSave({
       }
     };
 
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    window.addEventListener("pagehide", handleBeforeUnload);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (typeof window.addEventListener === "function") {
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        window.addEventListener("pagehide", handleBeforeUnload);
+      }
+      if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+      }
 
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("pagehide", handleBeforeUnload);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+      return () => {
+        if (typeof window.removeEventListener === "function") {
+          window.removeEventListener("beforeunload", handleBeforeUnload);
+          window.removeEventListener("pagehide", handleBeforeUnload);
+        }
+        if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+          document.removeEventListener("visibilitychange", handleVisibilityChange);
+        }
+      };
+    } else {
+      // Native iOS & Android AppState listener: saves project automatically on app background
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "background" || state === "inactive") {
+          const cur = projectRef.current;
+          if (cur && cur.id) {
+            commitSave(cur);
+          }
+        }
+      });
+      return () => sub.remove();
+    }
   }, [commitSave, projectRef]);
 
   const triggerImmediateSave = useCallback(() => {

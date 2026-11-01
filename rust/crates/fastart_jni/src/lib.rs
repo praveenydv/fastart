@@ -1,5 +1,5 @@
-use jni::objects::{JClass, JFloatArray, JString};
-use jni::sys::{jboolean, jbyteArray, jfloatArray, jint, jsize, jstring, JNI_TRUE};
+use jni::objects::{JByteArray, JClass, JFloatArray, JString};
+use jni::sys::{jboolean, jbyteArray, jfloat, jfloatArray, jint, jsize, jstring, JNI_TRUE};
 use jni::JNIEnv;
 use std::collections::HashMap;
 
@@ -299,6 +299,171 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportMp4(
 
     let signed_bytes: Vec<i8> = mp4_bytes.into_iter().map(|b| b as i8).collect();
     let _ = env.set_byte_array_region(&j_bytes, 0, &signed_bytes);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeSegmentFrameRgba(
+    env: JNIEnv,
+    _class: JClass,
+    j_rgba: JByteArray,
+    width: jint,
+    height: jint,
+    threshold: jfloat,
+    feather: jfloat,
+) -> jbyteArray {
+    let len = match env.get_array_length(&j_rgba) {
+        Ok(l) => l as usize,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let mut rgba_signed = vec![0i8; len];
+    if env.get_byte_array_region(&j_rgba, 0, &mut rgba_signed).is_err() {
+        return env.new_byte_array(0).unwrap().into_raw();
+    }
+    let rgba: Vec<u8> = rgba_signed.into_iter().map(|b| b as u8).collect();
+
+    let total = (width * height) as usize;
+    let mut out_alpha = vec![0u8; total];
+    fastart_core::segment_frame_rgba(
+        &rgba,
+        width as usize,
+        height as usize,
+        threshold as f32,
+        feather as f32,
+        None,
+        &mut out_alpha,
+    );
+
+    let j_bytes = match env.new_byte_array(total as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let signed_alpha: Vec<i8> = out_alpha.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_alpha);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeProcessChroma(
+    env: JNIEnv,
+    _class: JClass,
+    j_rgba: JByteArray,
+    width: jint,
+    height: jint,
+    r: jint,
+    g: jint,
+    b: jint,
+    threshold: jfloat,
+    feather: jfloat,
+    despill: jboolean,
+) -> jbyteArray {
+    let len = match env.get_array_length(&j_rgba) {
+        Ok(l) => l as usize,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let mut rgba_signed = vec![0i8; len];
+    if env.get_byte_array_region(&j_rgba, 0, &mut rgba_signed).is_err() {
+        return env.new_byte_array(0).unwrap().into_raw();
+    }
+    let mut rgba: Vec<u8> = rgba_signed.into_iter().map(|b| b as u8).collect();
+
+    let params = fastart_core::ChromaKeyParams {
+        key_color: (r as u8, g as u8, b as u8),
+        threshold: threshold as f32,
+        feather: feather as f32,
+        despill: despill == JNI_TRUE,
+    };
+    fastart_core::process_chroma_key(&mut rgba, width as usize, height as usize, &params);
+
+    let j_bytes = match env.new_byte_array(rgba.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let signed_rgba: Vec<i8> = rgba.into_iter().map(|x| x as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_rgba);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativePackAlphaRLE(
+    env: JNIEnv,
+    _class: JClass,
+    j_alpha: JByteArray,
+) -> jbyteArray {
+    let len = match env.get_array_length(&j_alpha) {
+        Ok(l) => l as usize,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let mut alpha_signed = vec![0i8; len];
+    if env.get_byte_array_region(&j_alpha, 0, &mut alpha_signed).is_err() {
+        return env.new_byte_array(0).unwrap().into_raw();
+    }
+    let alpha: Vec<u8> = alpha_signed.into_iter().map(|b| b as u8).collect();
+    let packed = fastart_core::pack_alpha_rle(&alpha);
+
+    let j_bytes = match env.new_byte_array(packed.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let signed_packed: Vec<i8> = packed.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_packed);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeUnpackAlphaRLE(
+    env: JNIEnv,
+    _class: JClass,
+    j_rle: JByteArray,
+    out_len: jint,
+) -> jbyteArray {
+    let len = match env.get_array_length(&j_rle) {
+        Ok(l) => l as usize,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let mut rle_signed = vec![0i8; len];
+    if env.get_byte_array_region(&j_rle, 0, &mut rle_signed).is_err() {
+        return env.new_byte_array(0).unwrap().into_raw();
+    }
+    let rle: Vec<u8> = rle_signed.into_iter().map(|b| b as u8).collect();
+
+    let mut out_alpha = vec![0u8; out_len as usize];
+    let written = fastart_core::unpack_alpha_rle(&rle, &mut out_alpha);
+
+    let j_bytes = match env.new_byte_array(written as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let signed_out: Vec<i8> = out_alpha[..written].iter().map(|&b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_out);
+    j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeEncodeRgbaPng(
+    env: JNIEnv,
+    _class: JClass,
+    j_rgba: JByteArray,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    let len = match env.get_array_length(&j_rgba) {
+        Ok(l) => l as usize,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let mut rgba_signed = vec![0i8; len];
+    if env.get_byte_array_region(&j_rgba, 0, &mut rgba_signed).is_err() {
+        return env.new_byte_array(0).unwrap().into_raw();
+    }
+    let rgba: Vec<u8> = rgba_signed.into_iter().map(|b| b as u8).collect();
+    let png = fastart_core::encode_rgba_to_png(&rgba, width as usize, height as usize);
+
+    let j_bytes = match env.new_byte_array(png.len() as jsize) {
+        Ok(arr) => arr,
+        Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
+    };
+    let signed_png: Vec<i8> = png.into_iter().map(|b| b as i8).collect();
+    let _ = env.set_byte_array_region(&j_bytes, 0, &signed_png);
     j_bytes.into_raw()
 }
 

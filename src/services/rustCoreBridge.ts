@@ -242,6 +242,24 @@ interface WasmExports {
     outAlphaPtr: number,
     maxOutLen: number
   ) => number;
+  fastart_segment_frame_rgba_c?: (
+    rgbaPtr: number,
+    width: number,
+    height: number,
+    threshold: number,
+    feather: number,
+    seedMaskPtr: number,
+    seedMaskLen: number,
+    outAlphaPtr: number,
+    maxOutLen: number
+  ) => number;
+  fastart_encode_rgba_png_c?: (
+    rgbaPtr: number,
+    width: number,
+    height: number,
+    outPtr: number,
+    maxOutLen: number
+  ) => number;
 }
 
 class RustCoreBridgeService {
@@ -950,6 +968,9 @@ class RustCoreBridgeService {
     trackRotation = false,
     cameraCenter = false,
     anchorTime?: number,
+    cameraFitToScreen = true,
+    cameraZoom = 1.25,
+    cameraLockCenter = true,
   ): { dx: number; dy: number; dScale: number; dRot: number } {
     if (!trajectory || trajectory.length === 0) {
       return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
@@ -996,12 +1017,23 @@ class RustCoreBridgeService {
     let dx = pt.x - origin.x;
     let dy = pt.y - origin.y;
     const originScale = origin.scale || 1.0;
-    const dScale = trackScale ? Math.max(0.2, Math.min(5.0, (pt.scale || 1.0) / originScale)) : 1.0;
+    let dScale = trackScale ? Math.max(0.2, Math.min(5.0, (pt.scale || 1.0) / originScale)) : 1.0;
     const rawRot = (pt.rotation || 0) - (origin.rotation || 0);
     const dRot = trackRotation ? Math.max(-15, Math.min(15, rawRot)) : 0;
     if (cameraCenter) {
-      dx = -dx;
-      dy = -dy;
+      if (cameraLockCenter) {
+        // Lock target to exact center (50%, 50%) of canvas
+        dx = -(pt.x - 50);
+        dy = -(pt.y - 50);
+      } else {
+        dx = -dx;
+        dy = -dy;
+      }
+      // Fit to screen: automatically zoom video to prevent black borders
+      if (cameraFitToScreen) {
+        const targetZoom = Math.max(1.0, cameraZoom || 1.25);
+        dScale = dScale * targetZoom;
+      }
     }
     return { dx, dy, dScale: Math.max(0.1, Math.min(10, dScale)), dRot };
   }
@@ -2388,6 +2420,563 @@ class RustCoreBridgeService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Unified platform-agnostic foreground segmentation.
+   * 
+   * On Web: Uses WASM Guided Filter Matting (fastart_guided_filter_matting_c) 
+   *         seeded with a center-ellipse prior mask for CapCut-grade edges.
+   * On Native: Falls back to high-quality JS saliency segmentation 
+   *            (skin-tone YCbCr + luminance + center ellipse prior + Hermite smoothing).
+   * 
+   * @param rgba     RGBA pixel buffer (Uint8Array or Uint8ClampedArray), w×h×4 bytes
+   * @param w        Pixel width
+   * @param h        Pixel height  
+   * @param threshold Cutout aggressiveness 0.0–1.0 (maps to center-prior radius)
+   * @param feather  Edge softness 0.0–1.0
+   * @returns        Alpha Uint8Array, length = w×h (0=transparent, 255=opaque)
+   */
+  public segmentFrameRgba(
+    rgba: Uint8Array | Uint8ClampedArray,
+    w: number,
+    h: number,
+    threshold = 0.45,
+    feather = 0.25,
+  ): Uint8Array {
+    const total = w * h;
+
+    // ── 1. Native Mobile Rust (FastArtRust native module) ────────────────────
+    if (
+      Platform.OS !== "web" &&
+      FastArtRust &&
+      typeof FastArtRust.segmentFrameRgba === "function"
+    ) {
+      try {
+        const nativeRes = FastArtRust.segmentFrameRgba(rgba, w, h, threshold, feather);
+        if (nativeRes && nativeRes.length === total) {
+          return nativeRes instanceof Uint8Array ? nativeRes : new Uint8Array(nativeRes);
+        }
+      } catch (e) {
+        console.warn("[RustCoreBridge] Native segmentFrameRgba fallback:", e);
+      }
+    }
+
+    // ── 2. WebAssembly Rust Core Engine ──────────────────────────────────────
+    const inst = this.wasmInstance;
+    if (inst && typeof inst.fastart_segment_frame_rgba_c === "function") {
+      try {
+        const rgbaBytes = total * 4;
+        const outBytes = total;
+        const totalNeeded = rgbaBytes + outBytes;
+
+        let rgbaPtr = 0, outPtr = 0;
+        let isScratch = false;
+
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+          if (scratchPtr) {
+            isScratch = true;
+            rgbaPtr = scratchPtr;
+            outPtr = rgbaPtr + rgbaBytes;
+          }
+        }
+        if (!rgbaPtr) {
+          rgbaPtr = inst.fastart_alloc(rgbaBytes);
+          outPtr = inst.fastart_alloc(outBytes);
+        }
+        if (rgbaPtr && outPtr) {
+          new Uint8Array(inst.memory.buffer, rgbaPtr, rgbaBytes).set(rgba);
+          const written = inst.fastart_segment_frame_rgba_c(
+            rgbaPtr,
+            w,
+            h,
+            threshold,
+            feather,
+            0,
+            0,
+            outPtr,
+            outBytes
+          );
+          if (written > 0) {
+            const result = new Uint8Array(outBytes);
+            result.set(new Uint8Array(inst.memory.buffer, outPtr, outBytes));
+            if (!isScratch) {
+              inst.fastart_dealloc(rgbaPtr, rgbaBytes);
+              inst.fastart_dealloc(outPtr, outBytes);
+            }
+            return result;
+          }
+        }
+        if (!isScratch) {
+          if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, rgbaBytes);
+          if (outPtr) inst.fastart_dealloc(outPtr, outBytes);
+        }
+      } catch (e) {
+        console.warn("[RustCoreBridge] segmentFrameRgba WASM error, using fallback:", e);
+      }
+    }
+
+    // ── 3. High-Precision Cross-Platform JS Engine ───────────────────────────
+    return this._segmentFrameRgbaJS(rgba, w, h, threshold, feather);
+  }
+
+  private _segmentFrameRgbaJS(
+    rgba: Uint8Array | Uint8ClampedArray,
+    w: number,
+    h: number,
+    threshold: number,
+    feather: number,
+  ): Uint8Array {
+    const total = w * h;
+
+    // ── 1. Border Background Sampling ─────────────────────────────────────────
+    const topH = Math.max(2, Math.floor(h * 0.08));
+    const botH = Math.max(topH, h - topH);
+    const leftW = Math.max(2, Math.floor(w * 0.08));
+    const rightW = Math.max(leftW, w - leftW);
+
+    const bgSamples: number[][] = [];
+    const stepX = Math.max(1, Math.floor(w / 64));
+    const stepY = Math.max(1, Math.floor(h / 64));
+
+    for (let y = 0; y < topH; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x += stepX) {
+        const idx = (row + x) * 4;
+        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
+      }
+    }
+    for (let y = botH; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x += stepX) {
+        const idx = (row + x) * 4;
+        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
+      }
+    }
+    for (let y = topH; y < botH; y += stepY) {
+      const row = y * w;
+      for (let x = 0; x < leftW; x++) {
+        const idx = (row + x) * 4;
+        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
+      }
+      for (let x = rightW; x < w; x++) {
+        const idx = (row + x) * 4;
+        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
+      }
+    }
+
+    const bgClusters: number[][] = [];
+    if (bgSamples.length > 0) {
+      let sumR = 0, sumG = 0, sumB = 0;
+      for (let i = 0; i < bgSamples.length; i++) {
+        sumR += bgSamples[i][0];
+        sumG += bgSamples[i][1];
+        sumB += bgSamples[i][2];
+      }
+      const n = bgSamples.length;
+      bgClusters.push([sumR / n, sumG / n, sumB / n]);
+
+      for (let i = 0; i < bgSamples.length; i++) {
+        if (bgClusters.length >= 6) break;
+        const s = bgSamples[i];
+        const isDiverse = bgClusters.every((c) => {
+          const dr = s[0] - c[0], dg = s[1] - c[1], db = s[2] - c[2];
+          return Math.sqrt(dr * dr + dg * dg + db * db) > 28;
+        });
+        if (isDiverse) bgClusters.push(s);
+      }
+    }
+
+    // ── 2. Foreground Subject Sampling ────────────────────────────────────────
+    const cx = w * 0.5;
+    const cy = h * 0.44;
+    const rx = Math.max(2, w * 0.32);
+    const ry = Math.max(2, h * 0.42);
+    const fgSamples: number[][] = [];
+
+    const yStart = Math.floor(h * 0.2);
+    const yEnd = Math.floor(h * 0.8);
+    const xStart = Math.floor(w * 0.2);
+    const xEnd = Math.floor(w * 0.8);
+
+    for (let y = yStart; y < yEnd; y++) {
+      const row = y * w;
+      const dy = (y - cy) / ry;
+      if (Math.abs(dy) > 1.0) continue;
+
+      for (let x = xStart; x < xEnd; x++) {
+        const dx = (x - cx) / rx;
+        if (dx * dx + dy * dy <= 1.0) {
+          const idx = (row + x) * 4;
+          const r = rgba[idx], g = rgba[idx + 1], b = rgba[idx + 2];
+
+          const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+          const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+          const isSkin = cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && r > g && g > b * 0.9;
+
+          if (isSkin) {
+            fgSamples.push([r, g, b]);
+          } else {
+            let distBg = Infinity;
+            for (let c = 0; c < bgClusters.length; c++) {
+              const bc = bgClusters[c];
+              const dr = r - bc[0], dg = g - bc[1], db = b - bc[2];
+              const d = Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
+              if (d < distBg) distBg = d;
+            }
+            if (distBg > 25) fgSamples.push([r, g, b]);
+          }
+        }
+      }
+    }
+
+    const fgClusters: number[][] = [];
+    if (fgSamples.length > 0) {
+      let sumR = 0, sumG = 0, sumB = 0;
+      for (let i = 0; i < fgSamples.length; i++) {
+        sumR += fgSamples[i][0];
+        sumG += fgSamples[i][1];
+        sumB += fgSamples[i][2];
+      }
+      const n = fgSamples.length;
+      fgClusters.push([sumR / n, sumG / n, sumB / n]);
+
+      for (let i = 0; i < fgSamples.length; i++) {
+        if (fgClusters.length >= 6) break;
+        const s = fgSamples[i];
+        const isDiverse = fgClusters.every((c) => {
+          const dr = s[0] - c[0], dg = s[1] - c[1], db = s[2] - c[2];
+          return Math.sqrt(dr * dr + dg * dg + db * db) > 24;
+        });
+        if (isDiverse) fgClusters.push(s);
+      }
+    } else {
+      const cyIdx = Math.min(h - 1, Math.floor(cy));
+      const cxIdx = Math.min(w - 1, Math.floor(cx));
+      const cIdx = (cyIdx * w + cxIdx) * 4;
+      fgClusters.push([rgba[cIdx], rgba[cIdx + 1], rgba[cIdx + 2]]);
+    }
+
+    // ── 3. Contrast & Saliency Energy Map ────────────────────────────────────
+    const rawMask = new Float32Array(total);
+    const sensitivity = 0.85 + (threshold - 0.45) * 0.80;
+
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      const dy = (y - cy) / ry;
+
+      for (let x = 0; x < w; x++) {
+        const idx = (row + x) * 4;
+        const r = rgba[idx], g = rgba[idx + 1], b = rgba[idx + 2];
+
+        let minDistBg = 255;
+        for (let c = 0; c < bgClusters.length; c++) {
+          const bc = bgClusters[c];
+          const dr = r - bc[0], dg = g - bc[1], db = b - bc[2];
+          const d = Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
+          if (d < minDistBg) minDistBg = d;
+        }
+
+        let minDistFg = 255;
+        for (let c = 0; c < fgClusters.length; c++) {
+          const fc = fgClusters[c];
+          const dr = r - fc[0], dg = g - fc[1], db = b - fc[2];
+          const d = Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
+          if (d < minDistFg) minDistFg = d;
+        }
+
+        const dBgSq = minDistBg * minDistBg;
+        const dFgSq = minDistFg * minDistFg;
+        let prob = dBgSq / (dBgSq + dFgSq * sensitivity + 49.0);
+
+        const dx = (x - cx) / rx;
+        const dSpatialSq = dx * dx + dy * dy;
+
+        if (dSpatialSq > 2.25) {
+          prob *= 0.08;
+        } else if (dSpatialSq > 1.2) {
+          const falloff = (2.25 - dSpatialSq) / 1.05;
+          prob *= Math.max(0.08, Math.min(1.0, falloff));
+        } else {
+          prob = Math.min(1.0, prob * 1.15);
+        }
+
+        const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+        const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+        if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && dSpatialSq < 1.4) {
+          prob = Math.min(1.0, prob + 0.40);
+        }
+
+        const isOuterBorder = x < leftW || x >= rightW || y < topH || y >= botH;
+        if (isOuterBorder && minDistBg < 40) {
+          prob = 0.0;
+        }
+
+        rawMask[row + x] = Math.max(0.0, Math.min(1.0, prob));
+      }
+    }
+
+    // ── 4. Fast Guided Image Filter Edge Snapping ────────────────────────────
+    const radius = Math.max(3, Math.min(12, Math.floor(w / 40)));
+    const eps = 1e-3;
+
+    const iNorm = new Float32Array(total);
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      iNorm[i] = (0.2126 * rgba[idx] + 0.7152 * rgba[idx + 1] + 0.0722 * rgba[idx + 2]) / 255;
+    }
+
+    const meanI = new Float32Array(total);
+    const meanP = new Float32Array(total);
+    this._boxFilter(iNorm, meanI, w, h, radius);
+    this._boxFilter(rawMask, meanP, w, h, radius);
+
+    const ii = new Float32Array(total);
+    const ip = new Float32Array(total);
+    for (let i = 0; i < total; i++) {
+      ii[i] = iNorm[i] * iNorm[i];
+      ip[i] = iNorm[i] * rawMask[i];
+    }
+
+    const meanII = new Float32Array(total);
+    const meanIP = new Float32Array(total);
+    this._boxFilter(ii, meanII, w, h, radius);
+    this._boxFilter(ip, meanIP, w, h, radius);
+
+    const aCoeff = new Float32Array(total);
+    const bCoeff = new Float32Array(total);
+    for (let i = 0; i < total; i++) {
+      const varI = Math.max(0, meanII[i] - meanI[i] * meanI[i]);
+      const covIP = meanIP[i] - meanI[i] * meanP[i];
+      const aVal = covIP / (varI + eps);
+      aCoeff[i] = aVal;
+      bCoeff[i] = meanP[i] - aVal * meanI[i];
+    }
+
+    const meanA = new Float32Array(total);
+    const meanB = new Float32Array(total);
+    this._boxFilter(aCoeff, meanA, w, h, radius);
+    this._boxFilter(bCoeff, meanB, w, h, radius);
+
+    // ── 5. User Soft Threshold Transfer ──────────────────────────────────────
+    const tBase = Math.max(0.12, Math.min(0.88, 0.28 + threshold * 0.35));
+    const soft = Math.max(0.03, Math.min(0.40, feather * 0.20 + 0.04));
+    const tLow = Math.max(0.0, tBase - soft);
+    const tHigh = Math.min(1.0, tBase + soft);
+    const invRange = 1.0 / Math.max(0.001, tHigh - tLow);
+
+    const outAlpha = new Uint8Array(total);
+    for (let i = 0; i < total; i++) {
+      const q = Math.max(0.0, Math.min(1.0, meanA[i] * iNorm[i] + meanB[i]));
+      if (q >= tHigh) {
+        outAlpha[i] = 255;
+      } else if (q > tLow) {
+        const u = (q - tLow) * invRange;
+        outAlpha[i] = Math.round(u * u * (3.0 - 2.0 * u) * 255);
+      } else {
+        outAlpha[i] = 0;
+      }
+    }
+
+    return outAlpha;
+  }
+
+  private _boxFilter(src: Float32Array, dst: Float32Array, w: number, h: number, r: number) {
+    const rad = Math.max(1, Math.min(r, Math.min(w, h) - 1));
+    const temp = new Float32Array(w * h);
+
+    // Horizontal pass
+    for (let y = 0; y < h; y++) {
+      const rowOffset = y * w;
+      let windowSum = 0;
+      for (let kx = 0; kx <= Math.min(rad, w - 1); kx++) {
+        windowSum += src[rowOffset + kx];
+      }
+      for (let x = 0; x < w; x++) {
+        const left = Math.max(0, x - rad);
+        const right = Math.min(w - 1, x + rad);
+        const count = right - left + 1;
+        if (x > 0) {
+          if (x + rad < w) windowSum += src[rowOffset + x + rad];
+          if (x - rad - 1 >= 0) windowSum -= src[rowOffset + x - rad - 1];
+        }
+        temp[rowOffset + x] = windowSum / count;
+      }
+    }
+
+    // Vertical pass
+    for (let x = 0; x < w; x++) {
+      let windowSum = 0;
+      for (let ky = 0; ky <= Math.min(rad, h - 1); ky++) {
+        windowSum += temp[ky * w + x];
+      }
+      for (let y = 0; y < h; y++) {
+        const top = Math.max(0, y - rad);
+        const bottom = Math.min(h - 1, y + rad);
+        const count = bottom - top + 1;
+        if (y > 0) {
+          if (y + rad < h) windowSum += temp[(y + rad) * w + x];
+          if (y - rad - 1 >= 0) windowSum -= temp[(y - rad - 1) * w + x];
+        }
+        dst[y * w + x] = windowSum / count;
+      }
+    }
+  }
+
+  /**
+   * Encodes a flat RGBA Uint8Array into a minimal valid PNG (store compression, no zlib deflate overhead).
+   * Works on both Web and Native — no canvas, no DOM, no FileSystem needed.
+   * Returns raw PNG bytes as Uint8Array.
+   */
+  public encodeRGBAPng(rgba: Uint8Array | Uint8ClampedArray, w: number, h: number): Uint8Array {
+    // 1. Mobile Native Rust
+    if (
+      Platform.OS !== "web" &&
+      FastArtRust &&
+      typeof FastArtRust.encodeRgbaPng === "function"
+    ) {
+      try {
+        const nativePng = FastArtRust.encodeRgbaPng(rgba, w, h);
+        if (nativePng && nativePng.length > 8) {
+          return nativePng instanceof Uint8Array ? nativePng : new Uint8Array(nativePng);
+        }
+      } catch (e) {
+        console.warn("[RustCoreBridge] Native encodeRgbaPng fallback:", e);
+      }
+    }
+
+    // 2. WebAssembly Rust Core
+    const inst = this.wasmInstance;
+    if (inst && typeof inst.fastart_encode_rgba_png_c === "function") {
+      try {
+        const total = w * h;
+        const rgbaBytes = total * 4;
+        const maxOut = rgbaBytes + 16384;
+        const totalNeeded = rgbaBytes + maxOut;
+
+        let rgbaPtr = 0, outPtr = 0;
+        let isScratch = false;
+        if (typeof inst.fastart_get_scratchpad === "function") {
+          const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
+          if (scratchPtr) {
+            isScratch = true;
+            rgbaPtr = scratchPtr;
+            outPtr = rgbaPtr + rgbaBytes;
+          }
+        }
+        if (!rgbaPtr) {
+          rgbaPtr = inst.fastart_alloc(rgbaBytes);
+          outPtr = inst.fastart_alloc(maxOut);
+        }
+        if (rgbaPtr && outPtr) {
+          new Uint8Array(inst.memory.buffer, rgbaPtr, rgbaBytes).set(rgba);
+          const pngLen = inst.fastart_encode_rgba_png_c(rgbaPtr, w, h, outPtr, maxOut);
+          if (pngLen > 0) {
+            const pngBytes = new Uint8Array(pngLen);
+            pngBytes.set(new Uint8Array(inst.memory.buffer, outPtr, pngLen));
+            if (!isScratch) {
+              inst.fastart_dealloc(rgbaPtr, rgbaBytes);
+              inst.fastart_dealloc(outPtr, maxOut);
+            }
+            return pngBytes;
+          }
+        }
+        if (!isScratch) {
+          if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, rgbaBytes);
+          if (outPtr) inst.fastart_dealloc(outPtr, maxOut);
+        }
+      } catch (e) {
+        console.warn("[RustCoreBridge] WASM encodeRgbaPng fallback:", e);
+      }
+    }
+
+    // 3. Fallback pure-JS PNG encoder
+    const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+
+    const ihdr = new Uint8Array(13);
+    const ihdrDv = new DataView(ihdr.buffer);
+    ihdrDv.setUint32(0, w);
+    ihdrDv.setUint32(4, h);
+    ihdr[8] = 8; ihdr[9] = 6;
+
+    const rowStride = w * 4;
+    const rawLen = h * (1 + rowStride);
+    const raw = new Uint8Array(rawLen);
+    for (let y = 0; y < h; y++) {
+      raw[y * (rowStride + 1)] = 0;
+      raw.set(
+        rgba instanceof Uint8ClampedArray
+          ? new Uint8Array(rgba.buffer, rgba.byteOffset + y * rowStride, rowStride)
+          : rgba.subarray(y * rowStride, (y + 1) * rowStride),
+        y * (rowStride + 1) + 1,
+      );
+    }
+
+    const zlib = this._zlibStore(raw);
+    return this._assemblePng(sig, ihdr, zlib);
+  }
+
+  private _crc32Table: Uint32Array | null = null;
+  private _getCrc32Table(): Uint32Array {
+    if (!this._crc32Table) {
+      this._crc32Table = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+        this._crc32Table[n] = c;
+      }
+    }
+    return this._crc32Table;
+  }
+  private _crc32(data: Uint8Array, start = 0, end = data.length): number {
+    const t = this._getCrc32Table();
+    let crc = 0xFFFFFFFF;
+    for (let i = start; i < end; i++) crc = t[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  private _makeChunk(type: string, data: Uint8Array): Uint8Array {
+    const typeBytes = new TextEncoder().encode(type);
+    const chunk = new Uint8Array(4 + 4 + data.length + 4);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, data.length);
+    chunk.set(typeBytes, 4);
+    chunk.set(data, 8);
+    dv.setUint32(8 + data.length, this._crc32(chunk, 4, 8 + data.length));
+    return chunk;
+  }
+  private _zlibStore(data: Uint8Array): Uint8Array {
+    const MAX = 65535;
+    const blocks = Math.ceil(data.length / MAX) || 1;
+    const out = new Uint8Array(2 + data.length + blocks * 5 + 4);
+    const dv = new DataView(out.buffer);
+    out[0] = 0x78; out[1] = 0x01;
+    let pos = 2, offset = 0;
+    for (let b = 0; b < blocks; b++) {
+      const bLen = Math.min(MAX, data.length - offset);
+      out[pos++] = b === blocks - 1 ? 1 : 0;
+      dv.setUint16(pos, bLen, true); pos += 2;
+      dv.setUint16(pos, (~bLen) & 0xFFFF, true); pos += 2;
+      out.set(data.subarray(offset, offset + bLen), pos);
+      pos += bLen; offset += bLen;
+    }
+    let s1 = 1, s2 = 0;
+    for (let i = 0; i < data.length; i++) { s1 = (s1 + data[i]) % 65521; s2 = (s2 + s1) % 65521; }
+    dv.setUint32(pos, (s2 << 16) | s1);
+    return out.subarray(0, pos + 4);
+  }
+  private _assemblePng(sig: Uint8Array, ihdr: Uint8Array, idat: Uint8Array): Uint8Array {
+    const ihdrChunk = this._makeChunk("IHDR", ihdr);
+    const idatChunk = this._makeChunk("IDAT", idat);
+    const iendChunk = this._makeChunk("IEND", new Uint8Array(0));
+    const total = sig.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
+    const out = new Uint8Array(total);
+    let pos = 0;
+    out.set(sig, pos); pos += sig.length;
+    out.set(ihdrChunk, pos); pos += ihdrChunk.length;
+    out.set(idatChunk, pos); pos += idatChunk.length;
+    out.set(iendChunk, pos);
+    return out;
   }
 }
 

@@ -400,18 +400,22 @@ export function useTimelineClipTrim({
         }, 50);
         soundEngine.playSfx("pop");
         triggerHaptic("light", isHapticEnabledRef.current);
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        window.removeEventListener("touchmove", onMove as any);
-        window.removeEventListener("touchend", onUp);
-        window.removeEventListener("touchcancel", onUp);
+        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+          window.removeEventListener("touchmove", onMove as any);
+          window.removeEventListener("touchend", onUp);
+          window.removeEventListener("touchcancel", onUp);
+        }
       };
 
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-      window.addEventListener("touchmove", onMove as any, { passive: false });
-      window.addEventListener("touchend", onUp);
-      window.addEventListener("touchcancel", onUp);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+        window.addEventListener("touchmove", onMove as any, { passive: false });
+        window.addEventListener("touchend", onUp);
+        window.addEventListener("touchcancel", onUp);
+      }
     },
     [isTrimmingActiveRef],
   );
@@ -496,18 +500,22 @@ export function useTimelineClipTrim({
         }, 50);
         soundEngine.playSfx("pop");
         triggerHaptic("light", isHapticEnabledRef.current);
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        window.removeEventListener("touchmove", onMove as any);
-        window.removeEventListener("touchend", onUp);
-        window.removeEventListener("touchcancel", onUp);
+        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+          window.removeEventListener("touchmove", onMove as any);
+          window.removeEventListener("touchend", onUp);
+          window.removeEventListener("touchcancel", onUp);
+        }
       };
 
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-      window.addEventListener("touchmove", onMove as any, { passive: false });
-      window.addEventListener("touchend", onUp);
-      window.addEventListener("touchcancel", onUp);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+        window.addEventListener("touchmove", onMove as any, { passive: false });
+        window.addEventListener("touchend", onUp);
+        window.addEventListener("touchcancel", onUp);
+      }
     },
     [isTrimmingActiveRef],
   );

@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Platform,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { ClipTransform, CustomCrop } from "../../types/project";
@@ -24,9 +24,6 @@ interface TransformModalProps {
   setIsCroppingPreview?: (active: boolean) => void;
   isInline?: boolean;
 }
-
-const WebDiv: any = Platform.OS === "web" ? "div" : View;
-const WebInput: any = Platform.OS === "web" ? "input" : View;
 
 const ASPECT_PRESETS: { label: string; ratio?: number; id: string }[] = [
   { id: "free", label: "Free" },

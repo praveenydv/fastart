@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   TextInput,
   Platform,
 } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { STICKER_LIBRARY } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';

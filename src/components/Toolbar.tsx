@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Platform,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
 import { theme } from "../constants/theme";
@@ -75,6 +75,7 @@ export interface ToolbarProps {
   activeToolId?: string;
   onCloseModal?: () => void;
   onBackToHome?: () => void;
+  settings?: any;
 }
 
 // Global tools for whole video (when no clip is selected) - Matches CapCut
@@ -252,6 +253,7 @@ function ToolbarComponent({
   activeToolId,
   onCloseModal,
   onBackToHome,
+  settings,
 }: ToolbarProps) {
   const isVertical = orientation === "vertical";
   const hasAudio = selectedClip ? mediaHasAudioTrack(selectedClip) : false;
@@ -461,8 +463,20 @@ function ToolbarComponent({
       );
     }
 
+    // Apply custom user pinned tools prioritization
+    if (
+      settings?.pinnedTools &&
+      Array.isArray(settings.pinnedTools) &&
+      settings.pinnedTools.length > 0
+    ) {
+      const pinnedSet = new Set(settings.pinnedTools);
+      const pinned = list.filter((t) => pinnedSet.has(t.id));
+      const unpinned = list.filter((t) => !pinnedSet.has(t.id));
+      list = [...pinned, ...unpinned];
+    }
+
     return list;
-  }, [selectedClip, selectedClipType, hasAudio, isVertical]);
+  }, [selectedClip, selectedClipType, hasAudio, isVertical, settings?.pinnedTools]);
 
   // Desktop vertical toolbar
   if (isVertical) {

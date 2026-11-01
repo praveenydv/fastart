@@ -2,11 +2,11 @@ import React, { useMemo } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
   Pressable,
   Platform,
   StyleSheet,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { UnifiedClipItem, TRACK_ROW_HEIGHT, MAX_TRACKS } from "./timelineTypes";

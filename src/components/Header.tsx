@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Modal,
   TextInput,
   useWindowDimensions,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
 import { ASPECT_RATIOS } from "../constants/sampleMedia";
@@ -25,6 +25,9 @@ interface HeaderProps {
   onOpenExport: () => void;
   onOpenCanvasModal?: () => void;
   hideBackButton?: boolean;
+  onOpenUndoHistory?: () => void;
+  onOpenKeyboardShortcuts?: () => void;
+  isSaving?: boolean;
 }
 
 function Header({
@@ -38,6 +41,9 @@ function Header({
   onOpenExport,
   onOpenCanvasModal,
   hideBackButton = false,
+  onOpenUndoHistory,
+  onOpenKeyboardShortcuts,
+  isSaving = false,
 }: HeaderProps) {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 420;
@@ -113,19 +119,44 @@ function Header({
         )}
       </View>
 
-      {/* Right: Undo / Redo & Export CTA */}
+      {/* Right: Auto-Save Status, Undo / Redo & Export CTA */}
       <View style={styles.rightSection}>
-        {/* Undo */}
+        {/* Subtle Auto-Save Status Indicator */}
+        {!isSmallScreen && (
+          <View style={styles.autoSavePill} accessibilityLabel="Save Status">
+            <View style={[styles.autoSaveDot, isSaving && styles.autoSaveDotSaving]} />
+            <Text style={styles.autoSaveText}>{isSaving ? "Saving..." : "Saved"}</Text>
+          </View>
+        )}
+
+        {/* Keyboard Shortcuts Trigger (Desktop / Web) */}
+        {onOpenKeyboardShortcuts && width >= 640 && (
+          <TouchableOpacity
+            style={styles.historyButton}
+            onPress={onOpenKeyboardShortcuts}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            accessibilityLabel="Keyboard Shortcuts"
+          >
+            <Ionicons name="help-circle-outline" size={17} color="#94A3B8" />
+          </TouchableOpacity>
+        )}
+
+        {/* Undo (Tap for step-undo, long-press for visual history drawer) */}
         <TouchableOpacity
           style={[
             styles.historyButton,
             !canUndo && styles.disabledButton,
           ]}
           onPress={onUndo}
+          onLongPress={onOpenUndoHistory ? () => {
+            soundEngine.playSfx("pop");
+            onOpenUndoHistory();
+          } : undefined}
           disabled={!canUndo}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 6, right: 4 }}
-          accessibilityLabel="Undo"
+          accessibilityLabel="Undo (Long press for History)"
         >
           <Ionicons
             name="arrow-undo-outline"
@@ -322,6 +353,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     flexShrink: 0,
+  },
+  autoSavePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    marginRight: 2,
+  },
+  autoSaveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10B981",
+  },
+  autoSaveDotSaving: {
+    backgroundColor: "#00E5C9",
+  },
+  autoSaveText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#94A3B8",
   },
   historyButton: {
     width: 36,

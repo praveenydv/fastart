@@ -3,11 +3,12 @@ import {
   View,
   Text,
   Modal,
-  TouchableOpacity,
   ScrollView,
   Platform,
 } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { openMediaService, OpenAudioItem, OpenMediaItem } from '../../services/openMediaService';
@@ -32,10 +33,6 @@ interface AutoCutModalProps {
   currentProject?: FastArtProject | null;
   isInline?: boolean;
 }
-
-const WebInput: any = Platform.OS === 'web' ? 'input' : View;
-const WebSpan: any = Platform.OS === 'web' ? 'span' : Text;
-const WebLabel: any = Platform.OS === 'web' ? 'label' : View;
 
 export default function AutoCutModal({
   visible,
@@ -191,28 +188,32 @@ export default function AutoCutModal({
     setClipPace(template.pace);
   };
 
-  const handleCustomFileUpload = (e: any) => {
-    const files = e.target?.files;
-    if (!files || files.length === 0) return;
-
-    const newClips: any[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const blobUrl = URL.createObjectURL(file);
-      customBlobUrlsRef.current.push(blobUrl);
-      const newClip = {
-        id: `custom-upload-${Date.now()}-${i}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        url: blobUrl,
-        thumbnailUrl: blobUrl,
-        duration: 8.0,
-      };
-      newClips.push(newClip);
+  const handlePickMedia = async () => {
+    soundEngine.playSfx("click");
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos", "images"],
+        allowsMultipleSelection: true,
+        quality: 1,
+      });
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const newClips: any[] = res.assets.map((asset, i) => {
+          const isVid = asset.type === "video";
+          return {
+            id: `custom-upload-${Date.now()}-${i}`,
+            title: asset.fileName || (isVid ? `Video ${i + 1}` : `Photo ${i + 1}`),
+            url: asset.uri,
+            thumbnailUrl: asset.uri,
+            duration: asset.duration ? asset.duration / 1000 : (isVid ? 8.0 : 4.0),
+          };
+        });
+        setCustomClips((prev) => [...newClips, ...prev]);
+        setSelectedClips((prev) => [...newClips.map((c) => c.id), ...prev]);
+        soundEngine.playSfx('whoosh');
+      }
+    } catch (err) {
+      console.warn("AutoCut image picker error:", err);
     }
-
-    setCustomClips((prev) => [...newClips, ...prev]);
-    setSelectedClips((prev) => [...newClips.map((c) => c.id), ...prev]);
-    soundEngine.playSfx('whoosh');
   };
 
   const allAvailableClips = [...customClips, ...availableVideos];
@@ -324,19 +325,15 @@ export default function AutoCutModal({
                 <Text style={styles.sectionTitle}>
                   2. Select Clips ({selectedClips.length} selected)
                 </Text>
-                {Platform.OS === 'web' && (
-                  <WebLabel style={styles.uploadBtn}>
-                    <Ionicons name="cloud-upload-outline" size={14} color="#00F2FE" />
-                    <WebSpan style={styles.uploadBtnText}>Upload Files</WebSpan>
-                    <WebInput
-                      type="file"
-                      accept="video/*,image/*"
-                      multiple
-                      onChange={handleCustomFileUpload}
-                      style={{ display: 'none' }}
-                    />
-                  </WebLabel>
-                )}
+                <TouchableOpacity
+                  style={styles.uploadBtn}
+                  onPress={handlePickMedia}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Upload media files"
+                >
+                  <Ionicons name="cloud-upload-outline" size={14} color="#00F2FE" />
+                  <Text style={styles.uploadBtnText}>Upload Files</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.clipsGrid}>

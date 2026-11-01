@@ -3,9 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { VoiceEffectId } from '../../types/project';

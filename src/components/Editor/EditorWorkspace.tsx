@@ -4,13 +4,13 @@ import {
   StyleSheet,
   Text,
   ActivityIndicator,
-  TouchableOpacity,
   Platform,
   useWindowDimensions,
   Animated,
   Easing,
   PanResponder,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../Header";
 import Player from "../Player";
@@ -36,6 +36,8 @@ import { reconnectLinkedMedia } from "../../utils/largeMediaStorage";
 import { pauseActiveVideoRenderer } from "../../utils/videoRenderer";
 import { pauseAllAudio } from "../Player/usePlayerAudioSync";
 import { ErrorBoundary } from "../Common/ErrorBoundary";
+import KeyboardShortcutsModal from "../Panels/KeyboardShortcutsModal";
+import UndoHistoryModal from "../Panels/UndoHistoryModal";
 
 const CLIP_TYPE_AVAILABLE_MENUS: Record<string, Set<string>> = {
   text: new Set([
@@ -253,6 +255,13 @@ interface EditorWorkspaceProps {
   renderModals?: (isInline?: boolean) => React.ReactNode;
   handleAddMedia?: (clip: any) => void;
   handleAddAudio?: (clip: any) => void;
+  historyStack?: FastArtProject[];
+  redoStack?: FastArtProject[];
+  handleJumpToState?: (index: number) => void;
+  isShortcutsOpen?: boolean;
+  setIsShortcutsOpen?: (open: boolean) => void;
+  isHistoryOpen?: boolean;
+  setIsHistoryOpen?: (open: boolean) => void;
 }
 
 const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
@@ -327,7 +336,23 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   handleAddMedia,
   handleAddAudio,
   handleDeleteProjectAsset,
+  historyStack = [],
+  redoStack = [],
+  handleJumpToState,
+  isShortcutsOpen: propIsShortcutsOpen,
+  setIsShortcutsOpen: propSetIsShortcutsOpen,
+  isHistoryOpen: propIsHistoryOpen,
+  setIsHistoryOpen: propSetIsHistoryOpen,
 }) => {
+  const [localShortcutsOpen, setLocalShortcutsOpen] = React.useState(false);
+  const [localHistoryOpen, setLocalHistoryOpen] = React.useState(false);
+
+  const isShortcutsOpen = propIsShortcutsOpen !== undefined ? propIsShortcutsOpen : localShortcutsOpen;
+  const setIsShortcutsOpen = propSetIsShortcutsOpen || setLocalShortcutsOpen;
+
+  const isHistoryOpen = propIsHistoryOpen !== undefined ? propIsHistoryOpen : localHistoryOpen;
+  const setIsHistoryOpen = propSetIsHistoryOpen || setLocalHistoryOpen;
+
   const activeModalRef = React.useRef(activeModal);
   activeModalRef.current = activeModal;
 
@@ -1226,6 +1251,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     orientation: "horizontal" | "vertical" = "horizontal",
   ) => (
     <Toolbar
+      settings={settings}
       orientation={orientation}
       activeToolId={activeModal || undefined}
       selectedClip={selectedClip}
@@ -1637,6 +1663,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
             onRedo={onRedo}
             onOpenExport={onOpenExport}
             onOpenCanvasModal={handleOpenCanvasModal}
+            onOpenUndoHistory={() => setIsHistoryOpen(true)}
+            onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
           />
 
           {/* Middle Row: Config Panel & Media Panel & Player with Draggable Splitters */}
@@ -2095,6 +2123,20 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           {/* ⑤ Bottom: Full-width Timeline */}
           <View style={styles.desktopTimelineArea}>{renderTimelineOnly()}</View>
         </View>
+
+        {/* Global Modals for Desktop */}
+        <KeyboardShortcutsModal
+          visible={isShortcutsOpen}
+          onClose={() => setIsShortcutsOpen(false)}
+        />
+        <UndoHistoryModal
+          visible={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          historyStack={historyStack}
+          redoStack={redoStack}
+          currentProject={project}
+          onJumpToState={handleJumpToState || (() => {})}
+        />
       </View>
     );
   }
@@ -2119,6 +2161,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           onRedo={onRedo}
           onOpenExport={onOpenExport}
           onOpenCanvasModal={handleOpenCanvasModal}
+          onOpenUndoHistory={() => setIsHistoryOpen(true)}
+          onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
         />
       )}
 
@@ -2213,6 +2257,20 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           )}
         </Animated.View>
       )}
+
+      {/* Global Modals for Mobile */}
+      <KeyboardShortcutsModal
+        visible={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+      <UndoHistoryModal
+        visible={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        historyStack={historyStack}
+        redoStack={redoStack}
+        currentProject={project}
+        onJumpToState={handleJumpToState || (() => {})}
+      />
     </View>
   );
 };

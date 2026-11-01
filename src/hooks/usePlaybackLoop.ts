@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { getActiveVideoRenderer, pauseActiveVideoRenderer } from "../utils/videoRenderer";
 import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
+import { playheadCoordinator } from "../utils/playheadCoordinator";
 
 interface UsePlaybackLoopParams {
   isPlaying: boolean;
@@ -73,6 +74,7 @@ export function usePlaybackLoop({
       if (nextTime >= totalDurationRef.current) {
         currentPosRef.current = 0;
         currentTimeRef.current = 0;
+        playheadCoordinator.notify(0);
         if (animFrameRef.current !== null) {
           cancelAnimationFrame(animFrameRef.current);
           animFrameRef.current = null;
@@ -87,15 +89,17 @@ export function usePlaybackLoop({
       currentPosRef.current = nextTime;
       currentTimeRef.current = nextTime;
 
-      // 1. Direct 60 FPS Hardware Canvas Render (bypasses React virtual DOM overhead)
+      // 1. Direct 60-120 FPS Sub-pixel Playhead Tracker Update (zero React re-render overhead)
+      playheadCoordinator.notify(nextTime);
+
+      // 2. Direct 60 FPS Hardware Canvas Render (bypasses React virtual DOM overhead)
       const renderer = getActiveVideoRenderer();
       if (renderer && renderer.onFrameNeeded) {
         renderer.onFrameNeeded();
       }
 
-      // 2. Throttled React state update for UI timecode & playhead (~24 FPS, ~42ms)
-      // Balances perfectly fluid UI playhead feedback while preserving 70%+ JS thread idle capacity
-      if (currentTimeStamp - lastReactUpdateRef.current >= 42) {
+      // 3. Fluid 60 FPS React state update for UI timecodes (~16ms)
+      if (currentTimeStamp - lastReactUpdateRef.current >= 16) {
         lastReactUpdateRef.current = currentTimeStamp;
         setCurrentTimeRef.current(nextTime);
       }
@@ -110,7 +114,8 @@ export function usePlaybackLoop({
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
-      // On stop, ensure exact final playhead is committed to React state
+      // On stop, ensure exact final playhead is committed to React state and coordinator
+      playheadCoordinator.notify(currentPosRef.current);
       setCurrentTimeRef.current(currentPosRef.current);
     };
   }, [isPlaying, totalDuration, currentTimeRef]);

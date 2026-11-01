@@ -5,6 +5,10 @@
 import { FastArtProject } from "../../types/project";
 import { exportProjectAudioToWav } from "../audioExporter";
 import { rustCoreBridge } from "../../services/rustCoreBridge";
+import {
+  getExportResolutionDimensions,
+  getLogicalBaseDimensions,
+} from "../../components/Panels/Export/exportTypes";
 import type { VideoRenderer } from "../videoRenderer";
 import type { ExportFormat, ExportOptions, ExportResult } from "./unifiedExporter";
 
@@ -28,44 +32,52 @@ export async function exportBrowserVideo(
     duration = 10.0,
     format = "mp4",
     currentTime = 0,
+    resolution = "1080p",
     logicalWidth,
     logicalHeight,
     videoBitsPerSecond: customBitsPerSecond,
   } = options;
 
+  // 1. Calculate Target Export Canvas Dimensions based on selected resolution & aspect ratio
+  const [targetW, targetH] = getExportResolutionDimensions(
+    resolution,
+    project.aspectRatio
+  );
+  const [baseW, baseH] = getLogicalBaseDimensions(project.aspectRatio);
+
   const exportCanvas = document.createElement("canvas");
-  exportCanvas.width = renderer.canvas.width;
-  exportCanvas.height = renderer.canvas.height;
+  exportCanvas.width = targetW;
+  exportCanvas.height = targetH;
+
   const exportRenderer = createRenderer
     ? createRenderer(exportCanvas)
     : new (renderer.constructor as any)(exportCanvas);
-  // Inherit preloaded media cache from this renderer so clips render immediately
-  exportRenderer.videoElements = new Map(renderer.videoElements);
+
+  // Inherit preloaded media cache from the live player renderer so clips render immediately
+  if (renderer.videoElements) {
+    exportRenderer.videoElements = new Map(renderer.videoElements);
+  }
 
   // Guarantee all project clips are preloaded before recording begins
-  for (const clip of project.tracks?.video || []) {
+  const videoClips = project.tracks?.video || [];
+  const preloadPromises = videoClips.map(async (clip) => {
     if (!exportRenderer.videoElements.has(clip.url)) {
       try {
-        await exportRenderer.preloadClip(clip);
+        await Promise.race([
+          exportRenderer.preloadClip(clip),
+          new Promise((r) => setTimeout(r, 4000)), // 4s timeout prevents slow assets from blocking export
+        ]);
       } catch (e) {
         console.warn("[browserVideoExporter] Preload clip error:", e);
       }
     }
-  }
+  });
+  await Promise.all(preloadPromises);
 
   const exportLogicalW =
-    logicalWidth && logicalWidth > 0
-      ? logicalWidth
-      : renderer.canvas.clientWidth > 0
-        ? renderer.canvas.clientWidth
-        : exportCanvas.width;
-
+    logicalWidth && logicalWidth > 0 ? logicalWidth : baseW;
   const exportLogicalH =
-    logicalHeight && logicalHeight > 0
-      ? logicalHeight
-      : renderer.canvas.clientHeight > 0
-        ? renderer.canvas.clientHeight
-        : exportCanvas.height;
+    logicalHeight && logicalHeight > 0 ? logicalHeight : baseH;
 
   // Initial raster render so canvas has valid pixels before stream capture
   exportRenderer.renderFrame(project, 0, false, exportLogicalW, exportLogicalH);
@@ -107,14 +119,17 @@ export async function exportBrowserVideo(
     } else if (isSupported("video/mp4;codecs=avc1")) {
       mimeType = "video/mp4;codecs=avc1";
       targetExtension = "mp4";
-    } else if (isSupported("video/mp4")) {
-      mimeType = "video/mp4";
-      targetExtension = "mp4";
     } else if (isSupported("video/mp4;codecs=h264")) {
       mimeType = "video/mp4;codecs=h264";
       targetExtension = "mp4";
+    } else if (isSupported("video/mp4")) {
+      mimeType = "video/mp4";
+      targetExtension = "mp4";
     } else if (isSupported("video/webm;codecs=h264")) {
       mimeType = "video/webm;codecs=h264";
+      targetExtension = "webm";
+    } else if (isSupported("video/webm;codecs=vp9,opus")) {
+      mimeType = "video/webm;codecs=vp9,opus";
       targetExtension = "webm";
     } else if (isSupported("video/webm;codecs=vp9")) {
       mimeType = "video/webm;codecs=vp9";
@@ -133,6 +148,10 @@ export async function exportBrowserVideo(
       mimeType = "video/webm;codecs=vp8,opus";
     } else if (isSupported("video/webm;codecs=vp8")) {
       mimeType = "video/webm;codecs=vp8";
+    } else if (isSupported("video/mp4;codecs=avc1")) {
+      // Fallback for Safari/iOS WebKit where WebM is unsupported
+      mimeType = "video/mp4;codecs=avc1";
+      targetExtension = "mp4";
     } else {
       mimeType = "video/webm";
     }
@@ -142,23 +161,13 @@ export async function exportBrowserVideo(
     typeof navigator !== "undefined" &&
     /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  let defaultBitrate = 22000000; // 22 Mbps Full HD baseline
-  if (
-    exportCanvas.width >= 3840 ||
-    exportCanvas.height >= 3840 ||
-    exportCanvas.width >= 2160 ||
-    exportCanvas.height >= 2160
-  ) {
-    defaultBitrate = isMobileDevice ? 35000000 : 50000000; // 35 - 50 Mbps 4K Ultra HD
-  } else if (
-    exportCanvas.width >= 1920 ||
-    exportCanvas.height >= 1920 ||
-    exportCanvas.width >= 1080 ||
-    exportCanvas.height >= 1080
-  ) {
-    defaultBitrate = isMobileDevice ? 18000000 : 25000000; // 18 - 25 Mbps 1080p FHD
+  let defaultBitrate = 18000000;
+  if (targetW >= 3840 || targetH >= 3840 || targetW >= 2160 || targetH >= 2160) {
+    defaultBitrate = isMobileDevice ? 30000000 : 45000000; // 4K: 30-45 Mbps
+  } else if (targetW >= 1920 || targetH >= 1920 || targetW >= 1080 || targetH >= 1080) {
+    defaultBitrate = isMobileDevice ? 14000000 : 20000000; // 1080p: 14-20 Mbps
   } else {
-    defaultBitrate = isMobileDevice ? 8000000 : 12000000; // 8 - 12 Mbps 720p HD
+    defaultBitrate = isMobileDevice ? 7000000 : 10000000;  // 720p: 7-10 Mbps
   }
   const finalVideoBitsPerSecond = customBitsPerSecond || defaultBitrate;
 
@@ -169,7 +178,7 @@ export async function exportBrowserVideo(
     const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
     const hasAudio =
       (project.tracks.audio && project.tracks.audio.length > 0) ||
-      (project.tracks.video && project.tracks.video.length > 0);
+      (project.tracks.video && project.tracks.video.some((c) => !c.muted));
     if (AudioCtxClass && hasAudio) {
       audioCtx = new AudioCtxClass();
       if (audioCtx.state === "suspended") {
@@ -222,11 +231,24 @@ export async function exportBrowserVideo(
   }
 
   const recordedChunks: Blob[] = [];
-  const mediaRecorder = new (window as any).MediaRecorder(stream, {
-    mimeType,
-    videoBitsPerSecond: finalVideoBitsPerSecond,
-    audioBitsPerSecond: 320000,
-  });
+  let mediaRecorder: any = null;
+
+  try {
+    mediaRecorder = new (window as any).MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: finalVideoBitsPerSecond,
+      audioBitsPerSecond: 192000,
+    });
+  } catch (recInitErr) {
+    console.warn("[browserVideoExporter] Primary MediaRecorder init failed, falling back to default options:", recInitErr);
+    try {
+      mediaRecorder = new (window as any).MediaRecorder(stream);
+      mimeType = (mediaRecorder as any).mimeType || "video/webm";
+      targetExtension = mimeType.includes("mp4") ? "mp4" : "webm";
+    } catch (fallbackErr) {
+      throw new Error(`MediaRecorder initialization failed: ${String(fallbackErr)}`);
+    }
+  }
 
   mediaRecorder.ondataavailable = (e: any) => {
     if (e.data && e.data.size > 0) {
@@ -299,7 +321,7 @@ export async function exportBrowserVideo(
       reject(err);
     };
 
-    // Mute video elements and cue to start
+    // Cue all video elements
     (project.tracks.video || []).forEach((c) => {
       const el = exportRenderer.videoElements.get(c.url);
       if (el && el instanceof HTMLVideoElement) {
@@ -354,6 +376,7 @@ export async function exportBrowserVideo(
         reject(new Error("Export cancelled"));
         return;
       }
+
       const now = performance.now();
       const elapsed = (now - recStartTime) / 1000;
       const curTime = Math.min(elapsed, duration);

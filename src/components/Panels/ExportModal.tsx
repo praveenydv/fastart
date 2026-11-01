@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, Modal, TouchableOpacity, ScrollView, Platform, useWindowDimensions, StyleSheet } from "react-native";
+import { View, Text, Modal, ScrollView, Platform, useWindowDimensions, StyleSheet } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { ExportModalProps } from "./Export/exportTypes";
 import { styles } from "./Export/ExportModalStyles";

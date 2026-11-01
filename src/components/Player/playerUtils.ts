@@ -22,6 +22,65 @@ export function formatTime(secs: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
 }
 
+export function computeVideoClipDimensions(
+  clip: any,
+  boxWidth: number,
+  canvasHeight: number,
+): { baseW: number; baseH: number; uncroppedW: number; uncroppedH: number } {
+  const w = boxWidth > 0 ? boxWidth : 360;
+  const h = canvasHeight > 0 ? canvasHeight : 640;
+
+  const nw = clip?.naturalWidth || clip?.width || 1920;
+  const nh = clip?.naturalHeight || clip?.height || 1080;
+
+  const crop = clip?.crop || clip?.transform?.crop;
+  let sw = nw;
+  let sh = nh;
+  if (crop && crop.width > 0 && crop.height > 0) {
+    sw = Math.min(nw, (crop.width / 100) * nw);
+    sh = Math.min(nh, (crop.height / 100) * nh);
+  }
+
+  const aspect = (sw / sh) || (16 / 9);
+  let dw = w;
+  let dh = w / aspect;
+  const fitMode = clip?.fit || "contain";
+
+  if (fitMode === "cover") {
+    if (dh < h) {
+      dh = h;
+      dw = h * aspect;
+    }
+  } else {
+    if (dh > h) {
+      dh = h;
+      dw = h * aspect;
+    }
+  }
+
+  const uncroppedAspect = (nw / nh) || (16 / 9);
+  let uncroppedW = w;
+  let uncroppedH = w / uncroppedAspect;
+  if (fitMode === "cover") {
+    if (uncroppedH < h) {
+      uncroppedH = h;
+      uncroppedW = h * uncroppedAspect;
+    }
+  } else {
+    if (uncroppedH > h) {
+      uncroppedH = h;
+      uncroppedW = h * uncroppedAspect;
+    }
+  }
+
+  return {
+    baseW: Math.round(dw),
+    baseH: Math.round(dh),
+    uncroppedW: Math.round(uncroppedW),
+    uncroppedH: Math.round(uncroppedH),
+  };
+}
+
 export function getItemBaseDimensions(
   type: "text" | "sticker" | "video" | "caption",
   clip: any,
@@ -29,6 +88,11 @@ export function getItemBaseDimensions(
   canvasHeight: number,
 ): { baseW: number; baseH: number } {
   const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
+
+  if (type === "video") {
+    const { baseW, baseH } = computeVideoClipDimensions(clip, boxWidth, canvasHeight);
+    return { baseW, baseH };
+  }
 
   if (type === "text" || type === "caption") {
     const rawFontSize = clip.style?.fontSize || (type === "caption" ? 24 : 22);

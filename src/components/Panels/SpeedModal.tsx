@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { SpeedCurvePoint } from '../../types/project';

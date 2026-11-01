@@ -465,6 +465,60 @@ pub extern "C" fn fastart_alpha_to_rgba_c(
     fastart_core::alpha_to_rgba(alpha, out_rgba);
 }
 
+/// End-to-end native portrait segmentation in WebAssembly
+#[no_mangle]
+pub extern "C" fn fastart_segment_frame_rgba_c(
+    rgba_ptr: *const u8,
+    width: u32,
+    height: u32,
+    threshold: f32,
+    feather: f32,
+    seed_mask_ptr: *const u8,
+    seed_mask_len: usize,
+    out_alpha_ptr: *mut u8,
+    max_out_len: usize,
+) -> u32 {
+    if rgba_ptr.is_null() || out_alpha_ptr.is_null() || width == 0 || height == 0 {
+        return 0;
+    }
+    let total = (width * height) as usize;
+    if max_out_len < total {
+        return 0;
+    }
+    let rgba = unsafe { slice::from_raw_parts(rgba_ptr, total * 4) };
+    let seed_mask = if !seed_mask_ptr.is_null() && seed_mask_len >= total {
+        Some(unsafe { slice::from_raw_parts(seed_mask_ptr, total) })
+    } else {
+        None
+    };
+    let out_alpha = unsafe { slice::from_raw_parts_mut(out_alpha_ptr, total) };
+    fastart_core::segment_frame_rgba(rgba, width as usize, height as usize, threshold, feather, seed_mask, out_alpha);
+    total as u32
+}
+
+/// Encodes raw RGBA pixels directly into valid PNG bytes in WebAssembly
+#[no_mangle]
+pub extern "C" fn fastart_encode_rgba_png_c(
+    rgba_ptr: *const u8,
+    width: u32,
+    height: u32,
+    out_ptr: *mut u8,
+    max_out_len: usize,
+) -> u32 {
+    if rgba_ptr.is_null() || out_ptr.is_null() || width == 0 || height == 0 {
+        return 0;
+    }
+    let total = (width * height) as usize;
+    let rgba = unsafe { slice::from_raw_parts(rgba_ptr, total * 4) };
+    let png = fastart_core::encode_rgba_to_png(rgba, width as usize, height as usize);
+    if png.len() > max_out_len {
+        return 0;
+    }
+    let out = unsafe { slice::from_raw_parts_mut(out_ptr, png.len()) };
+    out.copy_from_slice(&png);
+    png.len() as u32
+}
+
 /// Normalized Cross-Correlation (NCC) multi-scale template matching in WebAssembly
 #[no_mangle]
 pub extern "C" fn fastart_search_template_ncc_c(

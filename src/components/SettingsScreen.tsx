@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Switch,
   useWindowDimensions,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
 import { soundEngine } from "../utils/audioEngine";
@@ -81,6 +81,25 @@ export default function SettingsScreen({
   const resolutions = ["720p", "1080p", "2K/4K"];
   const frameRates = [24, 30, 60];
   const aspectRatios = ["9:16", "16:9", "1:1"];
+  const themePresets = [
+    { id: "obsidian", label: "Obsidian" },
+    { id: "oled", label: "OLED Black" },
+    { id: "slate", label: "Slate" },
+    { id: "high_contrast", label: "High Contrast" },
+  ];
+  const accentColors = [
+    { color: "#00E5C9", label: "Cyan" },
+    { color: "#A855F7", label: "Purple" },
+    { color: "#F59E0B", label: "Gold" },
+    { color: "#3B82F6", label: "Blue" },
+    { color: "#EF4444", label: "Coral" },
+    { color: "#10B981", label: "Emerald" },
+  ];
+  const trackHeights = [
+    { id: "compact", label: "Compact" },
+    { id: "standard", label: "Standard" },
+    { id: "expanded", label: "Expanded" },
+  ];
 
   return (
     <View style={styles.container}>
@@ -385,7 +404,117 @@ export default function SettingsScreen({
             </View>
           </View>
 
-          {/* SECTION 3: STORAGE & CACHE */}
+          {/* SECTION 3: WORKSPACE & CUSTOMIZATION */}
+          <Text style={styles.sectionHeader}>WORKSPACE & CUSTOMIZATION</Text>
+          <View style={styles.cardGroup}>
+            {/* Theme Preset */}
+            <View style={styles.selectorItem}>
+              <View style={styles.selectorHeader}>
+                <View style={styles.itemTitleRow}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="color-palette-outline" size={14} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.itemTitle}>Theme Preset</Text>
+                </View>
+                <Text style={styles.activeValueText}>
+                  {themePresets.find((t) => t.id === (localSettings.themePreset || "obsidian"))?.label || "Obsidian"}
+                </Text>
+              </View>
+              <View style={styles.segmentedTrack}>
+                {themePresets.map((t) => {
+                  const isSelected = (localSettings.themePreset || "obsidian") === t.id;
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.segmentBtn, isSelected && styles.segmentBtnActive]}
+                      onPress={() => setOption("themePreset", t.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.segmentText, isSelected && styles.segmentTextActive]}>
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Accent Color Palette */}
+            <View style={styles.selectorItem}>
+              <View style={styles.selectorHeader}>
+                <View style={styles.itemTitleRow}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="sparkles-outline" size={14} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.itemTitle}>Accent Color</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 8, paddingHorizontal: 4 }}>
+                {accentColors.map((item) => {
+                  const isSelected = (localSettings.accentColor || "#00E5C9") === item.color;
+                  return (
+                    <TouchableOpacity
+                      key={item.color}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: item.color,
+                        borderWidth: isSelected ? 2.5 : 1,
+                        borderColor: isSelected ? "#FFFFFF" : "rgba(255,255,255,0.2)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      onPress={() => setOption("accentColor", item.color)}
+                      activeOpacity={0.7}
+                    >
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={14} color="#000000" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Timeline Track Height */}
+            <View style={styles.selectorItem}>
+              <View style={styles.selectorHeader}>
+                <View style={styles.itemTitleRow}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name="reorder-two-outline" size={14} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.itemTitle}>Timeline Density</Text>
+                </View>
+                <Text style={styles.activeValueText}>
+                  {trackHeights.find((th) => th.id === (localSettings.timelineTrackHeight || "standard"))?.label || "Standard"}
+                </Text>
+              </View>
+              <View style={styles.segmentedTrack}>
+                {trackHeights.map((th) => {
+                  const isSelected = (localSettings.timelineTrackHeight || "standard") === th.id;
+                  return (
+                    <TouchableOpacity
+                      key={th.id}
+                      style={[styles.segmentBtn, isSelected && styles.segmentBtnActive]}
+                      onPress={() => setOption("timelineTrackHeight", th.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.segmentText, isSelected && styles.segmentTextActive]}>
+                        {th.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* SECTION 4: STORAGE & CACHE */}
           <Text style={styles.sectionHeader}>STORAGE & CACHE</Text>
           <View style={styles.cardGroup}>
             <View style={styles.toggleItem}>

@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
+import { View, Text, ActivityIndicator, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { ExportFormat } from "../../../utils/videoRenderer";
 import { MediaFormatOption } from "./exportTypes";

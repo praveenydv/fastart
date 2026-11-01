@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, Modal, TextInput } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { styles } from './HomeDashboardStyles';
 import { soundEngine } from '../../utils/audioEngine';
 

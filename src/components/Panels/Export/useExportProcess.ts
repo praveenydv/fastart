@@ -167,11 +167,11 @@ export function useExportProcess(
         // On Native Mobile (iOS/Android): If native Rust is unlinked or falls back, engage headless DomWebView canvas bridge
         if (
           Platform.OS !== "web" &&
-          (mediaType === "mp4" || mediaType === "webm") &&
+          (mediaType === "mp4" || mediaType === "webm" || mediaType === "png" || mediaType === "gif") &&
           (nativeErr?.message === "NATIVE_BRIDGE_FALLBACK_REQUIRED" ||
             nativeErr?.message?.includes("could not be rendered"))
         ) {
-          console.log("[useExportProcess] Native Rust unavailable, engaging Headless Canvas WebView bridge fallback...");
+          console.log(`[useExportProcess] Native Rust unavailable, engaging Headless Canvas WebView bridge fallback for ${mediaType.toUpperCase()}...`);
           setIsMobileCanvasRendering(true);
           result = await new Promise<ExportResult>((resolve, reject) => {
             mobileCanvasResolverRef.current = { resolve, reject };

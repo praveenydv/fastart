@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Platform, ScrollView } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 
 interface ErrorBoundaryProps {

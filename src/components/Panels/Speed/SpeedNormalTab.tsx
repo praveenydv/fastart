@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../../Common/TactileTouchable';
 import { SPEED_PRESETS } from '../../../constants/sampleMedia';
 import { styles } from './SpeedModalStyles';
 import { CompactSliderInput } from '../../Common/CompactSliderInput';

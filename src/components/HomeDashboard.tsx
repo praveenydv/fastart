@@ -2,12 +2,12 @@ import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
   TextInput,
   useWindowDimensions,
   Platform,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import {
   Ionicons,
   Feather,

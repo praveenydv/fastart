@@ -129,6 +129,45 @@ mod tests {
     }
 
     #[test]
+    fn test_segment_frame_rgba_background_removal() {
+        let width = 64;
+        let height = 64;
+        let total = width * height;
+        let mut rgba = vec![0u8; total * 4];
+
+        // Fill background with green (like studio green screen or blue room)
+        for i in 0..total {
+            rgba[i * 4] = 20;     // R
+            rgba[i * 4 + 1] = 210; // G
+            rgba[i * 4 + 2] = 30;  // B
+            rgba[i * 4 + 3] = 255; // A
+        }
+
+        // Draw portrait human subject in center with skin tones
+        for y in 20..44 {
+            for x in 22..42 {
+                let idx = (y * width + x) * 4;
+                rgba[idx] = 210;     // Skin R
+                rgba[idx + 1] = 160; // Skin G
+                rgba[idx + 2] = 120; // Skin B
+                rgba[idx + 3] = 255;
+            }
+        }
+
+        let mut out_alpha = vec![0u8; total];
+        segment_frame_rgba(&rgba, width, height, 0.45, 0.20, None, &mut out_alpha);
+
+        // Corner/border pixels MUST be transparent (alpha == 0)
+        assert_eq!(out_alpha[0], 0, "Top-left background pixel must be transparent 0");
+        assert_eq!(out_alpha[width - 1], 0, "Top-right background pixel must be transparent 0");
+        assert_eq!(out_alpha[(height - 1) * width], 0, "Bottom-left background pixel must be transparent 0");
+
+        // Center human subject pixel MUST be opaque
+        let center_idx = 32 * width + 32;
+        assert!(out_alpha[center_idx] > 180, "Center subject pixel must be opaque (> 180)");
+    }
+
+    #[test]
     fn test_modnet_tensor_preparation_and_output() {
         let total = 512 * 512;
         let mut rgba = vec![0u8; total * 4];

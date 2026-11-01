@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Platform,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
@@ -30,9 +30,6 @@ interface VolumeModalProps {
   onExtractAudio?: () => void;
   isInline?: boolean;
 }
-
-const WebDiv: any = Platform.OS === "web" ? "div" : View;
-const WebInput: any = Platform.OS === "web" ? "input" : View;
 
 export default function VolumeModal({
   visible,

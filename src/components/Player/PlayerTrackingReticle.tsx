@@ -113,12 +113,16 @@ export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
       activeHandleRef.current = null;
     };
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+    }
 
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+      }
     };
   }, [bw, bh, onChangeTargetRect]);
 

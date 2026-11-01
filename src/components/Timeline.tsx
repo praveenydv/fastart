@@ -1,12 +1,18 @@
-import React, { useRef, useState, useMemo, useEffect, useCallback } from "react";
+import React, {
+  useRef,
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   useWindowDimensions,
   Platform,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import {
   TimelineProps,
@@ -74,7 +80,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
-  const pxPerSec = Math.max(20, Math.min(1000, zoom));
+  const pxPerSec = Math.max(1, Math.min(1000, zoom));
 
   const scrollRef = useRef<any>(null);
   const containerRef = useRef<any>(null);
@@ -120,11 +126,17 @@ export const Timeline: React.FC<TimelineProps> = ({
       ? externalResetResizeHeight
       : internalResize.handleResetResizeHeight;
 
+  const lastReportedHeightRef = useRef<number | null>(null);
   useEffect(() => {
-    if (onTimelineHeightChange) {
+    if (
+      externalTimelineHeight === undefined &&
+      onTimelineHeightChange &&
+      lastReportedHeightRef.current !== timelineHeight
+    ) {
+      lastReportedHeightRef.current = timelineHeight;
       onTimelineHeightChange(timelineHeight);
     }
-  }, [timelineHeight, onTimelineHeightChange]);
+  }, [externalTimelineHeight, timelineHeight, onTimelineHeightChange]);
 
   // Settings
   const isSnappingEnabled = (project as any)?.settings?.snapping !== false;
@@ -229,7 +241,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const trackDom = (scrollRef.current as any)?._inputRef || scrollRef.current;
-    const rulerDom = (rulerScrollRef.current as any)?._inputRef || rulerScrollRef.current;
+    const rulerDom =
+      (rulerScrollRef.current as any)?._inputRef || rulerScrollRef.current;
     if (!trackDom || !rulerDom) return;
 
     let isSyncing = false;
@@ -292,7 +305,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         }
       }
     }
-  }, [project?.isPlaying, currentTime, pxPerSec, screenWidth, isMobile]);
+  }, [isPlaying, project?.isPlaying, currentTime, pxPerSec, screenWidth, isMobile]);
 
   // Touch pinch-to-zoom
   const [isPinching, setIsPinching] = useState(false);
@@ -319,7 +332,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const currentDist = Math.hypot(dx, dy);
       const ratio = currentDist / pinchStartDist.current;
       const newZoom = Math.max(
-        20,
+        1,
         Math.min(1000, Math.round(pinchStartZoom.current * ratio)),
       );
       onZoomChange(newZoom);
@@ -368,10 +381,12 @@ export const Timeline: React.FC<TimelineProps> = ({
     const maxDur = Math.max(10, totalDuration) + 3;
     const targetPxSpacing = 65;
     const minTimeStep = targetPxSpacing / pxPerSec;
-    const candidateSteps = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60];
-    const step = candidateSteps.find((s) => s >= minTimeStep) || 60;
+    const candidateSteps = [
+      0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600,
+    ];
+    const step = candidateSteps.find((s) => s >= minTimeStep) || 3600;
     const totalTicks = Math.ceil(maxDur / step);
-    const limit = Math.min(totalTicks, 180);
+    const limit = Math.min(totalTicks, 300);
 
     for (let i = 0; i <= limit; i++) {
       const t = Number((i * step).toFixed(2));
@@ -385,12 +400,17 @@ export const Timeline: React.FC<TimelineProps> = ({
         label = isMajor ? `${sec}s` : `.${Math.floor(ms / 100)}`;
       } else {
         isMajor = t % (step * 5) < 0.01 || t === 0;
-        const mins = Math.floor(sec / 60);
+        const totalMins = Math.floor(sec / 60);
+        const hours = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
         const remSecs = sec % 60;
-        label =
-          mins > 0
-            ? `${mins}:${remSecs.toString().padStart(2, "0")}`
-            : `${sec}s`;
+        if (hours > 0) {
+          label = `${hours}:${mins.toString().padStart(2, "0")}:${remSecs.toString().padStart(2, "0")}`;
+        } else if (totalMins > 0) {
+          label = `${totalMins}:${remSecs.toString().padStart(2, "0")}`;
+        } else {
+          label = `${sec}s`;
+        }
       }
       list.push({ time: t, label, isMajor });
     }
@@ -483,7 +503,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   fontWeight: "800",
                 }}
               >
-                New
+                {isMobile ? "" : "New"}
               </Text>
             </View>
           )}
@@ -540,7 +560,9 @@ export const Timeline: React.FC<TimelineProps> = ({
           <Ionicons
             name="add"
             size={12}
-            color={isBottomActive ? THEME_COLORS.accent : THEME_COLORS.textMuted}
+            color={
+              isBottomActive ? THEME_COLORS.accent : THEME_COLORS.textMuted
+            }
           />
           <Text
             style={[
@@ -553,7 +575,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               },
             ]}
           >
-            {isMobile ? `+T` : "New"}
+            {isMobile ? `T` : "New"}
           </Text>
         </View>,
       );
@@ -733,7 +755,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                     onDrop: (e: any) => {
                       e.preventDefault();
                       try {
-                        const raw = e.dataTransfer.getData("application/fastart-clip");
+                        const raw = e.dataTransfer.getData(
+                          "application/fastart-clip",
+                        );
                         if (!raw) return;
                         const data = JSON.parse(raw);
                         const rect = e.currentTarget.getBoundingClientRect();
@@ -744,14 +768,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                           onAddMedia({
                             ...data.clip,
                             id: `clip-${Date.now()}`,
-                            sourceMediaId: data.clip.sourceMediaId || data.clip.id,
+                            sourceMediaId:
+                              data.clip.sourceMediaId || data.clip.id,
                             startTime: dropTime,
                           });
                         } else if (data.type === "audio" && onAddAudio) {
                           onAddAudio({
                             ...data.clip,
                             id: `audio-${Date.now()}`,
-                            sourceMediaId: data.clip.sourceMediaId || data.clip.id,
+                            sourceMediaId:
+                              data.clip.sourceMediaId || data.clip.id,
                             startTime: dropTime,
                           });
                         }

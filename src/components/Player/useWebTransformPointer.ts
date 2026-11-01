@@ -231,25 +231,29 @@ export function useWebTransformPointer({
       }
     };
 
-    window.addEventListener("pointermove", handlePointerMove, { passive: false });
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    window.addEventListener("mousemove", handlePointerMove);
-    window.addEventListener("mouseup", handlePointerUp);
-    window.addEventListener("touchmove", handlePointerMove, { passive: false });
-    window.addEventListener("touchend", handlePointerUp);
-    window.addEventListener("touchcancel", handlePointerUp);
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("pointermove", handlePointerMove, { passive: false });
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerUp);
+      window.addEventListener("mousemove", handlePointerMove);
+      window.addEventListener("mouseup", handlePointerUp);
+      window.addEventListener("touchmove", handlePointerMove, { passive: false });
+      window.addEventListener("touchend", handlePointerUp);
+      window.addEventListener("touchcancel", handlePointerUp);
 
-    dragCleanupRef.current = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-      window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("mouseup", handlePointerUp);
-      window.removeEventListener("touchmove", handlePointerMove);
-      window.removeEventListener("touchend", handlePointerUp);
-      window.removeEventListener("touchcancel", handlePointerUp);
-    };
+      dragCleanupRef.current = () => {
+        if (typeof window.removeEventListener === "function") {
+          window.removeEventListener("pointermove", handlePointerMove);
+          window.removeEventListener("pointerup", handlePointerUp);
+          window.removeEventListener("pointercancel", handlePointerUp);
+          window.removeEventListener("mousemove", handlePointerMove);
+          window.removeEventListener("mouseup", handlePointerUp);
+          window.removeEventListener("touchmove", handlePointerMove);
+          window.removeEventListener("touchend", handlePointerUp);
+          window.removeEventListener("touchcancel", handlePointerUp);
+        }
+      };
+    }
   };
 
   useEffect(() => {

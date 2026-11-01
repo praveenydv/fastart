@@ -202,6 +202,7 @@ export default function App() {
     discardPreview,
     handleUndo,
     handleRedo,
+    handleJumpToState,
   } = useProjectHistory({
     projectRef,
     setProject,
@@ -209,6 +210,9 @@ export default function App() {
     projectId: project?.id,
   });
   historyStackRef.current = historyStack;
+
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // Continuous Auto-Save Engine:
   // Automatically persists all project configs, edits, cutouts, and layer stacks every few seconds
@@ -490,6 +494,7 @@ export default function App() {
     handleSplitClip,
     handleDuplicateClip,
     handleDeleteClip,
+    onOpenShortcuts: () => setIsShortcutsOpen(true),
   });
 
   // 60 FPS Playback loop hook
@@ -935,6 +940,13 @@ export default function App() {
                   setIsCroppingPreview={setIsCroppingPreview}
                   canUndo={historyStack.length > 0}
                   canRedo={redoStack.length > 0}
+                  historyStack={historyStack}
+                  redoStack={redoStack}
+                  handleJumpToState={handleJumpToState}
+                  isShortcutsOpen={isShortcutsOpen}
+                  setIsShortcutsOpen={setIsShortcutsOpen}
+                  isHistoryOpen={isHistoryOpen}
+                  setIsHistoryOpen={setIsHistoryOpen}
                   onUndo={handleUndo}
                   onRedo={handleRedo}
                   onOpenExport={handleOpenExport}

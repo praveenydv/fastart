@@ -1,11 +1,13 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Platform, PanResponder } from "react-native";
+import { View, Text, StyleSheet, Platform, PanResponder } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { MaskConfig, MaskShape } from "../../types/project";
 import { soundEngine } from "../../utils/audioEngine";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import { getPointerCoords } from "../Timeline";
 import { THEME_COLORS } from "../../constants/designConstants";
+import { computeVideoClipDimensions } from "./playerUtils";
 
 interface PlayerMaskOverlayProps {
   targetClip: any;
@@ -14,6 +16,7 @@ interface PlayerMaskOverlayProps {
   currentTime: number;
   project?: any;
   onUpdateClipMask?: (clipId: string, mask: MaskConfig, isFinal?: boolean) => void;
+  onTransientMaskUpdate?: (clipId: string, mask: MaskConfig | null) => void;
   onCloseMaskPreview?: () => void;
   getInterpolatedTransform?: (clip: any, curTime: number, clipType?: string) => any;
   rendererRef?: React.RefObject<any>;
@@ -27,6 +30,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   currentTime,
   project,
   onUpdateClipMask,
+  onTransientMaskUpdate,
   onCloseMaskPreview,
   getInterpolatedTransform,
   rendererRef,
@@ -72,6 +76,11 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
     setLocalMask(mask);
   }, [mask]);
 
+  const onUpdateClipMaskRef = useRef(onUpdateClipMask);
+  onUpdateClipMaskRef.current = onUpdateClipMask;
+  const onTransientMaskUpdateRef = useRef(onTransientMaskUpdate);
+  onTransientMaskUpdateRef.current = onTransientMaskUpdate;
+
   useEffect(() => {
     return () => {
       dragCleanupRef.current?.();
@@ -80,11 +89,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         cancelAnimationFrame(pendingMaskRafRef.current);
         pendingMaskRafRef.current = null;
       }
+      onTransientMaskUpdateRef.current?.(targetClip.id, null);
     };
-  }, []);
-
-  const onUpdateClipMaskRef = useRef(onUpdateClipMask);
-  onUpdateClipMaskRef.current = onUpdateClipMask;
+  }, [targetClip.id]);
 
   // Clip transform on canvas
   const clipT = useMemo(() => {
@@ -101,41 +108,14 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const clipScale = Math.max(0.01, Math.abs(clipT.scale || 1.0));
   const clipRot = clipT.rotation || 0;
 
-  // Calculate dw and dh of the clip inside canvas exactly matching rendererClip.ts
+  // Calculate dw and dh of the clip inside canvas exactly matching rendererClip.ts and PlayerNativeCompositor.tsx
   const { dw, dh } = useMemo(() => {
     if (rendererRef?.current?.getClipRenderDimensions) {
       const dims = rendererRef.current.getClipRenderDimensions(targetClip, boxWidth, canvasHeight);
       if (dims && dims.dw > 0 && dims.dh > 0) return { dw: dims.dw, dh: dims.dh };
     }
-    const naturalDims = rendererRef?.current?.getMediaNaturalDimensions(targetClip?.url);
-    const nw = naturalDims?.width || targetClip?.naturalWidth || targetClip?.width || 1920;
-    const nh = naturalDims?.height || targetClip?.naturalHeight || targetClip?.height || 1080;
-
-    const crop = targetClip?.crop || targetClip?.transform?.crop;
-    let sw = nw;
-    let sh = nh;
-    if (crop && crop.width > 0 && crop.height > 0) {
-      sw = (crop.width / 100) * nw;
-      sh = (crop.height / 100) * nh;
-    }
-
-    const aspect = (sw / sh) || (16 / 9);
-    let w = boxWidth;
-    let h = boxWidth / aspect;
-    const fitMode = targetClip?.fit || "contain";
-
-    if (fitMode === "cover") {
-      if (h < canvasHeight) {
-        h = canvasHeight;
-        w = canvasHeight * aspect;
-      }
-    } else {
-      if (h > canvasHeight) {
-        h = canvasHeight;
-        w = canvasHeight * aspect;
-      }
-    }
-    return { dw: w, dh: h };
+    const { baseW, baseH } = computeVideoClipDimensions(targetClip, boxWidth, canvasHeight);
+    return { dw: baseW, dh: baseH };
   }, [rendererRef, targetClip, boxWidth, canvasHeight]);
 
   const currentX = localMask.x || 0;
@@ -177,40 +157,45 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
     const w = maskBoxW;
     const h = maskBoxH;
     const shape = localMask.shape;
+    const isLine = shape === "linear" || shape === "mirror";
 
     return (
       <>
-        {/* Outer dashed bounding box */}
-        <rect
-          x={1}
-          y={1}
-          width={Math.max(2, w - 2)}
-          height={Math.max(2, h - 2)}
-          fill="none"
-          stroke="rgba(255, 255, 255, 0.45)"
-          strokeWidth="1.2"
-          strokeDasharray="4 4"
-        />
+        {/* Outer dashed bounding box and crosshairs only for 2D shapes (circle, rect, heart, star) */}
+        {!isLine && (
+          <>
+            <rect
+              x={1}
+              y={1}
+              width={Math.max(2, w - 2)}
+              height={Math.max(2, h - 2)}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.45)"
+              strokeWidth="1.2"
+              strokeDasharray="4 4"
+            />
 
-        {/* Center horizontal & vertical dashed crosshair lines */}
-        <line
-          x1={0}
-          y1={h / 2}
-          x2={w}
-          y2={h / 2}
-          stroke="rgba(255, 255, 255, 0.45)"
-          strokeWidth="1.2"
-          strokeDasharray="4 4"
-        />
-        <line
-          x1={w / 2}
-          y1={0}
-          x2={w / 2}
-          y2={h}
-          stroke="rgba(255, 255, 255, 0.45)"
-          strokeWidth="1.2"
-          strokeDasharray="4 4"
-        />
+            {/* Center horizontal & vertical dashed crosshair lines */}
+            <line
+              x1={0}
+              y1={h / 2}
+              x2={w}
+              y2={h / 2}
+              stroke="rgba(255, 255, 255, 0.45)"
+              strokeWidth="1.2"
+              strokeDasharray="4 4"
+            />
+            <line
+              x1={w / 2}
+              y1={0}
+              x2={w / 2}
+              y2={h}
+              stroke="rgba(255, 255, 255, 0.45)"
+              strokeWidth="1.2"
+              strokeDasharray="4 4"
+            />
+          </>
+        )}
 
         {/* Actual mask shape outline matching video canvas mask */}
         {shape === "circle" && (
@@ -474,51 +459,22 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         }
 
         pendingMaskRef.current = currentUpdatedMask;
-
-        if (pendingMaskRafRef.current === null) {
-          pendingMaskRafRef.current = requestAnimationFrame(() => {
-            pendingMaskRafRef.current = null;
-            const targetMask = pendingMaskRef.current;
-            setLocalMask(targetMask);
-
-            // Directly render live mask preview on canvas at 60fps without full project re-render
-            if (rendererRef?.current && projectRef.current) {
-              rendererRef.current.renderFrame(
-                projectRef.current,
-                currentTimeRef.current,
-                false,
-                boxWidthRef.current,
-                canvasHeightRef.current,
-                {
-                  clipId: targetClip.id,
-                  mask: targetMask,
-                },
-              );
-            }
-          });
-        }
+        scheduleMaskUpdateRef.current(currentUpdatedMask, false);
       };
 
       const onPointerUp = () => {
         setActiveDrag(null);
         soundEngine.playSfx("pop");
 
-        if (pendingMaskRafRef.current !== null) {
-          cancelAnimationFrame(pendingMaskRafRef.current);
-          pendingMaskRafRef.current = null;
-        }
-
         const finalMask = pendingMaskRef.current;
-        setLocalMask(finalMask);
-
         dragCleanupRef.current?.();
         dragCleanupRef.current = null;
 
-        onUpdateClipMaskRef.current?.(targetClip.id, finalMask, true);
+        scheduleMaskUpdateRef.current(finalMask, true);
       };
 
       const cleanup = () => {
-        if (typeof window !== "undefined") {
+        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
           window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerUp);
@@ -531,7 +487,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       };
       dragCleanupRef.current = cleanup;
 
-      if (typeof window !== "undefined") {
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
         window.addEventListener("pointermove", onPointerMove, { passive: false });
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerUp);
@@ -576,31 +532,64 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const totalMaskRotRef = useRef(totalMaskRotation);
   totalMaskRotRef.current = totalMaskRotation;
 
-  const commitMaskUpdate = useCallback(
-    (updatedMask: MaskConfig, isFinal = false) => {
-      setLocalMask(updatedMask);
-      localMaskRef.current = updatedMask;
-      if (rendererRef?.current && projectRef.current) {
-        rendererRef.current.renderFrame(
-          projectRef.current,
-          currentTimeRef.current,
-          false,
-          boxWidthRef.current,
-          canvasHeightRef.current,
-          {
-            clipId: targetClip.id,
-            mask: updatedMask,
-          }
-        );
-      }
+  const scheduleMaskUpdate = useCallback(
+    (nextMask: MaskConfig, isFinal = false) => {
+      pendingMaskRef.current = nextMask;
+      localMaskRef.current = nextMask;
+
       if (isFinal) {
-        onUpdateClipMaskRef.current?.(targetClip.id, updatedMask, true);
+        if (pendingMaskRafRef.current !== null) {
+          cancelAnimationFrame(pendingMaskRafRef.current);
+          pendingMaskRafRef.current = null;
+        }
+        setLocalMask(nextMask);
+        if (rendererRef?.current && projectRef.current) {
+          rendererRef.current.renderFrame(
+            projectRef.current,
+            currentTimeRef.current,
+            false,
+            boxWidthRef.current,
+            canvasHeightRef.current,
+            {
+              clipId: targetClip.id,
+              mask: nextMask,
+            }
+          );
+        }
+        onTransientMaskUpdateRef.current?.(targetClip.id, null);
+        onUpdateClipMaskRef.current?.(targetClip.id, nextMask, true);
+        return;
+      }
+
+      if (pendingMaskRafRef.current === null) {
+        pendingMaskRafRef.current = requestAnimationFrame(() => {
+          pendingMaskRafRef.current = null;
+          const cur = pendingMaskRef.current;
+          if (!cur) return;
+          setLocalMask(cur);
+
+          if (rendererRef?.current && projectRef.current) {
+            rendererRef.current.renderFrame(
+              projectRef.current,
+              currentTimeRef.current,
+              false,
+              boxWidthRef.current,
+              canvasHeightRef.current,
+              {
+                clipId: targetClip.id,
+                mask: cur,
+              }
+            );
+          } else {
+            onTransientMaskUpdateRef.current?.(targetClip.id, cur);
+          }
+        });
       }
     },
     [rendererRef, targetClip.id]
   );
-  const commitMaskUpdateRef = useRef(commitMaskUpdate);
-  commitMaskUpdateRef.current = commitMaskUpdate;
+  const scheduleMaskUpdateRef = useRef(scheduleMaskUpdate);
+  scheduleMaskUpdateRef.current = scheduleMaskUpdate;
 
   // Native Mobile PanResponder 1: Move Mask Center
   const startMoveRef = useRef<{ startX: number; startY: number } | null>(null);
@@ -643,12 +632,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           x: nextX,
           y: nextY,
         };
-        commitMaskUpdateRef.current(nextMask, false);
+        scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
         soundEngine.playSfx("pop");
         setActiveDrag(null);
-        commitMaskUpdateRef.current(localMaskRef.current, true);
+        scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startMoveRef.current = null;
       },
     })
@@ -700,12 +689,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           ...localMaskRef.current,
           rotation: snapped,
         };
-        commitMaskUpdateRef.current(nextMask, false);
+        scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
         soundEngine.playSfx("pop");
         setActiveDrag(null);
-        commitMaskUpdateRef.current(localMaskRef.current, true);
+        scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startRotStateRef.current = null;
       },
     })
@@ -759,12 +748,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           width: nextW,
           height: nextH,
         };
-        commitMaskUpdateRef.current(nextMask, false);
+        scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
         soundEngine.playSfx("pop");
         setActiveDrag(null);
-        commitMaskUpdateRef.current(localMaskRef.current, true);
+        scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startScaleCornerRef.current = null;
       },
     })
@@ -802,12 +791,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           width: nextW,
           size: Math.max(nextW, localMaskRef.current.height ?? 60),
         };
-        commitMaskUpdateRef.current(nextMask, false);
+        scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
         soundEngine.playSfx("pop");
         setActiveDrag(null);
-        commitMaskUpdateRef.current(localMaskRef.current, true);
+        scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startScaleWRef.current = null;
       },
     })
@@ -845,12 +834,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           height: nextH,
           size: Math.max(localMaskRef.current.width ?? 60, nextH),
         };
-        commitMaskUpdateRef.current(nextMask, false);
+        scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
         soundEngine.playSfx("pop");
         setActiveDrag(null);
-        commitMaskUpdateRef.current(localMaskRef.current, true);
+        scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startScaleHRef.current = null;
       },
     })
@@ -873,6 +862,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   if (localMask.shape === "none") {
     return null;
   }
+
+  const isLinear = localMask.shape === "linear";
+  const isMirror = localMask.shape === "mirror";
+  const isLineShape = isLinear || isMirror;
 
   return (
     <View ref={containerRef} style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -964,7 +957,117 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         </View>
       </View>
 
-      {/* Main Mask Interactive Bounding Box on Canvas */}
+      {/* Layer 1: Canvas-Bounded Visuals (strictly clipped to player boundaries) */}
+      <View style={styles.canvasClipBounds} pointerEvents="none">
+        <View
+          style={[
+            styles.maskContainer,
+            {
+              left: 0,
+              top: 0,
+              width: maskBoxW,
+              height: maskBoxH,
+              transform: [
+                { translateX: maskCanvasCenterX - maskBoxW / 2 },
+                { translateY: maskCanvasCenterY - maskBoxH / 2 },
+                { rotate: `${totalMaskRotation}deg` },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          {/* Mask Visuals: Parallel Linear (Mirror) Lines & Shaded Band */}
+          {isMirror && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <View style={[styles.mirrorLine, { top: 0 }]} />
+              <View style={[styles.mirrorLine, { bottom: 0 }]} />
+              <View style={styles.shapeFill} />
+            </View>
+          )}
+
+          {/* Mask Visuals: Single Linear (Split) Line & Shaded Half */}
+          {isLinear && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <View style={styles.linearSplitLine} />
+              <View style={styles.linearHalfFill} />
+            </View>
+          )}
+
+          {/* Outer dashed bounding box - ONLY for non-line shapes (circle, rect, heart, star) */}
+          {!isLineShape && <View style={styles.boundingDashedBox} pointerEvents="none" />}
+
+          {/* Center Crosshair Lines - ONLY for non-line shapes */}
+          {!isLineShape && (
+            <>
+              <View style={styles.crosshairH} pointerEvents="none" />
+              <View style={styles.crosshairV} pointerEvents="none" />
+              <View style={styles.crosshairCenterDot} pointerEvents="none" />
+            </>
+          )}
+
+          {/* Mask Shape Outlines for Circle & Rectangle */}
+          {localMask.shape === "circle" && (
+            <View
+              style={[
+                styles.shapeCircle,
+                {
+                  width: Math.max(2, maskBoxW - 2),
+                  height: Math.max(2, maskBoxH - 2),
+                  borderRadius: Math.max(maskBoxW, maskBoxH),
+                },
+              ]}
+              pointerEvents="none"
+            />
+          )}
+
+          {localMask.shape === "rectangle" && (
+            <View
+              style={[
+                styles.shapeRectangle,
+                {
+                  width: Math.max(2, maskBoxW - 2),
+                  height: Math.max(2, maskBoxH - 2),
+                  borderRadius: Math.min(
+                    localMask.roundness ?? 16,
+                    Math.min(maskBoxW, maskBoxH) / 2
+                  ),
+                },
+              ]}
+              pointerEvents="none"
+            />
+          )}
+
+          {(localMask.shape === "heart" || localMask.shape === "star") && (
+            Platform.OS === "web" ? (
+              <svg
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: maskBoxW,
+                  height: maskBoxH,
+                  overflow: "visible",
+                  pointerEvents: "none",
+                  filter: `drop-shadow(0 0 6px ${THEME_COLORS.cyanBorder})`,
+                }}
+                viewBox={`0 0 ${maskBoxW} ${maskBoxH}`}
+              >
+                {shapeSvgContent}
+              </svg>
+            ) : (
+              <View style={styles.heartStarMobileBadge} pointerEvents="none">
+                <Ionicons
+                  name={localMask.shape === "heart" ? "heart-outline" : "star-outline"}
+                  size={Math.min(maskBoxW, maskBoxH) * 0.78}
+                  color="#00F2FE"
+                />
+              </View>
+            )
+          )}
+        </View>
+      </View>
+
+      {/* Layer 2: Interactive Controls & Handles (unclipped for smooth dragging & rotation) */}
       <View
         style={[
           styles.maskContainer,
@@ -981,97 +1084,68 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           },
         ]}
         collapsable={false}
-        {...(Platform.OS === "web"
-          ? ({
-              onMouseDown: (e: any) => startDrag(e, "move"),
-              onTouchStart: (e: any) => startDrag(e, "move"),
-            } as any)
-          : nativeMovePanResponder.panHandlers)}
+        pointerEvents="box-none"
       >
-        {/* Outer dashed bounding box (Always visible across all platforms) */}
-        <View style={styles.boundingDashedBox} pointerEvents="none" />
-
-        {/* Center Crosshair Lines (Horizontal & Vertical) */}
-        <View style={styles.crosshairH} pointerEvents="none" />
-        <View style={styles.crosshairV} pointerEvents="none" />
-        <View style={styles.crosshairCenterDot} pointerEvents="none" />
-
-        {/* Mask Shape Outlines */}
-        {localMask.shape === "circle" && (
+        {/* Interior Drag Surface for non-line shapes (circle, rect, heart, star) */}
+        {!isLineShape && (
           <View
-            style={[
-              styles.shapeCircle,
-              {
-                width: Math.max(2, maskBoxW - 2),
-                height: Math.max(2, maskBoxH - 2),
-                borderRadius: Math.max(maskBoxW, maskBoxH),
-              },
-            ]}
-            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { backgroundColor: "transparent" }]}
+            collapsable={false}
+            pointerEvents="auto"
+            {...(Platform.OS === "web"
+              ? ({
+                  onMouseDown: (e: any) => startDrag(e, "move"),
+                  onTouchStart: (e: any) => startDrag(e, "move"),
+                } as any)
+              : nativeMovePanResponder.panHandlers)}
+          />
+        )}
+        {/* Touch drag strip for Linear Split Line */}
+        {isLinear && (
+          <View
+            style={styles.linearTouchStrip}
+            collapsable={false}
+            {...(Platform.OS === "web"
+              ? ({
+                  onMouseDown: (e: any) => startDrag(e, "move"),
+                  onTouchStart: (e: any) => startDrag(e, "move"),
+                } as any)
+              : nativeMovePanResponder.panHandlers)}
           />
         )}
 
-        {localMask.shape === "rectangle" && (
+        {/* Touch drag strip for Mirror Band */}
+        {isMirror && (
           <View
-            style={[
-              styles.shapeRectangle,
-              {
-                width: Math.max(2, maskBoxW - 2),
-                height: Math.max(2, maskBoxH - 2),
-                borderRadius: Math.min(
-                  localMask.roundness ?? 16,
-                  Math.min(maskBoxW, maskBoxH) / 2
-                ),
-              },
-            ]}
-            pointerEvents="none"
+            style={styles.mirrorTouchStrip}
+            collapsable={false}
+            {...(Platform.OS === "web"
+              ? ({
+                  onMouseDown: (e: any) => startDrag(e, "move"),
+                  onTouchStart: (e: any) => startDrag(e, "move"),
+                } as any)
+              : nativeMovePanResponder.panHandlers)}
           />
         )}
 
-        {localMask.shape === "mirror" && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <View style={[styles.mirrorLine, { top: 0 }]} />
-            <View style={[styles.mirrorLine, { bottom: 0 }]} />
-            <View style={styles.shapeFill} />
+        {/* Center Move Knob for Linear & Mirror (Clean circular handle, no box!) */}
+        {isLineShape && (
+          <View
+            style={styles.lineCenterMoveHandle}
+            collapsable={false}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            {...(Platform.OS === "web"
+              ? ({
+                  onMouseDown: (e: any) => startDrag(e, "move"),
+                  onTouchStart: (e: any) => startDrag(e, "move"),
+                } as any)
+              : nativeMovePanResponder.panHandlers)}
+          >
+            <Ionicons name="move" size={13} color="#000000" />
           </View>
         )}
 
-        {localMask.shape === "linear" && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <View style={styles.linearSplitLine} />
-            <View style={styles.linearHalfFill} />
-          </View>
-        )}
-
-        {(localMask.shape === "heart" || localMask.shape === "star") && (
-          Platform.OS === "web" ? (
-            <svg
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: maskBoxW,
-                height: maskBoxH,
-                overflow: "visible",
-                pointerEvents: "none",
-                filter: `drop-shadow(0 0 6px ${THEME_COLORS.cyanBorder})`,
-              }}
-              viewBox={`0 0 ${maskBoxW} ${maskBoxH}`}
-            >
-              {shapeSvgContent}
-            </svg>
-          ) : (
-            <View style={styles.heartStarMobileBadge} pointerEvents="none">
-              <Ionicons
-                name={localMask.shape === "heart" ? "heart" : "star"}
-                size={Math.min(maskBoxW, maskBoxH) * 0.72}
-                color="rgba(0, 242, 254, 0.75)"
-              />
-            </View>
-          )
-        )}
-
-        {/* Top Rotation Control Handle (Moved to top per user request, replacing arrow) */}
+        {/* Top Rotation Control Handle (always available for rotating mask angle) */}
         <View style={styles.rotStemTop} pointerEvents="none" />
         <View
           style={styles.rotKnobTop}
@@ -1084,78 +1158,83 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
               } as any)
             : nativeRotPanResponder.panHandlers)}
         >
-          <Ionicons name="sync-outline" size={15} color="#000000" />
+          <Ionicons name="sync-outline" size={14} color="#000000" />
         </View>
 
-        {/* 4 Corner Solid White Resize Dots */}
-        <View
-          style={[styles.cornerDot, styles.dotTL]}
-          collapsable={false}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "scale"),
-                onTouchStart: (e: any) => startDrag(e, "scale"),
-              } as any)
-            : nativeScaleCornerResponder.panHandlers)}
-        />
-        <View
-          style={[styles.cornerDot, styles.dotTR]}
-          collapsable={false}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "scale"),
-                onTouchStart: (e: any) => startDrag(e, "scale"),
-              } as any)
-            : nativeScaleCornerResponder.panHandlers)}
-        />
-        <View
-          style={[styles.cornerDot, styles.dotBL]}
-          collapsable={false}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "scale"),
-                onTouchStart: (e: any) => startDrag(e, "scale"),
-              } as any)
-            : nativeScaleCornerResponder.panHandlers)}
-        />
-        <View
-          style={[styles.cornerDot, styles.dotBR]}
-          collapsable={false}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "scale"),
-                onTouchStart: (e: any) => startDrag(e, "scale"),
-              } as any)
-            : nativeScaleCornerResponder.panHandlers)}
-        />
+        {/* Corner dots & Width pill handles ONLY for non-line shapes (circle, rect, heart, star) */}
+        {!isLineShape && (
+          <>
+            <View
+              style={[styles.cornerDot, styles.dotTL]}
+              collapsable={false}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => startDrag(e, "scale"),
+                    onTouchStart: (e: any) => startDrag(e, "scale"),
+                  } as any)
+                : nativeScaleCornerResponder.panHandlers)}
+            />
+            <View
+              style={[styles.cornerDot, styles.dotTR]}
+              collapsable={false}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => startDrag(e, "scale"),
+                    onTouchStart: (e: any) => startDrag(e, "scale"),
+                  } as any)
+                : nativeScaleCornerResponder.panHandlers)}
+            />
+            <View
+              style={[styles.cornerDot, styles.dotBL]}
+              collapsable={false}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => startDrag(e, "scale"),
+                    onTouchStart: (e: any) => startDrag(e, "scale"),
+                  } as any)
+                : nativeScaleCornerResponder.panHandlers)}
+            />
+            <View
+              style={[styles.cornerDot, styles.dotBR]}
+              collapsable={false}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => startDrag(e, "scale"),
+                    onTouchStart: (e: any) => startDrag(e, "scale"),
+                  } as any)
+                : nativeScaleCornerResponder.panHandlers)}
+            />
 
-        {/* 4 Side Deformation White Capsule/Pill Handles (Left & Right for Width, Top & Bottom for Height) */}
-        <View
-          style={[styles.pillHandleV, styles.pillLeft]}
-          collapsable={false}
-          hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "scale-w"),
-                onTouchStart: (e: any) => startDrag(e, "scale-w"),
-              } as any)
-            : nativeScaleWResponder.panHandlers)}
-        />
-        <View
-          style={[styles.pillHandleV, styles.pillRight]}
-          collapsable={false}
-          hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "scale-w"),
-                onTouchStart: (e: any) => startDrag(e, "scale-w"),
-              } as any)
-            : nativeScaleWResponder.panHandlers)}
-        />
+            <View
+              style={[styles.pillHandleV, styles.pillLeft]}
+              collapsable={false}
+              hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => startDrag(e, "scale-w"),
+                    onTouchStart: (e: any) => startDrag(e, "scale-w"),
+                  } as any)
+                : nativeScaleWResponder.panHandlers)}
+            />
+            <View
+              style={[styles.pillHandleV, styles.pillRight]}
+              collapsable={false}
+              hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
+              {...(Platform.OS === "web"
+                ? ({
+                    onMouseDown: (e: any) => startDrag(e, "scale-w"),
+                    onTouchStart: (e: any) => startDrag(e, "scale-w"),
+                  } as any)
+                : nativeScaleWResponder.panHandlers)}
+            />
+          </>
+        )}
+
+        {/* Height adjustment pills for shapes with height (rectangle, mirror, heart, star; NOT linear) */}
         {localMask.shape !== "linear" && (
           <>
             <View
@@ -1296,12 +1375,62 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
     backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
+  canvasClipBounds: {
+    ...StyleSheet.absoluteFill,
+    overflow: "hidden",
+    borderRadius: 8,
+    ...(Platform.OS === "web" ? ({ clipPath: "inset(0 round 8px)" } as any) : {}),
+  },
+  lineCenterMoveHandle: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: THEME_COLORS.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -13,
+    marginTop: -13,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 8,
+    zIndex: 10015,
+    cursor: "move" as any,
+  },
+  linearTouchStrip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "50%",
+    height: 48,
+    marginTop: -24,
+    backgroundColor: "transparent",
+    cursor: "move" as any,
+    zIndex: 10005,
+  },
+  mirrorTouchStrip: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "transparent",
+    cursor: "move" as any,
+    zIndex: 10005,
+  },
   mirrorLine: {
     position: "absolute",
     left: 0,
     right: 0,
     height: 2.5,
     backgroundColor: "#00F2FE",
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 4,
+    elevation: 3,
   },
   shapeFill: {
     ...StyleSheet.absoluteFill,
@@ -1312,23 +1441,28 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: "50%",
-    height: 3,
+    height: 2.5,
     backgroundColor: "#00F2FE",
-    marginTop: -1.5,
+    marginTop: -1.25,
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 4,
+    elevation: 4,
   },
   linearHalfFill: {
     position: "absolute",
     left: 0,
     right: 0,
     top: "50%",
-    bottom: 0,
+    height: 1600,
     backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   heartStarMobileBadge: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0, 242, 254, 0.06)",
+    backgroundColor: "transparent",
   },
   rotStemTop: {
     position: "absolute",

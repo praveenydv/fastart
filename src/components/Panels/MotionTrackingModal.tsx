@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import {
   MotionTrackConfig,
@@ -88,6 +88,18 @@ export default function MotionTrackingModal({
   const [mosaicRadius, setMosaicRadius] = useState<number>(
     currentTrack?.mosaicRadius ?? 18,
   );
+  const [mosaicShape, setMosaicShape] = useState<"rectangle" | "circle">(
+    currentTrack?.mosaicShape || "rectangle",
+  );
+  const [cameraFitToScreen, setCameraFitToScreen] = useState<boolean>(
+    currentTrack?.cameraFitToScreen !== false,
+  );
+  const [cameraZoom, setCameraZoom] = useState<number>(
+    currentTrack?.cameraZoom ?? 1.25,
+  );
+  const [cameraLockCenter, setCameraLockCenter] = useState<boolean>(
+    currentTrack?.cameraLockCenter !== false,
+  );
   const [smoothness, setSmoothness] = useState<number>(
     currentTrack?.smoothness ?? 75,
   );
@@ -118,6 +130,10 @@ export default function MotionTrackingModal({
       if (currentTrack.trackRotation !== undefined) setTrackRotation(currentTrack.trackRotation);
       if (currentTrack.mosaicStyle) setMosaicStyle(currentTrack.mosaicStyle);
       if (currentTrack.mosaicRadius !== undefined) setMosaicRadius(currentTrack.mosaicRadius);
+      if (currentTrack.mosaicShape) setMosaicShape(currentTrack.mosaicShape);
+      if (currentTrack.cameraFitToScreen !== undefined) setCameraFitToScreen(currentTrack.cameraFitToScreen);
+      if (currentTrack.cameraZoom !== undefined) setCameraZoom(currentTrack.cameraZoom);
+      if (currentTrack.cameraLockCenter !== undefined) setCameraLockCenter(currentTrack.cameraLockCenter);
       if (currentTrack.smoothness !== undefined) setSmoothness(currentTrack.smoothness);
       if (currentTrack.trajectory) setTrajectory(currentTrack.trajectory);
     }
@@ -138,6 +154,10 @@ export default function MotionTrackingModal({
         trackRotation: overrides?.trackRotation !== undefined ? overrides.trackRotation : trackRotation,
         mosaicStyle: overrides?.mosaicStyle || mosaicStyle,
         mosaicRadius: overrides?.mosaicRadius !== undefined ? overrides.mosaicRadius : mosaicRadius,
+        mosaicShape: overrides?.mosaicShape || mosaicShape,
+        cameraFitToScreen: overrides?.cameraFitToScreen !== undefined ? overrides.cameraFitToScreen : cameraFitToScreen,
+        cameraZoom: overrides?.cameraZoom !== undefined ? overrides.cameraZoom : cameraZoom,
+        cameraLockCenter: overrides?.cameraLockCenter !== undefined ? overrides.cameraLockCenter : cameraLockCenter,
         smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
         anchorTime: overrides?.anchorTime !== undefined ? overrides.anchorTime : currentTrack?.anchorTime,
         trackingStatus:

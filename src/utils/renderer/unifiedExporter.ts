@@ -1,6 +1,6 @@
 // FastArt Unified Cross-Platform Exporter Engine
-// Unified exporter shared across Web (WASM), Android (JNI), and iOS (FFI)
-// Automatically leverages native Rust core for 10x-50x faster exports with zero UI stalls
+// Unified exporter shared across Web (WASM / Canvas), Android (JNI / Bridge), and iOS (FFI / Bridge)
+// Automatically leverages native Rust core when compiled, or seamless GPU canvas engine with zero UI stalls
 
 import { Buffer } from "buffer";
 import { Platform } from "react-native";
@@ -12,6 +12,7 @@ import {
   getLogicalBaseDimensions,
 } from "../../components/Panels/Export/exportTypes";
 import { exportBrowserVideo } from "./browserVideoExporter";
+import { FastArtGifEncoder } from "./gifEncoder";
 
 export type ExportFormat = "mp4" | "webm" | "gif" | "png" | "wav";
 
@@ -44,7 +45,7 @@ export class BinaryFileWriter {
   private buffer: Uint8Array;
   private bufferOffset = 0;
   private totalBytesWritten = 0;
-  private chunkSize = 1024 * 1024; // 1MB chunks (reduces JS-to-native bridge calls by 50%)
+  private chunkSize = 1024 * 1024; // 1MB chunks
 
   constructor(targetUri: string, chunkSize = 1024 * 1024) {
     this.targetUri = targetUri;
@@ -96,14 +97,14 @@ export async function writeBinaryFileSafely(
   return await writer.close();
 }
 
-function uint8ToBase64(bytes: Uint8Array): string {
+export function uint8ToBase64(bytes: Uint8Array): string {
   try {
     if (typeof Buffer !== "undefined") {
       return Buffer.from(bytes).toString("base64");
     }
   } catch (_) {}
 
-  // High-speed chunked btoa fallback
+  // Chunked btoa
   if (typeof btoa === "function") {
     let binary = "";
     const chunkSize = 16384;
@@ -114,7 +115,7 @@ function uint8ToBase64(bytes: Uint8Array): string {
     return btoa(binary);
   }
 
-  // Pre-allocated chunk array fallback (avoids string concatenation heap thrashing)
+  // Pre-allocated chunk array fallback
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const len = bytes.length;
   const chunks: string[] = [];
@@ -132,7 +133,7 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return chunks.join("");
 }
 
-function base64ToUint8(b64: string): Uint8Array {
+export function base64ToUint8(b64: string): Uint8Array {
   try {
     if (typeof Buffer !== "undefined") {
       const buf = Buffer.from(b64, "base64");
@@ -243,10 +244,13 @@ export async function exportFastArtProject(
           const { VideoRenderer } = require("../videoRenderer");
           renderer = new VideoRenderer(offscreenCanvas);
           for (const clip of project.tracks?.video || []) {
-            await renderer.preloadClip(clip);
+            try {
+              await renderer.preloadClip(clip);
+            } catch (e) {}
           }
         }
-        await renderer.renderFrame(currentTime, baseW, baseH);
+        // Correct signature: project, time, isPlaying, logicalWidth, logicalHeight
+        renderer.renderFrame(project, currentTime, false, baseW, baseH);
         const dataUrl = renderer.canvas.toDataURL("image/png");
         let blob: Blob = new Blob([]);
         try {
@@ -265,6 +269,11 @@ export async function exportFastArtProject(
       } catch (canvasErr) {
         console.warn("[unifiedExporter] Canvas PNG snapshot fallback failed:", canvasErr);
       }
+    }
+
+    // On native mobile, signal to engage headless canvas bridge
+    if (Platform.OS !== "web") {
+      throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
     }
   }
 
@@ -323,14 +332,14 @@ export async function exportFastArtProject(
   }
 
   // -------------------------------------------------------------------------
-  // 3. Animated GIF Export in Rust
+  // 3. Animated GIF Export in Rust + Pure Canvas Fallback
   // -------------------------------------------------------------------------
   if (format === "gif") {
     const gifFps = Math.min(fps, 15);
     const gifW = Math.min(targetW, 480);
     const gifH = Math.round((targetH / targetW) * gifW);
 
-    onProgress?.(30, 0, duration);
+    onProgress?.(25, 0, duration);
 
     try {
       const isRustReady = await rustCoreBridge.isAvailable();
@@ -369,6 +378,61 @@ export async function exportFastArtProject(
     } catch (err) {
       console.warn("[unifiedExporter] Rust GIF fallback:", err);
     }
+
+    // Web Canvas fallback for GIF
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      try {
+        const offscreenCanvas = document.createElement("canvas");
+        offscreenCanvas.width = gifW;
+        offscreenCanvas.height = gifH;
+        const ctx = offscreenCanvas.getContext("2d", { willReadFrequently: true });
+        const { VideoRenderer } = require("../videoRenderer");
+        const renderer = new VideoRenderer(offscreenCanvas);
+        for (const clip of project.tracks?.video || []) {
+          try {
+            await renderer.preloadClip(clip);
+          } catch (e) {}
+        }
+
+        const encoder = new FastArtGifEncoder(gifW, gifH);
+        const totalFrames = Math.max(1, Math.ceil(duration * gifFps));
+        const frameInterval = 1 / gifFps;
+        const delayMs = Math.round(1000 / gifFps);
+
+        for (let f = 0; f < totalFrames; f++) {
+          if (isCancelled?.()) throw new Error("Export cancelled");
+          const frameTime = f * frameInterval;
+          renderer.renderFrame(project, frameTime, false, baseW, baseH);
+          if (ctx) {
+            const imgData = ctx.getImageData(0, 0, gifW, gifH);
+            encoder.addFrame(imgData.data, { delayMs });
+          }
+          const pct = Math.round((f / totalFrames) * 90);
+          onProgress?.(pct, frameTime, duration);
+        }
+
+        const gifBytes = encoder.finish();
+        const blob = new Blob([gifBytes as any], { type: "image/gif" });
+        const videoUrl = URL.createObjectURL(blob);
+        onProgress?.(100, duration, duration);
+
+        return {
+          blob,
+          videoUrl,
+          mimeType: "image/gif",
+          format: "gif",
+          extension: "gif",
+          fileSize: gifBytes.length,
+        };
+      } catch (gifErr) {
+        console.warn("[unifiedExporter] Web Canvas GIF export error:", gifErr);
+      }
+    }
+
+    // On native mobile, signal to engage headless canvas bridge
+    if (Platform.OS !== "web") {
+      throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -385,7 +449,9 @@ export async function exportFastArtProject(
         const { VideoRenderer } = require("../videoRenderer");
         renderer = new VideoRenderer(offscreenCanvas);
         for (const clip of project.tracks?.video || []) {
-          await renderer.preloadClip(clip);
+          try {
+            await renderer.preloadClip(clip);
+          } catch (e) {}
         }
       }
 
@@ -396,6 +462,7 @@ export async function exportFastArtProject(
           fps,
           duration,
           format,
+          resolution,
           currentTime,
           logicalWidth: baseW,
           logicalHeight: baseH,

@@ -1,13 +1,11 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Platform } from "react-native";
+import { View, Text, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../../utils/audioEngine";
 import { ClipTransform, KeyframeEasing } from "../../../types/project";
 import { styles } from "./KeyframeModalStyles";
 import { CompactSliderInput } from "../../Common/CompactSliderInput";
-
-const WebDiv: any = Platform.OS === "web" ? "div" : View;
-const WebInput: any = Platform.OS === "web" ? "input" : View;
 
 interface KeyframePropertyControlsProps {
   hasKeyframeAtCurrentTime: boolean;

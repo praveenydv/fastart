@@ -24,6 +24,7 @@ interface UseKeyboardShortcutsParams {
   handleSplitClip: () => void;
   handleDuplicateClip: () => void;
   handleDeleteClip: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 export function useKeyboardShortcuts({
@@ -45,6 +46,7 @@ export function useKeyboardShortcuts({
   handleSplitClip,
   handleDuplicateClip,
   handleDeleteClip,
+  onOpenShortcuts,
 }: UseKeyboardShortcutsParams) {
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -106,8 +108,8 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      // 3. Split Clip (S or Cmd+K)
-      if ((e.key === "s" || e.key === "S") && !isCmdOrCtrl) {
+      // 3. Split Clip (C, S, or Cmd+K)
+      if ((e.key === "c" || e.key === "C" || e.key === "s" || e.key === "S") && !isCmdOrCtrl) {
         if (selectedClipId && routeScreen === "editor" && !activeModal) {
           e.preventDefault();
           soundEngine.playSfx("split");
@@ -121,6 +123,52 @@ export function useKeyboardShortcuts({
           soundEngine.playSfx("split");
           handleSplitClip();
         }
+        return;
+      }
+
+      // J-K-L Shuttle Controls
+      if ((e.key === "j" || e.key === "J") && !isCmdOrCtrl) {
+        e.preventDefault();
+        soundEngine.playSfx("click");
+        setCurrentTime((t) => Math.max(0, t - 1.0));
+        return;
+      }
+      if ((e.key === "k" || e.key === "K") && !isCmdOrCtrl) {
+        e.preventDefault();
+        soundEngine.playSfx("click");
+        pauseActiveVideoRenderer();
+        pauseAllAudio();
+        setIsPlaying(false);
+        return;
+      }
+      if ((e.key === "l" || e.key === "L") && !isCmdOrCtrl) {
+        e.preventDefault();
+        soundEngine.playSfx("click");
+        if (!isPlaying) {
+          setIsPlaying(true);
+        } else {
+          setCurrentTime((t) => Math.min(totalDuration, t + 1.0));
+        }
+        return;
+      }
+
+      // Open Shortcuts Help (?)
+      if (e.key === "?" && onOpenShortcuts) {
+        e.preventDefault();
+        soundEngine.playSfx("click");
+        onOpenShortcuts();
+        return;
+      }
+
+      // Home & End navigation
+      if (e.key === "Home") {
+        e.preventDefault();
+        setCurrentTime(0);
+        return;
+      }
+      if (e.key === "End") {
+        e.preventDefault();
+        setCurrentTime(totalDuration);
         return;
       }
 
@@ -183,7 +231,7 @@ export function useKeyboardShortcuts({
       }
       if (e.key === "-" || e.key === "_") {
         e.preventDefault();
-        setZoom((z) => Math.max(20, z - 10));
+        setZoom((z) => Math.max(1, z > 20 ? z - 10 : z > 6 ? z - 4 : z - 1));
         return;
       }
       if (e.key === "0") {
@@ -193,8 +241,14 @@ export function useKeyboardShortcuts({
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        if (typeof window.removeEventListener === "function") {
+          window.removeEventListener("keydown", handleKeyDown);
+        }
+      };
+    }
   }, [
     selectedClipId,
     routeScreen,
@@ -214,5 +268,6 @@ export function useKeyboardShortcuts({
     handleSplitClip,
     handleDuplicateClip,
     handleDeleteClip,
+    onOpenShortcuts,
   ]);
 }

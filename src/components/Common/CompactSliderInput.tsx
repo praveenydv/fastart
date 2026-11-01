@@ -3,12 +3,12 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   Platform,
   StyleProp,
   ViewStyle,
 } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from './TactileTouchable';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME_COLORS } from '../../constants/designConstants';

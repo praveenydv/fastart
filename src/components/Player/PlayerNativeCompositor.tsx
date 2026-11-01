@@ -1,10 +1,13 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { getNativeMaskUri, setOnMaskUpdated, getClipBakedFps } from "../../services/selfieSegmentationService";
 import { styles } from "./PlayerStyles";
 import { TransientTransformState } from "./playerTypes";
+import { computeVideoClipDimensions } from "./playerUtils";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking, FILTER_CSS_MAP, scaleCssFilter } from "../../utils/renderer/rendererEffects";
@@ -103,13 +106,23 @@ function renderMosaicCensor(clip: any, clipW: number, clipH: number, currentTime
   const boxLeft = Math.round(clipW * centerNormX - boxPixelW / 2);
   const boxTop = Math.round(clipH * centerNormY - boxPixelH / 2);
 
-  const radius = track.mosaicRadius ?? 16;
-  const isPixelate = track.mosaicStyle !== 'blur';
+  const radius = track.mosaicRadius ?? 18;
+  const isPixelate = track.mosaicStyle === 'pixelate';
+  const isCircle = track.mosaicShape === 'circle';
+  const bRadius = isCircle ? 9999 : isPixelate ? 4 : Math.round(Math.min(boxPixelW, boxPixelH) / 4);
 
   const webBackdropStyle: any = Platform.OS === 'web' ? {
-    backdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
-    WebkitBackdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
+    backdropFilter: isPixelate
+      ? `blur(${Math.max(2, Math.round(radius * 0.4))}px) contrast(170%) brightness(90%)`
+      : `blur(${radius}px)`,
+    WebkitBackdropFilter: isPixelate
+      ? `blur(${Math.max(2, Math.round(radius * 0.4))}px) contrast(170%) brightness(90%)`
+      : `blur(${radius}px)`,
   } : {};
+
+  // Procedural mosaic blocks pattern for native mobile & web
+  const gridRows = isPixelate ? Math.max(3, Math.min(8, Math.round(boxPixelH / Math.max(6, radius * 0.8)))) : 0;
+  const gridCols = isPixelate ? Math.max(3, Math.min(8, Math.round(boxPixelW / Math.max(6, radius * 0.8)))) : 0;
 
   return (
     <View
@@ -121,16 +134,41 @@ function renderMosaicCensor(clip: any, clipW: number, clipH: number, currentTime
           top: boxTop,
           width: boxPixelW,
           height: boxPixelH,
-          borderRadius: isPixelate ? 4 : Math.round(Math.min(boxPixelW, boxPixelH) / 4),
-          backgroundColor: isPixelate ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.12)',
+          borderRadius: bRadius,
+          backgroundColor: isPixelate ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.15)',
           overflow: 'hidden',
           borderWidth: 1.5,
-          borderColor: 'rgba(0, 242, 254, 0.4)',
+          borderColor: 'rgba(0, 242, 254, 0.45)',
           zIndex: 99,
+          justifyContent: 'center',
+          alignItems: 'center',
         },
         webBackdropStyle,
       ]}
-    />
+    >
+      {isPixelate && (
+        <View style={[StyleSheet.absoluteFill, { flexDirection: 'column' }]}>
+          {Array.from({ length: gridRows }).map((_, rIdx) => (
+            <View key={`r-${rIdx}`} style={{ flex: 1, flexDirection: 'row' }}>
+              {Array.from({ length: gridCols }).map((_, cIdx) => {
+                const shade = ((rIdx + cIdx) % 3 === 0 ? 0.35 : (rIdx + cIdx) % 2 === 0 ? 0.5 : 0.2);
+                return (
+                  <View
+                    key={`c-${cIdx}`}
+                    style={{
+                      flex: 1,
+                      backgroundColor: `rgba(0, 0, 0, ${shade})`,
+                      borderWidth: 0.5,
+                      borderColor: 'rgba(255, 255, 255, 0.08)',
+                    }}
+                  />
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -368,9 +406,39 @@ function renderNativeHslOverlay(hslAdjustments?: any) {
   );
 }
 
-function renderNativeCutoutOverlay(vid: any) {
-  const cutout = vid.cutout || vid.transform?.cutout;
-  if (!cutout || !cutout.enabled) return null;
+function renderNativeCutoutOverlay(_vid: any) {
+  // Cutout strokes are applied as a silhouette glow directly onto the transparent alpha matte,
+  // preventing unwanted rectangular box lines from appearing around the clip container.
+  return null;
+}
+
+/**
+ * Renders the AI-cutout or Chroma Key processed frame as an Image overlay on native.
+ * Shows when cutout is enabled and a processed PNG URI exists.
+ * The PNG has a transparent background from Rust/JS segmentation.
+ */
+function NativeCutoutLayer({
+  clipId,
+  frameIdx,
+  cutout,
+}: {
+  clipId: string;
+  frameIdx: number;
+  cutout: any;
+}) {
+  const [, forceUpdate] = React.useState(0);
+
+  React.useEffect(() => {
+    const onMask = () => forceUpdate((v) => v + 1);
+    const unsub = setOnMaskUpdated(onMask);
+    return () => {
+      unsub();
+    };
+  }, [clipId]);
+
+  const maskUri = getNativeMaskUri(clipId, frameIdx) ?? getNativeMaskUri(clipId, 0);
+
+  if (!maskUri || !cutout?.enabled) return null;
 
   const hasStroke =
     cutout.strokeColor &&
@@ -378,28 +446,27 @@ function renderNativeCutoutOverlay(vid: any) {
     cutout.strokeColor !== "transparent" &&
     cutout.strokeWidth &&
     cutout.strokeWidth > 0;
-
-  if (!hasStroke) return null;
-
   const strokeW = Math.max(1, Math.min(16, cutout.strokeWidth || 3));
   const strokeColor = cutout.strokeColor || "#00F2FE";
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View
+      {cutout.bgColor && cutout.bgColor !== "none" && cutout.bgColor !== "transparent" && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: cutout.bgColor }]} />
+      )}
+      <ExpoImage
+        source={{ uri: maskUri }}
         style={[
           StyleSheet.absoluteFill,
-          {
-            borderWidth: strokeW,
-            borderColor: strokeColor,
-            borderRadius: 6,
+          hasStroke && {
             shadowColor: strokeColor,
             shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.9,
-            shadowRadius: strokeW * 2.5,
-            elevation: strokeW * 2,
+            shadowOpacity: 0.95,
+            shadowRadius: strokeW * 2,
           },
         ]}
+        contentFit="contain"
+        cachePolicy="none"
       />
     </View>
   );
@@ -1018,6 +1085,11 @@ function renderMaskedClipContent(
   }
 
   // On Mobile Native (iOS & Android):
+  const effectiveCanvasBg =
+    (canvasBg && canvasBg.startsWith("color:")
+      ? canvasBg.replace("color:", "")
+      : canvasBg) || "#000000";
+
   const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
   const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
   const posX = mask.x || 0; // % offset from clip center (-50..50)
@@ -1027,97 +1099,165 @@ function renderMaskedClipContent(
   const roundness = mask.roundness !== undefined ? mask.roundness : 16;
   const shape = mask.shape;
 
-  let boxW = Math.max(4, Math.round(w * (effW / 100)));
-  let boxH = Math.max(4, Math.round(h * (effH / 100)));
-  let boxLeft = Math.round((w - boxW) / 2 + (posX / 100) * w);
-  let boxTop = Math.round((h - boxH) / 2 + (posY / 100) * h);
-  let bRadius = 0;
+  // Use isotropic minDim for circular, star and heart shapes to guarantee 1:1 roundness matching overlay reticle
+  const minDim = Math.min(w, h);
+  let boxW = Math.max(4, Math.round((minDim * effW) / 100));
+  let boxH = Math.max(4, Math.round((minDim * effH) / 100));
+  if (shape === "rectangle") {
+    boxW = Math.max(4, Math.round((w * effW) / 100));
+    boxH = Math.max(4, Math.round((h * effH) / 100));
+  } else if (shape === "mirror") {
+    boxW = Math.max(w, h) * 3;
+    boxH = Math.max(4, Math.round((h * effH) / 100));
+  } else if (shape === "linear") {
+    boxW = Math.max(w, h) * 3;
+    boxH = 40;
+  }
 
+  const cx = w / 2 + (posX / 100) * w;
+  const cy = h / 2 + (posY / 100) * h;
+  const boxLeft = Math.round(cx - boxW / 2);
+  const boxTop = Math.round(cy - boxH / 2);
+
+  // 1. LINEAR SPLIT MASK (Split Line through center cx, cy)
+  if (shape === "linear") {
+    const span = Math.max(w, h) * 3;
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {mediaNode}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: Math.round(cx - span / 2),
+            top: Math.round(cy - span / 2),
+            width: span,
+            height: span,
+            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: inverted ? span / 2 : 0,
+              height: span / 2,
+              backgroundColor: effectiveCanvasBg,
+            }}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // 2. MIRROR MASK (Parallel band of height boxH centered at cx, cy)
+  if (shape === "mirror") {
+    const span = Math.max(w, h) * 3;
+    const halfBand = boxH / 2;
+    const topMatteH = Math.max(0, span / 2 - halfBand);
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {mediaNode}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: Math.round(cx - span / 2),
+            top: Math.round(cy - span / 2),
+            width: span,
+            height: span,
+            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+          }}
+        >
+          {!inverted ? (
+            <>
+              <View
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: topMatteH,
+                  backgroundColor: effectiveCanvasBg,
+                }}
+              />
+              <View
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: span / 2 + halfBand,
+                  height: topMatteH,
+                  backgroundColor: effectiveCanvasBg,
+                }}
+              />
+            </>
+          ) : (
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: span / 2 - halfBand,
+                height: boxH,
+                backgroundColor: effectiveCanvasBg,
+              }}
+            />
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // 3. HEART & STAR MASK
+  if (shape === "heart" || shape === "star") {
+    const svgPath =
+      shape === "heart"
+        ? "M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z"
+        : "M 50 2 L 63 38 L 100 38 L 69 60 L 82 98 L 50 75 L 18 98 L 31 60 L 0 38 L 37 38 Z";
+
+    const svgXml = !inverted
+      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-200 -200 500 500"><path fill-rule="evenodd" d="M -200 -200 H 300 V 300 H -200 Z ${svgPath}" fill="${effectiveCanvasBg}"/></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="${svgPath}" fill="${effectiveCanvasBg}"/></svg>`;
+
+    const uri = `data:image/svg+xml;utf8,${encodeURIComponent(svgXml)}`;
+
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {mediaNode}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: boxLeft,
+            top: boxTop,
+            width: boxW,
+            height: boxH,
+            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+          }}
+        >
+          <ExpoImage
+            source={{ uri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="fill"
+            cachePolicy="none"
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // 4. CIRCLE & RECTANGLE MASK
+  let bRadius = 0;
   if (shape === "circle") {
     bRadius = Math.round(Math.min(boxW, boxH) / 2);
   } else if (shape === "rectangle") {
     bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
-  } else if (shape === "mirror") {
-    boxW = w;
-    boxLeft = 0;
-    boxH = Math.max(4, Math.round(h * (effH / 100)));
-    boxTop = Math.round((h - boxH) / 2 + (posY / 100) * h);
-    bRadius = 0;
-  } else if (shape === "linear") {
-    boxW = w;
-    boxLeft = 0;
-    boxH = Math.max(4, Math.round(h * (effH / 100)));
-    boxTop = Math.round((posY / 100) * h);
-    bRadius = 0;
-  } else if (shape === "heart" || shape === "star") {
-    bRadius = Math.round(Math.min(boxW, boxH) / 2);
   }
 
   if (inverted) {
-    if (shape === "linear") {
-      const invTop = boxTop + boxH;
-      const invH = Math.max(4, h - invTop);
-      return (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            top: invTop,
-            width: w,
-            height: invH,
-            overflow: "hidden",
-          }}
-        >
-          <View style={{ position: "absolute", left: 0, top: -invTop, width: w, height: h }}>
-            {mediaNode}
-          </View>
-        </View>
-      );
-    }
-
-    if (shape === "mirror") {
-      const topH = Math.max(0, boxTop);
-      const btmTop = boxTop + boxH;
-      const btmH = Math.max(0, h - btmTop);
-      return (
-        <View style={StyleSheet.absoluteFill}>
-          {topH > 0 && (
-            <View
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                width: w,
-                height: topH,
-                overflow: "hidden",
-              }}
-            >
-              <View style={{ position: "absolute", left: 0, top: 0, width: w, height: h }}>
-                {mediaNode}
-              </View>
-            </View>
-          )}
-          {btmH > 0 && (
-            <View
-              style={{
-                position: "absolute",
-                left: 0,
-                top: btmTop,
-                width: w,
-                height: btmH,
-                overflow: "hidden",
-              }}
-            >
-              <View style={{ position: "absolute", left: 0, top: -btmTop, width: w, height: h }}>
-                {mediaNode}
-              </View>
-            </View>
-          )}
-        </View>
-      );
-    }
-
-    // Inverted circle or rectangle: render media, and overlay the cutout matte on mobile
+    // Inverted: solid cutout overlay covers the inside
     return (
       <View style={StyleSheet.absoluteFill}>
         {mediaNode}
@@ -1130,7 +1270,7 @@ function renderMaskedClipContent(
             width: boxW,
             height: boxH,
             borderRadius: bRadius,
-            backgroundColor: canvasBg || "#000000",
+            backgroundColor: effectiveCanvasBg,
             transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
           }}
         />
@@ -1138,32 +1278,27 @@ function renderMaskedClipContent(
     );
   }
 
-  // Standard non-inverted clipping mask
+  // Standard non-inverted circle/rectangle:
+  // Ultra-fast zero-latency hardware-accelerated border matte covering the outside
+  const bw = Math.max(w, h) * 2;
   return (
-    <View
-      style={{
-        position: "absolute",
-        left: boxLeft,
-        top: boxTop,
-        width: boxW,
-        height: boxH,
-        borderRadius: bRadius,
-        overflow: "hidden",
-        transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-      }}
-    >
+    <View style={StyleSheet.absoluteFill}>
+      {mediaNode}
       <View
+        pointerEvents="none"
         style={{
           position: "absolute",
-          left: -boxLeft,
-          top: -boxTop,
-          width: w,
-          height: h,
-          transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
+          left: boxLeft - bw,
+          top: boxTop - bw,
+          width: boxW + bw * 2,
+          height: boxH + bw * 2,
+          borderWidth: bw,
+          borderColor: effectiveCanvasBg,
+          borderRadius: bRadius + bw,
+          backgroundColor: "transparent",
+          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
         }}
-      >
-        {mediaNode}
-      </View>
+      />
     </View>
   );
 }
@@ -1186,6 +1321,14 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
   getInterpolatedTransform,
 }) => {
   const pinnedTracksMap = new Map<string, any>();
+  const [, setMaskVersion] = React.useState(0);
+  React.useEffect(() => {
+    const onMaskUpdate = () => setMaskVersion((v) => v + 1);
+    const unsub = setOnMaskUpdated(onMaskUpdate);
+    return () => {
+      unsub();
+    };
+  }, []);
   for (let i = 0; i < activeVideos.length; i++) {
     const v = activeVideos[i];
     if (v.motionTrack?.enabled && v.motionTrack.pinnedClipId) {
@@ -1333,13 +1476,17 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
 
         const effScale = baseScale * motionScale;
         const effRot = rot + motionRot;
-        const { baseW, baseH } = getItemBaseDimensions("video", vid);
+        const clipDims = computeVideoClipDimensions(vid, boxWidth, canvasHeight);
+        const baseW = clipDims.baseW;
+        const baseH = clipDims.baseH;
+        const fullW = Math.round(clipDims.uncroppedW * effScale);
+        const fullH = Math.round(clipDims.uncroppedH * effScale);
         const w = Math.round(baseW * effScale);
         const h = Math.round(baseH * effScale);
         const cx = boxWidth / 2 + posX + motionX;
         const cy = canvasHeight / 2 + posY + motionY;
 
-        const mask = kfT?.mask || vid.mask || vid.transform?.mask;
+        const mask = (isTrans && activeTransient?.mask) ? activeTransient.mask : (kfT?.mask || vid.mask || vid.transform?.mask);
         let maskBorderRadius: number | undefined = undefined;
         let hasMaskShape = false;
         let webMaskStyle: any = undefined;
@@ -1564,8 +1711,8 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           const cropH = Math.max(0.01, crop.height / 100);
           const cropX = Math.max(0, crop.x / 100);
           const cropY = Math.max(0, crop.y / 100);
-          const croppedContainerW = Math.round(w * cropW);
-          const croppedContainerH = Math.round(h * cropH);
+          const croppedContainerW = Math.round(fullW * cropW);
+          const croppedContainerH = Math.round(fullH * cropH);
 
           const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
           const webBlendStyle =
@@ -1615,36 +1762,50 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   needsOffscreenAlphaCompositing={effectiveOpacity < 1}
                   style={{
                     position: "absolute",
-                    left: -Math.round(w * cropX),
-                    top: -Math.round(h * cropY),
-                    width: w,
-                    height: h,
+                    left: -Math.round(fullW * cropX),
+                    top: -Math.round(fullH * cropY),
+                    width: fullW,
+                    height: fullH,
                     justifyContent: "center",
                     alignItems: "center",
                   }}
                 >
-                  {vid.cutout?.enabled && vid.cutout?.bgColor && vid.cutout.bgColor !== "none" && vid.cutout.bgColor !== "transparent" && (
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        StyleSheet.absoluteFill,
-                        { backgroundColor: vid.cutout.bgColor, zIndex: -1 },
-                      ]}
-                    />
-                  )}
-                  <NativeVideoClipPlayer
-                    clip={vid}
-                    currentTime={currentTime}
-                    isPlaying={isPlaying}
-                    opacity={effectiveOpacity}
-                    onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
-                  />
-                  {renderClipEnhanceOverlay(vid)}
-                  {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
-                  {renderNativeHslOverlay(vid.hslAdjustments)}
-                  {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
-                  {renderMosaicCensor(vid, w, h, currentTime)}
-                  {renderNativeCutoutOverlay(vid)}
+                  {(() => {
+                    const isCutoutActive = Platform.OS !== "web" && !!vid.cutout?.enabled;
+                    const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
+                    const effSpeed = Math.max(0.1, vid.speed || 1.0);
+                    const bakedFps = getClipBakedFps(vid.id) || 20;
+                    const activeFrameIdx = Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
+                    const cutoutMaskUri = isCutoutActive
+                      ? (getNativeMaskUri(vid.id, activeFrameIdx) ?? getNativeMaskUri(vid.id, 0))
+                      : null;
+                    const hideUnderlying = isCutoutActive && !!cutoutMaskUri;
+
+                    return (
+                      <>
+                        <NativeVideoClipPlayer
+                          clip={vid}
+                          currentTime={currentTime}
+                          isPlaying={isPlaying}
+                          opacity={hideUnderlying ? 0 : effectiveOpacity}
+                          onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
+                        />
+                        {renderClipEnhanceOverlay(vid)}
+                        {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
+                        {renderNativeHslOverlay(vid.hslAdjustments)}
+                        {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
+                        {renderMosaicCensor(vid, w, h, currentTime)}
+                        {renderNativeCutoutOverlay(vid)}
+                        {isCutoutActive && (
+                          <NativeCutoutLayer
+                            clipId={vid.id}
+                            frameIdx={activeFrameIdx}
+                            cutout={vid.cutout}
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
                 </View>,
                 mask,
                 croppedContainerW,
@@ -1710,28 +1871,42 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   alignItems: "center",
                 }}
               >
-                {vid.cutout?.enabled && vid.cutout?.bgColor && vid.cutout.bgColor !== "none" && vid.cutout.bgColor !== "transparent" && (
-                  <View
-                    pointerEvents="none"
-                    style={[
-                      StyleSheet.absoluteFill,
-                      { backgroundColor: vid.cutout.bgColor, zIndex: -1 },
-                    ]}
-                  />
-                )}
-                <NativeVideoClipPlayer
-                  clip={vid}
-                  currentTime={currentTime}
-                  isPlaying={isPlaying}
-                  opacity={effectiveOpacity}
-                  onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
-                />
-                {renderClipEnhanceOverlay(vid)}
-                {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
-                {renderNativeHslOverlay(vid.hslAdjustments)}
-                {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
-                {renderMosaicCensor(vid, w, h, currentTime)}
-                {renderNativeCutoutOverlay(vid)}
+                {(() => {
+                  const isCutoutActive = Platform.OS !== "web" && !!vid.cutout?.enabled;
+                  const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
+                  const effSpeed = Math.max(0.1, vid.speed || 1.0);
+                  const bakedFps = getClipBakedFps(vid.id) || 20;
+                  const activeFrameIdx = Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
+                  const cutoutMaskUri = isCutoutActive
+                    ? (getNativeMaskUri(vid.id, activeFrameIdx) ?? getNativeMaskUri(vid.id, 0))
+                    : null;
+                  const hideUnderlying = isCutoutActive && !!cutoutMaskUri;
+
+                  return (
+                    <>
+                      <NativeVideoClipPlayer
+                        clip={vid}
+                        currentTime={currentTime}
+                        isPlaying={isPlaying}
+                        opacity={hideUnderlying ? 0 : effectiveOpacity}
+                        onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
+                      />
+                      {renderClipEnhanceOverlay(vid)}
+                      {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
+                      {renderNativeHslOverlay(vid.hslAdjustments)}
+                      {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
+                      {renderMosaicCensor(vid, w, h, currentTime)}
+                      {renderNativeCutoutOverlay(vid)}
+                      {isCutoutActive && (
+                        <NativeCutoutLayer
+                          clipId={vid.id}
+                          frameIdx={activeFrameIdx}
+                          cutout={vid.cutout}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               </View>,
               mask,
               w,

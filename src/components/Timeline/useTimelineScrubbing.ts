@@ -327,20 +327,24 @@ export function useTimelineScrubbing({
       }
     };
 
-    window.addEventListener("mousemove", onPointerMove);
-    window.addEventListener("mouseup", onPointerUp);
-    window.addEventListener("touchmove", onPointerMove as any, {
-      passive: false,
-    });
-    window.addEventListener("touchend", onPointerUp);
-    window.addEventListener("touchcancel", onPointerUp);
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("mousemove", onPointerMove);
+      window.addEventListener("mouseup", onPointerUp);
+      window.addEventListener("touchmove", onPointerMove as any, {
+        passive: false,
+      });
+      window.addEventListener("touchend", onPointerUp);
+      window.addEventListener("touchcancel", onPointerUp);
+    }
     return () => {
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
-      window.removeEventListener("mousemove", onPointerMove);
-      window.removeEventListener("mouseup", onPointerUp);
-      window.removeEventListener("touchmove", onPointerMove as any);
-      window.removeEventListener("touchend", onPointerUp);
-      window.removeEventListener("touchcancel", onPointerUp);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+        window.removeEventListener("mousemove", onPointerMove);
+        window.removeEventListener("mouseup", onPointerUp);
+        window.removeEventListener("touchmove", onPointerMove as any);
+        window.removeEventListener("touchend", onPointerUp);
+        window.removeEventListener("touchcancel", onPointerUp);
+      }
     };
   }, [performSeekWithSnap, rulerRef]);
 

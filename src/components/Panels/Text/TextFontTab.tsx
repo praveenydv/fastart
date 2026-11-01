@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { View, Text, ScrollView, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../../utils/audioEngine";
 import { FONT_OPTIONS } from "./textModalConstants";

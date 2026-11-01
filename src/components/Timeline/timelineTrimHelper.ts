@@ -62,7 +62,7 @@ export function computeLeftTrimUpdates(
   let candidateStart = Math.max(minAllowedStart, initialStart + clampedDelta);
 
   if (isSnappingEnabled) {
-    const snapThreshold = 20 / pxPerSec;
+    const snapThreshold = Math.min(1.5, 20 / pxPerSec);
     let bestSnap = candidateStart;
     let bestDist = snapThreshold;
 
@@ -176,7 +176,7 @@ export function computeRightTrimUpdates(
   );
 
   if (isSnappingEnabled) {
-    const snapThreshold = 20 / pxPerSec;
+    const snapThreshold = Math.min(1.5, 20 / pxPerSec);
     const candidateEnd = initialStart + candidateDur;
     let bestSnap = candidateEnd;
     let bestDist = snapThreshold;

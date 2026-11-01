@@ -268,6 +268,28 @@ export function useProjectHistory({
     soundEngine.playSfx("click");
   }, [flushPendingSave, redoStack, projectRef, setProject, setProjects]);
 
+  const handleJumpToState = useCallback((targetIndex: number) => {
+    flushPendingSave();
+    burstSnapshotRef.current = null;
+    if (targetIndex < 0 || targetIndex >= historyStack.length) return;
+    const current = projectRef.current;
+    const targetState = historyStack[targetIndex];
+    
+    // Everything after targetIndex moves to redoStack
+    const remainingHistory = historyStack.slice(0, targetIndex);
+    const statesToRedo = historyStack.slice(targetIndex + 1);
+    if (current) {
+      setRedoStack((r) => [...r, ...statesToRedo, JSON.parse(JSON.stringify(current))].slice(-20));
+    }
+    setHistoryStack(remainingHistory);
+
+    const saved = saveProject(targetState);
+    projectRef.current = saved;
+    setProject(saved);
+    setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
+    soundEngine.playSfx("whoosh");
+  }, [flushPendingSave, historyStack, projectRef, setProject, setProjects]);
+
   return {
     historyStack,
     redoStack,
@@ -279,5 +301,6 @@ export function useProjectHistory({
     discardPreview,
     handleUndo,
     handleRedo,
+    handleJumpToState,
   };
 }

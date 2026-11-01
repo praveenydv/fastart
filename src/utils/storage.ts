@@ -442,6 +442,10 @@ export interface AppSettings {
   hardwareAcceleration: boolean;
   cachedSizeMb: number;
   language: string;
+  themePreset?: 'obsidian' | 'oled' | 'slate' | 'high_contrast';
+  accentColor?: string;
+  timelineTrackHeight?: 'compact' | 'standard' | 'expanded';
+  pinnedTools?: string[];
 }
 
 export const defaultSettings: AppSettings = {
@@ -455,6 +459,10 @@ export const defaultSettings: AppSettings = {
   hardwareAcceleration: true,
   cachedSizeMb: 142.8,
   language: 'English (US)',
+  themePreset: 'obsidian',
+  accentColor: '#00E5C9',
+  timelineTrackHeight: 'standard',
+  pinnedTools: ['split', 'speed', 'volume', 'animation', 'cutout', 'filters'],
 };
 
 export const loadSettings = (): AppSettings => {

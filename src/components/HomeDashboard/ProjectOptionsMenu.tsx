@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, Image } from 'react-native';
+import { View, Text, Modal, Image } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from './HomeDashboardStyles';
 import { soundEngine } from '../../utils/audioEngine';

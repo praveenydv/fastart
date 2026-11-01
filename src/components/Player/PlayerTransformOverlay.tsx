@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
 import { styles } from "./PlayerStyles";
@@ -22,6 +23,7 @@ interface PlayerTransformOverlayProps {
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   onOpenMaskModal?: (clipId: string) => void;
   onOpenAnimationModal?: () => void;
+  onDuplicateClip?: (clipId: string, clipType: string) => void;
   onDeleteClip?: (clipId: string, clipType: string) => void;
   handleEnterCropMode: (clipId?: string) => void;
   handleStartDrag: (
@@ -63,6 +65,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   onOpenEditModal,
   onOpenMaskModal,
   onOpenAnimationModal,
+  onDuplicateClip,
   onDeleteClip,
   handleEnterCropMode,
   handleStartDrag,
@@ -718,6 +721,39 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                 <Ionicons name="play-circle-outline" size={13} color="#A78BFA" />
                 <Text style={[styles.floatingBtnText, { color: "#A78BFA" }]}>
                   Anim
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Duplicate / Copy Action */}
+            {onDuplicateClip && (
+              <TouchableOpacity
+                style={styles.floatingActionBtn}
+                onPress={() => {
+                  soundEngine.playSfx("pop");
+                  onDuplicateClip(
+                    activeTransformItem.id,
+                    activeTransformItem.type,
+                  );
+                }}
+                {...(Platform.OS === "web"
+                  ? ({
+                      onClick: (e: any) => {
+                        e.stopPropagation?.();
+                        soundEngine.playSfx("pop");
+                        onDuplicateClip(
+                          activeTransformItem.id,
+                          activeTransformItem.type,
+                        );
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation?.(),
+                    } as any)
+                  : {})}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="copy-outline" size={13} color="#00E5C9" />
+                <Text style={[styles.floatingBtnText, { color: "#00E5C9" }]}>
+                  Copy
                 </Text>
               </TouchableOpacity>
             )}

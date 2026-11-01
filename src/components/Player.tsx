@@ -5,7 +5,8 @@ import React, {
   useState,
   useMemo,
 } from "react";
-import { View, Text, TouchableOpacity, Platform, ActivityIndicator } from "react-native";
+import { View, Text, Platform, ActivityIndicator } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../utils/audioEngine";
 import { PlayerProps, TransientTransformState } from "./Player/playerTypes";
@@ -30,6 +31,7 @@ import { useActiveTransformItem } from "./Player/useActiveTransformItem";
 import { getExportResolutionDimensions } from "./Panels/Export/exportTypes";
 import { THEME_COLORS } from "../constants/designConstants";
 import { relinkMediaFile, reconnectLinkedMedia } from "../utils/largeMediaStorage";
+import { MaskConfig } from "../types/project";
 
 const EMPTY_ARRAY: any[] = Object.freeze([]) as any[];
 
@@ -90,6 +92,21 @@ function Player({
   const [showSafeZone, setShowSafeZone] = useState(false);
   const [activeTransient, setActiveTransient] =
     useState<TransientTransformState | null>(null);
+
+  const handleTransientMaskUpdate = useCallback((clipId: string, mask: MaskConfig | null) => {
+    if (!mask) {
+      setActiveTransient(null);
+    } else {
+      setActiveTransient((prev) => ({
+        clipId,
+        x: prev?.clipId === clipId ? prev.x : 0,
+        y: prev?.clipId === clipId ? prev.y : 0,
+        scale: prev?.clipId === clipId ? prev.scale : 1,
+        rotation: prev?.clipId === clipId ? prev.rotation : 0,
+        mask,
+      }));
+    }
+  }, []);
 
   // Clear transient state when changing selected clip to prevent transform bleed
   useEffect(() => {
@@ -727,6 +744,7 @@ function Player({
                 currentTime={currentTime}
                 project={project}
                 onUpdateClipMask={onUpdateClipMask}
+                onTransientMaskUpdate={handleTransientMaskUpdate}
                 onCloseMaskPreview={() => {
                   if (onToggleMaskPreview) onToggleMaskPreview(false);
                   setInternalMaskingMode(false);
@@ -779,6 +797,7 @@ function Player({
                 onOpenEditModal={onOpenEditModal}
                 onOpenMaskModal={onOpenMaskModal}
                 onOpenAnimationModal={onOpenAnimationModal}
+                onDuplicateClip={onDuplicateClip}
                 onDeleteClip={onDeleteClip}
                 handleEnterCropMode={handleEnterCropMode}
                 handleStartDrag={handleStartDrag}
@@ -829,6 +848,30 @@ function Player({
           {/* Safe Zone Grid & Social UI Overlay */}
           {showSafeZone && (
             <View style={styles.safeZoneBox} pointerEvents="none">
+              {/* Badge indicator */}
+              <View
+                style={{
+                  position: "absolute",
+                  top: 6,
+                  right: 6,
+                  backgroundColor: "rgba(0, 0, 0, 0.75)",
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 4,
+                  borderWidth: 1,
+                  borderColor: "rgba(0, 229, 201, 0.4)",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 3,
+                  zIndex: 10,
+                }}
+              >
+                <Ionicons name="shield-checkmark-outline" size={10} color="#00E5C9" />
+                <Text style={{ color: "#00E5C9", fontSize: 8.5, fontWeight: "700" }}>
+                  SAFE ZONE ACTIVE
+                </Text>
+              </View>
+
               {/* 3x3 Rule of Thirds Grid */}
               <View style={styles.safeZoneLineHoriz} />
               <View style={styles.safeZoneLineVert} />
@@ -1176,6 +1219,7 @@ function Player({
           totalDuration={totalDuration}
           isPlaying={isPlaying}
           onTogglePlay={onTogglePlay}
+          onSeek={onSeek}
           stepFrame={stepFrame}
           showSafeZone={showSafeZone}
           setShowSafeZone={setShowSafeZone}

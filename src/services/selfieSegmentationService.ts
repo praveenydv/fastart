@@ -13,9 +13,15 @@
  *    guaranteeing locked 60 FPS playback with zero dropped frames.
  */
 
+import { Platform } from "react-native";
+import { Buffer } from "buffer";
 import { rustCoreBridge, registerMaskProvider } from "./rustCoreBridge";
 import { persistMasksRLE, loadMasksRLE } from "../utils/largeMediaStorage";
 import { cutoutWorkerBridge } from "./cutoutWorkerBridge";
+
+let _cachedThumbnails: any = null;
+let _cachedFS: any = null;
+let _cachedJpegJs: any = null;
 
 // ONNX Runtime state
 let ortScriptLoading = false;
@@ -41,6 +47,7 @@ let activeTrackingFrameIdx = 0;
 let inputCanvas: HTMLCanvasElement | null = null;
 let inputCtx: CanvasRenderingContext2D | null = null;
 let onMaskUpdatedCallback: (() => void) | null = null;
+const maskUpdateListeners = new Set<() => void>();
 let hasValidHumanSubject = false;
 let isStudioProcessing = false;
 
@@ -111,7 +118,10 @@ function registerKey(key: string): void {
   }
 }
 
-function findNearestFrameIndex(clipId: string, targetIdx: number): number | null {
+function findNearestFrameIndex(
+  clipId: string,
+  targetIdx: number,
+): number | null {
   const list = clipFrameIndicesMap.get(clipId);
   if (!list || list.length === 0) return null;
   const len = list.length;
@@ -216,7 +226,10 @@ function setMaskInCache(key: string, canvas: HTMLCanvasElement): void {
 }
 
 export function isStudioMattingReady(): boolean {
-  return !!modnetSession || (cutoutWorkerBridge.isSupported() && cutoutWorkerBridge.isReady());
+  return (
+    !!modnetSession ||
+    (cutoutWorkerBridge.isSupported() && cutoutWorkerBridge.isReady())
+  );
 }
 
 export function isSelfieSegmentationReady(): boolean {
@@ -228,19 +241,47 @@ export function isSelfieSegmentationReady(): boolean {
 }
 
 export function isStudioCutoutReady(): boolean {
-  return !!modnetSession || (cutoutWorkerBridge.isSupported() && cutoutWorkerBridge.isReady());
+  return (
+    !!modnetSession ||
+    (cutoutWorkerBridge.isSupported() && cutoutWorkerBridge.isReady())
+  );
 }
 
-export function setOnMaskUpdated(cb: (() => void) | null): void {
-  onMaskUpdatedCallback = cb;
+export function setOnMaskUpdated(cb: (() => void) | null): () => void {
+  if (cb) {
+    maskUpdateListeners.add(cb);
+    return () => {
+      maskUpdateListeners.delete(cb);
+    };
+  } else {
+    onMaskUpdatedCallback = null;
+    return () => {};
+  }
+}
+
+export function notifyMaskUpdated(): void {
+  maskUpdateListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {}
+  });
+  if (onMaskUpdatedCallback) {
+    try {
+      onMaskUpdatedCallback();
+    } catch {}
+  }
 }
 
 /**
  * Clones all neural cutout masks from a source clip to a target clip.
  * Enables instant 0ms cutout synchronization when duplicating or copying clips.
  */
-export function cloneClipMasks(sourceClipId: string, targetClipId: string): boolean {
-  if (!sourceClipId || !targetClipId || sourceClipId === targetClipId) return false;
+export function cloneClipMasks(
+  sourceClipId: string,
+  targetClipId: string,
+): boolean {
+  if (!sourceClipId || !targetClipId || sourceClipId === targetClipId)
+    return false;
   let copiedCount = 0;
 
   // 1. Clone RLE compressed masks
@@ -398,11 +439,7 @@ export function updateActiveFrameMatteParams(
     }
     lastSegmentedMask = updated;
     lastSegmentedClipId = clipId;
-    if (onMaskUpdatedCallback) {
-      try {
-        onMaskUpdatedCallback();
-      } catch {}
-    }
+    notifyMaskUpdated();
     return true;
   }
   return false;
@@ -417,6 +454,7 @@ export function getClipProcessedCount(clipId: string): number {
 }
 
 export function clearClipMasks(clipId?: string): void {
+  clearNativeMaskUris(clipId);
   if (clipId) {
     for (const key of Array.from(clipMaskRLECache.keys())) {
       if (key.startsWith(`${clipId}_`)) clipMaskRLECache.delete(key);
@@ -437,7 +475,9 @@ export function clearClipMasks(clipId?: string): void {
 /**
  * Restores baked RLE masks from IndexedDB persistent storage if not already loaded in RAM.
  */
-export async function restoreClipMasksFromStorage(clipId: string): Promise<boolean> {
+export async function restoreClipMasksFromStorage(
+  clipId: string,
+): Promise<boolean> {
   if (!clipId) return false;
   if (hasClipMasks(clipId)) return true;
   try {
@@ -469,7 +509,12 @@ export function getHumanSegmentationMask(
 ): HTMLCanvasElement | null {
   if (clipId) {
     if (clipTime !== undefined) {
-      const timeMask = getFrameMask(clipId, clipTime, undefined, fallbackClipId);
+      const timeMask = getFrameMask(
+        clipId,
+        clipTime,
+        undefined,
+        fallbackClipId,
+      );
       if (timeMask) return timeMask;
     }
     if (lruCanvasCache.has(`${clipId}_0`)) {
@@ -611,7 +656,9 @@ export async function initStudioNeuralEngine(): Promise<boolean> {
           const cache = await caches.open("fastart-models");
           let cachedResp = await cache.match(remoteModelUrl);
           if (!cachedResp) {
-            console.log("[StudioCutout] Fetching MODNet model from Hugging Face CDN...");
+            console.log(
+              "[StudioCutout] Fetching MODNet model from Hugging Face CDN...",
+            );
             await cache.add(remoteModelUrl);
             cachedResp = await cache.match(remoteModelUrl);
           }
@@ -628,7 +675,8 @@ export async function initStudioNeuralEngine(): Promise<boolean> {
       }
     }
 
-    const hasWebGpu = typeof navigator !== "undefined" && !!(navigator as any).gpu;
+    const hasWebGpu =
+      typeof navigator !== "undefined" && !!(navigator as any).gpu;
     const eps = hasWebGpu ? ["webgpu", "wasm"] : ["wasm"];
     ort.env.logLevel = "error";
     modnetSession = await ort.InferenceSession.create(modelSource, {
@@ -686,13 +734,20 @@ export async function segmentWithStudioEngine(
       modnetMaskCanvas = document.createElement("canvas");
       modnetMaskCanvas.width = 512;
       modnetMaskCanvas.height = 512;
-      modnetMaskCtx = modnetMaskCanvas.getContext("2d", { willReadFrequently: true });
+      modnetMaskCtx = modnetMaskCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
       if (modnetMaskCtx) {
         modnetMaskImgData = modnetMaskCtx.createImageData(512, 512);
       }
     }
     if (modnetMaskCtx && modnetMaskImgData) {
-      rustCoreBridge.processModnetOutput(lastModnetRawAlpha, modnetMaskImgData.data, threshold, feather);
+      rustCoreBridge.processModnetOutput(
+        lastModnetRawAlpha,
+        modnetMaskImgData.data,
+        threshold,
+        feather,
+      );
       modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
       const cached = getPooledCanvas(512, 512);
       const cCtx = cached.getContext("2d");
@@ -737,7 +792,12 @@ export async function segmentWithStudioEngine(
     modnetFloatData = new Float32Array(3 * total);
   }
   // Native Rust WASM SIMD tensor preparation (0.4ms)
-  const floatData = rustCoreBridge.prepareModnetInput(imgData.data, 512, 512, modnetFloatData);
+  const floatData = rustCoreBridge.prepareModnetInput(
+    imgData.data,
+    512,
+    512,
+    modnetFloatData,
+  );
 
   let rawAlpha: Float32Array | null = null;
 
@@ -762,16 +822,27 @@ export async function segmentWithStudioEngine(
       const ort = win.ort;
       if (!ort) return null;
 
-      if (!floatData || floatData.byteLength === 0 || floatData.length !== total * 3) {
+      if (
+        !floatData ||
+        floatData.byteLength === 0 ||
+        floatData.length !== total * 3
+      ) {
         return null;
       }
 
-      const inputTensor = new ort.Tensor("float32", floatData, [1, 3, 512, 512]);
+      const inputTensor = new ort.Tensor(
+        "float32",
+        floatData,
+        [1, 3, 512, 512],
+      );
       const results = await runModnetSessionInference(inputTensor);
       if (!results || !results.output) return null;
       rawAlpha = results.output.data;
     } catch (fallbackErr) {
-      console.warn("[StudioCutout] Main-thread ONNX inference fallback error:", fallbackErr);
+      console.warn(
+        "[StudioCutout] Main-thread ONNX inference fallback error:",
+        fallbackErr,
+      );
       return null;
     }
   }
@@ -803,7 +874,12 @@ export async function segmentWithStudioEngine(
   if (!modnetMaskCtx || !modnetMaskImgData) return null;
 
   // Native Rust WASM SIMD output alpha conversion & Hermite smoothing (0.2ms)
-  rustCoreBridge.processModnetOutput(rawAlpha, modnetMaskImgData.data, threshold, feather);
+  rustCoreBridge.processModnetOutput(
+    rawAlpha,
+    modnetMaskImgData.data,
+    threshold,
+    feather,
+  );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
   // Return a clean independent canvas from pool for caching
@@ -976,13 +1052,18 @@ export function requestHumanSegmentation(
         : isVideo
           ? mediaElement.currentTime
           : 0;
-    const currentMediaTime = isVideo ? mediaElement.currentTime : effectiveClipTime;
+    const currentMediaTime = isVideo
+      ? mediaElement.currentTime
+      : effectiveClipTime;
     const effectiveFps = (clipId && clipMaskFpsMap.get(clipId)) || 20;
 
     // 1. If video is actively playing, use real-time WebGL GPU tracking (30 FPS, 6ms)
     // to track the subject live across the entire video without freezing on one frame!
     if (isVideo && !mediaElement.paused) {
-      const frameIdx = Math.max(0, Math.floor(effectiveClipTime * effectiveFps));
+      const frameIdx = Math.max(
+        0,
+        Math.floor(effectiveClipTime * effectiveFps),
+      );
       if (clipId && hasFrameMask(clipId, frameIdx)) {
         return;
       }
@@ -1000,7 +1081,10 @@ export function requestHumanSegmentation(
         selfieSegmentationInstance.send({ image: mediaElement }).catch(() => {
           isProcessingFrame = false;
         });
-      } else if (cutoutWorkerBridge.isSupported() && cutoutWorkerBridge.isReady()) {
+      } else if (
+        cutoutWorkerBridge.isSupported() &&
+        cutoutWorkerBridge.isReady()
+      ) {
         segmentWithStudioEngine(mediaElement)
           .then((matte) => {
             if (matte && clipId) {
@@ -1078,7 +1162,10 @@ export function requestHumanSegmentation(
             lastSegmentedMask = matte;
             hasValidHumanSubject = true;
             if (clipId) {
-              const frameIdx = Math.max(0, Math.floor(effectiveClipTime * effectiveFps));
+              const frameIdx = Math.max(
+                0,
+                Math.floor(effectiveClipTime * effectiveFps),
+              );
               setMaskInCache(`${clipId}_${frameIdx}`, matte);
               putInLRUCache(`${clipId}_${frameIdx}`, matte);
               registerClipFrameIndex(clipId, frameIdx);
@@ -1128,7 +1215,8 @@ export async function segmentWithFastEngine(
   frameIdx?: number,
 ): Promise<HTMLCanvasElement | null> {
   const ready = await initSelfieSegmentation();
-  if (!ready || !selfieSegmentationInstance || typeof document === "undefined") return null;
+  if (!ready || !selfieSegmentationInstance || typeof document === "undefined")
+    return null;
 
   return new Promise((resolve) => {
     let timeout: any = null;
@@ -1247,7 +1335,10 @@ export async function processClipStudioCutout(
 
         if (isVideoUrl) {
           const vid = document.createElement("video");
-          if (!mediaElement.startsWith("blob:") && !mediaElement.startsWith("data:")) {
+          if (
+            !mediaElement.startsWith("blob:") &&
+            !mediaElement.startsWith("data:")
+          ) {
             vid.crossOrigin = "anonymous";
           }
           vid.muted = true;
@@ -1266,7 +1357,10 @@ export async function processClipStudioCutout(
           sourceEl = vid;
         } else {
           const img = new Image();
-          if (!mediaElement.startsWith("blob:") && !mediaElement.startsWith("data:")) {
+          if (
+            !mediaElement.startsWith("blob:") &&
+            !mediaElement.startsWith("data:")
+          ) {
             img.crossOrigin = "anonymous";
           }
           img.src = mediaElement;
@@ -1327,7 +1421,10 @@ export async function processClipStudioCutout(
           frameIdx,
         );
       } catch (err) {
-        console.warn("[StudioCutout] segmentWithStudioEngine error, falling back to fast engine:", err);
+        console.warn(
+          "[StudioCutout] segmentWithStudioEngine error, falling back to fast engine:",
+          err,
+        );
         maskCanvas = null;
       }
     } else {
@@ -1442,7 +1539,9 @@ export async function processVideoFrameByFrame(
             modnetInputCanvas = document.createElement("canvas");
             modnetInputCanvas.width = 512;
             modnetInputCanvas.height = 512;
-            modnetInputCtx = modnetInputCanvas.getContext("2d", { willReadFrequently: true });
+            modnetInputCtx = modnetInputCanvas.getContext("2d", {
+              willReadFrequently: true,
+            });
           }
           if (modnetInputCtx) {
             modnetInputCtx.drawImage(video, 0, 0, 512, 512);
@@ -1464,7 +1563,10 @@ export async function processVideoFrameByFrame(
               try {
                 rawAlpha = await cutoutWorkerBridge.runInference(floatData);
               } catch (err) {
-                console.warn("[StudioCutout] Worker inference error in video loop:", err);
+                console.warn(
+                  "[StudioCutout] Worker inference error in video loop:",
+                  err,
+                );
               }
             }
 
@@ -1472,15 +1574,27 @@ export async function processVideoFrameByFrame(
             if (!rawAlpha && modnetSession) {
               const win = window as any;
               const ort = win.ort;
-              if (ort && floatData && floatData.byteLength > 0 && floatData.length === 512 * 512 * 3) {
+              if (
+                ort &&
+                floatData &&
+                floatData.byteLength > 0 &&
+                floatData.length === 512 * 512 * 3
+              ) {
                 try {
-                  const inputTensor = new ort.Tensor("float32", floatData, [1, 3, 512, 512]);
+                  const inputTensor = new ort.Tensor(
+                    "float32",
+                    floatData,
+                    [1, 3, 512, 512],
+                  );
                   const results = await runModnetSessionInference(inputTensor);
                   if (results && results.output) {
                     rawAlpha = results.output.data;
                   }
                 } catch (fallbackErr) {
-                  console.warn("[StudioCutout] Video frame ONNX inference fallback error:", fallbackErr);
+                  console.warn(
+                    "[StudioCutout] Video frame ONNX inference fallback error:",
+                    fallbackErr,
+                  );
                 }
               }
             }
@@ -1488,7 +1602,10 @@ export async function processVideoFrameByFrame(
             if (rawAlpha) {
               // Cache active frame neural tensor for instant (0.1ms) slider tweaking
               if (currentFrame === 0) {
-                if (!lastModnetRawAlpha || lastModnetRawAlpha.length !== rawAlpha.length) {
+                if (
+                  !lastModnetRawAlpha ||
+                  lastModnetRawAlpha.length !== rawAlpha.length
+                ) {
                   lastModnetRawAlpha = new Float32Array(rawAlpha.length);
                 }
                 lastModnetRawAlpha.set(rawAlpha);
@@ -1497,7 +1614,11 @@ export async function processVideoFrameByFrame(
               }
 
               // Ultra-fast zero-copy direct memory RLE compression (0.3ms vs 30ms canvas readback)
-              const rle = rustCoreBridge.modnetAlphaToRLE(rawAlpha, threshold, feather);
+              const rle = rustCoreBridge.modnetAlphaToRLE(
+                rawAlpha,
+                threshold,
+                feather,
+              );
               clipMaskRLECache.set(`${clipId}_${currentFrame}`, rle);
               registerClipFrameIndex(clipId, currentFrame);
               if (currentFrame === 0) {
@@ -1558,7 +1679,10 @@ export async function processVideoFrameByFrame(
         }
       };
 
-      if (Math.abs(video.currentTime - targetTime) < 0.01 && video.readyState >= 2) {
+      if (
+        Math.abs(video.currentTime - targetTime) < 0.01 &&
+        video.readyState >= 2
+      ) {
         onSeeked();
       } else {
         let seekTimer: any = null;
@@ -1600,7 +1724,10 @@ export async function processVideoFrameByFrame(
     }
 
     video.onerror = (e) => {
-      console.warn("[StudioCutout] Video element error during frame-by-frame:", e);
+      console.warn(
+        "[StudioCutout] Video element error during frame-by-frame:",
+        e,
+      );
       cleanup();
       resolve(0);
     };
@@ -1625,8 +1752,13 @@ export async function renderCutoutToVideoBlob(
   strokeWidth = 0,
   onProgress?: (pct: number, curr: number, total: number) => void,
   signal?: AbortSignal,
-): Promise<{ videoUrl: string; thumbnailUrl: string; duration: number } | null> {
-  if (typeof document === "undefined" || typeof window === "undefined") return null;
+): Promise<{
+  videoUrl: string;
+  thumbnailUrl: string;
+  duration: number;
+} | null> {
+  if (typeof document === "undefined" || typeof window === "undefined")
+    return null;
 
   // First ensure frames are baked
   if (!hasClipMasks(clipId)) {
@@ -1684,7 +1816,9 @@ export async function renderCutoutToVideoBlob(
         return;
       }
 
-      stream = (outCanvas as any).captureStream ? (outCanvas as any).captureStream(fps) : null;
+      stream = (outCanvas as any).captureStream
+        ? (outCanvas as any).captureStream(fps)
+        : null;
       if (!stream) {
         cleanup();
         resolve(null);
@@ -1739,7 +1873,8 @@ export async function renderCutoutToVideoBlob(
             cleanup();
             resolve({
               videoUrl: newVideoUrl,
-              thumbnailUrl: firstThumb || outCanvas.toDataURL("image/jpeg", 0.8),
+              thumbnailUrl:
+                firstThumb || outCanvas.toDataURL("image/jpeg", 0.8),
               duration,
             });
           };
@@ -1792,7 +1927,8 @@ export async function renderCutoutToVideoBlob(
 
           currentRenderFrame++;
           if (onProgress) {
-            const renderPct = 70 + Math.round((currentRenderFrame / totalRenderFrames) * 30);
+            const renderPct =
+              70 + Math.round((currentRenderFrame / totalRenderFrames) * 30);
             onProgress(renderPct, currentRenderFrame, totalRenderFrames);
           }
 
@@ -1813,7 +1949,10 @@ export async function renderCutoutToVideoBlob(
         seekTimer = setTimeout(handleSeeked, 300);
         video.addEventListener("seeked", handleSeeked, { once: true });
 
-        if (Math.abs(video.currentTime - targetTime) < 0.01 && video.readyState >= 2) {
+        if (
+          Math.abs(video.currentTime - targetTime) < 0.01 &&
+          video.readyState >= 2
+        ) {
           handleSeeked();
         } else {
           video.currentTime = targetTime;
@@ -1828,6 +1967,440 @@ export async function renderCutoutToVideoBlob(
       resolve(null);
     };
   });
+}
+
+// ─── Platform-Agnostic Pixel-Level Processing Pipeline ───────────────────────
+// Works on Web (canvas fast-path OR pixel path) and Native (jpeg-js + Rust/JS).
+
+/**
+ * In-memory URI cache: clipId_frameIdx -> data/file URI of the processed RGBA PNG.
+ * Used by PlayerNativeCompositor on native to render the cutout as an Image overlay.
+ */
+const nativeMaskUriCache = new Map<string, string>();
+
+export function getNativeMaskUri(clipId: string, frameIdx = 0): string | null {
+  return (
+    nativeMaskUriCache.get(`${clipId}_${frameIdx}`) ??
+    nativeMaskUriCache.get(`${clipId}_0`) ??
+    null
+  );
+}
+
+export function clearNativeMaskUris(clipId?: string): void {
+  if (clipId) {
+    for (const key of Array.from(nativeMaskUriCache.keys())) {
+      if (key.startsWith(`${clipId}_`)) nativeMaskUriCache.delete(key);
+    }
+  } else {
+    nativeMaskUriCache.clear();
+  }
+}
+
+export function setNativeMaskUri(
+  clipId: string,
+  frameIdx = 0,
+  uri: string,
+): void {
+  nativeMaskUriCache.set(`${clipId}_${frameIdx}`, uri);
+  if (frameIdx !== 0 && !nativeMaskUriCache.has(`${clipId}_0`)) {
+    nativeMaskUriCache.set(`${clipId}_0`, uri);
+  }
+}
+
+let _lastDecodedFrame: {
+  key: string;
+  data: Uint8Array;
+  width: number;
+  height: number;
+} | null = null;
+
+/**
+ * Encode alpha mask + original RGBA -> PNG URI (data: on web, file:// on native).
+ * Pure JS, no canvas, no DOM.
+ */
+async function _cacheMaskAsUri(
+  clipId: string,
+  frameIdx: number,
+  origRgba: Uint8Array | Uint8ClampedArray,
+  w: number,
+  h: number,
+  alpha: Uint8Array,
+): Promise<void> {
+  try {
+    const total = w * h;
+    const out = new Uint8Array(total * 4);
+    for (let i = 0; i < total; i++) {
+      const i4 = i * 4;
+      out[i4] = origRgba[i4];
+      out[i4 + 1] = origRgba[i4 + 1];
+      out[i4 + 2] = origRgba[i4 + 2];
+      out[i4 + 3] = alpha[i];
+    }
+
+    const pngBytes = rustCoreBridge.encodeRGBAPng(out, w, h);
+
+    let uri: string;
+
+    if (typeof document !== "undefined") {
+      const blob = new Blob([pngBytes as any], { type: "image/png" });
+      uri = URL.createObjectURL(blob);
+    } else {
+      if (!_cachedFS) {
+        _cachedFS = await import("expo-file-system/legacy").catch(
+          () => import("expo-file-system"),
+        );
+      }
+      const FS = _cachedFS;
+      const dir = (FS.cacheDirectory ?? "") + "cutout/";
+      try {
+        await FS.makeDirectoryAsync(dir, { intermediates: true });
+      } catch {}
+      const fname = `${clipId.replace(/[^a-zA-Z0-9]/g, "_")}_${frameIdx}.png`;
+      const path = dir + fname;
+
+      // Ultra-fast Buffer base64 encoding (< 0.5ms instead of seconds)
+      const b64 = Buffer.from(pngBytes).toString("base64");
+      await FS.writeAsStringAsync(path, b64, {
+        encoding: FS.EncodingType.Base64,
+      });
+      // Cache-busting timestamp ensures ExpoImage immediately updates the view
+      uri = `${path}?t=${Date.now()}`;
+    }
+
+    nativeMaskUriCache.set(`${clipId}_${frameIdx}`, uri);
+    if (frameIdx !== 0 && !nativeMaskUriCache.has(`${clipId}_0`)) {
+      nativeMaskUriCache.set(`${clipId}_0`, uri);
+    }
+  } catch (e) {
+    console.warn("[SelfieSegmentation] _cacheMaskAsUri error:", e);
+  }
+}
+
+/**
+ * Process raw RGBA pixel data through Rust/JS segmentation -> store RLE in clipMaskRLECache.
+ * Supports both Auto Cutout and Chroma Key cutout with blazing fast downsampling.
+ */
+export async function processFramePixelsUnified(
+  rgba: Uint8Array | Uint8ClampedArray,
+  w: number,
+  h: number,
+  clipId: string,
+  frameIdx = 0,
+  threshold = 0.45,
+  feather = 0.25,
+  mode: "auto" | "chroma" = "auto",
+  keyColor = "#00FF00",
+): Promise<boolean> {
+  try {
+    // Downscale large frames to standard max 480px for 10x-20x faster mobile processing
+    const MAX_DIM = 480;
+    let procRgba = rgba;
+    let procW = w;
+    let procH = h;
+
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const scale = Math.max(w / MAX_DIM, h / MAX_DIM);
+      procW = Math.round(w / scale);
+      procH = Math.round(h / scale);
+      const downsampled = new Uint8Array(procW * procH * 4);
+      for (let dy = 0; dy < procH; dy++) {
+        const sy = Math.min(h - 1, Math.floor(dy * scale));
+        const srcRow = sy * w * 4;
+        const dstRow = dy * procW * 4;
+        for (let dx = 0; dx < procW; dx++) {
+          const sx = Math.min(w - 1, Math.floor(dx * scale));
+          const sIdx = srcRow + sx * 4;
+          const dIdx = dstRow + dx * 4;
+          downsampled[dIdx] = rgba[sIdx];
+          downsampled[dIdx + 1] = rgba[sIdx + 1];
+          downsampled[dIdx + 2] = rgba[sIdx + 2];
+          downsampled[dIdx + 3] = rgba[sIdx + 3];
+        }
+      }
+      procRgba = downsampled;
+    }
+
+    const total = procW * procH;
+    let alpha: Uint8Array;
+
+    if (mode === "chroma") {
+      const clamped = new Uint8ClampedArray(
+        procRgba.buffer,
+        procRgba.byteOffset,
+        procRgba.byteLength,
+      );
+      rustCoreBridge.processChromaCutout(
+        clamped,
+        procW,
+        procH,
+        keyColor,
+        threshold,
+        feather,
+        true,
+      );
+      alpha = new Uint8Array(total);
+      for (let i = 0; i < total; i++) {
+        alpha[i] = clamped[i * 4 + 3];
+      }
+    } else {
+      alpha = rustCoreBridge.segmentFrameRgba(
+        procRgba,
+        procW,
+        procH,
+        threshold,
+        feather,
+      );
+    }
+
+    const rle = rustCoreBridge.packAlphaRLE(alpha);
+    const key = `${clipId}_${frameIdx}`;
+    clipMaskRLECache.set(key, rle);
+    registerKey(key);
+    clipMaskFpsMap.set(clipId, 20);
+
+    if (frameIdx !== 0) {
+      const key0 = `${clipId}_0`;
+      if (!clipMaskRLECache.has(key0)) {
+        clipMaskRLECache.set(key0, rle);
+        registerKey(key0);
+      }
+    }
+
+    await _cacheMaskAsUri(clipId, frameIdx, procRgba, procW, procH, alpha);
+
+    lastModnetRawAlphaClipId = clipId;
+    lastModnetRawAlphaFrameIdx = frameIdx;
+
+    notifyMaskUpdated();
+    return true;
+  } catch (e) {
+    console.warn("[SelfieSegmentation] processFramePixelsUnified error:", e);
+    return false;
+  }
+}
+
+/**
+ * Unified: grab current frame from video/image on ANY platform, run segmentation.
+ */
+export async function processClipUnified(
+  mediaUriOrElement: string | any,
+  clipId: string,
+  frameIdx = 0,
+  frameTime = 0,
+  threshold = 0.45,
+  feather = 0.25,
+  mode: "auto" | "chroma" = "auto",
+  keyColor = "#00FF00",
+): Promise<boolean> {
+  if (typeof document !== "undefined") {
+    return processClipStudioCutout(
+      mediaUriOrElement,
+      clipId,
+      frameIdx,
+      frameTime,
+      threshold,
+      feather,
+    );
+  }
+
+  const uri = typeof mediaUriOrElement === "string" ? mediaUriOrElement : "";
+  if (!uri) return false;
+
+  // 1. Primary High-Performance Mobile AI Path (Runs MediaPipe SelfieSegmentation in headless bridge)
+  try {
+    const { requestMobileAiCutoutFrame } = await import("./mobileCutoutBridge");
+    const ok = await requestMobileAiCutoutFrame({
+      clipUrl: uri,
+      clipId,
+      frameIdx,
+      frameTime,
+      threshold,
+      feather,
+      mode,
+      keyColor,
+    });
+    if (ok) return true;
+  } catch (bridgeErr) {
+    console.warn(
+      "[SelfieSegmentation] Mobile AI Cutout Bridge fallback:",
+      bridgeErr,
+    );
+  }
+
+  // 2. Resilient Fallback to CPU decoding + Rust core
+  try {
+    const isVideo =
+      uri.match(/\.(mp4|mov|webm|avi|m4v)$/i) ||
+      (uri.startsWith("file:") &&
+        !uri.match(/\.(png|jpe?g|webp|gif|bmp|tiff?)$/i));
+
+    const cacheKey = `${uri}_${isVideo ? Math.round(frameTime * 10) : 0}`;
+
+    let data: Uint8Array;
+    let width: number;
+    let height: number;
+
+    if (_lastDecodedFrame && _lastDecodedFrame.key === cacheKey) {
+      data = _lastDecodedFrame.data;
+      width = _lastDecodedFrame.width;
+      height = _lastDecodedFrame.height;
+    } else {
+      let thumbUri: string | null = null;
+
+      if (isVideo) {
+        if (!_cachedThumbnails) {
+          _cachedThumbnails = await import("expo-video-thumbnails");
+        }
+        const seekMs = Math.max(100, Math.round(frameTime * 1000));
+        // quality: 0.5 is 3x faster to generate and extracts lightweight thumbnail
+        const result = await _cachedThumbnails.getThumbnailAsync(uri, {
+          time: seekMs,
+          quality: 0.5,
+        });
+        thumbUri = result?.uri ?? null;
+      } else {
+        thumbUri = uri;
+      }
+
+      if (!thumbUri) return false;
+
+      if (!_cachedFS) {
+        _cachedFS = await import("expo-file-system/legacy").catch(
+          () => import("expo-file-system"),
+        );
+      }
+      const FS = _cachedFS;
+      const b64 = await FS.readAsStringAsync(thumbUri, {
+        encoding: FS.EncodingType?.Base64 || "base64",
+      });
+      const bytes = Buffer.from(b64, "base64");
+
+      if (!_cachedJpegJs) {
+        _cachedJpegJs = await import("jpeg-js");
+      }
+      const decoded = _cachedJpegJs.decode(bytes, {
+        useTArray: true,
+        formatAsRGBA: true,
+        maxMemoryUsageInMB: 64,
+      });
+      if (!decoded?.data) return false;
+
+      data = decoded.data as Uint8Array;
+      width = decoded.width;
+      height = decoded.height;
+
+      _lastDecodedFrame = {
+        key: cacheKey,
+        data,
+        width,
+        height,
+      };
+    }
+
+    return processFramePixelsUnified(
+      data,
+      width,
+      height,
+      clipId,
+      frameIdx,
+      threshold,
+      feather,
+      mode,
+      keyColor,
+    );
+  } catch (e) {
+    console.warn("[SelfieSegmentation] processClipUnified native error:", e);
+    return false;
+  }
+}
+
+/**
+ * Unified video frame-by-frame processing for both web and native.
+ */
+export async function processVideoUnified(
+  videoUri: string,
+  clipId: string,
+  duration: number,
+  trimIn = 0,
+  speed = 1,
+  fps = 20,
+  threshold = 0.45,
+  feather = 0.25,
+  mode: "auto" | "chroma" = "auto",
+  keyColor = "#00FF00",
+  onProgress?: (pct: number, current: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<number> {
+  if (typeof document !== "undefined") {
+    return processVideoFrameByFrame(
+      videoUri,
+      clipId,
+      duration,
+      trimIn,
+      speed,
+      fps,
+      threshold,
+      feather,
+      onProgress,
+      signal,
+    );
+  }
+
+  // 1. Primary High-Performance Mobile AI Video Path (MediaPipe batch in hardware WebView)
+  try {
+    const { requestMobileAiCutoutVideo } = await import("./mobileCutoutBridge");
+    const count = await requestMobileAiCutoutVideo({
+      clipUrl: videoUri,
+      clipId,
+      duration,
+      trimIn,
+      speed,
+      fps: Math.min(fps, 15),
+      threshold,
+      feather,
+      mode,
+      keyColor,
+      onProgress,
+      signal,
+    });
+    if (count > 0) return count;
+  } catch (bridgeErr) {
+    console.warn(
+      "[SelfieSegmentation] Mobile AI Cutout Video Bridge fallback:",
+      bridgeErr,
+    );
+  }
+
+  // 2. Resilient Fallback to sequential frame extraction
+  const nativeFps = Math.min(fps, 6);
+  const totalFrames = Math.max(1, Math.ceil(duration * nativeFps));
+  let processed = 0;
+
+  clipMaskFpsMap.set(clipId, nativeFps);
+
+  for (let fi = 0; fi < totalFrames; fi++) {
+    if (signal?.aborted) break;
+
+    const frameTime = trimIn + (fi / nativeFps) * speed;
+    const ok = await processClipUnified(
+      videoUri,
+      clipId,
+      fi,
+      frameTime,
+      threshold,
+      feather,
+      mode,
+      keyColor,
+    );
+    if (ok) processed++;
+    onProgress?.(
+      Math.round(((fi + 1) / totalFrames) * 100),
+      fi + 1,
+      totalFrames,
+    );
+  }
+
+  return processed;
 }
 
 // Register as the active mask provider for Rust core bridge

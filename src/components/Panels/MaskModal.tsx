@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Platform,
 } from 'react-native';
+import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { MaskConfig, MaskShape } from '../../types/project';
@@ -29,9 +29,6 @@ interface MaskModalProps {
   onJumpPrevKeyframe?: () => void;
   onJumpNextKeyframe?: () => void;
 }
-
-const WebDiv: any = Platform.OS === 'web' ? 'div' : View;
-const WebInput: any = Platform.OS === 'web' ? 'input' : View;
 
 const MASK_SHAPES: { id: MaskShape; label: string; icon: string; desc: string }[] = [
   { id: 'none', label: 'None', icon: 'close-circle-outline', desc: 'Full Video' },

@@ -161,23 +161,27 @@ export function useTimelineResize({
         }
         setUserTimelineHeight(currentH);
         setIsResizingHeight(false);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        window.removeEventListener("mousemove", onPointerMove);
-        window.removeEventListener("mouseup", onPointerUp);
-        window.removeEventListener("touchmove", onPointerMove);
-        window.removeEventListener("touchend", onPointerUp);
-        window.removeEventListener("touchcancel", onPointerUp);
+        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+          window.removeEventListener("pointermove", onPointerMove);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("mousemove", onPointerMove);
+          window.removeEventListener("mouseup", onPointerUp);
+          window.removeEventListener("touchmove", onPointerMove);
+          window.removeEventListener("touchend", onPointerUp);
+          window.removeEventListener("touchcancel", onPointerUp);
+        }
         saveHeight(currentH);
       };
 
-      window.addEventListener("pointermove", onPointerMove, { passive: false });
-      window.addEventListener("pointerup", onPointerUp);
-      window.addEventListener("mousemove", onPointerMove);
-      window.addEventListener("mouseup", onPointerUp);
-      window.addEventListener("touchmove", onPointerMove, { passive: false });
-      window.addEventListener("touchend", onPointerUp);
-      window.addEventListener("touchcancel", onPointerUp);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("pointermove", onPointerMove, { passive: false });
+        window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("mousemove", onPointerMove);
+        window.addEventListener("mouseup", onPointerUp);
+        window.addEventListener("touchmove", onPointerMove, { passive: false });
+        window.addEventListener("touchend", onPointerUp);
+        window.addEventListener("touchcancel", onPointerUp);
+      }
     },
     [minTimelineHeight, maxTimelineHeight, saveHeight],
   );

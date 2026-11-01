@@ -89,6 +89,10 @@ export interface MotionTrackConfig {
   trackRotation?: boolean; // Rotate with subject tilt (default: true)
   mosaicStyle?: 'pixelate' | 'blur'; // Censor style
   mosaicRadius?: number; // Censor block/blur radius in px (default: 16)
+  mosaicShape?: 'circle' | 'rectangle'; // Censor shape (default: 'rectangle')
+  cameraFitToScreen?: boolean; // CapCut Camera Tracking: automatically zoom to fit screen without black borders (default: true)
+  cameraZoom?: number; // Custom camera zoom level (e.g. 1.0 to 2.5, default: 1.25)
+  cameraLockCenter?: boolean; // Center the tracked subject at (50%, 50%) of canvas (default: true)
   smoothness?: number; // Damping filter strength 0..100 (default: 60)
   anchorTime?: number; // Timeline time where tracking target was selected
   trackingStatus?: 'idle' | 'tracking' | 'completed' | 'failed';
