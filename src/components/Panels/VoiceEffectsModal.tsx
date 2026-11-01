@@ -132,14 +132,14 @@ export default function VoiceEffectsModal({
             <TouchableOpacity
               style={styles.cancelBtn}
               onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Ionicons name="close" size={20} color="#EF4444" />
+              <Ionicons name="close" size={14} color="#EF4444" />
             </TouchableOpacity>
 
             <View style={styles.headerTitleRow}>
               <View style={styles.headerIconBadge}>
-                <MaterialCommunityIcons name="account-voice" size={16} color="#00F2FE" />
+                <MaterialCommunityIcons name="account-voice" size={13} color="#00F2FE" />
               </View>
               <Text style={styles.headerTitle}>Voice Changer & Audio FX</Text>
             </View>
@@ -150,7 +150,7 @@ export default function VoiceEffectsModal({
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.applyBtn} onPress={handleDone}>
-                <Ionicons name="checkmark" size={18} color="#0B0D13" />
+                <Ionicons name="checkmark" size={14} color="#0B0D13" />
               </TouchableOpacity>
             </View>
           </View>
@@ -184,7 +184,7 @@ export default function VoiceEffectsModal({
                   >
                     <MaterialCommunityIcons
                       name={preset.icon as any}
-                      size={24}
+                      size={16}
                       color={preset.color}
                     />
                   </View>
@@ -217,7 +217,7 @@ export default function VoiceEffectsModal({
 
                   {isSelected && (
                     <View style={styles.selectedCheck}>
-                      <Ionicons name="checkmark-circle" size={18} color="#00F2FE" />
+                      <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -246,19 +246,19 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   header: {
-    height: 52,
+    height: 34,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.07)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     backgroundColor: '#12141F',
   },
   cancelBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -266,42 +266,42 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerIconBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 4,
     backgroundColor: 'rgba(0, 242, 254, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   resetBtnText: {
-    fontSize: 12,
+    fontSize: 9.5,
     color: '#A1A1AA',
-    fontWeight: '600',
+    fontWeight: '400',
   },
   applyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
@@ -310,38 +310,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: 8,
+    paddingBottom: 24,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 8.5,
+    fontWeight: '500',
     color: '#A1A1AA',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 12,
+    letterSpacing: 0.6,
+    marginBottom: 6,
   },
   presetGrid: {
-    gap: 10,
+    gap: 5,
   },
   presetCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#171926',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1.5,
+    borderRadius: 6,
+    padding: 6,
+    borderWidth: 1,
     borderColor: 'transparent',
-    gap: 12,
+    gap: 8,
   },
   presetCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   cardIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -351,30 +351,31 @@ const styles = StyleSheet.create({
   nameBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
+    gap: 6,
+    marginBottom: 1,
   },
   cardName: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '400',
     color: '#FFFFFF',
   },
   cardNameActive: {
     color: '#00F2FE',
+    fontWeight: '500',
   },
   tagBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
   },
   tagBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 8,
+    fontWeight: '400',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   cardDesc: {
-    fontSize: 11,
+    fontSize: 8.5,
     color: '#71717A',
   },
   selectedCheck: {

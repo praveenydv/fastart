@@ -21,10 +21,10 @@ export function useTimelineResize({
     : "fastart_timeline_height";
 
   // Min and max limits
-  // On mobile: generous range from 120px to up to 65% of screen height
-  const minTimelineHeight = isMobile ? 120 : 74;
+  // On mobile: comfortable range guaranteeing ample player preview room
+  const minTimelineHeight = isMobile ? 180 : 74;
   const maxTimelineHeight = isMobile
-    ? Math.max(260, Math.min(Math.round(screenHeight * 0.65), screenHeight - 140))
+    ? Math.min(Math.round(screenHeight * 0.60), Math.max(minTimelineHeight, screenHeight - 250))
     : Math.min(550, Math.max(280, Math.round(screenHeight * 0.55)));
 
   const defaultHeight = isMobile ? 200 : 220;

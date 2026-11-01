@@ -8,6 +8,7 @@
   "dependencies": {
     "@expo/metro-runtime": "~58.0.16",
     "@expo/vector-icons": "^15.0.2",
+    "@react-native-community/slider": "5.2.1",
     "@types/react": "~19.3.0",
     "@xenova/transformers": "^2.17.2",
     "buffer": "^6.0.3",

@@ -166,6 +166,7 @@ export default function TransformModal({
   const [perspective, setPerspective] = useState<number>(
     currentTransform?.perspective ?? 800,
   ); // 3D depth
+  const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
 
   const prevVisibleRef = useRef<boolean>(false);
   const prevInitialTabRef = useRef<string>(initialTab);
@@ -681,6 +682,9 @@ export default function TransformModal({
       <ScrollView
         style={styles.contentScroll}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!isSliderDragging}
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
       >
         {/* 1. CROP SECTION */}
         {activeTab === "crop" && (
@@ -741,6 +745,9 @@ export default function TransformModal({
                 unit="%"
                 defaultValue={100}
                 accentColor="#00F2FE"
+                showSteppers={true}
+                onDragStart={() => setIsSliderDragging(true)}
+                onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => {
                   setCropWidth(val);
                   setSelectedRatio("custom");
@@ -764,6 +771,9 @@ export default function TransformModal({
                 unit="%"
                 defaultValue={100}
                 accentColor="#00F2FE"
+                showSteppers={true}
+                onDragStart={() => setIsSliderDragging(true)}
+                onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => {
                   setCropHeight(val);
                   setSelectedRatio("custom");
@@ -857,6 +867,9 @@ export default function TransformModal({
                 defaultValue={0}
                 showReset={true}
                 accentColor="#00F2FE"
+                showSteppers={true}
+                onDragStart={() => setIsSliderDragging(true)}
+                onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => {
                   const normalized = (Math.round(val) + 360) % 360;
                   setRotation(normalized);
@@ -1127,6 +1140,9 @@ export default function TransformModal({
                   decimals={2}
                   defaultValue={1.0}
                   accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
                   onChange={(val) => handleUpdateScaleX(val)}
                 />
 
@@ -1184,6 +1200,9 @@ export default function TransformModal({
                   decimals={2}
                   defaultValue={1.0}
                   accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
                   onChange={(val) => handleUpdateScaleY(val)}
                 />
 
@@ -1639,8 +1658,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderColor: "#1F2637",
     backgroundColor: "#08090E",
@@ -1648,26 +1667,26 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     letterSpacing: 0.1,
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
   closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -1675,21 +1694,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabBarContainer: {
-    marginTop: 6,
-    marginBottom: 4,
+    marginTop: 3,
+    marginBottom: 2,
   },
   tabBarScroll: {
-    paddingHorizontal: 10,
-    gap: 6,
+    paddingHorizontal: 6,
+    gap: 4,
   },
   tabBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 7,
+    gap: 3,
+    paddingVertical: 3.5,
+    paddingHorizontal: 7,
+    borderRadius: 5,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -1699,45 +1718,45 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   tabBtnText: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "600",
+    color: "#8E95A5",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   tabBtnTextActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   contentScroll: {
-    paddingHorizontal: 10,
-    paddingTop: 6,
+    paddingHorizontal: 6,
+    paddingTop: 3,
   },
   sectionContainer: {
-    gap: 8,
-    paddingBottom: 16,
+    gap: 5,
+    paddingBottom: 8,
   },
   sectionLabel: {
-    color: "#94A3B8",
-    fontSize: 10.5,
-    fontWeight: "700",
+    color: "#8E95A5",
+    fontSize: 8.5,
+    fontWeight: "500",
     textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginTop: 2,
+    letterSpacing: 0.5,
+    marginTop: 1,
   },
   hintText: {
     color: "#64748B",
-    fontSize: 10,
-    lineHeight: 14,
-    marginBottom: 2,
+    fontSize: 8.5,
+    lineHeight: 12,
+    marginBottom: 1,
   },
   ratioScroll: {
-    gap: 8,
-    paddingVertical: 2,
+    gap: 4,
+    paddingVertical: 1,
   },
   ratioChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
     backgroundColor: "#131826",
-    borderRadius: 7,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
@@ -1746,45 +1765,45 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   ratioChipText: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "600",
+    color: "#8E95A5",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   ratioChipTextActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   screenCropBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
     backgroundColor: "rgba(0, 242, 254, 0.08)",
     borderWidth: 1,
     borderColor: "rgba(0, 242, 254, 0.25)",
-    paddingVertical: 8,
-    borderRadius: 7,
+    paddingVertical: 5,
+    borderRadius: 5,
   },
   screenCropBtnText: {
     color: "#00F2FE",
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
   },
   card: {
     backgroundColor: "#131826",
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 6,
+    padding: 6,
     borderWidth: 1,
     borderColor: "#1F2637",
-    gap: 8,
+    gap: 5,
   },
   sliderRow: {
-    gap: 3,
+    gap: 2,
   },
   sliderTitleWithIcon: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
   },
   labelValueRow: {
     flexDirection: "row",
@@ -1793,32 +1812,32 @@ const styles = StyleSheet.create({
   },
   sliderLabel: {
     color: "#E2E8F0",
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   badge: {
     color: "#00F2FE",
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
   },
   lockRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 4,
+    paddingBottom: 3,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
   },
   lockBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     backgroundColor: "rgba(0, 242, 254, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(0, 242, 254, 0.25)",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    paddingVertical: 2.5,
+    paddingHorizontal: 6,
+    borderRadius: 4,
   },
   lockBtnActive: {
     backgroundColor: "#00F2FE",
@@ -1826,64 +1845,64 @@ const styles = StyleSheet.create({
   },
   lockBtnText: {
     color: "#00F2FE",
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 8.5,
+    fontWeight: "400",
   },
   lockBtnTextActive: {
     color: "#08090E",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   actionBtnRow: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 4,
+    gap: 5,
+    marginTop: 2,
   },
   secondaryBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
-    paddingVertical: 8,
-    borderRadius: 7,
+    paddingVertical: 5,
+    borderRadius: 5,
   },
   secondaryBtnText: {
-    color: "#94A3B8",
-    fontSize: 11.5,
-    fontWeight: "600",
+    color: "#8E95A5",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   primaryActionBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: "#00F2FE",
-    paddingVertical: 8,
-    borderRadius: 7,
+    paddingVertical: 5,
+    borderRadius: 5,
   },
   primaryActionBtnText: {
     color: "#08090E",
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
   },
   flipGrid: {
     flexDirection: "row",
-    gap: 8,
+    gap: 5,
   },
   flipCard: {
     flex: 1,
     backgroundColor: "#08090E",
     borderWidth: 1,
     borderColor: "#1F2637",
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
     alignItems: "center",
-    gap: 4,
+    gap: 2,
   },
   flipCardActive: {
     backgroundColor: "rgba(0, 242, 254, 0.12)",
@@ -1891,17 +1910,17 @@ const styles = StyleSheet.create({
   },
   flipCardTitle: {
     color: "#FFFFFF",
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   flipCardTitleActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   flipCardSub: {
-    color: "#94A3B8",
-    fontSize: 9.5,
-    fontWeight: "500",
+    color: "#8E95A5",
+    fontSize: 8,
+    fontWeight: "400",
   },
   flipCardSubActive: {
     color: "#00F2FE",

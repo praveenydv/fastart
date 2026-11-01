@@ -8,8 +8,8 @@ import {
   Platform,
   StyleProp,
   ViewStyle,
-  PanResponder,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME_COLORS } from '../../constants/designConstants';
 
@@ -29,11 +29,13 @@ export interface CompactSliderInputProps {
   icon?: React.ReactNode;
   hint?: string;
   layout?: 'stack' | 'inline';    // 'stack' (label + input on top, slider below) or 'inline' (label, slider, input in 1 row)
-  inputWidth?: number;            // width of numeric input box (default ~52)
+  inputWidth?: number;            // width of numeric input box (default ~54)
   containerStyle?: StyleProp<ViewStyle>;
   disabled?: boolean;
   onChange: (value: number) => void;
   onChangeEnd?: (value: number) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   onReset?: () => void;
 }
 
@@ -58,6 +60,8 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   disabled = false,
   onChange,
   onChangeEnd,
+  onDragStart,
+  onDragEnd,
   onReset,
 }) => {
   // Determine appropriate decimal precision
@@ -75,15 +79,12 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
 
   const [textVal, setTextVal] = useState<string>(() => formatNumber(value));
   const [isFocused, setIsFocused] = useState<boolean>(false);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [_isDragging, setIsDragging] = useState<boolean>(false);
   const isDraggingRef = useRef<boolean>(false);
   const currentValueRef = useRef<number>(value);
   currentValueRef.current = value;
 
   const inputRef = useRef<any>(null);
-  const trackRef = useRef<any>(null);
-  const trackLayoutRef = useRef<{ left: number; width: number }>({ left: 0, width: 1 });
-  const capturedPointerIdRef = useRef<number | null>(null);
 
   // Sync internal text when external value changes and not focused
   useEffect(() => {
@@ -104,21 +105,28 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     onChangeEnd?.(rounded);
   };
 
-  const handleSliderChange = useCallback((raw: number) => {
-    if (disabled) return;
-    const clamped = Math.max(min, Math.min(max, raw));
-    const rounded = parseFloat(clamped.toFixed(precision));
-    setTextVal(formatNumber(rounded));
-    onChange(rounded);
-  }, [disabled, min, max, precision, onChange]);
+  const handleSliderChange = useCallback(
+    (raw: number) => {
+      if (disabled) return;
+      const clamped = Math.max(min, Math.min(max, raw));
+      const rounded = parseFloat(clamped.toFixed(precision));
+      currentValueRef.current = rounded;
+      setTextVal(formatNumber(rounded));
+      onChange(rounded);
+    },
+    [disabled, min, max, precision, onChange]
+  );
 
-  const handleStepDelta = useCallback((delta: number) => {
-    if (disabled) return;
-    const next = Math.max(min, Math.min(max, currentValueRef.current + delta));
-    const rounded = parseFloat(next.toFixed(precision));
-    handleSliderChange(rounded);
-    onChangeEnd?.(rounded);
-  }, [disabled, min, max, precision, handleSliderChange, onChangeEnd]);
+  const handleStepDelta = useCallback(
+    (delta: number) => {
+      if (disabled) return;
+      const next = Math.max(min, Math.min(max, currentValueRef.current + delta));
+      const rounded = parseFloat(next.toFixed(precision));
+      handleSliderChange(rounded);
+      onChangeEnd?.(rounded);
+    },
+    [disabled, min, max, precision, handleSliderChange, onChangeEnd]
+  );
 
   const handleReset = () => {
     if (disabled) return;
@@ -134,157 +142,6 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     (showReset || defaultValue !== undefined) &&
     defaultValue !== undefined &&
     Math.abs(value - defaultValue) > 0.0001;
-
-  // Percentage for track fill and thumb placement (clamped 0..100)
-  const range = Math.max(0.0001, max - min);
-  const percent = Math.max(0, Math.min(100, ((value - min) / range) * 100));
-
-  // ── Universal Pointer Event Handlers for Web (Supports Mouse, Touch & Pen with Pointer Capture) ──
-  const handlePointerDown = (e: any) => {
-    if (disabled) return;
-    setIsDragging(true);
-    isDraggingRef.current = true;
-
-    const target = e.currentTarget || e.target;
-    if (target) {
-      if (typeof target.setPointerCapture === 'function' && e.pointerId !== undefined) {
-        try {
-          target.setPointerCapture(e.pointerId);
-          capturedPointerIdRef.current = e.pointerId;
-        } catch (_) {}
-      }
-
-      if (typeof target.getBoundingClientRect === 'function') {
-        const rect = target.getBoundingClientRect();
-        if (rect && rect.width > 0) {
-          trackLayoutRef.current = { left: rect.left, width: rect.width };
-          const clientX = e.clientX ?? (e.nativeEvent && e.nativeEvent.clientX);
-          if (clientX !== undefined) {
-            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            const rawVal = min + ratio * (max - min);
-            const stepped = Math.round((rawVal - min) / step) * step + min;
-            handleSliderChange(stepped);
-          }
-        }
-      }
-    }
-  };
-
-  const handlePointerMove = (e: any) => {
-    if (!isDraggingRef.current || disabled) return;
-    const { left, width } = trackLayoutRef.current;
-    if (width <= 0) return;
-    const clientX = e.clientX ?? (e.nativeEvent && e.nativeEvent.clientX);
-    if (clientX === undefined) return;
-    const ratio = Math.max(0, Math.min(1, (clientX - left) / width));
-    const rawVal = min + ratio * (max - min);
-    const stepped = Math.round((rawVal - min) / step) * step + min;
-    handleSliderChange(stepped);
-  };
-
-  const handlePointerUp = (e: any) => {
-    if (!isDraggingRef.current) return;
-    setIsDragging(false);
-    isDraggingRef.current = false;
-
-    const target = e.currentTarget || e.target;
-    if (
-      target &&
-      typeof target.releasePointerCapture === 'function' &&
-      capturedPointerIdRef.current !== null
-    ) {
-      try {
-        target.releasePointerCapture(capturedPointerIdRef.current);
-      } catch (_) {}
-      capturedPointerIdRef.current = null;
-    }
-
-    onChangeEnd?.(currentValueRef.current);
-  };
-
-  // Keyboard navigation on Web (Arrow keys, Home, End, PageUp, PageDown)
-  const handleKeyDown = (e: any) => {
-    if (disabled) return;
-    let handled = false;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-      handleStepDelta(-step);
-      handled = true;
-    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-      handleStepDelta(step);
-      handled = true;
-    } else if (e.key === 'PageDown') {
-      handleStepDelta(-step * 5);
-      handled = true;
-    } else if (e.key === 'PageUp') {
-      handleStepDelta(step * 5);
-      handled = true;
-    } else if (e.key === 'Home') {
-      handleSliderChange(min);
-      onChangeEnd?.(min);
-      handled = true;
-    } else if (e.key === 'End') {
-      handleSliderChange(max);
-      onChangeEnd?.(max);
-      handled = true;
-    }
-    if (handled) {
-      e.preventDefault?.();
-      e.stopPropagation?.();
-    }
-  };
-
-  // ── PanResponder for Native iOS/Android ──
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabled,
-      onStartShouldSetPanResponderCapture: () => !disabled,
-      onMoveShouldSetPanResponder: () => !disabled,
-      onMoveShouldSetPanResponderCapture: () => !disabled,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (evt) => {
-        setIsDragging(true);
-        isDraggingRef.current = true;
-        const { pageX, locationX } = evt.nativeEvent;
-        const { width } = trackLayoutRef.current;
-        if (pageX !== undefined && locationX !== undefined) {
-          trackLayoutRef.current.left = pageX - locationX;
-        }
-        if (width > 0) {
-          const curX =
-            locationX !== undefined
-              ? locationX
-              : pageX !== undefined
-              ? pageX - trackLayoutRef.current.left
-              : 0;
-          const ratio = Math.max(0, Math.min(1, curX / width));
-          const rawVal = min + ratio * (max - min);
-          const stepped = Math.round((rawVal - min) / step) * step + min;
-          handleSliderChange(stepped);
-        }
-      },
-      onPanResponderMove: (evt) => {
-        if (!isDraggingRef.current || disabled) return;
-        const { pageX } = evt.nativeEvent;
-        const { left, width } = trackLayoutRef.current;
-        if (width > 0 && pageX !== undefined) {
-          const ratio = Math.max(0, Math.min(1, (pageX - left) / width));
-          const rawVal = min + ratio * (max - min);
-          const stepped = Math.round((rawVal - min) / step) * step + min;
-          handleSliderChange(stepped);
-        }
-      },
-      onPanResponderRelease: () => {
-        setIsDragging(false);
-        isDraggingRef.current = false;
-        onChangeEnd?.(currentValueRef.current);
-      },
-      onPanResponderTerminate: () => {
-        setIsDragging(false);
-        isDraggingRef.current = false;
-        onChangeEnd?.(currentValueRef.current);
-      },
-    })
-  ).current;
 
   // Small size numeric input component
   const renderSmallInput = () => (
@@ -341,86 +198,37 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     </View>
   );
 
-  // Universal interactive slider track (works seamlessly on Web and Mobile)
+  // Native Expo Slider component
   const renderSliderTrack = () => (
-    <View
-      ref={trackRef}
-      collapsable={false}
-      onLayout={(e) => {
-        const { width } = e.nativeEvent.layout;
-        trackLayoutRef.current.width = width;
-        if (Platform.OS === 'web' && trackRef.current) {
-          try {
-            const el = trackRef.current as any;
-            if (el && typeof el.getBoundingClientRect === 'function') {
-              const rect = el.getBoundingClientRect();
-              trackLayoutRef.current.left = rect.left;
-              trackLayoutRef.current.width = rect.width;
-            }
-          } catch (_) {}
-        } else if (trackRef.current && (trackRef.current as any).measureInWindow) {
-          (trackRef.current as any).measureInWindow((x: number) => {
-            if (x !== undefined && !isNaN(x)) {
-              trackLayoutRef.current.left = x;
-            }
-          });
-        }
-      }}
-      style={[
-        styles.sliderTrackHitbox,
-        Platform.OS === 'web'
-          ? ({
-              touchAction: 'none',
-              userSelect: 'none',
-              cursor: disabled ? 'not-allowed' : isDragging ? 'grabbing' : 'pointer',
-              outlineStyle: 'none',
-            } as any)
-          : null,
-      ]}
-      {...(Platform.OS === 'web'
-        ? {
-            onPointerDown: handlePointerDown,
-            onPointerMove: handlePointerMove,
-            onPointerUp: handlePointerUp,
-            onPointerCancel: handlePointerUp,
-            onKeyDown: handleKeyDown,
-            tabIndex: disabled ? -1 : 0,
-            role: 'slider',
-            'aria-valuenow': value,
-            'aria-valuemin': min,
-            'aria-valuemax': max,
-          }
-        : panResponder.panHandlers)}
-    >
-      {/* Background Track Line */}
-      <View style={styles.trackBackground} pointerEvents="none">
-        {/* Active Colored Progress Fill Bar */}
-        <View
-          style={[
-            styles.trackFill,
-            {
-              width: `${percent}%`,
-              backgroundColor: accentColor,
-            },
-          ]}
-        />
-      </View>
-
-      {/* Visual Thumb Indicator (with active glow and scaling) */}
-      <View
-        style={[
-          styles.thumbNode,
-          {
-            left: `${percent}%`,
-            borderColor: accentColor,
-            shadowColor: accentColor,
-            transform: [{ scale: isDragging ? 1.22 : 1 }],
-          },
-        ]}
-        pointerEvents="none"
-      >
-        <View style={[styles.thumbCenterDot, { backgroundColor: accentColor }]} />
-      </View>
+    <View style={styles.sliderTrackContainer}>
+      <Slider
+        style={styles.nativeSlider}
+        value={value}
+        minimumValue={min}
+        maximumValue={max}
+        step={step}
+        minimumTrackTintColor={accentColor}
+        maximumTrackTintColor="#27272A"
+        thumbTintColor={accentColor}
+        disabled={disabled}
+        tapToSeek={true}
+        onSlidingStart={() => {
+          isDraggingRef.current = true;
+          setIsDragging(true);
+          onDragStart?.();
+        }}
+        onValueChange={(val) => {
+          handleSliderChange(val);
+        }}
+        onSlidingComplete={(val) => {
+          isDraggingRef.current = false;
+          setIsDragging(false);
+          onDragEnd?.();
+          const clamped = Math.max(min, Math.min(max, val));
+          const rounded = parseFloat(clamped.toFixed(precision));
+          onChangeEnd?.(rounded);
+        }}
+      />
     </View>
   );
 
@@ -434,23 +242,23 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
           onPress={() => handleStepDelta(-step)}
           disabled={disabled || value <= min}
           activeOpacity={0.7}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel="Decrease"
         >
-          <Ionicons name="remove" size={14} color="#CBD5E1" />
+          <Ionicons name="remove" size={12} color="#CBD5E1" />
         </TouchableOpacity>
 
-        <View style={{ flex: 1 }}>{renderSliderTrack()}</View>
+        <View style={{ flex: 1, marginHorizontal: 2 }}>{renderSliderTrack()}</View>
 
         <TouchableOpacity
           style={[styles.stepperBtn, (disabled || value >= max) && styles.disabledOpacity]}
           onPress={() => handleStepDelta(step)}
           disabled={disabled || value >= max}
           activeOpacity={0.7}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel="Increase"
         >
-          <Ionicons name="add" size={14} color="#CBD5E1" />
+          <Ionicons name="add" size={12} color="#CBD5E1" />
         </TouchableOpacity>
       </View>
     );
@@ -525,68 +333,68 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
 const styles = StyleSheet.create({
   stackContainer: {
     width: '100%',
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   inlineContainer: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
+    gap: 6,
+    paddingVertical: 2,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     flex: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   inlineLabelBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    minWidth: 80,
-    maxWidth: 120,
+    gap: 4,
+    minWidth: 70,
+    maxWidth: 110,
   },
   iconBox: {
     marginRight: 2,
   },
   labelTitle: {
-    color: '#E2E8F0',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    color: '#CBD5E1',
+    fontSize: 10,
+    fontWeight: '400',
+    letterSpacing: 0,
   },
   positivePrefix: {
     color: THEME_COLORS.accent,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
   sliderRow: {
     width: '100%',
-    marginTop: 2,
+    marginTop: 1,
   },
   trackWithSteppersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     width: '100%',
   },
   stepperBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
@@ -603,15 +411,15 @@ const styles = StyleSheet.create({
   },
   // Small size numeric input box
   inputWrapper: {
-    height: 22,
+    height: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#16171B',
     borderWidth: 1,
     borderColor: '#292B33',
-    borderRadius: 4,
-    paddingHorizontal: 4,
+    borderRadius: 3,
+    paddingHorizontal: 3,
   },
   inputWrapperFocused: {
     borderColor: THEME_COLORS.accent,
@@ -623,82 +431,52 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '400',
     textAlign: 'center',
     outlineStyle: 'none' as any,
   },
   unitText: {
     color: '#94A3B8',
-    fontSize: 9.5,
-    fontWeight: '600',
+    fontSize: 8.5,
+    fontWeight: '400',
     marginLeft: 1,
   },
-  // Full-height hitbox for comfortable touch & click targets
-  sliderTrackHitbox: {
+  // Native slider container with comfortable height & hit targets
+  sliderTrackContainer: {
     width: '100%',
-    height: 32,
+    height: 24,
     justifyContent: 'center',
-    position: 'relative',
   },
-  trackBackground: {
+  nativeSlider: {
     width: '100%',
-    height: 6,
-    backgroundColor: '#23252C',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  trackFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  thumbNode: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: -9,
-    marginLeft: -9,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  thumbCenterDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    height: 24,
   },
   tinyResetBtn: {
-    padding: 3,
+    padding: 2,
     borderRadius: 3,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   resetBadgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
     backgroundColor: 'rgba(0, 229, 201, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(0, 229, 201, 0.25)',
   },
   resetBadgeText: {
     color: THEME_COLORS.accent,
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 8.5,
+    fontWeight: '500',
   },
   hintText: {
     color: '#64748B',
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 8.5,
+    marginTop: 1,
   },
   disabledOpacity: {
     opacity: 0.4,

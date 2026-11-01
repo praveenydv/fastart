@@ -51,6 +51,7 @@ export default function VolumeModal({
   const [fadeIn, setFadeIn] = useState(currentFadeIn);
   const [fadeOut, setFadeOut] = useState(currentFadeOut);
   const [denoise, setDenoise] = useState(currentDenoise);
+  const [isSliderDragging, setIsSliderDragging] = useState(false);
 
   // Sync when opened
   React.useEffect(() => {
@@ -144,6 +145,7 @@ export default function VolumeModal({
       <ScrollView
         style={[styles.contentScroll, isInline && { paddingTop: 10 }]}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!isSliderDragging}
       >
         {isFromVideo && !hasAudio && (
           <View style={styles.noAudioBanner}>
@@ -188,6 +190,9 @@ export default function VolumeModal({
               unit="%"
               defaultValue={100}
               accentColor="#00E5C9"
+              showSteppers={true}
+              onDragStart={() => setIsSliderDragging(true)}
+              onDragEnd={() => setIsSliderDragging(false)}
               onChange={(val) => handleVolumeChange(val / 100)}
             />
           </View>
@@ -244,6 +249,9 @@ export default function VolumeModal({
               decimals={1}
               defaultValue={0}
               accentColor="#10B981"
+              showSteppers={true}
+              onDragStart={() => setIsSliderDragging(true)}
+              onDragEnd={() => setIsSliderDragging(false)}
               onChange={(val) => handleFadeInChange(val)}
             />
           </View>
@@ -261,6 +269,9 @@ export default function VolumeModal({
               decimals={1}
               defaultValue={0}
               accentColor="#F59E0B"
+              showSteppers={true}
+              onDragStart={() => setIsSliderDragging(true)}
+              onDragEnd={() => setIsSliderDragging(false)}
               onChange={(val) => handleFadeOutChange(val)}
             />
           </View>
@@ -382,8 +393,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
     backgroundColor: "#08090E",
@@ -391,58 +402,58 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   titleIconBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 4,
     backgroundColor: "rgba(0, 242, 254, 0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.2,
+    fontSize: 11.5,
+    fontWeight: "500",
+    letterSpacing: 0.1,
   },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
   },
   resetBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
   },
   resetBtnText: {
-    color: "#94A3B8",
-    fontSize: 10.5,
-    fontWeight: "600",
+    color: "#8E95A5",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   doneBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 5,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
   },
   doneBtnCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 5,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -451,18 +462,18 @@ const styles = StyleSheet.create({
   },
   doneBtnText: {
     color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
   },
   contentScroll: {
-    paddingHorizontal: 10,
-    paddingTop: 6,
+    paddingHorizontal: 6,
+    paddingTop: 4,
   },
   compactSection: {
     backgroundColor: "#131826",
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 6,
+    borderRadius: 6,
+    padding: 6,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
@@ -470,21 +481,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   sectionTitle: {
-    color: "#FFFFFF",
-    fontSize: 11.5,
-    fontWeight: "600",
+    color: "#CBD5E1",
+    fontSize: 10,
+    fontWeight: "400",
   },
   valueBadge: {
     color: "#00F2FE",
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     backgroundColor: "#08090E",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
@@ -492,20 +503,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    marginVertical: 4,
+    gap: 6,
+    marginVertical: 2,
   },
   stepperVal: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-    minWidth: 40,
+    fontSize: 10.5,
+    fontWeight: "500",
+    minWidth: 32,
     textAlign: "center",
   },
   stepBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 5,
     backgroundColor: "#1B2234",
     alignItems: "center",
     justifyContent: "center",
@@ -513,9 +524,9 @@ const styles = StyleSheet.create({
     borderColor: "#1F2637",
   },
   stepBtnSmall: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 4,
     backgroundColor: "#1B2234",
     alignItems: "center",
     justifyContent: "center",
@@ -525,7 +536,7 @@ const styles = StyleSheet.create({
   presetsGrid: {
     flexDirection: "row",
     gap: 4,
-    marginTop: 5,
+    marginTop: 4,
   },
   presetCard: {
     flex: 1,
@@ -534,8 +545,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
     backgroundColor: "#08090E",
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
@@ -544,97 +555,97 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   presetCardText: {
-    color: "#94A3B8",
-    fontSize: 9.5,
-    fontWeight: "600",
+    color: "#8E95A5",
+    fontSize: 8.5,
+    fontWeight: "400",
   },
   presetCardTextActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   fadeRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 6,
+    marginTop: 4,
   },
   fadeLabelBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    width: 75,
+    gap: 4,
+    width: 65,
   },
   fadeLabel: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "500",
+    color: "#8E95A5",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   fadeValText: {
     color: "#FFFFFF",
-    fontSize: 10.5,
-    fontWeight: "700",
-    minWidth: 32,
+    fontSize: 9.5,
+    fontWeight: "500",
+    minWidth: 28,
     textAlign: "right",
   },
   fadeStepperRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
   },
   noAudioBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: "rgba(245, 158, 11, 0.08)",
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "rgba(245, 158, 11, 0.25)",
-    padding: 10,
-    marginBottom: 8,
-    gap: 8,
+    padding: 6,
+    marginBottom: 6,
+    gap: 6,
   },
   noAudioIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 4,
     backgroundColor: "rgba(245, 158, 11, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   noAudioTitle: {
     color: "#F59E0B",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 2,
+    fontSize: 10.5,
+    fontWeight: "500",
+    marginBottom: 1,
   },
   noAudioSubtitle: {
     color: "#94A3B8",
-    fontSize: 10.5,
-    lineHeight: 15,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: "400",
   },
   silentBadge: {
     backgroundColor: "rgba(245, 158, 11, 0.12)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 3,
     borderWidth: 1,
     borderColor: "rgba(245, 158, 11, 0.25)",
   },
   silentBadgeText: {
     color: "#F59E0B",
-    fontSize: 9.5,
-    fontWeight: "700",
+    fontSize: 8.5,
+    fontWeight: "500",
   },
   denoiseCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#131826",
-    padding: 10,
-    borderRadius: 8,
+    padding: 6,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "#1F2637",
-    marginTop: 8,
+    marginTop: 4,
   },
   denoiseCardActive: {
     backgroundColor: "rgba(0, 242, 254, 0.08)",
@@ -643,14 +654,14 @@ const styles = StyleSheet.create({
   denoiseLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flex: 1,
-    marginRight: 10,
+    marginRight: 8,
   },
   denoiseIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: "#08090E",
     alignItems: "center",
     justifyContent: "center",
@@ -662,23 +673,23 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   denoiseTitle: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#CBD5E1",
+    fontSize: 10,
+    fontWeight: "400",
   },
   denoiseTitleActive: {
     color: "#FFFFFF",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   denoiseSubtitle: {
     color: "#64748B",
-    fontSize: 10,
+    fontSize: 8.5,
     marginTop: 1,
   },
   denoiseBadge: {
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 4,
+    borderRadius: 3,
     backgroundColor: "#08090E",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -688,10 +699,10 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   denoiseBadgeText: {
-    color: "#94A3B8",
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    color: "#8E95A5",
+    fontSize: 8,
+    fontWeight: "500",
+    letterSpacing: 0.3,
   },
   denoiseBadgeTextActive: {
     color: "#08090E",

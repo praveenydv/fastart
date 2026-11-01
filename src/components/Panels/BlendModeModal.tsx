@@ -118,6 +118,7 @@ export default function BlendModeModal({
 }: BlendModeModalProps) {
   const [selectedMode, setSelectedMode] = useState<BlendMode>(currentMode);
   const [opacity, setOpacity] = useState<number>(currentOpacity);
+  const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
 
   useEffect(() => {
     setSelectedMode(currentMode);
@@ -182,6 +183,7 @@ export default function BlendModeModal({
           style={styles.scrollBody}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!isSliderDragging}
         >
           {/* Layer Opacity Slider & Quick Presets */}
           <View style={styles.opacityCard}>
@@ -194,7 +196,10 @@ export default function BlendModeModal({
               unit="%"
               defaultValue={100}
               showReset={true}
+              showSteppers={true}
               accentColor="#00F2FE"
+              onDragStart={() => setIsSliderDragging(true)}
+              onDragEnd={() => setIsSliderDragging(false)}
               onChange={(val) => {
                 const nextOp = Math.max(0, Math.min(100, val)) / 100;
                 setOpacity(nextOp);
@@ -304,19 +309,19 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   header: {
-    height: 52,
+    height: 34,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.07)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     backgroundColor: '#12141F',
   },
   cancelBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -324,42 +329,42 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerIconBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     backgroundColor: 'rgba(0, 242, 254, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   resetBtnText: {
-    fontSize: 12,
+    fontSize: 9.5,
     color: '#A1A1AA',
-    fontWeight: '600',
+    fontWeight: '400',
   },
   applyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
@@ -368,14 +373,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: 6,
+    paddingBottom: 16,
   },
   opacityCard: {
     backgroundColor: '#171926',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: 6,
+    padding: 6,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
   },
@@ -383,28 +388,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 8.5,
+    fontWeight: '500',
     color: '#A1A1AA',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   opacityValueBadge: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
     color: '#00F2FE',
   },
   opacityPillsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 4,
   },
   opacityPill: {
     flex: 1,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -413,39 +418,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#00F2FE',
   },
   opacityPillText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: '400',
     color: '#D4D4D8',
   },
   opacityPillTextActive: {
     color: '#0B0D13',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   presetGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 10,
+    gap: 4,
+    marginTop: 4,
   },
   presetCard: {
-    width: '48%',
+    width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#171926',
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1.5,
+    borderRadius: 6,
+    padding: 5,
+    borderWidth: 1,
     borderColor: 'transparent',
-    gap: 10,
+    gap: 5,
   },
   presetCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   cardIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -453,17 +458,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardName: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '400',
     color: '#FFFFFF',
   },
   cardNameActive: {
     color: '#00F2FE',
+    fontWeight: '500',
   },
   cardDesc: {
-    fontSize: 10.5,
+    fontSize: 7.5,
     color: '#71717A',
-    marginTop: 2,
+    marginTop: 1,
   },
   selectedBadge: {
     marginLeft: 'auto',

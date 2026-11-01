@@ -111,7 +111,7 @@ export default function CanvasModal({
       {/* Aspect Ratios Grid */}
       <ScrollView
         style={styles.contentScroll}
-        contentContainerStyle={[styles.scrollBody, isInline && { paddingTop: 12 }]}
+        contentContainerStyle={[styles.scrollBody, isInline && { paddingTop: 6 }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.ratioGrid}>
@@ -132,7 +132,7 @@ export default function CanvasModal({
                 >
                   <Ionicons
                     name={item.icon}
-                    size={18}
+                    size={14}
                     color={isSelected ? "#00F2FE" : "#8E95A5"}
                   />
                 </View>
@@ -149,7 +149,7 @@ export default function CanvasModal({
                 </Text>
                 {isSelected && (
                   <View style={styles.checkBadge}>
-                    <Ionicons name="checkmark" size={10} color="#000000" />
+                    <Ionicons name="checkmark" size={7} color="#000000" />
                   </View>
                 )}
               </TouchableOpacity>
@@ -207,16 +207,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
     backgroundColor: "#08090E",
   },
   headerCloseBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -230,13 +230,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
   },
   resetBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 4,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -245,13 +245,13 @@ const styles = StyleSheet.create({
   },
   resetText: {
     color: "#94A3B8",
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "400",
   },
   doneBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -259,23 +259,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   contentScroll: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingTop: 6,
   },
   scrollBody: {
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   ratioGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 5,
   },
   ratioCard: {
-    width: "31.5%",
+    width: "23.5%",
     backgroundColor: "#131826",
-    borderRadius: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 4,
+    borderRadius: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -286,13 +286,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   ratioIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#08090E",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 3,
+    marginBottom: 2,
     borderWidth: 1,
     borderColor: "#1F2637",
   },
@@ -301,27 +301,28 @@ const styles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   ratioLabel: {
-    fontSize: 10.5,
+    fontSize: 8.5,
     color: "#94A3B8",
-    fontWeight: "600",
+    fontWeight: "400",
     marginBottom: 1,
   },
   ratioLabelActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   ratioDesc: {
-    fontSize: 8.5,
+    fontSize: 7.5,
     color: "#64748B",
     textAlign: "center",
+    fontWeight: "400",
   },
   checkBadge: {
     position: "absolute",
-    top: 3,
-    right: 3,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
@@ -331,16 +332,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: "#00F2FE",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
   },
   inlineAppliedBtn: {
     backgroundColor: "#10B981",
   },
   inlineApplyText: {
     color: "#08090E",
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
   },
 });

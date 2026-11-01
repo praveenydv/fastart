@@ -127,9 +127,6 @@ function computeTargetPosition(
       }
     });
 
-    if (bestSnap !== desiredStart) {
-      triggerHaptic("selection", isHapticEnabled);
-    }
     desiredStart = bestSnap;
   }
 
@@ -487,13 +484,8 @@ export function useTimelineClipDrag({
           cachedOtherClipsRef.current,
         );
 
-      const hasChangedState =
-        previousTargetTrackRef.current !== targetTrack ||
-        previousIsInsertingRef.current !== isInsertingNewTrack ||
-        previousInsertTrackRef.current !== insertTrackIndex;
-
-      if (hasChangedState) {
-        soundEngine.playSfx("pop");
+      const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
+      if (hasTrackChanged && previousTargetTrackRef.current !== null) {
         triggerHaptic("selection", isHapticEnabledRef.current);
       }
       previousTargetTrackRef.current = targetTrack;
@@ -723,13 +715,8 @@ export function useTimelineClipDrag({
             cachedOtherClipsRef.current,
           );
 
-        const hasChangedState =
-          previousTargetTrackRef.current !== targetTrack ||
-          previousIsInsertingRef.current !== isInsertingNewTrack ||
-          previousInsertTrackRef.current !== insertTrackIndex;
-
-        if (hasChangedState) {
-          soundEngine.playSfx("pop");
+        const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
+        if (hasTrackChanged && previousTargetTrackRef.current !== null) {
           triggerHaptic("selection", isHapticEnabledRef.current);
         }
         previousTargetTrackRef.current = targetTrack;
@@ -860,13 +847,8 @@ export function useTimelineClipDrag({
             cachedOtherClipsRef.current,
           );
 
-        const hasChangedState =
-          previousTargetTrackRef.current !== targetTrack ||
-          previousIsInsertingRef.current !== isInsertingNewTrack ||
-          previousInsertTrackRef.current !== insertTrackIndex;
-
-        if (hasChangedState) {
-          soundEngine.playSfx("pop");
+        const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
+        if (hasTrackChanged && previousTargetTrackRef.current !== null) {
           triggerHaptic("selection", isHapticEnabledRef.current);
         }
         previousTargetTrackRef.current = targetTrack;

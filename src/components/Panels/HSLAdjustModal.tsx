@@ -53,6 +53,7 @@ export default function HSLAdjustModal({
   const [adjustments, setAdjustments] = useState<HSLAdjustments>(
     initialAdjustments || {}
   );
+  const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
 
   useEffect(() => {
     setAdjustments(initialAdjustments || {});
@@ -155,6 +156,9 @@ export default function HSLAdjustModal({
           style={styles.scrollBody}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!isSliderDragging}
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
         >
           {/* 8 Color Channel Swatches */}
           <Text style={styles.sectionTitle}>Select Color Channel</Text>
@@ -229,6 +233,8 @@ export default function HSLAdjustModal({
                 defaultValue={0}
                 accentColor={currentDef.color}
                 showSteppers={true}
+                onDragStart={() => setIsSliderDragging(true)}
+                onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => handleSet('hue', val)}
               />
               <View style={styles.stepperRow}>
@@ -277,6 +283,8 @@ export default function HSLAdjustModal({
                 defaultValue={0}
                 accentColor={currentDef.color}
                 showSteppers={true}
+                onDragStart={() => setIsSliderDragging(true)}
+                onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => handleSet('saturation', val)}
               />
               <View style={styles.stepperRow}>
@@ -325,6 +333,8 @@ export default function HSLAdjustModal({
                 defaultValue={0}
                 accentColor={currentDef.color}
                 showSteppers={true}
+                onDragStart={() => setIsSliderDragging(true)}
+                onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => handleSet('luminance', val)}
               />
               <View style={styles.stepperRow}>
@@ -383,19 +393,19 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   header: {
-    height: 52,
+    height: 34,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.07)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     backgroundColor: '#12141F',
   },
   cancelBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -403,42 +413,42 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerIconBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 5,
     backgroundColor: 'rgba(0, 242, 254, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   resetBtnText: {
-    fontSize: 12,
+    fontSize: 9.5,
     color: '#A1A1AA',
-    fontWeight: '600',
+    fontWeight: '400',
   },
   applyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
@@ -447,37 +457,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: 6,
+    paddingBottom: 16,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 8.5,
+    fontWeight: '500',
     color: '#A1A1AA',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 12,
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   swatchRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 16,
+    gap: 4,
+    marginBottom: 6,
     backgroundColor: '#13151F',
-    borderRadius: 14,
-    padding: 8,
+    borderRadius: 8,
+    padding: 4,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   swatchBtn: {
     flexBasis: '22%',
     flexGrow: 1,
-    minWidth: 58,
+    minWidth: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 7,
+    paddingVertical: 4,
     paddingHorizontal: 2,
-    borderRadius: 10,
+    borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: 'transparent',
@@ -487,36 +497,36 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
   },
   swatchDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    marginBottom: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginBottom: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   swatchModIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#000000',
   },
   swatchLabel: {
-    fontSize: 10,
-    color: '#94A3B8',
-    fontWeight: '600',
+    fontSize: 8.5,
+    color: '#8E95A5',
+    fontWeight: '400',
   },
   swatchLabelSelected: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   tuningCard: {
     backgroundColor: '#171926',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 8,
+    padding: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.06)',
   },
@@ -526,80 +536,80 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-    paddingBottom: 10,
-    marginBottom: 14,
+    paddingBottom: 4,
+    marginBottom: 6,
   },
   tuningCardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   smallColorBadge: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   tuningCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '500',
     color: '#FFFFFF',
   },
   resetChannelBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   resetChannelText: {
-    fontSize: 11,
+    fontSize: 9,
     color: '#A1A1AA',
-    fontWeight: '600',
+    fontWeight: '400',
   },
   controlRow: {
-    marginBottom: 14,
+    marginBottom: 6,
   },
   controlLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   controlName: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 9.5,
+    fontWeight: '400',
     color: '#D4D4D8',
   },
   controlValue: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
     color: '#00F2FE',
   },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   stepBtn: {
     flex: 1,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingVertical: 4,
+    borderRadius: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '400',
     color: '#D4D4D8',
   },
   stepperCenter: {
-    minWidth: 48,
+    minWidth: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperCenterText: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '500',
     color: '#FFFFFF',
   },
 });

@@ -910,94 +910,119 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     windowHeight,
   });
 
-  // Mobile Modal Drag-to-Dismiss Gesture:
-  // When an inline modal is open, dragging its handle or header slides the modal down to dismiss,
-  // WITHOUT resizing the video player or changing playerStage height!
-  const modalTranslateY = React.useRef(new Animated.Value(0)).current;
-  const [isModalDragging, setIsModalDragging] = React.useState(false);
-  const isModalDraggingRef = React.useRef(false);
+  // Unified Root Draggable Bottom Container (Hosts either Tool Modal OR Timeline)
+  const defaultMobileToolHeight = React.useMemo(() => {
+    return Math.min(
+      Math.round(windowHeight * 0.50),
+      Math.max(300, Math.round(windowHeight * 0.44)),
+    );
+  }, [windowHeight]);
 
-  // Reset modal translation whenever activeModal changes
+  const minMobileToolHeight = 220;
+
+  const maxMobileToolHeight = React.useMemo(() => {
+    // Guarantees at least 250px vertical clearance for Header + Player at all times
+    return Math.min(
+      Math.round(windowHeight * 0.60),
+      Math.max(minMobileToolHeight, windowHeight - 250),
+    );
+  }, [windowHeight, minMobileToolHeight]);
+
+  const [mobileModalHeight, setMobileModalHeight] = React.useState<number | null>(null);
+
+  // Active height of the root draggable bottom container
+  const activeBottomHeight = React.useMemo(() => {
+    if (isDesktop) return currentTimelineHeight;
+    if (isMobileInlineActive) {
+      if (mobileModalHeight !== null) {
+        return Math.max(minMobileToolHeight, Math.min(maxMobileToolHeight, mobileModalHeight));
+      }
+      return defaultMobileToolHeight;
+    }
+    return Math.max(180, Math.min(maxMobileToolHeight, currentTimelineHeight));
+  }, [isDesktop, isMobileInlineActive, mobileModalHeight, defaultMobileToolHeight, minMobileToolHeight, maxMobileToolHeight, currentTimelineHeight]);
+
+  const activeBottomHeightRef = React.useRef(activeBottomHeight);
+  activeBottomHeightRef.current = activeBottomHeight;
+
+  // Single unified translation & drag state for root bottom container
+  const bottomTranslateY = React.useRef(new Animated.Value(0)).current;
+  const [isDraggingBottom, setIsDraggingBottom] = React.useState(false);
+  const isDraggingBottomRef = React.useRef(false);
+
+  // Reset modal state whenever activeModal changes
   React.useEffect(() => {
-    modalTranslateY.setValue(0);
-    setIsModalDragging(false);
-    isModalDraggingRef.current = false;
-  }, [activeModal]);
+    bottomTranslateY.setValue(0);
+    setIsDraggingBottom(false);
+    isDraggingBottomRef.current = false;
+    setMobileModalHeight(null);
+  }, [activeModal, bottomTranslateY]);
 
-  // PanResponder for Native (iOS / Android)
-  const modalPanResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gs) =>
-          gs.dy > 4 && Math.abs(gs.dy) > Math.abs(gs.dx),
-        onPanResponderGrant: () => {
-          isModalDraggingRef.current = true;
-          setIsModalDragging(true);
-        },
-        onPanResponderMove: (_, gs) => {
-          // Clamp so you can only drag downward (dy >= 0)
-          modalTranslateY.setValue(Math.max(0, gs.dy));
-        },
-        onPanResponderRelease: (_, gs) => {
-          isModalDraggingRef.current = false;
-          setIsModalDragging(false);
-          if (gs.dy > 55 || gs.vy > 0.45) {
-            Animated.timing(modalTranslateY, {
-              toValue: 300,
-              duration: 140,
-              easing: Easing.in(Easing.cubic),
-              useNativeDriver: Platform.OS !== "web",
-            }).start(() => {
-              modalTranslateY.setValue(0);
-              handleCloseMenu();
-            });
-          } else {
-            Animated.spring(modalTranslateY, {
-              toValue: 0,
-              damping: 18,
-              stiffness: 250,
-              useNativeDriver: Platform.OS !== "web",
-            }).start();
-          }
-        },
-        onPanResponderTerminate: () => {
-          isModalDraggingRef.current = false;
-          setIsModalDragging(false);
-          Animated.spring(modalTranslateY, {
-            toValue: 0,
-            damping: 18,
-            stiffness: 250,
-            useNativeDriver: Platform.OS !== "web",
-          }).start();
-        },
-      }),
-    [handleCloseMenu, modalTranslateY],
-  );
+  // Robust pointer/touch Y-coordinate extractor across all mobile browsers and environments
+  const getPointerClientY = (evt: any): number => {
+    if (typeof evt.clientY === "number") return evt.clientY;
+    if (typeof evt.pageY === "number") return evt.pageY;
+    if (evt.nativeEvent) {
+      if (typeof evt.nativeEvent.clientY === "number") return evt.nativeEvent.clientY;
+      if (typeof evt.nativeEvent.pageY === "number") return evt.nativeEvent.pageY;
+      if (evt.nativeEvent.touches && evt.nativeEvent.touches.length > 0) {
+        const t = evt.nativeEvent.touches[0];
+        if (typeof t.clientY === "number") return t.clientY;
+        if (typeof t.pageY === "number") return t.pageY;
+      }
+      if (evt.nativeEvent.changedTouches && evt.nativeEvent.changedTouches.length > 0) {
+        const t = evt.nativeEvent.changedTouches[0];
+        if (typeof t.clientY === "number") return t.clientY;
+        if (typeof t.pageY === "number") return t.pageY;
+      }
+    }
+    if (evt.touches && evt.touches.length > 0) {
+      const t = evt.touches[0];
+      if (typeof t.clientY === "number") return t.clientY;
+      if (typeof t.pageY === "number") return t.pageY;
+    }
+    return 0;
+  };
 
-  // Pointer / Mouse / Touch handlers for Web
-  const handleModalDragPointerDown = React.useCallback(
+  // Unified Web pointer & touch drag handler
+  const handleBottomDragStart = React.useCallback(
     (e: any) => {
       if (Platform.OS !== "web" || typeof window === "undefined") return;
       e.preventDefault?.();
       e.stopPropagation?.();
 
-      const startY = e.clientY ?? e.pageY ?? e.touches?.[0]?.clientY ?? 0;
-      let currentDeltaY = 0;
-      isModalDraggingRef.current = true;
-      setIsModalDragging(true);
+      const startY = getPointerClientY(e);
+      const startHeight = activeBottomHeightRef.current;
+      let lastDy = 0;
+      isDraggingBottomRef.current = true;
+      setIsDraggingBottom(true);
 
       const onPointerMove = (moveEvt: any) => {
-        const clientY =
-          moveEvt.clientY ?? moveEvt.pageY ?? moveEvt.touches?.[0]?.clientY ?? 0;
+        const clientY = getPointerClientY(moveEvt);
         const dy = clientY - startY;
-        currentDeltaY = Math.max(0, dy);
-        modalTranslateY.setValue(currentDeltaY);
+        lastDy = dy;
+
+        if (isMobileInlineActive) {
+          // Strictly clamp height; never translate downwards to dismiss
+          const targetH = Math.max(
+            minMobileToolHeight,
+            Math.min(maxMobileToolHeight, startHeight - dy),
+          );
+          setMobileModalHeight(targetH);
+          bottomTranslateY.setValue(0);
+        } else {
+          bottomTranslateY.setValue(0);
+          const nextH = Math.max(
+            180,
+            Math.min(maxMobileToolHeight, startHeight - dy),
+          );
+          setCurrentTimelineHeight(nextH);
+        }
       };
 
       const onPointerUp = () => {
-        isModalDraggingRef.current = false;
-        setIsModalDragging(false);
+        isDraggingBottomRef.current = false;
+        setIsDraggingBottom(false);
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
         window.removeEventListener("mousemove", onPointerMove);
@@ -1006,23 +1031,15 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         window.removeEventListener("touchend", onPointerUp);
         window.removeEventListener("touchcancel", onPointerUp);
 
-        if (currentDeltaY > 55) {
-          Animated.timing(modalTranslateY, {
-            toValue: 300,
-            duration: 140,
-            easing: Easing.in(Easing.cubic),
-            useNativeDriver: false,
-          }).start(() => {
-            modalTranslateY.setValue(0);
-            handleCloseMenu();
-          });
-        } else {
-          Animated.spring(modalTranslateY, {
-            toValue: 0,
-            damping: 18,
-            stiffness: 250,
-            useNativeDriver: false,
-          }).start();
+        if (isMobileInlineActive) {
+          // Never dismiss modal on drag-down; only snap between height bounds.
+          // Modals close ONLY with the explicit close button or check/done button.
+          bottomTranslateY.setValue(0);
+          if (lastDy < -35) {
+            setMobileModalHeight(maxMobileToolHeight);
+          } else if (lastDy > 35) {
+            setMobileModalHeight(defaultMobileToolHeight);
+          }
         }
       };
 
@@ -1034,8 +1051,80 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       window.addEventListener("touchend", onPointerUp);
       window.addEventListener("touchcancel", onPointerUp);
     },
-    [handleCloseMenu, modalTranslateY],
+    [
+      isMobileInlineActive,
+      maxMobileToolHeight,
+      minMobileToolHeight,
+      defaultMobileToolHeight,
+      setCurrentTimelineHeight,
+      bottomTranslateY,
+    ],
   );
+
+  // Unified Native PanResponder for iOS / Android
+  const bottomDragPanResponder = React.useMemo(() => {
+    let startHeight = activeBottomHeightRef.current;
+    let accumulatedDy = 0;
+
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        startHeight = activeBottomHeightRef.current;
+        isDraggingBottomRef.current = true;
+        setIsDraggingBottom(true);
+        accumulatedDy = 0;
+      },
+      onPanResponderMove: (_, gs) => {
+        accumulatedDy = gs.dy;
+        if (isMobileInlineActive) {
+          // Strictly clamp height; never translate downwards to dismiss
+          const targetH = Math.max(
+            minMobileToolHeight,
+            Math.min(maxMobileToolHeight, startHeight - gs.dy),
+          );
+          setMobileModalHeight(targetH);
+          bottomTranslateY.setValue(0);
+        } else {
+          bottomTranslateY.setValue(0);
+          const nextH = Math.max(
+            180,
+            Math.min(maxMobileToolHeight, startHeight - gs.dy),
+          );
+          setCurrentTimelineHeight(nextH);
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        isDraggingBottomRef.current = false;
+        setIsDraggingBottom(false);
+
+        if (isMobileInlineActive) {
+          // Never dismiss modal on drag-down; only snap between height bounds.
+          // Modals close ONLY with the explicit close button or check/done button.
+          bottomTranslateY.setValue(0);
+          if (accumulatedDy < -35) {
+            setMobileModalHeight(maxMobileToolHeight);
+          } else if (accumulatedDy > 35) {
+            setMobileModalHeight(defaultMobileToolHeight);
+          }
+        }
+      },
+      onPanResponderTerminate: () => {
+        isDraggingBottomRef.current = false;
+        setIsDraggingBottom(false);
+        bottomTranslateY.setValue(0);
+      },
+    });
+  }, [
+    isMobileInlineActive,
+    maxMobileToolHeight,
+    minMobileToolHeight,
+    defaultMobileToolHeight,
+    setCurrentTimelineHeight,
+    bottomTranslateY,
+  ]);
 
   // Label for active config panel
   const getConfigPanelTitle = () => {
@@ -1373,7 +1462,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         totalDuration={totalDuration}
         fullscreen={isFullscreen}
         isProcessing={isProcessing}
-        isResizing={isTimelineResizing}
+        isResizing={isDraggingBottom || isTimelineResizing}
         processingMessage={processingMessage}
         onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
         onTogglePlay={() => {
@@ -1972,11 +2061,13 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
   // ─────────────────────────────────────────────
   // MOBILE / FULLSCREEN LAYOUT
-  // Top: Player, Below: Timeline OR Selected menu config, Bottom: Menus
+  // 1. Root Top: Header
+  // 2. Root Middle: Player Preview (flex: 1 fills remaining space)
+  // 3. Root Bottom: Draggable Container (Modals OR Timeline directly at root!)
   // ─────────────────────────────────────────────
   return (
     <View style={styles.editorContainer}>
-      {/* Top Header Bar */}
+      {/* 1. Root Top: Header Bar */}
       {!isFullscreen && (
         <Header
           project={project}
@@ -1991,7 +2082,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         />
       )}
 
-      {/* Top: Canvas Viewport & Player Controls (clearly visible so user sees what is applying live!) */}
+      {/* 2. Root Middle: Player Preview Stage (flex: 1 fills remaining space) */}
       <View
         style={[
           styles.playerStage,
@@ -2001,109 +2092,86 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         {renderPlayer()}
       </View>
 
-      {/* Below Player: Timeline AND Selected menu configuration */}
+      {/* 3. Root Bottom: Draggable Container (Modals OR Timeline directly at root!) */}
       {!isFullscreen && (
-        <View style={styles.mobileBottomArea}>
-          {/* Universal Handle:
-              - In Timeline mode: Resizes timeline height
-              - In Modal/Tool mode: Drags down to dismiss tool WITHOUT resizing or jumping the player
-          */}
+        <Animated.View
+          style={[
+            styles.draggableBottomRoot,
+            {
+              height: activeBottomHeight,
+              transform: [{ translateY: bottomTranslateY }],
+            },
+          ]}
+        >
+          {/* Unified Grab Handle at the root of the draggable bottom section */}
           <View
             style={[
-              styles.mobileResizeHandle,
-              !isMobileInlineActive && isTimelineResizing && styles.mobileResizeHandleActive,
-              isMobileInlineActive && isModalDragging && styles.mobileResizeHandleActive,
+              styles.bottomDragHandle,
+              isDraggingBottom && styles.bottomDragHandleActive,
             ]}
-            {...(isMobileInlineActive
-              ? (Platform.OS === "web"
-                  ? {
-                      onMouseDown: handleModalDragPointerDown,
-                      onTouchStart: handleModalDragPointerDown,
-                    }
-                  : modalPanResponder.panHandlers)
-              : timelineResizeProps)}
+            hitSlop={{ top: 10, bottom: 10, left: 24, right: 24 }}
+            {...(Platform.OS === "web"
+              ? {
+                  onMouseDown: handleBottomDragStart,
+                  onTouchStart: handleBottomDragStart,
+                }
+              : bottomDragPanResponder.panHandlers)}
             accessibilityLabel={
               isMobileInlineActive
-                ? "Drag down to dismiss tool"
+                ? "Drag up to expand tool, drag down to shrink tool"
                 : "Drag up or down to adjust timeline height"
             }
           >
             <View
               style={[
-                styles.mobileResizePill,
-                (!isMobileInlineActive && isTimelineResizing) || (isMobileInlineActive && isModalDragging)
-                  ? styles.mobileResizePillActive
-                  : null,
+                styles.bottomDragPill,
+                isDraggingBottom && styles.bottomDragPillActive,
               ]}
             />
           </View>
 
-          {isMobileInlineActive && (
-            <Animated.View
-              style={[
-                styles.mobileInlineConfigArea,
-                {
-                  height: currentTimelineHeight,
-                  transform: [{ translateY: modalTranslateY }],
-                },
-                Platform.OS === "web" &&
-                  ({
-                    animation:
-                      "fastartInlineEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-                  } as any),
-              ]}
-            >
-              {/* Mobile menu modal header bar with close/back and done to restore timeline, plus swipe-down-to-dismiss */}
-              <View
-                style={styles.mobileInlineHeader}
-                {...(Platform.OS === "web"
-                  ? {
-                      onMouseDown: handleModalDragPointerDown,
-                      onTouchStart: handleModalDragPointerDown,
-                    }
-                  : modalPanResponder.panHandlers)}
-              >
+          {/* Direct Root Content: Active Modal Tool OR Timeline + Toolbar */}
+          {isMobileInlineActive ? (
+            <View style={styles.modalContentRoot}>
+              <View style={styles.modalHeaderBar}>
                 <TouchableOpacity
-                  style={styles.mobileInlineHeaderBtn}
+                  style={styles.modalHeaderBtn}
                   onPress={handleCloseMenu}
                   activeOpacity={0.7}
                   accessibilityLabel="Close tool"
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="chevron-down" size={20} color="#FFFFFF" />
+                  <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
                 </TouchableOpacity>
-                <Text style={styles.mobileInlineHeaderTitle} numberOfLines={1}>
+
+                <Text style={styles.modalHeaderTitle} numberOfLines={1}>
                   {getConfigPanelTitle()}
                 </Text>
+
                 <TouchableOpacity
-                  style={styles.mobileInlineHeaderDoneBtn}
+                  style={styles.modalHeaderDoneBtn}
                   onPress={handleCloseMenu}
                   activeOpacity={0.7}
                   accessibilityLabel="Done"
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="checkmark" size={18} color="#00E5FF" />
+                  <Ionicons name="checkmark" size={15} color="#00E5FF" />
                 </TouchableOpacity>
               </View>
-              <View style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+
+              <View style={styles.modalBodyWrap}>
                 {renderModals ? renderModals(true) : null}
               </View>
-            </Animated.View>
+            </View>
+          ) : (
+            <View style={styles.timelineContentRoot}>
+              <View style={styles.timelineBodyWrap}>
+                {renderTimelineOnly()}
+              </View>
+              {renderToolbar("horizontal")}
+            </View>
           )}
-
-          <View
-            style={[
-              styles.mobileTimelineArea,
-              { height: currentTimelineHeight },
-              isMobileInlineActive && { display: "none" },
-            ]}
-          >
-            {renderTimelineOnly()}
-          </View>
-
-          {/* Bottom: Menus bar */}
-          {renderToolbar("horizontal")}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -2462,6 +2530,7 @@ const styles = StyleSheet.create({
   playerStage: {
     flex: 1,
     width: "100%",
+    minHeight: 210,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden" as any,
@@ -2478,17 +2547,24 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: "#08090E",
   },
-  mobileBottomArea: {
+  // ── Unified Root Draggable Bottom Container Styles ──
+  draggableBottomRoot: {
     width: "100%",
-    flexShrink: 0,
-    backgroundColor: "#08090E",
-  },
-  mobileResizeHandle: {
-    height: 18,
-    width: "100%",
-    backgroundColor: "#08090E",
+    backgroundColor: "#0F131D",
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    overflow: "hidden" as any,
     borderTopWidth: 1,
     borderTopColor: "#1F2637",
+    flexShrink: 0,
+    zIndex: 30,
+  },
+  bottomDragHandle: {
+    height: 15,
+    width: "100%",
+    backgroundColor: "#0D111A",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1F2637",
     alignItems: "center" as const,
     justifyContent: "center" as const,
     cursor: "row-resize",
@@ -2496,62 +2572,78 @@ const styles = StyleSheet.create({
     touchAction: "none",
     zIndex: 50,
   } as any,
-  mobileResizeHandleActive: {
-    backgroundColor: "#131826",
-    borderTopColor: "rgba(0, 242, 254, 0.4)",
+  bottomDragHandleActive: {
+    backgroundColor: "#161D2B",
+    borderBottomColor: "rgba(0, 242, 254, 0.4)",
   },
-  mobileResizePill: {
-    width: 36,
-    height: 3.5,
-    borderRadius: 2,
+  bottomDragPill: {
+    width: 32,
+    height: 2.5,
+    borderRadius: 1.5,
     backgroundColor: "#4B5563",
   },
-  mobileResizePillActive: {
+  bottomDragPillActive: {
     backgroundColor: "#00F2FE",
-    width: 44,
+    width: 40,
   },
-  mobileInlineConfigArea: {
+  modalContentRoot: {
+    flex: 1,
     width: "100%",
     backgroundColor: "#0F131D",
-    borderTopWidth: 0,
     overflow: "hidden" as any,
   },
-  mobileInlineHeader: {
-    height: 38,
+  modalHeaderBar: {
+    height: 30,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
     backgroundColor: "#0D111A",
   },
-  mobileInlineHeaderBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+  modalHeaderBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
-  mobileInlineHeaderTitle: {
+  modalHeaderTitle: {
     color: "#FFFFFF",
-    fontSize: 12.5,
-    fontWeight: "700",
-    letterSpacing: 0.3,
+    fontSize: 11.5,
+    fontWeight: "500",
+    letterSpacing: 0.1,
   },
-  mobileInlineHeaderDoneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+  modalHeaderDoneBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0, 229, 255, 0.12)",
     borderWidth: 1,
     borderColor: "rgba(0, 229, 255, 0.25)",
   },
-  mobileTimelineArea: {
+  modalBodyWrap: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden" as any,
+  },
+  timelineContentRoot: {
+    flex: 1,
     width: "100%",
+    height: "100%",
+    backgroundColor: "#08090E",
+    overflow: "hidden" as any,
+  },
+  timelineBodyWrap: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    minHeight: 120,
+    overflow: "hidden" as any,
   },
   bottomDock: {
     width: "100%",

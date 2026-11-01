@@ -389,6 +389,7 @@ export default function EffectsModal({
                   unit="%"
                   defaultValue={80}
                   accentColor="#00F2FE"
+                  showSteppers={true}
                   onChange={(newPct) => handleIntensityChange(newPct / 100)}
                 />
 
@@ -506,7 +507,7 @@ export default function EffectsModal({
                           </View>
                           {isCurrentActive && (
                             <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={12} color="#000000" />
+                              <Ionicons name="checkmark" size={9} color="#000000" />
                             </View>
                           )}
                         </>
@@ -607,14 +608,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resetText: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   doneBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 5,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -622,21 +623,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   controlsBar: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    gap: 4,
     backgroundColor: '#08090E',
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
   },
   categoryScroll: {
-    gap: 5,
-    paddingVertical: 2,
+    gap: 4,
+    paddingVertical: 1,
   },
   categoryPill: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -646,19 +647,19 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
   },
   categoryPillText: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   categoryPillTextActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   intensityCard: {
     backgroundColor: '#0F131F',
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 6,
+    borderRadius: 6,
+    padding: 6,
+    marginTop: 4,
     borderWidth: 1,
     borderColor: 'rgba(0, 242, 254, 0.2)',
   },
@@ -666,30 +667,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   intensityActiveName: {
     color: '#E2E8F0',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
     maxWidth: 200,
   },
   intensityBadgeText: {
     color: '#00F2FE',
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
   quickPresetRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
+    gap: 4,
+    marginTop: 4,
   },
   quickPresetPill: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -699,33 +700,33 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
   },
   quickPresetText: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 9,
+    fontWeight: '400',
   },
   quickPresetTextActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   sheetBody: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingHorizontal: 6,
+    paddingTop: 4,
   },
   gridContainer: {
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 4,
   },
   effectCard: {
-    width: '31%',
+    width: '23.8%',
     alignItems: 'center',
-    padding: 4,
-    borderRadius: 8,
+    padding: 3,
+    borderRadius: 5,
     backgroundColor: '#131826',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#1F2637',
   },
   effectCardActive: {
@@ -734,14 +735,14 @@ const styles = StyleSheet.create({
   },
   previewBox: {
     width: '100%',
-    height: 52,
-    borderRadius: 5,
+    height: 36,
+    borderRadius: 4,
     overflow: 'hidden',
     backgroundColor: '#090B10',
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   previewImg: {
     width: '100%',
@@ -757,24 +758,20 @@ const styles = StyleSheet.create({
   },
   nonePreviewText: {
     color: '#64748B',
-    fontSize: 9.5,
-    fontWeight: '600',
+    fontSize: 8.5,
+    fontWeight: '400',
   },
   activeCheckBadge: {
     position: 'absolute',
-    top: 3,
-    right: 3,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    top: 2,
+    right: 2,
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 2,
-    elevation: 3,
   },
   recBadge: {
     position: 'absolute',
@@ -934,46 +931,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#08090E',
   },
   effectLabel: {
-    color: '#94A3B8',
-    fontSize: 9.5,
-    fontWeight: '500',
+    color: '#8E95A5',
+    fontSize: 8.5,
+    fontWeight: '400',
     textAlign: 'center',
   },
   effectLabelActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   effectDescText: {
-    color: '#64748B',
-    fontSize: 7.5,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 1,
-    width: '100%',
-    ...(Platform.OS === 'web'
-      ? ({
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          display: 'block',
-        } as any)
-      : {}),
+    display: 'none' as any,
   },
   inlineApplyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: '#00F2FE',
-    paddingHorizontal: 10,
-    height: 24,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    height: 22,
+    borderRadius: 5,
   },
   inlineAppliedBtn: {
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
     color: '#08090E',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
 });

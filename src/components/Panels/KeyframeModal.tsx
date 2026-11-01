@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -59,6 +59,8 @@ export default function KeyframeModal({
   onClearAllMaskKeyframes,
   isInline = false,
 }: KeyframeModalProps) {
+  const [isSliderDragging, setIsSliderDragging] = useState(false);
+
   useEffect(() => {
     if (visible) {
       soundEngine.playSfx("click");
@@ -169,6 +171,7 @@ export default function KeyframeModal({
             style={styles.scrollBody}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={!isSliderDragging}
           >
             {!selectedClip ? (
               <KeyframeNoClipView onClose={onClose} />
@@ -295,6 +298,8 @@ export default function KeyframeModal({
                   activeEasing={currentKeyframe?.easing || "easeInOut"}
                   activeTransform={activeTransform}
                   localTime={localTime}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
                   onUpdateKeyframeTransform={onUpdateKeyframeTransform}
                 />
 

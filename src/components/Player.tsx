@@ -106,6 +106,30 @@ function Player({
     handleViewportLayout,
   } = usePlayerViewport({ project, fullscreen, isResizing });
 
+  // Freeze canvas buffer resolution during drag/resize to prevent context wiping and glitching
+  const stableResolutionRef = useRef<{ width: number; height: number }>({
+    width: canvasWidth,
+    height: canvasHeight,
+  });
+
+  if (!isResizing && canvasWidth > 0 && canvasHeight > 0) {
+    stableResolutionRef.current = {
+      width: canvasWidth,
+      height: canvasHeight,
+    };
+  }
+
+  const effectiveBufferW = stableResolutionRef.current.width || canvasWidth;
+  const effectiveBufferH = stableResolutionRef.current.height || canvasHeight;
+
+  const dpr =
+    typeof window !== "undefined"
+      ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2.0)
+      : 1;
+
+  const canvasBufferWidth = Math.round(effectiveBufferW * dpr);
+  const canvasBufferHeight = Math.round(effectiveBufferH * dpr);
+
   // Web VideoRenderer Canvas hook
   const { canvasRef, canvasBoxRef, rendererRef } = usePlayerWebRenderer({
     project,
@@ -634,24 +658,8 @@ function Player({
           {Platform.OS === "web" ? (
             <canvas
               ref={canvasRef as any}
-              width={Math.round(
-                canvasWidth *
-                  (typeof window !== "undefined"
-                    ? Math.min(
-                        window.devicePixelRatio || 1,
-                        isMobile ? 1.5 : 2.0,
-                      )
-                    : 1),
-              )}
-              height={Math.round(
-                canvasHeight *
-                  (typeof window !== "undefined"
-                    ? Math.min(
-                        window.devicePixelRatio || 1,
-                        isMobile ? 1.5 : 2.0,
-                      )
-                    : 1),
-              )}
+              width={canvasBufferWidth}
+              height={canvasBufferHeight}
               style={{
                 width: "100%",
                 height: "100%",

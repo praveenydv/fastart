@@ -247,20 +247,20 @@ export default function BackgroundModal({
       {!isInline ? (
         <View style={styles.header}>
           <View style={styles.headerTitleRow}>
-            <Ionicons name="color-palette-outline" size={16} color="#00F2FE" />
+            <Ionicons name="color-palette-outline" size={14} color="#00F2FE" />
             <Text style={styles.headerTitle}>Background</Text>
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <TouchableOpacity
               onPress={handleReset}
-              style={[styles.resetBtn, isDefault && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
+              style={[styles.resetBtn, isDefault && { opacity: 0.4 }, { paddingHorizontal: 6, height: 22 }]}
               disabled={isDefault}
               activeOpacity={0.7}
               accessibilityLabel="Reset background to default"
             >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]}>Default</Text>
+              <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 2 }} />
+              <Text style={[styles.resetText, { fontSize: 9 }]}>Default</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -269,14 +269,14 @@ export default function BackgroundModal({
               activeOpacity={0.7}
               accessibilityLabel="Close panel"
             >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
+              <Ionicons name="close" size={14} color="#A1A1AA" />
             </TouchableOpacity>
           </View>
         </View>
       ) : null}
 
       {/* Navigation Tabs: Color, Image, Blur */}
-      <View style={[styles.tabContainer, isInline && { marginTop: 8 }]}>
+      <View style={[styles.tabContainer, isInline && { marginTop: 4 }]}>
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'color' && styles.tabBtnActive]}
               onPress={() => {
@@ -287,13 +287,13 @@ export default function BackgroundModal({
             >
               <Ionicons
                 name="color-palette-outline"
-                size={14}
+                size={12}
                 color={activeTab === 'color' ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'color' && { color: '#00F2FE', fontWeight: '700' },
+                  activeTab === 'color' && { color: '#00F2FE', fontWeight: '500' },
                 ]}
               >
                 Color
@@ -310,13 +310,13 @@ export default function BackgroundModal({
             >
               <Ionicons
                 name="image-outline"
-                size={14}
+                size={12}
                 color={activeTab === 'image' ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'image' && { color: '#00F2FE', fontWeight: '700' },
+                  activeTab === 'image' && { color: '#00F2FE', fontWeight: '500' },
                 ]}
               >
                 Image
@@ -333,13 +333,13 @@ export default function BackgroundModal({
             >
               <Ionicons
                 name="water-outline"
-                size={14}
+                size={12}
                 color={activeTab === 'blur' ? '#00F2FE' : '#94A3B8'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'blur' && { color: '#00F2FE', fontWeight: '700' },
+                  activeTab === 'blur' && { color: '#00F2FE', fontWeight: '500' },
                 ]}
               >
                 Blur
@@ -349,11 +349,11 @@ export default function BackgroundModal({
             {isInline && !isDefault && (
               <TouchableOpacity
                 onPress={handleReset}
-                style={[styles.tabBtn, { maxWidth: 36, paddingHorizontal: 0 }]}
+                style={[styles.tabBtn, { maxWidth: 30, paddingHorizontal: 0 }]}
                 activeOpacity={0.8}
                 accessibilityLabel="Reset background to default"
               >
-                <Ionicons name="refresh-outline" size={14} color="#00F2FE" />
+                <Ionicons name="refresh-outline" size={12} color="#00F2FE" />
               </TouchableOpacity>
             )}
           </View>
@@ -396,7 +396,7 @@ export default function BackgroundModal({
                           {isSelected && (
                             <Ionicons
                               name="checkmark"
-                              size={15}
+                              size={11}
                               color={col.id === '#FFFFFF' ? '#000000' : '#FFFFFF'}
                             />
                           )}
@@ -414,7 +414,7 @@ export default function BackgroundModal({
                         handleSelectBg(color);
                         setCustomHexInput(color.toUpperCase());
                       }}
-                      size={28}
+                      size={22}
                       shape="circle"
                       accessibilityLabel="Pick custom background color"
                     />
@@ -422,7 +422,7 @@ export default function BackgroundModal({
                 </ScrollView>
 
                 {/* Custom Hex Color Picker Input */}
-                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Custom Hex Color</Text>
+                <Text style={[styles.sectionTitle, { marginTop: 10 }]}>Custom Hex Color</Text>
                 <View style={styles.hexInputRow}>
                   <View
                     style={[
@@ -459,7 +459,7 @@ export default function BackgroundModal({
                   ) : (
                     <>
                       <View style={styles.uploadIconCircle}>
-                        <Ionicons name="cloud-upload-outline" size={20} color="#FFFFFF" />
+                        <Ionicons name="cloud-upload-outline" size={15} color="#FFFFFF" />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.uploadTitle}>Choose from Photos / Gallery</Text>
@@ -467,7 +467,7 @@ export default function BackgroundModal({
                           Select custom picture or wallpaper from device
                         </Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color="#71717A" />
+                      <Ionicons name="chevron-forward" size={14} color="#71717A" />
                     </>
                   )}
                 </TouchableOpacity>
@@ -482,7 +482,7 @@ export default function BackgroundModal({
                       cachePolicy="memory-disk"
                       transition={120}
                     />
-                    <View style={{ flex: 1, paddingLeft: 10 }}>
+                    <View style={{ flex: 1, paddingLeft: 8 }}>
                       <Text style={styles.activeCustomImageText}>Active Image Background</Text>
                       <Text style={styles.activeCustomImageSub} numberOfLines={1}>
                         {rawBg.replace('image:', '')}
@@ -491,9 +491,9 @@ export default function BackgroundModal({
                     <TouchableOpacity
                       onPress={handleReset}
                       style={styles.removeImageBtn}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={14} color="#EF4444" />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -501,7 +501,7 @@ export default function BackgroundModal({
                 {/* Live Canvas / Video Frame Option */}
                 {livePreviewUri ? (
                   <>
-                    <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+                    <Text style={[styles.sectionTitle, { marginTop: 10 }]}>
                       Live Canvas / Video Frame
                     </Text>
                     <TouchableOpacity
@@ -519,8 +519,8 @@ export default function BackgroundModal({
                         cachePolicy="memory-disk"
                         transition={120}
                       />
-                      <View style={{ flex: 1, paddingLeft: 12 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={{ flex: 1, paddingLeft: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                           <View style={styles.liveDot} />
                           <Text style={styles.liveFrameTitle}>Use Current Live Frame</Text>
                         </View>
@@ -530,17 +530,17 @@ export default function BackgroundModal({
                       </View>
                       {rawBg === `image:${livePreviewUri}` ? (
                         <View style={styles.liveSelectedBadge}>
-                          <Ionicons name="checkmark" size={12} color="#000000" />
+                          <Ionicons name="checkmark" size={9} color="#000000" />
                         </View>
                       ) : (
-                        <Ionicons name="add-circle-outline" size={20} color="#00F2FE" />
+                        <Ionicons name="add-circle-outline" size={16} color="#00F2FE" />
                       )}
                     </TouchableOpacity>
                   </>
                 ) : null}
 
                 {/* Curated Aesthetic Wallpapers */}
-                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+                <Text style={[styles.sectionTitle, { marginTop: 10 }]}>
                   Curated Studio Wallpapers
                 </Text>
                 <View style={styles.wallpaperGrid}>
@@ -570,7 +570,7 @@ export default function BackgroundModal({
                           </Text>
                           {isSelected && (
                             <View style={styles.wallpaperCheckBadge}>
-                              <Ionicons name="checkmark" size={12} color="#000000" />
+                              <Ionicons name="checkmark" size={8} color="#000000" />
                             </View>
                           )}
                         </View>
@@ -585,7 +585,7 @@ export default function BackgroundModal({
             {activeTab === 'blur' && (
               <View style={styles.tabBodySection}>
                 <View style={styles.blurNoticeBanner}>
-                  <Ionicons name="sparkles" size={15} color="#FFFFFF" />
+                  <Ionicons name="sparkles" size={13} color="#FFFFFF" />
                   <Text style={styles.blurNoticeText}>
                     Auto-generates synchronized dynamic blur behind video frames for aesthetic letterbox/pillarbox filling.
                   </Text>
@@ -610,7 +610,7 @@ export default function BackgroundModal({
                         <View style={styles.blurThumbnailContainer}>
                           {b.px === 0 ? (
                             <View style={styles.blurNoneBox}>
-                              <Ionicons name="ban-outline" size={20} color="#71717A" />
+                              <Ionicons name="ban-outline" size={15} color="#71717A" />
                             </View>
                           ) : (
                             <ExpoImage
@@ -629,7 +629,7 @@ export default function BackgroundModal({
                           )}
                           {isSelected && (
                             <View style={styles.blurSelectedCheckBadge}>
-                              <Ionicons name="checkmark" size={12} color="#000000" />
+                              <Ionicons name="checkmark" size={8} color="#000000" />
                             </View>
                           )}
                         </View>
@@ -698,15 +698,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
   },
   headerCloseBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#131826',
     alignItems: 'center',
     justifyContent: 'center',
@@ -720,13 +720,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
   },
   resetBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -735,13 +735,13 @@ const styles = StyleSheet.create({
   },
   resetText: {
     color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: '400',
   },
   doneBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -750,15 +750,15 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    marginHorizontal: 10,
-    marginTop: 6,
-    marginBottom: 6,
+    marginHorizontal: 8,
+    marginTop: 4,
+    marginBottom: 4,
     backgroundColor: '#08090E',
-    borderRadius: 8,
+    borderRadius: 6,
     padding: 2,
     borderWidth: 1,
     borderColor: '#1F2637',
-    height: 30,
+    height: 26,
   },
   tabBtn: {
     flex: 1,
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    borderRadius: 6,
+    borderRadius: 4,
   },
   tabBtnActive: {
     backgroundColor: '#131826',
@@ -774,81 +774,82 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
   },
   tabText: {
-    fontSize: 10.5,
+    fontSize: 9.5,
     color: '#94A3B8',
-    fontWeight: '600',
+    fontWeight: '400',
   },
   contentScroll: {
-    paddingHorizontal: 12,
-    paddingTop: 6,
+    paddingHorizontal: 8,
+    paddingTop: 4,
   },
   scrollBody: {
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   tabBodySection: {
     flex: 1,
   },
   sectionTitle: {
     color: '#94A3B8',
-    fontSize: 9.5,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontSize: 8.5,
+    fontWeight: '500',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   colorRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
     paddingVertical: 2,
   },
   colorItem: {
     alignItems: 'center',
-    width: 32,
+    width: 26,
   },
   colorItemActive: {
     transform: [{ scale: 1.05 }],
   },
   colorCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   colorLabel: {
-    fontSize: 8.5,
+    fontSize: 7.5,
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 1,
     textAlign: 'center',
+    fontWeight: '400',
   },
   colorLabelActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   hexInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#131826',
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: '#1F2637',
-    paddingHorizontal: 8,
-    height: 30,
+    paddingHorizontal: 6,
+    height: 26,
     gap: 6,
   },
   colorCircleSmall: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   hexInput: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    fontWeight: '700',
+    fontWeight: '400',
   },
   uploadCardBtn: {
     flexDirection: 'row',
@@ -857,112 +858,112 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1F2637',
     borderStyle: 'dashed',
-    borderRadius: 8,
-    padding: 8,
-    gap: 8,
+    borderRadius: 6,
+    padding: 6,
+    gap: 6,
   },
   uploadIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#1B2234',
     alignItems: 'center',
     justifyContent: 'center',
   },
   uploadTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '500',
   },
   uploadSubtitle: {
     color: '#64748B',
-    fontSize: 10,
+    fontSize: 8.5,
     marginTop: 1,
   },
   activeCustomImageContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#131826',
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#1F2637',
-    padding: 6,
-    marginTop: 8,
+    padding: 5,
+    marginTop: 6,
   },
   liveFrameCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#131826',
-    borderRadius: 8,
-    padding: 8,
-    borderWidth: 1.5,
+    borderRadius: 6,
+    padding: 6,
+    borderWidth: 1,
     borderColor: '#1F2637',
-    marginTop: 6,
-    marginBottom: 6,
+    marginTop: 4,
+    marginBottom: 4,
   },
   liveFrameCardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   liveFrameThumb: {
-    width: 60,
-    height: 44,
-    borderRadius: 6,
+    width: 48,
+    height: 34,
+    borderRadius: 4,
     backgroundColor: '#08090E',
   },
   liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#00F2FE',
   },
   liveFrameTitle: {
     color: '#FFFFFF',
-    fontSize: 11.5,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '500',
   },
   liveFrameSubtitle: {
     color: '#94A3B8',
-    fontSize: 9.5,
-    marginTop: 2,
+    fontSize: 8.5,
+    marginTop: 1,
   },
   liveSelectedBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeCustomImageThumb: {
-    width: 38,
-    height: 38,
-    borderRadius: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 4,
   },
   activeCustomImageText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
   activeCustomImageSub: {
     color: '#64748B',
-    fontSize: 9.5,
+    fontSize: 8,
     marginTop: 1,
   },
   removeImageBtn: {
-    padding: 5,
+    padding: 4,
     borderRadius: 4,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   wallpaperGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
   },
   wallpaperCard: {
-    width: '31.5%',
-    height: 66,
-    borderRadius: 6,
+    width: '23.5%',
+    height: 46,
+    borderRadius: 5,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -981,22 +982,22 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 3,
+    paddingVertical: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   wallpaperCardTitle: {
     color: '#FFFFFF',
-    fontSize: 8.5,
-    fontWeight: '700',
+    fontSize: 7.5,
+    fontWeight: '400',
     flex: 1,
   },
   wallpaperCheckBadge: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1004,30 +1005,30 @@ const styles = StyleSheet.create({
   blurNoticeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#131826',
-    padding: 8,
-    borderRadius: 8,
+    padding: 6,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#1F2637',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   blurNoticeText: {
     color: '#94A3B8',
-    fontSize: 10.5,
+    fontSize: 9.5,
     flex: 1,
-    lineHeight: 14,
+    lineHeight: 12,
   },
   blurLevelsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
   },
   blurPresetCard: {
-    width: '31.5%',
+    width: '23.5%',
     backgroundColor: '#131826',
-    borderRadius: 6,
-    padding: 4,
+    borderRadius: 5,
+    padding: 3,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -1038,11 +1039,11 @@ const styles = StyleSheet.create({
   },
   blurThumbnailContainer: {
     width: '100%',
-    height: 48,
+    height: 34,
     borderRadius: 4,
     overflow: 'hidden',
     backgroundColor: '#08090E',
-    marginBottom: 4,
+    marginBottom: 2,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1058,27 +1059,27 @@ const styles = StyleSheet.create({
   },
   blurSelectedCheckBadge: {
     position: 'absolute',
-    top: 3,
-    right: 3,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
   blurCardTitle: {
     color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 8.5,
+    fontWeight: '400',
   },
   blurCardTitleActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   blurCardDesc: {
     color: '#64748B',
-    fontSize: 8.5,
+    fontSize: 7.5,
     marginTop: 1,
   },
   inlineApplyBtn: {
@@ -1086,16 +1087,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#00F2FE',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
   },
   inlineAppliedBtn: {
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
     color: '#08090E',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
 });

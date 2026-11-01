@@ -729,6 +729,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             unit="%"
             defaultValue={100}
             showReset={true}
+            showSteppers={true}
             accentColor="#00F2FE"
             onChange={(val) => {
               if (project) {
@@ -892,40 +893,40 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
 
 const modalStyles = StyleSheet.create({
   panelContainer: {
-    padding: 10,
+    padding: 6,
     flex: 1,
     backgroundColor: "#0F131D",
   },
   panelSectionTitle: {
-    fontSize: 9.5,
-    fontWeight: "700",
+    fontSize: 8.5,
+    fontWeight: "500",
     color: "#94A3B8",
-    letterSpacing: 0.6,
-    marginBottom: 6,
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   layerInfoBox: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#131826",
-    borderRadius: 8,
-    padding: 8,
+    borderRadius: 6,
+    padding: 6,
     borderWidth: 1,
     borderColor: "#1F2637",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   layerInfoTitle: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#FFFFFF",
   },
   layerInfoSubtitle: {
-    fontSize: 9.5,
+    fontSize: 8.5,
     color: "#94A3B8",
     marginTop: 1,
   },
   btnGrid: {
     flexDirection: "row",
-    gap: 8,
+    gap: 4,
   },
   actionCardBtn: {
     flex: 1,
@@ -933,26 +934,26 @@ const modalStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#131826",
-    paddingVertical: 7,
-    borderRadius: 6,
+    paddingVertical: 5,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: "#1F2637",
-    gap: 5,
+    gap: 3,
   },
   actionCardText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "400",
     color: "#FFFFFF",
   },
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 4,
   },
   chipBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
@@ -962,42 +963,42 @@ const modalStyles = StyleSheet.create({
     borderColor: "#00F2FE",
   },
   chipText: {
-    fontSize: 10.5,
+    fontSize: 9.5,
     color: "#94A3B8",
-    fontWeight: "600",
+    fontWeight: "400",
   },
   chipTextActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
   chipGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 4,
   },
   animCard: {
     width: "48%",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#131826",
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingVertical: 6,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: "#1F2637",
-    gap: 4,
+    gap: 3,
   },
   animCardActive: {
     backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
   animCardText: {
-    fontSize: 11,
+    fontSize: 9.5,
     color: "#94A3B8",
-    fontWeight: "600",
+    fontWeight: "400",
   },
   animCardTextActive: {
     color: "#00F2FE",
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });
 

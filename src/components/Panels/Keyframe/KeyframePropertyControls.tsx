@@ -19,6 +19,8 @@ interface KeyframePropertyControlsProps {
   activeEasing?: KeyframeEasing;
   activeTransform: ClipTransform;
   localTime: number;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   onUpdateKeyframeTransform?: (
     time: number,
     transform: Partial<ClipTransform>,
@@ -37,6 +39,8 @@ export default function KeyframePropertyControls({
   activeEasing = "easeInOut",
   activeTransform,
   localTime,
+  onDragStart,
+  onDragEnd,
   onUpdateKeyframeTransform,
 }: KeyframePropertyControlsProps) {
   const handleUpdateProperty = (
@@ -86,6 +90,9 @@ export default function KeyframePropertyControls({
           decimals={2}
           defaultValue={1.0}
           accentColor="#00F2FE"
+          showSteppers={true}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           onChange={(val) => handleUpdateProperty("scale", val)}
         />
 
@@ -126,6 +133,9 @@ export default function KeyframePropertyControls({
           unit="°"
           defaultValue={0}
           accentColor="#00F2FE"
+          showSteppers={true}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           onChange={(val) => handleUpdateProperty("rotation", val)}
         />
 
@@ -165,6 +175,9 @@ export default function KeyframePropertyControls({
           unit="px"
           defaultValue={0}
           accentColor="#00F2FE"
+          showSteppers={true}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           onChange={(val) => handleUpdateProperty("x", val)}
         />
         <CompactSliderInput
@@ -177,6 +190,9 @@ export default function KeyframePropertyControls({
           unit="px"
           defaultValue={0}
           accentColor="#00F2FE"
+          showSteppers={true}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           onChange={(val) => handleUpdateProperty("y", val)}
         />
 
@@ -241,6 +257,9 @@ export default function KeyframePropertyControls({
           unit="%"
           defaultValue={100}
           accentColor="#00F2FE"
+          showSteppers={true}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           onChange={(val) => handleUpdateProperty("opacity", val / 100)}
         />
 

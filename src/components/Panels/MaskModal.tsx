@@ -71,6 +71,7 @@ export default function MaskModal({
   const [maskX, setMaskX] = useState<number>(currentMask?.x || 0);
   const [maskY, setMaskY] = useState<number>(currentMask?.y || 0);
   const [maskRotation, setMaskRotation] = useState<number>(currentMask?.rotation || 0);
+  const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
 
   useEffect(() => {
     if (visible) {
@@ -219,7 +220,13 @@ export default function MaskModal({
         </View>
       )}
 
-          <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.contentScroll}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={!isSliderDragging}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.groupContainer}>
               {/* Mask Shapes Grid */}
               <View style={styles.maskGrid}>
@@ -238,7 +245,7 @@ export default function MaskModal({
                     >
                       <Ionicons
                         name={m.icon as any}
-                        size={20}
+                        size={16}
                         color={isSelected ? '#00F2FE' : '#8E95A5'}
                       />
                       <Text
@@ -433,6 +440,8 @@ export default function MaskModal({
                       defaultValue={60}
                       accentColor="#00F2FE"
                       showSteppers={true}
+                      onDragStart={() => setIsSliderDragging(true)}
+                      onDragEnd={() => setIsSliderDragging(false)}
                       onChange={(val) => {
                         setMaskWidth(val);
                         if (isAspectLocked) {
@@ -459,6 +468,8 @@ export default function MaskModal({
                       defaultValue={60}
                       accentColor="#00F2FE"
                       showSteppers={true}
+                      onDragStart={() => setIsSliderDragging(true)}
+                      onDragEnd={() => setIsSliderDragging(false)}
                       onChange={(val) => {
                         setMaskHeight(val);
                         if (isAspectLocked) {
@@ -485,6 +496,8 @@ export default function MaskModal({
                       defaultValue={0}
                       accentColor="#00F2FE"
                       showSteppers={true}
+                      onDragStart={() => setIsSliderDragging(true)}
+                      onDragEnd={() => setIsSliderDragging(false)}
                       onChange={(val) => {
                         setMaskFeather(val);
                         triggerUpdate({ feather: val });
@@ -505,6 +518,8 @@ export default function MaskModal({
                         defaultValue={16}
                         accentColor="#00F2FE"
                         showSteppers={true}
+                        onDragStart={() => setIsSliderDragging(true)}
+                        onDragEnd={() => setIsSliderDragging(false)}
                         onChange={(val) => {
                           setMaskRoundness(val);
                           triggerUpdate({ roundness: val });
@@ -526,6 +541,8 @@ export default function MaskModal({
                       showReset={true}
                       showSteppers={true}
                       accentColor="#00F2FE"
+                      onDragStart={() => setIsSliderDragging(true)}
+                      onDragEnd={() => setIsSliderDragging(false)}
                       onChange={(val) => {
                         setMaskRotation(val);
                         triggerUpdate({ rotation: val });
@@ -570,6 +587,8 @@ export default function MaskModal({
                       defaultValue={0}
                       accentColor="#00F2FE"
                       showSteppers={true}
+                      onDragStart={() => setIsSliderDragging(true)}
+                      onDragEnd={() => setIsSliderDragging(false)}
                       onChange={(val) => {
                         setMaskX(val);
                         triggerUpdate({ x: val });
@@ -585,6 +604,8 @@ export default function MaskModal({
                       defaultValue={0}
                       accentColor="#00F2FE"
                       showSteppers={true}
+                      onDragStart={() => setIsSliderDragging(true)}
+                      onDragEnd={() => setIsSliderDragging(false)}
                       onChange={(val) => {
                         setMaskY(val);
                         triggerUpdate({ y: val });
@@ -635,21 +656,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
     backgroundColor: '#08090E',
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
   },
   closeBtnCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 5,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -673,28 +694,28 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#0F131D',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
     maxHeight: '75%',
     borderTopWidth: 1,
     borderColor: '#1F2637',
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   sheetHandle: {
-    width: 32,
-    height: 4,
-    borderRadius: 2,
+    width: 28,
+    height: 2.5,
+    borderRadius: 1.5,
     backgroundColor: '#1F2637',
     alignSelf: 'center',
-    marginTop: 6,
-    marginBottom: 4,
+    marginTop: 4,
+    marginBottom: 2,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     backgroundColor: '#08090E',
     borderBottomWidth: 1,
     borderColor: '#1F2637',
@@ -702,18 +723,18 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 11.5,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   doneBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 5,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -721,9 +742,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resetBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -731,29 +752,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resetText: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   contentScroll: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingHorizontal: 6,
+    paddingTop: 4,
   },
   groupContainer: {
-    gap: 8,
-    paddingBottom: 12,
+    gap: 5,
+    paddingBottom: 8,
   },
   maskGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 4,
   },
   maskCard: {
-    width: '23.5%',
+    width: '23.8%',
     backgroundColor: '#131826',
-    borderRadius: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 3,
+    borderRadius: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -763,26 +784,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   maskCardTitle: {
-    color: '#94A3B8',
-    fontSize: 9.5,
-    fontWeight: '600',
-    marginTop: 3,
+    color: '#8E95A5',
+    fontSize: 8.5,
+    fontWeight: '400',
+    marginTop: 2,
     textAlign: 'center',
   },
   maskCardTitleActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   controlsCard: {
     backgroundColor: '#131826',
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 6,
+    padding: 6,
     borderWidth: 1,
     borderColor: '#1F2637',
-    gap: 8,
+    gap: 5,
   },
   sliderRow: {
-    gap: 4,
+    gap: 3,
   },
   labelValueRow: {
     flexDirection: 'row',
@@ -790,14 +811,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sliderLabel: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '500',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   badge: {
     color: '#00F2FE',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -811,14 +832,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 3,
+    gap: 6,
+    marginTop: 2,
   },
   stepBtn: {
     backgroundColor: '#1B2234',
-    width: 26,
-    height: 26,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#1F2637',
     alignItems: 'center',
@@ -826,32 +847,32 @@ const styles = StyleSheet.create({
   },
   stepperVal: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    minWidth: 36,
+    fontSize: 9.5,
+    fontWeight: '500',
+    minWidth: 32,
     textAlign: 'center',
   },
   dimHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 4,
+    paddingBottom: 3,
     borderBottomWidth: 1,
     borderBottomColor: '#1A2130',
   },
   dimLabel: {
-    color: '#F1F5F9',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#CBD5E1',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   lockBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: '#161D2B',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#242F45',
   },
@@ -861,24 +882,24 @@ const styles = StyleSheet.create({
   },
   lockBtnText: {
     color: '#8E95A5',
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 8.5,
+    fontWeight: '400',
   },
   lockBtnTextActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   ratioPillsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 4,
     marginVertical: 2,
   },
   ratioPill: {
     backgroundColor: '#131826',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#1F2637',
   },
@@ -887,13 +908,13 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
   },
   ratioPillText: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 8.5,
+    fontWeight: '400',
   },
   ratioPillTextActive: {
     color: '#00F2FE',
-    fontWeight: '700',
+    fontWeight: '500',
   },
   keyframeBar: {
     flexDirection: 'row',

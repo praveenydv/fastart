@@ -216,7 +216,7 @@ export default function FiltersModal({
       ) : null}
 
           {/* Top Bar: Category Pills + Import LUT button */}
-          <View style={[styles.categoryRow, isInline && { marginTop: 8 }]}>
+          <View style={styles.categoryRow}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -236,11 +236,11 @@ export default function FiltersModal({
                   onPress={handleResetToNormal}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="refresh-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Ionicons name="refresh-outline" size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
                   <Text
                     style={[
                       styles.categoryPillText,
-                      { color: '#FFFFFF', fontWeight: '700', flexShrink: 0 },
+                      { color: '#FFFFFF', fontWeight: '500', flexShrink: 0 },
                       Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : null,
                     ]}
                     numberOfLines={1}
@@ -255,7 +255,7 @@ export default function FiltersModal({
                   onPress={handleImportCubeFile}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="cloud-upload-outline" size={13} color="#FFFFFF" />
+                  <Ionicons name="cloud-upload-outline" size={11} color="#FFFFFF" />
                   <Text style={styles.importBtnText}>+ .cube</Text>
                 </TouchableOpacity>
               )}
@@ -381,7 +381,7 @@ export default function FiltersModal({
                           </View>
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={12} color="#000000" />
+                              <Ionicons name="checkmark" size={9} color="#000000" />
                             </View>
                           )}
                         </View>
@@ -483,7 +483,7 @@ export default function FiltersModal({
                           )}
                           {isSelected && (
                             <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={12} color="#000000" />
+                              <Ionicons name="checkmark" size={9} color="#000000" />
                             </View>
                           )}
                         </View>
@@ -523,16 +523,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
     backgroundColor: '#08090E',
   },
   closeBtnCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 22,
+    height: 22,
+    borderRadius: 5,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -556,27 +556,27 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: '#0F131D',
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
-    paddingBottom: Platform.OS === 'ios' ? 16 : 6,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 4,
     borderTopWidth: 1,
     borderColor: '#1F2637',
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
+    width: 28,
+    height: 2.5,
     backgroundColor: '#1F2637',
     borderRadius: 1.5,
     alignSelf: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
     backgroundColor: '#08090E',
@@ -584,135 +584,135 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 11.5,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   resetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    height: 26,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    height: 22,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   resetText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
     flexShrink: 0,
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   categoryRow: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
     backgroundColor: '#08090E',
   },
   categoryScroll: {
-    gap: 6,
+    gap: 4,
     alignItems: 'center',
   },
   importBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 7,
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   importBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   categoryPillText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 9.5,
+    fontWeight: '400',
     flexShrink: 0,
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   categoryPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#00F2FE',
+    fontWeight: '500',
   },
   sheetBody: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingHorizontal: 6,
+    paddingTop: 4,
   },
   gridContainer: {
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   sectionBlock: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   intensitySliderRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(0, 242, 254, 0.04)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0, 242, 254, 0.03)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 4,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    marginBottom: 2,
   },
   sectionHeader: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 6,
+    color: '#64748B',
+    fontSize: 8.5,
+    fontWeight: '500',
+    letterSpacing: 0.6,
+    marginBottom: 3,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
   },
   card: {
-    width: '31%',
+    width: '23.8%',
     backgroundColor: '#131826',
-    borderRadius: 7,
+    borderRadius: 5,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#1F2637',
   },
   cardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
   colorPreview: {
-    height: 54,
+    height: 36,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
@@ -726,27 +726,27 @@ const styles = StyleSheet.create({
   },
   activeCheckBadge: {
     position: 'absolute',
-    top: 3,
-    right: 3,
-    backgroundColor: '#FFFFFF',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    top: 2,
+    right: 2,
+    backgroundColor: '#00F2FE',
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   metaBox: {
-    paddingVertical: 5,
-    paddingHorizontal: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
     overflow: 'hidden',
   },
   filterName: {
-    color: '#94A3B8',
-    fontSize: 10.5,
-    fontWeight: '600',
+    color: '#8E95A5',
+    fontSize: 8.5,
+    fontWeight: '400',
     textAlign: 'center',
     flexShrink: 0,
     ...(Platform.OS === 'web'
@@ -760,24 +760,11 @@ const styles = StyleSheet.create({
       : {}),
   },
   filterNameActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#00F2FE',
+    fontWeight: '500',
   },
   filterDescText: {
-    color: '#64748B',
-    fontSize: 7.5,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 1,
-    width: '100%',
-    ...(Platform.OS === 'web'
-      ? ({
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          display: 'block',
-        } as any)
-      : {}),
+    display: 'none' as any,
   },
   splitFilterBox: {
     width: '100%',
@@ -799,14 +786,14 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   splitImgLeft: {
-    width: 90,
+    width: 55,
     height: '100%',
     position: 'absolute',
     left: 0,
     top: 0,
   },
   splitImgRight: {
-    width: 90,
+    width: 55,
     height: '100%',
     position: 'absolute',
     right: 0,
@@ -814,46 +801,46 @@ const styles = StyleSheet.create({
   },
   splitBadgeLeft: {
     position: 'absolute',
-    bottom: 2,
-    left: 2,
+    bottom: 1,
+    left: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 3,
-    paddingVertical: 1,
+    paddingHorizontal: 2,
+    paddingVertical: 0.5,
     borderRadius: 2,
     zIndex: 3,
   },
   splitBadgeRight: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
+    bottom: 1,
+    right: 1,
     backgroundColor: 'rgba(0, 242, 254, 0.35)',
     borderWidth: 0.5,
     borderColor: '#00F2FE',
-    paddingHorizontal: 3,
-    paddingVertical: 1,
+    paddingHorizontal: 2,
+    paddingVertical: 0.5,
     borderRadius: 2,
     zIndex: 3,
   },
   splitBadgeText: {
     color: '#FFFFFF',
-    fontSize: 6.5,
-    fontWeight: '800',
+    fontSize: 5.5,
+    fontWeight: '500',
   },
   splitDividerLine: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     left: '50%',
-    width: 1,
+    width: 0.75,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 4,
   },
   splitDividerHandle: {
-    width: 5,
-    height: 9,
-    borderRadius: 2,
+    width: 3,
+    height: 6,
+    borderRadius: 1,
     backgroundColor: '#FFFFFF',
   },
   categoryTag: {

@@ -6,8 +6,6 @@ export const headerStyles = {
     backgroundColor: "#08090E",
     borderTopWidth: 1,
     borderTopColor: "#1F2637",
-    flexShrink: 0,
-    flexGrow: 0,
     overflow: "hidden" as any,
   },
   resizeHandleBar: {

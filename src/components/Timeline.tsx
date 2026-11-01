@@ -573,7 +573,14 @@ export const Timeline: React.FC<TimelineProps> = ({
   return (
     <View
       ref={containerRef}
-      style={[styles.container, { height: timelineHeight }]}
+      style={[
+        styles.container,
+        {
+          height: isMobile ? "100%" : timelineHeight,
+          width: "100%",
+          flex: isMobile ? 1 : undefined,
+        },
+      ]}
       onMoveShouldSetResponder={(e) =>
         (e.nativeEvent?.touches?.length || 0) === 2
       }
@@ -665,6 +672,9 @@ export const Timeline: React.FC<TimelineProps> = ({
             touchAction: isInteractingWithTimeline ? "none" : "pan-y",
           } as any,
         ]}
+        contentContainerStyle={{
+          paddingBottom: isMobile ? 40 : 24,
+        }}
         showsVerticalScrollIndicator={true}
         nestedScrollEnabled={true}
         keyboardShouldPersistTaps="handled"

@@ -275,7 +275,7 @@ export default function AudioModal({
                       : {})}
                   >
                     <View style={styles.importedAudioIconBox}>
-                      <Ionicons name="musical-note" size={16} color="#00F2FE" />
+                      <Ionicons name="musical-note" size={13} color="#00F2FE" />
                     </View>
                     <View style={styles.importedAudioInfo}>
                       <Text style={styles.importedAudioTitle} numberOfLines={1}>
@@ -305,7 +305,7 @@ export default function AudioModal({
                       }}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="add" size={13} color="#000000" />
+                      <Ionicons name="add" size={11} color="#000000" />
                       <Text style={styles.importedAddBtnText}>Add</Text>
                     </TouchableOpacity>
                   </View>
@@ -336,8 +336,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#1F2637',
     backgroundColor: '#08090E',
@@ -349,13 +349,13 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
   },
   closeBtnCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -363,92 +363,92 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetBody: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   fullWidthUploadButton: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: 'rgba(0, 242, 254, 0.4)',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 8,
   },
   fullWidthUploadButtonText: {
     color: '#00F2FE',
-    fontSize: 12.5,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '500',
     letterSpacing: 0.2,
   },
   emptyStateBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#1F2637',
     borderStyle: 'dashed',
-    gap: 4,
+    gap: 3,
   },
   emptyStateTitle: {
     color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
+    fontSize: 10.5,
+    fontWeight: '500',
+    marginTop: 3,
   },
   emptyStateSubtitle: {
     color: '#64748B',
-    fontSize: 10.5,
+    fontSize: 9,
   },
   importedSection: {
-    marginTop: 6,
+    marginTop: 4,
     width: '100%',
   },
   importedHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 4,
+    marginBottom: 6,
+    paddingHorizontal: 3,
   },
   importedSectionTitle: {
     color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 8.5,
+    fontWeight: '500',
     letterSpacing: 0.8,
   },
   importedCountText: {
     color: '#64748B',
-    fontSize: 10,
+    fontSize: 8.5,
     fontFamily: 'monospace',
   },
   importedList: {
     flexDirection: 'column',
-    gap: 8,
+    gap: 5,
     width: '100%',
   },
   importedAudioCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#121622',
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#1F2637',
-    padding: 10,
-    gap: 10,
+    padding: 6,
+    gap: 8,
   },
   importedAudioIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 5,
     backgroundColor: 'rgba(0, 242, 254, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(0, 242, 254, 0.25)',
@@ -460,13 +460,13 @@ const styles = StyleSheet.create({
   },
   importedAudioTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontSize: 10.5,
+    fontWeight: '400',
+    marginBottom: 1,
   },
   importedAudioSubtitle: {
     color: '#64748B',
-    fontSize: 10,
+    fontSize: 8.5,
     fontFamily: 'monospace',
   },
   importedAddBtn: {
@@ -475,14 +475,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
     borderColor: '#00F2FE',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 5,
+    gap: 2,
   },
   importedAddBtnText: {
     color: '#00F2FE',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '500',
   },
 });

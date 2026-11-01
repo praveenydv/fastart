@@ -80,7 +80,7 @@ export interface ToolbarProps {
 // Global tools for whole video (when no clip is selected) - Matches CapCut
 const ROOT_TOOLS = [
   { id: "media", title: "Media", icon: "folder-open-outline" as const },
-  { id: "audio", title: "Audio", icon: "music-note" as const },
+  { id: "audio", title: "Audio", icon: "music-note-outline" as const },
   { id: "text", title: "Text", icon: "format-text" as const },
   { id: "captions", title: "Caption", icon: "subtitles-outline" as const },
   { id: "effects", title: "Effect", icon: "auto-fix" as const },
@@ -92,11 +92,13 @@ const ROOT_TOOLS = [
 
 // Clip-specific tools (when video clip is selected) - CapCut hierarchy
 const VIDEO_CLIP_TOOLS = [
-  { id: "speed", title: "Speed", icon: "speedometer" as const },
+  { id: "split", title: "Split", icon: "content-cut" as const },
+
+  { id: "speed", title: "Speed", icon: "speedometer-slow" as const },
   {
     id: "volume",
     title: "Volume",
-    icon: "volume-high" as const,
+    icon: "volume-medium" as const,
     requiresAudio: true,
   },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
@@ -129,7 +131,7 @@ const VIDEO_CLIP_TOOLS = [
     icon: "ear-hearing" as const,
     requiresAudio: true,
   },
-  { id: "reverse", title: "Reverse", icon: "rewind" as const },
+  { id: "reverse", title: "Reverse", icon: "rewind-outline" as const },
   { id: "freeze", title: "Freeze", icon: "snowflake" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
@@ -187,6 +189,8 @@ const STICKER_CLIP_TOOLS = [
 ];
 
 const AUDIO_CLIP_TOOLS = [
+  { id: "split", title: "Split", icon: "content-cut" as const },
+
   { id: "volume", title: "Volume", icon: "volume-high" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
   {
@@ -450,9 +454,6 @@ function ToolbarComponent({
       list = VIDEO_CLIP_TOOLS.filter((t) => !t.requiresAudio || hasAudio);
     }
 
-    // Ensure split and adjust are removed from main toolbar
-    list = list.filter((t) => t.id !== "split" && t.id !== "adjust");
-
     // On big screen (isVertical), remove audio and media/overlay as they are default opened on the desktop panel
     if (isVertical) {
       list = list.filter(
@@ -529,7 +530,7 @@ function ToolbarComponent({
               >
                 <MaterialCommunityIcons
                   name={item.icon}
-                  size={20}
+                  size={17}
                   color={
                     isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"
                   }
@@ -538,7 +539,7 @@ function ToolbarComponent({
                   style={[
                     styles.verticalToolLabel,
                     isDelete && { color: "#EF4444" },
-                    isActive && { color: "#00E5FF" },
+                    isActive && { color: "#00E5FF", fontWeight: "500" },
                   ]}
                   numberOfLines={1}
                 >
@@ -564,7 +565,7 @@ function ToolbarComponent({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel="Back to root tools"
           >
-            <Ionicons name="chevron-back" size={17} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={15} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.mobileBackDivider} />
         </View>
@@ -596,14 +597,14 @@ function ToolbarComponent({
             >
               <MaterialCommunityIcons
                 name={tool.icon}
-                size={20}
-                color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"}
+                size={17}
+                color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#E2E8F0"}
               />
               <Text
                 style={[
                   styles.horizontalToolLabel,
                   isDelete && { color: "#EF4444" },
-                  isActive && { color: "#00E5FF" },
+                  isActive && { color: "#00E5FF", fontWeight: "500" },
                 ]}
                 numberOfLines={1}
               >
@@ -620,7 +621,7 @@ function ToolbarComponent({
 const styles = StyleSheet.create({
   // Desktop Vertical Toolbar
   verticalContainer: {
-    width: 62,
+    width: 50,
     backgroundColor: "#08090E",
     borderRightWidth: 1,
     borderRightColor: "#1F2637",
@@ -628,38 +629,38 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   verticalScrollContent: {
-    paddingVertical: 6,
+    paddingVertical: 4,
     alignItems: "center",
-    gap: 3,
+    gap: 2,
   },
   verticalToolBtn: {
-    width: 52,
-    height: 44,
+    width: 44,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 7,
-    paddingHorizontal: 2,
+    borderRadius: 6,
+    paddingHorizontal: 1,
     marginVertical: 1,
   },
   verticalToolBtnActive: {
-    backgroundColor: "rgba(0, 229, 255, 0.12)",
+    backgroundColor: "rgba(0, 229, 255, 0.1)",
   },
   verticalToolLabel: {
-    color: "#94A3B8",
-    fontSize: 9.5,
-    fontWeight: "600",
-    marginTop: 2,
+    color: "#8E95A5",
+    fontSize: 8.5,
+    fontWeight: "400",
+    marginTop: 1,
     textAlign: "center",
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   verticalHeader: {
-    paddingTop: 8,
-    paddingBottom: 6,
-    paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 4,
+    paddingHorizontal: 3,
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
-    gap: 4,
+    gap: 3,
   },
   verticalBackBtn: {
     flexDirection: "row",
@@ -669,38 +670,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F131D",
     borderWidth: 1,
     borderColor: "#1F2637",
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+    borderRadius: 5,
     width: "100%",
   },
   verticalBackText: {
     color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "400",
   },
   verticalClipBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.06)",
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
+    paddingVertical: 1,
+    paddingHorizontal: 4,
+    borderRadius: 3,
   },
   verticalClipBadgeText: {
     color: "#94A3B8",
-    fontSize: 8.5,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "500",
     textTransform: "uppercase",
   },
   verticalTopBrand: {
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 6,
+    paddingBottom: 3,
     alignItems: "center",
     justifyContent: "center",
   },
   verticalLogoBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 7,
     backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
@@ -708,44 +709,44 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
   verticalRootHeader: {
-    paddingVertical: 6,
+    paddingVertical: 4,
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
   },
   verticalRootTitle: {
     color: "#64748B",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.2,
+    fontSize: 8,
+    fontWeight: "500",
+    letterSpacing: 0.8,
   },
   verticalDeleteBtn: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   verticalClipActions: {
-    paddingBottom: 8,
-    paddingHorizontal: 4,
-    gap: 4,
+    paddingBottom: 6,
+    paddingHorizontal: 3,
+    gap: 3,
     alignItems: "center",
   },
   verticalDivider: {
-    width: 40,
+    width: 34,
     height: 1,
     backgroundColor: "#1F2637",
-    marginVertical: 3,
+    marginVertical: 2,
   },
   verticalActionBtn: {
-    width: 52,
-    height: 34,
-    borderRadius: 6,
+    width: 44,
+    height: 30,
+    borderRadius: 5,
     backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
   verticalActionText: {
-    color: "#94A3B8",
-    fontSize: 8.5,
-    fontWeight: "600",
+    color: "#8E95A5",
+    fontSize: 8,
+    fontWeight: "400",
     marginTop: 1,
   },
 
@@ -756,58 +757,58 @@ const styles = StyleSheet.create({
     backgroundColor: "#08090E",
     borderTopWidth: 1,
     borderTopColor: "#1F2637",
-    height: 52,
-    paddingHorizontal: 6,
+    height: 44,
+    paddingHorizontal: 4,
   },
   horizontalToolBtnActive: {
-    backgroundColor: "rgba(0, 229, 255, 0.1)",
-    borderRadius: 8,
+    backgroundColor: "rgba(0, 229, 255, 0.08)",
+    borderRadius: 6,
   },
   horizontalToolBtnDelete: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   mobileBackBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 7,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#0F131D",
     borderWidth: 1,
     borderColor: "#1F2637",
-    marginRight: 6,
+    marginRight: 4,
   },
   mobileBackDivider: {
     width: 1,
-    height: 22,
+    height: 16,
     backgroundColor: "#1F2637",
-    marginRight: 6,
+    marginRight: 4,
   },
   mobileBackText: {
     color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 8.5,
+    fontWeight: "400",
   },
   horizontalScrollContent: {
     alignItems: "center",
-    paddingHorizontal: 2,
-    gap: 4,
+    paddingHorizontal: 1,
+    gap: 2,
   },
   horizontalToolBtn: {
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 46,
-    height: 44,
-    paddingHorizontal: 4,
-    borderRadius: 7,
+    minWidth: 40,
+    height: 38,
+    paddingHorizontal: 2,
+    borderRadius: 6,
   },
   horizontalToolLabel: {
-    color: "#94A3B8",
-    fontSize: 9.5,
-    fontWeight: "600",
-    marginTop: 2,
+    color: "#8E95A5",
+    fontSize: 8.5,
+    fontWeight: "400",
+    marginTop: 1,
     textAlign: "center",
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
 });
 

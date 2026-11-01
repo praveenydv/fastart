@@ -99,6 +99,8 @@ export const canvasStyles = {
     alignItems: "center",
     justifyContent: "center",
     maxWidth: "100%",
+    overflow: "hidden" as any,
+    minHeight: 0,
   },
   canvasBox: {
     backgroundColor: "#000000",
