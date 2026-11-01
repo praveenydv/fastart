@@ -266,6 +266,16 @@ export const canvasStyles = {
     paddingVertical: 4,
     borderRadius: 6,
   },
+  floatingActionBtnIconOnly: {
+    width: 28,
+    height: 28,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 0,
+  },
   floatingBtnText: {
     color: "#FFFFFF",
     fontSize: 9.5,

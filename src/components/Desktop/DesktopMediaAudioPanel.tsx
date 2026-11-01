@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject, AudioClip } from '../../types/project';
 import { persistLargeMedia, pickWebMedia } from '../../utils/largeMediaStorage';
+import { registerMediaDimensions } from '../Player/playerUtils';
 import { addNotification } from '../../utils/storage';
 import { THEME_COLORS } from '../../constants/designConstants';
 
@@ -136,9 +137,18 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             volume: 1.0,
             filter: 'normal',
             effect: 'none',
+            width: saved.width,
+            height: saved.height,
+            naturalWidth: saved.width,
+            naturalHeight: saved.height,
             transform: { scale: 1, rotation: 0, x: 0, y: 0 },
             isLinked,
           };
+
+          if (saved.width && saved.height) {
+            registerMediaDimensions(saved.url, saved.width, saved.height);
+            registerMediaDimensions(mediaId, saved.width, saved.height);
+          }
 
           soundEngine.playSfx('pop');
           onAddMedia(clip);

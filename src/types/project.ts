@@ -191,6 +191,10 @@ export interface VideoClip {
   url: string;
   thumbnail?: string;
   sourceMediaId?: string;
+  width?: number;
+  height?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
   duration: number;
   startTime: number;
   trimIn?: number;

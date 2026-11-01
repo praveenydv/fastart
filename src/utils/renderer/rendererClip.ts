@@ -501,7 +501,14 @@ export function drawClip(
             offCtx.drawImage(activeMedia, sx, sy, sw, sh, 0, 0, smallW, smallH);
             ctx.save();
             ctx.beginPath();
-            if ((ctx as any).roundRect) {
+            const isCircle = track.mosaicShape === 'circle';
+            if (isCircle) {
+              if (ctx.ellipse) {
+                ctx.ellipse(boxX + boxPixelW / 2, boxY + boxPixelH / 2, boxPixelW / 2, boxPixelH / 2, 0, 0, Math.PI * 2);
+              } else {
+                ctx.arc(boxX + boxPixelW / 2, boxY + boxPixelH / 2, Math.min(boxPixelW, boxPixelH) / 2, 0, Math.PI * 2);
+              }
+            } else if ((ctx as any).roundRect) {
               (ctx as any).roundRect(boxX, boxY, boxPixelW, boxPixelH, 4);
             } else {
               ctx.rect(boxX, boxY, boxPixelW, boxPixelH);
@@ -519,11 +526,20 @@ export function drawClip(
         } else {
           ctx.save();
           ctx.beginPath();
-          const cornerR = Math.round(Math.min(boxPixelW, boxPixelH) / 4);
-          if ((ctx as any).roundRect) {
-            (ctx as any).roundRect(boxX, boxY, boxPixelW, boxPixelH, cornerR);
+          const isCircle = track.mosaicShape === 'circle';
+          if (isCircle) {
+            if (ctx.ellipse) {
+              ctx.ellipse(boxX + boxPixelW / 2, boxY + boxPixelH / 2, boxPixelW / 2, boxPixelH / 2, 0, 0, Math.PI * 2);
+            } else {
+              ctx.arc(boxX + boxPixelW / 2, boxY + boxPixelH / 2, Math.min(boxPixelW, boxPixelH) / 2, 0, Math.PI * 2);
+            }
           } else {
-            ctx.rect(boxX, boxY, boxPixelW, boxPixelH);
+            const cornerR = Math.round(Math.min(boxPixelW, boxPixelH) / 4);
+            if ((ctx as any).roundRect) {
+              (ctx as any).roundRect(boxX, boxY, boxPixelW, boxPixelH, cornerR);
+            } else {
+              ctx.rect(boxX, boxY, boxPixelW, boxPixelH);
+            }
           }
           ctx.clip();
           ctx.filter = `blur(${radius}px)`;

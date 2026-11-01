@@ -474,7 +474,7 @@ export async function persistLargeMedia(
     nativePath?: string;
     isLinked?: boolean;
   }
-): Promise<{ id: string; url: string; size: number; duration: number; thumbnail?: string; isLinked?: boolean }> {
+): Promise<{ id: string; url: string; size: number; duration: number; thumbnail?: string; isLinked?: boolean; width?: number; height?: number }> {
   const mimeType = fileOrBlob.type || (type === 'video' ? 'video/mp4' : type === 'audio' ? 'audio/mpeg' : 'image/jpeg');
   const size = fileOrBlob.size;
 
@@ -562,7 +562,7 @@ export async function persistLargeMedia(
     }
   }
 
-  return { id, url: liveUrl, size, duration, thumbnail, isLinked };
+  return { id, url: liveUrl, size, duration, thumbnail, isLinked, width, height };
 }
 
 // Retrieve live object URL for a media ID from IndexedDB

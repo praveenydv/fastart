@@ -203,6 +203,10 @@ export default function MotionTrackingModal({
       trackRotation,
       mosaicStyle,
       mosaicRadius,
+      mosaicShape,
+      cameraFitToScreen,
+      cameraZoom,
+      cameraLockCenter,
       currentTrack?.anchorTime,
       onApplyTracking,
       project,
@@ -325,6 +329,12 @@ export default function MotionTrackingModal({
         anchorTime,
         trackScale,
         trackRotation,
+        mosaicStyle,
+        mosaicRadius,
+        mosaicShape,
+        cameraFitToScreen,
+        cameraZoom,
+        cameraLockCenter,
         smoothness,
         trackingStatus: "completed",
       });
@@ -342,6 +352,12 @@ export default function MotionTrackingModal({
     smoothness,
     trackScale,
     trackRotation,
+    mosaicStyle,
+    mosaicRadius,
+    mosaicShape,
+    cameraFitToScreen,
+    cameraZoom,
+    cameraLockCenter,
     actionType,
     pinnedClipId,
     trajectory.length,
@@ -779,6 +795,52 @@ export default function MotionTrackingModal({
         {/* MAIN VIDEO TRACKING MODES */}
         {!isElementClip && activeTab === "censor" && (
           <View style={styles.tabContentSection}>
+            {/* Shape Selection: Rectangle vs Circle */}
+            <View style={styles.styleSegmentRow}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, mosaicShape === "rectangle" && styles.segmentBtnActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  triggerHaptic("selection");
+                  setMosaicShape("rectangle");
+                  syncTracking({ mosaicShape: "rectangle" });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="square-outline"
+                  size={14}
+                  color={mosaicShape === "rectangle" ? THEME_COLORS.accent : "#94A3B8"}
+                  style={{ marginRight: 5 }}
+                />
+                <Text style={[styles.segmentText, mosaicShape === "rectangle" && styles.segmentTextActive]}>
+                  Rectangle Box
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentBtn, mosaicShape === "circle" && styles.segmentBtnActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  triggerHaptic("selection");
+                  setMosaicShape("circle");
+                  syncTracking({ mosaicShape: "circle" });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="ellipse-outline"
+                  size={14}
+                  color={mosaicShape === "circle" ? THEME_COLORS.accent : "#94A3B8"}
+                  style={{ marginRight: 5 }}
+                />
+                <Text style={[styles.segmentText, mosaicShape === "circle" && styles.segmentTextActive]}>
+                  Circle / Oval
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Blur Style Selection: Blur vs Pixelate */}
             <View style={styles.styleSegmentRow}>
               <TouchableOpacity
                 style={[styles.segmentBtn, mosaicStyle === "blur" && styles.segmentBtnActive]}
@@ -823,12 +885,12 @@ export default function MotionTrackingModal({
               </TouchableOpacity>
             </View>
 
-            {/* Compact Blur Radius Slider */}
+            {/* Compact Blur Radius / Block Size Slider */}
             <CompactSliderInput
-              label="Blur Radius"
+              label={mosaicStyle === "pixelate" ? "Block Size" : "Blur Radius"}
               value={mosaicRadius}
               min={4}
-              max={50}
+              max={60}
               step={1}
               unit="px"
               layout="inline"
@@ -983,9 +1045,74 @@ export default function MotionTrackingModal({
             <View style={styles.cameraInfoCard}>
               <Ionicons name="videocam" size={16} color={THEME_COLORS.accent} style={{ marginRight: 8 }} />
               <Text style={styles.cameraInfoDesc}>
-                Locks and centers player camera on tracked subject in real-time.
+                Locks player camera onto tracked subject. Auto-centers screen and scales to eliminate canvas borders.
               </Text>
             </View>
+
+            <View style={[styles.toggleRow, { marginTop: 8 }]}>
+              <TouchableOpacity
+                style={[styles.togglePill, cameraFitToScreen && styles.togglePillActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  triggerHaptic("selection");
+                  const nextVal = !cameraFitToScreen;
+                  setCameraFitToScreen(nextVal);
+                  syncTracking({ cameraFitToScreen: nextVal, actionType: "camera_center" });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={cameraFitToScreen ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={cameraFitToScreen ? THEME_COLORS.accent : "#64748B"}
+                />
+                <Text style={[styles.togglePillText, cameraFitToScreen && styles.togglePillTextActive]}>
+                  Fit to Screen
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.togglePill, cameraLockCenter && styles.togglePillActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  triggerHaptic("selection");
+                  const nextVal = !cameraLockCenter;
+                  setCameraLockCenter(nextVal);
+                  syncTracking({ cameraLockCenter: nextVal, actionType: "camera_center" });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={cameraLockCenter ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={cameraLockCenter ? THEME_COLORS.accent : "#64748B"}
+                />
+                <Text style={[styles.togglePillText, cameraLockCenter && styles.togglePillTextActive]}>
+                  Lock Center
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {cameraFitToScreen && (
+              <View style={{ marginTop: 8 }}>
+                <CompactSliderInput
+                  label="Camera Zoom"
+                  value={Math.round(cameraZoom * 100)}
+                  min={100}
+                  max={250}
+                  step={5}
+                  unit="%"
+                  layout="inline"
+                  accentColor={THEME_COLORS.accent}
+                  onChange={(val) => {
+                    const z = Number((val / 100).toFixed(2));
+                    setCameraZoom(z);
+                    syncTracking({ cameraZoom: z, actionType: "camera_center" });
+                  }}
+                  containerStyle={styles.compactSliderWrap}
+                />
+              </View>
+            )}
           </View>
         )}
 

@@ -22,6 +22,13 @@ export function formatTime(secs: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
 }
 
+export const mediaDimensionsCache = new Map<string, { width: number; height: number }>();
+
+export function registerMediaDimensions(key: string | undefined, width: number, height: number): void {
+  if (!key || !width || !height || width <= 0 || height <= 0) return;
+  mediaDimensionsCache.set(key, { width, height });
+}
+
 export function computeVideoClipDimensions(
   clip: any,
   boxWidth: number,
@@ -30,8 +37,26 @@ export function computeVideoClipDimensions(
   const w = boxWidth > 0 ? boxWidth : 360;
   const h = canvasHeight > 0 ? canvasHeight : 640;
 
-  const nw = clip?.naturalWidth || clip?.width || 1920;
-  const nh = clip?.naturalHeight || clip?.height || 1080;
+  const cached =
+    mediaDimensionsCache.get(clip?.url) ||
+    mediaDimensionsCache.get(clip?.id) ||
+    mediaDimensionsCache.get(clip?.thumbnail);
+
+  let nw = clip?.naturalWidth || clip?.width || cached?.width;
+  let nh = clip?.naturalHeight || clip?.height || cached?.height;
+
+  // If dimensions not known yet: infer from viewport/canvas aspect ratio
+  if (!nw || !nh || nw <= 0 || nh <= 0) {
+    if (w < h) {
+      // Portrait container (e.g. 9:16 mobile canvas): default to portrait 1080x1920
+      nw = 1080;
+      nh = 1920;
+    } else {
+      // Landscape container: default to 1920x1080
+      nw = 1920;
+      nh = 1080;
+    }
+  }
 
   const crop = clip?.crop || clip?.transform?.crop;
   let sw = nw;

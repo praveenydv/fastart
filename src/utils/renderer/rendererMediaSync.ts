@@ -2,6 +2,7 @@ import { VideoClip } from "../../types/project";
 import { getLiveMediaUrl } from "../largeMediaStorage";
 import { setCachedMediaDuration } from "../mediaDuration";
 import { evaluateSpeedCurve } from "./rendererEffects";
+import { registerMediaDimensions } from "../../components/Player/playerUtils";
 
 export interface MediaSyncContext {
   videoElements: Map<string, HTMLVideoElement | HTMLImageElement>;
@@ -163,6 +164,14 @@ export async function preloadClip(
     vid.addEventListener("canplay", trigger);
     vid.addEventListener("seeked", trigger);
     vid.addEventListener("loadedmetadata", () => {
+      if (vid.videoWidth > 0 && vid.videoHeight > 0) {
+        clip.width = vid.videoWidth;
+        clip.height = vid.videoHeight;
+        clip.naturalWidth = vid.videoWidth;
+        clip.naturalHeight = vid.videoHeight;
+        registerMediaDimensions(clip.url, vid.videoWidth, vid.videoHeight);
+        if (clip.id) registerMediaDimensions(clip.id, vid.videoWidth, vid.videoHeight);
+      }
       if (vid.duration && !isNaN(vid.duration) && isFinite(vid.duration) && vid.duration > 0) {
         setCachedMediaDuration(clip.url, vid.duration);
         if (clip.id) setCachedMediaDuration(clip.id, vid.duration);
@@ -217,6 +226,14 @@ export async function preloadClip(
       img.crossOrigin = "anonymous";
     }
     img.onload = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        clip.width = img.naturalWidth;
+        clip.height = img.naturalHeight;
+        clip.naturalWidth = img.naturalWidth;
+        clip.naturalHeight = img.naturalHeight;
+        registerMediaDimensions(clip.url, img.naturalWidth, img.naturalHeight);
+        if (clip.id) registerMediaDimensions(clip.id, img.naturalWidth, img.naturalHeight);
+      }
       if (ctx.onFrameNeeded) ctx.onFrameNeeded();
     };
     img.onerror = async () => {

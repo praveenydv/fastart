@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform, useWindowDimensions } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { soundEngine } from "../../utils/audioEngine";
@@ -79,8 +79,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   getItemBaseDimensions,
   getInterpolatedTransform,
 }) => {
+  const { width: windowWidth } = useWindowDimensions();
   const safeBoxW = Math.max(1, boxWidth || 360);
   const safeCanvasH = Math.max(1, canvasHeight || 640);
+  const isSmallScreen = windowWidth < 600 || safeBoxW < 440;
 
   const unselectedHitboxes = useMemo(() => {
     // Fast-path: When video is actively playing, drag hitboxes are inert.
@@ -612,13 +614,22 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
       {/* Quick Action HUD Bar for Selected Item */}
       {activeTransformItem && (
         <View style={styles.floatingHudContainer} pointerEvents="box-none">
-          <View style={styles.floatingHudContentCompact} pointerEvents="auto">
+          <View
+            style={[
+              styles.floatingHudContentCompact,
+              isSmallScreen && { paddingHorizontal: 6, paddingVertical: 4, gap: 4 },
+            ]}
+            pointerEvents="auto"
+          >
             {/* Edit Action (for text, captions and stickers only; videos use Crop) */}
             {(activeTransformItem.type === "text" ||
               activeTransformItem.type === "caption" ||
               activeTransformItem.type === "sticker") && (
               <TouchableOpacity
-                style={styles.floatingActionBtn}
+                style={[
+                  styles.floatingActionBtn,
+                  isSmallScreen && styles.floatingActionBtnIconOnly,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   onOpenEditModal?.(
@@ -640,16 +651,20 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                     } as any)
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Edit"
               >
-                <Ionicons name="pencil" size={13} color="#FFFFFF" />
-                <Text style={styles.floatingBtnText}>Edit</Text>
+                <Ionicons name="pencil" size={isSmallScreen ? 14 : 13} color="#FFFFFF" />
+                {!isSmallScreen && <Text style={styles.floatingBtnText}>Edit</Text>}
               </TouchableOpacity>
             )}
 
             {/* Video Crop Action */}
             {activeTransformItem.type === "video" && (
               <TouchableOpacity
-                style={styles.floatingActionBtn}
+                style={[
+                  styles.floatingActionBtn,
+                  isSmallScreen && styles.floatingActionBtnIconOnly,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   handleEnterCropMode(activeTransformItem.id);
@@ -665,16 +680,20 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                     } as any)
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Crop"
               >
-                <Ionicons name="crop" size={13} color="#FFFFFF" />
-                <Text style={styles.floatingBtnText}>Crop</Text>
+                <Ionicons name="crop" size={isSmallScreen ? 14 : 13} color="#FFFFFF" />
+                {!isSmallScreen && <Text style={styles.floatingBtnText}>Crop</Text>}
               </TouchableOpacity>
             )}
 
             {/* Video Mask Action */}
             {activeTransformItem.type === "video" && (
               <TouchableOpacity
-                style={styles.floatingActionBtn}
+                style={[
+                  styles.floatingActionBtn,
+                  isSmallScreen && styles.floatingActionBtnIconOnly,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   onOpenMaskModal?.(activeTransformItem.id);
@@ -690,18 +709,24 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                     } as any)
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Mask"
               >
-                <Ionicons name="shapes-outline" size={13} color="#00F2FE" />
-                <Text style={[styles.floatingBtnText, { color: "#00F2FE" }]}>
-                  Mask
-                </Text>
+                <Ionicons name="shapes-outline" size={isSmallScreen ? 14 : 13} color="#00F2FE" />
+                {!isSmallScreen && (
+                  <Text style={[styles.floatingBtnText, { color: "#00F2FE" }]}>
+                    Mask
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 
             {/* Animation Action */}
             {onOpenAnimationModal && (
               <TouchableOpacity
-                style={styles.floatingActionBtn}
+                style={[
+                  styles.floatingActionBtn,
+                  isSmallScreen && styles.floatingActionBtnIconOnly,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("click");
                   onOpenAnimationModal();
@@ -717,18 +742,24 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                     } as any)
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Animation"
               >
-                <Ionicons name="play-circle-outline" size={13} color="#A78BFA" />
-                <Text style={[styles.floatingBtnText, { color: "#A78BFA" }]}>
-                  Anim
-                </Text>
+                <Ionicons name="play-circle-outline" size={isSmallScreen ? 14 : 13} color="#A78BFA" />
+                {!isSmallScreen && (
+                  <Text style={[styles.floatingBtnText, { color: "#A78BFA" }]}>
+                    Anim
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 
             {/* Duplicate / Copy Action */}
             {onDuplicateClip && (
               <TouchableOpacity
-                style={styles.floatingActionBtn}
+                style={[
+                  styles.floatingActionBtn,
+                  isSmallScreen && styles.floatingActionBtnIconOnly,
+                ]}
                 onPress={() => {
                   soundEngine.playSfx("pop");
                   onDuplicateClip(
@@ -750,17 +781,24 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                     } as any)
                   : {})}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Copy"
               >
-                <Ionicons name="copy-outline" size={13} color="#00E5C9" />
-                <Text style={[styles.floatingBtnText, { color: "#00E5C9" }]}>
-                  Copy
-                </Text>
+                <Ionicons name="copy-outline" size={isSmallScreen ? 14 : 13} color="#00E5C9" />
+                {!isSmallScreen && (
+                  <Text style={[styles.floatingBtnText, { color: "#00E5C9" }]}>
+                    Copy
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 
             {/* Delete */}
             <TouchableOpacity
-              style={[styles.floatingActionBtn, styles.floatingDeleteBtn]}
+              style={[
+                styles.floatingActionBtn,
+                styles.floatingDeleteBtn,
+                isSmallScreen && styles.floatingActionBtnIconOnly,
+              ]}
               onPress={() => {
                 soundEngine.playSfx("click");
                 onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
@@ -776,31 +814,41 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   } as any)
                 : {})}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Delete"
             >
-              <Ionicons name="trash-outline" size={13} color="#FB7185" />
-              <Text style={[styles.floatingBtnText, { color: "#FB7185" }]}>
-                Delete
-              </Text>
+              <Ionicons name="trash-outline" size={isSmallScreen ? 14 : 13} color="#FB7185" />
+              {!isSmallScreen && (
+                <Text style={[styles.floatingBtnText, { color: "#FB7185" }]}>
+                  Delete
+                </Text>
+              )}
             </TouchableOpacity>
 
             {/* Done */}
             <TouchableOpacity
-              style={[styles.floatingActionBtn, styles.floatingDoneBtn]}
+              style={[
+                styles.floatingActionBtn,
+                styles.floatingDoneBtn,
+                isSmallScreen && styles.floatingActionBtnIconOnly,
+              ]}
               onPress={() => {
                 soundEngine.playSfx("pop");
                 onSelectClip?.(null);
               }}
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Done"
             >
               <Ionicons
                 name="checkmark-circle-outline"
-                size={14}
+                size={isSmallScreen ? 15 : 14}
                 color="#10B981"
               />
-              <Text style={[styles.floatingBtnText, { color: "#10B981" }]}>
-                Done
-              </Text>
+              {!isSmallScreen && (
+                <Text style={[styles.floatingBtnText, { color: "#10B981" }]}>
+                  Done
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>

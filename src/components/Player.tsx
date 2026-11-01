@@ -641,12 +641,16 @@ function Player({
       {/* Floating Exit Fullscreen Button */}
       {fullscreen && (
         <TouchableOpacity
-          style={styles.floatingExitBtn}
+          style={[
+            styles.floatingExitBtn,
+            isMobile && { paddingHorizontal: 9, paddingVertical: 9, borderRadius: 18 },
+          ]}
           onPress={toggleFullscreen}
           activeOpacity={0.8}
+          accessibilityLabel="Exit Fullscreen"
         >
           <Ionicons name="contract" size={15} color="#000000" />
-          <Text style={styles.floatingExitBtnText}>Exit Fullscreen</Text>
+          {!isMobile && <Text style={styles.floatingExitBtnText}>Exit Fullscreen</Text>}
         </TouchableOpacity>
       )}
 

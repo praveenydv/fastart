@@ -20,6 +20,7 @@ import {
   pickWebMedia,
   persistNativeMediaCopy,
 } from '../../utils/largeMediaStorage';
+import { registerMediaDimensions } from '../Player/playerUtils';
 import { FastArtProject } from '../../types/project';
 
 interface MediaPickerModalProps {
@@ -84,9 +85,18 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
             volume: 1.0,
             filter: 'normal',
             effect: 'none',
+            width: saved.width,
+            height: saved.height,
+            naturalWidth: saved.width,
+            naturalHeight: saved.height,
             transform: { scale: 1, rotation: 0, x: 0, y: 0 },
             isLinked,
           };
+
+          if (saved.width && saved.height) {
+            registerMediaDimensions(saved.url, saved.width, saved.height);
+            registerMediaDimensions(mediaId, saved.width, saved.height);
+          }
 
           addNotification({
             title: 'Media Added',
@@ -143,6 +153,9 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
               }
             }
 
+            const assetW = asset.width || undefined;
+            const assetH = asset.height || undefined;
+
             const clip = {
               id: mediaId,
               sourceMediaId: mediaId,
@@ -159,8 +172,17 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
               volume: 1.0,
               filter: 'normal',
               effect: 'none',
+              width: assetW,
+              height: assetH,
+              naturalWidth: assetW,
+              naturalHeight: assetH,
               transform: { scale: 1, rotation: 0, x: 0, y: 0 },
             };
+
+            if (assetW && assetH) {
+              registerMediaDimensions(persistentUri, assetW, assetH);
+              registerMediaDimensions(mediaId, assetW, assetH);
+            }
 
             addNotification({
               title: 'Media Added',

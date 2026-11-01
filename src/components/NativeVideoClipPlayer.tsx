@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Image } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoClip } from '../types/project';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { THEME_COLORS } from '../constants/designConstants';
+import { registerMediaDimensions } from './Player/playerUtils';
 
 interface NativeVideoClipPlayerProps {
   clip: VideoClip;
@@ -53,6 +54,25 @@ function NativeVideoClipPlayerComponent({
 
   const effectiveOpacity = opacity !== undefined ? Math.max(0, Math.min(1, opacity)) : 1;
 
+  // Pre-load natural dimensions from photo or thumbnail for immediate portrait/landscape alignment
+  useEffect(() => {
+    if (mediaUri && (!clip.width || !clip.height)) {
+      const targetUri = clip.thumbnail || mediaUri;
+      if (typeof targetUri === 'string' && (targetUri.startsWith('file:') || targetUri.startsWith('http') || targetUri.startsWith('content:'))) {
+        Image.getSize(
+          targetUri,
+          (w, h) => {
+            if (w > 0 && h > 0) {
+              registerMediaDimensions(mediaUri, w, h);
+              registerMediaDimensions(clip.id, w, h);
+            }
+          },
+          () => {}
+        );
+      }
+    }
+  }, [mediaUri, clip.id, clip.width, clip.height, clip.thumbnail]);
+
   if (!mediaUri) {
     return (
       <View style={styles.fallbackBox}>
@@ -66,6 +86,7 @@ function NativeVideoClipPlayerComponent({
     return (
       <VideoClipRenderer
         uri={mediaUri}
+        clipId={clip.id}
         targetMediaTime={targetMediaTime}
         isPlaying={isPlaying}
         muted={!isInside || (clip.volume !== undefined ? clip.volume === 0 : false)}
@@ -85,12 +106,19 @@ function NativeVideoClipPlayerComponent({
       contentFit="contain"
       cachePolicy="memory-disk"
       transition={120}
+      onLoad={(evt) => {
+        if (evt.source?.width && evt.source?.height) {
+          registerMediaDimensions(mediaUri, evt.source.width, evt.source.height);
+          registerMediaDimensions(clip.id, evt.source.width, evt.source.height);
+        }
+      }}
     />
   );
 }
 
 function VideoClipRenderer({
   uri,
+  clipId,
   targetMediaTime,
   isPlaying,
   muted,
@@ -100,6 +128,7 @@ function VideoClipRenderer({
   opacity = 1,
 }: {
   uri: string;
+  clipId?: string;
   targetMediaTime: number;
   isPlaying: boolean;
   muted: boolean;
@@ -143,10 +172,26 @@ function VideoClipRenderer({
         }
       }
     });
+    const subSource = (player as any).addListener?.("sourceLoad", (payload: any) => {
+      const track = payload?.availableVideoTracks?.[0];
+      if (track?.size?.width && track?.size?.height) {
+        registerMediaDimensions(uri, track.size.width, track.size.height);
+        if (clipId) registerMediaDimensions(clipId, track.size.width, track.size.height);
+      }
+    });
+    const subTrack = (player as any).addListener?.("videoTrackChange", (payload: any) => {
+      const track = payload?.videoTrack;
+      if (track?.size?.width && track?.size?.height) {
+        registerMediaDimensions(uri, track.size.width, track.size.height);
+        if (clipId) registerMediaDimensions(clipId, track.size.width, track.size.height);
+      }
+    });
     return () => {
       sub?.remove?.();
+      subSource?.remove?.();
+      subTrack?.remove?.();
     };
-  }, [player]);
+  }, [player, uri, clipId]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying && isInside;

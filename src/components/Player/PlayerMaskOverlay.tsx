@@ -867,6 +867,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const isMirror = localMask.shape === "mirror";
   const isLineShape = isLinear || isMirror;
 
+  const isCompactMaskHud = boxWidth < 380;
+
   return (
     <View ref={containerRef} style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {/* Top Floating HUD with Live Position, Rotation, Size & Reset Controls */}
@@ -910,8 +912,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
               style={styles.hudActionBtn}
               onPress={handleResetPosition}
               activeOpacity={0.7}
+              accessibilityLabel="Center"
             >
-              <Text style={styles.hudActionText}>Center</Text>
+              <Ionicons name="locate-outline" size={11} color="#FFFFFF" />
+              {!isCompactMaskHud && <Text style={styles.hudActionText}>Center</Text>}
             </TouchableOpacity>
           )}
 
@@ -920,8 +924,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
               style={styles.hudActionBtn}
               onPress={handleResetRotation}
               activeOpacity={0.7}
+              accessibilityLabel="Reset 0°"
             >
-              <Text style={styles.hudActionText}>0°</Text>
+              <Ionicons name="refresh-outline" size={11} color="#FFFFFF" />
+              {!isCompactMaskHud && <Text style={styles.hudActionText}>0°</Text>}
             </TouchableOpacity>
           )}
 
@@ -932,7 +938,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                 {
                   backgroundColor: "rgba(16, 185, 129, 0.2)",
                   borderColor: "rgba(16, 185, 129, 0.5)",
-                  paddingHorizontal: 8,
+                  paddingHorizontal: isCompactMaskHud ? 6 : 8,
                   paddingVertical: 2,
                   flexDirection: "row",
                   alignItems: "center",
@@ -951,7 +957,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
               accessibilityLabel="Confirm and close mask"
             >
               <Ionicons name="checkmark" size={13} color="#10B981" />
-              <Text style={{ color: "#10B981", fontSize: 10, fontWeight: "700" }}>Done</Text>
+              {!isCompactMaskHud && (
+                <Text style={{ color: "#10B981", fontSize: 10, fontWeight: "700" }}>Done</Text>
+              )}
             </TouchableOpacity>
           )}
         </View>

@@ -13,6 +13,7 @@ import { allocateClipPlacement, doesClipOverlap, allocateNewTrackForClip } from 
 import { useProjectFilterEffects } from "./useProjectFilterEffects";
 import { extractRealMediaAudioPeaks } from "../utils/mediaAudioDetector";
 import { requestMediaThumbnail } from "../utils/mediaThumbnailGenerator";
+import { registerMediaDimensions } from "../components/Player/playerUtils";
 
 interface UseProjectMediaAddersParams {
   project: FastArtProject | null;
@@ -237,11 +238,29 @@ export function useProjectMediaAdders({
         targetStart = newClip.startTime;
       }
 
-      // If project has no media clips yet, place on Track 0. Otherwise allocate brand-new track.
+      // Register natural dimensions if present
+      if (newClip.width && newClip.height) {
+        registerMediaDimensions(newClip.url, newClip.width, newClip.height);
+        registerMediaDimensions(newClip.id, newClip.width, newClip.height);
+      }
+
+      // If project has no media clips yet, place on Track 0.
+      // Automatically adapt project canvas aspect ratio to match the first imported media clip!
+      let updatedAspectRatio = current.aspectRatio;
       if (videoClips.length === 0) {
         newClip.startTime = Math.max(0, Number(targetStart.toFixed(3)));
         newClip.trackIndex = 0;
         videoClips.push(newClip);
+
+        if (newClip.width && newClip.height) {
+          if (newClip.height > newClip.width * 1.1) {
+            updatedAspectRatio = "9:16";
+          } else if (newClip.width > newClip.height * 1.1) {
+            updatedAspectRatio = "16:9";
+          } else if (Math.abs(newClip.width - newClip.height) < newClip.width * 0.15) {
+            updatedAspectRatio = "1:1";
+          }
+        }
       } else {
         const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
           current,
@@ -282,6 +301,7 @@ export function useProjectMediaAdders({
 
       updateProjectWithHistory({
         ...current,
+        aspectRatio: updatedAspectRatio,
         assets,
         tracks: { ...current.tracks, video: videoClips },
       });
