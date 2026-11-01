@@ -17,6 +17,7 @@ interface PlayerTransformOverlayProps {
   boxWidth: number;
   canvasHeight: number;
   currentTime: number;
+  isPlaying?: boolean;
   onSelectClip?: (id: string | null, type?: string) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   onOpenMaskModal?: (clipId: string) => void;
@@ -57,6 +58,7 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   boxWidth,
   canvasHeight,
   currentTime,
+  isPlaying,
   onSelectClip,
   onOpenEditModal,
   onOpenMaskModal,
@@ -77,8 +79,11 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
   const safeBoxW = Math.max(1, boxWidth || 360);
   const safeCanvasH = Math.max(1, canvasHeight || 640);
 
-  const unselectedHitboxes = useMemo(
-    () => (
+  const unselectedHitboxes = useMemo(() => {
+    // Fast-path: When video is actively playing, drag hitboxes are inert.
+    // Completely bypasses O(N) keyframe interpolation & virtual DOM allocations at 60 FPS.
+    if (isPlaying) return null;
+    return (
       <>
         {/* Unselected Clickable & Immediately Draggable Hit Areas for Active Videos */}
         {activeVideos.map((vid) => {
@@ -453,9 +458,10 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
           );
         })}
       </>
-    ),
-    [
-      activeVideos,
+    );
+  }, [
+    isPlaying,
+    activeVideos,
       activeCaptions,
       activeTexts,
       activeStickers,

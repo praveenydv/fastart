@@ -155,16 +155,24 @@ export function useTimelineClips({
   }, [allClipsWithTracks]);
 
   const [persistentTrackCount, setPersistentTrackCount] = useState<number>(() => {
-    const initialMax = allClipsWithTracks.length > 0
-      ? Math.max(...allClipsWithTracks.map((c) => c.effectiveTrackIndex))
-      : 0;
+    let initialMax = 0;
+    for (let i = 0; i < allClipsWithTracks.length; i++) {
+      if (allClipsWithTracks[i].effectiveTrackIndex > initialMax) {
+        initialMax = allClipsWithTracks[i].effectiveTrackIndex;
+      }
+    }
     return Math.max(1, initialMax + 1);
   });
 
   // Expand track count when a clip is on a higher track, but NEVER auto-remove tracks when clips leave!
   useEffect(() => {
     if (allClipsWithTracks.length > 0) {
-      const currentMax = Math.max(...allClipsWithTracks.map((c) => c.effectiveTrackIndex));
+      let currentMax = 0;
+      for (let i = 0; i < allClipsWithTracks.length; i++) {
+        if (allClipsWithTracks[i].effectiveTrackIndex > currentMax) {
+          currentMax = allClipsWithTracks[i].effectiveTrackIndex;
+        }
+      }
       setPersistentTrackCount((prev) => Math.max(prev, currentMax + 1));
     }
   }, [allClipsWithTracks]);

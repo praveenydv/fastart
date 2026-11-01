@@ -1,8 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { VideoRenderer } from "../../utils/videoRenderer";
 import { getLiveMediaUrl } from "../../utils/largeMediaStorage";
 import { FastArtProject } from "../../types/project";
+
+const useIsomorphicLayoutEffect =
+  Platform.OS === "web" && typeof window !== "undefined"
+    ? useLayoutEffect
+    : useEffect;
 
 interface UsePlayerWebRendererProps {
   project: FastArtProject;
@@ -10,6 +15,7 @@ interface UsePlayerWebRendererProps {
   isPlaying: boolean;
   boxWidth: number;
   canvasHeight: number;
+  isResizing?: boolean;
 }
 
 export function usePlayerWebRenderer({
@@ -18,6 +24,7 @@ export function usePlayerWebRenderer({
   isPlaying,
   boxWidth,
   canvasHeight,
+  isResizing = false,
 }: UsePlayerWebRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasBoxRef = useRef<any>(null);
@@ -35,7 +42,7 @@ export function usePlayerWebRenderer({
   isPlayingRef.current = isPlaying;
 
   // Initialize VideoRenderer for Web
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (Platform.OS === "web" && canvasRef.current) {
       rendererRef.current = new VideoRenderer(canvasRef.current);
       rendererRef.current.onFrameNeeded = () => {
@@ -54,6 +61,15 @@ export function usePlayerWebRenderer({
       clips.forEach((clip) => {
         rendererRef.current?.preloadClip(clip);
       });
+
+      // Synchronously render the initial frame
+      rendererRef.current.renderFrame(
+        project,
+        currentTime,
+        isPlaying,
+        boxWidth,
+        canvasHeight,
+      );
     }
 
     return () => {
@@ -129,8 +145,8 @@ export function usePlayerWebRenderer({
     }
   }, [isPlaying]);
 
-  // Render frame on timestamp, project, or paused state change
-  useEffect(() => {
+  // Render frame synchronously on timestamp, project, or paused state / dimension change before browser paint
+  useIsomorphicLayoutEffect(() => {
     if (rendererRef.current && canvasRef.current) {
       if (rendererRef.current.canvas !== canvasRef.current) {
         rendererRef.current.setCanvas(canvasRef.current);

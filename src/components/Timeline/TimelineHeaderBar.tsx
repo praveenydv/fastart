@@ -34,7 +34,7 @@ interface TimelineHeaderBarProps {
   selectedClipType?: string;
 }
 
-export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
+const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
   isResizingHeight,
   resizeHandleProps,
   handleResizeMouseDown,
@@ -242,4 +242,5 @@ export const TimelineHeaderBar: React.FC<TimelineHeaderBarProps> = ({
   );
 };
 
-export default React.memo(TimelineHeaderBar);
+export const TimelineHeaderBar = React.memo(TimelineHeaderBarComponent);
+export default TimelineHeaderBar;

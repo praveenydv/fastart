@@ -26,7 +26,7 @@ export const UPLOADED_AUDIO_KEY = '@fastart_uploaded_audio_v2';
 export const CAPTION_SETTINGS_KEY = '@fastart_caption_settings_v1';
 
 // In-memory cache for synchronous instant lookups
-let memoryStore: Record<string, string> = {};
+let memoryStore: Record<string, string | null> = {};
 let isStorageInitialized = Platform.OS === 'web';
 let syncTimer: any = null;
 
@@ -119,24 +119,25 @@ export const initNativeStorageAsync = async (): Promise<boolean> => {
 
 // Low-level synchronous get
 export const getStorageItem = (key: string): string | null => {
+  if (memoryStore[key] !== undefined) {
+    return memoryStore[key];
+  }
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const val = window.localStorage.getItem(key);
-      if (val !== null) {
-        memoryStore[key] = val;
-        return val;
-      }
+      memoryStore[key] = val;
+      return val;
     }
-    return memoryStore[key] ?? null;
   } catch (e) {
-    return memoryStore[key] ?? null;
+    // Graceful fallback
   }
+  return null;
 };
 
 // Low-level synchronous set
 export const setStorageItem = (key: string, value: string): void => {
+  memoryStore[key] = value;
   try {
-    memoryStore[key] = value;
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(key, value);
     }
@@ -145,14 +146,13 @@ export const setStorageItem = (key: string, value: string): void => {
     }
   } catch (e) {
     // Graceful fallback for quota exceeded or storage disabled
-    memoryStore[key] = value;
   }
 };
 
 // Low-level synchronous remove
 export const removeStorageItem = (key: string): void => {
+  memoryStore[key] = null;
   try {
-    delete memoryStore[key];
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.removeItem(key);
     }

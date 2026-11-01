@@ -31,6 +31,8 @@ import { getExportResolutionDimensions } from "./Panels/Export/exportTypes";
 import { THEME_COLORS } from "../constants/designConstants";
 import { relinkMediaFile, reconnectLinkedMedia } from "../utils/largeMediaStorage";
 
+const EMPTY_ARRAY: any[] = Object.freeze([]) as any[];
+
 function Player({
   project,
   currentTime,
@@ -64,6 +66,7 @@ function Player({
   isProcessing,
   processingMessage,
   activeModal,
+  isResizing = false,
   onUpdateClipMotionTrack,
   onRelinkClip,
 }: PlayerProps) {
@@ -101,7 +104,7 @@ function Player({
     canvasHeight,
     boxWidth,
     handleViewportLayout,
-  } = usePlayerViewport({ project, fullscreen });
+  } = usePlayerViewport({ project, fullscreen, isResizing });
 
   // Web VideoRenderer Canvas hook
   const { canvasRef, canvasBoxRef, rendererRef } = usePlayerWebRenderer({
@@ -110,6 +113,7 @@ function Player({
     isPlaying,
     boxWidth,
     canvasHeight,
+    isResizing,
   });
 
   // Audio synchronization hook
@@ -124,7 +128,14 @@ function Player({
   );
   const isProjectEmpty = !hasAnyTrackContent;
 
+  const hasMissingOrPermissionClips = useMemo(() => {
+    return (project?.tracks?.video || []).some(
+      (c: any) => c.needsPermission || c.isMissing,
+    );
+  }, [project?.tracks?.video]);
+
   const currentActiveClip = useMemo(() => {
+    if (!hasMissingOrPermissionClips) return null;
     if (selectedClipId) {
       const selectedVideo = (project?.tracks?.video || []).find((c) => c.id === selectedClipId);
       if (selectedVideo && ((selectedVideo as any).needsPermission || (selectedVideo as any).isMissing)) {
@@ -134,46 +145,53 @@ function Player({
     return (project?.tracks?.video || []).find(
       (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
     );
-  }, [project?.tracks?.video, currentTime, selectedClipId]);
+  }, [hasMissingOrPermissionClips, project?.tracks?.video, currentTime, selectedClipId]);
+
+  const currentActiveClipRef = useRef(currentActiveClip);
+  useEffect(() => {
+    currentActiveClipRef.current = currentActiveClip;
+  }, [currentActiveClip]);
 
   const handleRelinkActiveClip = useCallback(async () => {
-    if (!currentActiveClip) return;
-    const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
-    const clipType = ("type" in currentActiveClip && (currentActiveClip as any).type) ? (currentActiveClip as any).type : "video";
+    const activeClip = currentActiveClipRef.current;
+    if (!activeClip) return;
+    const lookupId = activeClip.sourceMediaId || activeClip.id;
+    const clipType = ("type" in activeClip && (activeClip as any).type) ? (activeClip as any).type : "video";
     // 1. Try zero-dialog reconnect first using the handle
-    let result = await reconnectLinkedMedia(lookupId, currentActiveClip.title);
+    let result = await reconnectLinkedMedia(lookupId, activeClip.title);
     // 2. If reconnect fails, open file picker
     if (!result) {
       result = await relinkMediaFile(lookupId, clipType as any);
     }
     if (result) {
-      (currentActiveClip as any).isMissing = false;
-      (currentActiveClip as any).needsPermission = false;
-      currentActiveClip.url = result.url;
+      (activeClip as any).isMissing = false;
+      (activeClip as any).needsPermission = false;
+      activeClip.url = result.url;
       if (onRelinkClip) {
-        onRelinkClip(currentActiveClip.id, clipType, result.url, lookupId);
+        onRelinkClip(activeClip.id, clipType, result.url, lookupId);
       }
     } else if (Platform.OS !== "web" && onOpenMediaPicker) {
       onOpenMediaPicker();
     }
-  }, [currentActiveClip, onRelinkClip, onOpenMediaPicker]);
+  }, [onRelinkClip, onOpenMediaPicker]);
 
   const handleChooseReplacementFile = useCallback(async () => {
-    if (!currentActiveClip) return;
-    const lookupId = currentActiveClip.sourceMediaId || currentActiveClip.id;
-    const clipType = ("type" in currentActiveClip && (currentActiveClip as any).type) ? (currentActiveClip as any).type : "video";
+    const activeClip = currentActiveClipRef.current;
+    if (!activeClip) return;
+    const lookupId = activeClip.sourceMediaId || activeClip.id;
+    const clipType = ("type" in activeClip && (activeClip as any).type) ? (activeClip as any).type : "video";
     const res = await relinkMediaFile(lookupId, clipType as any);
     if (res) {
-      (currentActiveClip as any).isMissing = false;
-      (currentActiveClip as any).needsPermission = false;
-      currentActiveClip.url = res.url;
+      (activeClip as any).isMissing = false;
+      (activeClip as any).needsPermission = false;
+      activeClip.url = res.url;
       if (onRelinkClip) {
-        onRelinkClip(currentActiveClip.id, clipType, res.url, lookupId);
+        onRelinkClip(activeClip.id, clipType, res.url, lookupId);
       }
     } else if (Platform.OS !== "web" && onOpenMediaPicker) {
       onOpenMediaPicker();
     }
-  }, [currentActiveClip, onRelinkClip, onOpenMediaPicker]);
+  }, [onRelinkClip, onOpenMediaPicker]);
 
   const isLightBg = useMemo(() => {
     const bg = (project.canvasBackground || "#000000").toLowerCase();
@@ -215,30 +233,35 @@ function Player({
     };
   }, [fullscreen]);
 
-  const activeCaptions = useMemo(
-    () =>
-      (project.tracks.captions || []).filter(
-        (c) =>
-          currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
-      ),
-    [project.tracks.captions, currentTime],
-  );
-  const activeTexts = useMemo(
-    () =>
-      (project.tracks.text || []).filter(
-        (t) =>
-          currentTime >= t.startTime && currentTime <= t.startTime + t.duration,
-      ),
-    [project.tracks.text, currentTime],
-  );
-  const activeStickers = useMemo(
-    () =>
-      (project.tracks.stickers || []).filter(
-        (s) =>
-          currentTime >= s.startTime && currentTime <= s.startTime + s.duration,
-      ),
-    [project.tracks.stickers, currentTime],
-  );
+  const activeCaptions = useMemo(() => {
+    const list = project.tracks.captions;
+    if (!list || list.length === 0) return EMPTY_ARRAY;
+    const filtered = list.filter(
+      (c) =>
+        currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
+    );
+    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+  }, [project.tracks.captions, currentTime]);
+
+  const activeTexts = useMemo(() => {
+    const list = project.tracks.text;
+    if (!list || list.length === 0) return EMPTY_ARRAY;
+    const filtered = list.filter(
+      (t) =>
+        currentTime >= t.startTime && currentTime <= t.startTime + t.duration,
+    );
+    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+  }, [project.tracks.text, currentTime]);
+
+  const activeStickers = useMemo(() => {
+    const list = project.tracks.stickers;
+    if (!list || list.length === 0) return EMPTY_ARRAY;
+    const filtered = list.filter(
+      (s) =>
+        currentTime >= s.startTime && currentTime <= s.startTime + s.duration,
+    );
+    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+  }, [project.tracks.stickers, currentTime]);
 
   // Precomputed set of video clip IDs that have adjacent next clips on the same track.
   // Calculated once per track topology change instead of running O(N^2) loops 60 times a second.
@@ -265,8 +288,9 @@ function Player({
 
   // Visible active videos (strictly within active playback interval, used for transform & overlays)
   const activeVideos = useMemo(() => {
-    const vids = project.tracks.video || [];
-    return vids.filter((v) => {
+    const vids = project.tracks.video;
+    if (!vids || vids.length === 0) return EMPTY_ARRAY;
+    const filtered = vids.filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
@@ -275,12 +299,13 @@ function Player({
       }
       return currentTime >= start && currentTime <= end;
     });
+    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
   }, [project.tracks.video, currentTime, adjacentNextClipIds]);
 
   // Buffered native videos: includes 1.0s lookahead pre-warming with Hardware Decoder Safety Cap
   const bufferedNativeVideos = useMemo(() => {
     const list = project.tracks.video || [];
-    if (list.length === 0) return [];
+    if (list.length === 0) return EMPTY_ARRAY;
     const filtered = list.filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
@@ -293,6 +318,8 @@ function Player({
       if (!hasAdjacentNext && currentTime > end && currentTime - end <= 0.2) return true;
       return false;
     });
+
+    if (filtered.length === 0) return EMPTY_ARRAY;
 
     // Mobile Hardware Decoder Protection:
     // Strictly cap to at most 3-4 concurrent native video decoders (MediaCodec / AVPlayer)
@@ -323,29 +350,32 @@ function Player({
         duration: v.duration,
         intensity: v.effectIntensity !== undefined ? v.effectIntensity : 0.8,
       }));
-    return [...trackEffs, ...clipEffs];
+    const combined = [...trackEffs, ...clipEffs];
+    return combined.length > 0 ? combined : EMPTY_ARRAY;
   }, [project.tracks.effects, activeVideos, currentTime]);
 
-  const activeAudios = useMemo(
-    () =>
-      (project.tracks.audio || []).filter(
-        (a) =>
-          currentTime >= a.startTime && currentTime <= a.startTime + a.duration,
-      ),
-    [project.tracks.audio, currentTime],
-  );
+  const activeAudios = useMemo(() => {
+    const list = project.tracks.audio;
+    if (!list || list.length === 0) return EMPTY_ARRAY;
+    const filtered = list.filter(
+      (a) =>
+        currentTime >= a.startTime && currentTime <= a.startTime + a.duration,
+    );
+    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+  }, [project.tracks.audio, currentTime]);
 
   // Buffered native audio tracks: includes 1.5s lookahead pre-warming
   const bufferedNativeAudios = useMemo(() => {
-    const list = project.tracks.audio || [];
-    if (list.length === 0) return [];
-    return list.filter((a) => {
+    const list = project.tracks.audio;
+    if (!list || list.length === 0) return EMPTY_ARRAY;
+    const filtered = list.filter((a) => {
       const start = a.startTime;
       const end = a.startTime + a.duration;
       if (currentTime >= start && currentTime <= end) return true;
       if (currentTime < start && start - currentTime <= 1.5) return true;
       return false;
     });
+    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
   }, [project.tracks.audio, currentTime]);
 
   // Crop Gestures Hook
@@ -722,6 +752,7 @@ function Player({
                 boxWidth={boxWidth}
                 canvasHeight={canvasHeight}
                 currentTime={currentTime}
+                isPlaying={isPlaying}
                 onSelectClip={onSelectClip}
                 onOpenEditModal={onOpenEditModal}
                 onOpenMaskModal={onOpenMaskModal}

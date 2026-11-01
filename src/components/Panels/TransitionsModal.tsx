@@ -11,6 +11,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { TRANSITION_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { soundEngine } from '../../utils/audioEngine';
+import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 interface TransitionsModalProps {
   visible: boolean;
@@ -220,34 +221,54 @@ export default function TransitionsModal({
         </View>
       ) : null}
 
-          {/* Duration Selector Bar */}
+          {/* Transition Duration Slider (Continuous 0.1s - 3.0s + Presets) */}
           {!isNone && (
-            <View style={styles.durationRow}>
-              <Text style={styles.durationLabel}>Duration:</Text>
-              {durations.map((d) => (
-                <TouchableOpacity
-                  key={d}
-                  style={[styles.durationPill, duration === d && styles.durationPillActive]}
-                  onPress={() => {
-                    soundEngine.playSfx('click');
-                    setDuration(d);
-                    onApplyTransition({
-                      type: selectedType,
-                      duration: d,
-                    });
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.durationText,
-                      duration === d && styles.durationTextActive,
-                    ]}
+            <View style={styles.durationCard}>
+              <CompactSliderInput
+                label="Transition Duration"
+                value={duration}
+                min={0.1}
+                max={3.0}
+                step={0.1}
+                decimals={1}
+                unit="s"
+                defaultValue={0.5}
+                accentColor="#00F2FE"
+                showSteppers={true}
+                onChange={(val) => {
+                  setDuration(val);
+                  onApplyTransition({
+                    type: selectedType,
+                    duration: val,
+                  });
+                }}
+              />
+              <View style={styles.durationRow}>
+                {durations.map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.durationPill, Math.abs(duration - d) < 0.05 && styles.durationPillActive]}
+                    onPress={() => {
+                      soundEngine.playSfx('click');
+                      setDuration(d);
+                      onApplyTransition({
+                        type: selectedType,
+                        duration: d,
+                      });
+                    }}
+                    activeOpacity={0.7}
                   >
-                    {d}s
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.durationText,
+                        Math.abs(duration - d) < 0.05 && styles.durationTextActive,
+                      ]}
+                    >
+                      {d}s
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           )}
 
@@ -437,15 +458,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  durationCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0, 242, 254, 0.04)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 4,
+  },
   durationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#08090E',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    paddingTop: 6,
   },
   durationLabel: {
     color: '#94A3B8',

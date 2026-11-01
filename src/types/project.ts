@@ -90,6 +90,7 @@ export interface MotionTrackConfig {
   mosaicStyle?: 'pixelate' | 'blur'; // Censor style
   mosaicRadius?: number; // Censor block/blur radius in px (default: 16)
   smoothness?: number; // Damping filter strength 0..100 (default: 60)
+  anchorTime?: number; // Timeline time where tracking target was selected
   trackingStatus?: 'idle' | 'tracking' | 'completed' | 'failed';
   lastTrackedAt?: number;
 }
@@ -206,6 +207,7 @@ export interface VideoClip {
   denoise?: boolean;
   reverse?: boolean;
   filter?: string;
+  filterIntensity?: number; // 0..1 (default 1.0)
   customLut?: CustomLutConfig;
   effect?: string;
   effectIntensity?: number;
@@ -360,6 +362,7 @@ export interface EffectClip {
   duration: number;
   intensity?: number;
   filter?: string;
+  filterIntensity?: number; // 0..1 (default 1.0)
   customLut?: CustomLutConfig;
   keyframes?: KeyframePoint[];
   trackIndex?: number;
@@ -407,6 +410,7 @@ export interface FastArtProject {
   aiDenoise?: boolean;
   captionSettings?: any;
   filter?: string;
+  filterIntensity?: number; // 0..1 (default 1.0)
   customLut?: CustomLutConfig;
   assets?: ProjectAsset[];
   tracks: ProjectTracks;

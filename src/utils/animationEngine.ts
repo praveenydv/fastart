@@ -10,6 +10,16 @@ export interface EvaluatedClipAnimation {
   displayText?: string;
 }
 
+export const DEFAULT_ANIM_EVAL: EvaluatedClipAnimation = Object.freeze({
+  alpha: 1.0,
+  scaleX: 1.0,
+  scaleY: 1.0,
+  offsetX: 0,
+  offsetY: 0,
+  rotation: 0,
+  displayText: undefined,
+});
+
 /**
  * Universal evaluation function for clip animations across web player and offline renderers.
  * Supports:
@@ -27,6 +37,11 @@ export function evaluateClipAnimation(
   previewScale: number = 1.0,
   rawText?: string
 ): EvaluatedClipAnimation {
+  if (!anim || anim === 'none') {
+    if (!rawText) return DEFAULT_ANIM_EVAL;
+    return { alpha: 1.0, scaleX: 1.0, scaleY: 1.0, offsetX: 0, offsetY: 0, rotation: 0, displayText: rawText };
+  }
+
   let alpha = 1.0;
   let scaleX = 1.0;
   let scaleY = 1.0;
@@ -34,10 +49,6 @@ export function evaluateClipAnimation(
   let offsetY = 0;
   let rotation = 0;
   let displayText = rawText;
-
-  if (!anim || anim === 'none') {
-    return { alpha, scaleX, scaleY, offsetX, offsetY, rotation, displayText };
-  }
 
   const timeLeft = Math.max(0, duration - elapsed);
 
@@ -292,6 +303,18 @@ export function evaluateClipAnimation(
         alpha = p;
       }
     }
+  }
+
+  if (
+    alpha === 1.0 &&
+    scaleX === 1.0 &&
+    scaleY === 1.0 &&
+    offsetX === 0 &&
+    offsetY === 0 &&
+    rotation === 0 &&
+    !displayText
+  ) {
+    return DEFAULT_ANIM_EVAL;
   }
 
   return { alpha, scaleX, scaleY, offsetX, offsetY, rotation, displayText };

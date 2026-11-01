@@ -11,9 +11,9 @@ const mediaAudioPresenceCache = new LruCache<string, boolean>(150);
 const mediaPeaksCache = new LruCache<string, number[]>(100);
 const mediaAudioDurationCache = new LruCache<string, number>(150);
 const inFlightDecodes = new Map<string, Promise<number[] | null>>();
-const listeners = new Set<() => void>();
+const listeners = new Set<(changedKey?: string) => void>();
 
-export function subscribeMediaAudioChange(fn: () => void): () => void {
+export function subscribeMediaAudioChange(fn: (changedKey?: string) => void): () => void {
   listeners.add(fn);
   return () => {
     listeners.delete(fn);
@@ -21,15 +21,25 @@ export function subscribeMediaAudioChange(fn: () => void): () => void {
 }
 
 let notifyScheduled = false;
+const pendingAudioChangeKeys = new Set<string>();
 
-function notifyAudioChange() {
+function notifyAudioChange(key?: string) {
+  if (key) pendingAudioChangeKeys.add(key);
   if (notifyScheduled) return;
   notifyScheduled = true;
   const dispatch = () => {
     notifyScheduled = false;
+    const keys = Array.from(pendingAudioChangeKeys);
+    pendingAudioChangeKeys.clear();
     listeners.forEach((fn) => {
       try {
-        fn();
+        if (keys.length === 0) {
+          fn();
+        } else {
+          for (const k of keys) {
+            fn(k);
+          }
+        }
       } catch {}
     });
   };
@@ -48,7 +58,7 @@ export function setMediaHasAudio(key: string, hasAudio: boolean): void {
   if (!key) return;
   if (mediaAudioPresenceCache.get(key) === hasAudio) return;
   mediaAudioPresenceCache.set(key, hasAudio);
-  notifyAudioChange();
+  notifyAudioChange(key);
 }
 
 /**
@@ -84,7 +94,7 @@ export function setCachedMediaPeaks(
     setStorageItem(storageKey, JSON.stringify(compact));
   } catch (_) {}
 
-  notifyAudioChange();
+  notifyAudioChange(urlOrKey);
 }
 
 /**
@@ -482,7 +492,12 @@ export async function extractRealMediaAudioPeaks(
     return cached;
   }
 
-  // 2. Check persistent storage (survives page refresh & app reload)
+  // 2. If already in flight, reuse existing promise
+  if (inFlightDecodes.has(url)) {
+    return inFlightDecodes.get(url)!;
+  }
+
+  // 3. Check persistent storage (survives page refresh & app reload)
   try {
     const rawStored =
       getStorageItem(STORAGE_PEAKS_PREFIX + url) ||
@@ -494,7 +509,7 @@ export async function extractRealMediaAudioPeaks(
         if (clipId) mediaPeaksCache.set(clipId, parsed);
         setMediaHasAudio(url, true);
         if (clipId) setMediaHasAudio(clipId, true);
-        notifyAudioChange();
+        notifyAudioChange(url);
         return parsed;
       }
     }
@@ -507,11 +522,6 @@ export async function extractRealMediaAudioPeaks(
     if (clipId) setMediaHasAudio(clipId, false);
     mediaPeaksCache.set(url, []);
     return [];
-  }
-
-  // If already in flight, reuse existing promise
-  if (inFlightDecodes.has(url)) {
-    return inFlightDecodes.get(url)!;
   }
 
   const decodePromise = (async () => {
@@ -652,7 +662,7 @@ export async function extractRealMediaAudioPeaks(
         if (clipId) setMediaHasAudio(clipId, true);
       }
       mediaPeaksCache.set(url, []);
-      notifyAudioChange();
+      notifyAudioChange(url);
       return [];
     } catch (err) {
       console.warn("[mediaAudioDetector] Could not decode audio from:", url, err);
@@ -665,16 +675,16 @@ export async function extractRealMediaAudioPeaks(
         if (clipId) setMediaHasAudio(clipId, true);
       }
       mediaPeaksCache.set(url, []);
-      notifyAudioChange();
+      notifyAudioChange(url);
       return [];
     } finally {
       inFlightDecodes.delete(url);
-      notifyAudioChange();
+      notifyAudioChange(url);
     }
   })();
 
   inFlightDecodes.set(url, decodePromise);
-  notifyAudioChange();
+  notifyAudioChange(url);
   return decodePromise;
 }
 

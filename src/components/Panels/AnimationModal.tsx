@@ -11,6 +11,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../utils/audioEngine';
 import { PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
+import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 export interface AnimationPresetItem {
   id: string;
@@ -412,49 +413,38 @@ export default function AnimationModal({
         </TouchableOpacity>
       </View>
 
-      {/* Duration Slider (Only for In & Out animations when an active preset is chosen) */}
+      {/* Continuous Duration Slider + Quick Presets (For In & Out animations) */}
       {(activeCategory === 'in' || activeCategory === 'out') && activePresetId !== 'none' && (
         <View style={styles.durationRow}>
-          <View style={styles.durationLabelContainer}>
-            <Text style={styles.durationLabel}>Duration</Text>
-            <Text style={styles.durationValue}>
-              {(activeCategory === 'in' ? inDuration : outDuration).toFixed(1)}s
-            </Text>
+          <CompactSliderInput
+            label="Animation Duration"
+            value={parseFloat((activeCategory === 'in' ? inDuration : outDuration).toFixed(1))}
+            min={0.1}
+            max={parseFloat(maxAnimDuration.toFixed(1))}
+            step={0.1}
+            decimals={1}
+            unit="s"
+            defaultValue={0.5}
+            accentColor="#00F2FE"
+            showSteppers={true}
+            onChange={(val) => handleDurationChange(val)}
+          />
+          <View style={styles.durationQuickRow}>
+            {[0.3, 0.5, 0.8, 1.0, 1.5].filter((d) => d <= maxAnimDuration).map((d) => {
+              const isSel = Math.abs((activeCategory === 'in' ? inDuration : outDuration) - d) < 0.05;
+              return (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.quickDurPill, isSel && styles.quickDurPillActive]}
+                  onPress={() => handleDurationChange(d)}
+                >
+                  <Text style={[styles.quickDurText, isSel && styles.quickDurTextActive]}>
+                    {d}s
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          {Platform.OS === 'web' ? (
-            <input
-              type="range"
-              min="0.1"
-              max={maxAnimDuration.toString()}
-              step="0.1"
-              value={(activeCategory === 'in' ? inDuration : outDuration).toString()}
-              onChange={(e) => handleDurationChange(parseFloat(e.target.value))}
-              style={{
-                width: '100%',
-                height: 4,
-                accentColor: '#00F2FE',
-                cursor: 'pointer',
-                margin: 0,
-              } as any}
-            />
-          ) : (
-            <View style={styles.durationQuickRow}>
-              {[0.3, 0.5, 0.8, 1.0, 1.5].filter((d) => d <= maxAnimDuration).map((d) => {
-                const isSel = Math.abs((activeCategory === 'in' ? inDuration : outDuration) - d) < 0.05;
-                return (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.quickDurPill, isSel && styles.quickDurPillActive]}
-                    onPress={() => handleDurationChange(d)}
-                  >
-                    <Text style={[styles.quickDurText, isSel && styles.quickDurTextActive]}>
-                      {d}s
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
         </View>
       )}
 

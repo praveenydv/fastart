@@ -14,18 +14,50 @@ import { soundEngine } from '../../utils/audioEngine';
 import { parseCubeLut, PRO_3D_LUTS } from '../../utils/lutParser';
 import { CustomLutConfig } from '../../types/project';
 import { getStorageItem, setStorageItem } from '../../utils/storage';
+import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 interface FiltersModalProps {
   visible: boolean;
   onClose: () => void;
   onApply?: () => void;
   activeFilter?: string;
-  onSelectFilter: (filterId: string, customLut?: CustomLutConfig, applyToAll?: boolean) => void;
+  onSelectFilter: (filterId: string, customLut?: CustomLutConfig, applyToAll?: boolean, intensity?: number) => void;
   isInline?: boolean;
   isWholeProject?: boolean;
   selectedClip?: any;
   project?: any;
 }
+
+const FILTER_CATEGORIES = [
+  { id: 'All', label: 'All' },
+  { id: '3D_LUTs', label: '3D LUTs' },
+  { id: 'Cinematic', label: 'Cinematic' },
+  { id: 'Retro', label: 'Vintage' },
+  { id: 'Vibrant', label: 'Vibrant' },
+];
+
+const FILTER_COLOR_MAP: Record<string, string> = {
+  normal: '#8E95A5',
+  teal_orange: '#00F2FE',
+  cyberpunk: '#D946EF',
+  vintage: '#D97706',
+  noir: '#FFFFFF',
+  warm_sunset: '#F59E0B',
+  cold_moody: '#38BDF8',
+  emerald: '#10B981',
+  vhs_retro: '#E11D48',
+  pastel_dream: '#F472B6',
+  cinematic_warm: '#FB923C',
+  matrix_code: '#22C55E',
+  sepia_antique: '#B45309',
+  high_contrast: '#60A5FA',
+  polaroid_fade: '#CBD5E1',
+  solar_pop: '#A855F7',
+  lut_kodak_2383: '#D97706',
+  lut_fuji_pro400h: '#38BDF8',
+  lut_bleach_bypass: '#E2E8F0',
+  lut_teal_orange_film: '#00F2FE',
+};
 
 export default function FiltersModal({
   visible,
@@ -41,9 +73,18 @@ export default function FiltersModal({
   const [activeCategory, setActiveCategory] = useState('All');
   const [customLuts, setCustomLuts] = useState<CustomLutConfig[]>(PRO_3D_LUTS);
   const [selectedLutId, setSelectedLutId] = useState<string>(activeFilter);
+  const [filterIntensity, setFilterIntensity] = useState<number>(() => {
+    return Math.round((selectedClip?.filterIntensity !== undefined ? selectedClip.filterIntensity : 1.0) * 100);
+  });
 
   // Standardized prefix reference model image for consistent, clear filter previews
   const previewThumb = PRESET_PREVIEW_IMAGE;
+
+  useEffect(() => {
+    if (selectedClip?.filterIntensity !== undefined) {
+      setFilterIntensity(Math.round(selectedClip.filterIntensity * 100));
+    }
+  }, [selectedClip]);
 
   useEffect(() => {
     setSelectedLutId(activeFilter);
@@ -62,36 +103,10 @@ export default function FiltersModal({
     loadStoredLuts();
   }, [visible, activeFilter]);
 
-  const categories = [
-    { id: 'All', label: 'All' },
-    { id: '3D_LUTs', label: '3D LUTs' },
-    { id: 'Cinematic', label: 'Cinematic' },
-    { id: 'Retro', label: 'Vintage' },
-    { id: 'Vibrant', label: 'Vibrant' },
-  ];
+  if (!visible) return null;
 
-  const filterColorMap: Record<string, string> = {
-    normal: '#8E95A5',
-    teal_orange: '#00F2FE',
-    cyberpunk: '#D946EF',
-    vintage: '#D97706',
-    noir: '#FFFFFF',
-    warm_sunset: '#F59E0B',
-    cold_moody: '#38BDF8',
-    emerald: '#10B981',
-    vhs_retro: '#E11D48',
-    pastel_dream: '#F472B6',
-    cinematic_warm: '#FB923C',
-    matrix_code: '#22C55E',
-    sepia_antique: '#B45309',
-    high_contrast: '#60A5FA',
-    polaroid_fade: '#CBD5E1',
-    solar_pop: '#A855F7',
-    lut_kodak_2383: '#D97706',
-    lut_fuji_pro400h: '#38BDF8',
-    lut_bleach_bypass: '#E2E8F0',
-    lut_teal_orange_film: '#00F2FE',
-  };
+  const categories = FILTER_CATEGORIES;
+  const filterColorMap = FILTER_COLOR_MAP;
 
   const handleImportCubeFile = () => {
     if (Platform.OS === 'web') {
@@ -128,7 +143,7 @@ export default function FiltersModal({
             setStorageItem('fastart_custom_luts', JSON.stringify(userOnly));
           } catch (err) {}
 
-          onSelectFilter(newLut.id, newLut, isWholeProject);
+          onSelectFilter(newLut.id, newLut, isWholeProject, filterIntensity / 100);
         };
         reader.readAsText(file);
       };
@@ -139,19 +154,19 @@ export default function FiltersModal({
   const handleSelectStandardPreset = (presetId: string) => {
     soundEngine.playSfx('click');
     setSelectedLutId(presetId);
-    onSelectFilter(presetId, undefined, isWholeProject);
+    onSelectFilter(presetId, undefined, isWholeProject, filterIntensity / 100);
   };
 
   const handleSelectCustomLut = (lut: CustomLutConfig) => {
     soundEngine.playSfx('click');
     setSelectedLutId(lut.id);
-    onSelectFilter(lut.id, lut, isWholeProject);
+    onSelectFilter(lut.id, lut, isWholeProject, filterIntensity / 100);
   };
 
   const handleResetToNormal = () => {
     soundEngine.playSfx('click');
     setSelectedLutId('normal');
-    onSelectFilter('normal', undefined, isWholeProject);
+    onSelectFilter('normal', undefined, isWholeProject, 1.0);
   };
 
   const filteredPresets = FILTER_PRESETS.filter((item) => {
@@ -270,6 +285,28 @@ export default function FiltersModal({
               })}
             </ScrollView>
           </View>
+
+          {/* Continuous Filter Strength / Intensity Slider */}
+          {!isNormal && (
+            <View style={styles.intensitySliderRow}>
+              <CompactSliderInput
+                label="Filter Strength"
+                value={filterIntensity}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                defaultValue={100}
+                accentColor="#00F2FE"
+                showSteppers={true}
+                onChange={(val) => {
+                  setFilterIntensity(val);
+                  const activeCustom = customLuts.find((l) => l.id === selectedLutId);
+                  onSelectFilter(selectedLutId, activeCustom, isWholeProject, val / 100);
+                }}
+              />
+            </View>
+          )}
 
           {/* Filters Grid */}
           <ScrollView
@@ -472,7 +509,6 @@ export default function FiltersModal({
         </View>
   );
 
-  if (!visible) return null;
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
@@ -642,6 +678,14 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     marginBottom: 12,
+  },
+  intensitySliderRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0, 242, 254, 0.04)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 4,
   },
   sectionHeader: {
     color: '#94A3B8',

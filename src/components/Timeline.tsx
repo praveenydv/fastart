@@ -397,11 +397,50 @@ export const Timeline: React.FC<TimelineProps> = ({
     return list;
   }, [totalDuration, pxPerSec]);
 
-  // Left track header cells (stable layout with ZERO layout displacement)
+  // Left track header cells (aligned in exact reversed order matching TimelineTracksView)
   const renderedTrackHeaders = useMemo(() => {
     const headers: React.ReactNode[] = [];
 
-    trackRows.forEach((_rowClips, idx) => {
+    // Top new track header preview when dragging clip near/past top track
+    if (
+      dragState &&
+      dragState.isInsertingNewTrack &&
+      dragState.insertTrackIndex >= activeTrackCount
+    ) {
+      headers.push(
+        <View
+          key="insert-header-top"
+          style={[
+            styles.trackHeaderCellUniversal,
+            {
+              borderColor: THEME_COLORS.accent,
+              borderWidth: 1.5,
+              borderStyle: "dashed",
+              backgroundColor: THEME_COLORS.cyanBg,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2,
+            },
+          ]}
+        >
+          <Ionicons name="add" size={12} color={THEME_COLORS.accent} />
+          <Text
+            style={[
+              styles.trackHeaderLabelUniversal,
+              {
+                color: THEME_COLORS.accent,
+                fontWeight: "700",
+              },
+            ]}
+          >
+            {isMobile ? `+T` : `T${activeTrackCount + 1}`}
+          </Text>
+        </View>,
+      );
+    }
+
+    for (let idx = trackRows.length - 1; idx >= 0; idx--) {
       const isSeamActive =
         dragState?.isInsertingNewTrack && dragState?.insertTrackIndex === idx;
 
@@ -437,7 +476,13 @@ export const Timeline: React.FC<TimelineProps> = ({
               }}
             >
               <Ionicons name="add" size={10} color={THEME_COLORS.accent} />
-              <Text style={{ color: THEME_COLORS.accent, fontSize: 9, fontWeight: "800" }}>
+              <Text
+                style={{
+                  color: THEME_COLORS.accent,
+                  fontSize: 9,
+                  fontWeight: "800",
+                }}
+              >
                 New
               </Text>
             </View>
@@ -450,7 +495,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </View>
         </View>,
       );
-    });
+    }
 
     // Bottom new track header preview when dragging clip (only if track just above it is not empty)
     const isLastTrackEmpty =
@@ -459,12 +504,12 @@ export const Timeline: React.FC<TimelineProps> = ({
         (trackRows[trackRows.length - 1].length === 1 &&
           trackRows[trackRows.length - 1][0].id === dragState?.clipId));
 
-    if (dragState && activeTrackCount < 10 && !isLastTrackEmpty) {
+    if (dragState && activeTrackCount < MAX_TRACKS && !isLastTrackEmpty) {
       const isBottomActive =
         dragState.isInsertingNewTrack &&
-        (dragState.insertTrackIndex === null ||
-          dragState.insertTrackIndex === undefined ||
-          dragState.insertTrackIndex >= trackRows.length);
+        (dragState.insertTrackIndex === 0 ||
+          dragState.insertTrackIndex === null ||
+          dragState.insertTrackIndex === undefined);
 
       headers.push(
         <View
@@ -472,7 +517,9 @@ export const Timeline: React.FC<TimelineProps> = ({
           style={[
             styles.trackHeaderCellUniversal,
             {
-              borderColor: isBottomActive ? THEME_COLORS.accent : THEME_COLORS.cyanBorder,
+              borderColor: isBottomActive
+                ? THEME_COLORS.accent
+                : THEME_COLORS.cyanBorder,
               borderWidth: 1.5,
               borderStyle: "dashed",
               backgroundColor: isBottomActive
@@ -499,7 +546,9 @@ export const Timeline: React.FC<TimelineProps> = ({
             style={[
               styles.trackHeaderLabelUniversal,
               {
-                color: isBottomActive ? THEME_COLORS.accent : THEME_COLORS.textMuted,
+                color: isBottomActive
+                  ? THEME_COLORS.accent
+                  : THEME_COLORS.textMuted,
                 fontWeight: "700",
               },
             ]}

@@ -10,8 +10,7 @@ import {
   mediaHasAudioTrack,
 } from '../../../utils/mediaAudioDetector';
 import { styles } from './SpeedModalStyles';
-
-const WebInput: any = Platform.OS === 'web' ? 'input' : View;
+import { CompactSliderInput } from '../../Common/CompactSliderInput';
 
 export interface SpeedCustomCurveTabProps {
   customPoints: SpeedCurvePoint[];
@@ -482,57 +481,23 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
       {/* Selected Point Speed Slider */}
       {selectedPointIndex >= 0 && customPoints[selectedPointIndex] && (
         <View style={styles.pointFineTuneBox}>
-          <View style={styles.sliderRow}>
-            <Text style={styles.sliderLabel}>
-              Point #{selectedPointIndex + 1} Speed
-            </Text>
-            <Text style={styles.sliderVal}>
-              {customPoints[selectedPointIndex].s.toFixed(1)}x
-            </Text>
-          </View>
-          <View style={styles.sliderControls}>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() => {
-                const copy = [...customPoints];
-                copy[selectedPointIndex].s = Math.max(
-                  0.1,
-                  Number((copy[selectedPointIndex].s - 0.2).toFixed(1))
-                );
-                setCustomPoints(copy);
-              }}
-            >
-              <Ionicons name="remove" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-            {Platform.OS === 'web' ? (
-              <WebInput
-                type="range"
-                min="0.1"
-                max="5.0"
-                step="0.1"
-                value={customPoints[selectedPointIndex].s}
-                onChange={(e: any) => {
-                  const copy = [...customPoints];
-                  copy[selectedPointIndex].s = parseFloat(e.target.value);
-                  setCustomPoints(copy);
-                }}
-                style={{ flex: 1, accentColor: '#00F2FE' }}
-              />
-            ) : null}
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() => {
-                const copy = [...customPoints];
-                copy[selectedPointIndex].s = Math.min(
-                  5.0,
-                  Number((copy[selectedPointIndex].s + 0.2).toFixed(1))
-                );
-                setCustomPoints(copy);
-              }}
-            >
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          <CompactSliderInput
+            label={`Point #${selectedPointIndex + 1} Speed`}
+            value={parseFloat(customPoints[selectedPointIndex].s.toFixed(1))}
+            min={0.1}
+            max={5.0}
+            step={0.1}
+            decimals={1}
+            unit="x"
+            defaultValue={1.0}
+            accentColor="#00F2FE"
+            showSteppers={true}
+            onChange={(val) => {
+              const copy = [...customPoints];
+              copy[selectedPointIndex].s = val;
+              setCustomPoints(copy);
+            }}
+          />
         </View>
       )}
 

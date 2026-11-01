@@ -29,6 +29,20 @@ export interface TransitionRenderState {
   progress: number;
 }
 
+const BLEND_MAP: Record<string, GlobalCompositeOperation> = {
+  normal: "source-over",
+  screen: "screen",
+  multiply: "multiply",
+  overlay: "overlay",
+  darken: "darken",
+  lighten: "lighten",
+  "color-dodge": "color-dodge",
+  "color-burn": "color-burn",
+  "soft-light": "soft-light",
+  difference: "difference",
+  exclusion: "exclusion",
+};
+
 export function drawClip(
   ctx: CanvasRenderingContext2D,
   clip: VideoClip,
@@ -251,9 +265,8 @@ export function drawClip(
   }
 
   const t = getInterpolatedTransform(clip, time, "video");
-  const keyframeOpacity = t.opacity;
 
-  if (clip.motionTrack && clip.motionTrack.enabled && clip.motionTrack.actionType === 'camera_center') {
+  if (clip.motionTrack && clip.motionTrack.enabled) {
     const motion = applyMotionTracking(time, clip.startTime, clip.duration, clip.motionTrack);
     xOffset += (motion.dx / 100) * w;
     yOffset += (motion.dy / 100) * h;
@@ -261,24 +274,11 @@ export function drawClip(
     motionRot += motion.dRot || 0;
   }
 
-  const clipOpacity = (t?.opacity !== undefined ? t.opacity : 1.0) * keyframeOpacity;
+  const clipOpacity = t?.opacity !== undefined ? t.opacity : 1.0;
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha * clipOpacity));
 
   const rawBlend = (clip as any).blendMode || (t as any)?.blendMode || "normal";
-  const blendMap: Record<string, GlobalCompositeOperation> = {
-    normal: "source-over",
-    screen: "screen",
-    multiply: "multiply",
-    overlay: "overlay",
-    darken: "darken",
-    lighten: "lighten",
-    "color-dodge": "color-dodge",
-    "color-burn": "color-burn",
-    "soft-light": "soft-light",
-    difference: "difference",
-    exclusion: "exclusion",
-  };
-  ctx.globalCompositeOperation = blendMap[rawBlend] || "source-over";
+  ctx.globalCompositeOperation = BLEND_MAP[rawBlend] || "source-over";
 
   ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y + yOffset);
   ctx.rotate((((t.rotation || 0) + motionRot) * Math.PI) / 180);
@@ -308,7 +308,13 @@ export function drawClip(
 
   ctx.scale(scaleX, scaleY);
 
-  applyColorFilter(ctx, clip.filter, clip.customLut, clip.hslAdjustments);
+  applyColorFilter(
+    ctx,
+    clip.filter,
+    clip.customLut,
+    clip.hslAdjustments,
+    clip.filterIntensity !== undefined ? clip.filterIntensity : 1.0,
+  );
 
   if (!renderCtx.videoElements.has(clip.id) && !renderCtx.videoElements.has(clip.url)) {
     renderCtx.preloadClip(clip);

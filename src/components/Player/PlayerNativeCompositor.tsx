@@ -7,7 +7,7 @@ import { styles } from "./PlayerStyles";
 import { TransientTransformState } from "./playerTypes";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
-import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
+import { applyMotionTracking, FILTER_CSS_MAP, scaleCssFilter } from "../../utils/renderer/rendererEffects";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import { buildHslCssFilter } from "../../utils/hslEngine";
@@ -37,6 +37,98 @@ interface PlayerNativeCompositorProps {
   ) => any;
 }
 
+function renderClipEnhanceOverlay(clip: any) {
+  const enhance = clip.enhance;
+  if (!enhance) return null;
+  const hasHdr = Boolean(enhance.hdr);
+  const colorBoost = (enhance.colorBoost || 0) / 100;
+  const skinSmooth = (enhance.skinSmoothing || 0) / 100;
+  const faceRad = (enhance.faceRadiance || 0) / 100;
+
+  if (!hasHdr && colorBoost === 0 && skinSmooth === 0 && faceRad === 0) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {(faceRad > 0 || skinSmooth > 0) && (
+        <LinearGradient
+          colors={[
+            `rgba(255, 235, 225, ${(faceRad * 0.22 + skinSmooth * 0.12).toFixed(2)})`,
+            `rgba(255, 245, 235, ${(skinSmooth * 0.08).toFixed(2)})`,
+            `rgba(255, 225, 215, ${(faceRad * 0.18).toFixed(2)})`,
+          ]}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      {hasHdr && (
+        <LinearGradient
+          colors={["rgba(255, 255, 255, 0.12)", "transparent", "rgba(0, 0, 0, 0.15)"]}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      {colorBoost > 0 && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: `rgba(0, 242, 254, ${(colorBoost * 0.08).toFixed(2)})` },
+          ]}
+        />
+      )}
+    </View>
+  );
+}
+
+function renderMosaicCensor(clip: any, clipW: number, clipH: number, currentTime: number) {
+  if (!clip.motionTrack || !clip.motionTrack.enabled || clip.motionTrack.actionType !== 'mosaic_censor') {
+    return null;
+  }
+  const track = clip.motionTrack;
+  const rect = track.targetRect || { x: 35, y: 30, width: 30, height: 30 };
+  const motion = applyMotionTracking(currentTime, clip.startTime, clip.duration, track);
+
+  // rect.x, rect.width and motion.dx are in percent (0..100)
+  const centerNormX = Math.max(0, Math.min(1, (rect.x + rect.width / 2 + motion.dx) / 100));
+  const centerNormY = Math.max(0, Math.min(1, (rect.y + rect.height / 2 + motion.dy) / 100));
+  const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * motion.dScale));
+  const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * motion.dScale));
+
+  const boxPixelW = Math.max(20, Math.round(clipW * boxNormW));
+  const boxPixelH = Math.max(20, Math.round(clipH * boxNormH));
+  const boxLeft = Math.round(clipW * centerNormX - boxPixelW / 2);
+  const boxTop = Math.round(clipH * centerNormY - boxPixelH / 2);
+
+  const radius = track.mosaicRadius ?? 16;
+  const isPixelate = track.mosaicStyle !== 'blur';
+
+  const webBackdropStyle: any = Platform.OS === 'web' ? {
+    backdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
+    WebkitBackdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
+  } : {};
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          left: boxLeft,
+          top: boxTop,
+          width: boxPixelW,
+          height: boxPixelH,
+          borderRadius: isPixelate ? 4 : Math.round(Math.min(boxPixelW, boxPixelH) / 4),
+          backgroundColor: isPixelate ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.12)',
+          overflow: 'hidden',
+          borderWidth: 1.5,
+          borderColor: 'rgba(0, 242, 254, 0.4)',
+          zIndex: 99,
+        },
+        webBackdropStyle,
+      ]}
+    />
+  );
+}
+
 const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = ({
   activeVideos,
   activeAudios = [],
@@ -54,6 +146,13 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
   getItemBaseDimensions,
   getInterpolatedTransform,
 }) => {
+  const pinnedTracksMap = new Map<string, any>();
+  for (let i = 0; i < activeVideos.length; i++) {
+    const v = activeVideos[i];
+    if (v.motionTrack?.enabled && v.motionTrack.pinnedClipId) {
+      pinnedTracksMap.set(v.motionTrack.pinnedClipId, v.motionTrack);
+    }
+  }
   const rawBg = canvasBackground || "#000000";
   const isBlur = rawBg.startsWith("blur:");
   const isImage = rawBg.startsWith("image:");
@@ -153,100 +252,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
       })()}
 
       {/* Layer 1: Active Video / Image Clips */}
-      {(() => {
-        const renderClipEnhanceOverlay = (clip: any) => {
-          const enhance = clip.enhance;
-          if (!enhance) return null;
-          const hasHdr = Boolean(enhance.hdr);
-          const colorBoost = (enhance.colorBoost || 0) / 100;
-          const skinSmooth = (enhance.skinSmoothing || 0) / 100;
-          const faceRad = (enhance.faceRadiance || 0) / 100;
-
-          if (!hasHdr && colorBoost === 0 && skinSmooth === 0 && faceRad === 0) {
-            return null;
-          }
-
-          return (
-            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-              {(faceRad > 0 || skinSmooth > 0) && (
-                <LinearGradient
-                  colors={[
-                    `rgba(255, 235, 225, ${(faceRad * 0.22 + skinSmooth * 0.12).toFixed(2)})`,
-                    `rgba(255, 245, 235, ${(skinSmooth * 0.08).toFixed(2)})`,
-                    `rgba(255, 225, 215, ${(faceRad * 0.18).toFixed(2)})`,
-                  ]}
-                  style={StyleSheet.absoluteFill}
-                />
-              )}
-              {hasHdr && (
-                <LinearGradient
-                  colors={["rgba(255, 255, 255, 0.12)", "transparent", "rgba(0, 0, 0, 0.15)"]}
-                  style={StyleSheet.absoluteFill}
-                />
-              )}
-              {colorBoost > 0 && (
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    { backgroundColor: `rgba(0, 242, 254, ${(colorBoost * 0.08).toFixed(2)})` },
-                  ]}
-                />
-              )}
-            </View>
-          );
-        };
-
-        const renderMosaicCensor = (clip: any, clipW: number, clipH: number) => {
-          if (!clip.motionTrack || !clip.motionTrack.enabled || clip.motionTrack.actionType !== 'mosaic_censor') {
-            return null;
-          }
-          const track = clip.motionTrack;
-          const rect = track.targetRect || { x: 35, y: 30, width: 30, height: 30 };
-          const motion = applyMotionTracking(currentTime, clip.startTime, clip.duration, track);
-
-          // rect.x, rect.width and motion.dx are in percent (0..100)
-          const centerNormX = Math.max(0, Math.min(1, (rect.x + rect.width / 2 + motion.dx) / 100));
-          const centerNormY = Math.max(0, Math.min(1, (rect.y + rect.height / 2 + motion.dy) / 100));
-          const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * motion.dScale));
-          const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * motion.dScale));
-
-          const boxPixelW = Math.max(20, Math.round(clipW * boxNormW));
-          const boxPixelH = Math.max(20, Math.round(clipH * boxNormH));
-          const boxLeft = Math.round(clipW * centerNormX - boxPixelW / 2);
-          const boxTop = Math.round(clipH * centerNormY - boxPixelH / 2);
-
-          const radius = track.mosaicRadius ?? 16;
-          const isPixelate = track.mosaicStyle !== 'blur';
-
-          const webBackdropStyle: any = Platform.OS === 'web' ? {
-            backdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
-            WebkitBackdropFilter: isPixelate ? `blur(${Math.max(4, radius / 2)}px) contrast(180%)` : `blur(${radius}px)`,
-          } : {};
-
-          return (
-            <View
-              pointerEvents="none"
-              style={[
-                {
-                  position: 'absolute',
-                  left: boxLeft,
-                  top: boxTop,
-                  width: boxPixelW,
-                  height: boxPixelH,
-                  borderRadius: isPixelate ? 4 : Math.round(Math.min(boxPixelW, boxPixelH) / 4),
-                  backgroundColor: isPixelate ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.12)',
-                  overflow: 'hidden',
-                  borderWidth: 1.5,
-                  borderColor: 'rgba(0, 242, 254, 0.4)',
-                  zIndex: 99,
-                },
-                webBackdropStyle,
-              ]}
-            />
-          );
-        };
-
-        return activeVideos.map((vid) => {
+      {activeVideos.map((vid) => {
         const isTrans = activeTransient && activeTransient.clipId === vid.id;
         const kfT = getInterpolatedTransform(vid, currentTime);
         const posX = isTrans
@@ -271,7 +277,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         // Video movement: Camera Center stabilization OR Pinned overlay video
         const effectiveTrack = (vid.motionTrack && vid.motionTrack.enabled)
           ? vid.motionTrack
-          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === vid.id)?.motionTrack;
+          : pinnedTracksMap.get(vid.id);
 
         if (effectiveTrack && effectiveTrack.enabled) {
           const isCameraCenter = effectiveTrack.actionType === 'camera_center' && vid.motionTrack?.actionType === 'camera_center';
@@ -294,7 +300,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const cx = boxWidth / 2 + posX + motionX;
         const cy = canvasHeight / 2 + posY + motionY;
 
-        const mask = kfT?.mask || getInterpolatedMask(vid, currentTime) || vid.mask || vid.transform?.mask;
+        const mask = kfT?.mask || vid.mask || vid.transform?.mask;
         let maskBorderRadius: number | undefined = undefined;
         let hasMaskShape = false;
         let webMaskStyle: any = undefined;
@@ -528,9 +534,13 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               ? ({ mixBlendMode: blendMode } as any)
               : undefined;
 
+          const baseFilterCss = vid.customLut?.cssFilter || (vid.filter && vid.filter !== "none" && vid.filter !== "normal" ? FILTER_CSS_MAP[vid.filter] : "");
+          const scaledFilterCss = baseFilterCss ? scaleCssFilter(baseFilterCss, vid.filterIntensity ?? 1.0) : "";
           const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
-          const hslFilter = buildHslCssFilter(vid.hslAdjustments);
-          const filterStr = [clipBlur > 0 ? `blur(${clipBlur}px)` : "", hslFilter].filter(Boolean).join(" ");
+          const blurFilter = clipBlur > 0 ? `blur(${clipBlur}px)` : "";
+          const hslFilter = vid.hslAdjustments ? buildHslCssFilter(vid.hslAdjustments) : "";
+          const filterParts = [scaledFilterCss, blurFilter, hslFilter].filter(Boolean);
+          const filterStr = filterParts.join(" ");
           const webBlurStyle =
             Platform.OS === "web" && filterStr
               ? ({ filter: filterStr } as any)
@@ -579,7 +589,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
                 />
                 {renderClipEnhanceOverlay(vid)}
-                {renderMosaicCensor(vid, w, h)}
+                {renderMosaicCensor(vid, w, h, currentTime)}
               </View>
             </TouchableOpacity>
           );
@@ -591,9 +601,13 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
             ? ({ mixBlendMode: blendMode } as any)
             : undefined;
 
+        const baseFilterCss = vid.customLut?.cssFilter || (vid.filter && vid.filter !== "none" && vid.filter !== "normal" ? FILTER_CSS_MAP[vid.filter] : "");
+        const scaledFilterCss = baseFilterCss ? scaleCssFilter(baseFilterCss, vid.filterIntensity ?? 1.0) : "";
         const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
-        const hslFilter = buildHslCssFilter(vid.hslAdjustments);
-        const filterStr = [clipBlur > 0 ? `blur(${clipBlur}px)` : "", hslFilter].filter(Boolean).join(" ");
+        const blurFilter = clipBlur > 0 ? `blur(${clipBlur}px)` : "";
+        const hslFilter = vid.hslAdjustments ? buildHslCssFilter(vid.hslAdjustments) : "";
+        const filterParts = [scaledFilterCss, blurFilter, hslFilter].filter(Boolean);
+        const filterStr = filterParts.join(" ");
         const webBlurStyle =
           Platform.OS === "web" && filterStr
             ? ({ filter: filterStr } as any)
@@ -633,11 +647,10 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
             />
             {renderClipEnhanceOverlay(vid)}
-            {renderMosaicCensor(vid, w, h)}
+            {renderMosaicCensor(vid, w, h, currentTime)}
           </TouchableOpacity>
         );
-      });
-      })()}
+      })}
 
       {/* Layer 2: Active Text Overlays */}
       {activeTexts.map((txt) => {
@@ -677,7 +690,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let motionRot = 0;
         const effectiveTrack = (txt.motionTrack && txt.motionTrack.enabled)
           ? txt.motionTrack
-          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === txt.id)?.motionTrack;
+          : pinnedTracksMap.get(txt.id);
         if (effectiveTrack && effectiveTrack.enabled) {
           const motion = applyMotionTracking(currentTime, txt.startTime, txt.duration, effectiveTrack);
           motionX = (motion.dx / 100) * boxWidth;
@@ -806,7 +819,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let motionRot = 0;
         const effectiveTrack = (cap.motionTrack && cap.motionTrack.enabled)
           ? cap.motionTrack
-          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === cap.id)?.motionTrack;
+          : pinnedTracksMap.get(cap.id);
         if (effectiveTrack && effectiveTrack.enabled) {
           const motion = applyMotionTracking(
             currentTime,
@@ -919,7 +932,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let motionRot = 0;
         const effectiveTrack = (stk.motionTrack && stk.motionTrack.enabled)
           ? stk.motionTrack
-          : activeVideos.find((v) => v.motionTrack?.enabled && v.motionTrack.pinnedClipId === stk.id)?.motionTrack;
+          : pinnedTracksMap.get(stk.id);
         if (effectiveTrack && effectiveTrack.enabled) {
           const motion = applyMotionTracking(currentTime, stk.startTime, stk.duration, effectiveTrack);
           motionX = (motion.dx / 100) * boxWidth;

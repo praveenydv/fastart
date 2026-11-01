@@ -29,6 +29,19 @@ function notifyThumbnailListeners(clipId: string, thumbUrl: string): void {
   });
 }
 
+let sharedThumbCanvas: HTMLCanvasElement | null = null;
+let sharedThumbCtx: CanvasRenderingContext2D | null = null;
+
+function getSharedThumbCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  if (Platform.OS !== "web" || typeof document === "undefined") return null;
+  if (!sharedThumbCanvas) {
+    sharedThumbCanvas = document.createElement("canvas");
+    sharedThumbCtx = sharedThumbCanvas.getContext("2d");
+  }
+  if (!sharedThumbCtx) return null;
+  return { canvas: sharedThumbCanvas, ctx: sharedThumbCtx };
+}
+
 /**
  * Synchronously or near-instantaneously snapshots the current frame of an active video or canvas at the split point
  */
@@ -36,26 +49,26 @@ export function captureActiveFrameNow(mediaUrl?: string, seekSec?: number): stri
   if (Platform.OS !== "web" || typeof document === "undefined") return null;
 
   try {
+    const shared = getSharedThumbCanvas();
+    if (!shared) return null;
+    const { canvas, ctx } = shared;
+
     // 1. Check global active video elements
     if (mediaUrl && globalActiveVideoElements.has(mediaUrl)) {
       const vid = globalActiveVideoElements.get(mediaUrl);
       if (vid && vid.videoWidth > 0 && vid.readyState >= 2) {
         if (seekSec === undefined || Math.abs(vid.currentTime - seekSec) <= 0.35) {
-          const canvas = document.createElement("canvas");
           const aspect = (vid.videoWidth || 16) / (vid.videoHeight || 9);
           const tw = 240;
           const th = Math.round(tw / aspect);
           canvas.width = tw;
           canvas.height = th;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = "high";
-            ctx.drawImage(vid, 0, 0, tw, th);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-            if (dataUrl && dataUrl.length > 200) {
-              return dataUrl;
-            }
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(vid, 0, 0, tw, th);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          if (dataUrl && dataUrl.length > 200) {
+            return dataUrl;
           }
         }
       }
@@ -71,21 +84,17 @@ export function captureActiveFrameNow(mediaUrl?: string, seekSec?: number): stri
         vid.readyState >= 2
       ) {
         if (seekSec === undefined || Math.abs(vid.currentTime - seekSec) <= 0.35) {
-          const canvas = document.createElement("canvas");
           const aspect = (vid.videoWidth || 16) / (vid.videoHeight || 9);
           const tw = 240;
           const th = Math.round(tw / aspect);
           canvas.width = tw;
           canvas.height = th;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = "high";
-            ctx.drawImage(vid, 0, 0, tw, th);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-            if (dataUrl && dataUrl.length > 200) {
-              return dataUrl;
-            }
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(vid, 0, 0, tw, th);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          if (dataUrl && dataUrl.length > 200) {
+            return dataUrl;
           }
         }
       }

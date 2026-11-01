@@ -19,23 +19,55 @@ export const HSL_CHANNEL_METRICS: Record<HSLColorChannel, ChannelMetrics> = {
   magenta: { id: 'magenta', name: 'Magenta', centerHue: 315, weight: 0.05 },
 };
 
+export const HSL_CHANNEL_KEYS: HSLColorChannel[] = [
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'cyan',
+  'blue',
+  'purple',
+  'magenta',
+];
+
+const hslCssFilterCache = new Map<string, string>();
+
 /**
- * Checks whether any HSL channel has a non-zero adjustment.
+ * Checks whether any HSL channel has a non-zero adjustment without allocating arrays.
  */
 export function isHslActive(adjustments?: HSLAdjustments): boolean {
   if (!adjustments) return false;
-  return Object.values(adjustments).some(
-    (cfg) => cfg && (cfg.hue !== 0 || cfg.saturation !== 0 || cfg.luminance !== 0)
-  );
+  for (let i = 0; i < HSL_CHANNEL_KEYS.length; i++) {
+    const cfg = adjustments[HSL_CHANNEL_KEYS[i]];
+    if (cfg && (cfg.hue !== 0 || cfg.saturation !== 0 || cfg.luminance !== 0)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
  * Derives a hardware-accelerated CSS filter string from active 8-channel HSL adjustments
  * for 60fps real-time Canvas 2D and Web preview playback.
+ * High-performance: Zero intermediate tuple allocations, fully cached result.
  */
 export function buildHslCssFilter(adjustments?: HSLAdjustments): string {
   if (!adjustments || !isHslActive(adjustments)) {
     return '';
+  }
+
+  // Fast key calculation without object allocations
+  let cacheKey = '';
+  for (let i = 0; i < HSL_CHANNEL_KEYS.length; i++) {
+    const cfg = adjustments[HSL_CHANNEL_KEYS[i]];
+    if (cfg && (cfg.hue !== 0 || cfg.saturation !== 0 || cfg.luminance !== 0)) {
+      cacheKey += `${i}:${cfg.hue},${cfg.saturation},${cfg.luminance};`;
+    }
+  }
+
+  const cached = hslCssFilterCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
   }
 
   let totalWeight = 0;
@@ -50,9 +82,10 @@ export function buildHslCssFilter(adjustments?: HSLAdjustments): string {
   let dominantLum = 0;
   let dominantHue = 0;
 
-  for (const [key, cfg] of Object.entries(adjustments)) {
+  for (let i = 0; i < HSL_CHANNEL_KEYS.length; i++) {
+    const channelKey = HSL_CHANNEL_KEYS[i];
+    const cfg = adjustments[channelKey];
     if (!cfg) continue;
-    const channelKey = key as HSLColorChannel;
     const metric = HSL_CHANNEL_METRICS[channelKey];
     if (!metric) continue;
 
@@ -83,6 +116,7 @@ export function buildHslCssFilter(adjustments?: HSLAdjustments): string {
   }
 
   if (totalWeight <= 0) {
+    hslCssFilterCache.set(cacheKey, '');
     return '';
   }
 
@@ -122,7 +156,13 @@ export function buildHslCssFilter(adjustments?: HSLAdjustments): string {
     }
   }
 
-  return filterParts.join(' ');
+  const result = filterParts.join(' ');
+  if (hslCssFilterCache.size >= 200) {
+    const firstKey = hslCssFilterCache.keys().next().value;
+    if (firstKey) hslCssFilterCache.delete(firstKey);
+  }
+  hslCssFilterCache.set(cacheKey, result);
+  return result;
 }
 
 /**

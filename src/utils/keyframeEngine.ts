@@ -19,6 +19,38 @@ export interface ResolvedTransform {
   mask?: MaskConfig;
 }
 
+interface CachedBaseTransformEntry {
+  tRef: any;
+  posRef: any;
+  clipType?: string;
+  tx?: number;
+  ty?: number;
+  tScale?: number;
+  tRot?: number;
+  tOpacity?: number;
+  tFlipX?: boolean;
+  tFlipY?: boolean;
+  tScaleX?: number;
+  tScaleY?: number;
+  tRotateX?: number;
+  tRotateY?: number;
+  tSkewX?: number;
+  tSkewY?: number;
+  tPerspective?: number;
+  posX?: number;
+  posY?: number;
+  clipScale?: number;
+  clipRot?: number;
+  clipOpacity?: number;
+  clipFlipX?: boolean;
+  clipFlipY?: boolean;
+  text?: string;
+  char?: string;
+  result: ResolvedTransform;
+}
+
+const baseTransformCache = new WeakMap<object, CachedBaseTransformEntry>();
+
 /**
  * Extracts and sanitizes the base static transform for any clip type.
  */
@@ -45,6 +77,48 @@ export function getBaseTransform(
     };
   }
 
+  const t = clip.transform;
+  const pos = clip.position;
+
+  if (typeof clip === 'object' && clip !== null) {
+    const cached = baseTransformCache.get(clip);
+    if (
+      cached &&
+      cached.tRef === t &&
+      cached.posRef === pos &&
+      cached.clipType === clipType &&
+      (!t || (
+        cached.tx === t.x &&
+        cached.ty === t.y &&
+        cached.tScale === t.scale &&
+        cached.tRot === t.rotation &&
+        cached.tOpacity === t.opacity &&
+        cached.tFlipX === t.flipX &&
+        cached.tFlipY === t.flipY &&
+        cached.tScaleX === t.scaleX &&
+        cached.tScaleY === t.scaleY &&
+        cached.tRotateX === t.rotateX &&
+        cached.tRotateY === t.rotateY &&
+        cached.tSkewX === t.skewX &&
+        cached.tSkewY === t.skewY &&
+        cached.tPerspective === t.perspective
+      )) &&
+      (!pos || (
+        cached.posX === pos.x &&
+        cached.posY === pos.y
+      )) &&
+      cached.clipScale === clip.scale &&
+      cached.clipRot === clip.rotation &&
+      cached.clipOpacity === clip.opacity &&
+      cached.clipFlipX === clip.flipX &&
+      cached.clipFlipY === clip.flipY &&
+      cached.text === clip.text &&
+      cached.char === clip.char
+    ) {
+      return cached.result;
+    }
+  }
+
   const isCaption = clipType === "caption" || clipType === "captions";
   const isTextOrSticker =
     clipType === "text" ||
@@ -59,76 +133,76 @@ export function getBaseTransform(
   const defaultX = isTextOrSticker ? 50 : 0;
   const defaultY = isTextOrSticker ? (isCaption ? 82 : 50) : 0;
 
-  const t = clip.transform || {};
-  const pos = clip.position || {};
+  const tObj = t || {};
+  const posObj = pos || {};
 
   let x: number;
   let y: number;
   if (isTextOrSticker) {
     x =
-      Number.isFinite(pos.x) && Number(pos.x) !== 0
-        ? Number(pos.x)
-        : Number.isFinite(t.x) && Number(t.x) !== 0
-          ? Number(t.x)
-          : Number.isFinite(pos.x)
-            ? Number(pos.x)
-            : Number.isFinite(t.x)
-              ? Number(t.x)
+      Number.isFinite(posObj.x) && Number(posObj.x) !== 0
+        ? Number(posObj.x)
+        : Number.isFinite(tObj.x) && Number(tObj.x) !== 0
+          ? Number(tObj.x)
+          : Number.isFinite(posObj.x)
+            ? Number(posObj.x)
+            : Number.isFinite(tObj.x)
+              ? Number(tObj.x)
               : defaultX;
     y =
-      Number.isFinite(pos.y) && Number(pos.y) !== 0
-        ? Number(pos.y)
-        : Number.isFinite(t.y) && Number(t.y) !== 0
-          ? Number(t.y)
-          : Number.isFinite(pos.y)
-            ? Number(pos.y)
-            : Number.isFinite(t.y)
-              ? Number(t.y)
+      Number.isFinite(posObj.y) && Number(posObj.y) !== 0
+        ? Number(posObj.y)
+        : Number.isFinite(tObj.y) && Number(tObj.y) !== 0
+          ? Number(tObj.y)
+          : Number.isFinite(posObj.y)
+            ? Number(posObj.y)
+            : Number.isFinite(tObj.y)
+              ? Number(tObj.y)
               : defaultY;
   } else {
-    x = Number.isFinite(t.x)
-      ? Number(t.x)
-      : Number.isFinite(pos.x)
-        ? Number(pos.x)
+    x = Number.isFinite(tObj.x)
+      ? Number(tObj.x)
+      : Number.isFinite(posObj.x)
+        ? Number(posObj.x)
         : defaultX;
-    y = Number.isFinite(t.y)
-      ? Number(t.y)
-      : Number.isFinite(pos.y)
-        ? Number(pos.y)
+    y = Number.isFinite(tObj.y)
+      ? Number(tObj.y)
+      : Number.isFinite(posObj.y)
+        ? Number(posObj.y)
         : defaultY;
   }
 
-  const scale = Number.isFinite(t.scale)
-    ? Number(t.scale)
+  const scale = Number.isFinite(tObj.scale)
+    ? Number(tObj.scale)
     : Number.isFinite(clip.scale)
       ? Number(clip.scale)
       : defaultScale;
 
-  const rotation = Number.isFinite(t.rotation)
-    ? Number(t.rotation)
+  const rotation = Number.isFinite(tObj.rotation)
+    ? Number(tObj.rotation)
     : Number.isFinite(clip.rotation)
       ? Number(clip.rotation)
       : 0;
 
-  const opacity = Number.isFinite(t.opacity)
-    ? Number(t.opacity)
+  const opacity = Number.isFinite(tObj.opacity)
+    ? Number(tObj.opacity)
     : Number.isFinite(clip.opacity)
       ? Number(clip.opacity)
       : 1.0;
 
-  const flipX = Boolean(t.flipX ?? clip.flipX ?? false);
-  const flipY = Boolean(t.flipY ?? clip.flipY ?? false);
-  const scaleX = Number.isFinite(t.scaleX) ? Number(t.scaleX) : 1.0;
-  const scaleY = Number.isFinite(t.scaleY) ? Number(t.scaleY) : 1.0;
-  const rotateX = Number.isFinite(t.rotateX) ? Number(t.rotateX) : 0;
-  const rotateY = Number.isFinite(t.rotateY) ? Number(t.rotateY) : 0;
-  const skewX = Number.isFinite(t.skewX) ? Number(t.skewX) : 0;
-  const skewY = Number.isFinite(t.skewY) ? Number(t.skewY) : 0;
-  const perspective = Number.isFinite(t.perspective)
-    ? Number(t.perspective)
+  const flipX = Boolean(tObj.flipX ?? clip.flipX ?? false);
+  const flipY = Boolean(tObj.flipY ?? clip.flipY ?? false);
+  const scaleX = Number.isFinite(tObj.scaleX) ? Number(tObj.scaleX) : 1.0;
+  const scaleY = Number.isFinite(tObj.scaleY) ? Number(tObj.scaleY) : 1.0;
+  const rotateX = Number.isFinite(tObj.rotateX) ? Number(tObj.rotateX) : 0;
+  const rotateY = Number.isFinite(tObj.rotateY) ? Number(tObj.rotateY) : 0;
+  const skewX = Number.isFinite(tObj.skewX) ? Number(tObj.skewX) : 0;
+  const skewY = Number.isFinite(tObj.skewY) ? Number(tObj.skewY) : 0;
+  const perspective = Number.isFinite(tObj.perspective)
+    ? Number(tObj.perspective)
     : 800;
 
-  return {
+  const result: ResolvedTransform = {
     x,
     y,
     scale: Math.max(0.1, Math.min(10.0, scale)),
@@ -144,6 +218,40 @@ export function getBaseTransform(
     flipX,
     flipY,
   };
+
+  if (typeof clip === 'object' && clip !== null) {
+    baseTransformCache.set(clip, {
+      tRef: t,
+      posRef: pos,
+      clipType,
+      tx: t?.x,
+      ty: t?.y,
+      tScale: t?.scale,
+      tRot: t?.rotation,
+      tOpacity: t?.opacity,
+      tFlipX: t?.flipX,
+      tFlipY: t?.flipY,
+      tScaleX: t?.scaleX,
+      tScaleY: t?.scaleY,
+      tRotateX: t?.rotateX,
+      tRotateY: t?.rotateY,
+      tSkewX: t?.skewX,
+      tSkewY: t?.skewY,
+      tPerspective: t?.perspective,
+      posX: pos?.x,
+      posY: pos?.y,
+      clipScale: clip.scale,
+      clipRot: clip.rotation,
+      clipOpacity: clip.opacity,
+      clipFlipX: clip.flipX,
+      clipFlipY: clip.flipY,
+      text: clip.text,
+      char: clip.char,
+      result,
+    });
+  }
+
+  return result;
 }
 
 const sortedKfCache = new WeakMap<KeyframePoint[], KeyframePoint[]>();
@@ -335,6 +443,15 @@ export function cleanAndSortKeyframes(
     result.push(cleanKf);
   }
 
+  (result as any).hasAdvancedProps = result.some(
+    (k: any) =>
+      k.easing ||
+      k.transform?.rotateX ||
+      k.transform?.rotateY ||
+      k.transform?.skewX,
+  );
+  (result as any).legacyMaskKfs = result.filter((k) => k.mask || k.transform?.mask);
+
   sortedKfCache.set(keyframes, result);
   return result;
 }
@@ -483,7 +600,9 @@ export function getInterpolatedMask(
     clip.keyframes.length > 0
   ) {
     const kfs = cleanAndSortKeyframes(clip.keyframes);
-    const legacyMaskKfs = kfs.filter((k) => k.mask || k.transform?.mask);
+    const legacyMaskKfs: KeyframePoint[] =
+      (kfs as any).legacyMaskKfs ||
+      kfs.filter((k) => k.mask || k.transform?.mask);
     if (legacyMaskKfs.length > 0) {
       const localTime = Math.max(0, curTime - (clip.startTime || 0));
 
@@ -555,6 +674,9 @@ export function getInterpolatedTransform(
     !Array.isArray(clip.keyframes) ||
     clip.keyframes.length === 0
   ) {
+    if (!interpolatedMask && !baseT.mask) {
+      return baseT;
+    }
     return {
       ...baseT,
       mask: interpolatedMask,
@@ -563,6 +685,9 @@ export function getInterpolatedTransform(
 
   const kfs = cleanAndSortKeyframes(clip.keyframes);
   if (kfs.length === 0) {
+    if (!interpolatedMask && !baseT.mask) {
+      return baseT;
+    }
     return {
       ...baseT,
       mask: interpolatedMask,
@@ -617,7 +742,7 @@ export function getInterpolatedTransform(
   }
 
   // 1. High-Performance Native Rust / WebAssembly Evaluation with Hermite Ease
-  const hasAdvancedProps = kfs.some(
+  const hasAdvancedProps = (kfs as any).hasAdvancedProps ?? kfs.some(
     (k: any) =>
       k.easing ||
       k.transform?.rotateX ||

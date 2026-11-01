@@ -397,6 +397,9 @@ export function previewSoundEffect(sfx: SoundEffectItem) {
   }
 }
 
+// In-memory cache for synthesized SFX WAV blobs to prevent redundant OfflineAudioContext synthesis
+const sfxBlobCache = new Map<string, string>();
+
 /**
  * Generate an offline WAV blob and return an AudioClip ready to insert on the timeline
  */
@@ -406,7 +409,9 @@ export async function createAudioClipFromSfx(
 ): Promise<AudioClip> {
   let mediaUrl = 'data:audio/wav;base64,';
 
-  if (typeof window !== 'undefined') {
+  if (sfxBlobCache.has(sfx.id)) {
+    mediaUrl = sfxBlobCache.get(sfx.id)!;
+  } else if (typeof window !== 'undefined') {
     const OfflineCtx = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
     if (OfflineCtx) {
       try {
@@ -418,6 +423,7 @@ export async function createAudioClipFromSfx(
         const renderedBuffer = await offlineCtx.startRendering();
         const wavBlob = bufferToWavBlob(renderedBuffer);
         mediaUrl = URL.createObjectURL(wavBlob);
+        sfxBlobCache.set(sfx.id, mediaUrl);
       } catch (e) {
         console.warn('Offline rendering SFX failed, falling back to dummy url:', e);
       }

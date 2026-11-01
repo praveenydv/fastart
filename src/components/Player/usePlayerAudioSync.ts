@@ -86,7 +86,20 @@ export function usePlayerAudioSync({
         isFromVideo: true,
       }));
 
-    return [...rawAudioClips, ...videoAudioClips];
+    const rawSources = [...rawAudioClips, ...videoAudioClips];
+    return rawSources.map((clip) => {
+      const clipEnd = clip.startTime + clip.duration;
+      const hasAdjacentAudio = rawSources.some(
+        (other) =>
+          other.id !== clip.id &&
+          other.url === clip.url &&
+          Math.abs(other.startTime - clipEnd) < 0.01,
+      );
+      return {
+        ...clip,
+        hasAdjacentAudio,
+      };
+    });
   }, [project.tracks.audio, project.tracks.video, project.aiDenoise, audioPresenceTick]);
 
   // 2. Audio Elements & Web Audio Nodes lifecycle (only when sound sources change)
@@ -263,13 +276,7 @@ export function usePlayerAudioSync({
 
       const clipStart = clip.startTime || 0;
       const clipEnd = clipStart + (clip.duration || 0);
-      const hasAdjacentAudio = allSoundSources.some(
-        (other) =>
-          other.id !== clip.id &&
-          other.url === clip.url &&
-          Math.abs(other.startTime - clipEnd) < 0.01,
-      );
-      const isInside = hasAdjacentAudio
+      const isInside = (clip as any).hasAdjacentAudio
         ? currentTime >= clipStart && currentTime < clipEnd
         : currentTime >= clipStart && currentTime <= clipEnd;
 

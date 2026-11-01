@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   Platform,
   useWindowDimensions,
+  Animated,
+  Easing,
+  PanResponder,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../Header";
@@ -907,6 +910,133 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     windowHeight,
   });
 
+  // Mobile Modal Drag-to-Dismiss Gesture:
+  // When an inline modal is open, dragging its handle or header slides the modal down to dismiss,
+  // WITHOUT resizing the video player or changing playerStage height!
+  const modalTranslateY = React.useRef(new Animated.Value(0)).current;
+  const [isModalDragging, setIsModalDragging] = React.useState(false);
+  const isModalDraggingRef = React.useRef(false);
+
+  // Reset modal translation whenever activeModal changes
+  React.useEffect(() => {
+    modalTranslateY.setValue(0);
+    setIsModalDragging(false);
+    isModalDraggingRef.current = false;
+  }, [activeModal]);
+
+  // PanResponder for Native (iOS / Android)
+  const modalPanResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gs) =>
+          gs.dy > 4 && Math.abs(gs.dy) > Math.abs(gs.dx),
+        onPanResponderGrant: () => {
+          isModalDraggingRef.current = true;
+          setIsModalDragging(true);
+        },
+        onPanResponderMove: (_, gs) => {
+          // Clamp so you can only drag downward (dy >= 0)
+          modalTranslateY.setValue(Math.max(0, gs.dy));
+        },
+        onPanResponderRelease: (_, gs) => {
+          isModalDraggingRef.current = false;
+          setIsModalDragging(false);
+          if (gs.dy > 55 || gs.vy > 0.45) {
+            Animated.timing(modalTranslateY, {
+              toValue: 300,
+              duration: 140,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: Platform.OS !== "web",
+            }).start(() => {
+              modalTranslateY.setValue(0);
+              handleCloseMenu();
+            });
+          } else {
+            Animated.spring(modalTranslateY, {
+              toValue: 0,
+              damping: 18,
+              stiffness: 250,
+              useNativeDriver: Platform.OS !== "web",
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          isModalDraggingRef.current = false;
+          setIsModalDragging(false);
+          Animated.spring(modalTranslateY, {
+            toValue: 0,
+            damping: 18,
+            stiffness: 250,
+            useNativeDriver: Platform.OS !== "web",
+          }).start();
+        },
+      }),
+    [handleCloseMenu, modalTranslateY],
+  );
+
+  // Pointer / Mouse / Touch handlers for Web
+  const handleModalDragPointerDown = React.useCallback(
+    (e: any) => {
+      if (Platform.OS !== "web" || typeof window === "undefined") return;
+      e.preventDefault?.();
+      e.stopPropagation?.();
+
+      const startY = e.clientY ?? e.pageY ?? e.touches?.[0]?.clientY ?? 0;
+      let currentDeltaY = 0;
+      isModalDraggingRef.current = true;
+      setIsModalDragging(true);
+
+      const onPointerMove = (moveEvt: any) => {
+        const clientY =
+          moveEvt.clientY ?? moveEvt.pageY ?? moveEvt.touches?.[0]?.clientY ?? 0;
+        const dy = clientY - startY;
+        currentDeltaY = Math.max(0, dy);
+        modalTranslateY.setValue(currentDeltaY);
+      };
+
+      const onPointerUp = () => {
+        isModalDraggingRef.current = false;
+        setIsModalDragging(false);
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("mousemove", onPointerMove);
+        window.removeEventListener("mouseup", onPointerUp);
+        window.removeEventListener("touchmove", onPointerMove);
+        window.removeEventListener("touchend", onPointerUp);
+        window.removeEventListener("touchcancel", onPointerUp);
+
+        if (currentDeltaY > 55) {
+          Animated.timing(modalTranslateY, {
+            toValue: 300,
+            duration: 140,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: false,
+          }).start(() => {
+            modalTranslateY.setValue(0);
+            handleCloseMenu();
+          });
+        } else {
+          Animated.spring(modalTranslateY, {
+            toValue: 0,
+            damping: 18,
+            stiffness: 250,
+            useNativeDriver: false,
+          }).start();
+        }
+      };
+
+      window.addEventListener("pointermove", onPointerMove, { passive: false });
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("mousemove", onPointerMove);
+      window.addEventListener("mouseup", onPointerUp);
+      window.addEventListener("touchmove", onPointerMove, { passive: false });
+      window.addEventListener("touchend", onPointerUp);
+      window.addEventListener("touchcancel", onPointerUp);
+    },
+    [handleCloseMenu, modalTranslateY],
+  );
+
   // Label for active config panel
   const getConfigPanelTitle = () => {
     const TITLES: Record<string, string> = {
@@ -1243,6 +1373,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         totalDuration={totalDuration}
         fullscreen={isFullscreen}
         isProcessing={isProcessing}
+        isResizing={isTimelineResizing}
         processingMessage={processingMessage}
         onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
         onTogglePlay={() => {
@@ -1873,29 +2004,47 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       {/* Below Player: Timeline AND Selected menu configuration */}
       {!isFullscreen && (
         <View style={styles.mobileBottomArea}>
-          {/* Universal Drag Resize Handle: Always visible whether timeline or modal is open */}
+          {/* Universal Handle:
+              - In Timeline mode: Resizes timeline height
+              - In Modal/Tool mode: Drags down to dismiss tool WITHOUT resizing or jumping the player
+          */}
           <View
             style={[
               styles.mobileResizeHandle,
-              isTimelineResizing && styles.mobileResizeHandleActive,
+              !isMobileInlineActive && isTimelineResizing && styles.mobileResizeHandleActive,
+              isMobileInlineActive && isModalDragging && styles.mobileResizeHandleActive,
             ]}
-            {...timelineResizeProps}
-            accessibilityLabel="Drag up or down to adjust height"
+            {...(isMobileInlineActive
+              ? (Platform.OS === "web"
+                  ? {
+                      onMouseDown: handleModalDragPointerDown,
+                      onTouchStart: handleModalDragPointerDown,
+                    }
+                  : modalPanResponder.panHandlers)
+              : timelineResizeProps)}
+            accessibilityLabel={
+              isMobileInlineActive
+                ? "Drag down to dismiss tool"
+                : "Drag up or down to adjust timeline height"
+            }
           >
             <View
               style={[
                 styles.mobileResizePill,
-                isTimelineResizing && styles.mobileResizePillActive,
+                (!isMobileInlineActive && isTimelineResizing) || (isMobileInlineActive && isModalDragging)
+                  ? styles.mobileResizePillActive
+                  : null,
               ]}
             />
           </View>
 
           {isMobileInlineActive && (
-            <View
+            <Animated.View
               style={[
                 styles.mobileInlineConfigArea,
                 {
                   height: currentTimelineHeight,
+                  transform: [{ translateY: modalTranslateY }],
                 },
                 Platform.OS === "web" &&
                   ({
@@ -1904,8 +2053,16 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                   } as any),
               ]}
             >
-              {/* Mobile menu modal header bar with close/back and done to restore timeline */}
-              <View style={styles.mobileInlineHeader}>
+              {/* Mobile menu modal header bar with close/back and done to restore timeline, plus swipe-down-to-dismiss */}
+              <View
+                style={styles.mobileInlineHeader}
+                {...(Platform.OS === "web"
+                  ? {
+                      onMouseDown: handleModalDragPointerDown,
+                      onTouchStart: handleModalDragPointerDown,
+                    }
+                  : modalPanResponder.panHandlers)}
+              >
                 <TouchableOpacity
                   style={styles.mobileInlineHeaderBtn}
                   onPress={handleCloseMenu}
@@ -1931,7 +2088,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
               <View style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
                 {renderModals ? renderModals(true) : null}
               </View>
-            </View>
+            </Animated.View>
           )}
 
           <View

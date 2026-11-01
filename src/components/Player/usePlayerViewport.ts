@@ -5,9 +5,10 @@ import { FastArtProject } from "../../types/project";
 interface UsePlayerViewportProps {
   project: FastArtProject;
   fullscreen: boolean;
+  isResizing?: boolean;
 }
 
-export function usePlayerViewport({ project, fullscreen }: UsePlayerViewportProps) {
+export function usePlayerViewport({ project, fullscreen, isResizing = false }: UsePlayerViewportProps) {
   const { width: winW, height: winH } = useWindowDimensions();
   const isMobile = winW < 640;
 
@@ -41,34 +42,38 @@ export function usePlayerViewport({ project, fullscreen }: UsePlayerViewportProp
     const el = viewportWrapperRef.current as unknown as HTMLElement;
     if (!el || typeof ResizeObserver === "undefined") return;
 
-    let rafId: number | null = null;
+    let pendingDims: { width: number; height: number } | null = null;
+    let rafScheduled = false;
+
     const observer = new ResizeObserver((entries) => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (width > 0 && height > 0) {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          pendingDims = { width: Math.round(width), height: Math.round(height) };
+        }
+      }
+      if (!rafScheduled && pendingDims) {
+        rafScheduled = true;
+        requestAnimationFrame(() => {
+          rafScheduled = false;
+          if (pendingDims) {
             setViewportDims((prev) => {
               if (
                 prev &&
-                Math.abs(prev.width - width) < 3 &&
-                Math.abs(prev.height - height) < 3
+                Math.abs(prev.width - pendingDims!.width) < 2 &&
+                Math.abs(prev.height - pendingDims!.height) < 2
               ) {
                 return prev;
               }
-              return {
-                width: Math.round(width),
-                height: Math.round(height),
-              };
+              return pendingDims;
             });
           }
-        }
-      });
+        });
+      }
     });
 
     observer.observe(el);
     return () => {
-      if (rafId) cancelAnimationFrame(rafId);
       observer.disconnect();
     };
   }, []);

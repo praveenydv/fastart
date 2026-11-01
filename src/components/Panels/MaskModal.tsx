@@ -432,6 +432,7 @@ export default function MaskModal({
                       unit="%"
                       defaultValue={60}
                       accentColor="#00F2FE"
+                      showSteppers={true}
                       onChange={(val) => {
                         setMaskWidth(val);
                         if (isAspectLocked) {
@@ -457,6 +458,7 @@ export default function MaskModal({
                       unit="%"
                       defaultValue={60}
                       accentColor="#00F2FE"
+                      showSteppers={true}
                       onChange={(val) => {
                         setMaskHeight(val);
                         if (isAspectLocked) {
@@ -482,6 +484,7 @@ export default function MaskModal({
                       unit="%"
                       defaultValue={0}
                       accentColor="#00F2FE"
+                      showSteppers={true}
                       onChange={(val) => {
                         setMaskFeather(val);
                         triggerUpdate({ feather: val });
@@ -501,6 +504,7 @@ export default function MaskModal({
                         unit="px"
                         defaultValue={16}
                         accentColor="#00F2FE"
+                        showSteppers={true}
                         onChange={(val) => {
                           setMaskRoundness(val);
                           triggerUpdate({ roundness: val });
@@ -520,6 +524,7 @@ export default function MaskModal({
                       unit="°"
                       defaultValue={0}
                       showReset={true}
+                      showSteppers={true}
                       accentColor="#00F2FE"
                       onChange={(val) => {
                         setMaskRotation(val);
@@ -564,6 +569,7 @@ export default function MaskModal({
                       unit="%"
                       defaultValue={0}
                       accentColor="#00F2FE"
+                      showSteppers={true}
                       onChange={(val) => {
                         setMaskX(val);
                         triggerUpdate({ x: val });
@@ -578,6 +584,7 @@ export default function MaskModal({
                       unit="%"
                       defaultValue={0}
                       accentColor="#00F2FE"
+                      showSteppers={true}
                       onChange={(val) => {
                         setMaskY(val);
                         triggerUpdate({ y: val });

@@ -26,6 +26,24 @@ interface PlayerControlsBarProps {
   isMobile: boolean;
 }
 
+const TimecodePill = React.memo<{
+  currentTime: number;
+  totalDuration: number;
+  isNarrow: boolean;
+}>(({ currentTime, totalDuration, isNarrow }) => {
+  return (
+    <View style={[styles.timecodePill, isNarrow && { paddingHorizontal: 6, paddingVertical: 2.5 }]}>
+      <Text style={[styles.timecodeText, isNarrow && { fontSize: 10.5 }]}>
+        {formatTime(currentTime)}
+        <Text style={[styles.timecodeTotalText, isNarrow && { fontSize: 10 }]}>
+          {" "}
+          / {formatTime(totalDuration)}
+        </Text>
+      </Text>
+    </View>
+  );
+});
+
 const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
   currentTime,
   totalDuration,
@@ -59,15 +77,11 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
     >
       {/* Left: Timecode */}
       <View style={styles.controlGroupLeft}>
-        <View style={[styles.timecodePill, isNarrow && { paddingHorizontal: 6, paddingVertical: 2.5 }]}>
-          <Text style={[styles.timecodeText, isNarrow && { fontSize: 10.5 }]}>
-            {formatTime(currentTime)}
-            <Text style={[styles.timecodeTotalText, isNarrow && { fontSize: 10 }]}>
-              {" "}
-              / {formatTime(totalDuration)}
-            </Text>
-          </Text>
-        </View>
+        <TimecodePill
+          currentTime={currentTime}
+          totalDuration={totalDuration}
+          isNarrow={isNarrow}
+        />
       </View>
 
       {/* Center: Frame Step & Play / Pause Button */}

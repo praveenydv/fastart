@@ -113,6 +113,18 @@ export function useTimelineScrubbing({
     onSeekRef.current(Number(newTime.toFixed(3)));
   }, []);
 
+  const panRafRef = useRef<number | null>(null);
+
+  // Clean up RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current !== null) {
+        cancelAnimationFrame(panRafRef.current);
+        panRafRef.current = null;
+      }
+    };
+  }, []);
+
   // React Native PanResponder for smooth playhead needle & diamond head dragging on mobile
   const playheadPanResponder = useMemo(() => {
     return PanResponder.create({
@@ -137,73 +149,34 @@ export function useTimelineScrubbing({
         const dx = gestureState.dx;
         const initialTime = dragStartTimeRef.current;
         const pxPerSecVal = pxPerSecRef.current;
-        const deltaSec = dx / pxPerSecVal;
-        const maxDur = totalDurationRef.current;
-        let newTime = Math.max(0, Math.min(maxDur, initialTime + deltaSec));
+        const targetX = initialTime * pxPerSecVal + dx;
 
-        if (isSnappingEnabledRef.current) {
-          const snapThresholdSec = 10 / pxPerSecVal;
-          let closestSnap: number | null = null;
-          let minDiff = snapThresholdSec;
-
-          if (Math.abs(newTime) < minDiff) {
-            closestSnap = 0;
-            minDiff = Math.abs(newTime);
-          }
-
-          allClipsRef.current.forEach((c) => {
-            const diffStart = Math.abs(newTime - c.startTime);
-            if (diffStart < minDiff) {
-              closestSnap = c.startTime;
-              minDiff = diffStart;
-            }
-            const diffEnd = Math.abs(newTime - (c.startTime + c.duration));
-            if (diffEnd < minDiff) {
-              closestSnap = c.startTime + c.duration;
-              minDiff = diffEnd;
-            }
-            const kfs = c.rawClip?.keyframes;
-            if (kfs && Array.isArray(kfs)) {
-              kfs.forEach((kf: any) => {
-                const kfTime = c.startTime + (kf.time || 0);
-                const diffKf = Math.abs(newTime - kfTime);
-                if (diffKf < minDiff) {
-                  closestSnap = kfTime;
-                  minDiff = diffKf;
-                }
-              });
-            }
-            const maskKfs = c.rawClip?.maskKeyframes || c.rawClip?.mask?.keyframes;
-            if (maskKfs && Array.isArray(maskKfs)) {
-              maskKfs.forEach((mkf: any) => {
-                const mkfTime = c.startTime + (mkf.time || 0);
-                const diffMkf = Math.abs(newTime - mkfTime);
-                if (diffMkf < minDiff) {
-                  closestSnap = mkfTime;
-                  minDiff = diffMkf;
-                }
-              });
-            }
-          });
-
-          if (closestSnap !== null) {
-            newTime = closestSnap;
-            triggerHaptic("selection", isHapticEnabledRef.current);
-          }
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
         }
-
-        onSeekRef.current(Number(newTime.toFixed(3)));
+        panRafRef.current = requestAnimationFrame(() => {
+          panRafRef.current = null;
+          performSeekWithSnap(targetX);
+        });
       },
       onPanResponderRelease: () => {
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
+          panRafRef.current = null;
+        }
         isDraggingPlayhead.current = false;
         setIsScrubbingRuler(false);
       },
       onPanResponderTerminate: () => {
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
+          panRafRef.current = null;
+        }
         isDraggingPlayhead.current = false;
         setIsScrubbingRuler(false);
       },
     });
-  }, []);
+  }, [performSeekWithSnap]);
 
   // Universal Time Ruler PanResponder (mobile touch + web pointer)
   const rulerPanResponder = useMemo(() => {
@@ -242,13 +215,28 @@ export function useTimelineScrubbing({
             evt.nativeEvent?.locationX ??
             currentTimeRef.current * pxPerSecRef.current + gestureState.dx;
         }
-        performSeekWithSnap(clickX);
+
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
+        }
+        panRafRef.current = requestAnimationFrame(() => {
+          panRafRef.current = null;
+          performSeekWithSnap(clickX);
+        });
       },
       onPanResponderRelease: () => {
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
+          panRafRef.current = null;
+        }
         isDraggingPlayhead.current = false;
         setIsScrubbingRuler(false);
       },
       onPanResponderTerminate: () => {
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
+          panRafRef.current = null;
+        }
         isDraggingPlayhead.current = false;
         setIsScrubbingRuler(false);
       },

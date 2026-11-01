@@ -126,6 +126,8 @@ export function useTimelineResize({
         e.clientY ?? e.pageY ?? e.touches?.[0]?.clientY ?? 0;
       const initialH = timelineHeightRef.current;
       let currentH = initialH;
+      let targetH = initialH;
+      let rafHandle: number | null = null;
 
       setIsResizingHeight(true);
 
@@ -137,17 +139,27 @@ export function useTimelineResize({
           moveEvt.touches?.[0]?.clientY ??
           0;
         const deltaY = clientY - startY;
-        const newH = Math.round(
+        targetH = Math.round(
           Math.max(
             minTimelineHeight,
             Math.min(maxTimelineHeight, initialH - deltaY),
           ),
         );
-        currentH = newH;
-        setUserTimelineHeight(newH);
+        currentH = targetH;
+        if (rafHandle === null) {
+          rafHandle = requestAnimationFrame(() => {
+            rafHandle = null;
+            setUserTimelineHeight(targetH);
+          });
+        }
       };
 
       const onPointerUp = () => {
+        if (rafHandle !== null) {
+          cancelAnimationFrame(rafHandle);
+          rafHandle = null;
+        }
+        setUserTimelineHeight(currentH);
         setIsResizingHeight(false);
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
@@ -172,6 +184,17 @@ export function useTimelineResize({
 
   // PanResponder for Native iOS and Android
   const panStartHeightRef = useRef(0);
+  const nativeRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (nativeRafRef.current !== null) {
+        cancelAnimationFrame(nativeRafRef.current);
+        nativeRafRef.current = null;
+      }
+    };
+  }, []);
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -192,9 +215,19 @@ export function useTimelineResize({
               ),
             ),
           );
-          setUserTimelineHeight(newH);
+          if (nativeRafRef.current !== null) {
+            cancelAnimationFrame(nativeRafRef.current);
+          }
+          nativeRafRef.current = requestAnimationFrame(() => {
+            nativeRafRef.current = null;
+            setUserTimelineHeight(newH);
+          });
         },
         onPanResponderRelease: (_, gestureState) => {
+          if (nativeRafRef.current !== null) {
+            cancelAnimationFrame(nativeRafRef.current);
+            nativeRafRef.current = null;
+          }
           setIsResizingHeight(false);
           const finalH = Math.round(
             Math.max(
@@ -205,9 +238,14 @@ export function useTimelineResize({
               ),
             ),
           );
+          setUserTimelineHeight(finalH);
           saveHeight(finalH);
         },
         onPanResponderTerminate: () => {
+          if (nativeRafRef.current !== null) {
+            cancelAnimationFrame(nativeRafRef.current);
+            nativeRafRef.current = null;
+          }
           setIsResizingHeight(false);
         },
       }),

@@ -949,17 +949,28 @@ class RustCoreBridgeService {
     trackScale = true,
     trackRotation = false,
     cameraCenter = false,
+    anchorTime?: number,
   ): { dx: number; dy: number; dScale: number; dRot: number } {
     if (!trajectory || trajectory.length === 0) {
       return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
     }
-    const origin = trajectory[0];
-    if (trajectory.length === 1 || time <= origin.time) {
-      return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+    let origin = trajectory[0];
+    if (anchorTime !== undefined && Number.isFinite(anchorTime)) {
+      let bestDist = Infinity;
+      for (let i = 0; i < trajectory.length; i++) {
+        const dist = Math.abs(trajectory[i].time - anchorTime);
+        if (dist < bestDist) {
+          bestDist = dist;
+          origin = trajectory[i];
+        }
+      }
     }
+    const first = trajectory[0];
     const last = trajectory[trajectory.length - 1];
     let pt: TrajectoryPoint;
-    if (time >= last.time) {
+    if (trajectory.length === 1 || time <= first.time) {
+      pt = first;
+    } else if (time >= last.time) {
       pt = last;
     } else {
       let low = 0;

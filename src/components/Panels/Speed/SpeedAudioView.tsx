@@ -1,10 +1,9 @@
-import React, { useRef } from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEngine } from '../../../utils/audioEngine';
 import { styles } from './SpeedModalStyles';
-
-const WebInput: any = Platform.OS === 'web' ? 'input' : View;
+import { CompactSliderInput } from '../../Common/CompactSliderInput';
 
 interface SpeedAudioViewProps {
   speedVal: number;
@@ -32,28 +31,10 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
   keepPitch,
   onToggleKeepPitch,
 }) => {
-  const trackWidthRef = useRef<number>(260);
-
   // Dynamic duration calculation
   const baseDuration = Math.max(0.1, clipDuration);
   const newDuration = Math.max(0.05, baseDuration / Math.max(0.1, speedVal));
   const diffSec = newDuration - baseDuration;
-
-  const handleStep = (delta: number) => {
-    soundEngine.playSfx('click');
-    const next = Math.max(0.2, Math.min(4.0, Number((speedVal + delta).toFixed(2))));
-    onSelectSpeed(next);
-  };
-
-  const handleTrackTouch = (locationX: number) => {
-    const width = trackWidthRef.current || 260;
-    const ratio = Math.max(0, Math.min(1, locationX / width));
-    const rawVal = 0.2 + ratio * (4.0 - 0.2);
-    const snapped = Number((Math.round(rawVal * 20) / 20).toFixed(2));
-    onSelectSpeed(Math.max(0.2, Math.min(4.0, snapped)));
-  };
-
-  const fillPercent = Math.max(0, Math.min(100, ((speedVal - 0.2) / (4.0 - 0.2)) * 100));
 
   return (
     <View style={styles.audioViewContainer}>
@@ -105,65 +86,21 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
         })}
       </View>
 
-      {/* Fine Tuning Stepper & Interactive Slider */}
+      {/* Fine Tuning Interactive Slider with Steppers */}
       <View style={styles.audioSliderBox}>
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderLabel}>Fine Tuning</Text>
-          <Text style={styles.sliderVal}>{speedVal.toFixed(2)}x (0.2x – 4.0x)</Text>
-        </View>
-
-        <View style={styles.sliderControls}>
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => handleStep(-0.05)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Decrease speed"
-          >
-            <Ionicons name="remove" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          {Platform.OS === 'web' ? (
-            <WebInput
-              type="range"
-              min="0.2"
-              max="4.0"
-              step="0.05"
-              value={speedVal}
-              onChange={(e: any) => onSelectSpeed(parseFloat(e.target.value))}
-              style={{ flex: 1, accentColor: '#00F2FE', height: 28 }}
-            />
-          ) : (
-            <View
-              style={styles.sliderTrackTouchable}
-              onLayout={(e) => {
-                trackWidthRef.current = e.nativeEvent.layout.width;
-              }}
-              onTouchStart={(e) => handleTrackTouch(e.nativeEvent.locationX)}
-              onTouchMove={(e) => handleTrackTouch(e.nativeEvent.locationX)}
-            >
-              <View style={styles.sliderTrackBg}>
-                <View style={[styles.sliderTrackFill, { width: `${fillPercent}%` }]} />
-              </View>
-              <View
-                style={[
-                  styles.sliderThumb,
-                  { left: `${Math.max(0, Math.min(94, fillPercent))}%` },
-                ]}
-              />
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.stepBtn}
-            onPress={() => handleStep(0.05)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Increase speed"
-          >
-            <Ionicons name="add" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        <CompactSliderInput
+          label="Fine Tuning"
+          value={speedVal}
+          min={0.2}
+          max={4.0}
+          step={0.05}
+          decimals={2}
+          unit="x"
+          defaultValue={1.0}
+          accentColor="#00F2FE"
+          showSteppers={true}
+          onChange={(val) => onSelectSpeed(val)}
+        />
       </View>
 
       {/* Pitch Preservation Feature Card */}

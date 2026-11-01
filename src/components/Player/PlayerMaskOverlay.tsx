@@ -561,6 +561,301 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
     ],
   );
 
+  const localMaskRef = useRef<MaskConfig>(localMask);
+  localMaskRef.current = localMask;
+  const dwRef = useRef(dw);
+  dwRef.current = dw;
+  const dhRef = useRef(dh);
+  dhRef.current = dh;
+  const clipScaleRef = useRef({ sx: clipScaleX, sy: clipScaleY });
+  clipScaleRef.current = { sx: clipScaleX, sy: clipScaleY };
+  const clipRotRef = useRef(clipRot);
+  clipRotRef.current = clipRot;
+  const maskBoxDimsRef = useRef({ w: maskBoxW, h: maskBoxH });
+  maskBoxDimsRef.current = { w: maskBoxW, h: maskBoxH };
+  const totalMaskRotRef = useRef(totalMaskRotation);
+  totalMaskRotRef.current = totalMaskRotation;
+
+  const commitMaskUpdate = useCallback(
+    (updatedMask: MaskConfig, isFinal = false) => {
+      setLocalMask(updatedMask);
+      localMaskRef.current = updatedMask;
+      if (rendererRef?.current && projectRef.current) {
+        rendererRef.current.renderFrame(
+          projectRef.current,
+          currentTimeRef.current,
+          false,
+          boxWidthRef.current,
+          canvasHeightRef.current,
+          {
+            clipId: targetClip.id,
+            mask: updatedMask,
+          }
+        );
+      }
+      if (isFinal) {
+        onUpdateClipMaskRef.current?.(targetClip.id, updatedMask, true);
+      }
+    },
+    [rendererRef, targetClip.id]
+  );
+  const commitMaskUpdateRef = useRef(commitMaskUpdate);
+  commitMaskUpdateRef.current = commitMaskUpdate;
+
+  // Native Mobile PanResponder 1: Move Mask Center
+  const startMoveRef = useRef<{ startX: number; startY: number } | null>(null);
+  const nativeMovePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 1 || Math.abs(gs.dy) > 1,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        soundEngine.playSfx("click");
+        setActiveDrag("move");
+        startMoveRef.current = {
+          startX: localMaskRef.current.x || 0,
+          startY: localMaskRef.current.y || 0,
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const s = startMoveRef.current;
+        if (!s) return;
+        const rotRad = (clipRotRef.current * Math.PI) / 180;
+        const cosA = Math.cos(rotRad);
+        const sinA = Math.sin(rotRad);
+        const sx = clipScaleRef.current.sx;
+        const sy = clipScaleRef.current.sy;
+        const dwVal = Math.max(1, dwRef.current);
+        const dhVal = Math.max(1, dhRef.current);
+
+        const unrotDx = (gs.dx * cosA + gs.dy * sinA) / sx;
+        const unrotDy = (-gs.dx * sinA + gs.dy * cosA) / sy;
+
+        const nextX = Number(
+          Math.max(-100, Math.min(100, s.startX + (unrotDx / dwVal) * 100)).toFixed(2)
+        );
+        const nextY = Number(
+          Math.max(-100, Math.min(100, s.startY + (unrotDy / dhVal) * 100)).toFixed(2)
+        );
+
+        const nextMask: MaskConfig = {
+          ...localMaskRef.current,
+          x: nextX,
+          y: nextY,
+        };
+        commitMaskUpdateRef.current(nextMask, false);
+      },
+      onPanResponderRelease: () => {
+        soundEngine.playSfx("pop");
+        setActiveDrag(null);
+        commitMaskUpdateRef.current(localMaskRef.current, true);
+        startMoveRef.current = null;
+      },
+    })
+  ).current;
+
+  // Native Mobile PanResponder 2: Rotate Knob at Top
+  const startRotStateRef = useRef<{
+    startRot: number;
+    initialTouchAngle: number;
+  } | null>(null);
+
+  const nativeRotPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        soundEngine.playSfx("click");
+        setActiveDrag("rotate");
+        const totRotRad = (totalMaskRotRef.current * Math.PI) / 180;
+        const initialAngle = -Math.PI / 2 + totRotRad;
+        startRotStateRef.current = {
+          startRot: localMaskRef.current.rotation || 0,
+          initialTouchAngle: initialAngle,
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const s = startRotStateRef.current;
+        if (!s) return;
+        const mbH = maskBoxDimsRef.current.h;
+        const dist = mbH / 2 + 46;
+        const v0x = dist * Math.cos(s.initialTouchAngle);
+        const v0y = dist * Math.sin(s.initialTouchAngle);
+
+        const curVx = v0x + gs.dx;
+        const curVy = v0y + gs.dy;
+
+        const angleDiffDeg = ((Math.atan2(curVy, curVx) - Math.atan2(v0y, v0x)) * 180) / Math.PI;
+        const rawRot = (s.startRot + angleDiffDeg) % 360;
+        const normalized = Math.round(((rawRot % 360) + 360) % 360);
+        let snapped = normalized;
+        [0, 45, 90, 135, 180, 225, 270, 315, 360].forEach((snap) => {
+          if (Math.abs(normalized - snap) < 4) snapped = snap % 360;
+        });
+        if (snapped > 180) snapped -= 360;
+        if (snapped < -180) snapped += 360;
+
+        const nextMask: MaskConfig = {
+          ...localMaskRef.current,
+          rotation: snapped,
+        };
+        commitMaskUpdateRef.current(nextMask, false);
+      },
+      onPanResponderRelease: () => {
+        soundEngine.playSfx("pop");
+        setActiveDrag(null);
+        commitMaskUpdateRef.current(localMaskRef.current, true);
+        startRotStateRef.current = null;
+      },
+    })
+  ).current;
+
+  // Native Mobile PanResponder 3: Corner Proportional Scale
+  const startScaleCornerRef = useRef<{
+    startW: number;
+    startH: number;
+    startDist: number;
+  } | null>(null);
+
+  const nativeScaleCornerResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        soundEngine.playSfx("click");
+        setActiveDrag("scale");
+        const w = maskBoxDimsRef.current.w;
+        const h = maskBoxDimsRef.current.h;
+        startScaleCornerRef.current = {
+          startW: Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60),
+          startH: Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60),
+          startDist: Math.max(15, Math.hypot(w / 2, h / 2)),
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const s = startScaleCornerRef.current;
+        if (!s) return;
+        const w = maskBoxDimsRef.current.w;
+        const h = maskBoxDimsRef.current.h;
+        const totRad = (totalMaskRotRef.current * Math.PI) / 180;
+        const cosR = Math.cos(totRad);
+        const sinR = Math.sin(totRad);
+
+        const localDx = gs.dx * cosR + gs.dy * sinR;
+        const localDy = -gs.dx * sinR + gs.dy * cosR;
+
+        const curDist = Math.hypot(w / 2 + Math.abs(localDx), h / 2 + Math.abs(localDy));
+        const scaleRatio = curDist / s.startDist;
+
+        const nextW = Number(Math.max(5, Math.min(250, s.startW * scaleRatio)).toFixed(2));
+        const nextH = Number(Math.max(5, Math.min(250, s.startH * scaleRatio)).toFixed(2));
+        const nextSize = Math.max(nextW, nextH);
+
+        const nextMask: MaskConfig = {
+          ...localMaskRef.current,
+          size: nextSize,
+          width: nextW,
+          height: nextH,
+        };
+        commitMaskUpdateRef.current(nextMask, false);
+      },
+      onPanResponderRelease: () => {
+        soundEngine.playSfx("pop");
+        setActiveDrag(null);
+        commitMaskUpdateRef.current(localMaskRef.current, true);
+        startScaleCornerRef.current = null;
+      },
+    })
+  ).current;
+
+  // Native Mobile PanResponder 4: Width Scale (Left & Right Handles)
+  const startScaleWRef = useRef<{ startW: number; startDistX: number } | null>(null);
+  const nativeScaleWResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        soundEngine.playSfx("click");
+        setActiveDrag("scale-w");
+        startScaleWRef.current = {
+          startW: Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60),
+          startDistX: Math.max(15, maskBoxDimsRef.current.w / 2),
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const s = startScaleWRef.current;
+        if (!s) return;
+        const totRad = (totalMaskRotRef.current * Math.PI) / 180;
+        const cosR = Math.cos(totRad);
+        const sinR = Math.sin(totRad);
+
+        const localDx = Math.abs(gs.dx * cosR + gs.dy * sinR);
+        const curDistX = s.startDistX + localDx;
+        const scaleRatioX = curDistX / s.startDistX;
+
+        const nextW = Number(Math.max(5, Math.min(250, s.startW * scaleRatioX)).toFixed(2));
+        const nextMask: MaskConfig = {
+          ...localMaskRef.current,
+          width: nextW,
+          size: Math.max(nextW, localMaskRef.current.height ?? 60),
+        };
+        commitMaskUpdateRef.current(nextMask, false);
+      },
+      onPanResponderRelease: () => {
+        soundEngine.playSfx("pop");
+        setActiveDrag(null);
+        commitMaskUpdateRef.current(localMaskRef.current, true);
+        startScaleWRef.current = null;
+      },
+    })
+  ).current;
+
+  // Native Mobile PanResponder 5: Height Scale (Top & Bottom Handles)
+  const startScaleHRef = useRef<{ startH: number; startDistY: number } | null>(null);
+  const nativeScaleHResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        soundEngine.playSfx("click");
+        setActiveDrag("scale-h");
+        startScaleHRef.current = {
+          startH: Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60),
+          startDistY: Math.max(15, maskBoxDimsRef.current.h / 2),
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const s = startScaleHRef.current;
+        if (!s) return;
+        const totRad = (totalMaskRotRef.current * Math.PI) / 180;
+        const cosR = Math.cos(totRad);
+        const sinR = Math.sin(totRad);
+
+        const localDy = Math.abs(-gs.dx * sinR + gs.dy * cosR);
+        const curDistY = s.startDistY + localDy;
+        const scaleRatioY = curDistY / s.startDistY;
+
+        const nextH = Number(Math.max(5, Math.min(250, s.startH * scaleRatioY)).toFixed(2));
+        const nextMask: MaskConfig = {
+          ...localMaskRef.current,
+          height: nextH,
+          size: Math.max(localMaskRef.current.width ?? 60, nextH),
+        };
+        commitMaskUpdateRef.current(nextMask, false);
+      },
+      onPanResponderRelease: () => {
+        soundEngine.playSfx("pop");
+        setActiveDrag(null);
+        commitMaskUpdateRef.current(localMaskRef.current, true);
+        startScaleHRef.current = null;
+      },
+    })
+  ).current;
+
   const handleResetPosition = () => {
     soundEngine.playSfx("click");
     const updated = { ...localMask, x: 0, y: 0 };
@@ -685,43 +980,109 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             ],
           },
         ]}
+        collapsable={false}
         {...(Platform.OS === "web"
           ? ({
               onMouseDown: (e: any) => startDrag(e, "move"),
               onTouchStart: (e: any) => startDrag(e, "move"),
             } as any)
-          : {})}
+          : nativeMovePanResponder.panHandlers)}
       >
-        {/* SVG Outline for the Mask Shape */}
-        {Platform.OS === "web" && (
-          <svg
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: maskBoxW,
-              height: maskBoxH,
-              overflow: "visible",
-              pointerEvents: "none",
-              filter: `drop-shadow(0 0 6px ${THEME_COLORS.cyanBorder})`,
-            }}
-            viewBox={`0 0 ${maskBoxW} ${maskBoxH}`}
-          >
-            {shapeSvgContent}
-          </svg>
+        {/* Outer dashed bounding box (Always visible across all platforms) */}
+        <View style={styles.boundingDashedBox} pointerEvents="none" />
+
+        {/* Center Crosshair Lines (Horizontal & Vertical) */}
+        <View style={styles.crosshairH} pointerEvents="none" />
+        <View style={styles.crosshairV} pointerEvents="none" />
+        <View style={styles.crosshairCenterDot} pointerEvents="none" />
+
+        {/* Mask Shape Outlines */}
+        {localMask.shape === "circle" && (
+          <View
+            style={[
+              styles.shapeCircle,
+              {
+                width: Math.max(2, maskBoxW - 2),
+                height: Math.max(2, maskBoxH - 2),
+                borderRadius: Math.max(maskBoxW, maskBoxH),
+              },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {localMask.shape === "rectangle" && (
+          <View
+            style={[
+              styles.shapeRectangle,
+              {
+                width: Math.max(2, maskBoxW - 2),
+                height: Math.max(2, maskBoxH - 2),
+                borderRadius: Math.min(
+                  localMask.roundness ?? 16,
+                  Math.min(maskBoxW, maskBoxH) / 2
+                ),
+              },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {localMask.shape === "mirror" && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View style={[styles.mirrorLine, { top: 0 }]} />
+            <View style={[styles.mirrorLine, { bottom: 0 }]} />
+            <View style={styles.shapeFill} />
+          </View>
+        )}
+
+        {localMask.shape === "linear" && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View style={styles.linearSplitLine} />
+            <View style={styles.linearHalfFill} />
+          </View>
+        )}
+
+        {(localMask.shape === "heart" || localMask.shape === "star") && (
+          Platform.OS === "web" ? (
+            <svg
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: maskBoxW,
+                height: maskBoxH,
+                overflow: "visible",
+                pointerEvents: "none",
+                filter: `drop-shadow(0 0 6px ${THEME_COLORS.cyanBorder})`,
+              }}
+              viewBox={`0 0 ${maskBoxW} ${maskBoxH}`}
+            >
+              {shapeSvgContent}
+            </svg>
+          ) : (
+            <View style={styles.heartStarMobileBadge} pointerEvents="none">
+              <Ionicons
+                name={localMask.shape === "heart" ? "heart" : "star"}
+                size={Math.min(maskBoxW, maskBoxH) * 0.72}
+                color="rgba(0, 242, 254, 0.75)"
+              />
+            </View>
+          )
         )}
 
         {/* Top Rotation Control Handle (Moved to top per user request, replacing arrow) */}
         <View style={styles.rotStemTop} pointerEvents="none" />
         <View
           style={styles.rotKnobTop}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          collapsable={false}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "rotate"),
                 onTouchStart: (e: any) => startDrag(e, "rotate"),
               } as any)
-            : {})}
+            : nativeRotPanResponder.panHandlers)}
         >
           <Ionicons name="sync-outline" size={15} color="#000000" />
         </View>
@@ -729,87 +1090,95 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         {/* 4 Corner Solid White Resize Dots */}
         <View
           style={[styles.cornerDot, styles.dotTL]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          collapsable={false}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
               } as any)
-            : {})}
+            : nativeScaleCornerResponder.panHandlers)}
         />
         <View
           style={[styles.cornerDot, styles.dotTR]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          collapsable={false}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
               } as any)
-            : {})}
+            : nativeScaleCornerResponder.panHandlers)}
         />
         <View
           style={[styles.cornerDot, styles.dotBL]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          collapsable={false}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
               } as any)
-            : {})}
+            : nativeScaleCornerResponder.panHandlers)}
         />
         <View
           style={[styles.cornerDot, styles.dotBR]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          collapsable={false}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale"),
                 onTouchStart: (e: any) => startDrag(e, "scale"),
               } as any)
-            : {})}
+            : nativeScaleCornerResponder.panHandlers)}
         />
 
         {/* 4 Side Deformation White Capsule/Pill Handles (Left & Right for Width, Top & Bottom for Height) */}
         <View
           style={[styles.pillHandleV, styles.pillLeft]}
-          hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
+          collapsable={false}
+          hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale-w"),
                 onTouchStart: (e: any) => startDrag(e, "scale-w"),
               } as any)
-            : {})}
+            : nativeScaleWResponder.panHandlers)}
         />
         <View
           style={[styles.pillHandleV, styles.pillRight]}
-          hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
+          collapsable={false}
+          hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
           {...(Platform.OS === "web"
             ? ({
                 onMouseDown: (e: any) => startDrag(e, "scale-w"),
                 onTouchStart: (e: any) => startDrag(e, "scale-w"),
               } as any)
-            : {})}
+            : nativeScaleWResponder.panHandlers)}
         />
         {localMask.shape !== "linear" && (
           <>
             <View
               style={[styles.pillHandleH, styles.pillTop]}
-              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+              collapsable={false}
+              hitSlop={{ top: 16, bottom: 16, left: 14, right: 14 }}
               {...(Platform.OS === "web"
                 ? ({
                     onMouseDown: (e: any) => startDrag(e, "scale-h"),
                     onTouchStart: (e: any) => startDrag(e, "scale-h"),
                   } as any)
-                : {})}
+                : nativeScaleHResponder.panHandlers)}
             />
             <View
               style={[styles.pillHandleH, styles.pillBottom]}
-              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+              collapsable={false}
+              hitSlop={{ top: 16, bottom: 16, left: 14, right: 14 }}
               {...(Platform.OS === "web"
                 ? ({
                     onMouseDown: (e: any) => startDrag(e, "scale-h"),
                     onTouchStart: (e: any) => startDrag(e, "scale-h"),
                   } as any)
-                : {})}
+                : nativeScaleHResponder.panHandlers)}
             />
           </>
         )}
@@ -879,6 +1248,87 @@ const styles = StyleSheet.create({
     willChange: "transform" as any,
     transition: "none" as any,
     cursor: "move" as any,
+  },
+  boundingDashedBox: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.75)",
+    borderStyle: "dashed",
+  },
+  crosshairH: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "50%",
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.45)",
+    marginTop: -0.5,
+  },
+  crosshairV: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: "50%",
+    width: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.45)",
+    marginLeft: -0.5,
+  },
+  crosshairCenterDot: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: THEME_COLORS.accent,
+    top: "50%",
+    left: "50%",
+    marginTop: -3,
+    marginLeft: -3,
+  },
+  shapeCircle: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+  },
+  shapeRectangle: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+  },
+  mirrorLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 2.5,
+    backgroundColor: "#00F2FE",
+  },
+  shapeFill: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+  },
+  linearSplitLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "50%",
+    height: 3,
+    backgroundColor: "#00F2FE",
+    marginTop: -1.5,
+  },
+  linearHalfFill: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "50%",
+    bottom: 0,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+  },
+  heartStarMobileBadge: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 242, 254, 0.06)",
   },
   rotStemTop: {
     position: "absolute",

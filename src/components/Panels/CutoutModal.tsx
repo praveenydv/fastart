@@ -658,6 +658,7 @@ export default function CutoutModal({
         step={step}
         unit={unit}
         accentColor={accentColor}
+        showSteppers={true}
         onChange={onChange}
       />
     </View>

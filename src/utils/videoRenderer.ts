@@ -139,6 +139,8 @@ export class VideoRenderer {
     trackIndex: number;
     transitionState?: TransitionRenderState | null;
   }> = [];
+  private snapshotCanvas: HTMLCanvasElement | null = null;
+  private snapshotCtx: CanvasRenderingContext2D | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -177,6 +179,11 @@ export class VideoRenderer {
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
       this.ctx.imageSmoothingQuality = "high";
+      if (this.snapshotCanvas && canvas && canvas.width > 0 && canvas.height > 0) {
+        try {
+          this.ctx.drawImage(this.snapshotCanvas, 0, 0, canvas.width, canvas.height);
+        } catch (_) {}
+      }
     }
   }
 
@@ -278,6 +285,8 @@ export class VideoRenderer {
     this.offscreenCtx = null;
     this.blurCanvas = null;
     this.blurCtx = null;
+    this.snapshotCanvas = null;
+    this.snapshotCtx = null;
     this._activeVideoItems.length = 0;
     this._handledVideoIds.clear();
     this._clipsByTrack.clear();
@@ -518,11 +527,47 @@ export class VideoRenderer {
         }
       }
 
-      const activeVideos = activeVideoItems.map((item) => item.clip);
-      const activeCaptions = captionClips.filter((c) => time >= c.startTime && time <= c.startTime + c.duration);
-      const activeTexts = textClips.filter((t) => time >= t.startTime && time <= t.startTime + t.duration);
-      const activeStickers = stickerClips.filter((s) => time >= s.startTime && time <= s.startTime + s.duration);
-      const activeEffects = effectClips.filter((e) => time >= e.startTime && time <= e.startTime + e.duration);
+      const activeVideos = this._activeVideosScratch;
+      activeVideos.length = 0;
+      for (let i = 0; i < activeVideoItems.length; i++) {
+        activeVideos.push(activeVideoItems[i].clip);
+      }
+
+      const activeCaptions = this._activeCaptionsScratch;
+      activeCaptions.length = 0;
+      for (let i = 0; i < captionClips.length; i++) {
+        const c = captionClips[i];
+        if (time >= c.startTime && time <= c.startTime + c.duration) {
+          activeCaptions.push(c);
+        }
+      }
+
+      const activeTexts = this._activeTextsScratch;
+      activeTexts.length = 0;
+      for (let i = 0; i < textClips.length; i++) {
+        const t = textClips[i];
+        if (time >= t.startTime && time <= t.startTime + t.duration) {
+          activeTexts.push(t);
+        }
+      }
+
+      const activeStickers = this._activeStickersScratch;
+      activeStickers.length = 0;
+      for (let i = 0; i < stickerClips.length; i++) {
+        const s = stickerClips[i];
+        if (time >= s.startTime && time <= s.startTime + s.duration) {
+          activeStickers.push(s);
+        }
+      }
+
+      const activeEffects = this._activeEffectsScratch;
+      activeEffects.length = 0;
+      for (let i = 0; i < effectClips.length; i++) {
+        const e = effectClips[i];
+        if (time >= e.startTime && time <= e.startTime + e.duration) {
+          activeEffects.push(e);
+        }
+      }
 
       const canvasBg = (project.canvasBackground && project.canvasBackground.trim()) || "#000000";
 
@@ -711,47 +756,92 @@ export class VideoRenderer {
 
       const visualItems = this._visualItems;
       visualItems.length = 0;
+      let poolIdx = 0;
 
       for (let i = 0; i < activeVideoItems.length; i++) {
         const item = activeVideoItems[i];
-        visualItems.push({
-          kind: "video",
-          clip: item.clip,
-          trackIndex: (typeof item.clip.trackIndex === "number" ? item.clip.trackIndex : 0) * 100,
-          transitionState: item.transitionState,
-        });
+        let p = this._visualItemPool[poolIdx];
+        const tIdx = (typeof item.clip.trackIndex === "number" ? item.clip.trackIndex : 0) * 100;
+        if (!p) {
+          p = {
+            kind: "video",
+            clip: item.clip,
+            trackIndex: tIdx,
+            transitionState: item.transitionState,
+          };
+          this._visualItemPool[poolIdx] = p;
+        } else {
+          p.kind = "video";
+          p.clip = item.clip;
+          p.trackIndex = tIdx;
+          p.transitionState = item.transitionState;
+        }
+        visualItems.push(p);
+        poolIdx++;
       }
       for (let i = 0; i < activeCaptions.length; i++) {
         const c = activeCaptions[i];
-        visualItems.push({
-          kind: "caption",
-          clip: c,
-          trackIndex: (typeof c.trackIndex === "number" ? c.trackIndex : 2) * 100 + 2,
-        });
+        let p = this._visualItemPool[poolIdx];
+        const tIdx = (typeof c.trackIndex === "number" ? c.trackIndex : 2) * 100 + 2;
+        if (!p) {
+          p = { kind: "caption", clip: c, trackIndex: tIdx };
+          this._visualItemPool[poolIdx] = p;
+        } else {
+          p.kind = "caption";
+          p.clip = c;
+          p.trackIndex = tIdx;
+          p.transitionState = undefined;
+        }
+        visualItems.push(p);
+        poolIdx++;
       }
       for (let i = 0; i < activeTexts.length; i++) {
         const t = activeTexts[i];
-        visualItems.push({
-          kind: "text",
-          clip: t,
-          trackIndex: (typeof t.trackIndex === "number" ? t.trackIndex : 2) * 100 + 3,
-        });
+        let p = this._visualItemPool[poolIdx];
+        const tIdx = (typeof t.trackIndex === "number" ? t.trackIndex : 2) * 100 + 3;
+        if (!p) {
+          p = { kind: "text", clip: t, trackIndex: tIdx };
+          this._visualItemPool[poolIdx] = p;
+        } else {
+          p.kind = "text";
+          p.clip = t;
+          p.trackIndex = tIdx;
+          p.transitionState = undefined;
+        }
+        visualItems.push(p);
+        poolIdx++;
       }
       for (let i = 0; i < activeStickers.length; i++) {
         const s = activeStickers[i];
-        visualItems.push({
-          kind: "sticker",
-          clip: s,
-          trackIndex: (typeof s.trackIndex === "number" ? s.trackIndex : 3) * 100 + 4,
-        });
+        let p = this._visualItemPool[poolIdx];
+        const tIdx = (typeof s.trackIndex === "number" ? s.trackIndex : 3) * 100 + 4;
+        if (!p) {
+          p = { kind: "sticker", clip: s, trackIndex: tIdx };
+          this._visualItemPool[poolIdx] = p;
+        } else {
+          p.kind = "sticker";
+          p.clip = s;
+          p.trackIndex = tIdx;
+          p.transitionState = undefined;
+        }
+        visualItems.push(p);
+        poolIdx++;
       }
       for (let i = 0; i < activeEffects.length; i++) {
         const e = activeEffects[i];
-        visualItems.push({
-          kind: "effect",
-          clip: e,
-          trackIndex: (typeof e.trackIndex === "number" ? e.trackIndex : 4) * 100 + 5,
-        });
+        let p = this._visualItemPool[poolIdx];
+        const tIdx = (typeof e.trackIndex === "number" ? e.trackIndex : 4) * 100 + 5;
+        if (!p) {
+          p = { kind: "effect", clip: e, trackIndex: tIdx };
+          this._visualItemPool[poolIdx] = p;
+        } else {
+          p.kind = "effect";
+          p.clip = e;
+          p.trackIndex = tIdx;
+          p.transitionState = undefined;
+        }
+        visualItems.push(p);
+        poolIdx++;
       }
 
       visualItems.sort((a, b) => a.trackIndex - b.trackIndex);
@@ -845,6 +935,22 @@ export class VideoRenderer {
         }
       }
     });
+
+    if (this.canvas && canvasW > 0 && canvasH > 0 && typeof document !== "undefined") {
+      try {
+        if (!this.snapshotCanvas) {
+          this.snapshotCanvas = document.createElement("canvas");
+          this.snapshotCtx = this.snapshotCanvas.getContext("2d");
+        }
+        if (this.snapshotCanvas && this.snapshotCtx) {
+          if (this.snapshotCanvas.width !== canvasW || this.snapshotCanvas.height !== canvasH) {
+            this.snapshotCanvas.width = canvasW;
+            this.snapshotCanvas.height = canvasH;
+          }
+          this.snapshotCtx.drawImage(this.canvas, 0, 0);
+        }
+      } catch (_) {}
+    }
 
     } catch (err) {
       console.error("[VideoRenderer] renderFrame error:", err);

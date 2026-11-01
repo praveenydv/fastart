@@ -82,6 +82,39 @@ export function useProjectHistory({
     activeProjectId ? loadStack(`@fastart_redo_${activeProjectId}`) : []
   );
 
+  const pendingSaveTimerRef = useRef<any>(null);
+  const pendingHistTimerRef = useRef<any>(null);
+  const pendingRedoTimerRef = useRef<any>(null);
+  const lastHistoryPushTimeRef = useRef<number>(0);
+  const burstSnapshotRef = useRef<FastArtProject | null>(null);
+
+  // Flush pending project save to disk immediately
+  const flushPendingSave = useCallback(() => {
+    if (pendingSaveTimerRef.current) {
+      clearTimeout(pendingSaveTimerRef.current);
+      pendingSaveTimerRef.current = null;
+    }
+    if (projectRef.current) {
+      saveProject(projectRef.current);
+    }
+  }, [projectRef]);
+
+  // Clean up on unmount or beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPendingSave();
+    };
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    }
+    return () => {
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
+      flushPendingSave();
+    };
+  }, [flushPendingSave]);
+
   // Restore history across project navigation, page reloads, and close/reopen
   useEffect(() => {
     if (!activeProjectId) return;
@@ -94,19 +127,31 @@ export function useProjectHistory({
     setRedoStack(savedRedo);
   }, [activeProjectId]);
 
-  // Persist undo stack to survive refresh, close, and reopen
+  // Persist undo stack to survive refresh, close, and reopen (debounced to avoid serializing during slider drags)
   useEffect(() => {
     if (!activeProjectId || activeProjectRef.current !== activeProjectId) return;
-    saveStack(`@fastart_hist_${activeProjectId}`, historyStack);
+    if (pendingHistTimerRef.current) clearTimeout(pendingHistTimerRef.current);
+    pendingHistTimerRef.current = setTimeout(() => {
+      saveStack(`@fastart_hist_${activeProjectId}`, historyStack);
+    }, 400);
+    return () => {
+      if (pendingHistTimerRef.current) clearTimeout(pendingHistTimerRef.current);
+    };
   }, [activeProjectId, historyStack]);
 
-  // Persist redo stack to survive refresh, close, and reopen
+  // Persist redo stack to survive refresh, close, and reopen (debounced)
   useEffect(() => {
     if (!activeProjectId || activeProjectRef.current !== activeProjectId) return;
-    saveStack(`@fastart_redo_${activeProjectId}`, redoStack);
+    if (pendingRedoTimerRef.current) clearTimeout(pendingRedoTimerRef.current);
+    pendingRedoTimerRef.current = setTimeout(() => {
+      saveStack(`@fastart_redo_${activeProjectId}`, redoStack);
+    }, 400);
+    return () => {
+      if (pendingRedoTimerRef.current) clearTimeout(pendingRedoTimerRef.current);
+    };
   }, [activeProjectId, redoStack]);
 
-  // Push state to undo stack with memory cap (max 20 snapshots)
+  // Push state to undo stack with memory cap (max 20 snapshots) & debounced disk persistence
   const updateProjectWithHistory = useCallback((updatedProject: any) => {
     const current = projectRef.current;
     if (!current) return;
@@ -115,15 +160,35 @@ export function useProjectHistory({
       ...(updatedProject || {}),
       tracks: updatedProject?.tracks ? updatedProject.tracks : current.tracks,
     };
-    setHistoryStack((prev) => [
-      ...prev.slice(-20),
-      cloneProjectSnapshot(current),
-    ]);
+
+    const now = Date.now();
+    // Burst grouping: if calls occur within 400ms (e.g. dragging a slider),
+    // retain the initial baseline snapshot so intermediate frames don't flood the undo stack
+    if (now - lastHistoryPushTimeRef.current > 400 || !burstSnapshotRef.current) {
+      burstSnapshotRef.current = cloneProjectSnapshot(current);
+      setHistoryStack((prev) => [
+        ...prev.slice(-20),
+        burstSnapshotRef.current!,
+      ]);
+    }
+    lastHistoryPushTimeRef.current = now;
     setRedoStack([]);
-    const saved = saveProject(fullProject);
-    projectRef.current = saved;
-    setProject(saved);
-    setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+
+    // Update in-memory state and UI immediately (0ms latency, 120 FPS)
+    projectRef.current = fullProject;
+    setProject(fullProject);
+    setProjects((prev) => prev.map((p) => (p.id === fullProject.id ? fullProject : p)));
+
+    // Debounce expensive disk / localStorage writes so continuous slider moves never drop frames
+    if (pendingSaveTimerRef.current) {
+      clearTimeout(pendingSaveTimerRef.current);
+    }
+    pendingSaveTimerRef.current = setTimeout(() => {
+      pendingSaveTimerRef.current = null;
+      if (projectRef.current) {
+        saveProject(projectRef.current);
+      }
+    }, 300);
   }, [projectRef, setProject, setProjects]);
 
   // Transient live preview update: updates in-memory state without polluting undo history or saving to disk
@@ -167,6 +232,8 @@ export function useProjectHistory({
   }, [projectRef, setProject, setProjects]);
 
   const handleUndo = useCallback(() => {
+    flushPendingSave();
+    burstSnapshotRef.current = null;
     if (historyStack.length === 0) return;
     const current = projectRef.current;
     const prev = historyStack[historyStack.length - 1];
@@ -179,9 +246,11 @@ export function useProjectHistory({
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
     soundEngine.playSfx("click");
-  }, [historyStack, projectRef, setProject, setProjects]);
+  }, [flushPendingSave, historyStack, projectRef, setProject, setProjects]);
 
   const handleRedo = useCallback(() => {
+    flushPendingSave();
+    burstSnapshotRef.current = null;
     if (redoStack.length === 0) return;
     const current = projectRef.current;
     const next = redoStack[redoStack.length - 1];
@@ -197,7 +266,7 @@ export function useProjectHistory({
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
     soundEngine.playSfx("click");
-  }, [redoStack, projectRef, setProject, setProjects]);
+  }, [flushPendingSave, redoStack, projectRef, setProject, setProjects]);
 
   return {
     historyStack,

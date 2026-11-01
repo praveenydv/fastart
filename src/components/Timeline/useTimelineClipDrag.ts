@@ -50,11 +50,13 @@ function computeTargetPosition(
   wasInsertingNewTrack: boolean = false,
   previousInsertTrack: number | null = null,
   currentTime?: number,
+  cachedDraggingClip?: UnifiedClipItem,
+  cachedOtherClips?: UnifiedClipItem[],
 ) {
   const rawTrackPos = initialTrack - deltaYPixels / TRACK_ROW_HEIGHT;
 
-  // Other clips excluding the one being dragged
-  const otherClips = allClips.filter((c) => c.id !== clipId);
+  // Other clips excluding the one being dragged (uses precomputed cache during active drag)
+  const otherClips = cachedOtherClips || allClips.filter((c) => c.id !== clipId);
 
   let desiredStart = Math.max(0, initialStart + deltaX);
 
@@ -85,7 +87,7 @@ function computeTargetPosition(
     // 3. Multi-track Magnetic Snapping:
     // Pass 1: Start-to-Start alignment (highest priority for multi-track synchronization!)
     // Prioritizes matching clip starts across all tracks, giving counterpart clips (sharing URL or sourceMediaId) priority
-    const draggingClip = allClips.find((c) => c.id === clipId);
+    const draggingClip = cachedDraggingClip || allClips.find((c) => c.id === clipId);
     const draggingSourceId = draggingClip?.rawClip?.sourceMediaId || draggingClip?.rawClip?.id || clipId;
     const draggingUrl = draggingClip?.rawClip?.url;
 
@@ -283,6 +285,10 @@ export function useTimelineClipDrag({
   dragStateRef.current = dragState;
   const panDragRafRef = useRef<number | null>(null);
   const latestDragStateRef = useRef<TimelineDragState | null>(null);
+  const touchMoveRafRef = useRef<number | null>(null);
+  const latestTouchDragStateRef = useRef<TimelineDragState | null>(null);
+  const cachedDraggingClipRef = useRef<UnifiedClipItem | undefined>(undefined);
+  const cachedOtherClipsRef = useRef<UnifiedClipItem[] | undefined>(undefined);
   const lastTapRef = useRef({ time: 0, clipId: "" });
 
   // Touch tracking state for mobile gesture handling
@@ -339,8 +345,14 @@ export function useTimelineClipDrag({
     if (touchStateRef.current?.timer) {
       clearTimeout(touchStateRef.current.timer);
     }
+    if (touchMoveRafRef.current !== null) {
+      cancelAnimationFrame(touchMoveRafRef.current);
+      touchMoveRafRef.current = null;
+    }
     touchStateRef.current = null;
     clipDragStartInfoRef.current = null;
+    cachedDraggingClipRef.current = undefined;
+    cachedOtherClipsRef.current = undefined;
     setIsDraggingClip(false);
     setDragState(null);
   }, []);
@@ -383,6 +395,9 @@ export function useTimelineClipDrag({
         if (touchStateRef.current) {
           touchStateRef.current.isDragging = true;
         }
+
+        cachedDraggingClipRef.current = clip;
+        cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clip.id);
 
         clipDragStartInfoRef.current = {
           clipId: clip.id,
@@ -468,6 +483,8 @@ export function useTimelineClipDrag({
           previousIsInsertingRef.current,
           previousInsertTrackRef.current,
           currentTimeRef.current,
+          cachedDraggingClipRef.current,
+          cachedOtherClipsRef.current,
         );
 
       const hasChangedState =
@@ -483,7 +500,7 @@ export function useTimelineClipDrag({
       previousIsInsertingRef.current = isInsertingNewTrack;
       previousInsertTrackRef.current = insertTrackIndex;
 
-      setDragState({
+      latestTouchDragStateRef.current = {
         clipId: state.clipId,
         currentStart: rawStart,
         targetStart: clampedStart,
@@ -492,7 +509,16 @@ export function useTimelineClipDrag({
         isInsertingNewTrack,
         insertTrackIndex,
         hasOverlap,
-      });
+      };
+
+      if (touchMoveRafRef.current === null) {
+        touchMoveRafRef.current = requestAnimationFrame(() => {
+          touchMoveRafRef.current = null;
+          if (latestTouchDragStateRef.current) {
+            setDragState(latestTouchDragStateRef.current);
+          }
+        });
+      }
     },
     [activeTrackCount],
   );
@@ -500,6 +526,13 @@ export function useTimelineClipDrag({
   // Mobile Touch End (Clean drop & exit)
   const handleClipTouchEnd = useCallback(
     (e: any) => {
+      if (touchMoveRafRef.current !== null) {
+        cancelAnimationFrame(touchMoveRafRef.current);
+        touchMoveRafRef.current = null;
+      }
+      cachedDraggingClipRef.current = undefined;
+      cachedOtherClipsRef.current = undefined;
+
       const state = touchStateRef.current;
       if (state?.timer) {
         clearTimeout(state.timer);
@@ -507,9 +540,10 @@ export function useTimelineClipDrag({
       }
 
       if (state?.isDragging || isDraggingClip) {
-        const currentDrag = dragStateRef.current;
+        const currentDrag = latestTouchDragStateRef.current || dragStateRef.current;
         setIsDraggingClip(false);
         setDragState(null);
+        latestTouchDragStateRef.current = null;
         clipDragStartInfoRef.current = null;
         previousIsInsertingRef.current = false;
         previousInsertTrackRef.current = null;
@@ -654,6 +688,8 @@ export function useTimelineClipDrag({
           if (moveDistance >= 4) {
             hasStartedDragging = true;
             setIsDraggingClip(true);
+            cachedDraggingClipRef.current = allClipsRef.current.find((c) => c.id === clipId);
+            cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clipId);
             soundEngine.playSfx("click");
             triggerHaptic("selection", isHapticEnabledRef.current);
             onSelectClip(clipId, trackType);
@@ -683,6 +719,8 @@ export function useTimelineClipDrag({
             previousIsInsertingRef.current,
             previousInsertTrackRef.current,
             currentTimeRef.current,
+            cachedDraggingClipRef.current,
+            cachedOtherClipsRef.current,
           );
 
         const hasChangedState =
@@ -724,6 +762,8 @@ export function useTimelineClipDrag({
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
         setIsDraggingClip(false);
+        cachedDraggingClipRef.current = undefined;
+        cachedOtherClipsRef.current = undefined;
 
         if (hasStartedDragging) {
           const currentDrag = dragStateRef.current;
@@ -770,6 +810,8 @@ export function useTimelineClipDrag({
         );
         if (!clip) return;
         setIsDraggingClip(true);
+        cachedDraggingClipRef.current = clip;
+        cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clip.id);
         soundEngine.playSfx("pop");
         triggerHaptic("medium", isHapticEnabledRef.current);
         clipDragStartInfoRef.current = {
@@ -814,6 +856,8 @@ export function useTimelineClipDrag({
             previousIsInsertingRef.current,
             previousInsertTrackRef.current,
             currentTimeRef.current,
+            cachedDraggingClipRef.current,
+            cachedOtherClipsRef.current,
           );
 
         const hasChangedState =
@@ -862,6 +906,8 @@ export function useTimelineClipDrag({
         setDragState(null);
         latestDragStateRef.current = null;
         clipDragStartInfoRef.current = null;
+        cachedDraggingClipRef.current = undefined;
+        cachedOtherClipsRef.current = undefined;
         previousIsInsertingRef.current = false;
         previousInsertTrackRef.current = null;
 
@@ -912,6 +958,8 @@ export function useTimelineClipDrag({
         setDragState(null);
         latestDragStateRef.current = null;
         clipDragStartInfoRef.current = null;
+        cachedDraggingClipRef.current = undefined;
+        cachedOtherClipsRef.current = undefined;
         previousIsInsertingRef.current = false;
         previousInsertTrackRef.current = null;
       },

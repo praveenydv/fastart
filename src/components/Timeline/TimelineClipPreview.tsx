@@ -18,7 +18,7 @@ interface TimelineClipPreviewProps {
 const FRAME_WIDTH = 54;
 const isWeb = typeof window !== "undefined" || (typeof Platform !== "undefined" && Platform?.OS === "web");
 
-export const TimelineClipPreview: React.FC<TimelineClipPreviewProps> = ({
+const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
   clip,
   width,
 }) => {
@@ -161,4 +161,5 @@ const previewStyles = StyleSheet.create({
   },
 });
 
-export default React.memo(TimelineClipPreview);
+export const TimelineClipPreview = React.memo(TimelineClipPreviewComponent);
+export default TimelineClipPreview;

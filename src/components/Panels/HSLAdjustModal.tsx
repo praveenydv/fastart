@@ -228,6 +228,7 @@ export default function HSLAdjustModal({
                 unit="°"
                 defaultValue={0}
                 accentColor={currentDef.color}
+                showSteppers={true}
                 onChange={(val) => handleSet('hue', val)}
               />
               <View style={styles.stepperRow}>
@@ -275,6 +276,7 @@ export default function HSLAdjustModal({
                 unit="%"
                 defaultValue={0}
                 accentColor={currentDef.color}
+                showSteppers={true}
                 onChange={(val) => handleSet('saturation', val)}
               />
               <View style={styles.stepperRow}>
@@ -322,6 +324,7 @@ export default function HSLAdjustModal({
                 unit="%"
                 defaultValue={0}
                 accentColor={currentDef.color}
+                showSteppers={true}
                 onChange={(val) => handleSet('luminance', val)}
               />
               <View style={styles.stepperRow}>

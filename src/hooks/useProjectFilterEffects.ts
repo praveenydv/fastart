@@ -121,20 +121,42 @@ export function useProjectFilterEffects({
 
   // Apply color filter or custom 3D LUT (attached to video clip if selected, or create timeline filter clip if global)
   const handleApplyFilter = useCallback(
-    (filterId: string, customLut?: CustomLutConfig) => {
+    (
+      filterId: string,
+      customLut?: CustomLutConfig,
+      applyToAll: boolean = false,
+      intensity: number = 1.0,
+    ) => {
       const current = projectRef.current || project;
       if (!current) return;
+
+      const isNone = filterId === "none" || filterId === "normal";
+
+      // If applyToAll is true, apply to all video clips!
+      if (applyToAll) {
+        const videoClips = (current.tracks.video || []).map((c) => ({
+          ...c,
+          filter: isNone ? undefined : filterId,
+          customLut: isNone ? undefined : customLut,
+          filterIntensity: isNone ? undefined : intensity,
+        }));
+        updateProjectWithHistory({
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
+        });
+        return;
+      }
 
       // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the filter to that clip!
       if (selectedClipId && selectedClipType === "video") {
         const videoClips = [...(current.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
-          const isNone = filterId === "none" || filterId === "normal";
           videoClips[idx] = {
             ...videoClips[idx],
             filter: isNone ? undefined : filterId,
             customLut: isNone ? undefined : customLut,
+            filterIntensity: isNone ? undefined : intensity,
           };
           updateProjectWithHistory({
             ...current,
@@ -149,7 +171,6 @@ export function useProjectFilterEffects({
         const effectClips = [...(current.tracks.effects || [])];
         const idx = effectClips.findIndex((e) => e.id === selectedClipId);
         if (idx >= 0) {
-          const isNone = filterId === "none" || filterId === "normal";
           if (isNone) {
             effectClips.splice(idx, 1);
             updateProjectWithHistory({
@@ -166,6 +187,7 @@ export function useProjectFilterEffects({
               type: "filter_" + filterId,
               name: `Filter: ${filterName}`,
               customLut,
+              intensity,
             };
             updateProjectWithHistory({
               ...current,
@@ -177,7 +199,7 @@ export function useProjectFilterEffects({
       }
 
       // 3. GLOBAL: Create timeline filter clip!
-      if (filterId === "none" || filterId === "normal") return;
+      if (isNone) return;
 
       const desiredStart = currentTime || 0;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
@@ -194,7 +216,7 @@ export function useProjectFilterEffects({
         customLut,
         startTime: Math.max(0, Number(desiredStart.toFixed(3))),
         duration: 3.0,
-        intensity: 0.8,
+        intensity,
         trackIndex: newTrackIndex,
       };
 
@@ -239,7 +261,21 @@ export function useProjectFilterEffects({
     (motionConfig: MotionTrackConfig) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const targetId = resolveTargetClipId(selectedClipType === "audio" ? "audio" : "video");
+
+      let targetId = selectedClipId;
+      if (!targetId) {
+        if (selectedClipType === "text") {
+          targetId = (current.tracks.text || []).find(
+            (t) => currentTime >= t.startTime && currentTime <= t.startTime + t.duration
+          )?.id || current.tracks.text?.[0]?.id || null;
+        } else if (selectedClipType === "stickers" || selectedClipType === "sticker") {
+          targetId = (current.tracks.stickers || []).find(
+            (s) => currentTime >= s.startTime && currentTime <= s.startTime + s.duration
+          )?.id || current.tracks.stickers?.[0]?.id || null;
+        } else {
+          targetId = resolveTargetClipId("video");
+        }
+      }
       if (!targetId) return;
 
       if (selectedClipType === "text") {
@@ -277,7 +313,7 @@ export function useProjectFilterEffects({
         }
       }
     },
-    [project, projectRef, selectedClipType, resolveTargetClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, selectedClipType, currentTime, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply transition

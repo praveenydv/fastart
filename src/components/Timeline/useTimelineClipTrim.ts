@@ -243,18 +243,19 @@ export function useTimelineClipTrim({
         );
 
         latestPanTrimUpdatesRef.current = updates;
-        setActiveTrimDelta({
-          clipId: info.clipId,
-          side: "right",
-          startTime: info.initialStart,
-          duration: updates.duration,
-        });
-
         if (panTrimRafRef.current === null) {
           panTrimRafRef.current = requestAnimationFrame(() => {
             panTrimRafRef.current = null;
-            if (onTrimClipRef.current && latestPanTrimUpdatesRef.current) {
-              onTrimClipRef.current(info.clipId, latestPanTrimUpdatesRef.current, false);
+            const up = latestPanTrimUpdatesRef.current;
+            if (!up) return;
+            setActiveTrimDelta({
+              clipId: info.clipId,
+              side: "right",
+              startTime: info.initialStart,
+              duration: up.duration,
+            });
+            if (onTrimClipRef.current) {
+              onTrimClipRef.current(info.clipId, up, false);
             }
           });
         }
@@ -352,6 +353,12 @@ export function useTimelineClipTrim({
 
       const performTrimUpdate = (isFinal = false) => {
         pendingRaf = null;
+        setActiveTrimDelta({
+          clipId,
+          side: "left",
+          startTime: latestUpdates.startTime,
+          duration: latestUpdates.duration,
+        });
         if (onTrimClipRef.current) {
           onTrimClipRef.current(clipId, latestUpdates, isFinal);
         }
@@ -377,12 +384,6 @@ export function useTimelineClipTrim({
         );
 
         latestUpdates = updates;
-        setActiveTrimDelta({
-          clipId,
-          side: "left",
-          startTime: updates.startTime,
-          duration: updates.duration,
-        });
 
         if (pendingRaf === null) {
           pendingRaf = requestAnimationFrame(() => performTrimUpdate(false));
@@ -448,6 +449,12 @@ export function useTimelineClipTrim({
 
       const performTrimUpdate = (isFinal = false) => {
         pendingRaf = null;
+        setActiveTrimDelta({
+          clipId,
+          side: "right",
+          startTime: initialStart,
+          duration: latestUpdates.duration,
+        });
         if (onTrimClipRef.current) {
           onTrimClipRef.current(clipId, latestUpdates, isFinal);
         }
@@ -473,12 +480,6 @@ export function useTimelineClipTrim({
         );
 
         latestUpdates = updates;
-        setActiveTrimDelta({
-          clipId,
-          side: "right",
-          startTime: initialStart,
-          duration: updates.duration,
-        });
 
         if (pendingRaf === null) {
           pendingRaf = requestAnimationFrame(() => performTrimUpdate(false));

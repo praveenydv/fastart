@@ -74,7 +74,7 @@ interface EditorModalsProps {
   handleAddText: (clip: TextClip) => void;
   handleUpdateText: (clip: TextClip) => void;
   handleAddAudio: (item: any) => void;
-  handleApplyFilter: (lut: string) => void;
+  handleApplyFilter: (lut: string, customLut?: any, applyToAll?: boolean, intensity?: number) => void;
   handleAddEffect: (effect: any) => void;
   handleUpdateEffect: (clip: EffectClip) => void;
   handleAddSticker: (sticker: any) => void;
@@ -354,13 +354,16 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
               : selectedClipType === "stickers" ||
                   selectedClipType === "sticker"
                 ? "sticker"
-                : "video"
+                : selectedClip?.trackIndex && selectedClip.trackIndex > 0
+                  ? "overlay"
+                  : "video"
           }
           currentTrack={selectedClip?.motionTrack}
           onApplyTracking={handleApplyMotionTracking}
           isInline={isInline}
           project={project}
           selectedClip={selectedClip}
+          currentTime={currentTime}
           updateProjectWithHistory={updateProjectWithHistory}
         />
       )}
@@ -998,5 +1001,46 @@ const modalStyles = StyleSheet.create({
   },
 });
 
-export const EditorModals = React.memo(EditorModalsComponent);
+export const EditorModals = React.memo(
+  EditorModalsComponent,
+  (prevProps, nextProps) => {
+    // Fast-path: When both previously and currently no modal is open,
+    // skip re-rendering completely (prevents 24 FPS playhead ticks from diffing 35 modal trees).
+    if (
+      !prevProps.activeModal &&
+      !nextProps.activeModal &&
+      !prevProps.clipToDelete &&
+      !nextProps.clipToDelete
+    ) {
+      return true;
+    }
+
+    if (
+      prevProps.activeModal !== nextProps.activeModal ||
+      prevProps.clipToDelete !== nextProps.clipToDelete ||
+      prevProps.selectedClipId !== nextProps.selectedClipId ||
+      prevProps.selectedClip !== nextProps.selectedClip ||
+      prevProps.selectedClipType !== nextProps.selectedClipType ||
+      prevProps.isInline !== nextProps.isInline ||
+      prevProps.project !== nextProps.project ||
+      prevProps.totalDuration !== nextProps.totalDuration
+    ) {
+      return false;
+    }
+
+    // Only re-render on currentTime if the currently open modal actually depends on currentTime
+    if (prevProps.currentTime !== nextProps.currentTime) {
+      const active = nextProps.activeModal;
+      const needsTime =
+        active === "keyframe" ||
+        active === "background" ||
+        active === "cutout" ||
+        active === "tracking" ||
+        active === "captions";
+      return !needsTime;
+    }
+
+    return false;
+  },
+);
 export default EditorModals;

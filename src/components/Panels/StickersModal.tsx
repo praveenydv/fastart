@@ -24,6 +24,14 @@ interface StickersModalProps {
   isInline?: boolean;
 }
 
+const STICKER_CATEGORIES = [
+  { id: 'All', label: 'All (' + STICKER_LIBRARY.length + ')' },
+  { id: 'Reactions', label: '🔥 Reactions' },
+  { id: 'Creator', label: '🎬 Badges' },
+  { id: 'Comic', label: '💥 Comic & Meme' },
+  { id: 'Symbols', label: '🎯 Pointers' },
+];
+
 export default function StickersModal({
   visible,
   onClose,
@@ -47,22 +55,22 @@ export default function StickersModal({
     }
   }, [visible, editingClip]);
 
-  const categories = [
-    { id: 'All', label: 'All (' + STICKER_LIBRARY.length + ')' },
-    { id: 'Reactions', label: '🔥 Reactions' },
-    { id: 'Creator', label: '🎬 Badges' },
-    { id: 'Comic', label: '💥 Comic & Meme' },
-    { id: 'Symbols', label: '🎯 Pointers' },
-  ];
+  const filteredStickers = React.useMemo(() => {
+    if (!visible) return [];
+    const query = searchQuery.trim().toLowerCase();
+    return STICKER_LIBRARY.filter((item) => {
+      const matchesCat = activeCategory === 'All' || item.category === activeCategory;
+      const matchesQuery =
+        !query ||
+        item.label.toLowerCase().includes(query) ||
+        item.char.toLowerCase().includes(query);
+      return matchesCat && matchesQuery;
+    });
+  }, [visible, activeCategory, searchQuery]);
 
-  const filteredStickers = STICKER_LIBRARY.filter((item) => {
-    const matchesCat = activeCategory === 'All' || item.category === activeCategory;
-    const matchesQuery =
-      !searchQuery.trim() ||
-      item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.char.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCat && matchesQuery;
-  });
+  if (!visible) return null;
+
+  const categories = STICKER_CATEGORIES;
 
   const startTimeDisplay = editingClip ? (editingClip.startTime || 0) : currentPlayheadTime;
   const endTimeDisplay = Number((startTimeDisplay + duration).toFixed(1));
@@ -189,7 +197,6 @@ export default function StickersModal({
         </View>
   );
 
-  if (!visible) return null;
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 

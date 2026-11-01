@@ -115,6 +115,27 @@ export function drawSticker(
 const textLinesCache = new Map<string, { lines: string[]; textWidth: number; textHeight: number }>();
 const wordWidthCache = new Map<string, number>();
 
+interface CachedSubtitleWord {
+  word: string;
+  width: number;
+  start: number;
+  end: number;
+}
+
+interface CachedSubtitleLine {
+  words: CachedSubtitleWord[];
+  lineWidth: number;
+}
+
+interface CachedCaptionLayout {
+  lines: CachedSubtitleLine[];
+  maxLineWidth: number;
+  totalTextHeight: number;
+  lineHeight: number;
+}
+
+const captionLayoutCache = new Map<string, CachedCaptionLayout>();
+
 function getCachedWordWidth(
   ctx: CanvasRenderingContext2D,
   word: string,
@@ -507,13 +528,83 @@ export function drawCaptionOverlay(
 
   const isUppercase = Boolean((style as any)?.uppercase ?? (cap as any)?.uppercase);
   const rawText = isUppercase ? (cap.text || "").toUpperCase() : cap.text || "";
-  const rawWords =
-    cap.words && cap.words.length > 0
-      ? cap.words
-      : generateWordTimings(rawText, cap.startTime, cap.duration);
-  const wordsList = isUppercase
-    ? rawWords.map((item) => ({ ...item, word: item.word.toUpperCase() }))
-    : rawWords;
+  const spaceWidth = getCachedWordWidth(ctx, " ", fontSize, fontFamily, fontWeight);
+  const maxAllowedW = Math.max(140 * previewScale, (w * 0.9) / Math.max(0.1, scale));
+
+  const cacheKey = `${cap.id}_${rawText}_${cap.startTime}_${cap.duration}_${fontSize}_${fontFamily}_${fontWeight}_${Math.round(maxAllowedW)}_${cap.words?.length || 0}`;
+  let layout = captionLayoutCache.get(cacheKey);
+
+  if (!layout) {
+    const rawWords =
+      cap.words && cap.words.length > 0
+        ? cap.words
+        : generateWordTimings(rawText, cap.startTime, cap.duration);
+    const wordsList = isUppercase
+      ? rawWords.map((item) => ({ ...item, word: item.word.toUpperCase() }))
+      : rawWords;
+
+    const lines: CachedSubtitleLine[] = [];
+    let currentLineWords: CachedSubtitleWord[] = [];
+    let currentLineWidth = 0;
+
+    for (let i = 0; i < wordsList.length; i++) {
+      const item = wordsList[i];
+      const wWidth = getCachedWordWidth(ctx, item.word, fontSize, fontFamily, fontWeight);
+      const additional = currentLineWords.length > 0 ? spaceWidth + wWidth : wWidth;
+
+      if (currentLineWidth + additional > maxAllowedW && currentLineWords.length > 0) {
+        lines.push({
+          words: currentLineWords,
+          lineWidth: currentLineWidth,
+        });
+        currentLineWords = [{ word: item.word, width: wWidth, start: item.start, end: item.end }];
+        currentLineWidth = wWidth;
+      } else {
+        currentLineWords.push({
+          word: item.word,
+          width: wWidth,
+          start: item.start,
+          end: item.end,
+        });
+        currentLineWidth += additional;
+      }
+    }
+
+    if (currentLineWords.length > 0) {
+      lines.push({
+        words: currentLineWords,
+        lineWidth: currentLineWidth,
+      });
+    }
+
+    const rawWidth = getCachedWordWidth(ctx, rawText, fontSize, fontFamily, fontWeight);
+    const effectiveLines = lines.length > 0 ? lines : [{
+      words: [{ word: rawText, width: rawWidth, start: cap.startTime, end: cap.startTime + cap.duration }],
+      lineWidth: rawWidth,
+    }];
+
+    const lineHeight = fontSize * 1.35;
+    const totalTextHeight = effectiveLines.length * lineHeight;
+    let maxLineWidth = 0;
+    for (const l of effectiveLines) {
+      if (l.lineWidth > maxLineWidth) maxLineWidth = l.lineWidth;
+    }
+
+    layout = {
+      lines: effectiveLines,
+      maxLineWidth,
+      totalTextHeight,
+      lineHeight,
+    };
+
+    if (captionLayoutCache.size >= 250) {
+      const firstKey = captionLayoutCache.keys().next().value;
+      if (firstKey) captionLayoutCache.delete(firstKey);
+    }
+    captionLayoutCache.set(cacheKey, layout);
+  }
+
+  const { lines: effectiveLines, maxLineWidth, totalTextHeight, lineHeight } = layout;
 
   const enableWordHighlight =
     cap.enableWordHighlight !== false &&
@@ -529,70 +620,6 @@ export function drawCaptionOverlay(
   const baseTextColor = style.color || "#FFFFFF";
   const strokeColor = style.strokeColor || "#000000";
   const strokeWidth = Math.max(0.5, (style.strokeWidth ?? 3.5) * previewScale);
-
-  // Measure word widths and lay them out into wrapped lines
-  const spaceWidth = getCachedWordWidth(ctx, " ", fontSize, fontFamily, fontWeight);
-  const maxAllowedW = Math.max(140 * previewScale, (w * 0.9) / Math.max(0.1, scale));
-
-  interface MeasuredWord {
-    word: string;
-    width: number;
-    isActive: boolean;
-  }
-
-  interface SubtitleLine {
-    words: MeasuredWord[];
-    lineWidth: number;
-  }
-
-  const lines: SubtitleLine[] = [];
-  let currentLineWords: MeasuredWord[] = [];
-  let currentLineWidth = 0;
-
-  for (let i = 0; i < wordsList.length; i++) {
-    const item = wordsList[i];
-    const wWidth = getCachedWordWidth(ctx, item.word, fontSize, fontFamily, fontWeight);
-    const isWordActive = time >= item.start && time < item.end;
-
-    // Check if adding this word exceeds line width
-    const additional = currentLineWords.length > 0 ? spaceWidth + wWidth : wWidth;
-
-    if (currentLineWidth + additional > maxAllowedW && currentLineWords.length > 0) {
-      lines.push({
-        words: currentLineWords,
-        lineWidth: currentLineWidth,
-      });
-      currentLineWords = [{ word: item.word, width: wWidth, isActive: isWordActive }];
-      currentLineWidth = wWidth;
-    } else {
-      currentLineWords.push({
-        word: item.word,
-        width: wWidth,
-        isActive: isWordActive,
-      });
-      currentLineWidth += additional;
-    }
-  }
-
-  if (currentLineWords.length > 0) {
-    lines.push({
-      words: currentLineWords,
-      lineWidth: currentLineWidth,
-    });
-  }
-
-  const rawWidth = getCachedWordWidth(ctx, rawText, fontSize, fontFamily, fontWeight);
-  const effectiveLines = lines.length > 0 ? lines : [{
-    words: [{ word: rawText, width: rawWidth, isActive: true }],
-    lineWidth: rawWidth,
-  }];
-
-  const lineHeight = fontSize * 1.35;
-  const totalTextHeight = effectiveLines.length * lineHeight;
-  let maxLineWidth = 0;
-  for (const l of effectiveLines) {
-    if (l.lineWidth > maxLineWidth) maxLineWidth = l.lineWidth;
-  }
 
   // Draw Background Box / Pill if configured (e.g. Minimal subtitle box)
   if (style.backgroundColor && style.backgroundColor !== "transparent") {
@@ -659,7 +686,7 @@ export function drawCaptionOverlay(
 
     for (let wIdx = 0; wIdx < lineObj.words.length; wIdx++) {
       const mw = lineObj.words[wIdx];
-      const isHighlighted = mw.isActive && enableWordHighlight;
+      const isHighlighted = enableWordHighlight && time >= mw.start && time < mw.end;
       const hlStyle = (cap as any).highlightStyle || (style as any).highlightStyle || "color";
 
       ctx.save();

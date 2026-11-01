@@ -826,6 +826,7 @@ export default function App() {
         {(() => {
           const renderSharedModals = (isInline?: boolean) => (
             <EditorModals
+              key={isInline ? "inline-modals" : "overlay-modals"}
               activeModal={activeModal}
               closeModal={handleCancelModal}
               onCancelModal={handleCancelModal}

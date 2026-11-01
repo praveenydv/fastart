@@ -27,12 +27,13 @@ interface MotionTrackingModalProps {
   visible: boolean;
   onClose: () => void;
   onApply?: () => void;
-  targetType: "text" | "sticker" | "video";
+  targetType?: "text" | "sticker" | "overlay" | "video";
   currentTrack?: MotionTrackConfig;
   onApplyTracking: (config: MotionTrackConfig) => void;
   isInline?: boolean;
   project?: FastArtProject;
   selectedClip?: any;
+  currentTime?: number;
   updateProjectWithHistory?: (proj: FastArtProject) => void;
 }
 
@@ -46,8 +47,10 @@ export default function MotionTrackingModal({
   isInline = false,
   project,
   selectedClip,
+  currentTime,
   updateProjectWithHistory,
 }: MotionTrackingModalProps) {
+  const isElementClip = targetType === "text" || targetType === "sticker" || targetType === "overlay";
   // Primary States
   const [enabled, setEnabled] = useState<boolean>(
     currentTrack?.enabled || false,
@@ -136,6 +139,7 @@ export default function MotionTrackingModal({
         mosaicStyle: overrides?.mosaicStyle || mosaicStyle,
         mosaicRadius: overrides?.mosaicRadius !== undefined ? overrides.mosaicRadius : mosaicRadius,
         smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
+        anchorTime: overrides?.anchorTime !== undefined ? overrides.anchorTime : currentTrack?.anchorTime,
         trackingStatus:
           overrides?.trackingStatus ||
           ((overrides?.trajectory || trajectory).length > 0 ? "completed" : "idle"),
@@ -179,6 +183,7 @@ export default function MotionTrackingModal({
       trackRotation,
       mosaicStyle,
       mosaicRadius,
+      currentTrack?.anchorTime,
       onApplyTracking,
       project,
       updateProjectWithHistory,
@@ -187,7 +192,7 @@ export default function MotionTrackingModal({
 
   // Find candidate clips in project that can be pinned
   const availableClipsToPin = useMemo(() => {
-    if (!project) return [];
+    if (!visible || !project) return [];
     const list: { id: string; label: string; icon: string; type: string }[] = [];
 
     (project.tracks.text || []).forEach((t) => {
@@ -220,47 +225,7 @@ export default function MotionTrackingModal({
     });
 
     return list;
-  }, [project, selectedClip]);
-
-  // Quick Preset Selection for Reticle
-  const handleSelectPreset = useCallback(
-    (preset: "face" | "body" | "center" | "wide") => {
-      soundEngine.playSfx("click");
-      triggerHaptic("selection");
-      let nextRect: TrackingRect;
-      if (preset === "face") {
-        nextRect = { x: 35, y: 16, width: 30, height: 32 };
-      } else if (preset === "body") {
-        nextRect = { x: 35, y: 15, width: 30, height: 68 };
-      } else if (preset === "center") {
-        nextRect = { x: 35, y: 35, width: 30, height: 30 };
-      } else {
-        nextRect = { x: 20, y: 20, width: 60, height: 60 };
-      }
-      setTargetRect(nextRect);
-      syncTracking({ targetRect: nextRect });
-    },
-    [syncTracking],
-  );
-
-  const isPresetActive = useCallback(
-    (preset: "face" | "body" | "center" | "wide") => {
-      if (preset === "face") {
-        return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 16) <= 2 && Math.abs(targetRect.width - 30) <= 2;
-      }
-      if (preset === "body") {
-        return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.height - 68) <= 2;
-      }
-      if (preset === "center") {
-        return Math.abs(targetRect.x - 35) <= 2 && Math.abs(targetRect.y - 35) <= 2 && Math.abs(targetRect.width - 30) <= 2;
-      }
-      if (preset === "wide") {
-        return Math.abs(targetRect.x - 20) <= 2 && Math.abs(targetRect.width - 60) <= 2;
-      }
-      return false;
-    },
-    [targetRect],
-  );
+  }, [visible, project, selectedClip]);
 
   // Run Real Computer-Vision Tracking
   const handleStartTracking = useCallback(async () => {
@@ -271,6 +236,26 @@ export default function MotionTrackingModal({
     setScanStatusText("Analyzing Video Frames...");
 
     syncTracking({ trackingStatus: "tracking" });
+
+    const anchorTime = currentTime !== undefined ? currentTime : (selectedClip?.startTime ?? 0);
+
+    let bgVideoClip: VideoClip | null = null;
+    if (isElementClip && project?.tracks?.video) {
+      bgVideoClip =
+        project.tracks.video.find(
+          (v) =>
+            (v.trackIndex === 0 || !v.trackIndex) &&
+            anchorTime >= v.startTime &&
+            anchorTime < v.startTime + v.duration
+        ) ||
+        project.tracks.video.find(
+          (v) => anchorTime >= v.startTime && anchorTime < v.startTime + v.duration
+        ) ||
+        project.tracks.video[0] ||
+        null;
+    } else if (!isElementClip) {
+      bgVideoClip = selectedClip;
+    }
 
     const clipToTrack: VideoClip = selectedClip || {
       id: "active_clip",
@@ -285,12 +270,15 @@ export default function MotionTrackingModal({
 
     try {
       const generatedTrajectory = await ObjectTrackerEngine.trackClip({
-        clip: clipToTrack,
+        clip: selectedClip || clipToTrack,
+        sourceVideoClip: bgVideoClip,
+        project,
         targetRect,
         sampleFps: 12,
         smoothness,
         trackScale,
         trackRotation,
+        currentTime: anchorTime,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
           setScanProgress(p.percent);
@@ -305,11 +293,19 @@ export default function MotionTrackingModal({
       setIsScanning(false);
       setScanStatusText("");
 
+      const effectiveActionType = isElementClip ? "pin_element" : actionType;
+      const effectivePinnedId = isElementClip ? selectedClip.id : pinnedClipId;
+
       syncTracking({
         enabled: true,
         trajectory: generatedTrajectory,
         targetRect,
-        actionType,
+        actionType: effectiveActionType,
+        pinnedClipId: effectivePinnedId,
+        anchorTime,
+        trackScale,
+        trackRotation,
+        smoothness,
         trackingStatus: "completed",
       });
     } catch (err) {
@@ -318,12 +314,16 @@ export default function MotionTrackingModal({
       syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
     }
   }, [
+    isElementClip,
+    currentTime,
     selectedClip,
+    project,
     targetRect,
     smoothness,
     trackScale,
     trackRotation,
     actionType,
+    pinnedClipId,
     trajectory.length,
     syncTracking,
   ]);
@@ -345,11 +345,11 @@ export default function MotionTrackingModal({
     soundEngine.playSfx("whoosh");
     triggerHaptic("success");
 
-    // Determine target clip: if pinnedClipId is set, bake onto the pinned element!
     let targetClip = selectedClip;
-    let targetKind: "video" | "text" | "sticker" | "caption" = "video";
+    let targetKind: "video" | "text" | "sticker" | "caption" =
+      targetType === "overlay" ? "video" : (targetType as any);
 
-    if (pinnedClipId) {
+    if (!isElementClip && pinnedClipId) {
       const foundTxt = (project.tracks.text || []).find((t) => t.id === pinnedClipId);
       if (foundTxt) {
         targetClip = foundTxt;
@@ -384,7 +384,8 @@ export default function MotionTrackingModal({
       baseTransform,
       targetClip?.duration || 5,
       0.2,
-      targetKind
+      targetKind,
+      currentTrack?.anchorTime
     );
 
     const currentProj = { ...project };
@@ -434,7 +435,10 @@ export default function MotionTrackingModal({
     project,
     updateProjectWithHistory,
     selectedClip,
+    targetType,
+    isElementClip,
     pinnedClipId,
+    currentTrack?.anchorTime,
   ]);
 
   const handleReset = useCallback(() => {
@@ -510,7 +514,7 @@ export default function MotionTrackingModal({
             ) : (
               <View style={styles.statusBadgeIdle}>
                 <View style={styles.statusDotIdle} />
-                <Text style={styles.statusBadgeIdleText}>Reticle Ready</Text>
+                <Text style={styles.statusBadgeIdleText}>Ready to Track</Text>
               </View>
             )}
           </View>
@@ -529,110 +533,110 @@ export default function MotionTrackingModal({
         </View>
       )}
 
-      {/* Mode Switcher Tabs (Segmented Control) */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === "censor" && styles.tabBtnActive]}
-          onPress={() => {
-            soundEngine.playSfx("click");
-            triggerHaptic("selection");
-            setActiveTab("censor");
-            setActionType("mosaic_censor");
-            syncTracking({ actionType: "mosaic_censor", enabled: true });
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="eye-off-outline"
-            size={13}
-            color={activeTab === "censor" ? THEME_COLORS.accent : "#94A3B8"}
-          />
-          <Text style={[styles.tabText, activeTab === "censor" && styles.tabTextActive]}>
-            Censor Blur
-          </Text>
-        </TouchableOpacity>
+      {/* Target Element Header Badge for Text / Sticker / Overlay Clip */}
+      {isElementClip && (
+        <View style={styles.elementHeaderCard}>
+          <View style={styles.elementIconBadge}>
+            <Ionicons
+              name={
+                targetType === "text"
+                  ? "text"
+                  : targetType === "sticker"
+                  ? "happy"
+                  : "layers"
+              }
+              size={14}
+              color={THEME_COLORS.accent}
+            />
+          </View>
+          <View style={styles.elementInfoCol}>
+            <Text style={styles.elementTitle} numberOfLines={1}>
+              {targetType === "text"
+                ? `Text: "${selectedClip?.text || "Text"}"`
+                : targetType === "sticker"
+                ? `Sticker: ${selectedClip?.char || "Graphic"}`
+                : "PIP Video Overlay"}
+            </Text>
+            <Text style={styles.elementSubtitle}>
+              Element automatically follows video motion
+            </Text>
+          </View>
+        </View>
+      )}
 
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === "pin" && styles.tabBtnActive]}
-          onPress={() => {
-            soundEngine.playSfx("click");
-            triggerHaptic("selection");
-            setActiveTab("pin");
-            setActionType("pin_element");
-            syncTracking({ actionType: "pin_element", enabled: true });
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="attach-outline"
-            size={13}
-            color={activeTab === "pin" ? THEME_COLORS.accent : "#94A3B8"}
-          />
-          <Text style={[styles.tabText, activeTab === "pin" && styles.tabTextActive]}>
-            Pin Element
-          </Text>
-        </TouchableOpacity>
+      {/* Mode Switcher Tabs for Main Video Clip */}
+      {!isElementClip && (
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === "censor" && styles.tabBtnActive]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              triggerHaptic("selection");
+              setActiveTab("censor");
+              setActionType("mosaic_censor");
+              syncTracking({ actionType: "mosaic_censor", enabled: true });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="eye-off-outline"
+              size={13}
+              color={activeTab === "censor" ? THEME_COLORS.accent : "#94A3B8"}
+            />
+            <Text style={[styles.tabText, activeTab === "censor" && styles.tabTextActive]}>
+              Censor Blur
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === "camera" && styles.tabBtnActive]}
-          onPress={() => {
-            soundEngine.playSfx("click");
-            triggerHaptic("selection");
-            setActiveTab("camera");
-            setActionType("camera_center");
-            syncTracking({ actionType: "camera_center", enabled: true });
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="videocam-outline"
-            size={13}
-            color={activeTab === "camera" ? THEME_COLORS.accent : "#94A3B8"}
-          />
-          <Text style={[styles.tabText, activeTab === "camera" && styles.tabTextActive]}>
-            Lock Camera
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === "pin" && styles.tabBtnActive]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              triggerHaptic("selection");
+              setActiveTab("pin");
+              setActionType("pin_element");
+              syncTracking({ actionType: "pin_element", enabled: true });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="attach-outline"
+              size={13}
+              color={activeTab === "pin" ? THEME_COLORS.accent : "#94A3B8"}
+            />
+            <Text style={[styles.tabText, activeTab === "pin" && styles.tabTextActive]}>
+              Pin Element
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === "camera" && styles.tabBtnActive]}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              triggerHaptic("selection");
+              setActiveTab("camera");
+              setActionType("camera_center");
+              syncTracking({ actionType: "camera_center", enabled: true });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="videocam-outline"
+              size={13}
+              color={activeTab === "camera" ? THEME_COLORS.accent : "#94A3B8"}
+            />
+            <Text style={[styles.tabText, activeTab === "camera" && styles.tabTextActive]}>
+              Lock Camera
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView
         style={styles.sheetBody}
         contentContainerStyle={styles.sheetBodyContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Compact Reticle Snap Bar */}
-        <View style={styles.reticleBar}>
-          <View style={styles.reticleLabelWrap}>
-            <Ionicons name="scan-outline" size={12} color={THEME_COLORS.accent} />
-            <Text style={styles.reticleLabel}>Reticle</Text>
-          </View>
-          <View style={styles.presetPillsRow}>
-            {(["face", "body", "center", "wide"] as const).map((preset) => {
-              const active = isPresetActive(preset);
-              const label =
-                preset === "face"
-                  ? "Face"
-                  : preset === "body"
-                  ? "Body"
-                  : preset === "center"
-                  ? "Center"
-                  : "Wide";
-              return (
-                <TouchableOpacity
-                  key={preset}
-                  style={[styles.presetPill, active && styles.presetPillActive]}
-                  onPress={() => handleSelectPreset(preset)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.presetPillText, active && styles.presetPillTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
         {/* Scanning Progress HUD when active */}
         {isScanning ? (
           <View style={styles.scanningCard}>
@@ -696,8 +700,64 @@ export default function MotionTrackingModal({
           </View>
         )}
 
-        {/* TAB 1: CENSOR BLUR */}
-        {activeTab === "censor" && (
+        {/* ELEMENT FOLLOW CONTROLS (for Text, Sticker, PIP Overlay) */}
+        {isElementClip && (
+          <View style={{ marginBottom: 6 }}>
+            <View style={styles.elementTipCard}>
+              <Ionicons name="scan-outline" size={13} color={THEME_COLORS.accent} style={{ marginRight: 6 }} />
+              <Text style={styles.elementTipText}>
+                Position the green box on video player over the subject to follow.
+              </Text>
+            </View>
+
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.togglePill, trackScale && styles.togglePillActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  triggerHaptic("selection");
+                  const nextVal = !trackScale;
+                  setTrackScale(nextVal);
+                  syncTracking({ trackScale: nextVal });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={trackScale ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={trackScale ? THEME_COLORS.accent : "#64748B"}
+                />
+                <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
+                  Follow Scale
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.togglePill, trackRotation && styles.togglePillActive]}
+                onPress={() => {
+                  soundEngine.playSfx("click");
+                  triggerHaptic("selection");
+                  const nextVal = !trackRotation;
+                  setTrackRotation(nextVal);
+                  syncTracking({ trackRotation: nextVal });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={trackRotation ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={trackRotation ? THEME_COLORS.accent : "#64748B"}
+                />
+                <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
+                  Follow Tilt
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* MAIN VIDEO TRACKING MODES */}
+        {!isElementClip && activeTab === "censor" && (
           <View style={styles.tabContentSection}>
             <View style={styles.styleSegmentRow}>
               <TouchableOpacity
@@ -763,7 +823,7 @@ export default function MotionTrackingModal({
         )}
 
         {/* TAB 2: PIN ELEMENT */}
-        {activeTab === "pin" && (
+        {!isElementClip && activeTab === "pin" && (
           <View style={styles.tabContentSection}>
             {availableClipsToPin.length === 0 ? (
               <View style={styles.emptyClipsBox}>
@@ -773,55 +833,81 @@ export default function MotionTrackingModal({
                 </Text>
               </View>
             ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.pinnedClipsScroll}
-              >
-                {availableClipsToPin.map((c) => {
-                  const isSelected = pinnedClipId === c.id;
-                  return (
+              <View style={styles.pinVerticalContainer}>
+                <View style={styles.pinSectionHeader}>
+                  <Text style={styles.pinSectionTitle}>ATTACH TO TARGET</Text>
+                  {pinnedClipId ? (
                     <TouchableOpacity
-                      key={c.id}
-                      style={[styles.pinClipChip, isSelected && styles.pinClipChipActive]}
                       onPress={() => {
                         soundEngine.playSfx("click");
                         triggerHaptic("selection");
-                        const nextId = isSelected ? "" : c.id;
-                        setPinnedClipId(nextId);
-                        setActionType("pin_element");
-                        syncTracking({
-                          pinnedClipId: nextId,
-                          actionType: "pin_element",
-                          enabled: true,
-                        });
+                        setPinnedClipId("");
+                        syncTracking({ pinnedClipId: "", actionType: "pin_element" });
                       }}
-                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons
-                        name={c.icon as any}
-                        size={12}
-                        color={isSelected ? THEME_COLORS.accent : "#94A3B8"}
-                        style={{ marginRight: 5 }}
-                      />
-                      <Text
-                        style={[styles.pinClipLabel, isSelected && styles.pinClipLabelActive]}
-                        numberOfLines={1}
-                      >
-                        {c.label}
-                      </Text>
-                      {isSelected && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={12}
-                          color={THEME_COLORS.accent}
-                          style={{ marginLeft: 4 }}
-                        />
-                      )}
+                      <Text style={styles.pinDetachText}>Detach</Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                  ) : null}
+                </View>
+
+                <View style={styles.pinVerticalList}>
+                  {availableClipsToPin.map((c) => {
+                    const isSelected = pinnedClipId === c.id;
+                    const layerTag =
+                      c.type === "text"
+                        ? "Text Layer"
+                        : c.type === "sticker"
+                        ? "Sticker Layer"
+                        : "Video Overlay";
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[styles.pinClipRow, isSelected && styles.pinClipRowActive]}
+                        onPress={() => {
+                          soundEngine.playSfx("click");
+                          triggerHaptic("selection");
+                          const nextId = isSelected ? "" : c.id;
+                          setPinnedClipId(nextId);
+                          setActionType("pin_element");
+                          syncTracking({
+                            pinnedClipId: nextId,
+                            actionType: "pin_element",
+                            enabled: true,
+                          });
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.pinClipIconWrap, isSelected && styles.pinClipIconWrapActive]}>
+                          <Ionicons
+                            name={c.icon as any}
+                            size={14}
+                            color={isSelected ? THEME_COLORS.accent : "#94A3B8"}
+                          />
+                        </View>
+                        <View style={styles.pinClipInfo}>
+                          <Text
+                            style={[styles.pinClipLabel, isSelected && styles.pinClipLabelActive]}
+                            numberOfLines={1}
+                          >
+                            {c.label}
+                          </Text>
+                          <Text style={styles.pinClipSubtext}>{layerTag}</Text>
+                        </View>
+                        <View style={[styles.pinRadioIndicator, isSelected && styles.pinRadioIndicatorActive]}>
+                          {isSelected ? (
+                            <Ionicons
+                              name="checkmark"
+                              size={12}
+                              color="#000000"
+                            />
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             )}
 
             {/* Scale & Tilt Toggles in 2 compact columns */}
@@ -872,7 +958,7 @@ export default function MotionTrackingModal({
         )}
 
         {/* TAB 3: CAMERA LOCK */}
-        {activeTab === "camera" && (
+        {!isElementClip && activeTab === "camera" && (
           <View style={styles.tabContentSection}>
             <View style={styles.cameraInfoCard}>
               <Ionicons name="videocam" size={16} color={THEME_COLORS.accent} style={{ marginRight: 8 }} />
@@ -1033,6 +1119,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  elementHeaderCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 229, 201, 0.08)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 201, 0.25)",
+  },
+  elementIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: "rgba(0, 229, 201, 0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 9,
+  },
+  elementInfoCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  elementTitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  elementSubtitle: {
+    color: "#94A3B8",
+    fontSize: 10,
+    marginTop: 1,
+  },
+  elementTipCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+  },
+  elementTipText: {
+    flex: 1,
+    color: "#94A3B8",
+    fontSize: 10.5,
+    lineHeight: 14,
+  },
   tabBar: {
     flexDirection: "row",
     backgroundColor: THEME_COLORS.surface || "#18181A",
@@ -1071,52 +1208,6 @@ const styles = StyleSheet.create({
   },
   sheetBodyContent: {
     paddingBottom: 10,
-  },
-  reticleBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    marginBottom: 6,
-  },
-  reticleLabelWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  reticleLabel: {
-    color: "#E2E8F0",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  presetPillsRow: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  presetPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 5,
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-  },
-  presetPillActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(0, 229, 201, 0.4)",
-  },
-  presetPillText: {
-    color: "#94A3B8",
-    fontSize: 10.5,
-    fontWeight: "600",
-  },
-  presetPillTextActive: {
-    color: THEME_COLORS.accent || "#00E5C9",
-    fontWeight: "700",
   },
   scanningCard: {
     backgroundColor: "rgba(0, 229, 201, 0.06)",
@@ -1272,35 +1363,87 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     lineHeight: 14,
   },
-  pinnedClipsScroll: {
-    flexDirection: "row",
-    gap: 5,
-    marginBottom: 6,
-    paddingVertical: 1,
+  pinVerticalContainer: {
+    marginBottom: 8,
   },
-  pinClipChip: {
+  pinSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
-  pinClipChipActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.12)",
+  pinSectionTitle: {
+    color: "#64748B",
+    fontSize: 9.5,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
+  pinDetachText: {
+    color: "#EF4444",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  pinVerticalList: {
+    flexDirection: "column",
+    gap: 5,
+  },
+  pinClipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.07)",
+  },
+  pinClipRowActive: {
+    backgroundColor: "rgba(0, 229, 201, 0.10)",
     borderColor: "rgba(0, 229, 201, 0.4)",
   },
+  pinClipIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 9,
+  },
+  pinClipIconWrapActive: {
+    backgroundColor: "rgba(0, 229, 201, 0.18)",
+  },
+  pinClipInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
   pinClipLabel: {
-    color: "#CBD5E1",
-    fontSize: 11,
+    color: "#E2E8F0",
+    fontSize: 11.5,
     fontWeight: "600",
-    maxWidth: 120,
   },
   pinClipLabelActive: {
     color: THEME_COLORS.accent || "#00E5C9",
     fontWeight: "700",
+  },
+  pinClipSubtext: {
+    color: "#64748B",
+    fontSize: 9.5,
+    marginTop: 1,
+  },
+  pinRadioIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  pinRadioIndicatorActive: {
+    backgroundColor: THEME_COLORS.accent || "#00E5C9",
+    borderColor: THEME_COLORS.accent || "#00E5C9",
   },
   toggleRow: {
     flexDirection: "row",
