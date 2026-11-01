@@ -189,6 +189,29 @@ mod tests {
     }
 
     #[test]
+    fn test_h264_pframe_skip_encoding() {
+        use crate::codecs::{encode_h264_iframe, encode_h264_pframe_into, BitWriter};
+        let w = 320u32;
+        let h = 240u32;
+        let mb_w = w / 16;
+        let mb_h = h / 16;
+
+        let frame1 = FrameBuffer::with_color(w, h, 20, 30, 40, 255);
+        let frame2 = FrameBuffer::with_color(w, h, 20, 30, 40, 255);
+
+        let iframe_bytes = encode_h264_iframe(&frame1, 0, mb_w, mb_h);
+        assert!(iframe_bytes.len() > 10000, "I-frame contains uncompressed macroblocks");
+
+        let mut bw = BitWriter::new(1024);
+        let mut pframe_bytes = Vec::new();
+        encode_h264_pframe_into(&frame2, &frame1, 1, mb_w, mb_h, &mut bw, &mut pframe_bytes);
+
+        // A static frame encoded with mb_skip_run should be less than 50 bytes!
+        assert!(pframe_bytes.len() < 50, "P-frame with zero changed macroblocks must be tiny, got {} bytes", pframe_bytes.len());
+        assert_eq!(pframe_bytes[0], 0x41, "Must be a non-IDR P-slice NAL unit");
+    }
+
+    #[test]
     fn test_h264_iframe_macroblock_syntax() {
         let fb = FrameBuffer::with_color(32, 32, 100, 150, 200, 255);
         let nal = encode_h264_iframe(&fb, 0, 2, 2);

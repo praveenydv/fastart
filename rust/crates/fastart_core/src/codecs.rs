@@ -330,6 +330,13 @@ impl BitWriter {
     }
 
     #[inline]
+    pub fn reset(&mut self) {
+        self.data.clear();
+        self.current_byte = 0;
+        self.bits_in_byte = 0;
+    }
+
+    #[inline]
     pub fn write_bit(&mut self, bit: u8) {
         self.current_byte = (self.current_byte << 1) | (bit & 1);
         self.bits_in_byte += 1;
@@ -484,9 +491,23 @@ pub fn build_h264_pps() -> Vec<u8> {
 }
 
 pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h: u32) -> Vec<u8> {
-    let total_mbs = (mb_w * mb_h) as usize;
     let mut bw = BitWriter::new(128);
+    let mut body = Vec::with_capacity((mb_w * mb_h) as usize * 386 + 128);
+    let mut nal_out = Vec::with_capacity((mb_w * mb_h) as usize * 386 + 128);
+    encode_h264_iframe_into(fb, frame_index, mb_w, mb_h, &mut bw, &mut body, &mut nal_out);
+    nal_out
+}
 
+pub fn encode_h264_iframe_into(
+    fb: &FrameBuffer,
+    frame_index: usize,
+    mb_w: u32,
+    mb_h: u32,
+    bw: &mut BitWriter,
+    body: &mut Vec<u8>,
+    nal_out: &mut Vec<u8>,
+) {
+    bw.reset();
     bw.write_ue(0); // first_mb_in_slice
     bw.write_ue(7); // slice_type (All I-slice)
     bw.write_ue(0); // pic_parameter_set_id
@@ -500,17 +521,14 @@ pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h:
     bw.write_ue(25);
     bw.align_zero();
 
-    let header_bytes = bw.into_bytes();
-    let estimated_rbsp = header_bytes.len() + total_mbs * 386 + 16;
-    let mut body = Vec::with_capacity(estimated_rbsp);
-    body.extend_from_slice(&header_bytes);
+    body.clear();
+    body.extend_from_slice(&bw.data);
 
     let width = fb.width as usize;
     let height = fb.height as usize;
 
     for mby in 0..mb_h as usize {
         for mbx in 0..mb_w as usize {
-            // For every macroblock after #0, emit ue(25) + alignment zeros = [0x0D, 0x00]
             if mbx > 0 || mby > 0 {
                 body.push(0x0D);
                 body.push(0x00);
@@ -566,14 +584,176 @@ pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h:
         }
     }
 
-    // Trailing bits for slice
     body.push(0x80);
 
-    let nal_body = rbsp_to_nal(&body);
-    let mut nal = Vec::with_capacity(1 + nal_body.len());
-    nal.push(0x65); // IDR slice (type 5, nal_ref_idc 3)
-    nal.extend_from_slice(&nal_body);
-    nal
+    nal_out.clear();
+    nal_out.push(0x65); // IDR slice (type 5, nal_ref_idc 3)
+    let mut zero_count = 0;
+    for &b in body.iter() {
+        if zero_count == 2 && b <= 3 {
+            nal_out.push(3);
+            zero_count = 0;
+        }
+        nal_out.push(b);
+        if b == 0 {
+            zero_count += 1;
+        } else {
+            zero_count = 0;
+        }
+    }
+}
+
+#[inline(always)]
+pub fn macroblock_has_changed(
+    curr: &FrameBuffer,
+    prev: &FrameBuffer,
+    mbx: usize,
+    mby: usize,
+    width: usize,
+    height: usize,
+) -> bool {
+    let start_x = mbx * 16;
+    let start_y = mby * 16;
+
+    let mut diff_sum: u32 = 0;
+    for py in (0..16).step_by(2) {
+        let cy = (start_y + py).min(height - 1);
+        let offset = cy * curr.stride;
+        for px in (0..16).step_by(2) {
+            let cx = (start_x + px).min(width - 1);
+            let idx = offset + cx * 4;
+            let dr = (curr.data[idx] as i32 - prev.data[idx] as i32).abs() as u32;
+            let dg = (curr.data[idx + 1] as i32 - prev.data[idx + 1] as i32).abs() as u32;
+            let db = (curr.data[idx + 2] as i32 - prev.data[idx + 2] as i32).abs() as u32;
+            diff_sum += dr + dg + db;
+            if diff_sum > 256 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub fn encode_h264_pframe_into(
+    curr_fb: &FrameBuffer,
+    prev_fb: &FrameBuffer,
+    frame_index: usize,
+    mb_w: u32,
+    mb_h: u32,
+    bw: &mut BitWriter,
+    nal_out: &mut Vec<u8>,
+) {
+    bw.reset();
+    bw.write_ue(0); // first_mb_in_slice
+    bw.write_ue(0); // slice_type (0 = P-slice)
+    bw.write_ue(0); // pic_parameter_set_id
+    bw.write_bits((frame_index & 15) as u32, 4); // frame_num (4 bits)
+    bw.write_bit(0); // num_ref_idx_active_override_flag = 0
+    bw.write_bit(0); // ref_pic_list_modification_flag_l0 = 0
+    bw.write_bit(0); // adaptive_ref_pic_marking_mode_flag = 0
+    bw.write_se(0); // slice_qp_delta: 0
+
+    let width = curr_fb.width as usize;
+    let height = curr_fb.height as usize;
+    let mut skip_run = 0u32;
+
+    for mby in 0..mb_h as usize {
+        for mbx in 0..mb_w as usize {
+            let changed = macroblock_has_changed(curr_fb, prev_fb, mbx, mby, width, height);
+            if !changed {
+                skip_run += 1;
+            } else {
+                bw.write_ue(skip_run);
+                skip_run = 0;
+
+                // Table 7-13 in H.264 spec: mb_type 30 is I_PCM for P-slices
+                bw.write_ue(30);
+                bw.align_zero();
+
+                let start_x = mbx * 16;
+                let start_y = mby * 16;
+
+                // 1. 256 Y samples (16x16)
+                for py in 0..16 {
+                    let cy = (start_y + py).min(height - 1);
+                    let row_offset = cy * curr_fb.stride;
+                    for px in 0..16 {
+                        let cx = (start_x + px).min(width - 1);
+                        let idx = row_offset + cx * 4;
+                        let r = curr_fb.data[idx] as i32;
+                        let g = curr_fb.data[idx + 1] as i32;
+                        let b = curr_fb.data[idx + 2] as i32;
+                        let y_val = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+                        bw.data.push(y_val.clamp(16, 235) as u8);
+                    }
+                }
+
+                // 2. 64 Cb (U) samples (8x8)
+                for py in 0..8 {
+                    let cy = (start_y + py * 2).min(height - 1);
+                    let row_offset = cy * curr_fb.stride;
+                    for px in 0..8 {
+                        let cx = (start_x + px * 2).min(width - 1);
+                        let idx = row_offset + cx * 4;
+                        let r = curr_fb.data[idx] as i32;
+                        let g = curr_fb.data[idx + 1] as i32;
+                        let b = curr_fb.data[idx + 2] as i32;
+                        let u_val = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                        bw.data.push(u_val.clamp(16, 240) as u8);
+                    }
+                }
+
+                // 3. 64 Cr (V) samples (8x8)
+                for py in 0..8 {
+                    let cy = (start_y + py * 2).min(height - 1);
+                    let row_offset = cy * curr_fb.stride;
+                    for px in 0..8 {
+                        let cx = (start_x + px * 2).min(width - 1);
+                        let idx = row_offset + cx * 4;
+                        let r = curr_fb.data[idx] as i32;
+                        let g = curr_fb.data[idx + 1] as i32;
+                        let b = curr_fb.data[idx + 2] as i32;
+                        let v_val = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                        bw.data.push(v_val.clamp(16, 240) as u8);
+                    }
+                }
+            }
+        }
+    }
+
+    if skip_run > 0 {
+        bw.write_ue(skip_run);
+    }
+    bw.write_rbsp_trailing_bits();
+
+    nal_out.clear();
+    nal_out.push(0x41); // Non-IDR P-slice (nal_ref_idc 2, type 1)
+    let mut zero_count = 0;
+    for &b in bw.data.iter() {
+        if zero_count == 2 && b <= 3 {
+            nal_out.push(3);
+            zero_count = 0;
+        }
+        nal_out.push(b);
+        if b == 0 {
+            zero_count += 1;
+        } else {
+            zero_count = 0;
+        }
+    }
+}
+
+pub fn encode_h264_pframe(
+    curr_fb: &FrameBuffer,
+    prev_fb: &FrameBuffer,
+    frame_index: usize,
+    mb_w: u32,
+    mb_h: u32,
+) -> Vec<u8> {
+    let mut bw = BitWriter::new(128);
+    let mut nal_out = Vec::with_capacity(mb_w as usize * mb_h as usize * 386 + 128);
+    encode_h264_pframe_into(curr_fb, prev_fb, frame_index, mb_w, mb_h, &mut bw, &mut nal_out);
+    nal_out
 }
 
 /// Zero-Memory Streaming MP4 Writer supporting both in-memory and direct-to-disk sinks

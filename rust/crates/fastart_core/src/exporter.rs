@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use crate::audio::{encode_wav_16bit, AudioBuffer};
 use crate::codecs::{
-    build_h264_pps, build_h264_sps, encode_h264_iframe, encode_png_fast,
+    build_h264_pps, build_h264_sps, encode_h264_iframe_into,
+    encode_h264_pframe_into, encode_png_fast, BitWriter,
 };
 use crate::compositor::{render_canvas_background, BlendMode};
 use crate::effects::{apply_color_adjustments, apply_fast_blur, apply_vignette};
@@ -11,23 +12,22 @@ use crate::types::{FastArtProject, FrameBuffer, VideoClip};
 pub struct FastArtExporter;
 
 impl FastArtExporter {
-    /// Renders a single composite project frame at time_sec into an RGBA FrameBuffer
-    pub fn render_frame(
+    /// Renders a single composite project frame at time_sec into an existing RGBA FrameBuffer.
+    /// Eliminates heap allocations during export rendering loops.
+    pub fn render_frame_into(
         project: &FastArtProject,
         time_sec: f64,
-        width: u32,
-        height: u32,
+        fb: &mut FrameBuffer,
         media_cache: &HashMap<String, FrameBuffer>,
-    ) -> FrameBuffer {
-        let width = width.max(16);
-        let height = height.max(16);
-        let mut fb = FrameBuffer::new(width, height);
+    ) {
+        let width = fb.width;
+        let height = fb.height;
 
         // 1. Canvas Background
-        render_canvas_background(&mut fb, &project.canvas_background);
+        render_canvas_background(fb, &project.canvas_background);
 
         if time_sec < 0.0 {
-            return fb;
+            return;
         }
 
         // 2. Video and Photo Clips sorted by track layer
@@ -98,7 +98,7 @@ impl FastArtExporter {
                 let mut bg_transform = transform;
                 bg_transform.opacity = (bg_transform.opacity * 0.45).clamp(0.0, 1.0);
                 composite_transformed(
-                    &mut fb,
+                    fb,
                     &blur_bg,
                     &bg_transform,
                     Some("cover"),
@@ -116,7 +116,7 @@ impl FastArtExporter {
             );
 
             composite_transformed(
-                &mut fb,
+                fb,
                 src_frame,
                 &transform,
                 Some(fit),
@@ -143,10 +143,10 @@ impl FastArtExporter {
             };
 
             match effect.effect_type.as_str() {
-                "vignette" => apply_vignette(&mut fb, intensity * 0.8, 0.4),
-                "blur" => apply_fast_blur(&mut fb, ((intensity * 10.0) as u32).min(32)),
-                "contrast" => apply_color_adjustments(&mut fb, 0.0, 1.0 + intensity * 0.5, 1.0),
-                "saturation" => apply_color_adjustments(&mut fb, 0.0, 1.0, 1.0 + intensity * 0.8),
+                "vignette" => apply_vignette(fb, intensity * 0.8, 0.4),
+                "blur" => apply_fast_blur(fb, ((intensity * 10.0) as u32).min(32)),
+                "contrast" => apply_color_adjustments(fb, 0.0, 1.0 + intensity * 0.5, 1.0),
+                "saturation" => apply_color_adjustments(fb, 0.0, 1.0, 1.0 + intensity * 0.8),
                 "cinema" | "letterbox" => {
                     let bar_h = ((height as f32) * 0.12 * intensity).min(height as f32 * 0.3) as u32;
                     let stride = fb.stride;
@@ -178,7 +178,7 @@ impl FastArtExporter {
                         transform.y = pos.y as f32;
                     }
                     composite_transformed(
-                        &mut fb,
+                        fb,
                         text_frame,
                         &transform,
                         Some("contain"),
@@ -205,7 +205,7 @@ impl FastArtExporter {
                             transform.y = pos.y as f32;
                         }
                         composite_transformed(
-                            &mut fb,
+                            fb,
                             cap_frame,
                             &transform,
                             Some("contain"),
@@ -232,7 +232,7 @@ impl FastArtExporter {
                         transform.y = pos.y as f32;
                     }
                     composite_transformed(
-                        &mut fb,
+                        fb,
                         stk_frame,
                         &transform,
                         Some("contain"),
@@ -243,7 +243,20 @@ impl FastArtExporter {
                 }
             }
         }
+    }
 
+    /// Renders a single composite project frame at time_sec into an RGBA FrameBuffer
+    pub fn render_frame(
+        project: &FastArtProject,
+        time_sec: f64,
+        width: u32,
+        height: u32,
+        media_cache: &HashMap<String, FrameBuffer>,
+    ) -> FrameBuffer {
+        let width = width.max(16);
+        let height = height.max(16);
+        let mut fb = FrameBuffer::new(width, height);
+        Self::render_frame_into(project, time_sec, &mut fb, media_cache);
         fb
     }
 
@@ -351,10 +364,11 @@ impl FastArtExporter {
             Err(_) => return Vec::new(),
         };
 
+        let mut curr_fb = FrameBuffer::new(width, height);
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            let fb = Self::render_frame(project, time_sec, width, height, media_cache);
-            let _ = writer.append_frame(&fb, delay_ms);
+            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+            let _ = writer.append_frame(&curr_fb, delay_ms);
         }
 
         match writer.finish() {
@@ -403,11 +417,43 @@ impl FastArtExporter {
             Err(_) => return Vec::new(),
         };
 
+        let mut curr_fb = FrameBuffer::new(width, height);
+        let mut prev_fb = FrameBuffer::new(width, height);
+        let gop_size = (fps * 2).clamp(30, 60) as usize;
+
+        let mut bw = BitWriter::new((mb_w * mb_h * 64) as usize + 2048);
+        let mut nal_body = Vec::with_capacity((mb_w * mb_h * 386) as usize + 2048);
+        let mut nal_out = Vec::with_capacity((mb_w * mb_h * 386) as usize + 2048);
+
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            let fb = Self::render_frame(project, time_sec, width, height, media_cache);
-            let nal = encode_h264_iframe(&fb, frame_idx, mb_w, mb_h);
-            let _ = writer.append_frame(&nal);
+            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+
+            let is_keyframe = frame_idx == 0 || (frame_idx % gop_size == 0);
+            if is_keyframe {
+                encode_h264_iframe_into(
+                    &curr_fb,
+                    frame_idx,
+                    mb_w,
+                    mb_h,
+                    &mut bw,
+                    &mut nal_body,
+                    &mut nal_out,
+                );
+            } else {
+                encode_h264_pframe_into(
+                    &curr_fb,
+                    &prev_fb,
+                    frame_idx,
+                    mb_w,
+                    mb_h,
+                    &mut bw,
+                    &mut nal_out,
+                );
+            }
+
+            let _ = writer.append_frame(&nal_out);
+            prev_fb.data.copy_from_slice(&curr_fb.data);
         }
 
         match writer.finish() {
@@ -443,11 +489,43 @@ impl FastArtExporter {
         let buf_writer = std::io::BufWriter::with_capacity(512 * 1024, file);
         let mut writer = crate::codecs::Mp4StreamWriter::new(buf_writer, width, height, fps, &sps, &pps)?;
 
+        let mut curr_fb = FrameBuffer::new(width, height);
+        let mut prev_fb = FrameBuffer::new(width, height);
+        let gop_size = (fps * 2).clamp(30, 60) as usize;
+
+        let mut bw = BitWriter::new((mb_w * mb_h * 64) as usize + 2048);
+        let mut nal_body = Vec::with_capacity((mb_w * mb_h * 386) as usize + 2048);
+        let mut nal_out = Vec::with_capacity((mb_w * mb_h * 386) as usize + 2048);
+
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            let fb = Self::render_frame(project, time_sec, width, height, media_cache);
-            let nal = encode_h264_iframe(&fb, frame_idx, mb_w, mb_h);
-            writer.append_frame(&nal)?;
+            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+
+            let is_keyframe = frame_idx == 0 || (frame_idx % gop_size == 0);
+            if is_keyframe {
+                encode_h264_iframe_into(
+                    &curr_fb,
+                    frame_idx,
+                    mb_w,
+                    mb_h,
+                    &mut bw,
+                    &mut nal_body,
+                    &mut nal_out,
+                );
+            } else {
+                encode_h264_pframe_into(
+                    &curr_fb,
+                    &prev_fb,
+                    frame_idx,
+                    mb_w,
+                    mb_h,
+                    &mut bw,
+                    &mut nal_out,
+                );
+            }
+
+            writer.append_frame(&nal_out)?;
+            prev_fb.data.copy_from_slice(&curr_fb.data);
         }
 
         writer.finish()?;
@@ -474,10 +552,11 @@ impl FastArtExporter {
         let buf_writer = std::io::BufWriter::with_capacity(256 * 1024, file);
         let mut writer = crate::codecs::GifStreamWriter::new(buf_writer, width as u16, height as u16)?;
 
+        let mut curr_fb = FrameBuffer::new(width, height);
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            let fb = Self::render_frame(project, time_sec, width, height, media_cache);
-            writer.append_frame(&fb, delay_ms)?;
+            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+            writer.append_frame(&curr_fb, delay_ms)?;
         }
 
         writer.finish()?;

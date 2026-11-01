@@ -17,6 +17,16 @@ impl FastArtEngine {
         crate::exporter::FastArtExporter::render_frame(project, time_sec, width, height, media_cache)
     }
 
+    /// Renders a single composite project frame into a pre-allocated FrameBuffer
+    pub fn render_frame_into(
+        project: &FastArtProject,
+        time_sec: f64,
+        fb: &mut FrameBuffer,
+        media_cache: &HashMap<String, FrameBuffer>,
+    ) {
+        crate::exporter::FastArtExporter::render_frame_into(project, time_sec, fb, media_cache)
+    }
+
     /// Renders a project frame and encodes directly to PNG bytes in Rust
     pub fn render_snapshot_png(
         project: &FastArtProject,
