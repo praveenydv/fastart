@@ -183,8 +183,15 @@ export function useProjectMediaAdders({
         return;
       }
 
-      // Also if a video clip is currently selected, update or remove its effect
-      if (selectedClipId && selectedClipType === "video") {
+      // Also if a video or photo/image clip is currently selected, update or remove its effect
+      const isVisualClip = Boolean(
+        selectedClipId &&
+          (selectedClipType === "video" ||
+            selectedClipType === "photo" ||
+            selectedClipType === "image" ||
+            (current.tracks.video || []).some((c) => c.id === selectedClipId))
+      );
+      if (isVisualClip) {
         const videoClips = [...(current.tracks.video || [])];
         const vIdx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (vIdx >= 0) {
@@ -482,8 +489,16 @@ export function useProjectMediaAdders({
       const isNone = !effType || effType === "none" || effType === "None";
       const effInt = typeof preset === "object" && preset?.intensity !== undefined ? preset.intensity : 0.8;
 
-      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the effect to that clip!
-      if (selectedClipId && selectedClipType === "video") {
+      // 1. VISUAL CLIP ATTACHED: If a video or photo/image clip is currently selected, attach the effect to that clip!
+      const isVisualClip = Boolean(
+        selectedClipId &&
+          (selectedClipType === "video" ||
+            selectedClipType === "photo" ||
+            selectedClipType === "image" ||
+            (current.tracks.video || []).some((c) => c.id === selectedClipId))
+      );
+
+      if (isVisualClip) {
         const videoClips = [...(current.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
@@ -505,7 +520,7 @@ export function useProjectMediaAdders({
           });
           addNotification({
             title: isNone ? "Effect Removed" : "Effect Applied",
-            message: isNone ? "Effect cleared from video clip." : `Attached to selected video clip.`,
+            message: isNone ? "Effect cleared from clip." : `Attached to selected clip.`,
             icon: "sparkles",
           });
         }

@@ -18,65 +18,57 @@ export function usePlayerViewport({ project, fullscreen, isResizing = false }: U
     height: number;
   } | null>(null);
 
-  const handleViewportLayout = useCallback((e: any) => {
-    const layout = e.nativeEvent?.layout;
-    if (layout && layout.width > 0 && layout.height > 0) {
+  const rafLayoutRef = useRef<number | null>(null);
+
+  const applyDims = useCallback((width: number, height: number) => {
+    if (rafLayoutRef.current !== null) {
+      cancelAnimationFrame(rafLayoutRef.current);
+    }
+    rafLayoutRef.current = requestAnimationFrame(() => {
+      rafLayoutRef.current = null;
       setViewportDims((prev) => {
         if (
           prev &&
-          Math.abs(prev.width - layout.width) < 2 &&
-          Math.abs(prev.height - layout.height) < 2
+          Math.abs(prev.width - width) < 2 &&
+          Math.abs(prev.height - height) < 2
         ) {
           return prev;
         }
-        return {
-          width: Math.round(layout.width),
-          height: Math.round(layout.height),
-        };
+        return { width, height };
       });
-    }
+    });
   }, []);
+
+  const handleViewportLayout = useCallback((e: any) => {
+    const layout = e.nativeEvent?.layout;
+    if (layout && layout.width > 0 && layout.height > 0) {
+      applyDims(Math.round(layout.width), Math.round(layout.height));
+    }
+  }, [applyDims]);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     const el = viewportWrapperRef.current as unknown as HTMLElement;
     if (!el || typeof ResizeObserver === "undefined") return;
 
-    let pendingDims: { width: number; height: number } | null = null;
-    let rafScheduled = false;
-
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
-          pendingDims = { width: Math.round(width), height: Math.round(height) };
+          applyDims(Math.round(width), Math.round(height));
         }
-      }
-      if (!rafScheduled && pendingDims) {
-        rafScheduled = true;
-        requestAnimationFrame(() => {
-          rafScheduled = false;
-          if (pendingDims) {
-            setViewportDims((prev) => {
-              if (
-                prev &&
-                Math.abs(prev.width - pendingDims!.width) < 2 &&
-                Math.abs(prev.height - pendingDims!.height) < 2
-              ) {
-                return prev;
-              }
-              return pendingDims;
-            });
-          }
-        });
       }
     });
 
     observer.observe(el);
     return () => {
       observer.disconnect();
+      if (rafLayoutRef.current !== null) {
+        cancelAnimationFrame(rafLayoutRef.current);
+        rafLayoutRef.current = null;
+      }
     };
-  }, []);
+  }, [applyDims]);
 
   const getAspectRatioDimensions = () => {
     const ratioMap: Record<string, number> = {

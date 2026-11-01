@@ -192,6 +192,7 @@ function HomeDashboard({
             <TouchableOpacity
               style={styles.navIconBtn}
               activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               onPress={() => {
                 soundEngine.playSfx("click");
                 onOpenNotifications();
@@ -212,6 +213,7 @@ function HomeDashboard({
             <TouchableOpacity
               style={styles.navIconBtn}
               activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               onPress={() => {
                 soundEngine.playSfx("click");
                 onOpenSettings();

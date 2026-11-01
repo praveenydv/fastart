@@ -105,7 +105,7 @@ export const canvasStyles = {
   canvasBox: {
     backgroundColor: "#000000",
     borderRadius: 8,
-    overflow: "visible" as any,
+    overflow: "hidden" as any,
     position: "relative",
     borderWidth: 1,
     borderColor: "#1E2333",
@@ -114,6 +114,8 @@ export const canvasStyles = {
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
+    maxWidth: "100%",
+    maxHeight: "100%",
   },
   interactiveCanvasLayer: {
     ...StyleSheet.absoluteFill,

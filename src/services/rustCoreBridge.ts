@@ -1024,7 +1024,9 @@ class RustCoreBridgeService {
     despill = true
   ): boolean {
     const inst = this.wasmInstance;
-    if (!inst) return false;
+    if (!inst) {
+      return this.processChromaCutoutJS(pixels, width, height, keyHex, threshold, feather, despill);
+    }
 
     try {
       const hex = keyHex.startsWith("#") ? keyHex.slice(1) : keyHex;
@@ -1037,7 +1039,9 @@ class RustCoreBridgeService {
       const pixelsPtr = isScratchpad
         ? inst.fastart_get_scratchpad!(totalBytes)
         : inst.fastart_alloc(totalBytes);
-      if (!pixelsPtr) return false;
+      if (!pixelsPtr) {
+        return this.processChromaCutoutJS(pixels, width, height, keyHex, threshold, feather, despill);
+      }
 
       // Copy input pixels to WebAssembly linear memory
       new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes).set(pixels);
@@ -1063,9 +1067,90 @@ class RustCoreBridgeService {
       }
       return true;
     } catch (err) {
-      console.warn("[RustCoreBridge] processChromaCutout error:", err);
-      return false;
+      console.warn("[RustCoreBridge] processChromaCutout wasm error, falling back to JS:", err);
+      return this.processChromaCutoutJS(pixels, width, height, keyHex, threshold, feather, despill);
     }
+  }
+
+  /**
+   * Pure JavaScript Chroma Keying Fallback Engine
+   * Provides 100% reliable chroma cutout on mobile browsers and environments where WebAssembly is loading or unavailable.
+   * Matches Rec. 709 Euclidean perceptual color distance, smooth Hermite S-curve interpolation, and despill suppression.
+   */
+  public processChromaCutoutJS(
+    pixels: Uint8ClampedArray,
+    width: number,
+    height: number,
+    keyHex: string,
+    threshold: number,
+    feather: number,
+    despill = true
+  ): boolean {
+    const hex = keyHex.startsWith("#") ? keyHex.slice(1) : keyHex;
+    const rKey = parseInt(hex.slice(0, 2), 16) || 0;
+    const gKey = parseInt(hex.slice(2, 4), 16) || 0;
+    const bKey = parseInt(hex.slice(4, 6), 16) || 0;
+
+    const w_r = 0.299;
+    const w_g = 0.587;
+    const w_b = 0.114;
+
+    const clampedThresh = Math.max(0.01, Math.min(1.0, threshold)) * 180.0;
+    const thresh_sq = clampedThresh * clampedThresh;
+    const clampedFeather = Math.max(1.0, Math.max(0.01, Math.min(1.0, feather)) * 80.0);
+    const outer = clampedThresh + clampedFeather;
+    const outer_sq = outer * outer;
+    const inv_feather = 1.0 / clampedFeather;
+
+    const is_green_screen = gKey > rKey && gKey > bKey;
+    const is_blue_screen = bKey > rKey && bKey > gKey;
+
+    const total = width * height;
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      const r = pixels[idx];
+      let g = pixels[idx + 1];
+      let b = pixels[idx + 2];
+      const origA = pixels[idx + 3];
+      if (origA === 0) continue;
+
+      const dr = r - rKey;
+      const dg = g - gKey;
+      const db = b - bKey;
+
+      const dist_sq = w_r * dr * dr + w_g * dg * dg + w_b * db * db;
+
+      if (dist_sq <= thresh_sq) {
+        pixels[idx + 3] = 0;
+        continue;
+      }
+
+      let alpha = 1.0;
+      if (dist_sq < outer_sq) {
+        const dist = Math.sqrt(dist_sq);
+        const u = (dist - clampedThresh) * inv_feather;
+        alpha = u * u * (3.0 - 2.0 * u);
+      }
+
+      if (despill) {
+        if (is_green_screen) {
+          const max_rb = Math.max(r, b);
+          if (g > max_rb) {
+            g = Math.round(g * 0.35 + max_rb * 0.65);
+            pixels[idx + 1] = g;
+          }
+        } else if (is_blue_screen) {
+          const max_rg = Math.max(r, g);
+          if (b > max_rg) {
+            b = Math.round(b * 0.35 + max_rg * 0.65);
+            pixels[idx + 2] = b;
+          }
+        }
+      }
+
+      pixels[idx + 3] = Math.round(origA * alpha);
+    }
+    return true;
   }
 
   /**

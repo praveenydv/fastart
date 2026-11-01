@@ -10,6 +10,7 @@ interface NativeVideoClipPlayerProps {
   clip: VideoClip;
   currentTime: number;
   isPlaying: boolean;
+  opacity?: number;
   onSelect?: () => void;
 }
 
@@ -17,6 +18,7 @@ function NativeVideoClipPlayerComponent({
   clip,
   currentTime,
   isPlaying,
+  opacity,
 }: NativeVideoClipPlayerProps) {
   const mediaUri = clip.url || clip.thumbnail || '';
   const isVideo =
@@ -49,6 +51,8 @@ function NativeVideoClipPlayerComponent({
       )
     : (clip.trimIn || 0) + elapsed * effSpeed;
 
+  const effectiveOpacity = opacity !== undefined ? Math.max(0, Math.min(1, opacity)) : 1;
+
   if (!mediaUri) {
     return (
       <View style={styles.fallbackBox}>
@@ -68,6 +72,7 @@ function NativeVideoClipPlayerComponent({
         speed={effSpeed}
         fallbackThumbnail={clip.thumbnail}
         isInside={isInside}
+        opacity={effectiveOpacity}
       />
     );
   }
@@ -76,7 +81,7 @@ function NativeVideoClipPlayerComponent({
   return (
     <ExpoImage
       source={{ uri: mediaUri }}
-      style={styles.fullMedia}
+      style={[styles.fullMedia, { opacity: effectiveOpacity }]}
       contentFit="contain"
       cachePolicy="memory-disk"
       transition={120}
@@ -92,6 +97,7 @@ function VideoClipRenderer({
   speed,
   fallbackThumbnail,
   isInside,
+  opacity = 1,
 }: {
   uri: string;
   targetMediaTime: number;
@@ -100,6 +106,7 @@ function VideoClipRenderer({
   speed: number;
   fallbackThumbnail?: string;
   isInside: boolean;
+  opacity?: number;
 }) {
   const [hasError, setHasError] = useState(false);
   const lastSeekTargetRef = React.useRef<number>(-1);
@@ -226,7 +233,7 @@ function VideoClipRenderer({
       return (
         <ExpoImage
           source={{ uri: fallbackThumbnail }}
-          style={styles.fullMedia}
+          style={[styles.fullMedia, { opacity }]}
           contentFit="contain"
           cachePolicy="memory-disk"
           transition={120}
@@ -242,13 +249,15 @@ function VideoClipRenderer({
   }
 
   return (
-    <VideoView
-      player={player}
-      style={styles.fullMedia}
-      contentFit="contain"
-      nativeControls={false}
-      surfaceType="textureView"
-    />
+    <View style={styles.fullMedia} needsOffscreenAlphaCompositing={opacity < 1}>
+      <VideoView
+        player={player}
+        style={[styles.fullMedia, { opacity }]}
+        contentFit="contain"
+        nativeControls={false}
+        surfaceType="textureView"
+      />
+    </View>
   );
 }
 

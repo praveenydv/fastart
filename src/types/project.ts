@@ -309,6 +309,7 @@ export interface TextClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
+  opacity?: number;
   animation?: ClipAnimationConfig | 'none' | 'bounce' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
   style?: TextStyle;
   keyframes?: KeyframePoint[];
@@ -325,6 +326,7 @@ export interface CaptionClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
+  opacity?: number;
   animation?: ClipAnimationConfig | 'none' | 'bounce' | 'karaoke' | 'typewriter' | 'fade' | 'slideUp' | 'slideDown' | 'zoomIn' | 'pulse' | 'glitch' | 'shake' | 'wave' | string;
   style?: TextStyle;
   keyframes?: KeyframePoint[];
@@ -347,6 +349,7 @@ export interface StickerClip {
   position?: { x: number; y: number };
   scale?: number;
   rotation?: number;
+  opacity?: number;
   animation?: ClipAnimationConfig | 'none' | 'bounce' | 'pulse' | 'wave' | 'fade' | 'pop' | string;
   keyframes?: KeyframePoint[];
   trackIndex?: number;

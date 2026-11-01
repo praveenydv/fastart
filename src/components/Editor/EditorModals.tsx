@@ -68,7 +68,7 @@ interface EditorModalsProps {
   } | null;
   setClipToDelete: (val: any) => void;
   handleAddMedia: (media: any[]) => void;
-  handleApplyCutout: (cutout: any) => void;
+  handleApplyCutout: (cutout: any, clipId?: string) => void;
   cutoutInitialMode?: 'auto' | 'chroma';
   handleApplyMotionTracking: (track: any) => void;
   handleAddText: (clip: TextClip) => void;
@@ -291,6 +291,59 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
     return null;
   }
 
+  const handleUpdateOpacity = (opacityPercent: number) => {
+    if (!project || !selectedClip) return;
+    const normVal = Math.max(0, Math.min(100, opacityPercent)) / 100;
+    const targetId = selectedClip.id;
+    const tracks = { ...project.tracks };
+    let matched = false;
+
+    // 1. Video tracks (includes video & photo clips)
+    if (tracks.video) {
+      const idx = tracks.video.findIndex((c: any) => c.id === targetId);
+      if (idx >= 0) {
+        const newVideo = [...tracks.video];
+        newVideo[idx] = { ...newVideo[idx], opacity: normVal };
+        tracks.video = newVideo;
+        matched = true;
+      }
+    }
+    // 2. Text tracks
+    if (!matched && tracks.text) {
+      const idx = tracks.text.findIndex((c: any) => c.id === targetId);
+      if (idx >= 0) {
+        const newText = [...tracks.text];
+        newText[idx] = { ...newText[idx], opacity: normVal };
+        tracks.text = newText;
+        matched = true;
+      }
+    }
+    // 3. Stickers tracks
+    if (!matched && tracks.stickers) {
+      const idx = tracks.stickers.findIndex((c: any) => c.id === targetId);
+      if (idx >= 0) {
+        const newStickers = [...tracks.stickers];
+        newStickers[idx] = { ...newStickers[idx], opacity: normVal };
+        tracks.stickers = newStickers;
+        matched = true;
+      }
+    }
+    // 4. Captions tracks
+    if (!matched && tracks.captions) {
+      const idx = tracks.captions.findIndex((c: any) => c.id === targetId);
+      if (idx >= 0) {
+        const newCaptions = [...tracks.captions];
+        newCaptions[idx] = { ...newCaptions[idx], opacity: normVal };
+        tracks.captions = newCaptions;
+        matched = true;
+      }
+    }
+
+    if (matched) {
+      updateProjectWithHistory({ ...project, tracks });
+    }
+  };
+
   const renderedContent = (
     <>
       {/* LAZY LOADED MODALS ON MOBILE (Only mounted when active to save CPU and RAM) */}
@@ -419,7 +472,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           onClose={handleCancel}
           onApply={handleApply}
           activeFilter={
-            selectedClipType === "video"
+            selectedClipType === "video" || selectedClipType === "photo" || selectedClipType === "image"
               ? (selectedClip as VideoClip)?.filter || "normal"
               : selectedClipType === "effects" || selectedClipType === "effect"
               ? (selectedClip as EffectClip)?.filter || ((selectedClip as EffectClip)?.type?.startsWith("filter_") ? (selectedClip as EffectClip).type.replace(/^filter_/, "") : "normal")
@@ -440,7 +493,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           activeEffect={
             selectedClipType === "effects" || selectedClipType === "effect"
               ? (selectedClip as EffectClip)?.type
-              : selectedClipType === "video"
+              : (selectedClipType === "video" || selectedClipType === "photo" || selectedClipType === "image")
               ? (typeof (selectedClip as VideoClip)?.effect === "string"
                   ? (selectedClip as VideoClip)?.effect
                   : (selectedClip as any)?.effect?.type || (selectedClip as any)?.effect?.id || "none")
@@ -449,7 +502,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           activeIntensity={
             selectedClipType === "effects" || selectedClipType === "effect"
               ? (selectedClip as EffectClip)?.intensity
-              : selectedClipType === "video"
+              : (selectedClipType === "video" || selectedClipType === "photo" || selectedClipType === "image")
               ? (selectedClip as any)?.effectIntensity
               : undefined
           }
@@ -731,28 +784,10 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             showReset={true}
             showSteppers={true}
             accentColor="#00F2FE"
-            onChange={(val) => {
-              if (project) {
-                const tracks = { ...project.tracks };
-                const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                if (idx >= 0) {
-                  targetList[idx] = { ...targetList[idx], opacity: Math.max(0, Math.min(100, val)) / 100 };
-                  updateProjectWithHistory({ ...project, tracks });
-                }
-              }
-            }}
+            onChange={(val) => handleUpdateOpacity(val)}
             onReset={() => {
               soundEngine.playSfx("click");
-              if (project) {
-                const tracks = { ...project.tracks };
-                const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                if (idx >= 0) {
-                  targetList[idx] = { ...targetList[idx], opacity: 1.0 };
-                  updateProjectWithHistory({ ...project, tracks });
-                }
-              }
+              handleUpdateOpacity(100);
             }}
           />
           <View style={[modalStyles.chipRow, { marginTop: 10 }]}>
@@ -765,15 +800,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
                   style={[modalStyles.chipBtn, isSel && modalStyles.chipBtnActive]}
                   onPress={() => {
                     soundEngine.playSfx("click");
-                    if (project) {
-                      const tracks = { ...project.tracks };
-                      const targetList = (tracks as any)[selectedClipType] || tracks.video;
-                      const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
-                      if (idx >= 0) {
-                        targetList[idx] = { ...targetList[idx], opacity: op / 100 };
-                        updateProjectWithHistory({ ...project, tracks });
-                      }
-                    }
+                    handleUpdateOpacity(op);
                   }}
                 >
                   <Text style={[modalStyles.chipText, isSel && modalStyles.chipTextActive]}>

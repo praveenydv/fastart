@@ -130,6 +130,17 @@ function Player({
   const canvasBufferWidth = Math.round(effectiveBufferW * dpr);
   const canvasBufferHeight = Math.round(effectiveBufferH * dpr);
 
+  const targetRatio = useMemo(() => {
+    const ratioMap: Record<string, number> = {
+      "9:16": 9 / 16,
+      "16:9": 16 / 9,
+      "1:1": 1 / 1,
+      "4:5": 4 / 5,
+      "2.35:1": 235 / 100,
+    };
+    return ratioMap[project.aspectRatio] || 9 / 16;
+  }, [project.aspectRatio]);
+
   // Web VideoRenderer Canvas hook
   const { canvasRef, canvasBoxRef, rendererRef } = usePlayerWebRenderer({
     project,
@@ -651,6 +662,9 @@ function Player({
             {
               width: boxWidth,
               height: canvasHeight,
+              aspectRatio: targetRatio,
+              maxWidth: "100%",
+              maxHeight: "100%",
               backgroundColor: effectiveCanvasBg,
             },
           ]}

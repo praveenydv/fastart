@@ -41,7 +41,7 @@ function Header({
 }: HeaderProps) {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 420;
-  const isVerySmallScreen = width < 370;
+  const isVerySmallScreen = width < 360;
 
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
@@ -59,15 +59,16 @@ function Header({
   return (
     <View style={[styles.header, isSmallScreen && styles.headerCompact]}>
       {/* Left: Back button & Resolution/Aspect Ratio Pill */}
-      <View style={[styles.leftSection, isSmallScreen && { gap: 6 }]}>
+      <View style={styles.leftSection}>
         {!hideBackButton && (
           <TouchableOpacity
-            style={[styles.backButton, isSmallScreen && styles.backButtonSmall]}
+            style={styles.backButton}
             onPress={onBackToHome}
             activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 8 }}
             accessibilityLabel="Back to Home"
           >
-            <Ionicons name="chevron-back" size={isSmallScreen ? 18 : 20} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         )}
 
@@ -79,6 +80,7 @@ function Header({
             if (onOpenCanvasModal) onOpenCanvasModal();
           }}
           activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
           accessibilityLabel="Change Canvas Format"
         >
           <Text style={styles.ratioText}>{currentRatio.label}</Text>
@@ -88,46 +90,46 @@ function Header({
               <Text style={styles.resolutionText}>1080P</Text>
             </>
           )}
-          <Ionicons name="chevron-down" size={11} color="#8E8E93" style={{ marginLeft: 3 }} />
+          <Ionicons name="chevron-down" size={12} color="#94A3B8" style={{ marginLeft: 3 }} />
         </TouchableOpacity>
 
         {/* Project Title (Clean, tap to rename) */}
-        <TouchableOpacity
-          style={[
-            styles.titlePill,
-            isSmallScreen && { maxWidth: isVerySmallScreen ? 80 : 110, paddingHorizontal: 4 },
-          ]}
-          onPress={() => {
-            soundEngine.playSfx("click");
-            setEditedTitle(displayTitle);
-            setIsRenaming(true);
-          }}
-          activeOpacity={0.7}
-          accessibilityLabel="Rename Project"
-        >
-          <Text style={styles.titleText} numberOfLines={1}>
-            {displayTitle}
-          </Text>
-        </TouchableOpacity>
+        {!isVerySmallScreen && (
+          <TouchableOpacity
+            style={styles.titlePill}
+            onPress={() => {
+              soundEngine.playSfx("click");
+              setEditedTitle(displayTitle);
+              setIsRenaming(true);
+            }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            accessibilityLabel="Rename Project"
+          >
+            <Text style={styles.titleText} numberOfLines={1}>
+              {displayTitle}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Right: Undo / Redo & Export CTA */}
-      <View style={[styles.rightSection, isSmallScreen && { gap: 5 }]}>
+      <View style={styles.rightSection}>
         {/* Undo */}
         <TouchableOpacity
           style={[
             styles.historyButton,
-            isSmallScreen && styles.historyButtonSmall,
             !canUndo && styles.disabledButton,
           ]}
           onPress={onUndo}
           disabled={!canUndo}
           activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 6, right: 4 }}
           accessibilityLabel="Undo"
         >
           <Ionicons
             name="arrow-undo-outline"
-            size={isSmallScreen ? 14 : 16}
+            size={17}
             color={canUndo ? "#FFFFFF" : "#64748B"}
           />
         </TouchableOpacity>
@@ -136,17 +138,17 @@ function Header({
         <TouchableOpacity
           style={[
             styles.historyButton,
-            isSmallScreen && styles.historyButtonSmall,
             !canRedo && styles.disabledButton,
           ]}
           onPress={onRedo}
           disabled={!canRedo}
           activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 4, right: 6 }}
           accessibilityLabel="Redo"
         >
           <Ionicons
             name="arrow-redo-outline"
-            size={isSmallScreen ? 14 : 16}
+            size={17}
             color={canRedo ? "#FFFFFF" : "#64748B"}
           />
         </TouchableOpacity>
@@ -156,10 +158,11 @@ function Header({
           style={[styles.exportButton, isSmallScreen && styles.exportButtonCompact]}
           onPress={onOpenExport}
           activeOpacity={0.85}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={13} color="#000000" style={{ marginRight: 2 }} />
-          <Text style={[styles.exportText, isSmallScreen && { fontSize: 11.5 }]}>Export</Text>
+          <Ionicons name="arrow-up" size={14} color="#000000" style={{ marginRight: 2 }} />
+          <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
 
@@ -234,20 +237,20 @@ function Header({
 
 const styles = StyleSheet.create({
   header: {
-    height: 48,
-    backgroundColor: THEME_COLORS.background,
+    height: 54,
+    backgroundColor: "#08090E",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.border,
+    borderBottomColor: "#1F2637",
     zIndex: 10,
     flexShrink: 0,
   },
   headerCompact: {
-    paddingHorizontal: 8,
-    height: 44,
+    paddingHorizontal: 10,
+    height: 52,
   },
   leftSection: {
     flexDirection: "row",
@@ -257,106 +260,108 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: THEME_COLORS.surface,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: THEME_COLORS.border,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
   backButtonSmall: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
   },
   ratioPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: THEME_COLORS.surface,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
+    backgroundColor: "#131826",
+    paddingHorizontal: 10,
+    height: 36,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: THEME_COLORS.border,
+    borderColor: "#1F2637",
     flexShrink: 0,
   },
   ratioPillCompact: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    height: 36,
+    borderRadius: 9,
   },
   ratioText: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 11,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
   },
   ratioDivider: {
-    color: THEME_COLORS.textMuted,
+    color: "#64748B",
     fontSize: 10,
     marginHorizontal: 4,
   },
   resolutionText: {
-    color: THEME_COLORS.textSecondary,
-    fontSize: 11,
+    color: "#94A3B8",
+    fontSize: 11.5,
     fontWeight: "600",
   },
   titlePill: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    maxWidth: 160,
+    height: 36,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    maxWidth: 140,
     flexShrink: 1,
   },
   titleText: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#E2E8F0",
+    fontSize: 12.5,
+    fontWeight: "500",
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flexShrink: 0,
   },
   historyButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: THEME_COLORS.surface,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: THEME_COLORS.border,
+    borderColor: "#1F2637",
     alignItems: "center",
     justifyContent: "center",
   },
   historyButtonSmall: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 36,
+    height: 36,
+    borderRadius: 9,
   },
   disabledButton: {
-    opacity: 0.45,
+    opacity: 0.35,
   },
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
-    backgroundColor: THEME_COLORS.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 6.5,
-    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    height: 36,
+    paddingHorizontal: 13,
+    borderRadius: 9,
     shadowColor: "#000",
     shadowOpacity: 0.25,
     shadowRadius: 4,
   },
   exportButtonCompact: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 7,
+    height: 36,
+    paddingHorizontal: 11,
+    borderRadius: 9,
   },
   exportText: {
-    color: THEME_COLORS.primaryText,
-    fontSize: 12,
+    color: "#000000",
+    fontSize: 12.5,
     fontWeight: "700",
   },
   modalOverlay: {

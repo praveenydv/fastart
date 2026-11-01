@@ -10,7 +10,12 @@ import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking, FILTER_CSS_MAP, scaleCssFilter } from "../../utils/renderer/rendererEffects";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
-import { buildHslCssFilter } from "../../utils/hslEngine";
+import {
+  buildHslCssFilter,
+  isHslActive,
+  HSL_CHANNEL_KEYS,
+  HSL_CHANNEL_METRICS,
+} from "../../utils/hslEngine";
 
 interface PlayerNativeCompositorProps {
   activeVideos: any[];
@@ -126,6 +131,1040 @@ function renderMosaicCensor(clip: any, clipW: number, clipH: number, currentTime
         webBackdropStyle,
       ]}
     />
+  );
+}
+
+const FILTER_TINT_CONFIG: Record<string, { colors?: [string, string, ...string[]]; bg?: string; contrast?: boolean }> = {
+  cyberpunk: { colors: ["rgba(217, 70, 239, 0.36)", "rgba(0, 242, 254, 0.30)"] },
+  teal_orange: { colors: ["rgba(0, 242, 254, 0.30)", "rgba(255, 125, 20, 0.28)"] },
+  lut_teal_orange_film: { colors: ["rgba(0, 242, 254, 0.30)", "rgba(255, 125, 20, 0.28)"] },
+  vintage: { colors: ["rgba(180, 83, 9, 0.32)", "rgba(217, 119, 6, 0.22)"], bg: "rgba(245, 158, 11, 0.12)" },
+  sepia_antique: { colors: ["rgba(180, 83, 9, 0.38)", "rgba(217, 119, 6, 0.24)"] },
+  noir: { bg: "rgba(18, 18, 22, 0.76)", contrast: true },
+  bw: { bg: "rgba(18, 18, 22, 0.76)", contrast: true },
+  warm_sunset: { colors: ["rgba(245, 158, 11, 0.30)", "rgba(239, 68, 68, 0.20)"] },
+  cinematic_warm: { colors: ["rgba(245, 158, 11, 0.28)", "rgba(239, 68, 68, 0.18)"] },
+  cold_moody: { colors: ["rgba(15, 23, 42, 0.34)", "rgba(56, 189, 248, 0.24)"] },
+  emerald: { colors: ["rgba(16, 185, 129, 0.32)", "rgba(5, 150, 105, 0.22)"] },
+  matrix_code: { colors: ["rgba(16, 185, 129, 0.34)", "rgba(5, 150, 105, 0.24)"] },
+  vhs_retro: { colors: ["rgba(225, 29, 72, 0.26)", "rgba(168, 85, 247, 0.20)"] },
+  pastel_dream: { colors: ["rgba(244, 114, 182, 0.26)", "rgba(192, 132, 252, 0.22)"] },
+  high_contrast: { colors: ["rgba(0, 0, 0, 0.28)", "transparent", "rgba(0, 0, 0, 0.28)"], contrast: true },
+  polaroid_fade: { bg: "rgba(203, 213, 225, 0.24)" },
+  solar_pop: { colors: ["rgba(168, 85, 247, 0.28)", "rgba(245, 158, 11, 0.24)"] },
+  lut_kodak_2383: { colors: ["rgba(217, 119, 6, 0.32)", "rgba(180, 83, 9, 0.24)"] },
+  lut_fuji_pro400h: { colors: ["rgba(56, 189, 248, 0.26)", "rgba(16, 185, 129, 0.20)"] },
+  lut_bleach_bypass: { bg: "rgba(226, 232, 240, 0.28)", contrast: true },
+};
+
+function renderNativeFilterOverlay(filterId?: string, customLut?: any, intensity: number = 1.0) {
+  const normIntensity = Math.max(0, Math.min(1, intensity));
+  if (normIntensity <= 0.01) return null;
+
+  // 1. Custom 3D LUT
+  if (customLut) {
+    const lutKey = (customLut.id || customLut.name || "").toLowerCase().replace(/[-_]/g, "");
+    if (lutKey.includes("kodak") || lutKey.includes("2383")) {
+      return (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <LinearGradient
+            colors={[
+              `rgba(217, 119, 6, ${(0.32 * normIntensity).toFixed(3)})`,
+              `rgba(180, 83, 9, ${(0.24 * normIntensity).toFixed(3)})`,
+            ]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      );
+    }
+    if (lutKey.includes("fuji") || lutKey.includes("pro400h")) {
+      return (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <LinearGradient
+            colors={[
+              `rgba(56, 189, 248, ${(0.26 * normIntensity).toFixed(3)})`,
+              `rgba(16, 185, 129, ${(0.20 * normIntensity).toFixed(3)})`,
+            ]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      );
+    }
+    if (lutKey.includes("bleach")) {
+      return (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(226, 232, 240, ${(0.28 * normIntensity).toFixed(3)})` }]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 0, 0, ${(0.16 * normIntensity).toFixed(3)})` }]} />
+        </View>
+      );
+    }
+    const tint = customLut.color || "#00F2FE";
+    return (
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: tint, opacity: Math.min(0.35, 0.24 * normIntensity) },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 2. Preset Filter
+  const f = (filterId || "").toLowerCase();
+  if (!f || f === "none" || f === "normal") return null;
+
+  const cfg = FILTER_TINT_CONFIG[f];
+  if (!cfg) return null;
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {cfg.colors && (
+        <LinearGradient
+          colors={cfg.colors.map((c) => {
+            const match = c.match(/rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)/i);
+            if (match) {
+              const alpha = Math.min(1, Math.max(0, parseFloat(match[4]) * normIntensity)).toFixed(3);
+              return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${alpha})`;
+            }
+            return c;
+          }) as any}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      {cfg.bg && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: cfg.bg.replace(/([0-9.]+)\s*\)$/, (m, a) => `${(parseFloat(a) * normIntensity).toFixed(3)})`),
+            },
+          ]}
+        />
+      )}
+      {cfg.contrast && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: `rgba(255, 255, 255, ${(0.07 * normIntensity).toFixed(3)})`,
+            },
+          ]}
+        />
+      )}
+    </View>
+  );
+}
+
+const HSL_CHANNEL_TINTS: Record<string, string> = {
+  red: "#EF4444",
+  orange: "#F97316",
+  yellow: "#EAB308",
+  green: "#22C55E",
+  cyan: "#06B6D4",
+  blue: "#3B82F6",
+  purple: "#A855F7",
+  magenta: "#EC4899",
+};
+
+function renderNativeHslOverlay(hslAdjustments?: any) {
+  if (!hslAdjustments || !isHslActive(hslAdjustments)) return null;
+
+  let totalWeight = 0;
+  let weightedHue = 0;
+  let weightedSat = 0;
+  let weightedLum = 0;
+  let maxChannelDev = 0;
+  let dominantChannel = "red";
+  let dominantSat = 0;
+  let dominantHue = 0;
+
+  for (let i = 0; i < HSL_CHANNEL_KEYS.length; i++) {
+    const ch = HSL_CHANNEL_KEYS[i];
+    const cfg = hslAdjustments[ch];
+    if (!cfg) continue;
+    const metric = HSL_CHANNEL_METRICS[ch];
+    if (!metric) continue;
+
+    const h = cfg.hue || 0;
+    const s = cfg.saturation || 0;
+    const l = cfg.luminance || 0;
+    if (h === 0 && s === 0 && l === 0) continue;
+
+    const w = metric.weight;
+    totalWeight += w;
+    weightedHue += h * w;
+    weightedSat += s * w;
+    weightedLum += l * w;
+
+    const dev = Math.abs(s) * 1.2 + Math.abs(l) * 0.8 + Math.abs(h) * 0.5;
+    if (dev > maxChannelDev) {
+      maxChannelDev = dev;
+      dominantChannel = ch;
+      dominantSat = s;
+      dominantHue = h;
+    }
+  }
+
+  if (totalWeight <= 0) return null;
+
+  const effectiveLum = weightedLum / totalWeight;
+  const effectiveSat = weightedSat / totalWeight;
+  const dominantColor = HSL_CHANNEL_TINTS[dominantChannel] || "#00F2FE";
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {effectiveLum < -2 && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: "#000000",
+              opacity: Math.min(0.85, (Math.abs(effectiveLum) / 100) * 0.72),
+            },
+          ]}
+        />
+      )}
+      {effectiveLum > 2 && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: "#FFFFFF",
+              opacity: Math.min(0.55, (effectiveLum / 100) * 0.42),
+            },
+          ]}
+        />
+      )}
+      {effectiveSat < -2 && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: "#1C1C22",
+              opacity: Math.min(0.82, (Math.abs(effectiveSat) / 100) * 0.68),
+            },
+          ]}
+        />
+      )}
+      {(Math.abs(dominantSat) > 4 || Math.abs(dominantHue) > 4) && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: dominantColor,
+              opacity: Math.min(
+                0.32,
+                (Math.abs(dominantSat) / 100) * 0.18 + (Math.abs(dominantHue) / 180) * 0.16,
+              ),
+            },
+          ]}
+        />
+      )}
+    </View>
+  );
+}
+
+function renderNativeCutoutOverlay(vid: any) {
+  const cutout = vid.cutout || vid.transform?.cutout;
+  if (!cutout || !cutout.enabled) return null;
+
+  const hasStroke =
+    cutout.strokeColor &&
+    cutout.strokeColor !== "none" &&
+    cutout.strokeColor !== "transparent" &&
+    cutout.strokeWidth &&
+    cutout.strokeWidth > 0;
+
+  if (!hasStroke) return null;
+
+  const strokeW = Math.max(1, Math.min(16, cutout.strokeWidth || 3));
+  const strokeColor = cutout.strokeColor || "#00F2FE";
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderWidth: strokeW,
+            borderColor: strokeColor,
+            borderRadius: 6,
+            shadowColor: strokeColor,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.9,
+            shadowRadius: strokeW * 2.5,
+            elevation: strokeW * 2,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+function renderEffectContent(
+  eff: { id?: string; type?: string; filter?: string; intensity?: number },
+  width: number,
+  height: number,
+  currentTime: number,
+): React.ReactNode {
+  const intensity = eff.intensity !== undefined ? eff.intensity : 0.8;
+  const type = (eff.type || "").toLowerCase().replace(/[-_]/g, "");
+
+  // 0. Filter clip on timeline
+  if (eff.filter || eff.type?.startsWith("filter_")) {
+    const filterName = (eff.filter || eff.type.replace(/^filter_/, "")).toLowerCase();
+    let tint = "rgba(0,0,0,0)";
+    if (filterName === "cyberpunk") tint = `rgba(0, 242, 254, ${0.16 * intensity})`;
+    else if (filterName === "warm" || filterName === "vintage" || filterName === "sunset") tint = `rgba(255, 160, 0, ${0.15 * intensity})`;
+    else if (filterName === "cool" || filterName === "frost") tint = `rgba(0, 140, 255, ${0.14 * intensity})`;
+    else if (filterName === "bw" || filterName === "noir") tint = `rgba(20, 20, 20, ${0.35 * intensity})`;
+    else if (filterName === "cinematic") tint = `rgba(15, 25, 45, ${0.18 * intensity})`;
+    else if (filterName === "emerald") tint = `rgba(16, 185, 129, ${0.14 * intensity})`;
+    else tint = `rgba(255, 255, 255, ${0.08 * intensity})`;
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+      </View>
+    );
+  }
+
+  // 1. Dark Vignette / Cinematic Border
+  if (type === "vignette" || type === "darkborder") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient
+          colors={["rgba(0,0,0," + (0.75 * intensity) + ")", "transparent", "transparent", "rgba(0,0,0," + (0.75 * intensity) + ")"]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(20 * intensity),
+              borderColor: "rgba(0, 0, 0, " + (0.65 * intensity) + ")",
+              borderRadius: 4,
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 2. Cinema Letterbox Bars
+  if (type === "cinematic" || type === "letterbox" || type === "bars") {
+    const barH = Math.round(height * 0.12 * intensity);
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: barH, backgroundColor: "#000000" }} />
+        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: barH, backgroundColor: "#000000" }} />
+      </View>
+    );
+  }
+
+  // 3. Glitch Shake
+  if (type === "glitch") {
+    const shift1 = Math.round(((Math.sin(currentTime * 45) * 6) + 4) * intensity);
+    const shift2 = Math.round(((Math.cos(currentTime * 38) * 6) + 4) * intensity);
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              left: shift1,
+              backgroundColor: "rgba(0, 242, 254, " + (0.22 * intensity) + ")",
+            },
+          ]}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              left: -shift2,
+              backgroundColor: "rgba(255, 0, 80, " + (0.22 * intensity) + ")",
+            },
+          ]}
+        />
+        <View
+          style={{
+            position: "absolute",
+            top: "28%",
+            left: shift1 * 1.5,
+            right: 0,
+            height: 16,
+            backgroundColor: "rgba(0, 242, 254, " + (0.4 * intensity) + ")",
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            top: "62%",
+            left: -shift2 * 1.5,
+            right: 0,
+            height: 12,
+            backgroundColor: "rgba(255, 0, 80, " + (0.4 * intensity) + ")",
+          }}
+        />
+      </View>
+    );
+  }
+
+  // 4. RGB Split
+  if (type === "rgbsplit") {
+    const offset = Math.max(3, Math.round(6 * intensity));
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              left: offset,
+              backgroundColor: "rgba(0, 242, 254, " + (0.28 * intensity) + ")",
+            },
+          ]}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              left: -offset,
+              backgroundColor: "rgba(255, 0, 80, " + (0.28 * intensity) + ")",
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 5. Action Shake
+  if (type === "shake" || type === "earthquake") {
+    const jx = Math.round((Math.sin(currentTime * 36) * 5) * intensity);
+    const jy = Math.round((Math.cos(currentTime * 48) * 5) * intensity);
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            transform: [{ translateX: jx }, { translateY: jy }],
+          },
+        ]}
+      />
+    );
+  }
+
+  // 6. Zoom Pulse / Heartbeat
+  if (type === "zoompulse" || type === "pulse" || type === "heartbeat") {
+    const pulse = (0.04 + Math.abs(Math.sin(currentTime * 8)) * 0.08) * intensity;
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderWidth: Math.round(4 + pulse * 20),
+            borderColor: "rgba(0, 242, 254, " + (0.45 + pulse * 4) + ")",
+            borderRadius: 6,
+          },
+        ]}
+      />
+    );
+  }
+
+  // 7. Neon Glow Edge
+  if (type === "neonedge" || type === "neon") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(6 * intensity),
+              borderColor: "rgba(0, 242, 254, 0.85)",
+              borderRadius: 8,
+            },
+          ]}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              margin: 4,
+              borderWidth: Math.round(2 * intensity),
+              borderColor: "rgba(255, 0, 80, 0.7)",
+              borderRadius: 6,
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 8. Strobe Flash
+  if (type === "flash") {
+    const flashPulse = Math.abs(Math.sin(currentTime * 16));
+    const alpha = Math.min(0.85, (0.28 + flashPulse * 0.55) * intensity);
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: "rgba(255, 255, 255, " + alpha + ")",
+          },
+        ]}
+      />
+    );
+  }
+
+  // 9. Retro VHS & CRT Screen
+  if (type === "vhs" || type === "crttv") {
+    const barY = Math.floor(((currentTime * 180) + 40) % Math.max(20, height - 20));
+    const secs = Math.floor(currentTime).toString().padStart(2, "0");
+    const ms = Math.floor((currentTime % 1) * 30).toString().padStart(2, "0");
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0, 0, 0, 0.15)" }]} />
+        <View
+          style={{
+            position: "absolute",
+            top: barY,
+            left: 0,
+            right: 0,
+            height: 14,
+            backgroundColor: "rgba(255, 255, 255, 0.28)",
+          }}
+        />
+        <View style={{ position: "absolute", bottom: 16, left: 16, flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={{ color: "#00FF66", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontWeight: "800", fontSize: 13, textShadowColor: "#000", textShadowRadius: 3 }}>
+            PLAY ▶ SP 00:{secs}:{ms}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // 10. Film Grain & 1920s Old Film
+  if (type === "filmgrain" || type === "oldfilm") {
+    const jitterLine = Math.floor(((currentTime * 320) + 80) % (width || 300));
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(160, 100, 30, " + (0.22 * intensity) + ")" }]} />
+        <View style={{ position: "absolute", top: 0, bottom: 0, left: jitterLine, width: 2, backgroundColor: "rgba(255, 255, 255, 0.35)" }} />
+      </View>
+    );
+  }
+
+  // 11. Prism Light Leak & Sun Flare
+  if (type === "prismleak" || type === "sunflare" || type === "lightleak") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient
+          colors={["rgba(255, 170, 0, " + (0.45 * intensity) + ")", "transparent", "rgba(255, 210, 60, " + (0.35 * intensity) + ")"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+    );
+  }
+
+  // 12. Cyberpunk Dual
+  if (type === "cyberpunkdual" || type === "cyberpunk") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient
+          colors={["rgba(0, 242, 254, " + (0.32 * intensity) + ")", "transparent", "rgba(255, 0, 128, " + (0.32 * intensity) + ")"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+    );
+  }
+
+  // 13. Rainbow Psyche Flow
+  if (type === "rainbowflow" || type === "rainbow") {
+    const hue = Math.floor((currentTime * 120) % 360);
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: `hsla(${hue}, 90%, 50%, ${0.18 * intensity})`,
+          },
+        ]}
+      />
+    );
+  }
+
+  // 14. Blur / Cinematic Blur / Tilt Shift
+  if (type === "blur" || type === "blurcinematic" || type === "tiltshift" || type === "gaussianblur" || type === "radialblur" || type === "motionblur") {
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: "rgba(15, 23, 42, " + (0.36 * intensity) + ")",
+          },
+        ]}
+      />
+    );
+  }
+
+  // 15. Mirror & Kaleidoscope Split
+  if (type === "mirror" || type === "kaleidoscope") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, opacity: 0.12 * intensity, backgroundColor: "rgba(0, 242, 254, 0.2)" }} />
+      </View>
+    );
+  }
+
+  // 16. Thermal Infrared Heatmap
+  if (type === "thermal") {
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: "rgba(255, 0, 128, " + (0.24 * intensity) + ")",
+          },
+        ]}
+      />
+    );
+  }
+
+  // 17. AI Beauty Smooth Glow
+  if (type === "beautysmooth" || type === "aibeautysmooth") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient
+          colors={[
+            `rgba(255, 235, 230, ${0.25 * intensity})`,
+            `rgba(255, 215, 210, ${0.1 * intensity})`,
+            `rgba(255, 240, 235, ${0.2 * intensity})`,
+          ]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(12 * intensity),
+              borderColor: `rgba(255, 255, 255, ${0.2 * intensity})`,
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 18. AI Cyberpunk Glow
+  if (type === "aicyberpunk") {
+    const glowThick = Math.max(3, Math.round(6 * intensity));
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient
+          colors={[`rgba(0, 242, 254, ${0.32 * intensity})`, "transparent", `rgba(255, 0, 128, ${0.32 * intensity})`]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderTopWidth: glowThick,
+              borderTopColor: "rgba(0, 242, 254, 0.85)",
+              borderBottomWidth: glowThick,
+              borderBottomColor: "rgba(255, 0, 128, 0.85)",
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 19. AI Anime Manga
+  if (type === "aimanga" || type === "manga") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 0, 0, ${0.28 * intensity})` }]} />
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 16, backgroundColor: `rgba(0, 0, 0, ${0.7 * intensity})` }} />
+        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 16, backgroundColor: `rgba(0, 0, 0, ${0.7 * intensity})` }} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.max(4, Math.round(8 * intensity)),
+              borderColor: "rgba(255, 255, 255, 0.35)",
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 20. AI Matrix Cascade
+  if (type === "aimatrix" || type === "matrix") {
+    const barY = Math.floor(((currentTime * 220) + 50) % (height || 400));
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 255, 100, ${0.12 * intensity})` }]} />
+        <View
+          style={{
+            position: "absolute",
+            top: barY,
+            left: 0,
+            right: 0,
+            height: 14,
+            backgroundColor: `rgba(0, 255, 120, ${0.35 * intensity})`,
+          }}
+        />
+        <View style={{ position: "absolute", top: 12, right: 14 }}>
+          <Text style={{ color: "#00FF66", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontWeight: "800", fontSize: 11, textShadowColor: "#000", textShadowRadius: 3 }}>
+            AI MATRIX // RUNNING
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // 21. AI Radiant Aura
+  if (type === "aiaura" || type === "aura") {
+    const pulse = (0.5 + Math.sin(currentTime * 6) * 0.35) * intensity;
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(10 * (0.8 + pulse * 0.5)),
+              borderColor: `rgba(0, 242, 254, ${0.5 + pulse * 0.4})`,
+              borderRadius: 12,
+            },
+          ]}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              margin: 6,
+              borderWidth: Math.round(4 * (0.8 + pulse * 0.5)),
+              borderColor: `rgba(255, 0, 128, ${0.45 + pulse * 0.4})`,
+              borderRadius: 8,
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 22. AI Night Vision
+  if (type === "ainightvision" || type === "nightvision") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(10, 255, 60, ${0.22 * intensity})` }]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(24 * intensity),
+              borderColor: "rgba(0, 0, 0, 0.7)",
+              borderRadius: Math.round(Math.min(width, height) * 0.45),
+            },
+          ]}
+        />
+        <View style={{ position: "absolute", top: 12, left: 14 }}>
+          <Text style={{ color: "#00FF66", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontWeight: "800", fontSize: 11, textShadowColor: "#000", textShadowRadius: 3 }}>
+            AI NVG-GEN4 // 1080P
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // 23. AI Cel Cartoon
+  if (type === "aicartoon" || type === "cartoon") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(8 * intensity),
+              borderColor: "rgba(255, 230, 0, 0.8)",
+              borderRadius: 6,
+            },
+          ]}
+        />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(255, 230, 0, ${0.08 * intensity})` }]} />
+      </View>
+    );
+  }
+
+  // 24. Water Ripple
+  if (type === "waterripple") {
+    const rScale = 1.0 + Math.sin(currentTime * 6) * 0.05 * intensity;
+    return (
+      <View
+        key={eff.id}
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            alignItems: "center",
+            justifyContent: "center",
+          },
+        ]}
+      >
+        <View
+          style={{
+            width: Math.round(180 * rScale),
+            height: Math.round(180 * rScale),
+            borderRadius: 999,
+            borderWidth: 3,
+            borderColor: "rgba(0, 242, 254, " + (0.55 * intensity) + ")",
+          }}
+        />
+      </View>
+    );
+  }
+
+  // 25. Fisheye Lens
+  if (type === "fisheye") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: Math.round(28 * intensity),
+              borderColor: "rgba(0, 0, 0, 0.75)",
+              borderRadius: Math.round(Math.min(width, height) * 0.45),
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  // 26. Mosaic Pixelate Blur
+  if (type === "mosaicblur") {
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 0, 0, ${0.35 * intensity})` }]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: 2,
+              borderColor: "rgba(0, 242, 254, 0.3)",
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
+  return null;
+}
+
+function renderNativeClipEffectOverlay(
+  vid: any,
+  clipW: number,
+  clipH: number,
+  currentTime: number,
+) {
+  const effType = typeof vid.effect === "string" ? vid.effect : (vid.effect?.type || vid.effect?.id);
+  if (!effType || effType === "none" || effType === "None") return null;
+  const intensity = vid.effectIntensity !== undefined ? vid.effectIntensity : 0.8;
+  return renderEffectContent(
+    { id: `clip-eff-${vid.id}`, type: effType, intensity },
+    clipW,
+    clipH,
+    currentTime,
+  );
+}
+
+function renderMaskedClipContent(
+  mediaNode: React.ReactNode,
+  mask: any,
+  w: number,
+  h: number,
+  canvasBg: string = "#000000",
+) {
+  if (!mask || !mask.shape || mask.shape === "none") {
+    return mediaNode;
+  }
+
+  // On Web, CSS mask handles clipping via webMaskStyle
+  if (Platform.OS === "web") {
+    return mediaNode;
+  }
+
+  // On Mobile Native (iOS & Android):
+  const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
+  const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
+  const posX = mask.x || 0; // % offset from clip center (-50..50)
+  const posY = mask.y || 0; // % offset from clip center (-50..50)
+  const rotDeg = mask.rotation || 0;
+  const inverted = Boolean(mask.inverted);
+  const roundness = mask.roundness !== undefined ? mask.roundness : 16;
+  const shape = mask.shape;
+
+  let boxW = Math.max(4, Math.round(w * (effW / 100)));
+  let boxH = Math.max(4, Math.round(h * (effH / 100)));
+  let boxLeft = Math.round((w - boxW) / 2 + (posX / 100) * w);
+  let boxTop = Math.round((h - boxH) / 2 + (posY / 100) * h);
+  let bRadius = 0;
+
+  if (shape === "circle") {
+    bRadius = Math.round(Math.min(boxW, boxH) / 2);
+  } else if (shape === "rectangle") {
+    bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
+  } else if (shape === "mirror") {
+    boxW = w;
+    boxLeft = 0;
+    boxH = Math.max(4, Math.round(h * (effH / 100)));
+    boxTop = Math.round((h - boxH) / 2 + (posY / 100) * h);
+    bRadius = 0;
+  } else if (shape === "linear") {
+    boxW = w;
+    boxLeft = 0;
+    boxH = Math.max(4, Math.round(h * (effH / 100)));
+    boxTop = Math.round((posY / 100) * h);
+    bRadius = 0;
+  } else if (shape === "heart" || shape === "star") {
+    bRadius = Math.round(Math.min(boxW, boxH) / 2);
+  }
+
+  if (inverted) {
+    if (shape === "linear") {
+      const invTop = boxTop + boxH;
+      const invH = Math.max(4, h - invTop);
+      return (
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            top: invTop,
+            width: w,
+            height: invH,
+            overflow: "hidden",
+          }}
+        >
+          <View style={{ position: "absolute", left: 0, top: -invTop, width: w, height: h }}>
+            {mediaNode}
+          </View>
+        </View>
+      );
+    }
+
+    if (shape === "mirror") {
+      const topH = Math.max(0, boxTop);
+      const btmTop = boxTop + boxH;
+      const btmH = Math.max(0, h - btmTop);
+      return (
+        <View style={StyleSheet.absoluteFill}>
+          {topH > 0 && (
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: w,
+                height: topH,
+                overflow: "hidden",
+              }}
+            >
+              <View style={{ position: "absolute", left: 0, top: 0, width: w, height: h }}>
+                {mediaNode}
+              </View>
+            </View>
+          )}
+          {btmH > 0 && (
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                top: btmTop,
+                width: w,
+                height: btmH,
+                overflow: "hidden",
+              }}
+            >
+              <View style={{ position: "absolute", left: 0, top: -btmTop, width: w, height: h }}>
+                {mediaNode}
+              </View>
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // Inverted circle or rectangle: render media, and overlay the cutout matte on mobile
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {mediaNode}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: boxLeft,
+            top: boxTop,
+            width: boxW,
+            height: boxH,
+            borderRadius: bRadius,
+            backgroundColor: canvasBg || "#000000",
+            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+          }}
+        />
+      </View>
+    );
+  }
+
+  // Standard non-inverted clipping mask
+  return (
+    <View
+      style={{
+        position: "absolute",
+        left: boxLeft,
+        top: boxTop,
+        width: boxW,
+        height: boxH,
+        borderRadius: bRadius,
+        overflow: "hidden",
+        transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+      }}
+    >
+      <View
+        style={{
+          position: "absolute",
+          left: -boxLeft,
+          top: -boxTop,
+          width: w,
+          height: h,
+          transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
+        }}
+      >
+        {mediaNode}
+      </View>
+    </View>
   );
 }
 
@@ -571,26 +1610,47 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                 webBlurStyle,
               ]}
             >
-              <View
-                style={{
-                  position: "absolute",
-                  left: -Math.round(w * cropX),
-                  top: -Math.round(h * cropY),
-                  width: w,
-                  height: h,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <NativeVideoClipPlayer
-                  clip={vid}
-                  currentTime={currentTime}
-                  isPlaying={isPlaying}
-                  onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
-                />
-                {renderClipEnhanceOverlay(vid)}
-                {renderMosaicCensor(vid, w, h, currentTime)}
-              </View>
+              {renderMaskedClipContent(
+                <View
+                  needsOffscreenAlphaCompositing={effectiveOpacity < 1}
+                  style={{
+                    position: "absolute",
+                    left: -Math.round(w * cropX),
+                    top: -Math.round(h * cropY),
+                    width: w,
+                    height: h,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  {vid.cutout?.enabled && vid.cutout?.bgColor && vid.cutout.bgColor !== "none" && vid.cutout.bgColor !== "transparent" && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        { backgroundColor: vid.cutout.bgColor, zIndex: -1 },
+                      ]}
+                    />
+                  )}
+                  <NativeVideoClipPlayer
+                    clip={vid}
+                    currentTime={currentTime}
+                    isPlaying={isPlaying}
+                    opacity={effectiveOpacity}
+                    onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
+                  />
+                  {renderClipEnhanceOverlay(vid)}
+                  {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
+                  {renderNativeHslOverlay(vid.hslAdjustments)}
+                  {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
+                  {renderMosaicCensor(vid, w, h, currentTime)}
+                  {renderNativeCutoutOverlay(vid)}
+                </View>,
+                mask,
+                croppedContainerW,
+                croppedContainerH,
+                canvasBackground,
+              )}
             </TouchableOpacity>
           );
         }
@@ -640,14 +1700,44 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               webBlurStyle,
             ]}
           >
-            <NativeVideoClipPlayer
-              clip={vid}
-              currentTime={currentTime}
-              isPlaying={isPlaying}
-              onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
-            />
-            {renderClipEnhanceOverlay(vid)}
-            {renderMosaicCensor(vid, w, h, currentTime)}
+            {renderMaskedClipContent(
+              <View
+                needsOffscreenAlphaCompositing={effectiveOpacity < 1}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                {vid.cutout?.enabled && vid.cutout?.bgColor && vid.cutout.bgColor !== "none" && vid.cutout.bgColor !== "transparent" && (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      StyleSheet.absoluteFill,
+                      { backgroundColor: vid.cutout.bgColor, zIndex: -1 },
+                    ]}
+                  />
+                )}
+                <NativeVideoClipPlayer
+                  clip={vid}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  opacity={effectiveOpacity}
+                  onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
+                />
+                {renderClipEnhanceOverlay(vid)}
+                {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
+                {renderNativeHslOverlay(vid.hslAdjustments)}
+                {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
+                {renderMosaicCensor(vid, w, h, currentTime)}
+                {renderNativeCutoutOverlay(vid)}
+              </View>,
+              mask,
+              w,
+              h,
+              canvasBackground,
+            )}
           </TouchableOpacity>
         );
       })}
@@ -1014,568 +2104,12 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const effZ = effTrk * 100 + 50;
         const effElevation = Math.max(1, Math.floor(effZ / 10));
         const intensity = eff.intensity !== undefined ? eff.intensity : 0.8;
-        const type = (eff.type || "").toLowerCase().replace(/[-_]/g, "");
-
-        const renderEffectBody = () => {
-          // 0. Filter clip on timeline
-          if (eff.filter || eff.type?.startsWith("filter_")) {
-            const filterName = (eff.filter || eff.type.replace(/^filter_/, "")).toLowerCase();
-            let tint = "rgba(0,0,0,0)";
-            if (filterName === "cyberpunk") tint = `rgba(0, 242, 254, ${0.16 * intensity})`;
-            else if (filterName === "warm" || filterName === "vintage" || filterName === "sunset") tint = `rgba(255, 160, 0, ${0.15 * intensity})`;
-            else if (filterName === "cool" || filterName === "frost") tint = `rgba(0, 140, 255, ${0.14 * intensity})`;
-            else if (filterName === "bw" || filterName === "noir") tint = `rgba(20, 20, 20, ${0.35 * intensity})`;
-            else if (filterName === "cinematic") tint = `rgba(15, 25, 45, ${0.18 * intensity})`;
-            else if (filterName === "emerald") tint = `rgba(16, 185, 129, ${0.14 * intensity})`;
-            else tint = `rgba(255, 255, 255, ${0.08 * intensity})`;
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
-              </View>
-            );
-          }
-
-          // 1. Dark Vignette / Cinematic Border
-          if (type === "vignette" || type === "darkborder") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <LinearGradient
-                  colors={["rgba(0,0,0," + (0.75 * intensity) + ")", "transparent", "transparent", "rgba(0,0,0," + (0.75 * intensity) + ")"]}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(20 * intensity),
-                      borderColor: "rgba(0, 0, 0, " + (0.65 * intensity) + ")",
-                      borderRadius: 4,
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 2. Cinema Letterbox Bars
-          if (type === "cinematic" || type === "letterbox" || type === "bars") {
-            const barH = Math.round(canvasHeight * 0.12 * intensity);
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: barH, backgroundColor: "#000000" }} />
-                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: barH, backgroundColor: "#000000" }} />
-              </View>
-            );
-          }
-
-          // 3. Glitch Shake
-          if (type === "glitch") {
-            const shift1 = Math.round(((Math.sin(currentTime * 45) * 6) + 4) * intensity);
-            const shift2 = Math.round(((Math.cos(currentTime * 38) * 6) + 4) * intensity);
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      left: shift1,
-                      backgroundColor: "rgba(0, 242, 254, " + (0.22 * intensity) + ")",
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      left: -shift2,
-                      backgroundColor: "rgba(255, 0, 80, " + (0.22 * intensity) + ")",
-                    },
-                  ]}
-                />
-                {/* Jitter Slice Bands */}
-                <View
-                  style={{
-                    position: "absolute",
-                    top: "28%",
-                    left: shift1 * 1.5,
-                    right: 0,
-                    height: 16,
-                    backgroundColor: "rgba(0, 242, 254, " + (0.4 * intensity) + ")",
-                  }}
-                />
-                <View
-                  style={{
-                    position: "absolute",
-                    top: "62%",
-                    left: -shift2 * 1.5,
-                    right: 0,
-                    height: 12,
-                    backgroundColor: "rgba(255, 0, 80, " + (0.4 * intensity) + ")",
-                  }}
-                />
-              </View>
-            );
-          }
-
-          // 4. RGB Split
-          if (type === "rgbsplit") {
-            const offset = Math.max(3, Math.round(6 * intensity));
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      left: offset,
-                      backgroundColor: "rgba(0, 242, 254, " + (0.28 * intensity) + ")",
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      left: -offset,
-                      backgroundColor: "rgba(255, 0, 80, " + (0.28 * intensity) + ")",
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 5. Action Shake
-          if (type === "shake" || type === "earthquake") {
-            const jx = Math.round((Math.sin(currentTime * 36) * 5) * intensity);
-            const jy = Math.round((Math.cos(currentTime * 48) * 5) * intensity);
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    transform: [{ translateX: jx }, { translateY: jy }],
-                  },
-                ]}
-              />
-            );
-          }
-
-          // 6. Zoom Pulse / Heartbeat
-          if (type === "zoompulse" || type === "pulse" || type === "heartbeat") {
-            const pulse = (0.04 + Math.abs(Math.sin(currentTime * 8)) * 0.08) * intensity;
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    borderWidth: Math.round(4 + pulse * 20),
-                    borderColor: "rgba(0, 242, 254, " + (0.45 + pulse * 4) + ")",
-                    borderRadius: 6,
-                  },
-                ]}
-              />
-            );
-          }
-
-          // 7. Neon Glow Edge
-          if (type === "neonedge" || type === "neon") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(6 * intensity),
-                      borderColor: "rgba(0, 242, 254, 0.85)",
-                      borderRadius: 8,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      margin: 4,
-                      borderWidth: Math.round(2 * intensity),
-                      borderColor: "rgba(255, 0, 80, 0.7)",
-                      borderRadius: 6,
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 8. Strobe Flash
-          if (type === "flash") {
-            const flashPulse = Math.abs(Math.sin(currentTime * 16));
-            const alpha = Math.min(0.85, (0.28 + flashPulse * 0.55) * intensity);
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: "rgba(255, 255, 255, " + alpha + ")",
-                  },
-                ]}
-              />
-            );
-          }
-
-          // 9. Retro VHS & CRT Screen
-          if (type === "vhs" || type === "crttv") {
-            const barY = Math.floor(((currentTime * 180) + 40) % Math.max(100, canvasHeight - 20));
-            const secs = Math.floor(currentTime).toString().padStart(2, "0");
-            const ms = Math.floor((currentTime % 1) * 30).toString().padStart(2, "0");
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                {/* Scanline pattern overlay */}
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0, 0, 0, 0.15)" }]} />
-                {/* VHS tracking glitch bar */}
-                <View
-                  style={{
-                    position: "absolute",
-                    top: barY,
-                    left: 0,
-                    right: 0,
-                    height: 14,
-                    backgroundColor: "rgba(255, 255, 255, 0.28)",
-                  }}
-                />
-                {/* Retro OSD text */}
-                <View style={{ position: "absolute", bottom: 16, left: 16, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Text style={{ color: "#00FF66", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontWeight: "800", fontSize: 13, textShadowColor: "#000", textShadowRadius: 3 }}>
-                    PLAY ▶ SP 00:{secs}:{ms}
-                  </Text>
-                </View>
-              </View>
-            );
-          }
-
-          // 10. Film Grain & 1920s Old Film
-          if (type === "filmgrain" || type === "oldfilm") {
-            const jitterLine = Math.floor(((currentTime * 320) + 80) % (boxWidth || 300));
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(160, 100, 30, " + (0.22 * intensity) + ")" }]} />
-                <View style={{ position: "absolute", top: 0, bottom: 0, left: jitterLine, width: 2, backgroundColor: "rgba(255, 255, 255, 0.35)" }} />
-              </View>
-            );
-          }
-
-          // 11. Prism Light Leak & Sun Flare
-          if (type === "prismleak" || type === "sunflare" || type === "lightleak") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <LinearGradient
-                  colors={["rgba(255, 170, 0, " + (0.45 * intensity) + ")", "transparent", "rgba(255, 210, 60, " + (0.35 * intensity) + ")"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              </View>
-            );
-          }
-
-          // 12. Cyberpunk Dual
-          if (type === "cyberpunkdual" || type === "cyberpunk") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <LinearGradient
-                  colors={["rgba(0, 242, 254, " + (0.32 * intensity) + ")", "transparent", "rgba(255, 0, 128, " + (0.32 * intensity) + ")"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              </View>
-            );
-          }
-
-          // 13. Rainbow Psyche Flow
-          if (type === "rainbowflow" || type === "rainbow") {
-            const hue = Math.floor((currentTime * 120) % 360);
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: `hsla(${hue}, 90%, 50%, ${0.18 * intensity})`,
-                  },
-                ]}
-              />
-            );
-          }
-
-          // 14. Blur / Cinematic Blur / Tilt Shift
-          if (type === "blur" || type === "blurcinematic" || type === "tiltshift") {
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: "rgba(15, 23, 42, " + (0.36 * intensity) + ")",
-                  },
-                ]}
-              />
-            );
-          }
-
-          // 15. Mirror & Kaleidoscope Split
-          if (type === "mirror" || type === "kaleidoscope") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, opacity: 0.12 * intensity, backgroundColor: "rgba(0, 242, 254, 0.2)" }} />
-              </View>
-            );
-          }
-
-          // 16. Thermal Infrared Heatmap
-          if (type === "thermal") {
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: "rgba(255, 0, 128, " + (0.24 * intensity) + ")",
-                  },
-                ]}
-              />
-            );
-          }
-
-          // 17. AI Beauty Smooth Glow
-          if (type === "beautysmooth" || type === "aibeautysmooth") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <LinearGradient
-                  colors={[
-                    `rgba(255, 235, 230, ${0.25 * intensity})`,
-                    `rgba(255, 215, 210, ${0.1 * intensity})`,
-                    `rgba(255, 240, 235, ${0.2 * intensity})`,
-                  ]}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(12 * intensity),
-                      borderColor: `rgba(255, 255, 255, ${0.2 * intensity})`,
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 18. AI Cyberpunk Glow
-          if (type === "aicyberpunk") {
-            const glowThick = Math.max(3, Math.round(6 * intensity));
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <LinearGradient
-                  colors={[`rgba(0, 242, 254, ${0.32 * intensity})`, "transparent", `rgba(255, 0, 128, ${0.32 * intensity})`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderTopWidth: glowThick,
-                      borderTopColor: "rgba(0, 242, 254, 0.85)",
-                      borderBottomWidth: glowThick,
-                      borderBottomColor: "rgba(255, 0, 128, 0.85)",
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 19. AI Anime Manga
-          if (type === "aimanga" || type === "manga") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 0, 0, ${0.28 * intensity})` }]} />
-                {/* Comic Speed Lines at top and bottom */}
-                <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 16, backgroundColor: `rgba(0, 0, 0, ${0.7 * intensity})` }} />
-                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 16, backgroundColor: `rgba(0, 0, 0, ${0.7 * intensity})` }} />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.max(4, Math.round(8 * intensity)),
-                      borderColor: "rgba(255, 255, 255, 0.35)",
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 20. AI Matrix Cascade
-          if (type === "aimatrix" || type === "matrix") {
-            const barY = Math.floor(((currentTime * 220) + 50) % (canvasHeight || 400));
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0, 255, 100, ${0.12 * intensity})` }]} />
-                {/* Horizontal digital code scanline */}
-                <View
-                  style={{
-                    position: "absolute",
-                    top: barY,
-                    left: 0,
-                    right: 0,
-                    height: 14,
-                    backgroundColor: `rgba(0, 255, 120, ${0.35 * intensity})`,
-                  }}
-                />
-                <View style={{ position: "absolute", top: 12, right: 14 }}>
-                  <Text style={{ color: "#00FF66", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontWeight: "800", fontSize: 11, textShadowColor: "#000", textShadowRadius: 3 }}>
-                    AI MATRIX // RUNNING
-                  </Text>
-                </View>
-              </View>
-            );
-          }
-
-          // 21. AI Radiant Aura
-          if (type === "aiaura" || type === "aura") {
-            const pulse = (0.5 + Math.sin(currentTime * 6) * 0.35) * intensity;
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(10 * (0.8 + pulse * 0.5)),
-                      borderColor: `rgba(0, 242, 254, ${0.5 + pulse * 0.4})`,
-                      borderRadius: 12,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      margin: 6,
-                      borderWidth: Math.round(4 * (0.8 + pulse * 0.5)),
-                      borderColor: `rgba(255, 0, 128, ${0.45 + pulse * 0.4})`,
-                      borderRadius: 8,
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          // 22. AI Night Vision
-          if (type === "ainightvision" || type === "nightvision") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(10, 255, 60, ${0.22 * intensity})` }]} />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(24 * intensity),
-                      borderColor: "rgba(0, 0, 0, 0.7)",
-                      borderRadius: Math.round(Math.min(boxWidth, canvasHeight) * 0.45),
-                    },
-                  ]}
-                />
-                <View style={{ position: "absolute", top: 12, left: 14 }}>
-                  <Text style={{ color: "#00FF66", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontWeight: "800", fontSize: 11, textShadowColor: "#000", textShadowRadius: 3 }}>
-                    AI NVG-GEN4 // 1080P
-                  </Text>
-                </View>
-              </View>
-            );
-          }
-
-          // 23. AI Cel Cartoon
-          if (type === "aicartoon" || type === "cartoon") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(8 * intensity),
-                      borderColor: "rgba(255, 230, 0, 0.8)",
-                      borderRadius: 6,
-                    },
-                  ]}
-                />
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(255, 230, 0, ${0.08 * intensity})` }]} />
-              </View>
-            );
-          }
-
-          // 24. Water Ripple
-          if (type === "waterripple") {
-            const rScale = 1.0 + Math.sin(currentTime * 6) * 0.05 * intensity;
-            return (
-              <View
-                key={eff.id}
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    alignItems: "center",
-                    justifyContent: "center",
-                  },
-                ]}
-              >
-                <View
-                  style={{
-                    width: Math.round(180 * rScale),
-                    height: Math.round(180 * rScale),
-                    borderRadius: 999,
-                    borderWidth: 3,
-                    borderColor: "rgba(0, 242, 254, " + (0.55 * intensity) + ")",
-                  }}
-                />
-              </View>
-            );
-          }
-
-          // 25. Fisheye Lens
-          if (type === "fisheye") {
-            return (
-              <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      borderWidth: Math.round(28 * intensity),
-                      borderColor: "rgba(0, 0, 0, 0.75)",
-                      borderRadius: Math.round(Math.min(boxWidth, canvasHeight) * 0.45),
-                    },
-                  ]}
-                />
-              </View>
-            );
-          }
-
-          return null;
-        };
-
-        const effectBody = renderEffectBody();
+        const effectBody = renderEffectContent(
+          { ...eff, intensity },
+          boxWidth,
+          canvasHeight,
+          currentTime,
+        );
         if (!effectBody) return null;
 
         return (

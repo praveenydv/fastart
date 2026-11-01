@@ -155,6 +155,11 @@ export function usePlayerWebRenderer({
       if (isPlaying) {
         return;
       }
+      // While actively resizing/dragging layout, skip clearing and re-rendering every sub-pixel.
+      // CSS scales the existing canvas buffer butter-smooth without context clears or flickering!
+      if (isResizing) {
+        return;
+      }
       rendererRef.current.renderFrame(
         project,
         currentTime,
@@ -163,7 +168,7 @@ export function usePlayerWebRenderer({
         canvasHeight,
       );
     }
-  }, [currentTime, project, isPlaying, boxWidth, canvasHeight]);
+  }, [currentTime, project, isPlaying, boxWidth, canvasHeight, isResizing]);
 
   return {
     canvasRef,

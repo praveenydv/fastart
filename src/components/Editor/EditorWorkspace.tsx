@@ -507,8 +507,16 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       if (!project) return;
       const safeIntensity = intensity ?? 80;
 
-      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the filter to that clip!
-      if (selectedClipId && selectedClipType === "video") {
+      // 1. VISUAL CLIP ATTACHED: If a video or photo/image clip is currently selected, attach the filter to that clip!
+      const isVisualClip = Boolean(
+        selectedClipId &&
+          (selectedClipType === "video" ||
+            selectedClipType === "photo" ||
+            selectedClipType === "image" ||
+            (project.tracks?.video || []).some((c: any) => c.id === selectedClipId))
+      );
+
+      if (isVisualClip) {
         const isNone = filter === "none" || filter === "normal";
         const updatedVideos = (project.tracks?.video || []).map((c: any) =>
           c.id === selectedClipId
@@ -713,8 +721,16 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           ? nameOrPreset.intensity
           : 0.8;
 
-      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the effect to that clip!
-      if (selectedClipId && selectedClipType === "video") {
+      // 1. VISUAL CLIP ATTACHED: If a video or photo/image clip is currently selected, attach the effect to that clip!
+      const isVisualClip = Boolean(
+        selectedClipId &&
+          (selectedClipType === "video" ||
+            selectedClipType === "photo" ||
+            selectedClipType === "image" ||
+            (project.tracks?.video || []).some((c: any) => c.id === selectedClipId))
+      );
+
+      if (isVisualClip) {
         const updatedVideos = (project.tracks?.video || []).map((c: any) => {
           if (c.id === selectedClipId) {
             if (isNone) {
@@ -994,6 +1010,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       const startY = getPointerClientY(e);
       const startHeight = activeBottomHeightRef.current;
       let lastDy = 0;
+      let rafHandle: number | null = null;
       isDraggingBottomRef.current = true;
       setIsDraggingBottom(true);
 
@@ -1002,25 +1019,34 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         const dy = clientY - startY;
         lastDy = dy;
 
-        if (isMobileInlineActive) {
-          // Strictly clamp height; never translate downwards to dismiss
-          const targetH = Math.max(
-            minMobileToolHeight,
-            Math.min(maxMobileToolHeight, startHeight - dy),
-          );
-          setMobileModalHeight(targetH);
-          bottomTranslateY.setValue(0);
-        } else {
-          bottomTranslateY.setValue(0);
-          const nextH = Math.max(
-            180,
-            Math.min(maxMobileToolHeight, startHeight - dy),
-          );
-          setCurrentTimelineHeight(nextH);
+        if (rafHandle === null) {
+          rafHandle = requestAnimationFrame(() => {
+            rafHandle = null;
+            if (isMobileInlineActive) {
+              // Strictly clamp height; never translate downwards to dismiss
+              const targetH = Math.max(
+                minMobileToolHeight,
+                Math.min(maxMobileToolHeight, startHeight - dy),
+              );
+              setMobileModalHeight(targetH);
+              bottomTranslateY.setValue(0);
+            } else {
+              bottomTranslateY.setValue(0);
+              const nextH = Math.max(
+                180,
+                Math.min(maxMobileToolHeight, startHeight - dy),
+              );
+              setCurrentTimelineHeight(nextH);
+            }
+          });
         }
       };
 
       const onPointerUp = () => {
+        if (rafHandle !== null) {
+          cancelAnimationFrame(rafHandle);
+          rafHandle = null;
+        }
         isDraggingBottomRef.current = false;
         setIsDraggingBottom(false);
         window.removeEventListener("pointermove", onPointerMove);
@@ -1065,6 +1091,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const bottomDragPanResponder = React.useMemo(() => {
     let startHeight = activeBottomHeightRef.current;
     let accumulatedDy = 0;
+    let rafHandle: number | null = null;
 
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -1079,24 +1106,33 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       },
       onPanResponderMove: (_, gs) => {
         accumulatedDy = gs.dy;
-        if (isMobileInlineActive) {
-          // Strictly clamp height; never translate downwards to dismiss
-          const targetH = Math.max(
-            minMobileToolHeight,
-            Math.min(maxMobileToolHeight, startHeight - gs.dy),
-          );
-          setMobileModalHeight(targetH);
-          bottomTranslateY.setValue(0);
-        } else {
-          bottomTranslateY.setValue(0);
-          const nextH = Math.max(
-            180,
-            Math.min(maxMobileToolHeight, startHeight - gs.dy),
-          );
-          setCurrentTimelineHeight(nextH);
+        if (rafHandle === null) {
+          rafHandle = requestAnimationFrame(() => {
+            rafHandle = null;
+            if (isMobileInlineActive) {
+              // Strictly clamp height; never translate downwards to dismiss
+              const targetH = Math.max(
+                minMobileToolHeight,
+                Math.min(maxMobileToolHeight, startHeight - gs.dy),
+              );
+              setMobileModalHeight(targetH);
+              bottomTranslateY.setValue(0);
+            } else {
+              bottomTranslateY.setValue(0);
+              const nextH = Math.max(
+                180,
+                Math.min(maxMobileToolHeight, startHeight - gs.dy),
+              );
+              setCurrentTimelineHeight(nextH);
+            }
+          });
         }
       },
       onPanResponderRelease: (_, gs) => {
+        if (rafHandle !== null) {
+          cancelAnimationFrame(rafHandle);
+          rafHandle = null;
+        }
         isDraggingBottomRef.current = false;
         setIsDraggingBottom(false);
 
@@ -1112,6 +1148,10 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         }
       },
       onPanResponderTerminate: () => {
+        if (rafHandle !== null) {
+          cancelAnimationFrame(rafHandle);
+          rafHandle = null;
+        }
         isDraggingBottomRef.current = false;
         setIsDraggingBottom(false);
         bottomTranslateY.setValue(0);
@@ -1132,7 +1172,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       media: "📁 Media",
       overlay: "📁 Media",
       audio: "🎵 Audio Studio",
-      filters: "🎨 Filters & LUTs",
+      filters: "🎨 Filters",
       transform: "⚙️ Transform",
       mask: "🔶 Mask",
       speed: "⚡ Speed",
@@ -1314,7 +1354,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const renderTimelineOnly = () => (
     <Timeline
       timelineHeight={currentTimelineHeight}
-      isResizingHeight={isTimelineResizing}
+      isResizingHeight={isDraggingBottom || isTimelineResizing}
       resizeHandleProps={timelineResizeProps}
       handleResetResizeHeight={handleResetResizeHeight}
       project={project}

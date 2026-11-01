@@ -147,8 +147,16 @@ export function useProjectFilterEffects({
         return;
       }
 
-      // 1. VIDEO ATTACHED: If a video clip is currently selected, attach the filter to that clip!
-      if (selectedClipId && selectedClipType === "video") {
+      // 1. VISUAL CLIP ATTACHED: If a video or photo/image clip is currently selected, attach the filter to that clip!
+      const isVisualClip = Boolean(
+        selectedClipId &&
+          (selectedClipType === "video" ||
+            selectedClipType === "photo" ||
+            selectedClipType === "image" ||
+            (current.tracks.video || []).some((c) => c.id === selectedClipId))
+      );
+
+      if (isVisualClip) {
         const videoClips = [...(current.tracks.video || [])];
         const idx = videoClips.findIndex((c) => c.id === selectedClipId);
         if (idx >= 0) {
@@ -234,10 +242,10 @@ export function useProjectFilterEffects({
 
   // Apply Cutout — only writes to clip.cutout, never overwrites clip.transform
   const handleApplyCutout = useCallback(
-    (cutoutConfig: CutoutConfig) => {
+    (cutoutConfig: CutoutConfig, clipId?: string) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const targetId = resolveTargetClipId("video");
+      const targetId = clipId || selectedClipId || resolveTargetClipId("video");
       if (!targetId) return;
 
       const videoClips = [...(current.tracks.video || [])];
@@ -249,11 +257,14 @@ export function useProjectFilterEffects({
         };
         updateProjectWithHistory({
           ...current,
-          tracks: { ...current.tracks, video: videoClips },
+          tracks: {
+            ...current.tracks,
+            video: videoClips,
+          },
         });
       }
     },
-    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply AI Motion Tracking

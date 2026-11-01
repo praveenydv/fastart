@@ -81,7 +81,7 @@ interface CutoutModalProps {
   onClose: () => void;
   onApply?: () => void;
   currentCutout?: CutoutConfig;
-  onApplyCutout: (config: CutoutConfig) => void;
+  onApplyCutout: (config: CutoutConfig, clipId?: string) => void;
   initialMode?: "auto" | "chroma";
   isInline?: boolean;
   selectedClip?: any;
@@ -343,9 +343,9 @@ export default function CutoutModal({
         strokeColor: nextStrokeColor === "none" ? undefined : nextStrokeColor,
         strokeWidth: nextStrokeColor === "none" ? 0 : nextStrokeWidth,
         bgColor: nextBgColor === "none" ? undefined : nextBgColor,
-      });
+      }, clipId);
     },
-    [onApplyCutout],
+    [onApplyCutout, clipId],
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────

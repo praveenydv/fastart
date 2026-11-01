@@ -302,12 +302,12 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
               </Text>
             </View>
 
-            {/* LUT filter indicator */}
-            {clip.type === "video" &&
+            {/* Filter indicator */}
+            {(clip.type === "video" || clip.type === "photo") &&
               clip.rawClip?.filter &&
               clip.rawClip?.filter !== "normal" && (
                 <View style={styles.filterTag}>
-                  <Text style={styles.filterTagText}>LUT</Text>
+                  <Text style={styles.filterTagText}>FILTER</Text>
                 </View>
               )}
 
