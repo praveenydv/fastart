@@ -282,29 +282,33 @@ export async function exportFastArtProject(
   // -------------------------------------------------------------------------
   if (format === "wav") {
     onProgress?.(30, 0, duration);
-    let wavBytes: Uint8Array | null = null;
+    const filename = `${cleanTitle}_audio_${Date.now()}.wav`;
+    const targetFileUri = `${targetDir}${filename}`;
+    const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
+
+    let wavResult: Uint8Array | string | null = null;
 
     try {
       const isRustReady = await rustCoreBridge.isAvailable();
       if (isRustReady) {
         onProgress?.(60, 0, duration);
-        wavBytes = await rustCoreBridge.exportProjectWav(project, 44100, duration);
+        wavResult = await rustCoreBridge.exportProjectWav(project, 44100, duration, cleanFilePath);
       }
     } catch (err) {
       console.warn("[unifiedExporter] Rust WAV export error, falling back to pure-JS mixer:", err);
     }
 
-    if (!wavBytes || wavBytes.length <= 44) {
+    if (!wavResult || (wavResult instanceof Uint8Array && wavResult.length <= 44)) {
       onProgress?.(75, 0, duration);
       const { exportProjectAudioToWavBytes } = require("../audioExporter");
-      wavBytes = await exportProjectAudioToWavBytes(project, duration, 44100);
+      wavResult = await exportProjectAudioToWavBytes(project, duration, 44100);
     }
 
-    if (wavBytes && wavBytes.length > 44) {
+    if (wavResult) {
       onProgress?.(100, duration, duration);
 
-      if (Platform.OS === "web" && typeof URL !== "undefined") {
-        const blob = new Blob([wavBytes as any], { type: "audio/wav" });
+      if (Platform.OS === "web" && wavResult instanceof Uint8Array && typeof URL !== "undefined") {
+        const blob = new Blob([wavResult as any], { type: "audio/wav" });
         const videoUrl = URL.createObjectURL(blob);
         return {
           blob,
@@ -312,17 +316,25 @@ export async function exportFastArtProject(
           mimeType: "audio/wav",
           format: "wav",
           extension: "wav",
-          fileSize: wavBytes.length,
+          fileSize: wavResult.length,
         };
       }
 
-      const filename = `${cleanTitle}_audio_${Date.now()}.wav`;
-      const targetFileUri = `${targetDir}${filename}`;
-      const writtenSize = await writeBinaryFileSafely(targetFileUri, wavBytes);
+      const finalUrl = typeof wavResult === "string"
+        ? (wavResult.startsWith("file://") ? wavResult : `file://${wavResult}`)
+        : targetFileUri;
+
+      let writtenSize = 0;
+      if (wavResult instanceof Uint8Array) {
+        writtenSize = await writeBinaryFileSafely(targetFileUri, wavResult);
+      } else {
+        const info = await FileSystem.getInfoAsync(finalUrl);
+        writtenSize = (info.exists && (info as any).size) ? (info as any).size : 0;
+      }
 
       return {
         blob: new Blob([]),
-        videoUrl: targetFileUri,
+        videoUrl: finalUrl,
         mimeType: "audio/wav",
         format: "wav",
         extension: "wav",
@@ -340,16 +352,26 @@ export async function exportFastArtProject(
     const gifH = Math.round((targetH / targetW) * gifW);
 
     onProgress?.(25, 0, duration);
+    const filename = `${cleanTitle}_anim_${Date.now()}.gif`;
+    const targetFileUri = `${targetDir}${filename}`;
+    const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
 
     try {
       const isRustReady = await rustCoreBridge.isAvailable();
       if (isRustReady) {
         onProgress?.(65, 0, duration);
-        const rustGif = await rustCoreBridge.exportProjectGif(project, gifFps, gifW, gifH, duration);
-        if (rustGif && rustGif.startsWith("data:image/gif;base64,")) {
+        const rustGif = await rustCoreBridge.exportProjectGif(
+          project,
+          gifFps,
+          gifW,
+          gifH,
+          duration,
+          cleanFilePath
+        );
+        if (rustGif) {
           onProgress?.(100, duration, duration);
 
-          if (Platform.OS === "web") {
+          if (Platform.OS === "web" && rustGif.startsWith("data:image/gif;base64,")) {
             return {
               blob: new Blob([]),
               videoUrl: rustGif,
@@ -359,15 +381,23 @@ export async function exportFastArtProject(
             };
           }
 
-          const b64 = rustGif.substring("data:image/gif;base64,".length);
-          const bytes = base64ToUint8(b64);
-          const filename = `${cleanTitle}_anim_${Date.now()}.gif`;
-          const targetFileUri = `${targetDir}${filename}`;
-          const writtenSize = await writeBinaryFileSafely(targetFileUri, bytes);
+          const finalUrl = rustGif.startsWith("data:")
+            ? targetFileUri
+            : (rustGif.startsWith("file://") ? rustGif : `file://${rustGif}`);
+
+          let writtenSize = 0;
+          if (rustGif.startsWith("data:image/gif;base64,")) {
+            const b64 = rustGif.substring("data:image/gif;base64,".length);
+            const bytes = base64ToUint8(b64);
+            writtenSize = await writeBinaryFileSafely(targetFileUri, bytes);
+          } else {
+            const info = await FileSystem.getInfoAsync(finalUrl);
+            writtenSize = (info.exists && (info as any).size) ? (info as any).size : 0;
+          }
 
           return {
             blob: new Blob([]),
-            videoUrl: targetFileUri,
+            videoUrl: finalUrl,
             mimeType: "image/gif",
             format: "gif",
             extension: "gif",
@@ -478,23 +508,37 @@ export async function exportFastArtProject(
       const isRustReady = await rustCoreBridge.isAvailable();
       if (isRustReady) {
         onProgress?.(60, 0, duration);
-        const mp4Bytes = await rustCoreBridge.exportProjectMp4(
+        const filename = `${cleanTitle}_video_${Date.now()}.mp4`;
+        const targetFileUri = `${targetDir}${filename}`;
+        const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
+
+        const result = await rustCoreBridge.exportProjectMp4(
           project,
           fps,
           targetW,
           targetH,
-          duration
+          duration,
+          cleanFilePath
         );
-        if (mp4Bytes && mp4Bytes.length > 128) {
+
+        if (result) {
           onProgress?.(100, duration, duration);
 
-          const filename = `${cleanTitle}_video_${Date.now()}.mp4`;
-          const targetFileUri = `${targetDir}${filename}`;
-          const writtenSize = await writeBinaryFileSafely(targetFileUri, mp4Bytes);
+          const finalUrl = typeof result === "string"
+            ? (result.startsWith("file://") ? result : `file://${result}`)
+            : targetFileUri;
+
+          let writtenSize = 0;
+          if (result instanceof Uint8Array) {
+            writtenSize = await writeBinaryFileSafely(targetFileUri, result);
+          } else {
+            const info = await FileSystem.getInfoAsync(finalUrl);
+            writtenSize = (info.exists && (info as any).size) ? (info as any).size : 0;
+          }
 
           return {
             blob: new Blob([]),
-            videoUrl: targetFileUri,
+            videoUrl: finalUrl,
             mimeType: "video/mp4",
             format: "mp4",
             extension: "mp4",

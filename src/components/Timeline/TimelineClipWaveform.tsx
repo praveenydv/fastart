@@ -25,6 +25,87 @@ interface WebWaveformCanvasProps {
   isBottomAnchored?: boolean;
 }
 
+const WebWaveformCanvasTile: React.FC<{
+  tilePeaks: number[];
+  tileWidth: number;
+  height: number;
+  barColor: string;
+  isBottomAnchored: boolean;
+  barWidth: number;
+  barGap: number;
+}> = React.memo(
+  ({
+    tilePeaks,
+    tileWidth,
+    height,
+    barColor,
+    isBottomAnchored,
+    barWidth,
+    barGap,
+  }) => {
+    const canvasRef = React.useRef<any>(null);
+
+    React.useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext ? canvas.getContext("2d") : null;
+      if (!ctx) return;
+
+      const dpr =
+        typeof window !== "undefined"
+          ? Math.min(2, window.devicePixelRatio || 1)
+          : 1;
+      canvas.width = Math.max(1, Math.floor(tileWidth * dpr));
+      canvas.height = Math.max(1, Math.floor(height * dpr));
+      ctx.scale(dpr, dpr);
+
+      ctx.clearRect(0, 0, tileWidth, height);
+      ctx.fillStyle = barColor;
+
+      const numBars = tilePeaks.length;
+      const minH = 2.5;
+
+      for (let i = 0; i < numBars; i++) {
+        const h = Math.max(
+          minH,
+          Math.min(height, Math.round(tilePeaks[i] * height)),
+        );
+        const x = i * (barWidth + barGap);
+        const y = isBottomAnchored ? height - h : (height - h) / 2;
+        const r = Math.min(1.0, barWidth / 2);
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(x, y, barWidth, h, r);
+          ctx.fill();
+        } else {
+          ctx.fillRect(x, y, barWidth, h);
+        }
+      }
+    }, [
+      tilePeaks,
+      tileWidth,
+      height,
+      barColor,
+      isBottomAnchored,
+      barWidth,
+      barGap,
+    ]);
+
+    return (
+      <canvas
+        ref={canvasRef}
+        style={{
+          width: tileWidth,
+          height,
+          display: "block",
+          pointerEvents: "none",
+          flexShrink: 0,
+        }}
+      />
+    );
+  },
+);
+
 const WebWaveformCanvasComponent: React.FC<WebWaveformCanvasProps> = ({
   peaks,
   availableWidth,
@@ -32,48 +113,71 @@ const WebWaveformCanvasComponent: React.FC<WebWaveformCanvasProps> = ({
   barColor,
   isBottomAnchored = false,
 }) => {
-  const canvasRef = React.useRef<any>(null);
+  const numBars = peaks.length;
+  const barWidth = 2.0;
+  const dynamicGap =
+    numBars > 1
+      ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1))
+      : 1.0;
+  const barStep = barWidth + dynamicGap;
 
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext ? canvas.getContext("2d") : null;
-    if (!ctx) return;
+  // Single tile fast-path when within safe GPU texture dimensions
+  if (availableWidth <= 1536) {
+    return (
+      <WebWaveformCanvasTile
+        tilePeaks={peaks}
+        tileWidth={availableWidth}
+        height={height}
+        barColor={barColor}
+        isBottomAnchored={isBottomAnchored}
+        barWidth={barWidth}
+        barGap={dynamicGap}
+      />
+    );
+  }
 
-    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-    canvas.width = Math.max(1, Math.floor(availableWidth * dpr));
-    canvas.height = Math.max(1, Math.floor(height * dpr));
-    ctx.scale(dpr, dpr);
+  // Large clip width: chunk into tiled canvases (max 1024px each) to prevent canvas GPU texture overflow/crashes
+  const TILE_WIDTH = 1024;
+  const numTiles = Math.ceil(availableWidth / TILE_WIDTH);
+  const tiles: React.ReactNode[] = [];
+  const barsPerTile = Math.max(
+    1,
+    Math.round(TILE_WIDTH / Math.max(0.1, barStep)),
+  );
 
-    ctx.clearRect(0, 0, availableWidth, height);
-    ctx.fillStyle = barColor;
+  for (let t = 0; t < numTiles; t++) {
+    const tileStartBar = t * barsPerTile;
+    const tileEndBar = Math.min(numBars, (t + 1) * barsPerTile);
+    const tilePeaks = peaks.slice(tileStartBar, tileEndBar);
+    const thisTileWidth =
+      t === numTiles - 1 ? availableWidth - t * TILE_WIDTH : TILE_WIDTH;
 
-    const numBars = peaks.length;
-    const barWidth = 2.0;
-    const dynamicGap =
-      numBars > 1 ? Math.max(0.5, (availableWidth - numBars * barWidth) / (numBars - 1)) : 0;
-    const minH = 2;
-
-    for (let i = 0; i < numBars; i++) {
-      const h = Math.max(minH, Math.min(height, Math.round(peaks[i] * height)));
-      const x = i * (barWidth + dynamicGap);
-      const y = isBottomAnchored ? height - h : (height - h) / 2;
-      ctx.fillRect(x, y, barWidth, h);
-    }
-  }, [peaks, availableWidth, height, barColor, isBottomAnchored]);
+    tiles.push(
+      <WebWaveformCanvasTile
+        key={`tile-${t}`}
+        tilePeaks={tilePeaks}
+        tileWidth={thisTileWidth}
+        height={height}
+        barColor={barColor}
+        isBottomAnchored={isBottomAnchored}
+        barWidth={barWidth}
+        barGap={dynamicGap}
+      />,
+    );
+  }
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={availableWidth}
-      height={height}
+    <View
       style={{
+        flexDirection: "row",
         width: availableWidth,
         height,
-        display: "block",
-        pointerEvents: "none",
+        overflow: "hidden",
       }}
-    />
+      pointerEvents="none"
+    >
+      {tiles}
+    </View>
   );
 };
 
@@ -130,7 +234,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
 
   // Compute waveform peaks based on real decoded PCM audio data
   const barWidth = 2.0;
-  const barGap = 1.5;
+  const barGap = 1.0;
   // Identical 4px horizontal insets on both video and audio
   const horizontalInset = 4;
   // Quantize available width to nearest integer to avoid sub-pixel canvas redraw thrashing
@@ -166,10 +270,15 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
     clipMediaDuration,
   ]);
 
-  // On Native, downsample peaks to avoid allocating hundreds of React Native View nodes
+  // On Native, generate dense, high-detail peaks with tight spacing
   const effectivePeaks = useMemo(() => {
     if (Platform.OS === "web" || peaks.length <= 48) return peaks;
-    const maxNativeBars = Math.min(peaks.length, Math.max(16, Math.floor(availableWidth / 6)), 54);
+    const maxNativeBars = Math.min(
+      peaks.length,
+      Math.max(30, Math.min(800, Math.floor(availableWidth / 3.0))),
+    );
+    if (maxNativeBars >= peaks.length) return peaks;
+
     const bucketSize = peaks.length / maxNativeBars;
     const sampled: number[] = new Array(maxNativeBars);
     for (let i = 0; i < maxNativeBars; i++) {
@@ -243,15 +352,27 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   }
 
   const numBars = effectivePeaks.length;
-  const effectiveBarWidth = Platform.OS === "web" ? barWidth : Math.max(2.5, Math.floor((availableWidth / Math.max(1, numBars)) * 0.6));
+  const effectiveBarWidth =
+    Platform.OS === "web"
+      ? barWidth
+      : Math.min(
+          2.5,
+          Math.max(
+            1.5,
+            (availableWidth / Math.max(1, numBars)) * 0.65,
+          ),
+        );
   const dynamicGap =
     numBars > 1
-      ? Math.max(0.5, (availableWidth - numBars * effectiveBarWidth) / (numBars - 1))
-      : 0;
+      ? Math.max(
+          0.5,
+          (availableWidth - numBars * effectiveBarWidth) / (numBars - 1),
+        )
+      : 1.0;
 
-  // Maximum bar height is 28px on both media and separate audio so waveforms match proportionally
-  const maxBarHeight = 28;
-  const minBarHeight = 3;
+  // Maximum bar height in audio track: 34px (fills track beautifully with headroom)
+  const maxBarHeight = 34;
+  const minBarHeight = 2.5;
 
   // Audio clip: full-height centered waveform across the whole clip
   if (isAudio) {
@@ -344,11 +465,11 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
           )}
 
           {Platform.OS === "web" ? (
-            <View style={{ height: 10, justifyContent: "flex-end", alignItems: "center" }}>
+            <View style={{ height: 16, justifyContent: "flex-end", alignItems: "center" }}>
               <WebWaveformCanvas
                 peaks={peaks}
                 availableWidth={availableWidth}
-                height={10}
+                height={16}
                 barColor={videoBarColor}
                 isBottomAnchored={true}
               />
@@ -364,7 +485,7 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
                       width: effectiveBarWidth,
                       height: Math.max(
                         minBarHeight,
-                        Math.min(10, Math.round(peak * 10)),
+                        Math.min(16, Math.round(peak * 16)),
                       ),
                       backgroundColor: videoBarColor,
                       marginRight: idx === numBars - 1 ? 0 : dynamicGap,
@@ -399,14 +520,14 @@ const styles = StyleSheet.create({
     left: 4,
     right: 4,
     bottom: 2,
-    height: 14,
+    height: 18,
     justifyContent: "flex-end",
     overflow: "hidden",
     zIndex: 2,
   },
   videoBackdropBand: {
     width: "100%",
-    height: 14,
+    height: 18,
     backgroundColor: "transparent",
     justifyContent: "flex-end",
     alignItems: "flex-end",
@@ -420,7 +541,7 @@ const styles = StyleSheet.create({
   barsRowBottom: {
     flexDirection: "row",
     alignItems: "flex-end",
-    height: 12,
+    height: 16,
     width: "100%",
   },
   waveBar: {

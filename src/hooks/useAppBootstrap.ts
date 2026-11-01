@@ -455,6 +455,22 @@ export function useAppBootstrap({
       if (matched) {
         if (!project || project.id !== matched.id) {
           setProject(matched);
+          rehydrateProjectMedia(matched).then((hydrated: any) => {
+            if (hydrated) {
+              setProject(hydrated);
+              saveProject(hydrated);
+              if (hydrated.tracks?.video) {
+                for (const c of hydrated.tracks.video) {
+                  if (c.cutout?.enabled) {
+                    restoreClipMasksFromStorage(c.id).catch(() => {});
+                    if (c.sourceMediaId) {
+                      restoreClipMasksFromStorage(c.sourceMediaId).catch(() => {});
+                    }
+                  }
+                }
+              }
+            }
+          });
           const session = loadLastSession();
           const resumeTime =
             session &&

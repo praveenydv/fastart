@@ -100,9 +100,11 @@ export function usePlayerWebRenderer({
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const clips = project.tracks.video || [];
       clips.forEach(async (clip) => {
-        if (clip.url.startsWith("blob:")) {
+        if (clip.url && clip.url.startsWith("blob:")) {
           // Verify if element is genuinely working and loaded in DOM
-          const existingEl = rendererRef.current?.videoElements.get(clip.url);
+          const existingEl =
+            rendererRef.current?.videoElements.get(clip.id) ||
+            rendererRef.current?.videoElements.get(clip.url);
           const isMediaWorking =
             existingEl instanceof HTMLVideoElement
               ? !(existingEl as any).error && existingEl.readyState >= 1
@@ -115,21 +117,25 @@ export function usePlayerWebRenderer({
 
           try {
             const lookupId = clip.sourceMediaId || clip.id;
-            const freshUrl = await getLiveMediaUrl(lookupId);
+            const freshUrl = await getLiveMediaUrl(lookupId, clip.title || (clip as any).name);
             if (freshUrl) {
               clip.url = freshUrl;
               if (clip.type === "photo" && (!clip.thumbnail || clip.thumbnail.startsWith("blob:"))) {
                 clip.thumbnail = freshUrl;
               }
-              if (rendererRef.current && canvasRef.current) {
+              if (rendererRef.current) {
+                rendererRef.current.videoElements.delete(clip.id);
+                rendererRef.current.videoElements.delete(clip.url);
                 rendererRef.current.preloadClip(clip);
-                rendererRef.current.renderFrame(
-                  projectRef.current,
-                  currentTimeRef.current,
-                  isPlaying,
-                  boxWidthRef.current,
-                  canvasHeightRef.current,
-                );
+                if (canvasRef.current) {
+                  rendererRef.current.renderFrame(
+                    projectRef.current,
+                    currentTimeRef.current,
+                    isPlaying,
+                    boxWidthRef.current,
+                    canvasHeightRef.current,
+                  );
+                }
               }
             }
           } catch (e) {}

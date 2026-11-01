@@ -1,5 +1,6 @@
 use crate::types::FrameBuffer;
 use byteorder::{BigEndian, WriteBytesExt};
+use std::io::{Seek, SeekFrom, Write};
 
 /// Ultra-Fast PNG encoder (outputs a completely valid, uncompressed/fast IDAT PNG)
 /// Perfect for instant snapshot exports and mobile thumbnail generation.
@@ -118,6 +119,105 @@ pub struct GifFrame {
     pub delay_ms: u16,
 }
 
+/// Zero-Memory Streaming Animated GIF Writer
+pub struct GifStreamWriter<W: Write> {
+    pub writer: W,
+    pub width: u16,
+    pub height: u16,
+    palette: Vec<u8>,
+}
+
+impl<W: Write> GifStreamWriter<W> {
+    pub fn new(mut writer: W, width: u16, height: u16) -> std::io::Result<Self> {
+        writer.write_all(b"GIF89a")?;
+        writer.write_all(&width.to_le_bytes())?;
+        writer.write_all(&height.to_le_bytes())?;
+
+        // Global Color Table flag (none, using local 256-color table per frame)
+        writer.write_all(&[0x70, 0, 0])?;
+
+        // Netscape 2.0 Loop Extension (Infinite Loop)
+        writer.write_all(&[0x21, 0xFF, 0x0B])?;
+        writer.write_all(b"NETSCAPE2.0")?;
+        writer.write_all(&[0x03, 0x01, 0x00, 0x00, 0x00])?;
+
+        // High-fidelity 256-color palette (6x6x6 color cube = 216 colors + 40 grayscale levels)
+        let mut palette = Vec::with_capacity(256 * 3);
+        for r in 0..6 {
+            for g in 0..6 {
+                for b in 0..6 {
+                    palette.push(((r * 255) / 5) as u8);
+                    palette.push(((g * 255) / 5) as u8);
+                    palette.push(((b * 255) / 5) as u8);
+                }
+            }
+        }
+        for i in 0..40 {
+            let v = ((i * 255) / 39) as u8;
+            palette.push(v);
+            palette.push(v);
+            palette.push(v);
+        }
+
+        Ok(Self {
+            writer,
+            width,
+            height,
+            palette,
+        })
+    }
+
+    pub fn append_frame(&mut self, fb: &FrameBuffer, delay_ms: u16) -> std::io::Result<()> {
+        let delay_hundredths = (delay_ms / 10).max(1);
+
+        // Graphic Control Extension
+        self.writer.write_all(&[0x21, 0xF9, 0x04, 0x04])?;
+        self.writer.write_all(&delay_hundredths.to_le_bytes())?;
+        self.writer.write_all(&[0, 0])?;
+
+        // Image Descriptor
+        self.writer.write_all(&[0x2C, 0, 0, 0, 0])?;
+        self.writer.write_all(&self.width.to_le_bytes())?;
+        self.writer.write_all(&self.height.to_le_bytes())?;
+
+        // Local Color Table Flag (Local table present, 256 colors = 2^(7+1))
+        self.writer.write_all(&[0x87])?;
+        self.writer.write_all(&self.palette)?;
+
+        // Quantize frame pixels to 256-color indices
+        let pixel_count = (self.width as usize) * (self.height as usize);
+        let mut indexed_pixels = Vec::with_capacity(pixel_count);
+        for chunk in fb.data.chunks_exact(4) {
+            let r = chunk[0];
+            let g = chunk[1];
+            let b = chunk[2];
+
+            let diff_rg = (r as i32 - g as i32).abs();
+            let diff_gb = (g as i32 - b as i32).abs();
+            let color_index = if diff_rg <= 8 && diff_gb <= 8 {
+                let gray = ((r as u32 + g as u32 + b as u32) / 3) as u8;
+                let gray_idx = ((gray as u32 * 39 + 127) / 255).min(39) as u8;
+                216 + gray_idx
+            } else {
+                let r_idx = ((r as u32 * 5 + 25) / 255).min(5) as u8;
+                let g_idx = ((g as u32 * 5 + 25) / 255).min(5) as u8;
+                let b_idx = ((b as u32 * 5 + 25) / 255).min(5) as u8;
+                r_idx * 36 + g_idx * 6 + b_idx
+            };
+            indexed_pixels.push(color_index);
+        }
+
+        write_lzw_subblocks_to_writer(&mut self.writer, &indexed_pixels, 8)?;
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> std::io::Result<W> {
+        self.writer.write_all(&[0x3B])?;
+        self.writer.flush()?;
+        Ok(self.writer)
+    }
+}
+
 pub fn encode_gif(frames: &[GifFrame]) -> Vec<u8> {
     if frames.is_empty() {
         return Vec::new();
@@ -125,91 +225,36 @@ pub fn encode_gif(frames: &[GifFrame]) -> Vec<u8> {
 
     let width = frames[0].fb.width as u16;
     let height = frames[0].fb.height as u16;
-    let mut out = Vec::new();
-
-    // GIF89a Header
-    out.extend_from_slice(b"GIF89a");
-    let _ = out.write_u16::<byteorder::LittleEndian>(width);
-    let _ = out.write_u16::<byteorder::LittleEndian>(height);
-
-    // Global Color Table flag (none, using local color table per frame for max quality)
-    out.push(0x70); // 8 bits per pixel, no global table
-    out.push(0);    // Background color index
-    out.push(0);    // Pixel aspect ratio
-
-    // Netscape 2.0 Loop Extension (Infinite Loop)
-    out.extend_from_slice(&[0x21, 0xFF, 0x0B]);
-    out.extend_from_slice(b"NETSCAPE2.0");
-    out.extend_from_slice(&[0x03, 0x01, 0x00, 0x00, 0x00]);
-
-    // Standard 64-color web-safe quantized palette for blistering fast compression
-    let mut palette = Vec::with_capacity(64 * 3);
-    for r in 0..4 {
-        for g in 0..4 {
-            for b in 0..4 {
-                palette.push((r * 85) as u8);
-                palette.push((g * 85) as u8);
-                palette.push((b * 85) as u8);
-            }
-        }
-    }
+    let mut writer = match GifStreamWriter::new(Vec::new(), width, height) {
+        Ok(w) => w,
+        Err(_) => return Vec::new(),
+    };
 
     for frame in frames {
-        let delay_hundredths = (frame.delay_ms / 10).max(1);
-
-        // Graphic Control Extension
-        out.extend_from_slice(&[0x21, 0xF9, 0x04]);
-        out.push(0x04); // Disposal method 1 (do not dispose)
-        let _ = out.write_u16::<byteorder::LittleEndian>(delay_hundredths);
-        out.push(0);    // Transparent color index
-        out.push(0);    // Block terminator
-
-        // Image Descriptor
-        out.push(0x2C); // Image separator
-        let _ = out.write_u16::<byteorder::LittleEndian>(0); // Left
-        let _ = out.write_u16::<byteorder::LittleEndian>(0); // Top
-        let _ = out.write_u16::<byteorder::LittleEndian>(width);
-        let _ = out.write_u16::<byteorder::LittleEndian>(height);
-
-        // Local Color Table Flag (Local table present, 64 colors = 2^(5+1))
-        out.push(0x85);
-        // Write 64 RGB entries (192 bytes)
-        out.extend_from_slice(&palette);
-
-        // Quantize frame pixels to 64-color indices
-        let pixel_count = (width as usize) * (height as usize);
-        let mut indexed_pixels = Vec::with_capacity(pixel_count);
-        for chunk in frame.fb.data.chunks_exact(4) {
-            let r_idx = (chunk[0] / 64).min(3);
-            let g_idx = (chunk[1] / 64).min(3);
-            let b_idx = (chunk[2] / 64).min(3);
-            let color_index = r_idx * 16 + g_idx * 4 + b_idx;
-            indexed_pixels.push(color_index);
-        }
-
-        // LZW Compression for 6-bit codes (Minimum code size = 6)
-        write_lzw_subblocks(&mut out, &indexed_pixels, 6);
+        let _ = writer.append_frame(&frame.fb, frame.delay_ms);
     }
 
-    // GIF Trailer
-    out.push(0x3B);
-    out
+    match writer.finish() {
+        Ok(vec) => vec,
+        Err(_) => Vec::new(),
+    }
 }
 
-fn write_lzw_subblocks(out: &mut Vec<u8>, pixels: &[u8], min_code_size: u8) {
-    out.push(min_code_size);
+pub fn write_lzw_subblocks_to_writer<W: Write>(out: &mut W, pixels: &[u8], min_code_size: u8) -> std::io::Result<()> {
+    out.write_all(&[min_code_size])?;
     let clear_code = 1u16 << min_code_size;
     let eoi_code = clear_code + 1;
 
     let mut bit_buf = 0u32;
     let mut bit_count = 0u8;
-    let code_size = min_code_size + 1;
+    let mut code_size = min_code_size + 1;
+    let mut next_code = clear_code + 2;
 
     let mut subblock = Vec::with_capacity(255);
 
-    let mut emit_code = |code: u16, subblock: &mut Vec<u8>, out: &mut Vec<u8>| {
+    let mut emit_code = |code: u16, cur_code_size: u8, subblock: &mut Vec<u8>, out: &mut W| -> std::io::Result<()> {
         bit_buf |= (code as u32) << bit_count;
-        bit_count += code_size;
+        bit_count += cur_code_size;
 
         while bit_count >= 8 {
             subblock.push((bit_buf & 0xFF) as u8);
@@ -217,21 +262,39 @@ fn write_lzw_subblocks(out: &mut Vec<u8>, pixels: &[u8], min_code_size: u8) {
             bit_count -= 8;
 
             if subblock.len() == 254 {
-                out.push(subblock.len() as u8);
-                out.extend_from_slice(subblock);
+                out.write_all(&[subblock.len() as u8])?;
+                out.write_all(subblock)?;
                 subblock.clear();
             }
         }
+        Ok(())
     };
 
-    emit_code(clear_code, &mut subblock, out);
+    // Emit initial Clear code
+    emit_code(clear_code, code_size, &mut subblock, out)?;
 
-    // Literal code emission with periodic clear codes for simplicity & speed
+    let mut is_first = true;
     for &px in pixels {
-        emit_code(px as u16, &mut subblock, out);
+        emit_code(px as u16, code_size, &mut subblock, out)?;
+
+        if is_first {
+            is_first = false;
+        } else {
+            next_code += 1;
+            if next_code == (1 << code_size) {
+                if code_size < 12 {
+                    code_size += 1;
+                } else {
+                    emit_code(clear_code, code_size, &mut subblock, out)?;
+                    code_size = min_code_size + 1;
+                    next_code = clear_code + 2;
+                    is_first = true;
+                }
+            }
+        }
     }
 
-    emit_code(eoi_code, &mut subblock, out);
+    emit_code(eoi_code, code_size, &mut subblock, out)?;
 
     // Flush remaining bits
     if bit_count > 0 {
@@ -239,11 +302,12 @@ fn write_lzw_subblocks(out: &mut Vec<u8>, pixels: &[u8], min_code_size: u8) {
     }
 
     if !subblock.is_empty() {
-        out.push(subblock.len() as u8);
-        out.extend_from_slice(&subblock);
+        out.write_all(&[subblock.len() as u8])?;
+        out.write_all(&subblock)?;
     }
 
-    out.push(0x00); // Block terminator
+    out.write_all(&[0x00])?; // Block terminator
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -350,9 +414,10 @@ pub fn rbsp_to_nal(rbsp: &[u8]) -> Vec<u8> {
 
 pub fn build_h264_sps(mb_width: u32, mb_height: u32, fps: u32) -> Vec<u8> {
     let mut bw = BitWriter::new(256);
-    bw.write_bits(66, 8); // Profile: Baseline
+    bw.write_bits(66, 8); // Profile: Baseline (66)
     bw.write_bits(0xE0, 8); // Constraints
-    bw.write_bits(31, 8); // Level 3.1
+    let level = if mb_width * mb_height > 3600 { 41 } else { 31 }; // Level 4.1 for 1080p, 3.1 for 720p
+    bw.write_bits(level, 8);
     bw.write_ue(0); // seq_parameter_set_id
     bw.write_ue(0); // log2_max_frame_num_minus4
     bw.write_ue(2); // pic_order_cnt_type: 2
@@ -420,26 +485,37 @@ pub fn build_h264_pps() -> Vec<u8> {
 
 pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h: u32) -> Vec<u8> {
     let total_mbs = (mb_w * mb_h) as usize;
-    let mut bw = BitWriter::new(total_mbs * 390 + 512);
+    let mut bw = BitWriter::new(128);
 
     bw.write_ue(0); // first_mb_in_slice
     bw.write_ue(7); // slice_type (All I-slice)
     bw.write_ue(0); // pic_parameter_set_id
     bw.write_bits(0, 4); // frame_num (0 for IDR)
     bw.write_ue((frame_index & 1) as u32); // idr_pic_id
-    bw.write_bit(0);
-    bw.write_bit(0);
+    bw.write_bit(0); // no_output_of_prior_pics_flag
+    bw.write_bit(0); // long_term_reference_flag
     bw.write_se(0); // slice_qp_delta
 
-    bw.write_ue(25); // mb_type: 25 (I_PCM)
+    // Macroblock 0 mb_type: 25 (I_PCM)
+    bw.write_ue(25);
     bw.align_zero();
 
-    let mut body = bw.into_bytes();
+    let header_bytes = bw.into_bytes();
+    let estimated_rbsp = header_bytes.len() + total_mbs * 386 + 16;
+    let mut body = Vec::with_capacity(estimated_rbsp);
+    body.extend_from_slice(&header_bytes);
+
     let width = fb.width as usize;
     let height = fb.height as usize;
 
     for mby in 0..mb_h as usize {
         for mbx in 0..mb_w as usize {
+            // For every macroblock after #0, emit ue(25) + alignment zeros = [0x0D, 0x00]
+            if mbx > 0 || mby > 0 {
+                body.push(0x0D);
+                body.push(0x00);
+            }
+
             let start_x = mbx * 16;
             let start_y = mby * 16;
 
@@ -454,7 +530,7 @@ pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h:
                     let g = fb.data[idx + 1] as i32;
                     let b = fb.data[idx + 2] as i32;
                     let y_val = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-                    body.push(y_val.clamp(0, 255) as u8);
+                    body.push(y_val.clamp(16, 235) as u8);
                 }
             }
 
@@ -469,7 +545,7 @@ pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h:
                     let g = fb.data[idx + 1] as i32;
                     let b = fb.data[idx + 2] as i32;
                     let u_val = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-                    body.push(u_val.clamp(0, 255) as u8);
+                    body.push(u_val.clamp(16, 240) as u8);
                 }
             }
 
@@ -484,17 +560,267 @@ pub fn encode_h264_iframe(fb: &FrameBuffer, frame_index: usize, mb_w: u32, mb_h:
                     let g = fb.data[idx + 1] as i32;
                     let b = fb.data[idx + 2] as i32;
                     let v_val = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
-                    body.push(v_val.clamp(0, 255) as u8);
+                    body.push(v_val.clamp(16, 240) as u8);
                 }
             }
         }
     }
+
+    // Trailing bits for slice
+    body.push(0x80);
 
     let nal_body = rbsp_to_nal(&body);
     let mut nal = Vec::with_capacity(1 + nal_body.len());
     nal.push(0x65); // IDR slice (type 5, nal_ref_idc 3)
     nal.extend_from_slice(&nal_body);
     nal
+}
+
+/// Zero-Memory Streaming MP4 Writer supporting both in-memory and direct-to-disk sinks
+pub struct Mp4StreamWriter<W: Write + Seek> {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub sps: Vec<u8>,
+    pub pps: Vec<u8>,
+    pub sample_sizes: Vec<u32>,
+    pub writer: W,
+    pub mdat_header_pos: u64,
+}
+
+impl<W: Write + Seek> Mp4StreamWriter<W> {
+    pub fn new(mut writer: W, width: u32, height: u32, fps: u32, sps: &[u8], pps: &[u8]) -> std::io::Result<Self> {
+        // 1. ftyp box
+        let mut ftyp = Vec::with_capacity(32);
+        write_mp4_box(&mut ftyp, b"ftyp", |b| {
+            b.extend_from_slice(b"isom");
+            let _ = b.write_u32::<BigEndian>(512);
+            b.extend_from_slice(b"isom");
+            b.extend_from_slice(b"iso2");
+            b.extend_from_slice(b"avc1");
+            b.extend_from_slice(b"mp41");
+        });
+        writer.write_all(&ftyp)?;
+
+        // 2. Start mdat box
+        let mdat_header_pos = writer.stream_position()?;
+        writer.write_all(&[0, 0, 0, 0, b'm', b'd', b'a', b't'])?;
+
+        Ok(Self {
+            width,
+            height,
+            fps,
+            sps: sps.to_vec(),
+            pps: pps.to_vec(),
+            sample_sizes: Vec::new(),
+            writer,
+            mdat_header_pos,
+        })
+    }
+
+    #[inline]
+    pub fn append_frame(&mut self, nal_frame: &[u8]) -> std::io::Result<()> {
+        let len = nal_frame.len() as u32;
+        self.sample_sizes.push(len + 4);
+        self.writer.write_all(&len.to_be_bytes())?;
+        self.writer.write_all(nal_frame)?;
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> std::io::Result<W> {
+        let total_samples = self.sample_sizes.len();
+        let timescale = self.fps.max(1) * 1000;
+        let duration = (total_samples as u64 * 1000) as u32;
+
+        let mdat_end = self.writer.stream_position()?;
+        let mdat_len = (mdat_end - self.mdat_header_pos) as u32;
+
+        // Finalize mdat length in-place without copying payload
+        self.writer.seek(SeekFrom::Start(self.mdat_header_pos))?;
+        self.writer.write_all(&mdat_len.to_be_bytes())?;
+        self.writer.seek(SeekFrom::Start(mdat_end))?;
+
+        let chunk_offset = (self.mdat_header_pos + 8) as u32;
+
+        // moov box
+        let mut moov = Vec::with_capacity(total_samples * 4 + 1024);
+        write_mp4_box(&mut moov, b"moov", |m| {
+            // mvhd
+            write_mp4_box(m, b"mvhd", |mvhd| {
+                mvhd.push(0);
+                mvhd.extend_from_slice(&[0, 0, 0]);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(timescale);
+                let _ = mvhd.write_u32::<BigEndian>(duration);
+                let _ = mvhd.write_u32::<BigEndian>(0x00010000);
+                let _ = mvhd.write_u16::<BigEndian>(0x0100);
+                mvhd.extend_from_slice(&[0; 10]);
+                let _ = mvhd.write_u32::<BigEndian>(0x00010000);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0x00010000);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0);
+                let _ = mvhd.write_u32::<BigEndian>(0x40000000);
+                mvhd.extend_from_slice(&[0; 24]);
+                let _ = mvhd.write_u32::<BigEndian>(2);
+            });
+
+            // trak
+            write_mp4_box(m, b"trak", |trak| {
+                write_mp4_box(trak, b"tkhd", |tkhd| {
+                    tkhd.push(0);
+                    tkhd.extend_from_slice(&[0, 0, 3]);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(1);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(duration);
+                    tkhd.extend_from_slice(&[0; 8]);
+                    let _ = tkhd.write_u16::<BigEndian>(0);
+                    let _ = tkhd.write_u16::<BigEndian>(0);
+                    let _ = tkhd.write_u16::<BigEndian>(0);
+                    let _ = tkhd.write_u16::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0x00010000);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0x00010000);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0);
+                    let _ = tkhd.write_u32::<BigEndian>(0x40000000);
+                    let _ = tkhd.write_u32::<BigEndian>(self.width << 16);
+                    let _ = tkhd.write_u32::<BigEndian>(self.height << 16);
+                });
+
+                write_mp4_box(trak, b"mdia", |mdia| {
+                    write_mp4_box(mdia, b"mdhd", |mdhd| {
+                        mdhd.push(0);
+                        mdhd.extend_from_slice(&[0, 0, 0]);
+                        let _ = mdhd.write_u32::<BigEndian>(0);
+                        let _ = mdhd.write_u32::<BigEndian>(0);
+                        let _ = mdhd.write_u32::<BigEndian>(timescale);
+                        let _ = mdhd.write_u32::<BigEndian>(duration);
+                        let _ = mdhd.write_u16::<BigEndian>(0x55C4);
+                        let _ = mdhd.write_u16::<BigEndian>(0);
+                    });
+
+                    write_mp4_box(mdia, b"hdlr", |hdlr| {
+                        hdlr.push(0);
+                        hdlr.extend_from_slice(&[0, 0, 0]);
+                        let _ = hdlr.write_u32::<BigEndian>(0);
+                        hdlr.extend_from_slice(b"vide");
+                        hdlr.extend_from_slice(&[0; 12]);
+                        hdlr.extend_from_slice(b"VideoHandler\0");
+                    });
+
+                    write_mp4_box(mdia, b"minf", |minf| {
+                        write_mp4_box(minf, b"vmhd", |vmhd| {
+                            vmhd.push(0);
+                            vmhd.extend_from_slice(&[0, 0, 1]);
+                            let _ = vmhd.write_u16::<BigEndian>(0);
+                            let _ = vmhd.write_u16::<BigEndian>(0);
+                            let _ = vmhd.write_u16::<BigEndian>(0);
+                            let _ = vmhd.write_u16::<BigEndian>(0);
+                        });
+
+                        write_mp4_box(minf, b"dinf", |dinf| {
+                            write_mp4_box(dinf, b"dref", |dref| {
+                                dref.push(0);
+                                dref.extend_from_slice(&[0, 0, 0]);
+                                let _ = dref.write_u32::<BigEndian>(1);
+                                write_mp4_box(dref, b"url ", |u| {
+                                    u.push(0);
+                                    u.extend_from_slice(&[0, 0, 1]);
+                                });
+                            });
+                        });
+
+                        write_mp4_box(minf, b"stbl", |stbl| {
+                            write_mp4_box(stbl, b"stsd", |stsd| {
+                                stsd.push(0);
+                                stsd.extend_from_slice(&[0, 0, 0]);
+                                let _ = stsd.write_u32::<BigEndian>(1);
+
+                                write_mp4_box(stsd, b"avc1", |avc1| {
+                                    avc1.extend_from_slice(&[0; 6]);
+                                    let _ = avc1.write_u16::<BigEndian>(1);
+                                    let _ = avc1.write_u16::<BigEndian>(0);
+                                    let _ = avc1.write_u16::<BigEndian>(0);
+                                    avc1.extend_from_slice(&[0; 12]);
+                                    let _ = avc1.write_u16::<BigEndian>(self.width as u16);
+                                    let _ = avc1.write_u16::<BigEndian>(self.height as u16);
+                                    let _ = avc1.write_u32::<BigEndian>(0x00480000);
+                                    let _ = avc1.write_u32::<BigEndian>(0x00480000);
+                                    let _ = avc1.write_u32::<BigEndian>(0);
+                                    let _ = avc1.write_u16::<BigEndian>(1);
+                                    avc1.extend_from_slice(&[0; 32]);
+                                    let _ = avc1.write_u16::<BigEndian>(0x0018);
+                                    let _ = avc1.write_i16::<BigEndian>(-1);
+
+                                    write_mp4_box(avc1, b"avcC", |avcc| {
+                                        avcc.push(1);
+                                        avcc.push(self.sps[1]);
+                                        avcc.push(self.sps[2]);
+                                        avcc.push(self.sps[3]);
+                                        avcc.push(0xFF);
+                                        avcc.push(0xE1);
+                                        let _ = avcc.write_u16::<BigEndian>(self.sps.len() as u16);
+                                        avcc.extend_from_slice(&self.sps);
+                                        avcc.push(1);
+                                        let _ = avcc.write_u16::<BigEndian>(self.pps.len() as u16);
+                                        avcc.extend_from_slice(&self.pps);
+                                    });
+                                });
+                            });
+
+                            write_mp4_box(stbl, b"stts", |stts| {
+                                stts.push(0);
+                                stts.extend_from_slice(&[0, 0, 0]);
+                                let _ = stts.write_u32::<BigEndian>(1);
+                                let _ = stts.write_u32::<BigEndian>(total_samples as u32);
+                                let _ = stts.write_u32::<BigEndian>(1000);
+                            });
+
+                            write_mp4_box(stbl, b"stsc", |stsc| {
+                                stsc.push(0);
+                                stsc.extend_from_slice(&[0, 0, 0]);
+                                let _ = stsc.write_u32::<BigEndian>(1);
+                                let _ = stsc.write_u32::<BigEndian>(1);
+                                let _ = stsc.write_u32::<BigEndian>(total_samples as u32);
+                                let _ = stsc.write_u32::<BigEndian>(1);
+                            });
+
+                            write_mp4_box(stbl, b"stsz", |stsz| {
+                                stsz.push(0);
+                                stsz.extend_from_slice(&[0, 0, 0]);
+                                let _ = stsz.write_u32::<BigEndian>(0);
+                                let _ = stsz.write_u32::<BigEndian>(total_samples as u32);
+                                for &sz in &self.sample_sizes {
+                                    let _ = stsz.write_u32::<BigEndian>(sz);
+                                }
+                            });
+
+                            write_mp4_box(stbl, b"stco", |stco| {
+                                stco.push(0);
+                                stco.extend_from_slice(&[0, 0, 0]);
+                                let _ = stco.write_u32::<BigEndian>(1);
+                                let _ = stco.write_u32::<BigEndian>(chunk_offset);
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
+        self.writer.write_all(&moov)?;
+        self.writer.flush()?;
+        Ok(self.writer)
+    }
 }
 
 pub fn create_mp4_container(
@@ -505,230 +831,18 @@ pub fn create_mp4_container(
     pps: &[u8],
     nal_frames: &[Vec<u8>],
 ) -> Vec<u8> {
-    let mut out = Vec::new();
-    let total_samples = nal_frames.len();
-    let timescale = fps.max(1) * 1000;
-    let duration = (total_samples as u64 * 1000) as u32;
-
-    // 1. ftyp box
-    write_mp4_box(&mut out, b"ftyp", |b| {
-        b.extend_from_slice(b"isom"); // Major brand
-        let _ = b.write_u32::<BigEndian>(512); // Minor version
-        b.extend_from_slice(b"isom");
-        b.extend_from_slice(b"iso2");
-        b.extend_from_slice(b"avc1");
-        b.extend_from_slice(b"mp41");
-    });
-
-    // 2. Compute mdat size and offsets
-    let mut mdat_payload = Vec::new();
-    let mut sample_sizes = Vec::with_capacity(total_samples);
-
+    let cursor = std::io::Cursor::new(Vec::with_capacity(nal_frames.len() * 512 + 65536));
+    let mut writer = match Mp4StreamWriter::new(cursor, width, height, fps, sps, pps) {
+        Ok(w) => w,
+        Err(_) => return Vec::new(),
+    };
     for frame in nal_frames {
-        let len = frame.len() as u32;
-        sample_sizes.push(len + 4);
-        let _ = mdat_payload.write_u32::<BigEndian>(len);
-        mdat_payload.extend_from_slice(frame);
+        let _ = writer.append_frame(frame);
     }
-
-    // 3. moov box
-    let mut moov_bytes = Vec::new();
-    write_mp4_box(&mut moov_bytes, b"moov", |moov| {
-        // mvhd
-        write_mp4_box(moov, b"mvhd", |mvhd| {
-            mvhd.push(0); // version
-            mvhd.extend_from_slice(&[0, 0, 0]); // flags
-            let _ = mvhd.write_u32::<BigEndian>(0); // creation_time
-            let _ = mvhd.write_u32::<BigEndian>(0); // modification_time
-            let _ = mvhd.write_u32::<BigEndian>(timescale);
-            let _ = mvhd.write_u32::<BigEndian>(duration);
-            let _ = mvhd.write_u32::<BigEndian>(0x00010000); // rate 1.0
-            let _ = mvhd.write_u16::<BigEndian>(0x0100); // volume 1.0
-            mvhd.extend_from_slice(&[0; 10]); // reserved
-            // Unity matrix
-            let _ = mvhd.write_u32::<BigEndian>(0x00010000);
-            let _ = mvhd.write_u32::<BigEndian>(0);
-            let _ = mvhd.write_u32::<BigEndian>(0);
-            let _ = mvhd.write_u32::<BigEndian>(0);
-            let _ = mvhd.write_u32::<BigEndian>(0x00010000);
-            let _ = mvhd.write_u32::<BigEndian>(0);
-            let _ = mvhd.write_u32::<BigEndian>(0);
-            let _ = mvhd.write_u32::<BigEndian>(0);
-            let _ = mvhd.write_u32::<BigEndian>(0x40000000);
-            mvhd.extend_from_slice(&[0; 24]); // pre_defined
-            let _ = mvhd.write_u32::<BigEndian>(2); // next_track_ID
-        });
-
-        // trak
-        write_mp4_box(moov, b"trak", |trak| {
-            // tkhd
-            write_mp4_box(trak, b"tkhd", |tkhd| {
-                tkhd.push(0); // version
-                tkhd.extend_from_slice(&[0, 0, 3]); // flags (enabled + in_movie)
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(1); // track_ID
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(duration);
-                tkhd.extend_from_slice(&[0; 8]);
-                let _ = tkhd.write_u16::<BigEndian>(0); // layer
-                let _ = tkhd.write_u16::<BigEndian>(0); // alternate_group
-                let _ = tkhd.write_u16::<BigEndian>(0); // volume
-                let _ = tkhd.write_u16::<BigEndian>(0);
-                // Unity matrix
-                let _ = tkhd.write_u32::<BigEndian>(0x00010000);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0x00010000);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0);
-                let _ = tkhd.write_u32::<BigEndian>(0x40000000);
-                let _ = tkhd.write_u32::<BigEndian>(width << 16);
-                let _ = tkhd.write_u32::<BigEndian>(height << 16);
-            });
-
-            // mdia
-            write_mp4_box(trak, b"mdia", |mdia| {
-                write_mp4_box(mdia, b"mdhd", |mdhd| {
-                    mdhd.push(0);
-                    mdhd.extend_from_slice(&[0, 0, 0]);
-                    let _ = mdhd.write_u32::<BigEndian>(0);
-                    let _ = mdhd.write_u32::<BigEndian>(0);
-                    let _ = mdhd.write_u32::<BigEndian>(timescale);
-                    let _ = mdhd.write_u32::<BigEndian>(duration);
-                    let _ = mdhd.write_u16::<BigEndian>(0x55C4); // Language 'und'
-                    let _ = mdhd.write_u16::<BigEndian>(0);
-                });
-
-                write_mp4_box(mdia, b"hdlr", |hdlr| {
-                    hdlr.push(0);
-                    hdlr.extend_from_slice(&[0, 0, 0]);
-                    let _ = hdlr.write_u32::<BigEndian>(0);
-                    hdlr.extend_from_slice(b"vide");
-                    hdlr.extend_from_slice(&[0; 12]);
-                    hdlr.extend_from_slice(b"VideoHandler\0");
-                });
-
-                write_mp4_box(mdia, b"minf", |minf| {
-                    write_mp4_box(minf, b"vmhd", |vmhd| {
-                        vmhd.push(0);
-                        vmhd.extend_from_slice(&[0, 0, 1]);
-                        let _ = vmhd.write_u16::<BigEndian>(0);
-                        let _ = vmhd.write_u16::<BigEndian>(0);
-                        let _ = vmhd.write_u16::<BigEndian>(0);
-                        let _ = vmhd.write_u16::<BigEndian>(0);
-                    });
-
-                    write_mp4_box(minf, b"dinf", |dinf| {
-                        write_mp4_box(dinf, b"dref", |dref| {
-                            dref.push(0);
-                            dref.extend_from_slice(&[0, 0, 0]);
-                            let _ = dref.write_u32::<BigEndian>(1);
-                            write_mp4_box(dref, b"url ", |u| {
-                                u.push(0);
-                                u.extend_from_slice(&[0, 0, 1]);
-                            });
-                        });
-                    });
-
-                    write_mp4_box(minf, b"stbl", |stbl| {
-                        // stsd
-                        write_mp4_box(stbl, b"stsd", |stsd| {
-                            stsd.push(0);
-                            stsd.extend_from_slice(&[0, 0, 0]);
-                            let _ = stsd.write_u32::<BigEndian>(1);
-
-                            write_mp4_box(stsd, b"avc1", |avc1| {
-                                avc1.extend_from_slice(&[0; 6]);
-                                let _ = avc1.write_u16::<BigEndian>(1); // data_reference_index
-                                let _ = avc1.write_u16::<BigEndian>(0);
-                                let _ = avc1.write_u16::<BigEndian>(0);
-                                avc1.extend_from_slice(&[0; 12]);
-                                let _ = avc1.write_u16::<BigEndian>(width as u16);
-                                let _ = avc1.write_u16::<BigEndian>(height as u16);
-                                let _ = avc1.write_u32::<BigEndian>(0x00480000); // 72 dpi
-                                let _ = avc1.write_u32::<BigEndian>(0x00480000);
-                                let _ = avc1.write_u32::<BigEndian>(0);
-                                let _ = avc1.write_u16::<BigEndian>(1); // frame_count
-                                avc1.extend_from_slice(&[0; 32]); // compressorname
-                                let _ = avc1.write_u16::<BigEndian>(0x0018); // depth 24
-                                let _ = avc1.write_i16::<BigEndian>(-1);
-
-                                // avcC
-                                write_mp4_box(avc1, b"avcC", |avcc| {
-                                    avcc.push(1); // configurationVersion
-                                    avcc.push(sps[1]); // AVCProfileIndication
-                                    avcc.push(sps[2]); // profile_compatibility
-                                    avcc.push(sps[3]); // AVCLevelIndication
-                                    avcc.push(0xFF); // lengthSizeMinusOne = 3 (4-byte NAL lengths)
-                                    avcc.push(0xE1); // numOfSequenceParameterSets = 1
-                                    let _ = avcc.write_u16::<BigEndian>(sps.len() as u16);
-                                    avcc.extend_from_slice(sps);
-                                    avcc.push(1); // numOfPictureParameterSets = 1
-                                    let _ = avcc.write_u16::<BigEndian>(pps.len() as u16);
-                                    avcc.extend_from_slice(pps);
-                                });
-                            });
-                        });
-
-                        // stts
-                        write_mp4_box(stbl, b"stts", |stts| {
-                            stts.push(0);
-                            stts.extend_from_slice(&[0, 0, 0]);
-                            let _ = stts.write_u32::<BigEndian>(1);
-                            let _ = stts.write_u32::<BigEndian>(total_samples as u32);
-                            let _ = stts.write_u32::<BigEndian>(1000); // sample delta
-                        });
-
-                        // stsc
-                        write_mp4_box(stbl, b"stsc", |stsc| {
-                            stsc.push(0);
-                            stsc.extend_from_slice(&[0, 0, 0]);
-                            let _ = stsc.write_u32::<BigEndian>(1);
-                            let _ = stsc.write_u32::<BigEndian>(1);
-                            let _ = stsc.write_u32::<BigEndian>(total_samples as u32);
-                            let _ = stsc.write_u32::<BigEndian>(1);
-                        });
-
-                        // stsz
-                        write_mp4_box(stbl, b"stsz", |stsz| {
-                            stsz.push(0);
-                            stsz.extend_from_slice(&[0, 0, 0]);
-                            let _ = stsz.write_u32::<BigEndian>(0);
-                            let _ = stsz.write_u32::<BigEndian>(total_samples as u32);
-                            for &sz in &sample_sizes {
-                                let _ = stsz.write_u32::<BigEndian>(sz);
-                            }
-                        });
-
-                        // stco (placeholder offset, patched after moov box is finalized)
-                        write_mp4_box(stbl, b"stco", |stco| {
-                            stco.push(0);
-                            stco.extend_from_slice(&[0, 0, 0]);
-                            let _ = stco.write_u32::<BigEndian>(1);
-                            let _ = stco.write_u32::<BigEndian>(0); // placeholder
-                        });
-                    });
-                });
-            });
-        });
-    });
-
-    // Patch chunk offset in stco box (last 4 bytes of moov_bytes)
-    let chunk_offset = (out.len() + moov_bytes.len() + 8) as u32;
-    let offset_pos = moov_bytes.len() - 4;
-    moov_bytes[offset_pos..offset_pos + 4].copy_from_slice(&chunk_offset.to_be_bytes());
-
-    out.extend_from_slice(&moov_bytes);
-
-    // 4. mdat box
-    write_mp4_box(&mut out, b"mdat", |mdat| {
-        mdat.extend_from_slice(&mdat_payload);
-    });
-
-    out
+    match writer.finish() {
+        Ok(cursor) => cursor.into_inner(),
+        Err(_) => Vec::new(),
+    }
 }
 
 fn write_mp4_box<F: FnOnce(&mut Vec<u8>)>(out: &mut Vec<u8>, fourcc: &[u8; 4], writer: F) {

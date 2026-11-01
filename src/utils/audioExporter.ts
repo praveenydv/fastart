@@ -209,7 +209,7 @@ export async function exportProjectAudioToWavBytes(
     const isRustReady = await rustCoreBridge.isAvailable();
     if (isRustReady) {
       const rustWav = await rustCoreBridge.exportProjectWav(project, sampleRate, duration);
-      if (rustWav && rustWav.length > 44) {
+      if (rustWav && rustWav instanceof Uint8Array && rustWav.length > 44) {
         return rustWav;
       }
     }

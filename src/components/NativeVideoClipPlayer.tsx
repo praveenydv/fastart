@@ -138,6 +138,10 @@ function VideoClipRenderer({
   opacity?: number;
 }) {
   const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [uri]);
   const lastSeekTargetRef = React.useRef<number>(-1);
   const lastSeekTimestampRef = React.useRef<number>(0);
   const isPlayingRef = React.useRef<boolean>(false);

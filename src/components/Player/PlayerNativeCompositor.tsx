@@ -1079,12 +1079,6 @@ function renderMaskedClipContent(
     return mediaNode;
   }
 
-  // On Web, CSS mask handles clipping via webMaskStyle
-  if (Platform.OS === "web") {
-    return mediaNode;
-  }
-
-  // On Mobile Native (iOS & Android):
   const effectiveCanvasBg =
     (canvasBg && canvasBg.startsWith("color:")
       ? canvasBg.replace("color:", "")
@@ -1111,153 +1105,24 @@ function renderMaskedClipContent(
     boxH = Math.max(4, Math.round((h * effH) / 100));
   } else if (shape === "linear") {
     boxW = Math.max(w, h) * 3;
-    boxH = 40;
+    boxH = Math.max(w, h) * 3;
   }
 
   const cx = w / 2 + (posX / 100) * w;
   const cy = h / 2 + (posY / 100) * h;
-  const boxLeft = Math.round(cx - boxW / 2);
-  const boxTop = Math.round(cy - boxH / 2);
+  const span = Math.max(w, h) * 3;
 
-  // 1. LINEAR SPLIT MASK (Split Line through center cx, cy)
-  if (shape === "linear") {
-    const span = Math.max(w, h) * 3;
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        {mediaNode}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            left: Math.round(cx - span / 2),
-            top: Math.round(cy - span / 2),
-            width: span,
-            height: span,
-            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-          }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: inverted ? span / 2 : 0,
-              height: span / 2,
-              backgroundColor: effectiveCanvasBg,
-            }}
-          />
-        </View>
-      </View>
-    );
-  }
-
-  // 2. MIRROR MASK (Parallel band of height boxH centered at cx, cy)
-  if (shape === "mirror") {
-    const span = Math.max(w, h) * 3;
-    const halfBand = boxH / 2;
-    const topMatteH = Math.max(0, span / 2 - halfBand);
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        {mediaNode}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            left: Math.round(cx - span / 2),
-            top: Math.round(cy - span / 2),
-            width: span,
-            height: span,
-            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-          }}
-        >
-          {!inverted ? (
-            <>
-              <View
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: topMatteH,
-                  backgroundColor: effectiveCanvasBg,
-                }}
-              />
-              <View
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  top: span / 2 + halfBand,
-                  height: topMatteH,
-                  backgroundColor: effectiveCanvasBg,
-                }}
-              />
-            </>
-          ) : (
-            <View
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: span / 2 - halfBand,
-                height: boxH,
-                backgroundColor: effectiveCanvasBg,
-              }}
-            />
-          )}
-        </View>
-      </View>
-    );
-  }
-
-  // 3. HEART & STAR MASK
-  if (shape === "heart" || shape === "star") {
-    const svgPath =
-      shape === "heart"
-        ? "M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z"
-        : "M 50 2 L 63 38 L 100 38 L 69 60 L 82 98 L 50 75 L 18 98 L 31 60 L 0 38 L 37 38 Z";
-
-    const svgXml = !inverted
-      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-200 -200 500 500"><path fill-rule="evenodd" d="M -200 -200 H 300 V 300 H -200 Z ${svgPath}" fill="${effectiveCanvasBg}"/></svg>`
-      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="${svgPath}" fill="${effectiveCanvasBg}"/></svg>`;
-
-    const uri = `data:image/svg+xml;utf8,${encodeURIComponent(svgXml)}`;
-
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        {mediaNode}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            left: boxLeft,
-            top: boxTop,
-            width: boxW,
-            height: boxH,
-            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-          }}
-        >
-          <ExpoImage
-            source={{ uri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="fill"
-            cachePolicy="none"
-          />
-        </View>
-      </View>
-    );
-  }
-
-  // 4. CIRCLE & RECTANGLE MASK
-  let bRadius = 0;
-  if (shape === "circle") {
-    bRadius = Math.round(Math.min(boxW, boxH) / 2);
-  } else if (shape === "rectangle") {
-    bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
-  }
-
+  // Inverted Mask: solid shape covering the inside
   if (inverted) {
-    // Inverted: solid cutout overlay covers the inside
+    let bRadius = 0;
+    if (shape === "circle") {
+      bRadius = Math.round(Math.min(boxW, boxH) / 2);
+    } else if (shape === "rectangle") {
+      bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
+    } else if (shape === "heart" || shape === "star") {
+      bRadius = Math.round(Math.min(boxW, boxH) * 0.25);
+    }
+
     return (
       <View style={StyleSheet.absoluteFill}>
         {mediaNode}
@@ -1265,8 +1130,8 @@ function renderMaskedClipContent(
           pointerEvents="none"
           style={{
             position: "absolute",
-            left: boxLeft,
-            top: boxTop,
+            left: Math.round(cx - boxW / 2),
+            top: Math.round(cy - boxH / 2),
             width: boxW,
             height: boxH,
             borderRadius: bRadius,
@@ -1278,29 +1143,220 @@ function renderMaskedClipContent(
     );
   }
 
-  // Standard non-inverted circle/rectangle:
-  // Ultra-fast zero-latency hardware-accelerated border matte covering the outside
-  const bw = Math.max(w, h) * 2;
-  return (
-    <View style={StyleSheet.absoluteFill}>
-      {mediaNode}
+  // 1. HEART & STAR MASK
+  if (shape === "heart" || shape === "star") {
+    const svgPath =
+      shape === "heart"
+        ? "M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z"
+        : "M 50 2 L 63 38 L 100 38 L 69 60 L 82 98 L 50 75 L 18 98 L 31 60 L 0 38 L 37 38 Z";
+
+    const svgXml = !inverted
+      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill-rule="evenodd" d="M 0 0 H 100 V 100 H 0 Z ${svgPath}" fill="${effectiveCanvasBg}"/></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="${svgPath}" fill="${effectiveCanvasBg}"/></svg>`;
+
+    const uri = `data:image/svg+xml;utf8,${encodeURIComponent(svgXml)}`;
+
+    if (inverted) {
+      return (
+        <View style={StyleSheet.absoluteFill}>
+          {mediaNode}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: Math.round(cx - boxW / 2),
+              top: Math.round(cy - boxH / 2),
+              width: boxW,
+              height: boxH,
+              transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+            }}
+          >
+            <ExpoImage
+              source={{ uri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="fill"
+              cachePolicy="memory"
+            />
+          </View>
+        </View>
+      );
+    }
+
+    return (
       <View
-        pointerEvents="none"
         style={{
           position: "absolute",
-          left: boxLeft - bw,
-          top: boxTop - bw,
-          width: boxW + bw * 2,
-          height: boxH + bw * 2,
-          borderWidth: bw,
-          borderColor: effectiveCanvasBg,
-          borderRadius: bRadius + bw,
-          backgroundColor: "transparent",
+          left: Math.round(cx - boxW / 2),
+          top: Math.round(cy - boxH / 2),
+          width: boxW,
+          height: boxH,
+          overflow: "hidden",
           transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
         }}
-      />
-    </View>
-  );
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: Math.round(boxW / 2 - span / 2),
+            top: Math.round(boxH / 2 - span / 2),
+            width: span,
+            height: span,
+            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: Math.round(span / 2 - cx),
+              top: Math.round(span / 2 - cy),
+              width: w,
+              height: h,
+            }}
+          >
+            {mediaNode}
+          </View>
+        </View>
+        <ExpoImage
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="fill"
+          cachePolicy="memory"
+          pointerEvents="none"
+        />
+      </View>
+    );
+  }
+
+  // 2. CIRCLE & RECTANGLE (Hardware-Accelerated Native Clipping)
+  if (shape === "circle" || shape === "rectangle") {
+    let bRadius = 0;
+    if (shape === "circle") {
+      bRadius = Math.round(Math.min(boxW, boxH) / 2);
+    } else if (shape === "rectangle") {
+      bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
+    }
+
+    return (
+      <View
+        style={{
+          position: "absolute",
+          left: Math.round(cx - boxW / 2),
+          top: Math.round(cy - boxH / 2),
+          width: boxW,
+          height: boxH,
+          borderRadius: bRadius,
+          overflow: "hidden",
+          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+        }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: Math.round(boxW / 2 - span / 2),
+            top: Math.round(boxH / 2 - span / 2),
+            width: span,
+            height: span,
+            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: Math.round(span / 2 - cx),
+              top: Math.round(span / 2 - cy),
+              width: w,
+              height: h,
+            }}
+          >
+            {mediaNode}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // 2. LINEAR SPLIT MASK
+  if (shape === "linear") {
+    const halfSpan = span / 2;
+    return (
+      <View
+        style={{
+          position: "absolute",
+          left: Math.round(cx - span / 2),
+          top: Math.round(cy),
+          width: span,
+          height: halfSpan,
+          overflow: "hidden",
+          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+        }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            top: -halfSpan,
+            width: span,
+            height: span,
+            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: Math.round(span / 2 - cx),
+              top: Math.round(span / 2 - cy),
+              width: w,
+              height: h,
+            }}
+          >
+            {mediaNode}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // 3. MIRROR MASK
+  if (shape === "mirror") {
+    return (
+      <View
+        style={{
+          position: "absolute",
+          left: Math.round(cx - span / 2),
+          top: Math.round(cy - boxH / 2),
+          width: span,
+          height: boxH,
+          overflow: "hidden",
+          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
+        }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            top: Math.round(boxH / 2 - span / 2),
+            width: span,
+            height: span,
+            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: Math.round(span / 2 - cx),
+              top: Math.round(span / 2 - cy),
+              width: w,
+              height: h,
+            }}
+          >
+            {mediaNode}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return mediaNode;
 }
 
 const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = ({
@@ -1437,16 +1493,16 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
       {activeVideos.map((vid) => {
         const isTrans = activeTransient && activeTransient.clipId === vid.id;
         const kfT = getInterpolatedTransform(vid, currentTime);
-        const posX = isTrans
+        const posX = (isTrans && !activeTransient!.mask)
           ? activeTransient!.x
           : (kfT?.x ?? vid.transform?.x ?? 0);
-        const posY = isTrans
+        const posY = (isTrans && !activeTransient!.mask)
           ? activeTransient!.y
           : (kfT?.y ?? vid.transform?.y ?? 0);
-        const baseScale = isTrans
+        const baseScale = (isTrans && !activeTransient!.mask)
           ? activeTransient!.scale
           : (kfT?.scale ?? vid.transform?.scale ?? vid.scale ?? 1.0);
-        const rot = isTrans
+        const rot = (isTrans && !activeTransient!.mask)
           ? activeTransient!.rotation
           : (kfT?.rotation ?? vid.transform?.rotation ?? vid.rotation ?? 0);
         const opacity =
@@ -1788,7 +1844,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                           currentTime={currentTime}
                           isPlaying={isPlaying}
                           opacity={hideUnderlying ? 0 : effectiveOpacity}
-                          onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
                         />
                         {renderClipEnhanceOverlay(vid)}
                         {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
@@ -1889,7 +1944,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                         currentTime={currentTime}
                         isPlaying={isPlaying}
                         opacity={hideUnderlying ? 0 : effectiveOpacity}
-                        onSelect={() => onSelectClip?.(vid.id, vid.type || "video")}
                       />
                       {renderClipEnhanceOverlay(vid)}
                       {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}

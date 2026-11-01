@@ -72,6 +72,46 @@ impl FastArtEngine {
         crate::exporter::FastArtExporter::export_mp4(project, fps, width, height, total_duration, media_cache)
     }
 
+    /// Zero-Memory direct-to-disk streaming MP4 export
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_mp4_file(
+        project: &FastArtProject,
+        fps: u32,
+        width: u32,
+        height: u32,
+        total_duration: f64,
+        media_cache: &HashMap<String, FrameBuffer>,
+        output_path: &str,
+    ) -> std::io::Result<()> {
+        crate::exporter::FastArtExporter::export_mp4_file(project, fps, width, height, total_duration, media_cache, output_path)
+    }
+
+    /// Zero-Memory direct-to-disk streaming GIF export
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_gif_file(
+        project: &FastArtProject,
+        fps: u32,
+        width: u32,
+        height: u32,
+        total_duration: f64,
+        media_cache: &HashMap<String, FrameBuffer>,
+        output_path: &str,
+    ) -> std::io::Result<()> {
+        crate::exporter::FastArtExporter::export_gif_file(project, fps, width, height, total_duration, media_cache, output_path)
+    }
+
+    /// Direct-to-disk WAV master audio export
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_wav_file(
+        project: &FastArtProject,
+        sample_rate: u32,
+        total_duration: f64,
+        audio_cache: &HashMap<String, crate::audio::AudioBuffer>,
+        output_path: &str,
+    ) -> std::io::Result<()> {
+        crate::exporter::FastArtExporter::export_wav_file(project, sample_rate, total_duration, audio_cache, output_path)
+    }
+
     /// High-speed beat and tempo detector
     pub fn detect_beats(samples: &[f32], sample_rate: u32) -> BeatDetectionOutput {
         detect_audio_beats(samples, sample_rate)

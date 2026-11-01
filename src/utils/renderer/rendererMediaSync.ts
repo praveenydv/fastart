@@ -86,14 +86,45 @@ export async function preloadClip(
     ctx.thumbnailElements.set(clip.id, thumb);
   }
 
-  if (ctx.videoElements.has(elementKey)) {
-    return ctx.videoElements.get(elementKey)!;
-  }
-  if (
-    ctx.videoElements.has(clip.url) &&
-    !Array.from(ctx.videoElements.keys()).some((k) => k !== clip.url && k !== elementKey)
-  ) {
-    return ctx.videoElements.get(clip.url)!;
+  const cachedEl = ctx.videoElements.get(elementKey) || ctx.videoElements.get(clip.url);
+  if (cachedEl) {
+    if (clip.type === "video" && cachedEl instanceof HTMLVideoElement) {
+      const currentSrc = cachedEl.src || cachedEl.currentSrc || "";
+      const isDead = Boolean(cachedEl.error) || (cachedEl.networkState === 3);
+      const urlChanged = Boolean(clip.url && currentSrc && !currentSrc.endsWith(clip.url) && currentSrc !== clip.url);
+
+      if (clip.url && (urlChanged || isDead)) {
+        try {
+          cachedEl.pause();
+          if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
+            cachedEl.crossOrigin = "anonymous";
+          } else {
+            cachedEl.removeAttribute("crossorigin");
+          }
+          cachedEl.src = clip.url;
+          cachedEl.load();
+          ctx.videoElements.set(clip.url, cachedEl);
+          globalActiveVideoElements.set(clip.url, cachedEl);
+          ctx.videoElements.set(elementKey, cachedEl);
+          globalActiveVideoElements.set(elementKey, cachedEl);
+          if (clip.id) {
+            ctx.videoElements.set(clip.id, cachedEl);
+            globalActiveVideoElements.set(clip.id, cachedEl);
+          }
+        } catch (e) {}
+      }
+      return cachedEl;
+    } else if (clip.type === "photo" && cachedEl instanceof HTMLImageElement) {
+      const currentSrc = cachedEl.src || "";
+      const urlChanged = Boolean(clip.url && currentSrc !== clip.url);
+      if (clip.url && urlChanged) {
+        cachedEl.src = clip.url;
+        ctx.videoElements.set(clip.url, cachedEl);
+        ctx.videoElements.set(elementKey, cachedEl);
+      }
+      return cachedEl;
+    }
+    return cachedEl;
   }
 
   if (clip.type === "video") {
@@ -194,12 +225,19 @@ export async function preloadClip(
       try {
         const lookupId = clip.sourceMediaId || clip.id;
         const freshUrl = await getLiveMediaUrl(lookupId, clip.title || (clip as any).name);
-        if (freshUrl && freshUrl !== clip.url) {
+        const curSrc = vid.src || vid.currentSrc || "";
+        if (freshUrl && (!curSrc.endsWith(freshUrl) && curSrc !== freshUrl)) {
           ctx.videoElements.delete(clip.url);
           globalActiveVideoElements.delete(clip.url);
           clip.url = freshUrl;
           ctx.videoElements.set(freshUrl, vid);
           globalActiveVideoElements.set(freshUrl, vid);
+          ctx.videoElements.set(elementKey, vid);
+          globalActiveVideoElements.set(elementKey, vid);
+          if (clip.id) {
+            ctx.videoElements.set(clip.id, vid);
+            globalActiveVideoElements.set(clip.id, vid);
+          }
           vid.src = freshUrl;
           vid.load();
           return;
@@ -318,6 +356,13 @@ export function syncPlayback(
     if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
     const vid = mediaEl as HTMLVideoElement;
 
+    // Auto-heal URL mismatch or dead blob on active video element
+    const curSrc = vid.src || vid.currentSrc || "";
+    if (activeClip.url && (!curSrc.endsWith(activeClip.url) && curSrc !== activeClip.url)) {
+      vid.src = activeClip.url;
+      vid.load();
+    }
+
     if (vid.duration && !isNaN(vid.duration) && isFinite(vid.duration) && vid.duration > 0) {
       if (!(vid as any)._durationCached) {
         (vid as any)._durationCached = true;
@@ -361,9 +406,11 @@ export function syncPlayback(
 
       if (vid.paused) {
         // Startup sync: snap directly to mediaTime if drift > 0.04s before starting playback
-        if (Math.abs(vid.currentTime - mediaTime) > 0.04 && now - lastHardSeek > 400) {
+        if (vid.readyState >= 1 && Math.abs(vid.currentTime - mediaTime) > 0.04 && now - lastHardSeek > 400) {
           (vid as any)._lastHardSeek = now;
-          vid.currentTime = Math.max(0, mediaTime);
+          try {
+            vid.currentTime = Math.max(0, mediaTime);
+          } catch (e) {}
         }
         vid.play().catch(() => {});
       } else {

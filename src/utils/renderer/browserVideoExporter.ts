@@ -195,7 +195,7 @@ export async function exportBrowserVideo(
         const isRustReady = await rustCoreBridge.isAvailable();
         if (isRustReady) {
           const wavBytes = await rustCoreBridge.exportProjectWav(project, sampleRate, duration);
-          if (wavBytes && wavBytes.length > 44) {
+          if (wavBytes && wavBytes instanceof Uint8Array && wavBytes.length > 44) {
             audioBuffer = await audioCtx.decodeAudioData(wavBytes.buffer.slice(0));
           }
         }

@@ -16,7 +16,7 @@ interface TimelineClipPreviewProps {
 }
 
 const FRAME_WIDTH = 54;
-const isWeb = typeof window !== "undefined" || (typeof Platform !== "undefined" && Platform?.OS === "web");
+const isWeb = Platform.OS === "web";
 
 const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
   clip,
@@ -72,7 +72,7 @@ const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
   const frameCount = useMemo(() => {
     if (width <= 0) return 0;
     const count = Math.max(1, Math.ceil(width / FRAME_WIDTH));
-    return isWeb ? count : Math.min(count, 8);
+    return isWeb ? count : Math.min(count, 32);
   }, [width]);
 
   if (!thumbUri || frameCount <= 0) {
@@ -135,6 +135,7 @@ const previewStyles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
     zIndex: 1,
+    backgroundColor: "#0B0D13",
   },
   filmstripRow: {
     flex: 1,

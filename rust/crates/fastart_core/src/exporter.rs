@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use crate::audio::{encode_wav_16bit, AudioBuffer};
 use crate::codecs::{
-    build_h264_pps, build_h264_sps, create_mp4_container, encode_gif, encode_h264_iframe,
-    encode_png_fast, GifFrame,
+    build_h264_pps, build_h264_sps, encode_h264_iframe, encode_png_fast,
 };
 use crate::compositor::{render_canvas_background, BlendMode};
 use crate::effects::{apply_color_adjustments, apply_fast_blur, apply_vignette};
@@ -49,59 +48,82 @@ impl FastArtExporter {
                 .or_else(|| clip.thumbnail.as_ref().and_then(|t| media_cache.get(t)))
                 .or_else(|| media_cache.get(&clip.id));
 
-            if let Some(src_frame) = clip_media {
-                let speed = if clip.speed > 0.01 && clip.speed.is_finite() {
-                    clip.speed
-                } else {
-                    1.0
-                };
-                let trim_in = clip.trim_in.unwrap_or(0.0).max(0.0);
-                let local_time = (time_sec - start) * speed + trim_in;
-
-                let mut transform = evaluate_keyframes(
-                    clip.transform.as_ref(),
-                    clip.keyframes.as_deref(),
-                    local_time,
-                );
-
-                sanitize_transform(&mut transform);
-                transform.opacity = (transform.opacity * clip.opacity as f32).clamp(0.0, 1.0);
-
-                let fit = clip.fit.as_deref().unwrap_or("contain");
-
-                if fit == "contain" && (src_frame.width != width || src_frame.height != height) {
-                    let mut blur_bg = src_frame.clone();
-                    apply_fast_blur(&mut blur_bg, 8);
-                    let mut bg_transform = transform;
-                    bg_transform.opacity = (bg_transform.opacity * 0.45).clamp(0.0, 1.0);
-                    composite_transformed(
-                        &mut fb,
-                        &blur_bg,
-                        &bg_transform,
-                        Some("cover"),
-                        None,
-                        None,
-                        BlendMode::Normal,
-                    );
+            let placeholder_frame: FrameBuffer;
+            let src_frame: &FrameBuffer = if let Some(src) = clip_media {
+                src
+            } else {
+                // Procedural placeholder card so clips without cache still render visually
+                let w = width.min(720).max(64);
+                let h = height.min(1280).max(64);
+                let mut fallback = FrameBuffer::new(w, h);
+                let seed = clip.id.as_bytes().iter().fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
+                let r1 = ((seed.wrapping_mul(1103515245).wrapping_add(12345)) >> 16) & 0xFF;
+                let g1 = ((seed.wrapping_mul(214013).wrapping_add(2531011)) >> 16) & 0xFF;
+                let b1 = (seed ^ (seed >> 8)) & 0xFF;
+                for y in 0..h {
+                    let fy = y as f32 / h as f32;
+                    let r = ((r1 as f32 * (1.0 - fy * 0.4)).clamp(25.0, 215.0)) as u8;
+                    let g = ((g1 as f32 * (1.0 - fy * 0.4)).clamp(25.0, 215.0)) as u8;
+                    let b = ((b1 as f32 * (1.0 - fy * 0.4)).clamp(35.0, 225.0)) as u8;
+                    for x in 0..w {
+                        fallback.set_pixel(x, y, r, g, b, 255);
+                    }
                 }
+                placeholder_frame = fallback;
+                &placeholder_frame
+            };
 
-                let evaluated_mask = evaluate_mask_keyframes(
-                    clip.mask.as_ref(),
-                    clip.mask_keyframes.as_deref().or_else(|| clip.mask.as_ref().and_then(|m| m.keyframes.as_deref())),
-                    clip.keyframes.as_deref(),
-                    local_time,
-                );
+            let speed = if clip.speed > 0.01 && clip.speed.is_finite() {
+                clip.speed
+            } else {
+                1.0
+            };
+            let trim_in = clip.trim_in.unwrap_or(0.0).max(0.0);
+            let local_time = (time_sec - start) * speed + trim_in;
 
+            let mut transform = evaluate_keyframes(
+                clip.transform.as_ref(),
+                clip.keyframes.as_deref(),
+                local_time,
+            );
+
+            sanitize_transform(&mut transform);
+            transform.opacity = (transform.opacity * clip.opacity as f32).clamp(0.0, 1.0);
+
+            let fit = clip.fit.as_deref().unwrap_or("contain");
+
+            if fit == "contain" && (src_frame.width != width || src_frame.height != height) {
+                let mut blur_bg = src_frame.clone();
+                apply_fast_blur(&mut blur_bg, 8);
+                let mut bg_transform = transform;
+                bg_transform.opacity = (bg_transform.opacity * 0.45).clamp(0.0, 1.0);
                 composite_transformed(
                     &mut fb,
-                    src_frame,
-                    &transform,
-                    Some(fit),
-                    evaluated_mask.as_ref().or(clip.mask.as_ref()),
-                    clip.cutout.as_ref(),
+                    &blur_bg,
+                    &bg_transform,
+                    Some("cover"),
+                    None,
+                    None,
                     BlendMode::Normal,
                 );
             }
+
+            let evaluated_mask = evaluate_mask_keyframes(
+                clip.mask.as_ref(),
+                clip.mask_keyframes.as_deref().or_else(|| clip.mask.as_ref().and_then(|m| m.keyframes.as_deref())),
+                clip.keyframes.as_deref(),
+                local_time,
+            );
+
+            composite_transformed(
+                &mut fb,
+                src_frame,
+                &transform,
+                Some(fit),
+                evaluated_mask.as_ref().or(clip.mask.as_ref()),
+                clip.cutout.as_ref(),
+                BlendMode::Normal,
+            );
         }
 
         // 3. Effects Track
@@ -324,14 +346,21 @@ impl FastArtExporter {
         let total_frames = ((duration * fps as f64) as usize).max(1);
         let delay_ms = (1000 / fps) as u16;
 
-        let mut gif_frames = Vec::with_capacity(total_frames);
+        let mut writer = match crate::codecs::GifStreamWriter::new(Vec::new(), width as u16, height as u16) {
+            Ok(w) => w,
+            Err(_) => return Vec::new(),
+        };
+
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
             let fb = Self::render_frame(project, time_sec, width, height, media_cache);
-            gif_frames.push(GifFrame { fb, delay_ms });
+            let _ = writer.append_frame(&fb, delay_ms);
         }
 
-        encode_gif(&gif_frames)
+        match writer.finish() {
+            Ok(vec) => vec,
+            Err(_) => Vec::new(),
+        }
     }
 
     /// Renders a single project frame at time_sec and encodes to PNG
@@ -368,15 +397,107 @@ impl FastArtExporter {
         let sps = build_h264_sps(mb_w, mb_h, fps);
         let pps = build_h264_pps();
 
-        let mut nal_frames = Vec::with_capacity(total_frames);
+        let cursor = std::io::Cursor::new(Vec::with_capacity(total_frames * 512 + 65536));
+        let mut writer = match crate::codecs::Mp4StreamWriter::new(cursor, width, height, fps, &sps, &pps) {
+            Ok(w) => w,
+            Err(_) => return Vec::new(),
+        };
+
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
             let fb = Self::render_frame(project, time_sec, width, height, media_cache);
             let nal = encode_h264_iframe(&fb, frame_idx, mb_w, mb_h);
-            nal_frames.push(nal);
+            let _ = writer.append_frame(&nal);
         }
 
-        create_mp4_container(width, height, fps, &sps, &pps, &nal_frames)
+        match writer.finish() {
+            Ok(c) => c.into_inner(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Zero-Memory direct-to-disk streaming MP4 export
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_mp4_file(
+        project: &FastArtProject,
+        fps: u32,
+        width: u32,
+        height: u32,
+        total_duration: f64,
+        media_cache: &HashMap<String, FrameBuffer>,
+        output_path: &str,
+    ) -> std::io::Result<()> {
+        let fps = fps.clamp(5, 60);
+        let duration = total_duration.max(0.2);
+        let total_frames = ((duration * fps as f64) as usize).max(1);
+
+        let width = ((width + 15) / 16) * 16;
+        let height = ((height + 15) / 16) * 16;
+        let mb_w = width / 16;
+        let mb_h = height / 16;
+
+        let sps = build_h264_sps(mb_w, mb_h, fps);
+        let pps = build_h264_pps();
+
+        let file = std::fs::File::create(output_path)?;
+        let buf_writer = std::io::BufWriter::with_capacity(512 * 1024, file);
+        let mut writer = crate::codecs::Mp4StreamWriter::new(buf_writer, width, height, fps, &sps, &pps)?;
+
+        for frame_idx in 0..total_frames {
+            let time_sec = frame_idx as f64 / fps as f64;
+            let fb = Self::render_frame(project, time_sec, width, height, media_cache);
+            let nal = encode_h264_iframe(&fb, frame_idx, mb_w, mb_h);
+            writer.append_frame(&nal)?;
+        }
+
+        writer.finish()?;
+        Ok(())
+    }
+
+    /// Zero-Memory direct-to-disk streaming GIF export
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_gif_file(
+        project: &FastArtProject,
+        fps: u32,
+        width: u32,
+        height: u32,
+        total_duration: f64,
+        media_cache: &HashMap<String, FrameBuffer>,
+        output_path: &str,
+    ) -> std::io::Result<()> {
+        let fps = fps.clamp(5, 30);
+        let duration = total_duration.max(0.2).min(30.0);
+        let total_frames = ((duration * fps as f64) as usize).max(1);
+        let delay_ms = (1000 / fps) as u16;
+
+        let file = std::fs::File::create(output_path)?;
+        let buf_writer = std::io::BufWriter::with_capacity(256 * 1024, file);
+        let mut writer = crate::codecs::GifStreamWriter::new(buf_writer, width as u16, height as u16)?;
+
+        for frame_idx in 0..total_frames {
+            let time_sec = frame_idx as f64 / fps as f64;
+            let fb = Self::render_frame(project, time_sec, width, height, media_cache);
+            writer.append_frame(&fb, delay_ms)?;
+        }
+
+        writer.finish()?;
+        Ok(())
+    }
+
+    /// Direct-to-disk WAV master audio export
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_wav_file(
+        project: &FastArtProject,
+        sample_rate: u32,
+        total_duration: f64,
+        audio_cache: &HashMap<String, AudioBuffer>,
+        output_path: &str,
+    ) -> std::io::Result<()> {
+        let master = Self::mix_audio(project, sample_rate, total_duration, audio_cache);
+        let file = std::fs::File::create(output_path)?;
+        let mut buf_writer = std::io::BufWriter::with_capacity(256 * 1024, file);
+        crate::audio::encode_wav_16bit_to_writer(&mut buf_writer, &master)?;
+        Ok(())
     }
 }
 

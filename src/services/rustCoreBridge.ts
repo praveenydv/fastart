@@ -212,6 +212,14 @@ interface WasmExports {
     outPtr: number,
     maxOutLen: number
   ) => number;
+  fastart_export_gif_to_heap?: (
+    projectJsonPtr: number,
+    jsonLen: number,
+    fps: number,
+    width: number,
+    height: number,
+    duration: number
+  ) => number;
   fastart_export_wav_c: (
     projectJsonPtr: number,
     jsonLen: number,
@@ -219,6 +227,12 @@ interface WasmExports {
     duration: number,
     outPtr: number,
     maxOutLen: number
+  ) => number;
+  fastart_export_wav_to_heap?: (
+    projectJsonPtr: number,
+    jsonLen: number,
+    sampleRate: number,
+    duration: number
   ) => number;
   fastart_export_mp4_c: (
     projectJsonPtr: number,
@@ -230,6 +244,16 @@ interface WasmExports {
     outPtr: number,
     maxOutLen: number
   ) => number;
+  fastart_export_mp4_to_heap?: (
+    projectJsonPtr: number,
+    jsonLen: number,
+    fps: number,
+    width: number,
+    height: number,
+    duration: number
+  ) => number;
+  fastart_get_export_buffer_ptr?: () => number;
+  fastart_free_export_buffer?: () => void;
   fastart_pack_alpha_rle_c?: (
     alphaPtr: number,
     len: number,
@@ -653,7 +677,8 @@ class RustCoreBridgeService {
     fps: number = 15,
     width: number = 480,
     height: number = 854,
-    duration?: number
+    duration?: number,
+    targetFilePath?: string
   ): Promise<string | null> {
     await this.init();
 
@@ -663,14 +688,15 @@ class RustCoreBridgeService {
     // 1. Android / iOS Native
     if ((this.backendType === "android_native" || this.backendType === "ios_native") && FastArtRust) {
       try {
-        const dataUri: string = await FastArtRust.exportGif(
+        const result: string = await FastArtRust.exportGif(
           projectJson,
           fps,
           width,
           height,
-          dur
+          dur,
+          targetFilePath || ""
         );
-        return dataUri;
+        return result;
       } catch (err) {
         console.warn("[RustCoreBridge] Native exportGif error:", err);
       }
@@ -691,8 +717,36 @@ class RustCoreBridgeService {
         if (!jsonPtr) return null;
         new Uint8Array(inst.memory.buffer, jsonPtr, jsonBytes.length).set(jsonBytes);
 
-        // Pre-allocate buffer for GIF (e.g. up to 10MB)
-        maxOutLen = Math.min(width * height * fps * Math.ceil(dur) + 65536, 15 * 1024 * 1024);
+        // Check if fastart_export_gif_to_heap is available for zero-copy dynamically-sized export
+        if (typeof inst.fastart_export_gif_to_heap === "function" && typeof inst.fastart_get_export_buffer_ptr === "function") {
+          const written = inst.fastart_export_gif_to_heap(
+            jsonPtr,
+            jsonBytes.length,
+            fps,
+            width,
+            height,
+            dur
+          );
+
+          if (written > 0) {
+            const ptr = inst.fastart_get_export_buffer_ptr();
+            const gifBytes = new Uint8Array(inst.memory.buffer, ptr, written);
+            let binary = "";
+            const chunkSize = 16384;
+            for (let i = 0; i < written; i += chunkSize) {
+              const sub = gifBytes.subarray(i, Math.min(i + chunkSize, written));
+              binary += String.fromCharCode.apply(null, sub as any);
+            }
+            if (typeof inst.fastart_free_export_buffer === "function") {
+              inst.fastart_free_export_buffer();
+            }
+            const b64 = btoa(binary);
+            return `data:image/gif;base64,${b64}`;
+          }
+        }
+
+        // Fallback to fastart_export_gif_c
+        maxOutLen = Math.min(width * height * fps * Math.ceil(dur) + 65536, 30 * 1024 * 1024);
         outPtr = inst.fastart_alloc(maxOutLen);
         if (!outPtr) return null;
 
@@ -711,8 +765,10 @@ class RustCoreBridgeService {
         if (written > 0) {
           const gifBytes = new Uint8Array(inst.memory.buffer, outPtr, written);
           let binary = "";
-          for (let i = 0; i < written; i++) {
-            binary += String.fromCharCode(gifBytes[i]);
+          const chunkSize = 16384;
+          for (let i = 0; i < written; i += chunkSize) {
+            const sub = gifBytes.subarray(i, Math.min(i + chunkSize, written));
+            binary += String.fromCharCode.apply(null, sub as any);
           }
           const b64 = btoa(binary);
           dataUri = `data:image/gif;base64,${b64}`;
@@ -738,8 +794,9 @@ class RustCoreBridgeService {
   public async exportProjectWav(
     project: FastArtProject,
     sampleRate: number = 44100,
-    duration?: number
-  ): Promise<Uint8Array | null> {
+    duration?: number,
+    targetFilePath?: string
+  ): Promise<Uint8Array | string | null> {
     await this.init();
 
     const dur = duration || (project as any).duration || 5.0;
@@ -748,13 +805,17 @@ class RustCoreBridgeService {
     // 1. Android / iOS Native
     if ((this.backendType === "android_native" || this.backendType === "ios_native") && FastArtRust) {
       try {
-        const rawBytes: Uint8Array | number[] = await FastArtRust.exportWav(
+        const rawResult: any = await FastArtRust.exportWav(
           projectJson,
           sampleRate,
-          dur
+          dur,
+          targetFilePath || ""
         );
-        if (rawBytes) {
-          return rawBytes instanceof Uint8Array ? rawBytes : new Uint8Array(rawBytes);
+        if (rawResult) {
+          if (typeof rawResult === "string") {
+            return rawResult;
+          }
+          return rawResult instanceof Uint8Array ? rawResult : new Uint8Array(rawResult);
         }
       } catch (err) {
         console.warn("[RustCoreBridge] Native exportWav error:", err);
@@ -775,6 +836,26 @@ class RustCoreBridgeService {
         jsonPtr = inst.fastart_alloc(jsonBytes.length);
         if (!jsonPtr) return null;
         new Uint8Array(inst.memory.buffer, jsonPtr, jsonBytes.length).set(jsonBytes);
+
+        // Check if fastart_export_wav_to_heap is available for zero-copy export
+        if (typeof inst.fastart_export_wav_to_heap === "function" && typeof inst.fastart_get_export_buffer_ptr === "function") {
+          const written = inst.fastart_export_wav_to_heap(
+            jsonPtr,
+            jsonBytes.length,
+            sampleRate,
+            dur
+          );
+
+          if (written > 0) {
+            const ptr = inst.fastart_get_export_buffer_ptr();
+            const wasmSlice = new Uint8Array(inst.memory.buffer, ptr, written);
+            const copy = new Uint8Array(wasmSlice);
+            if (typeof inst.fastart_free_export_buffer === "function") {
+              inst.fastart_free_export_buffer();
+            }
+            return copy;
+          }
+        }
 
         // WAV header (44 bytes) + samples (dur * sampleRate * 2 channels * 2 bytes/sample)
         const totalSamples = Math.ceil(dur * sampleRate * 2);
@@ -819,8 +900,9 @@ class RustCoreBridgeService {
     fps: number = 30,
     width: number = 720,
     height: number = 1280,
-    duration?: number
-  ): Promise<Uint8Array | null> {
+    duration?: number,
+    targetFilePath?: string
+  ): Promise<Uint8Array | string | null> {
     await this.init();
 
     const dur = duration || (project as any).duration || 5.0;
@@ -829,15 +911,19 @@ class RustCoreBridgeService {
     // 1. Android / iOS Native
     if ((this.backendType === "android_native" || this.backendType === "ios_native") && FastArtRust) {
       try {
-        const rawBytes: Uint8Array | number[] = await FastArtRust.exportMp4(
+        const rawResult: any = await FastArtRust.exportMp4(
           projectJson,
           fps,
           width,
           height,
-          dur
+          dur,
+          targetFilePath || ""
         );
-        if (rawBytes) {
-          return rawBytes instanceof Uint8Array ? rawBytes : new Uint8Array(rawBytes);
+        if (rawResult) {
+          if (typeof rawResult === "string") {
+            return rawResult;
+          }
+          return rawResult instanceof Uint8Array ? rawResult : new Uint8Array(rawResult);
         }
       } catch (err) {
         console.warn("[RustCoreBridge] Native exportMp4 error:", err);
@@ -859,8 +945,30 @@ class RustCoreBridgeService {
         if (!jsonPtr) return null;
         new Uint8Array(inst.memory.buffer, jsonPtr, jsonBytes.length).set(jsonBytes);
 
+        // Check if fastart_export_mp4_to_heap is available for zero-copy export
+        if (typeof inst.fastart_export_mp4_to_heap === "function" && typeof inst.fastart_get_export_buffer_ptr === "function") {
+          const written = inst.fastart_export_mp4_to_heap(
+            jsonPtr,
+            jsonBytes.length,
+            fps,
+            width,
+            height,
+            dur
+          );
+
+          if (written > 0) {
+            const ptr = inst.fastart_get_export_buffer_ptr();
+            const wasmSlice = new Uint8Array(inst.memory.buffer, ptr, written);
+            const copy = new Uint8Array(wasmSlice);
+            if (typeof inst.fastart_free_export_buffer === "function") {
+              inst.fastart_free_export_buffer();
+            }
+            return copy;
+          }
+        }
+
         const totalFrames = Math.max(1, Math.ceil(dur * fps));
-        maxOutLen = Math.min(totalFrames * 32 * 1024 + 512 * 1024, 25 * 1024 * 1024);
+        maxOutLen = Math.max(totalFrames * 500 * 1024, 64 * 1024 * 1024);
         outPtr = inst.fastart_alloc(maxOutLen);
         if (!outPtr) {
           return null;

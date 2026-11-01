@@ -97,14 +97,17 @@ function Player({
     if (!mask) {
       setActiveTransient(null);
     } else {
-      setActiveTransient((prev) => ({
-        clipId,
-        x: prev?.clipId === clipId ? prev.x : 0,
-        y: prev?.clipId === clipId ? prev.y : 0,
-        scale: prev?.clipId === clipId ? prev.scale : 1,
-        rotation: prev?.clipId === clipId ? prev.rotation : 0,
-        mask,
-      }));
+      setActiveTransient((prev) => {
+        if (prev?.clipId === clipId && prev.mask === mask) return prev;
+        return {
+          clipId,
+          x: prev?.clipId === clipId && !prev.mask ? prev.x : 0,
+          y: prev?.clipId === clipId && !prev.mask ? prev.y : 0,
+          scale: prev?.clipId === clipId && !prev.mask ? prev.scale : 1,
+          rotation: prev?.clipId === clipId && !prev.mask ? prev.rotation : 0,
+          mask,
+        };
+      });
     }
   }, []);
 

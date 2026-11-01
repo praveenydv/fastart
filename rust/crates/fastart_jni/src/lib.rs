@@ -149,6 +149,207 @@ pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeRenderSnapshot(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeRenderFrameRgba(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    time_sec: f64,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(
+        env,
+        class,
+        j_project_json,
+        time_sec,
+        width,
+        height,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportGif(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportGif(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportWav(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportWav(
+        env,
+        class,
+        j_project_json,
+        sample_rate,
+        duration,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportMp4(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+    )
+}
+
+// Aliases for com.fastart.FastArtRustModule direct invocations
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeRenderSnapshot(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    time_sec: f64,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeRenderSnapshot(env, class, j_project_json, time_sec, width, height)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeRenderSnapshot(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    time_sec: f64,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeRenderSnapshot(env, class, j_project_json, time_sec, width, height)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeRenderFrameRgba(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    time_sec: f64,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(env, class, j_project_json, time_sec, width, height)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeRenderFrameRgba(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    time_sec: f64,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(env, class, j_project_json, time_sec, width, height)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportGif(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportGif(env, class, j_project_json, fps, width, height, duration)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeExportGif(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportGif(env, class, j_project_json, fps, width, height, duration)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportWav(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportWav(env, class, j_project_json, sample_rate, duration)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeExportWav(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportWav(env, class, j_project_json, sample_rate, duration)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportMp4(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4(env, class, j_project_json, fps, width, height, duration)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeExportMp4(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4(env, class, j_project_json, fps, width, height, duration)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(
     mut env: JNIEnv,
     _class: JClass,
@@ -300,6 +501,242 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportMp4(
     let signed_bytes: Vec<i8> = mp4_bytes.into_iter().map(|b| b as i8).collect();
     let _ = env.set_byte_array_region(&j_bytes, 0, &signed_bytes);
     j_bytes.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportMp4File(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let output_path: String = match env.get_string(&j_output_path) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+
+    let media_cache = HashMap::new();
+    match FastArtEngine::export_mp4_file(
+        &project,
+        fps as u32,
+        width as u32,
+        height as u32,
+        duration,
+        &media_cache,
+        &output_path,
+    ) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportGifFile(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let output_path: String = match env.get_string(&j_output_path) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+
+    let media_cache = HashMap::new();
+    match FastArtEngine::export_gif_file(
+        &project,
+        fps as u32,
+        width as u32,
+        height as u32,
+        duration,
+        &media_cache,
+        &output_path,
+    ) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportWavFile(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    let project_str: String = match env.get_string(&j_project_json) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+    let output_path: String = match env.get_string(&j_output_path) {
+        Ok(s) => s.into(),
+        Err(_) => return 0,
+    };
+
+    let project: FastArtProject = match serde_json::from_str(&project_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+
+    let audio_cache = HashMap::new();
+    match FastArtEngine::export_wav_file(
+        &project,
+        sample_rate as u32,
+        duration,
+        &audio_cache,
+        &output_path,
+    ) {
+        Ok(_) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportMp4File(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(env, class, j_project_json, fps, width, height, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeExportMp4File(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(env, class, j_project_json, fps, width, height, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportGifFile(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(env, class, j_project_json, fps, width, height, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeExportGifFile(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(env, class, j_project_json, fps, width, height, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportWavFile(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(env, class, j_project_json, sample_rate, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeExportWavFile(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(env, class, j_project_json, sample_rate, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportMp4File(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(env, class, j_project_json, fps, width, height, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportGifFile(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    fps: jint,
+    width: jint,
+    height: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(env, class, j_project_json, fps, width, height, duration, j_output_path)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportWavFile(
+    env: JNIEnv,
+    class: JClass,
+    j_project_json: JString,
+    sample_rate: jint,
+    duration: f64,
+    j_output_path: JString,
+) -> jboolean {
+    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(env, class, j_project_json, sample_rate, duration, j_output_path)
 }
 
 #[no_mangle]

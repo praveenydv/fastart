@@ -198,7 +198,7 @@ export function applyDenoiseToPeaks(rawPeaks: number[]): number[] {
  */
 export function parseWavPeaks(
   buf: ArrayBuffer,
-  numPoints: number = 800,
+  numPoints: number = 3200,
 ): { duration: number; peaks: number[] } | null {
   if (buf.byteLength < 44) return null;
   const view = new DataView(buf);
@@ -293,7 +293,7 @@ export function parseWavPeaks(
  */
 export function parseMp4AudioPeaks(
   buf: ArrayBuffer,
-  numPoints: number = 800,
+  numPoints: number = 3200,
 ): { hasAudio: boolean; peaks: number[] } | null {
   if (buf.byteLength < 32) return null;
   const view = new DataView(buf);
@@ -565,8 +565,8 @@ export async function extractRealMediaAudioPeaks(
             const ch1 = numChannels > 1 ? audioBuffer.getChannelData(1) : null;
 
             const numPoints = Math.min(
-              2400,
-              Math.max(800, Math.floor(duration * 50)),
+              24000,
+              Math.max(2400, Math.floor(duration * 150)),
             );
 
             // Fast path 1: Try Rust native / WASM SIMD waveform generator
@@ -717,15 +717,16 @@ export function getClipWaveformPeaks(
   trimIn: number = 0,
   speed: number = 1.0,
   barWidth: number = 2.0,
-  barGap: number = 1.5,
+  barGap: number = 1.0,
   denoise: boolean = false,
   clipPeaks?: number[],
   clipMediaDuration?: number,
 ): number[] {
-  const maxBars = Platform.OS !== "web" ? 220 : 500;
+  const targetStep = barWidth + barGap;
+  const maxBars = Platform.OS !== "web" ? 800 : 8000;
   const numBars = Math.max(
-    4,
-    Math.min(maxBars, Math.floor(width / (barWidth + barGap))),
+    8,
+    Math.min(maxBars, Math.floor(width / targetStep)),
   );
 
   // 1. Use explicit clip peaks if attached to the clip object
@@ -761,14 +762,25 @@ export function getClipWaveformPeaks(
       Math.max(0.1, trimIn + duration * speed);
     const effectiveDuration = Math.max(0.05, duration * speed);
     const result: number[] = new Array(numBars);
+    const allPeaksLen = allPeaks.length;
 
     for (let i = 0; i < numBars; i++) {
-      const clipFrac = numBars > 1 ? i / (numBars - 1) : 0;
-      const sourceTime = trimIn + clipFrac * effectiveDuration;
-      const sourceFrac = Math.max(0, Math.min(1.0, sourceTime / totalMediaDur));
-      const peakIdx = Math.floor(sourceFrac * (allPeaks.length - 1));
-      const val = allPeaks[Math.max(0, Math.min(allPeaks.length - 1, peakIdx))];
-      result[i] = Math.max(0.04, Math.min(1.0, val));
+      const clipFracStart = i / numBars;
+      const clipFracEnd = (i + 1) / numBars;
+      const srcTimeStart = trimIn + clipFracStart * effectiveDuration;
+      const srcTimeEnd = trimIn + clipFracEnd * effectiveDuration;
+      const srcFracStart = Math.max(0, Math.min(1.0, srcTimeStart / totalMediaDur));
+      const srcFracEnd = Math.max(0, Math.min(1.0, srcTimeEnd / totalMediaDur));
+
+      const idxStart = Math.floor(srcFracStart * (allPeaksLen - 1));
+      const idxEnd = Math.max(idxStart, Math.floor(srcFracEnd * (allPeaksLen - 1)));
+
+      let maxP = 0;
+      for (let j = idxStart; j <= idxEnd; j++) {
+        const v = allPeaks[j];
+        if (v > maxP) maxP = v;
+      }
+      result[i] = Math.max(0.04, Math.min(1.0, maxP));
     }
 
     // Apply spectral noise gate transfer function when Denoise is active

@@ -1,4 +1,3 @@
-use byteorder::{LittleEndian, WriteBytesExt};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
@@ -185,7 +184,13 @@ pub fn denoise_waveform_peaks(peaks: &mut [f32]) {
 
 /// Encodes 32-bit float audio buffer into standard 16-bit PCM RIFF WAV bytes
 pub fn encode_wav_16bit(buffer: &AudioBuffer) -> Vec<u8> {
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(44 + buffer.samples.len() * 2);
+    let _ = encode_wav_16bit_to_writer(&mut out, buffer);
+    out
+}
+
+/// Encodes 32-bit float audio buffer directly into any std::io::Write stream
+pub fn encode_wav_16bit_to_writer<W: std::io::Write>(writer: &mut W, buffer: &AudioBuffer) -> std::io::Result<()> {
     let num_channels = buffer.channels;
     let sample_rate = buffer.sample_rate;
     let bits_per_sample = 16u16;
@@ -195,30 +200,30 @@ pub fn encode_wav_16bit(buffer: &AudioBuffer) -> Vec<u8> {
     let total_len = 36 + data_len;
 
     // RIFF Header
-    out.extend_from_slice(b"RIFF");
-    let _ = out.write_u32::<LittleEndian>(total_len as u32);
-    out.extend_from_slice(b"WAVE");
+    writer.write_all(b"RIFF")?;
+    writer.write_all(&(total_len as u32).to_le_bytes())?;
+    writer.write_all(b"WAVE")?;
 
     // fmt chunk
-    out.extend_from_slice(b"fmt ");
-    let _ = out.write_u32::<LittleEndian>(16); // Chunk size
-    let _ = out.write_u16::<LittleEndian>(1);  // Audio format 1 = PCM
-    let _ = out.write_u16::<LittleEndian>(num_channels);
-    let _ = out.write_u32::<LittleEndian>(sample_rate);
-    let _ = out.write_u32::<LittleEndian>(byte_rate);
-    let _ = out.write_u16::<LittleEndian>(block_align);
-    let _ = out.write_u16::<LittleEndian>(bits_per_sample);
+    writer.write_all(b"fmt ")?;
+    writer.write_all(&16u32.to_le_bytes())?; // Chunk size
+    writer.write_all(&1u16.to_le_bytes())?;  // Audio format 1 = PCM
+    writer.write_all(&num_channels.to_le_bytes())?;
+    writer.write_all(&sample_rate.to_le_bytes())?;
+    writer.write_all(&byte_rate.to_le_bytes())?;
+    writer.write_all(&block_align.to_le_bytes())?;
+    writer.write_all(&bits_per_sample.to_le_bytes())?;
 
     // data chunk
-    out.extend_from_slice(b"data");
-    let _ = out.write_u32::<LittleEndian>(data_len as u32);
+    writer.write_all(b"data")?;
+    writer.write_all(&(data_len as u32).to_le_bytes())?;
 
     for &s in &buffer.samples {
-        // Soft-knee limiting and clamping
         let clamped = s.clamp(-1.0, 1.0);
         let pcm = (clamped * 32767.0) as i16;
-        let _ = out.write_i16::<LittleEndian>(pcm);
+        writer.write_all(&pcm.to_le_bytes())?;
     }
 
-    out
+    writer.flush()?;
+    Ok(())
 }

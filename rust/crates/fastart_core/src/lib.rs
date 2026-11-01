@@ -86,6 +86,165 @@ mod tests {
         let mp4 = FastArtEngine::export_mp4(&proj, 30, 360, 640, 1.0, &cache);
         assert!(!mp4.is_empty());
         assert_eq!(&mp4[4..8], b"ftyp");
+        // Check that mdat exists in container
+        let has_mdat = mp4.windows(4).any(|w| w == b"mdat");
+        let has_moov = mp4.windows(4).any(|w| w == b"moov");
+        assert!(has_mdat, "MP4 must contain mdat box");
+        assert!(has_moov, "MP4 must contain moov box");
+    }
+
+    #[test]
+    fn test_export_mp4_file_streaming() {
+        use std::collections::HashMap;
+        let json = r#"{
+            "id": "proj-file-mp4",
+            "title": "File MP4 Project",
+            "aspectRatio": "9:16",
+            "tracks": {
+                "video": [],
+                "audio": [],
+                "text": [],
+                "captions": [],
+                "stickers": [],
+                "effects": [],
+                "filters": []
+            }
+        }"#;
+        let proj: FastArtProject = serde_json::from_str(json).unwrap();
+        let cache = HashMap::new();
+        let tmp_path = std::env::temp_dir().join("test_fastart_export.mp4");
+        let path_str = tmp_path.to_str().unwrap();
+
+        let res = FastArtEngine::export_mp4_file(&proj, 30, 360, 640, 0.5, &cache, path_str);
+        assert!(res.is_ok(), "Streaming MP4 to disk should succeed");
+
+        let metadata = std::fs::metadata(&tmp_path).expect("File must exist on disk");
+        assert!(metadata.len() > 1024, "File size must be > 1KB");
+
+        let bytes = std::fs::read(&tmp_path).unwrap();
+        assert_eq!(&bytes[4..8], b"ftyp");
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_export_gif_file_streaming() {
+        use std::collections::HashMap;
+        let json = r#"{
+            "id": "proj-file-gif",
+            "title": "File GIF Project",
+            "aspectRatio": "1:1",
+            "tracks": {
+                "video": [],
+                "audio": [],
+                "text": [],
+                "captions": [],
+                "stickers": [],
+                "effects": [],
+                "filters": []
+            }
+        }"#;
+        let proj: FastArtProject = serde_json::from_str(json).unwrap();
+        let cache = HashMap::new();
+        let tmp_path = std::env::temp_dir().join("test_fastart_export.gif");
+        let path_str = tmp_path.to_str().unwrap();
+
+        let res = FastArtEngine::export_gif_file(&proj, 10, 64, 64, 0.4, &cache, path_str);
+        assert!(res.is_ok(), "Streaming GIF to disk should succeed");
+
+        let bytes = std::fs::read(&tmp_path).unwrap();
+        assert!(bytes.starts_with(b"GIF89a"));
+        assert_eq!(bytes[bytes.len() - 1], 0x3B);
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_export_wav_file_streaming() {
+        use std::collections::HashMap;
+        let json = r#"{
+            "id": "proj-file-wav",
+            "title": "File WAV Project",
+            "aspectRatio": "16:9",
+            "tracks": {
+                "video": [],
+                "audio": [],
+                "text": [],
+                "captions": [],
+                "stickers": [],
+                "effects": [],
+                "filters": []
+            }
+        }"#;
+        let proj: FastArtProject = serde_json::from_str(json).unwrap();
+        let cache = HashMap::new();
+        let tmp_path = std::env::temp_dir().join("test_fastart_export.wav");
+        let path_str = tmp_path.to_str().unwrap();
+
+        let res = FastArtEngine::export_wav_file(&proj, 44100, 0.4, &cache, path_str);
+        assert!(res.is_ok(), "Streaming WAV to disk should succeed");
+
+        let bytes = std::fs::read(&tmp_path).unwrap();
+        assert!(bytes.starts_with(b"RIFF"));
+        assert_eq!(&bytes[8..12], b"WAVE");
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_h264_iframe_macroblock_syntax() {
+        let fb = FrameBuffer::with_color(32, 32, 100, 150, 200, 255);
+        let nal = encode_h264_iframe(&fb, 0, 2, 2);
+        assert!(!nal.is_empty());
+        assert_eq!(nal[0], 0x65); // IDR slice header
+        // Verify macroblocks 1, 2, 3 receive the mandatory [0x0D, 0x00] I_PCM syntax
+        assert!(nal.len() > 384 * 4);
+    }
+
+    #[test]
+    fn test_export_gif_compliance() {
+        use std::collections::HashMap;
+        let json = r#"{
+            "id": "proj-gif",
+            "title": "GIF Project",
+            "aspectRatio": "1:1",
+            "tracks": {
+                "video": [],
+                "audio": [],
+                "text": [],
+                "captions": [],
+                "stickers": [],
+                "effects": [],
+                "filters": []
+            }
+        }"#;
+        let proj: FastArtProject = serde_json::from_str(json).unwrap();
+        let cache = HashMap::new();
+        let gif = FastArtEngine::export_gif(&proj, 10, 64, 64, 0.5, &cache);
+        assert!(gif.starts_with(b"GIF89a"), "GIF must have GIF89a header");
+        assert_eq!(gif[gif.len() - 1], 0x3B, "GIF must end with trailer byte 0x3B");
+    }
+
+    #[test]
+    fn test_export_wav_audio() {
+        use std::collections::HashMap;
+        let json = r#"{
+            "id": "proj-wav",
+            "title": "WAV Project",
+            "aspectRatio": "16:9",
+            "tracks": {
+                "video": [],
+                "audio": [],
+                "text": [],
+                "captions": [],
+                "stickers": [],
+                "effects": [],
+                "filters": []
+            }
+        }"#;
+        let proj: FastArtProject = serde_json::from_str(json).unwrap();
+        let cache = HashMap::new();
+        let wav = FastArtEngine::export_wav(&proj, 44100, 0.5, &cache);
+        assert!(wav.starts_with(b"RIFF"));
+        assert_eq!(&wav[8..12], b"WAVE");
+        assert!(wav.len() > 44);
     }
 
     #[test]

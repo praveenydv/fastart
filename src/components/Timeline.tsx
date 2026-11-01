@@ -311,6 +311,107 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [isPinching, setIsPinching] = useState(false);
   const pinchStartDist = useRef<number | null>(null);
   const pinchStartZoom = useRef<number>(pxPerSec);
+  const lastZoomRef = useRef(pxPerSec);
+
+  // Unified Zoom Change with Playhead (Tracker Line) Anchoring
+  const handleZoomChangeWithAnchor = useCallback(
+    (newZoom: number) => {
+      const clampedZoom = Math.max(1, Math.min(1000, Math.round(newZoom)));
+      if (clampedZoom === pxPerSec) return;
+
+      const oldZoom = pxPerSec;
+      lastZoomRef.current = clampedZoom;
+      const oldScrollX = currentScrollXRef.current;
+      const playheadOldX = currentTime * oldZoom;
+      const playheadScreenX = playheadOldX - oldScrollX;
+      const visibleWidth = Math.max(100, screenWidth - (isMobile ? 55 : 80));
+
+      const playheadNewX = currentTime * clampedZoom;
+      let newScrollX: number;
+
+      // If tracker line was within visible window, keep it at the EXACT same screen position!
+      if (playheadScreenX >= 0 && playheadScreenX <= visibleWidth) {
+        newScrollX = Math.max(0, playheadNewX - playheadScreenX);
+      } else {
+        // If tracker line was off-screen, center it in the visible window
+        newScrollX = Math.max(0, playheadNewX - visibleWidth / 2);
+      }
+
+      currentScrollXRef.current = newScrollX;
+
+      const syncScroll = (targetX: number) => {
+        if (Platform.OS === "web") {
+          const trackDom =
+            (scrollRef.current as any)?._inputRef || scrollRef.current;
+          const rulerDom =
+            (rulerScrollRef.current as any)?._inputRef || rulerScrollRef.current;
+          if (trackDom && trackDom.scrollLeft !== undefined) {
+            trackDom.scrollLeft = targetX;
+          }
+          if (rulerDom && rulerDom.scrollLeft !== undefined) {
+            rulerDom.scrollLeft = targetX;
+          }
+        } else {
+          scrollRef.current?.scrollTo?.({ x: targetX, animated: false });
+          rulerScrollRef.current?.scrollTo?.({ x: targetX, animated: false });
+        }
+      };
+
+      syncScroll(newScrollX);
+      requestAnimationFrame(() => {
+        syncScroll(newScrollX);
+      });
+      setTimeout(() => {
+        syncScroll(newScrollX);
+      }, 50);
+
+      onZoomChange(clampedZoom);
+    },
+    [pxPerSec, currentTime, screenWidth, isMobile, onZoomChange],
+  );
+
+  // Synchronize scroll on external zoom changes (e.g. keyboard shortcuts or prop updates)
+  useEffect(() => {
+    if (lastZoomRef.current !== pxPerSec) {
+      const oldZoom = lastZoomRef.current;
+      lastZoomRef.current = pxPerSec;
+      const oldScrollX = currentScrollXRef.current;
+      const playheadOldX = currentTime * oldZoom;
+      const playheadScreenX = playheadOldX - oldScrollX;
+      const visibleWidth = Math.max(100, screenWidth - (isMobile ? 55 : 80));
+      const playheadNewX = currentTime * pxPerSec;
+
+      let newScrollX: number;
+      if (playheadScreenX >= 0 && playheadScreenX <= visibleWidth) {
+        newScrollX = Math.max(0, playheadNewX - playheadScreenX);
+      } else {
+        newScrollX = Math.max(0, playheadNewX - visibleWidth / 2);
+      }
+
+      currentScrollXRef.current = newScrollX;
+
+      const syncScroll = () => {
+        if (Platform.OS === "web") {
+          const trackDom =
+            (scrollRef.current as any)?._inputRef || scrollRef.current;
+          const rulerDom =
+            (rulerScrollRef.current as any)?._inputRef || rulerScrollRef.current;
+          if (trackDom && trackDom.scrollLeft !== undefined) {
+            trackDom.scrollLeft = newScrollX;
+          }
+          if (rulerDom && rulerDom.scrollLeft !== undefined) {
+            rulerDom.scrollLeft = newScrollX;
+          }
+        } else {
+          scrollRef.current?.scrollTo?.({ x: newScrollX, animated: false });
+          rulerScrollRef.current?.scrollTo?.({ x: newScrollX, animated: false });
+        }
+      };
+
+      syncScroll();
+      requestAnimationFrame(syncScroll);
+    }
+  }, [pxPerSec, currentTime, screenWidth, isMobile]);
 
   const handleTouchStart = (e: any) => {
     const touches = e.nativeEvent?.touches;
@@ -335,7 +436,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         1,
         Math.min(1000, Math.round(pinchStartZoom.current * ratio)),
       );
-      onZoomChange(newZoom);
+      handleZoomChangeWithAnchor(newZoom);
     }
   };
 
@@ -384,9 +485,17 @@ export const Timeline: React.FC<TimelineProps> = ({
     const candidateSteps = [
       0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600,
     ];
-    const step = candidateSteps.find((s) => s >= minTimeStep) || 3600;
+    let stepIndex = candidateSteps.findIndex((s) => s >= minTimeStep);
+    if (stepIndex === -1) stepIndex = candidateSteps.length - 1;
+    while (
+      stepIndex < candidateSteps.length - 1 &&
+      Math.ceil(maxDur / candidateSteps[stepIndex]) > 500
+    ) {
+      stepIndex++;
+    }
+    const step = candidateSteps[stepIndex];
     const totalTicks = Math.ceil(maxDur / step);
-    const limit = Math.min(totalTicks, 300);
+    const limit = Math.min(totalTicks, 500);
 
     for (let i = 0; i <= limit; i++) {
       const t = Number((i * step).toFixed(2));
@@ -623,7 +732,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         isMobile={isMobile}
         activeClipInfo={activeClipInfo}
         pxPerSec={pxPerSec}
-        onZoomChange={onZoomChange}
+        onZoomChange={handleZoomChangeWithAnchor}
         onDeselectClip={() => onSelectClip("", "video")}
         canUndo={canUndo}
         canRedo={canRedo}

@@ -716,6 +716,117 @@ pub extern "C" fn fastart_render_frame_rgba_c(
     to_copy
 }
 
+static mut LAST_EXPORT_BUFFER: Vec<u8> = Vec::new();
+
+/// Returns pointer to the last generated export buffer in WebAssembly linear memory
+#[no_mangle]
+pub extern "C" fn fastart_get_export_buffer_ptr() -> *const u8 {
+    unsafe {
+        let ptr = std::ptr::addr_of!(LAST_EXPORT_BUFFER);
+        (*ptr).as_ptr()
+    }
+}
+
+/// Frees the export buffer in WebAssembly linear memory to immediately reclaim RAM
+#[no_mangle]
+pub extern "C" fn fastart_free_export_buffer() {
+    unsafe {
+        let ptr = std::ptr::addr_of_mut!(LAST_EXPORT_BUFFER);
+        *ptr = Vec::new();
+    }
+}
+
+/// Zero-copy, dynamically-sized GIF export into WebAssembly heap
+#[no_mangle]
+pub extern "C" fn fastart_export_gif_to_heap(
+    project_json_ptr: *const u8,
+    json_len: usize,
+    fps: u32,
+    width: u32,
+    height: u32,
+    duration: f64,
+) -> usize {
+    if project_json_ptr.is_null() || json_len == 0 {
+        return 0;
+    }
+    let json_bytes = unsafe { slice::from_raw_parts(project_json_ptr, json_len) };
+    let json_str = match std::str::from_utf8(json_bytes) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let project: FastArtProject = match serde_json::from_str(json_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+    let media_cache = HashMap::new();
+    let bytes = FastArtEngine::export_gif(&project, fps, width, height, duration, &media_cache);
+    let len = bytes.len();
+    unsafe {
+        LAST_EXPORT_BUFFER = bytes;
+    }
+    len
+}
+
+/// Zero-copy, dynamically-sized WAV master audio export into WebAssembly heap
+#[no_mangle]
+pub extern "C" fn fastart_export_wav_to_heap(
+    project_json_ptr: *const u8,
+    json_len: usize,
+    sample_rate: u32,
+    duration: f64,
+) -> usize {
+    if project_json_ptr.is_null() || json_len == 0 {
+        return 0;
+    }
+    let json_bytes = unsafe { slice::from_raw_parts(project_json_ptr, json_len) };
+    let json_str = match std::str::from_utf8(json_bytes) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let project: FastArtProject = match serde_json::from_str(json_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+    let audio_cache = HashMap::new();
+    let bytes = FastArtEngine::export_wav(&project, sample_rate, duration, &audio_cache);
+    let len = bytes.len();
+    unsafe {
+        LAST_EXPORT_BUFFER = bytes;
+    }
+    len
+}
+
+/// Zero-copy, dynamically-sized MP4 video export into WebAssembly heap
+#[no_mangle]
+pub extern "C" fn fastart_export_mp4_to_heap(
+    project_json_ptr: *const u8,
+    json_len: usize,
+    fps: u32,
+    width: u32,
+    height: u32,
+    duration: f64,
+) -> usize {
+    if project_json_ptr.is_null() || json_len == 0 {
+        return 0;
+    }
+    let json_bytes = unsafe { slice::from_raw_parts(project_json_ptr, json_len) };
+    let json_str = match std::str::from_utf8(json_bytes) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let project: FastArtProject = match serde_json::from_str(json_str) {
+        Ok(p) => p,
+        Err(_) => return 0,
+    };
+    let media_cache = HashMap::new();
+    let bytes = FastArtEngine::export_mp4(&project, fps, width, height, duration, &media_cache);
+    let len = bytes.len();
+    unsafe {
+        LAST_EXPORT_BUFFER = bytes;
+    }
+    len
+}
+
 /// Renders project into an animated GIF directly in WebAssembly
 #[no_mangle]
 pub extern "C" fn fastart_export_gif_c(
@@ -728,7 +839,7 @@ pub extern "C" fn fastart_export_gif_c(
     out_ptr: *mut u8,
     max_out_len: usize,
 ) -> usize {
-    if project_json_ptr.is_null() || json_len == 0 || out_ptr.is_null() || max_out_len == 0 {
+    if project_json_ptr.is_null() || json_len == 0 {
         return 0;
     }
 
@@ -745,8 +856,12 @@ pub extern "C" fn fastart_export_gif_c(
 
     let media_cache = HashMap::new();
     let gif_bytes = FastArtEngine::export_gif(&project, fps, width, height, duration, &media_cache);
-    let to_copy = gif_bytes.len().min(max_out_len);
 
+    if out_ptr.is_null() || max_out_len == 0 {
+        return gif_bytes.len();
+    }
+
+    let to_copy = gif_bytes.len().min(max_out_len);
     unsafe {
         let out_slice = slice::from_raw_parts_mut(out_ptr, to_copy);
         out_slice.copy_from_slice(&gif_bytes[..to_copy]);
@@ -765,7 +880,7 @@ pub extern "C" fn fastart_export_wav_c(
     out_ptr: *mut u8,
     max_out_len: usize,
 ) -> usize {
-    if project_json_ptr.is_null() || json_len == 0 || out_ptr.is_null() || max_out_len == 0 {
+    if project_json_ptr.is_null() || json_len == 0 {
         return 0;
     }
 
@@ -782,8 +897,12 @@ pub extern "C" fn fastart_export_wav_c(
 
     let audio_cache = HashMap::new();
     let wav_bytes = FastArtEngine::export_wav(&project, sample_rate, duration, &audio_cache);
-    let to_copy = wav_bytes.len().min(max_out_len);
 
+    if out_ptr.is_null() || max_out_len == 0 {
+        return wav_bytes.len();
+    }
+
+    let to_copy = wav_bytes.len().min(max_out_len);
     unsafe {
         let out_slice = slice::from_raw_parts_mut(out_ptr, to_copy);
         out_slice.copy_from_slice(&wav_bytes[..to_copy]);
@@ -804,7 +923,7 @@ pub extern "C" fn fastart_export_mp4_c(
     out_ptr: *mut u8,
     max_out_len: usize,
 ) -> usize {
-    if project_json_ptr.is_null() || json_len == 0 || out_ptr.is_null() || max_out_len == 0 {
+    if project_json_ptr.is_null() || json_len == 0 {
         return 0;
     }
 
@@ -821,8 +940,12 @@ pub extern "C" fn fastart_export_mp4_c(
 
     let media_cache = HashMap::new();
     let mp4_bytes = FastArtEngine::export_mp4(&project, fps, width, height, duration, &media_cache);
-    let to_copy = mp4_bytes.len().min(max_out_len);
 
+    if out_ptr.is_null() || max_out_len == 0 {
+        return mp4_bytes.len();
+    }
+
+    let to_copy = mp4_bytes.len().min(max_out_len);
     unsafe {
         let out_slice = slice::from_raw_parts_mut(out_ptr, to_copy);
         out_slice.copy_from_slice(&mp4_bytes[..to_copy]);

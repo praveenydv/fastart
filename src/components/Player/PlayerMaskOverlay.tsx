@@ -1,5 +1,12 @@
-import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import { View, Text, StyleSheet, Platform, PanResponder } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { MaskConfig, MaskShape } from "../../types/project";
@@ -15,10 +22,18 @@ interface PlayerMaskOverlayProps {
   canvasHeight: number;
   currentTime: number;
   project?: any;
-  onUpdateClipMask?: (clipId: string, mask: MaskConfig, isFinal?: boolean) => void;
+  onUpdateClipMask?: (
+    clipId: string,
+    mask: MaskConfig,
+    isFinal?: boolean,
+  ) => void;
   onTransientMaskUpdate?: (clipId: string, mask: MaskConfig | null) => void;
   onCloseMaskPreview?: () => void;
-  getInterpolatedTransform?: (clip: any, curTime: number, clipType?: string) => any;
+  getInterpolatedTransform?: (
+    clip: any,
+    curTime: number,
+    clipType?: string,
+  ) => any;
   rendererRef?: React.RefObject<any>;
   canvasBoxRef?: React.RefObject<any>;
 }
@@ -56,8 +71,11 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
     );
   }, [targetClip, currentTime]);
 
-  const [activeDrag, setActiveDrag] = useState<"move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather" | null>(null);
+  const [activeDrag, setActiveDrag] = useState<
+    "move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather" | null
+  >(null);
   const [localMask, setLocalMask] = useState<MaskConfig>(mask);
+  const isDraggingRef = useRef(false);
 
   const pendingMaskRafRef = useRef<number | null>(null);
   const pendingMaskRef = useRef<MaskConfig>(mask);
@@ -73,7 +91,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   canvasHeightRef.current = canvasHeight;
 
   useEffect(() => {
-    setLocalMask(mask);
+    if (!isDraggingRef.current) {
+      setLocalMask(mask);
+    }
   }, [mask]);
 
   const onUpdateClipMaskRef = useRef(onUpdateClipMask);
@@ -103,18 +123,33 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
   const clipCx = boxWidth / 2 + (clipT.x || 0);
   const clipCy = canvasHeight / 2 + (clipT.y || 0);
-  const clipScaleX = Math.max(0.01, Math.abs((clipT.scale || 1.0) * (clipT.scaleX ?? 1.0)));
-  const clipScaleY = Math.max(0.01, Math.abs((clipT.scale || 1.0) * (clipT.scaleY ?? 1.0)));
+  const clipScaleX = Math.max(
+    0.01,
+    Math.abs((clipT.scale || 1.0) * (clipT.scaleX ?? 1.0)),
+  );
+  const clipScaleY = Math.max(
+    0.01,
+    Math.abs((clipT.scale || 1.0) * (clipT.scaleY ?? 1.0)),
+  );
   const clipScale = Math.max(0.01, Math.abs(clipT.scale || 1.0));
   const clipRot = clipT.rotation || 0;
 
   // Calculate dw and dh of the clip inside canvas exactly matching rendererClip.ts and PlayerNativeCompositor.tsx
   const { dw, dh } = useMemo(() => {
     if (rendererRef?.current?.getClipRenderDimensions) {
-      const dims = rendererRef.current.getClipRenderDimensions(targetClip, boxWidth, canvasHeight);
-      if (dims && dims.dw > 0 && dims.dh > 0) return { dw: dims.dw, dh: dims.dh };
+      const dims = rendererRef.current.getClipRenderDimensions(
+        targetClip,
+        boxWidth,
+        canvasHeight,
+      );
+      if (dims && dims.dw > 0 && dims.dh > 0)
+        return { dw: dims.dw, dh: dims.dh };
     }
-    const { baseW, baseH } = computeVideoClipDimensions(targetClip, boxWidth, canvasHeight);
+    const { baseW, baseH } = computeVideoClipDimensions(
+      targetClip,
+      boxWidth,
+      canvasHeight,
+    );
     return { dw: baseW, dh: baseH };
   }, [rendererRef, targetClip, boxWidth, canvasHeight]);
 
@@ -122,8 +157,14 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const currentY = localMask.y || 0;
   const currentRot = localMask.rotation || 0;
   const currentSize = Math.max(5, Math.min(250, localMask.size ?? 60));
-  const currentW = Math.max(5, Math.min(250, localMask.width ?? localMask.size ?? 60));
-  const currentH = Math.max(5, Math.min(250, localMask.height ?? localMask.size ?? 60));
+  const currentW = Math.max(
+    5,
+    Math.min(250, localMask.width ?? localMask.size ?? 60),
+  );
+  const currentH = Math.max(
+    5,
+    Math.min(250, localMask.height ?? localMask.size ?? 60),
+  );
 
   // Compute canvas pixel position of mask center
   const rad = (clipRot * Math.PI) / 180;
@@ -133,8 +174,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const localOffsetX = (currentX / 100) * dw * clipScaleX;
   const localOffsetY = (currentY / 100) * dh * clipScaleY;
 
-  const maskCanvasCenterX = clipCx + (localOffsetX * cosA - localOffsetY * sinA);
-  const maskCanvasCenterY = clipCy + (localOffsetX * sinA + localOffsetY * cosA);
+  const maskCanvasCenterX =
+    clipCx + (localOffsetX * cosA - localOffsetY * sinA);
+  const maskCanvasCenterY =
+    clipCy + (localOffsetX * sinA + localOffsetY * cosA);
   const totalMaskRotation = clipRot + currentRot;
 
   // Mask bounding box in pixels matching buildMaskPath
@@ -224,7 +267,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         )}
 
         {shape === "heart" && (
-          <g transform={`translate(${w / 2}, ${h / 2}) scale(${w / 100}, ${h / 100})`}>
+          <g
+            transform={`translate(${w / 2}, ${h / 2}) scale(${w / 100}, ${h / 100})`}
+          >
             <path
               d="M 0,44 C -28,18 -50,0 -50,-20 A 25,25 0 0,1 0,-20 A 25,25 0 0,1 50,-20 C 50,0 28,18 0,44 Z"
               fill="rgba(0, 242, 254, 0.08)"
@@ -235,28 +280,45 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           </g>
         )}
 
-        {shape === "star" && (() => {
-          const points: string[] = [];
-          for (let i = 0; i < 10; i++) {
-            const radiusFactor = i % 2 === 0 ? 0.5 : 0.21;
-            const a = (i * Math.PI) / 5 - Math.PI / 2;
-            points.push(`${w / 2 + w * radiusFactor * Math.cos(a)},${h / 2 + h * radiusFactor * Math.sin(a)}`);
-          }
-          return (
-            <polygon
-              points={points.join(" ")}
-              fill="rgba(0, 242, 254, 0.08)"
-              stroke="#00F2FE"
-              strokeWidth="2.5"
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })()}
+        {shape === "star" &&
+          (() => {
+            const points: string[] = [];
+            for (let i = 0; i < 10; i++) {
+              const radiusFactor = i % 2 === 0 ? 0.5 : 0.21;
+              const a = (i * Math.PI) / 5 - Math.PI / 2;
+              points.push(
+                `${w / 2 + w * radiusFactor * Math.cos(a)},${h / 2 + h * radiusFactor * Math.sin(a)}`,
+              );
+            }
+            return (
+              <polygon
+                points={points.join(" ")}
+                fill="rgba(0, 242, 254, 0.08)"
+                stroke="#00F2FE"
+                strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })()}
 
         {shape === "mirror" && (
           <>
-            <line x1={0} y1={0} x2={w} y2={0} stroke="#00F2FE" strokeWidth="2.5" />
-            <line x1={0} y1={h} x2={w} y2={h} stroke="#00F2FE" strokeWidth="2.5" />
+            <line
+              x1={0}
+              y1={0}
+              x2={w}
+              y2={0}
+              stroke="#00F2FE"
+              strokeWidth="2.5"
+            />
+            <line
+              x1={0}
+              y1={h}
+              x2={w}
+              y2={h}
+              stroke="#00F2FE"
+              strokeWidth="2.5"
+            />
             <rect
               x={0}
               y={0}
@@ -294,12 +356,16 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
   // Pointer drag session handling
   const startDrag = useCallback(
-    (e: any, mode: "move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather") => {
+    (
+      e: any,
+      mode: "move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather",
+    ) => {
       if (e.stopPropagation) e.stopPropagation();
       if (e.cancelable && e.preventDefault) e.preventDefault();
 
       soundEngine.playSfx("click");
       setActiveDrag(mode);
+      isDraggingRef.current = true;
 
       const coords = getPointerCoords(e);
       const startClientX = coords.clientX;
@@ -317,7 +383,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       let canvasRectLeft = 0;
       let canvasRectTop = 0;
       if (typeof window !== "undefined") {
-        const el = canvasBoxRef?.current || containerRef.current || rendererRef?.current?.canvas;
+        const el =
+          canvasBoxRef?.current ||
+          containerRef.current ||
+          rendererRef?.current?.canvas;
         if (el && typeof el.getBoundingClientRect === "function") {
           const r = el.getBoundingClientRect();
           canvasRectLeft = r.left;
@@ -339,7 +408,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       // Distance and angle in absolute client space
       const startDist = Math.max(
         15,
-        Math.hypot(startClientX - absMaskCenterX, startClientY - absMaskCenterY),
+        Math.hypot(
+          startClientX - absMaskCenterX,
+          startClientY - absMaskCenterY,
+        ),
       );
       const startAngle = Math.atan2(
         startClientY - absMaskCenterY,
@@ -375,10 +447,16 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
           // Sub-pixel floating point precision with 2 decimals - matches clip move exactly
           const nextX = Number(
-            Math.max(-100, Math.min(100, startMaskX + (unrotDx / dw) * 100)).toFixed(2),
+            Math.max(
+              -100,
+              Math.min(100, startMaskX + (unrotDx / dw) * 100),
+            ).toFixed(2),
           );
           const nextY = Number(
-            Math.max(-100, Math.min(100, startMaskY + (unrotDy / dh) * 100)).toFixed(2),
+            Math.max(
+              -100,
+              Math.min(100, startMaskY + (unrotDy / dh) * 100),
+            ).toFixed(2),
           );
 
           currentUpdatedMask = {
@@ -412,8 +490,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             curClientY - absMaskCenterY,
           );
           const scaleRatio = curDist / startDist;
-          const nextW = Number(Math.max(5, Math.min(250, startMaskW * scaleRatio)).toFixed(2));
-          const nextH = Number(Math.max(5, Math.min(250, startMaskH * scaleRatio)).toFixed(2));
+          const nextW = Number(
+            Math.max(5, Math.min(250, startMaskW * scaleRatio)).toFixed(2),
+          );
+          const nextH = Number(
+            Math.max(5, Math.min(250, startMaskH * scaleRatio)).toFixed(2),
+          );
           const nextSize = Math.max(nextW, nextH);
 
           currentUpdatedMask = {
@@ -428,7 +510,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           const curVecY = curClientY - absMaskCenterY;
           const curLocalDistX = Math.abs(curVecX * cosTR + curVecY * sinTR);
           const scaleRatioX = curLocalDistX / startDistX;
-          const nextW = Number(Math.max(5, Math.min(250, startMaskW * scaleRatioX)).toFixed(2));
+          const nextW = Number(
+            Math.max(5, Math.min(250, startMaskW * scaleRatioX)).toFixed(2),
+          );
 
           currentUpdatedMask = {
             ...currentUpdatedMask,
@@ -441,7 +525,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           const curVecY = curClientY - absMaskCenterY;
           const curLocalDistY = Math.abs(-curVecX * sinTR + curVecY * cosTR);
           const scaleRatioY = curLocalDistY / startDistY;
-          const nextH = Number(Math.max(5, Math.min(250, startMaskH * scaleRatioY)).toFixed(2));
+          const nextH = Number(
+            Math.max(5, Math.min(250, startMaskH * scaleRatioY)).toFixed(2),
+          );
 
           currentUpdatedMask = {
             ...currentUpdatedMask,
@@ -450,7 +536,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           };
         } else if (mode === "feather") {
           const dy = -(curClientY - startClientY);
-          const nextFeather = Math.round(Math.max(0, Math.min(80, startMaskFeather + dy * 0.5)));
+          const nextFeather = Math.round(
+            Math.max(0, Math.min(80, startMaskFeather + dy * 0.5)),
+          );
 
           currentUpdatedMask = {
             ...currentUpdatedMask,
@@ -474,7 +562,11 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       };
 
       const cleanup = () => {
-        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+        if (
+          Platform.OS === "web" &&
+          typeof window !== "undefined" &&
+          typeof window.removeEventListener === "function"
+        ) {
           window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerUp);
@@ -487,8 +579,14 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       };
       dragCleanupRef.current = cleanup;
 
-      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
-        window.addEventListener("pointermove", onPointerMove, { passive: false });
+      if (
+        Platform.OS === "web" &&
+        typeof window !== "undefined" &&
+        typeof window.addEventListener === "function"
+      ) {
+        window.addEventListener("pointermove", onPointerMove, {
+          passive: false,
+        });
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerUp);
         window.addEventListener("touchmove", onPointerMove, { passive: false });
@@ -538,6 +636,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       localMaskRef.current = nextMask;
 
       if (isFinal) {
+        isDraggingRef.current = false;
         if (pendingMaskRafRef.current !== null) {
           cancelAnimationFrame(pendingMaskRafRef.current);
           pendingMaskRafRef.current = null;
@@ -553,7 +652,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             {
               clipId: targetClip.id,
               mask: nextMask,
-            }
+            },
           );
         }
         onTransientMaskUpdateRef.current?.(targetClip.id, null);
@@ -561,6 +660,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         return;
       }
 
+      isDraggingRef.current = true;
       if (pendingMaskRafRef.current === null) {
         pendingMaskRafRef.current = requestAnimationFrame(() => {
           pendingMaskRafRef.current = null;
@@ -578,7 +678,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
               {
                 clipId: targetClip.id,
                 mask: cur,
-              }
+              },
             );
           } else {
             onTransientMaskUpdateRef.current?.(targetClip.id, cur);
@@ -586,27 +686,79 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         });
       }
     },
-    [rendererRef, targetClip.id]
+    [rendererRef, targetClip.id],
   );
   const scheduleMaskUpdateRef = useRef(scheduleMaskUpdate);
   scheduleMaskUpdateRef.current = scheduleMaskUpdate;
 
-  // Native Mobile PanResponder 1: Move Mask Center
+  // Native Mobile PanResponder 1: Move Mask Center + Two-Finger Pinch Zoom
   const startMoveRef = useRef<{ startX: number; startY: number } | null>(null);
+  const pinchStartRef = useRef<{ startDist: number; startW: number; startH: number } | null>(null);
+
   const nativeMovePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 1 || Math.abs(gs.dy) > 1,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > 1 || Math.abs(gs.dy) > 1,
       onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (evt) => {
         soundEngine.playSfx("click");
-        setActiveDrag("move");
-        startMoveRef.current = {
-          startX: localMaskRef.current.x || 0,
-          startY: localMaskRef.current.y || 0,
-        };
+        isDraggingRef.current = true;
+        const touches = evt.nativeEvent.touches;
+        if (touches && touches.length >= 2) {
+          setActiveDrag("scale");
+          const dist = Math.hypot(
+            touches[1].pageX - touches[0].pageX,
+            touches[1].pageY - touches[0].pageY,
+          );
+          pinchStartRef.current = {
+            startDist: Math.max(10, dist),
+            startW: Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60),
+            startH: Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60),
+          };
+          startMoveRef.current = null;
+        } else {
+          setActiveDrag("move");
+          pinchStartRef.current = null;
+          startMoveRef.current = {
+            startX: localMaskRef.current.x || 0,
+            startY: localMaskRef.current.y || 0,
+          };
+        }
       },
-      onPanResponderMove: (_, gs) => {
+      onPanResponderMove: (evt, gs) => {
+        const touches = evt.nativeEvent.touches;
+        if (touches && touches.length >= 2) {
+          const p = pinchStartRef.current;
+          if (!p) {
+            const dist = Math.hypot(
+              touches[1].pageX - touches[0].pageX,
+              touches[1].pageY - touches[0].pageY,
+            );
+            pinchStartRef.current = {
+              startDist: Math.max(10, dist),
+              startW: Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60),
+              startH: Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60),
+            };
+            return;
+          }
+          const curDist = Math.hypot(
+            touches[1].pageX - touches[0].pageX,
+            touches[1].pageY - touches[0].pageY,
+          );
+          const ratio = Math.max(0.1, curDist / p.startDist);
+          const nextW = Number(Math.max(5, Math.min(250, p.startW * ratio)).toFixed(2));
+          const nextH = Number(Math.max(5, Math.min(250, p.startH * ratio)).toFixed(2));
+          const nextMask: MaskConfig = {
+            ...localMaskRef.current,
+            width: nextW,
+            height: nextH,
+            size: Math.max(nextW, nextH),
+          };
+          scheduleMaskUpdateRef.current(nextMask, false);
+          return;
+        }
+
         const s = startMoveRef.current;
         if (!s) return;
         const rotRad = (clipRotRef.current * Math.PI) / 180;
@@ -621,10 +773,16 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         const unrotDy = (-gs.dx * sinA + gs.dy * cosA) / sy;
 
         const nextX = Number(
-          Math.max(-100, Math.min(100, s.startX + (unrotDx / dwVal) * 100)).toFixed(2)
+          Math.max(
+            -100,
+            Math.min(100, s.startX + (unrotDx / dwVal) * 100),
+          ).toFixed(2),
         );
         const nextY = Number(
-          Math.max(-100, Math.min(100, s.startY + (unrotDy / dhVal) * 100)).toFixed(2)
+          Math.max(
+            -100,
+            Math.min(100, s.startY + (unrotDy / dhVal) * 100),
+          ).toFixed(2),
         );
 
         const nextMask: MaskConfig = {
@@ -639,8 +797,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startMoveRef.current = null;
+        pinchStartRef.current = null;
       },
-    })
+    }),
   ).current;
 
   // Native Mobile PanResponder 2: Rotate Knob at Top
@@ -657,6 +816,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       onPanResponderGrant: () => {
         soundEngine.playSfx("click");
         setActiveDrag("rotate");
+        isDraggingRef.current = true;
         const totRotRad = (totalMaskRotRef.current * Math.PI) / 180;
         const initialAngle = -Math.PI / 2 + totRotRad;
         startRotStateRef.current = {
@@ -675,7 +835,8 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         const curVx = v0x + gs.dx;
         const curVy = v0y + gs.dy;
 
-        const angleDiffDeg = ((Math.atan2(curVy, curVx) - Math.atan2(v0y, v0x)) * 180) / Math.PI;
+        const angleDiffDeg =
+          ((Math.atan2(curVy, curVx) - Math.atan2(v0y, v0x)) * 180) / Math.PI;
         const rawRot = (s.startRot + angleDiffDeg) % 360;
         const normalized = Math.round(((rawRot % 360) + 360) % 360);
         let snapped = normalized;
@@ -697,37 +858,30 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startRotStateRef.current = null;
       },
-    })
+    }),
   ).current;
 
-  // Native Mobile PanResponder 3: Corner Proportional Scale
-  const startScaleCornerRef = useRef<{
-    startW: number;
-    startH: number;
-    startDist: number;
-  } | null>(null);
+  // Directional Corner & Side Scaling Helper Factory
+  const makeCornerResponder = (signX: number, signY: number) => {
+    let startW = 60;
+    let startH = 60;
+    let startHalfW = 30;
+    let startHalfH = 30;
 
-  const nativeScaleCornerResponder = useRef(
-    PanResponder.create({
+    return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         soundEngine.playSfx("click");
         setActiveDrag("scale");
-        const w = maskBoxDimsRef.current.w;
-        const h = maskBoxDimsRef.current.h;
-        startScaleCornerRef.current = {
-          startW: Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60),
-          startH: Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60),
-          startDist: Math.max(15, Math.hypot(w / 2, h / 2)),
-        };
+        isDraggingRef.current = true;
+        startW = Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60);
+        startH = Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60);
+        startHalfW = Math.max(10, maskBoxDimsRef.current.w / 2);
+        startHalfH = Math.max(10, maskBoxDimsRef.current.h / 2);
       },
       onPanResponderMove: (_, gs) => {
-        const s = startScaleCornerRef.current;
-        if (!s) return;
-        const w = maskBoxDimsRef.current.w;
-        const h = maskBoxDimsRef.current.h;
         const totRad = (totalMaskRotRef.current * Math.PI) / 180;
         const cosR = Math.cos(totRad);
         const sinR = Math.sin(totRad);
@@ -735,16 +889,19 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         const localDx = gs.dx * cosR + gs.dy * sinR;
         const localDy = -gs.dx * sinR + gs.dy * cosR;
 
-        const curDist = Math.hypot(w / 2 + Math.abs(localDx), h / 2 + Math.abs(localDy));
-        const scaleRatio = curDist / s.startDist;
+        const projX = localDx * signX;
+        const projY = localDy * signY;
 
-        const nextW = Number(Math.max(5, Math.min(250, s.startW * scaleRatio)).toFixed(2));
-        const nextH = Number(Math.max(5, Math.min(250, s.startH * scaleRatio)).toFixed(2));
-        const nextSize = Math.max(nextW, nextH);
+        const scaleX = (startHalfW + projX) / startHalfW;
+        const scaleY = (startHalfH + projY) / startHalfH;
+        const scale = Math.max(0.08, (scaleX + scaleY) / 2);
+
+        const nextW = Number(Math.max(5, Math.min(250, startW * scale)).toFixed(2));
+        const nextH = Number(Math.max(5, Math.min(250, startH * scale)).toFixed(2));
 
         const nextMask: MaskConfig = {
           ...localMaskRef.current,
-          size: nextSize,
+          size: Math.max(nextW, nextH),
           width: nextW,
           height: nextH,
         };
@@ -754,38 +911,35 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
-        startScaleCornerRef.current = null;
       },
-    })
-  ).current;
+    });
+  };
 
-  // Native Mobile PanResponder 4: Width Scale (Left & Right Handles)
-  const startScaleWRef = useRef<{ startW: number; startDistX: number } | null>(null);
-  const nativeScaleWResponder = useRef(
-    PanResponder.create({
+  const makeSideWResponder = (signX: number) => {
+    let startW = 60;
+    let startHalfW = 30;
+
+    return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         soundEngine.playSfx("click");
         setActiveDrag("scale-w");
-        startScaleWRef.current = {
-          startW: Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60),
-          startDistX: Math.max(15, maskBoxDimsRef.current.w / 2),
-        };
+        isDraggingRef.current = true;
+        startW = Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60);
+        startHalfW = Math.max(10, maskBoxDimsRef.current.w / 2);
       },
       onPanResponderMove: (_, gs) => {
-        const s = startScaleWRef.current;
-        if (!s) return;
         const totRad = (totalMaskRotRef.current * Math.PI) / 180;
         const cosR = Math.cos(totRad);
         const sinR = Math.sin(totRad);
 
-        const localDx = Math.abs(gs.dx * cosR + gs.dy * sinR);
-        const curDistX = s.startDistX + localDx;
-        const scaleRatioX = curDistX / s.startDistX;
+        const localDx = gs.dx * cosR + gs.dy * sinR;
+        const projX = localDx * signX;
+        const scale = Math.max(0.08, (startHalfW + projX) / startHalfW);
 
-        const nextW = Number(Math.max(5, Math.min(250, s.startW * scaleRatioX)).toFixed(2));
+        const nextW = Number(Math.max(5, Math.min(250, startW * scale)).toFixed(2));
         const nextMask: MaskConfig = {
           ...localMaskRef.current,
           width: nextW,
@@ -797,38 +951,35 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
-        startScaleWRef.current = null;
       },
-    })
-  ).current;
+    });
+  };
 
-  // Native Mobile PanResponder 5: Height Scale (Top & Bottom Handles)
-  const startScaleHRef = useRef<{ startH: number; startDistY: number } | null>(null);
-  const nativeScaleHResponder = useRef(
-    PanResponder.create({
+  const makeSideHResponder = (signY: number) => {
+    let startH = 60;
+    let startHalfH = 30;
+
+    return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         soundEngine.playSfx("click");
         setActiveDrag("scale-h");
-        startScaleHRef.current = {
-          startH: Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60),
-          startDistY: Math.max(15, maskBoxDimsRef.current.h / 2),
-        };
+        isDraggingRef.current = true;
+        startH = Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60);
+        startHalfH = Math.max(10, maskBoxDimsRef.current.h / 2);
       },
       onPanResponderMove: (_, gs) => {
-        const s = startScaleHRef.current;
-        if (!s) return;
         const totRad = (totalMaskRotRef.current * Math.PI) / 180;
         const cosR = Math.cos(totRad);
         const sinR = Math.sin(totRad);
 
-        const localDy = Math.abs(-gs.dx * sinR + gs.dy * cosR);
-        const curDistY = s.startDistY + localDy;
-        const scaleRatioY = curDistY / s.startDistY;
+        const localDy = -gs.dx * sinR + gs.dy * cosR;
+        const projY = localDy * signY;
+        const scale = Math.max(0.08, (startHalfH + projY) / startHalfH);
 
-        const nextH = Number(Math.max(5, Math.min(250, s.startH * scaleRatioY)).toFixed(2));
+        const nextH = Number(Math.max(5, Math.min(250, startH * scale)).toFixed(2));
         const nextMask: MaskConfig = {
           ...localMaskRef.current,
           height: nextH,
@@ -840,24 +991,20 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
-        startScaleHRef.current = null;
       },
-    })
-  ).current;
-
-  const handleResetPosition = () => {
-    soundEngine.playSfx("click");
-    const updated = { ...localMask, x: 0, y: 0 };
-    setLocalMask(updated);
-    onUpdateClipMaskRef.current?.(targetClip.id, updated, true);
+    });
   };
 
-  const handleResetRotation = () => {
-    soundEngine.playSfx("click");
-    const updated = { ...localMask, rotation: 0 };
-    setLocalMask(updated);
-    onUpdateClipMaskRef.current?.(targetClip.id, updated, true);
-  };
+  const nativeScaleCornerBR = useRef(makeCornerResponder(1, 1)).current;
+  const nativeScaleCornerBL = useRef(makeCornerResponder(-1, 1)).current;
+  const nativeScaleCornerTR = useRef(makeCornerResponder(1, -1)).current;
+  const nativeScaleCornerTL = useRef(makeCornerResponder(-1, -1)).current;
+
+  const nativeScaleWRight = useRef(makeSideWResponder(1)).current;
+  const nativeScaleWLeft = useRef(makeSideWResponder(-1)).current;
+
+  const nativeScaleHTop = useRef(makeSideHResponder(-1)).current;
+  const nativeScaleHBottom = useRef(makeSideHResponder(1)).current;
 
   if (localMask.shape === "none") {
     return null;
@@ -867,104 +1014,12 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const isMirror = localMask.shape === "mirror";
   const isLineShape = isLinear || isMirror;
 
-  const isCompactMaskHud = boxWidth < 380;
-
   return (
-    <View ref={containerRef} style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Top Floating HUD with Live Position, Rotation, Size & Reset Controls */}
-      <View style={styles.topHudContainer} pointerEvents="box-none">
-        <View style={styles.hudPill} pointerEvents="auto">
-          <View style={styles.hudBadge}>
-            <Ionicons
-              name={
-                localMask.shape === "heart"
-                  ? "heart"
-                  : localMask.shape === "star"
-                  ? "star"
-                  : localMask.shape === "circle"
-                  ? "radio-button-on"
-                  : "shapes"
-              }
-              size={13}
-              color={THEME_COLORS.accent}
-            />
-            <Text style={styles.hudTitle}>
-              {localMask.shape === "heart"
-                ? "Love Heart"
-                : localMask.shape === "star"
-                ? "Star"
-                : localMask.shape === "circle"
-                ? "Circle"
-                : localMask.shape === "rectangle"
-                ? "Rectangle"
-                : localMask.shape === "linear"
-                ? "Split"
-                : "Mirror"}
-            </Text>
-          </View>
-
-          <Text style={styles.hudText}>
-            X:{currentX}% Y:{currentY}% • {currentRot}° • W:{currentW}% H:{currentH}%
-          </Text>
-
-          {(currentX !== 0 || currentY !== 0) && (
-            <TouchableOpacity
-              style={styles.hudActionBtn}
-              onPress={handleResetPosition}
-              activeOpacity={0.7}
-              accessibilityLabel="Center"
-            >
-              <Ionicons name="locate-outline" size={11} color="#FFFFFF" />
-              {!isCompactMaskHud && <Text style={styles.hudActionText}>Center</Text>}
-            </TouchableOpacity>
-          )}
-
-          {currentRot !== 0 && (
-            <TouchableOpacity
-              style={styles.hudActionBtn}
-              onPress={handleResetRotation}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset 0°"
-            >
-              <Ionicons name="refresh-outline" size={11} color="#FFFFFF" />
-              {!isCompactMaskHud && <Text style={styles.hudActionText}>0°</Text>}
-            </TouchableOpacity>
-          )}
-
-          {onCloseMaskPreview && (
-            <TouchableOpacity
-              style={[
-                styles.hudActionBtn,
-                {
-                  backgroundColor: "rgba(16, 185, 129, 0.2)",
-                  borderColor: "rgba(16, 185, 129, 0.5)",
-                  paddingHorizontal: isCompactMaskHud ? 6 : 8,
-                  paddingVertical: 2,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 3,
-                },
-              ]}
-              onPress={() => {
-                soundEngine.playSfx("pop");
-                if (targetClip?.id && onUpdateClipMask) {
-                  onUpdateClipMask(targetClip.id, localMask, true);
-                }
-                onCloseMaskPreview();
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              activeOpacity={0.7}
-              accessibilityLabel="Confirm and close mask"
-            >
-              <Ionicons name="checkmark" size={13} color="#10B981" />
-              {!isCompactMaskHud && (
-                <Text style={{ color: "#10B981", fontSize: 10, fontWeight: "700" }}>Done</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
+    <View
+      ref={containerRef}
+      style={StyleSheet.absoluteFill}
+      pointerEvents="box-none"
+    >
       {/* Layer 1: Canvas-Bounded Visuals (strictly clipped to player boundaries) */}
       <View style={styles.canvasClipBounds} pointerEvents="none">
         <View
@@ -1002,7 +1057,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           )}
 
           {/* Outer dashed bounding box - ONLY for non-line shapes (circle, rect, heart, star) */}
-          {!isLineShape && <View style={styles.boundingDashedBox} pointerEvents="none" />}
+          {!isLineShape && (
+            <View style={styles.boundingDashedBox} pointerEvents="none" />
+          )}
 
           {/* Center Crosshair Lines - ONLY for non-line shapes */}
           {!isLineShape && (
@@ -1037,7 +1094,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                   height: Math.max(2, maskBoxH - 2),
                   borderRadius: Math.min(
                     localMask.roundness ?? 16,
-                    Math.min(maskBoxW, maskBoxH) / 2
+                    Math.min(maskBoxW, maskBoxH) / 2,
                   ),
                 },
               ]}
@@ -1046,31 +1103,37 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
           )}
 
           {(localMask.shape === "heart" || localMask.shape === "star") && (
-            Platform.OS === "web" ? (
-              <svg
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: maskBoxW,
+                height: maskBoxH,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+              pointerEvents="none"
+            >
+              <ExpoImage
+                source={{
+                  uri:
+                    localMask.shape === "heart"
+                      ? `data:image/svg+xml;utf8,${encodeURIComponent(
+                          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
+                        )}`
+                      : `data:image/svg+xml;utf8,${encodeURIComponent(
+                          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><polygon points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
+                        )}`,
+                }}
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
                   width: maskBoxW,
                   height: maskBoxH,
-                  overflow: "visible",
-                  pointerEvents: "none",
-                  filter: `drop-shadow(0 0 6px ${THEME_COLORS.cyanBorder})`,
                 }}
-                viewBox={`0 0 ${maskBoxW} ${maskBoxH}`}
-              >
-                {shapeSvgContent}
-              </svg>
-            ) : (
-              <View style={styles.heartStarMobileBadge} pointerEvents="none">
-                <Ionicons
-                  name={localMask.shape === "heart" ? "heart-outline" : "star-outline"}
-                  size={Math.min(maskBoxW, maskBoxH) * 0.78}
-                  color="#00F2FE"
-                />
-              </View>
-            )
+                contentFit="fill"
+                cachePolicy="memory"
+              />
+            </View>
           )}
         </View>
       </View>
@@ -1097,7 +1160,10 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         {/* Interior Drag Surface for non-line shapes (circle, rect, heart, star) */}
         {!isLineShape && (
           <View
-            style={[StyleSheet.absoluteFill, { backgroundColor: "transparent" }]}
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: "transparent" },
+            ]}
             collapsable={false}
             pointerEvents="auto"
             {...(Platform.OS === "web"
@@ -1181,7 +1247,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale"),
                     onTouchStart: (e: any) => startDrag(e, "scale"),
                   } as any)
-                : nativeScaleCornerResponder.panHandlers)}
+                : nativeScaleCornerTL.panHandlers)}
             />
             <View
               style={[styles.cornerDot, styles.dotTR]}
@@ -1192,7 +1258,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale"),
                     onTouchStart: (e: any) => startDrag(e, "scale"),
                   } as any)
-                : nativeScaleCornerResponder.panHandlers)}
+                : nativeScaleCornerTR.panHandlers)}
             />
             <View
               style={[styles.cornerDot, styles.dotBL]}
@@ -1203,7 +1269,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale"),
                     onTouchStart: (e: any) => startDrag(e, "scale"),
                   } as any)
-                : nativeScaleCornerResponder.panHandlers)}
+                : nativeScaleCornerBL.panHandlers)}
             />
             <View
               style={[styles.cornerDot, styles.dotBR]}
@@ -1214,7 +1280,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale"),
                     onTouchStart: (e: any) => startDrag(e, "scale"),
                   } as any)
-                : nativeScaleCornerResponder.panHandlers)}
+                : nativeScaleCornerBR.panHandlers)}
             />
 
             <View
@@ -1226,7 +1292,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale-w"),
                     onTouchStart: (e: any) => startDrag(e, "scale-w"),
                   } as any)
-                : nativeScaleWResponder.panHandlers)}
+                : nativeScaleWLeft.panHandlers)}
             />
             <View
               style={[styles.pillHandleV, styles.pillRight]}
@@ -1237,7 +1303,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale-w"),
                     onTouchStart: (e: any) => startDrag(e, "scale-w"),
                   } as any)
-                : nativeScaleWResponder.panHandlers)}
+                : nativeScaleWRight.panHandlers)}
             />
           </>
         )}
@@ -1254,7 +1320,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale-h"),
                     onTouchStart: (e: any) => startDrag(e, "scale-h"),
                   } as any)
-                : nativeScaleHResponder.panHandlers)}
+                : nativeScaleHTop.panHandlers)}
             />
             <View
               style={[styles.pillHandleH, styles.pillBottom]}
@@ -1265,7 +1331,7 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
                     onMouseDown: (e: any) => startDrag(e, "scale-h"),
                     onTouchStart: (e: any) => startDrag(e, "scale-h"),
                   } as any)
-                : nativeScaleHResponder.panHandlers)}
+                : nativeScaleHBottom.panHandlers)}
             />
           </>
         )}
@@ -1387,7 +1453,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
     borderRadius: 8,
-    ...(Platform.OS === "web" ? ({ clipPath: "inset(0 round 8px)" } as any) : {}),
+    ...(Platform.OS === "web"
+      ? ({ clipPath: "inset(0 round 8px)" } as any)
+      : {}),
   },
   lineCenterMoveHandle: {
     position: "absolute",
