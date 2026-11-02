@@ -13,7 +13,7 @@
 // - Chunked Base64 binary streaming to keep React Native bridge memory near zero
 // - Standard Android/iOS Gallery & ExoPlayer playback compatibility
 
-import { FastArtProject, VideoClip, TextClip, CaptionClip, StickerClip, EffectClip } from "../../types/project";
+import { FastArtProject } from "../../types/project";
 import { ExportOptions } from "./unifiedExporter";
 import { getExportResolutionDimensions } from "../../components/Panels/Export/exportTypes";
 
@@ -324,7 +324,9 @@ export function generateCanvasBridgeHtml(
             v.playsInline = true;
             v.setAttribute("playsinline", "true");
             v.setAttribute("webkit-playsinline", "true");
-            v.crossOrigin = "anonymous";
+            if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+              v.crossOrigin = "anonymous";
+            }
             v.preload = "auto";
             v.src = clip.url;
             promises.push(new Promise((resolve) => {
@@ -334,13 +336,15 @@ export function generateCanvasBridgeHtml(
               v.onloadeddata = finish;
               v.oncanplay = finish;
               v.onerror = finish;
-              setTimeout(finish, 4000);
+              setTimeout(finish, 3000);
             }));
             mediaMap.set(clip.url, v);
             mediaMap.set(clip.id, v);
           } else {
             const img = new Image();
-            img.crossOrigin = "anonymous";
+            if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+              img.crossOrigin = "anonymous";
+            }
             promises.push(new Promise((resolve) => {
               img.onload = () => resolve();
               img.onerror = () => {
@@ -348,7 +352,7 @@ export function generateCanvasBridgeHtml(
                 img.src = clip.url;
                 resolve();
               };
-              setTimeout(resolve, 3000);
+              setTimeout(resolve, 2500);
             }));
             img.src = clip.url;
             mediaMap.set(clip.url, img);
@@ -360,7 +364,9 @@ export function generateCanvasBridgeHtml(
         for (const clip of audioClips) {
           if (!clip.url) continue;
           const a = new Audio();
-          a.crossOrigin = "anonymous";
+          if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+            a.crossOrigin = "anonymous";
+          }
           a.preload = "auto";
           a.src = clip.url;
           promises.push(new Promise((resolve) => {
@@ -369,7 +375,7 @@ export function generateCanvasBridgeHtml(
             a.oncanplaythrough = finish;
             a.onloadeddata = finish;
             a.onerror = finish;
-            setTimeout(finish, 3000);
+            setTimeout(finish, 2500);
           }));
           mediaMap.set("audio_" + clip.id, a);
           mediaMap.set("audio_" + clip.url, a);
@@ -379,7 +385,9 @@ export function generateCanvasBridgeHtml(
         for (const clip of stickerClips) {
           if (!clip.url || clip.url.startsWith("emoji:")) continue;
           const img = new Image();
-          img.crossOrigin = "anonymous";
+          if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+            img.crossOrigin = "anonymous";
+          }
           promises.push(new Promise((resolve) => {
             img.onload = () => resolve();
             img.onerror = () => resolve();
@@ -393,6 +401,9 @@ export function generateCanvasBridgeHtml(
         if (PROJECT.canvasBackground && PROJECT.canvasBackground.startsWith("image:")) {
           const bgUrl = PROJECT.canvasBackground.replace("image:", "");
           const bgImg = new Image();
+          if (bgUrl.startsWith("http://") || bgUrl.startsWith("https://")) {
+            bgImg.crossOrigin = "anonymous";
+          }
           bgImg.crossOrigin = "anonymous";
           promises.push(new Promise((resolve) => {
             bgImg.onload = () => resolve();
@@ -535,12 +546,108 @@ export function generateCanvasBridgeHtml(
 
             const flipX = vid.transform?.flipX || vid.flipHorizontal;
             const flipY = vid.transform?.flipY || vid.flipVertical;
-            if (flipX || flipY) {
-              ctx.translate(dx + dw / 2, dy + dh / 2);
-              ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-              ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+
+            const mask = vid.mask || vid.transform?.mask;
+            if (mask && mask.shape && mask.shape !== "none") {
+              const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
+              const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
+              const mPosX = (mask.x || 0) * (dw / 100);
+              const mPosY = (mask.y || 0) * (dh / 100);
+              const mRot = ((mask.rotation || 0) * Math.PI) / 180;
+              const rawFeather = Math.max(0, Math.min(100, mask.feather ?? 0));
+              const minDim = Math.min(dw, dh);
+              const featherPx = rawFeather > 0 ? (minDim * (rawFeather / 100) * 0.45) : 0;
+
+              const offCanvas = document.createElement("canvas");
+              offCanvas.width = Math.ceil(dw);
+              offCanvas.height = Math.ceil(dh);
+              const offCtx = offCanvas.getContext("2d");
+              if (offCtx) {
+                if (flipX || flipY) {
+                  offCtx.save();
+                  offCtx.translate(dw / 2, dh / 2);
+                  offCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+                  offCtx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+                  offCtx.restore();
+                } else {
+                  offCtx.drawImage(el, 0, 0, dw, dh);
+                }
+
+                const shapeCanvas = document.createElement("canvas");
+                shapeCanvas.width = Math.ceil(dw);
+                shapeCanvas.height = Math.ceil(dh);
+                const sCtx = shapeCanvas.getContext("2d");
+                if (sCtx) {
+                  sCtx.translate(dw / 2 + mPosX, dh / 2 + mPosY);
+                  sCtx.rotate(mRot);
+                  if (featherPx > 0) {
+                    sCtx.filter = "blur(" + featherPx.toFixed(1) + "px)";
+                  }
+                  sCtx.fillStyle = "#ffffff";
+                  sCtx.beginPath();
+                  if (mask.inverted) {
+                    const big = Math.max(dw, dh) * 4;
+                    sCtx.rect(-big, -big, big * 2, big * 2);
+                  }
+
+                  if (mask.shape === "circle") {
+                    const rx = (minDim * effW) / 200;
+                    const ry = (minDim * effH) / 200;
+                    sCtx.scale(rx, ry);
+                    sCtx.arc(0, 0, 1, 0, Math.PI * 2);
+                  } else if (mask.shape === "rectangle") {
+                    const rw = (dw * effW) / 100;
+                    const rh = (dh * effH) / 100;
+                    const rad = Math.max(0, Math.min(mask.roundness ?? 16, Math.min(rw, rh) / 2));
+                    if (sCtx.roundRect) sCtx.roundRect(-rw / 2, -rh / 2, rw, rh, rad);
+                    else sCtx.rect(-rw / 2, -rh / 2, rw, rh);
+                  } else if (mask.shape === "linear") {
+                    const big = Math.max(dw, dh) * 4;
+                    sCtx.rect(-big, 0, big * 2, big * 2);
+                  } else if (mask.shape === "mirror") {
+                    const bh = Math.max(2, (dh * effH) / 100);
+                    const big = Math.max(dw, dh) * 4;
+                    sCtx.rect(-big, -bh / 2, big * 2, bh);
+                  } else if (mask.shape === "heart") {
+                    const hw = Math.max(1, (minDim * effW) / 100);
+                    const hh = Math.max(1, (minDim * effH) / 100);
+                    sCtx.scale(hw / 100, hh / 100);
+                    sCtx.moveTo(0, 44);
+                    sCtx.bezierCurveTo(-28, 18, -50, 0, -50, -20);
+                    sCtx.arc(-25, -20, 25, Math.PI, 0, false);
+                    sCtx.arc(25, -20, 25, Math.PI, 0, false);
+                    sCtx.bezierCurveTo(50, 0, 28, 18, 0, 44);
+                    sCtx.closePath();
+                  } else if (mask.shape === "star") {
+                    const sx = (minDim * effW) / 200;
+                    const sy = (minDim * effH) / 200;
+                    for (let pi = 0; pi < 10; pi++) {
+                      const rf = pi % 2 === 0 ? 1.0 : 0.42;
+                      const a = (pi * Math.PI) / 5 - Math.PI / 2;
+                      const px = sx * rf * Math.cos(a);
+                      const py = sy * rf * Math.sin(a);
+                      if (pi === 0) sCtx.moveTo(px, py);
+                      else sCtx.lineTo(px, py);
+                    }
+                    sCtx.closePath();
+                  }
+
+                  sCtx.fill(mask.inverted ? "evenodd" : "nonzero");
+
+                  offCtx.globalCompositeOperation = "destination-in";
+                  offCtx.drawImage(shapeCanvas, 0, 0);
+                }
+
+                ctx.drawImage(offCanvas, dx, dy, dw, dh);
+              }
             } else {
-              ctx.drawImage(el, dx, dy, dw, dh);
+              if (flipX || flipY) {
+                ctx.translate(dx + dw / 2, dy + dh / 2);
+                ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+                ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+              } else {
+                ctx.drawImage(el, dx, dy, dw, dh);
+              }
             }
           }
           ctx.restore();
@@ -822,8 +929,9 @@ export function generateCanvasBridgeHtml(
       // 7. Main Export Pipeline
       // -----------------------------------------------------------------------
       async function runExport() {
-        sendToNative({ type: "PROGRESS", progress: 5, status: "Preloading assets..." });
+        sendToNative({ type: "PROGRESS", progress: 10, status: "Preloading assets..." });
         await preloadAllMedia();
+        sendToNative({ type: "PROGRESS", progress: 20, status: "Assets ready, initiating render..." });
 
         // A. Snapshot PNG Export
         if (EXPORT_OPTIONS.format === "png") {
@@ -1006,7 +1114,12 @@ export function generateCanvasBridgeHtml(
           const reader = new FileReader();
           reader.onloadend = function() {
             const res = reader.result;
-            const base64 = typeof res === "string" ? res.split(",")[1] : "";
+            let base64 = "";
+            if (typeof res === "string") {
+              const commaIdx = res.indexOf(",");
+              base64 = commaIdx >= 0 ? res.slice(commaIdx + 1) : res;
+              base64 = base64.replace(/[\r\n\s]+/g, "");
+            }
             const CHUNK_SIZE = 256 * 1024; // 256KB binary chunk streaming
             if (base64.length > CHUNK_SIZE) {
               const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
@@ -1098,7 +1211,7 @@ export function generateCanvasBridgeHtml(
 
           renderFrame(curTime);
 
-          const progress = Math.min(99, Math.round((curTime / durationSec) * 100));
+          const progress = Math.min(99, Math.round(20 + (curTime / durationSec) * 79));
           sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });
 
           if (elapsed < durationSec) {

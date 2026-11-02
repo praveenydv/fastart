@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { SpeedCurvePoint } from '../../types/project';
 import { styles } from './Speed/SpeedModalStyles';
 import { SpeedNormalTab } from './Speed/SpeedNormalTab';
@@ -79,18 +78,15 @@ export default function SpeedModal({
 
   const handleSelectNormal = (val: number) => {
     setSpeedVal(val);
-    soundEngine.playSfx('click');
     onApplySpeed(val, null, isAudio ? 'none' : smoothSlowMo);
   };
 
   const handleSelectPresetCurve = (curve: any) => {
     setActiveCurveId(curve.id);
-    soundEngine.playSfx('click');
     onApplySpeed(1.5, curve, smoothSlowMo);
   };
 
   const handleApplyCustomCurve = () => {
-    soundEngine.playSfx('whoosh');
     onApplySpeed(1.0, { id: 'custom', name: 'Custom Bezier', points: customPoints }, smoothSlowMo);
     if (onApply) {
       onApply();
@@ -100,7 +96,6 @@ export default function SpeedModal({
   };
 
   const handleSelectSlowMo = (val: 'none' | 'blend' | 'optical_flow') => {
-    soundEngine.playSfx('click');
     setSmoothSlowMo(val);
     const curvePayload =
       activeTab === 'custom'
@@ -110,7 +105,6 @@ export default function SpeedModal({
   };
 
   const handleResetSpeed = () => {
-    soundEngine.playSfx('click');
     setSpeedVal(1.0);
     setActiveTab('normal');
     setSmoothSlowMo('none');
@@ -174,7 +168,6 @@ export default function SpeedModal({
               <TouchableOpacity
                 style={[styles.tabBtn, activeTab === 'normal' && styles.tabBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   setActiveTab('normal');
                 }}
                 activeOpacity={0.7}
@@ -187,7 +180,6 @@ export default function SpeedModal({
               <TouchableOpacity
                 style={[styles.tabBtn, activeTab === 'curve' && styles.tabBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   setActiveTab('curve');
                 }}
                 activeOpacity={0.7}
@@ -200,7 +192,6 @@ export default function SpeedModal({
               <TouchableOpacity
                 style={[styles.tabBtn, activeTab === 'custom' && styles.tabBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   setActiveTab('custom');
                 }}
                 activeOpacity={0.7}

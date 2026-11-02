@@ -12,7 +12,6 @@ import {
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject } from '../../types/project';
 import { getLivePlayerCanvasSnapshot } from '../../utils/videoRenderer';
 import { getMediaThumbnail } from '../../utils/mediaThumbnailGenerator';
@@ -181,7 +180,6 @@ export default function BackgroundModal({
     'https://images.unsplash.com/photo-1536240478700-b869070f9279?auto=format&fit=crop&w=400&q=80';
 
   const handleSelectBg = (bg: string) => {
-    soundEngine.playSfx('pop');
     onUpdateProject({ canvasBackground: bg });
   };
 
@@ -194,13 +192,11 @@ export default function BackgroundModal({
   };
 
   const handleReset = () => {
-    soundEngine.playSfx('pop');
     onUpdateProject({ canvasBackground: '#000000' });
     setCustomHexInput('#000000');
   };
 
   const handlePickCustomImage = async () => {
-    soundEngine.playSfx('click');
     try {
       if (Platform.OS === 'web') {
         const input = document.createElement('input');
@@ -280,7 +276,6 @@ export default function BackgroundModal({
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'color' && styles.tabBtnActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 setActiveTab('color');
               }}
               activeOpacity={0.8}
@@ -303,7 +298,6 @@ export default function BackgroundModal({
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'image' && styles.tabBtnActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 setActiveTab('image');
               }}
               activeOpacity={0.8}
@@ -326,7 +320,6 @@ export default function BackgroundModal({
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'blur' && styles.tabBtnActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 setActiveTab('blur');
               }}
               activeOpacity={0.8}

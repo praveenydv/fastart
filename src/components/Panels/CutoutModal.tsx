@@ -9,12 +9,10 @@ import {
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { CutoutConfig } from "../../types/project";
-import { soundEngine } from "../../utils/audioEngine";
 import {
   CutoutControls,
   CutoutMode,
 } from "./Cutout/CutoutControls";
-import MobileCutoutBridgeView from "./Cutout/MobileCutoutBridgeView";
 import {
   processVideoUnified,
   processClipUnified,
@@ -82,6 +80,7 @@ export default function CutoutModal({
     strokeColor: currentCutout?.strokeColor ?? "none",
     strokeWidth: currentCutout?.strokeWidth ?? 3,
     bgColor: currentCutout?.bgColor ?? "none",
+    quality: currentCutout?.quality ?? "fast",
   }));
 
   // Processing state
@@ -90,7 +89,9 @@ export default function CutoutModal({
   const [frameProgress, setFrameProgress] = useState<number>(0);
   const [processedFrames, setProcessedFrames] = useState<number>(0);
   const [totalFramesToProcess, setTotalFramesToProcess] = useState<number>(0);
+  const [processingError, setProcessingError] = useState<string | null>(null);
   const abortCtrlRef = useRef<AbortController | null>(null);
+  const previewInFlightRef = useRef(false);
 
   const isAlreadyProcessed = clipId ? hasClipMasks(clipId) : false;
   const currentProcessedCount = clipId ? getClipProcessedCount(clipId) : 0;
@@ -110,7 +111,7 @@ export default function CutoutModal({
   // Sync state when currentCutout prop changes
   useEffect(() => {
     if (currentCutout) {
-      setConfig({
+      setConfig((prev) => ({
         enabled: currentCutout.enabled ?? false,
         mode: currentCutout.mode ?? "chroma",
         keyColor: currentCutout.keyColor ?? "#00FF00",
@@ -119,7 +120,8 @@ export default function CutoutModal({
         strokeColor: currentCutout.strokeColor ?? "none",
         strokeWidth: currentCutout.strokeWidth ?? 3,
         bgColor: currentCutout.bgColor ?? "none",
-      });
+        quality: currentCutout.quality ?? prev.quality ?? "fast",
+      }));
     }
   }, [currentCutout]);
 
@@ -131,23 +133,59 @@ export default function CutoutModal({
     }
   }, [visible]);
 
-  // Auto-process current active frame on mobile when modal opens with cutout enabled
-  useEffect(() => {
-    if (visible && Platform.OS !== "web" && config.enabled && selectedClip?.url && !hasClipMasks(clipId)) {
-      processClipUnified(
-        selectedClip.url,
-        clipId,
-        frameIdx,
-        mediaTime,
-        (config.intensity ?? 45) / 100,
-        (config.shadow ?? 25) / 100,
-        config.mode || "auto",
-        config.keyColor || "#00FF00"
-      ).catch(() => {});
-    }
-  }, [visible, config.enabled, config.mode, clipId]);
-
   const debounceTimerRef = useRef<any>(null);
+
+  const runPreview = useCallback(async (
+    clip: any,
+    id: string,
+    index: number,
+    time: number,
+    previewConfig: CutoutConfig,
+  ) => {
+    if (!clip?.url || previewInFlightRef.current) return false;
+    previewInFlightRef.current = true;
+    setIsProcessingActiveFrame(true);
+    setProcessingError(null);
+    try {
+      const ok = await processClipUnified(
+        clip.url,
+        id,
+        index,
+        time,
+        (previewConfig.intensity ?? 45) / 100,
+        (previewConfig.shadow ?? 25) / 100,
+        previewConfig.mode || "auto",
+        previewConfig.keyColor || "#00FF00",
+        clip.type === "video" ? "video" : "photo",
+      );
+      if (!ok) {
+        setProcessingError(
+          previewConfig.mode === "auto"
+            ? "Auto Cutout could not create a mask. Check model initialization and try another frame."
+            : "Chroma Key could not process this frame. Check the clip and try again.",
+        );
+      }
+      return ok;
+    } catch (error) {
+      console.warn("[CutoutModal] Preview frame processing failed:", error);
+      setProcessingError(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      previewInFlightRef.current = false;
+      setIsProcessingActiveFrame(false);
+    }
+  }, []);
+
+  // Process once when the modal opens or cutout is first enabled. Mode changes
+  // and slider updates are handled by the debounced config-change path below.
+  useEffect(() => {
+    if (
+      visible && Platform.OS !== "web" && config.enabled && selectedClip?.url &&
+      !hasClipMasks(clipId)
+    ) {
+      void runPreview(selectedClip, clipId, frameIdx, mediaTime, config);
+    }
+  }, [visible, config.enabled, clipId, selectedClip?.url, runPreview]);
 
   const handleConfigChange = (newConfig: CutoutConfig) => {
     setConfig(newConfig);
@@ -165,43 +203,17 @@ export default function CutoutModal({
       }
     } else {
       // Mobile real-time preview on slider or color adjustment
-      if (newConfig.enabled && selectedClip?.url) {
+      if (newConfig.enabled && config.enabled && selectedClip?.url) {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(() => {
-          processClipUnified(
-            selectedClip.url,
-            clipId,
-            frameIdx,
-            mediaTime,
-            (newConfig.intensity ?? 45) / 100,
-            (newConfig.shadow ?? 25) / 100,
-            newConfig.mode || "auto",
-            newConfig.keyColor || "#00FF00"
-          ).catch(() => {});
+          void runPreview(selectedClip, clipId, frameIdx, mediaTime, newConfig);
         }, 100);
       }
     }
   };
 
   const handleProcessActiveFrame = async () => {
-    if (!selectedClip?.url || isProcessingActiveFrame) return;
-    setIsProcessingActiveFrame(true);
-    try {
-      await processClipUnified(
-        selectedClip.url,
-        clipId,
-        frameIdx,
-        mediaTime,
-        (config.intensity ?? 45) / 100,
-        (config.shadow ?? 25) / 100,
-        config.mode || "auto",
-        config.keyColor || "#00FF00"
-      );
-    } catch (e) {
-      console.warn("[CutoutModal] handleProcessActiveFrame error:", e);
-    } finally {
-      setIsProcessingActiveFrame(false);
-    }
+    await runPreview(selectedClip, clipId, frameIdx, mediaTime, config);
   };
 
   const handleProcessVideo = async () => {
@@ -210,19 +222,21 @@ export default function CutoutModal({
     setIsProcessingFrames(true);
     setFrameProgress(0);
 
+    const isFast = (config.quality || "fast") === "fast";
     const clipDuration = Math.max(0.1, selectedClip.duration || 1.0);
-    const fps = bakedFps || 20;
-    const estTotal = Math.max(1, Math.ceil(clipDuration * fps));
+    const targetFps = isFast ? (clipDuration > 60 ? 4 : 8) : (bakedFps || 20);
+    const estTotal = Math.max(1, Math.ceil(clipDuration * targetFps));
     setTotalFramesToProcess(estTotal);
 
     try {
-      await processVideoUnified(
+      setProcessingError(null);
+      const processed = await processVideoUnified(
         selectedClip.url,
         clipId,
         clipDuration,
         selectedClip.trimIn || 0,
         selectedClip.speed || 1.0,
-        fps,
+        targetFps,
         (config.intensity ?? 45) / 100,
         (config.shadow ?? 25) / 100,
         config.mode || "auto",
@@ -232,8 +246,10 @@ export default function CutoutModal({
           setProcessedFrames(cur);
           setTotalFramesToProcess(tot);
         },
-        abortCtrlRef.current.signal
+        abortCtrlRef.current.signal,
+        config.quality || "fast"
       );
+      if (processed === 0) setProcessingError("No frames were processed. Check clip access and cutout engine readiness, then retry.");
     } catch (e) {
       console.warn("[CutoutModal] handleProcessVideo error:", e);
     } finally {
@@ -243,7 +259,6 @@ export default function CutoutModal({
   };
 
   const handleCancelProcessing = () => {
-    soundEngine.playSfx("click");
     if (abortCtrlRef.current) {
       abortCtrlRef.current.abort();
       abortCtrlRef.current = null;
@@ -252,7 +267,6 @@ export default function CutoutModal({
   };
 
   const handleReset = () => {
-    soundEngine.playSfx("click");
     if (abortCtrlRef.current) {
       abortCtrlRef.current.abort();
       abortCtrlRef.current = null;
@@ -261,6 +275,7 @@ export default function CutoutModal({
       clearClipMasks(clipId);
       clearNativeMaskUris(clipId);
     }
+    setProcessingError(null);
     const resetCfg: CutoutConfig = {
       enabled: false,
       mode: "chroma",
@@ -270,6 +285,7 @@ export default function CutoutModal({
       strokeColor: "none",
       strokeWidth: 3,
       bgColor: "none",
+      quality: "fast",
     };
     setConfig(resetCfg);
     onApplyCutout(resetCfg, clipId);
@@ -328,6 +344,7 @@ export default function CutoutModal({
             totalFramesToProcess={totalFramesToProcess}
             isAlreadyProcessed={isAlreadyProcessed}
             processedCount={currentProcessedCount}
+            errorMessage={processingError}
             onPreviewFrame={handleProcessActiveFrame}
             onProcessVideo={handleProcessVideo}
             onCancelProcessing={handleCancelProcessing}
@@ -335,7 +352,6 @@ export default function CutoutModal({
           />
         </ScrollView>
       </View>
-      {Platform.OS !== "web" && <MobileCutoutBridgeView />}
     </View>
   );
 }

@@ -9,7 +9,6 @@ import {
   getPermissionsAsync,
 } from "expo-media-library";
 import * as MediaLibraryLegacy from "expo-media-library/legacy";
-import { soundEngine } from "../../../utils/audioEngine";
 import { ExportResult } from "../../../utils/videoRenderer";
 import { MediaFormatOption, NoticeDialogState } from "./exportTypes";
 import { triggerDownloadNotification } from "../../../utils/downloadNotification";
@@ -134,7 +133,6 @@ export async function executeDirectDownload({
               files: [shareFile],
               title: filename,
             });
-            soundEngine.playSfx("pop");
 
             const destPath = `Camera Roll / ${filename}`;
             await triggerDownloadNotification({
@@ -173,7 +171,6 @@ export async function executeDirectDownload({
           const writable = await handle.createWritable();
           await writable.write(blob);
           await writable.close();
-          soundEngine.playSfx("pop");
 
           const destPath = `Downloads / ${filename}`;
           await triggerDownloadNotification({
@@ -218,7 +215,6 @@ export async function executeDirectDownload({
 
       document.body.appendChild(a);
       a.click();
-      soundEngine.playSfx("pop");
 
       const destPath = `Downloads / ${filename}`;
       await triggerDownloadNotification({
@@ -453,7 +449,6 @@ export async function executeDirectDownload({
       setSaving(false);
 
       if (savedSuccess) {
-        soundEngine.playSfx("pop");
 
         // Trigger system / in-app notification
         await triggerDownloadNotification({

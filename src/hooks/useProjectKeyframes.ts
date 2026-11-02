@@ -1,6 +1,5 @@
 import { useMemo, useCallback } from "react";
 import { FastArtProject, MaskConfig, MaskKeyframePoint } from "../types/project";
-import { soundEngine } from "../utils/audioEngine";
 import {
   cleanAndSortKeyframes,
   cleanAndSortMaskKeyframes,
@@ -101,7 +100,6 @@ export function useProjectKeyframes({
 
   const handleJumpPrevMaskKeyframe = useCallback(() => {
     if (!prevMaskKeyframe || !activeClip) return;
-    soundEngine.playSfx("pop");
     const targetTime = Math.max(0, (activeClip.startTime || 0) + prevMaskKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
@@ -111,7 +109,6 @@ export function useProjectKeyframes({
 
   const handleJumpNextMaskKeyframe = useCallback(() => {
     if (!nextMaskKeyframe || !activeClip) return;
-    soundEngine.playSfx("pop");
     const targetTime = Math.max(0, (activeClip.startTime || 0) + nextMaskKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
@@ -141,12 +138,10 @@ export function useProjectKeyframes({
     }
 
     if (!targetClip) {
-      soundEngine.playSfx("click");
       openModal("mask");
       return;
     }
 
-    soundEngine.playSfx("pop");
     const activeTime = currentTimeRef?.current ?? currentTime;
     const clipMaskKfs = cleanAndSortMaskKeyframes(
       targetClip.maskKeyframes || targetClip.mask?.keyframes || [],
@@ -286,7 +281,6 @@ export function useProjectKeyframes({
 
   const handleJumpPrevKeyframe = useCallback(() => {
     if (!prevKeyframe || !activeClip) return;
-    soundEngine.playSfx("pop");
     const targetTime = Math.max(0, (activeClip.startTime || 0) + prevKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
@@ -296,7 +290,6 @@ export function useProjectKeyframes({
 
   const handleJumpNextKeyframe = useCallback(() => {
     if (!nextKeyframe || !activeClip) return;
-    soundEngine.playSfx("pop");
     const targetTime = Math.max(0, (activeClip.startTime || 0) + nextKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
@@ -329,12 +322,10 @@ export function useProjectKeyframes({
     }
 
     if (!targetClip) {
-      soundEngine.playSfx("click");
       openModal("keyframe");
       return;
     }
 
-    soundEngine.playSfx("pop");
     const clipKeyframes = targetClip.keyframes || [];
     const clipLocalTime = Math.max(0, currentTime - (targetClip.startTime || 0));
     const existing = findKeyframeAtTime(clipKeyframes, clipLocalTime, 0.12);

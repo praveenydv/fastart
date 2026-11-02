@@ -9,7 +9,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { FastArtProject, VideoClip, TextClip, CaptionClip, StickerClip } from "../../types/project";
-import { soundEngine } from "../../utils/audioEngine";
 import { triggerHaptic } from "../../utils/haptics";
 import { MAX_TRACKS } from "../Timeline/timelineTypes";
 
@@ -139,7 +138,6 @@ export default function LayerModal({
 
   const applyNewLayer = (targetLayer: number) => {
     if (!selectedClipId || !onUpdateProject) return;
-    soundEngine.playSfx("click");
     triggerHaptic("selection");
 
     const clampedLayer = Math.max(1, Math.min(20, targetLayer));

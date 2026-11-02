@@ -34,6 +34,16 @@ class FastArtRustModule : Module() {
         @JvmStatic external fun nativeInit(): Boolean
         @JvmStatic external fun nativeDetectBeats(samples: FloatArray, sampleRate: Int): String
         @JvmStatic external fun nativeGenerateWaveform(samples: FloatArray, buckets: Int): FloatArray
+        @JvmStatic external fun nativeDenoiseWaveformPeaks(peaks: FloatArray): FloatArray
+        @JvmStatic external fun nativeDecodeAudioPeaks(data: ByteArray, numPoints: Int): String
+        @JvmStatic external fun nativeInitializeModnet(path: String): String
+        @JvmStatic external fun nativeInferModnetRgba(rgba: ByteArray, width: Int, height: Int, threshold: Float, feather: Float): ByteArray
+        @JvmStatic external fun nativeSegmentFrameRgba(rgba: ByteArray, width: Int, height: Int, threshold: Float, feather: Float): ByteArray
+        @JvmStatic external fun nativeGenerateAnimationKeyframes(preset: String, category: String, frames: Int): String
+        @JvmStatic external fun nativeProcessChroma(rgba: ByteArray, width: Int, height: Int, r: Int, g: Int, b: Int, threshold: Float, feather: Float, despill: Boolean): ByteArray
+        @JvmStatic external fun nativePackAlphaRLE(alpha: ByteArray): ByteArray
+        @JvmStatic external fun nativeUnpackAlphaRLE(rle: ByteArray, outputLength: Int): ByteArray
+        @JvmStatic external fun nativeEncodeRgbaPng(rgba: ByteArray, width: Int, height: Int): ByteArray
         @JvmStatic external fun nativeRenderSnapshot(projectJson: String, timeSec: Double, width: Int, height: Int): ByteArray
         @JvmStatic external fun nativeRenderFrameRgba(projectJson: String, timeSec: Double, width: Int, height: Int): ByteArray
         @JvmStatic external fun nativeExportGif(projectJson: String, fps: Int, width: Int, height: Int, duration: Double): ByteArray
@@ -52,6 +62,11 @@ class FastArtRustModule : Module() {
             isLoaded
         }
 
+        AsyncFunction("generateAnimationKeyframes") Coroutine { preset: String, category: String, frames: Int ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            nativeGenerateAnimationKeyframes(preset, category, frames)
+        }
+
         AsyncFunction("detectBeats") Coroutine { samplesArray: List<Double>, sampleRate: Int ->
             if (!isLoaded) {
                 throw Exception("Rust native library not loaded")
@@ -67,6 +82,71 @@ class FastArtRustModule : Module() {
             val floatArr = FloatArray(samplesArray.size) { samplesArray[it].toFloat() }
             val peaks = nativeGenerateWaveform(floatArr, buckets)
             peaks.map { it.toDouble() }
+        }
+
+        AsyncFunction("denoiseWaveformPeaks") Coroutine { peaksArray: List<Double> ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            nativeDenoiseWaveformPeaks(FloatArray(peaksArray.size) { peaksArray[it].toFloat() })
+                .map { it.toDouble() }
+        }
+
+        AsyncFunction("decodeAudioPeaks") Coroutine { dataBase64: String, numPoints: Int ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            val data = Base64.decode(dataBase64, Base64.DEFAULT)
+            val result = nativeDecodeAudioPeaks(data, numPoints)
+            // Unsupported containers/codecs and media without a decodable audio
+            // stream have no waveform; return null instead of rejecting a normal
+            // media probe and logging it as an application error.
+            result.takeUnless { it.isBlank() }
+        }
+
+        AsyncFunction("initializeModnet") Coroutine { modelPath: String ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            nativeInitializeModnet(modelPath)
+        }
+
+        AsyncFunction("inferModnetRgba") Coroutine { rgbaBase64: String, width: Int, height: Int, threshold: Double, feather: Double ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            val rgba = Base64.decode(rgbaBase64, Base64.DEFAULT)
+            Base64.encodeToString(
+                nativeInferModnetRgba(rgba, width, height, threshold.toFloat(), feather.toFloat()),
+                Base64.NO_WRAP,
+            )
+        }
+
+        AsyncFunction("segmentFrameRgba") Coroutine { rgba: List<Int>, width: Int, height: Int, threshold: Double, feather: Double ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            val bytes = ByteArray(rgba.size) { rgba[it].toByte() }
+            nativeSegmentFrameRgba(bytes, width, height, threshold.toFloat(), feather.toFloat())
+                .map { it.toInt() and 0xFF }
+        }
+
+        AsyncFunction("processChromaCutout") Coroutine { rgbaBase64: String, width: Int, height: Int, rgb: Int, threshold: Double, feather: Double, despill: Boolean ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            val bytes = Base64.decode(rgbaBase64, Base64.DEFAULT)
+            val r = (rgb shr 16) and 0xFF
+            val g = (rgb shr 8) and 0xFF
+            val b = rgb and 0xFF
+            nativeProcessChroma(bytes, width, height, r, g, b, threshold.toFloat(), feather.toFloat(), despill)
+                .let { Base64.encodeToString(it, Base64.NO_WRAP) }
+        }
+
+        AsyncFunction("packAlphaRLE") Coroutine { alphaBase64: String ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            val alpha = Base64.decode(alphaBase64, Base64.DEFAULT)
+            Base64.encodeToString(nativePackAlphaRLE(alpha), Base64.NO_WRAP)
+        }
+
+        AsyncFunction("unpackAlphaRLE") Coroutine { rle: List<Int>, outputLength: Int ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            nativeUnpackAlphaRLE(ByteArray(rle.size) { rle[it].toByte() }, outputLength)
+                .map { it.toInt() and 0xFF }
+        }
+
+        AsyncFunction("encodeRgbaPng") Coroutine { rgbaBase64: String, width: Int, height: Int ->
+            if (!isLoaded) throw Exception("Rust native library not loaded")
+            val rgba = Base64.decode(rgbaBase64, Base64.DEFAULT)
+            Base64.encodeToString(nativeEncodeRgbaPng(rgba, width, height), Base64.NO_WRAP)
         }
 
         AsyncFunction("renderSnapshot") Coroutine { projectJson: String, timeSec: Double, width: Int, height: Int ->

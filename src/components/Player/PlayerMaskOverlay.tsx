@@ -6,11 +6,10 @@ import React, {
   useCallback,
 } from "react";
 import { View, Text, StyleSheet, Platform, PanResponder } from "react-native";
+import { Buffer } from "buffer";
 import { Image as ExpoImage } from "expo-image";
-import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { MaskConfig, MaskShape } from "../../types/project";
-import { soundEngine } from "../../utils/audioEngine";
+import { MaskConfig } from "../../types/project";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import { getPointerCoords } from "../Timeline";
 import { THEME_COLORS } from "../../constants/designConstants";
@@ -363,7 +362,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       if (e.stopPropagation) e.stopPropagation();
       if (e.cancelable && e.preventDefault) e.preventDefault();
 
-      soundEngine.playSfx("click");
       setActiveDrag(mode);
       isDraggingRef.current = true;
 
@@ -552,7 +550,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
 
       const onPointerUp = () => {
         setActiveDrag(null);
-        soundEngine.playSfx("pop");
 
         const finalMask = pendingMaskRef.current;
         dragCleanupRef.current?.();
@@ -702,7 +699,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         Math.abs(gs.dx) > 1 || Math.abs(gs.dy) > 1,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
-        soundEngine.playSfx("click");
         isDraggingRef.current = true;
         const touches = evt.nativeEvent.touches;
         if (touches && touches.length >= 2) {
@@ -793,7 +789,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
-        soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startMoveRef.current = null;
@@ -814,7 +809,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        soundEngine.playSfx("click");
         setActiveDrag("rotate");
         isDraggingRef.current = true;
         const totRotRad = (totalMaskRotRef.current * Math.PI) / 180;
@@ -853,7 +847,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
-        soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
         startRotStateRef.current = null;
@@ -873,7 +866,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        soundEngine.playSfx("click");
         setActiveDrag("scale");
         isDraggingRef.current = true;
         startW = Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60);
@@ -908,7 +900,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
-        soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
       },
@@ -924,7 +915,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        soundEngine.playSfx("click");
         setActiveDrag("scale-w");
         isDraggingRef.current = true;
         startW = Math.max(5, localMaskRef.current.width ?? localMaskRef.current.size ?? 60);
@@ -948,7 +938,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
-        soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
       },
@@ -964,7 +953,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        soundEngine.playSfx("click");
         setActiveDrag("scale-h");
         isDraggingRef.current = true;
         startH = Math.max(5, localMaskRef.current.height ?? localMaskRef.current.size ?? 60);
@@ -988,7 +976,6 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
         scheduleMaskUpdateRef.current(nextMask, false);
       },
       onPanResponderRelease: () => {
-        soundEngine.playSfx("pop");
         setActiveDrag(null);
         scheduleMaskUpdateRef.current(localMaskRef.current, true);
       },
@@ -1006,6 +993,30 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
   const nativeScaleHTop = useRef(makeSideHResponder(-1)).current;
   const nativeScaleHBottom = useRef(makeSideHResponder(1)).current;
 
+  let nativeFeatherStart = 0;
+  const nativeFeatherDrag = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        setActiveDrag("feather");
+        isDraggingRef.current = true;
+        nativeFeatherStart = localMaskRef.current.feather ?? 0;
+      },
+      onPanResponderMove: (_, gesture) => {
+        const feather = Math.round(Math.max(0, Math.min(80, nativeFeatherStart - gesture.dy * 0.5)));
+        scheduleMaskUpdateRef.current({ ...localMaskRef.current, feather }, false);
+      },
+      onPanResponderRelease: () => {
+        setActiveDrag(null);
+        scheduleMaskUpdateRef.current(localMaskRef.current, true);
+      },
+    }),
+  ).current;
+
+
+
   if (localMask.shape === "none") {
     return null;
   }
@@ -1020,6 +1031,26 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
       style={StyleSheet.absoluteFill}
       pointerEvents="box-none"
     >
+      {/* Top HUD Display for interactive mask parameters */}
+      <View style={styles.topHudContainer} pointerEvents="none">
+        <View style={styles.hudPill}>
+          <View style={styles.hudBadge}>
+            <Ionicons name="scan-outline" size={12} color={THEME_COLORS.accent} />
+            <Text style={styles.hudTitle}>
+              {localMask.shape.toUpperCase()}
+            </Text>
+          </View>
+          <Text style={styles.hudText}>
+            Softness: {localMask.feather || 0}%
+          </Text>
+          {localMask.rotation !== 0 && (
+            <Text style={styles.hudText}>
+              {localMask.rotation}°
+            </Text>
+          )}
+        </View>
+      </View>
+
       {/* Layer 1: Canvas-Bounded Visuals (strictly clipped to player boundaries) */}
       <View style={styles.canvasClipBounds} pointerEvents="none">
         <View
@@ -1115,24 +1146,51 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
               }}
               pointerEvents="none"
             >
-              <ExpoImage
-                source={{
-                  uri:
-                    localMask.shape === "heart"
-                      ? `data:image/svg+xml;utf8,${encodeURIComponent(
-                          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
-                        )}`
-                      : `data:image/svg+xml;utf8,${encodeURIComponent(
-                          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><polygon points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
-                        )}`,
-                }}
-                style={{
-                  width: maskBoxW,
-                  height: maskBoxH,
-                }}
-                contentFit="fill"
-                cachePolicy="memory"
-              />
+              {Platform.OS === "web" ? (
+                <svg
+                  viewBox="0 0 100 100"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    overflow: "visible",
+                  }}
+                >
+                  {localMask.shape === "heart" ? (
+                    <path
+                      d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z"
+                      fill="rgba(0, 242, 254, 0.12)"
+                      stroke="#00F2FE"
+                      strokeWidth="2.5"
+                    />
+                  ) : (
+                    <polygon
+                      points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38"
+                      fill="rgba(0, 242, 254, 0.12)"
+                      stroke="#00F2FE"
+                      strokeWidth="2.5"
+                    />
+                  )}
+                </svg>
+              ) : (
+                <ExpoImage
+                  source={{
+                    uri: `data:image/svg+xml;base64,${Buffer.from(
+                      localMask.shape === "heart"
+                        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
+                        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><polygon points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
+                    ).toString("base64")}`,
+                  }}
+                  style={{
+                    width: maskBoxW,
+                    height: maskBoxH,
+                  }}
+                  contentFit="fill"
+                  cachePolicy="memory"
+                />
+              )}
             </View>
           )}
         </View>
@@ -1335,12 +1393,34 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
             />
           </>
         )}
+
+
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  featherHandleWrap: {
+    position: "absolute",
+    alignSelf: "center",
+    zIndex: 10003,
+  },
+  featherPill: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#141416",
+    borderWidth: 1.5,
+    borderColor: "#00F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 5,
+    elevation: 8,
+  },
   topHudContainer: {
     position: "absolute",
     top: 10,

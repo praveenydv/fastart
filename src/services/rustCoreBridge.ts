@@ -5,6 +5,7 @@
 // Keeps Expo UI at 60fps with zero UI-thread stalls
 
 import { NativeModules, Platform } from "react-native";
+import { Buffer } from "buffer";
 import { FastArtProject, TrajectoryPoint, CutoutConfig } from "../types/project";
 
 export interface MaskProvider {
@@ -26,18 +27,34 @@ try {
   FastArtRust = requireNativeModule("FastArtRust") || FastArtRust;
 } catch (_) {}
 
+function encodeNativeBytes(bytes: Uint8Array | Uint8ClampedArray): string {
+  return Buffer.from(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength).toString("base64");
+}
+
 export interface RustBeatResult {
   bpm: number;
   beats: number[];
 }
 
 export type RustBackendType = "android_native" | "ios_native" | "web_wasm" | "fallback";
+export type AnimationKeyframe = readonly [number, number, number, number, number, number];
 
 let internalMaskCanvas: HTMLCanvasElement | null = null;
 let internalMaskCtx: CanvasRenderingContext2D | null = null;
 
 interface WasmExports {
   memory: WebAssembly.Memory;
+  fastart_motion_track_c?: (
+    time: number,
+    clipStart: number,
+    clipDuration: number,
+    modeIndex: number,
+    intensity: number,
+    outDx: number,
+    outDy: number,
+    outScale: number,
+    outRotation: number,
+  ) => void;
   fastart_get_scratchpad?: (size: number) => number;
   fastart_alloc: (size: number) => number;
   fastart_dealloc: (ptr: number, size: number) => void;
@@ -53,6 +70,14 @@ interface WasmExports {
     count: number,
     buckets: number,
     outPeaksPtr: number
+  ) => number;
+  fastart_decode_audio_peaks_c?: (
+    dataPtr: number,
+    dataLength: number,
+    numPoints: number,
+    outPeaksPtr: number,
+    outCapacity: number,
+    outDurationPtr: number,
   ) => number;
   fastart_render_snapshot_c: (
     projectJsonPtr: number,
@@ -104,6 +129,26 @@ interface WasmExports {
     pointsSPtr: number,
     count: number,
     progress: number
+  ) => number;
+  fastart_evaluate_object_track_c?: (
+    time: number,
+    timesPtr: number,
+    xPtr: number,
+    yPtr: number,
+    scalesPtr: number,
+    rotationsPtr: number,
+    count: number,
+    anchorTime: number,
+    trackScale: number,
+    trackRotation: number,
+    cameraCenter: number,
+    cameraFitToScreen: number,
+    cameraZoom: number,
+    cameraLockCenter: number,
+    outDx: number,
+    outDy: number,
+    outScale: number,
+    outRotation: number,
   ) => number;
   fastart_apply_color_adjustments_c: (
     pixelsPtr: number,
@@ -266,6 +311,14 @@ interface WasmExports {
     outAlphaPtr: number,
     maxOutLen: number
   ) => number;
+  fastart_modnet_alpha_to_rle_c?: (
+    alphaPtr: number,
+    alphaLen: number,
+    threshold: number,
+    feather: number,
+    outPtr: number,
+    outCapacity: number
+  ) => number;
   fastart_segment_frame_rgba_c?: (
     rgbaPtr: number,
     width: number,
@@ -283,6 +336,14 @@ interface WasmExports {
     height: number,
     outPtr: number,
     maxOutLen: number
+  ) => number;
+  fastart_generate_animation_keyframes_c?: (
+    presetPtr: number,
+    presetLength: number,
+    categoryPtr: number,
+    categoryLength: number,
+    frames: number,
+    outPtr: number,
   ) => number;
 }
 
@@ -322,7 +383,10 @@ class RustCoreBridgeService {
       if (Platform.OS === "web" && typeof window !== "undefined" && window.WebAssembly) {
         try {
           // Attempt loading WASM binary from static public directory
-          const candidates = ["/wasm/fastart_wasm.wasm", "/assets/wasm/fastart_wasm.wasm"];
+          // Resolve from the origin root: document.baseURI may point at a client route
+          // such as /project/, which would return the SPA HTML for /project/wasm/.
+          const wasmUrl = new URL("/wasm/fastart_wasm.wasm", window.location.origin).toString();
+          const candidates = [wasmUrl];
           for (const wasmUrl of candidates) {
             try {
               const res = await fetch(wasmUrl);
@@ -331,18 +395,34 @@ class RustCoreBridgeService {
                 const bytes = new Uint8Array(buf);
                 // Verify WebAssembly magic header: \0asm
                 if (bytes[0] === 0x00 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d) {
+                  let wasmInstance: WebAssembly.Instance | null = null;
                   const module = await WebAssembly.instantiate(buf, {
-                    env: {},
+                    env: { fastart_fill_random: (ptr: number, length: number) => {
+                      const cryptoApi = window.crypto;
+                      if (!cryptoApi || !wasmInstance) return 0;
+                      const memory = wasmInstance.exports.memory as WebAssembly.Memory;
+                      const output = new Uint8Array(memory.buffer, ptr, length);
+                      for (let offset = 0; offset < length; offset += 65536) {
+                        cryptoApi.getRandomValues(output.subarray(offset, Math.min(length, offset + 65536)));
+                      }
+                      return 1;
+                    } },
                     wasi_snapshot_preview1: {},
                   });
+                  wasmInstance = module.instance;
                   this.wasmInstance = module.instance.exports as unknown as WasmExports;
                   this.backendType = "web_wasm";
                   this.isInitialized = true;
                   console.log("[RustCoreBridge] Initialized with WebAssembly Rust Engine (fastart_wasm.wasm)");
                   return true;
                 }
+                console.warn(`[RustCoreBridge] Invalid WASM response from ${wasmUrl}`);
+              } else {
+                console.warn(`[RustCoreBridge] WASM request failed (${res.status}) for ${wasmUrl}`);
               }
-            } catch (_) {}
+            } catch (error) {
+              console.warn(`[RustCoreBridge] WASM initialization failed for ${wasmUrl}:`, error);
+            }
           }
         } catch (wasmErr) {
           console.warn("[RustCoreBridge] WebAssembly fetch skipped, fallback active:", wasmErr);
@@ -364,6 +444,47 @@ class RustCoreBridgeService {
 
   public getBackendType(): RustBackendType {
     return this.backendType;
+  }
+
+  public async initializeModnet(): Promise<boolean> {
+    await this.init();
+    if (this.backendType === "web_wasm") return false;
+    if ((this.backendType !== "ios_native" && this.backendType !== "android_native") || !FastArtRust?.initializeModnet) return false;
+    try {
+      const fileSystem = await import("expo-file-system/legacy");
+      const modelUrl = "https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx";
+      const modelPath = `${fileSystem.cacheDirectory}fastart-modnet-pr6.onnx`;
+      const existing = await fileSystem.getInfoAsync(modelPath);
+      if (!existing.exists || (existing.size ?? 0) < 25_000_000) {
+        await fileSystem.downloadAsync(modelUrl, modelPath);
+      }
+      const initialized = !!(await FastArtRust.initializeModnet(modelPath));
+      if (!initialized) {
+        console.warn("[RustCoreBridge] Rust MODNet rejected the downloaded model; automatic cutout is unavailable");
+      }
+      return initialized;
+    } catch (error) {
+      console.warn("[RustCoreBridge] MODNet native initialization failed:", error);
+      return false;
+    }
+  }
+
+  public async inferModnetRgba(
+    rgba: Uint8Array | Uint8ClampedArray,
+    width: number,
+    height: number,
+    threshold: number,
+    feather: number,
+  ): Promise<Uint8Array> {
+    await this.init();
+    if ((this.backendType !== "ios_native" && this.backendType !== "android_native") || !FastArtRust?.inferModnetRgba) {
+      throw new Error("Native Rust MODNet is unavailable");
+    }
+    const result = await FastArtRust.inferModnetRgba(
+      encodeNativeBytes(rgba), width, height, threshold, feather,
+    );
+    if (typeof result !== "string") throw new Error("Native Rust MODNet returned no alpha mask");
+    return Uint8Array.from(Buffer.from(result, "base64"));
   }
 
   /**
@@ -510,6 +631,64 @@ class RustCoreBridgeService {
     }
 
     return null;
+  }
+
+  public async decodeAudioPeaks(
+    buffer: ArrayBuffer,
+    numPoints = 3200,
+  ): Promise<{ duration: number; peaks: number[] } | null> {
+    await this.init();
+    const bytes = new Uint8Array(buffer);
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.decodeAudioPeaks !== "function") {
+        throw new Error("Rust audio decoding is not exposed by the native module");
+      }
+      const json = await FastArtRust.decodeAudioPeaks(
+        Buffer.from(bytes).toString("base64"),
+        numPoints,
+      );
+      if (!json) return null;
+      const result = JSON.parse(json) as { duration: number; peaks: number[] };
+      return result.peaks?.length ? result : null;
+    }
+    const inst = this.wasmInstance;
+    if (
+      this.backendType !== "web_wasm" ||
+      !inst?.fastart_decode_audio_peaks_c
+    ) {
+      throw new Error("Rust WASM WAV parsing is unavailable");
+    }
+    const pointCapacity = Math.min(24_000, Math.max(1, Math.floor(numPoints)));
+    const outputBytes = pointCapacity * Float32Array.BYTES_PER_ELEMENT;
+    // WASM memory views require naturally aligned offsets even when the input
+    // media byte length is arbitrary (compressed files rarely end on 4/8 bytes).
+    const alignmentPadding = 3 + 7;
+    const totalBytes = bytes.length + outputBytes + alignmentPadding + Float64Array.BYTES_PER_ELEMENT;
+    const scratch = typeof inst.fastart_get_scratchpad === "function";
+    const basePtr = scratch
+      ? inst.fastart_get_scratchpad!(totalBytes)
+      : inst.fastart_alloc(totalBytes);
+    if (!basePtr) throw new Error("Rust WASM allocation failed for WAV parsing");
+    try {
+      const outputPtr = Math.ceil((basePtr + bytes.length) / Float32Array.BYTES_PER_ELEMENT) * Float32Array.BYTES_PER_ELEMENT;
+      const durationAddress = outputPtr + outputBytes;
+      const durationPtr = Math.ceil(durationAddress / Float64Array.BYTES_PER_ELEMENT) * Float64Array.BYTES_PER_ELEMENT;
+      new Uint8Array(inst.memory.buffer, basePtr, bytes.length).set(bytes);
+      const count = inst.fastart_decode_audio_peaks_c(
+        basePtr,
+        bytes.length,
+        pointCapacity,
+        outputPtr,
+        pointCapacity,
+        durationPtr,
+      );
+      if (count <= 0 || count > pointCapacity) return null;
+      const peaks = Array.from(new Float32Array(inst.memory.buffer, outputPtr, count));
+      const duration = new Float64Array(inst.memory.buffer, durationPtr, 1)[0];
+      return { duration, peaks };
+    } finally {
+      if (!scratch) inst.fastart_dealloc(basePtr, totalBytes);
+    }
   }
 
   /**
@@ -1015,58 +1194,41 @@ class RustCoreBridgeService {
     mode: string = "follow_center",
     intensity: number = 60
   ): { dx: number; dy: number; dScale: number; dRot: number } {
-    if (this.backendType === "web_wasm" && this.wasmInstance && (this.wasmInstance as any).fastart_motion_track_c) {
-      try {
-        const inst = this.wasmInstance as any;
-        const modeMap: Record<string, number> = {
-          follow_center: 1,
-          cinematic_drift: 2,
-          dynamic_zoom: 3,
-          orbit_float: 4,
-        };
-        const modeIdx = modeMap[mode] || 0;
-        const outPtr = inst.fastart_alloc(32); // 4 * sizeof(f64)
-        inst.fastart_motion_track_c(
-          time,
-          clipStartTime,
-          clipDuration,
-          modeIdx,
-          intensity,
-          outPtr,
-          outPtr + 8,
-          outPtr + 16,
-          outPtr + 24
-        );
-        const f64View = new Float64Array(inst.memory.buffer, outPtr, 4);
-        const dx = f64View[0];
-        const dy = f64View[1];
-        const dScale = f64View[2];
-        const dRot = f64View[3];
-        inst.fastart_dealloc(outPtr, 32);
-        return { dx, dy, dScale, dRot };
-      } catch (_) {}
+    const identity = { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+    if (this.backendType !== "web_wasm" || !this.wasmInstance?.fastart_motion_track_c) {
+      return identity;
     }
-
-    // High precision fallback
-    const elapsed = Math.max(0, time - clipStartTime);
-    const progress = clipDuration > 0 ? Math.min(1, Math.max(0, elapsed / clipDuration)) : 0;
-    const factor = Math.min(2, Math.max(0, intensity / 100));
-    if (mode === "follow_center") {
-      const angle = progress * Math.PI * 2;
-      return { dx: Math.sin(angle) * 28 * factor, dy: Math.cos(angle) * 14 * factor, dScale: 1.0, dRot: 0 };
-    } else if (mode === "cinematic_drift") {
-      const dx = (progress - 0.5) * 65 * factor;
-      const dy = Math.sin(progress * Math.PI) * -16 * factor;
-      return { dx, dy, dScale: 1.0 + progress * 0.12 * factor, dRot: 0 };
-    } else if (mode === "dynamic_zoom") {
-      const pulse = Math.sin(progress * Math.PI * 3) * 0.15 * factor;
-      return { dx: 0, dy: 0, dScale: Math.max(0.1, 1.0 + pulse), dRot: 0 };
-    } else if (mode === "orbit_float") {
-      const a = progress * Math.PI * 4;
-      return { dx: Math.cos(a) * 32 * factor, dy: Math.sin(a) * 32 * factor, dScale: 1.0, dRot: Math.sin(a) * 5 * factor };
+    let outPtr = 0;
+    try {
+      const inst = this.wasmInstance;
+      const modeMap: Record<string, number> = {
+        follow_center: 1,
+        cinematic_drift: 2,
+        dynamic_zoom: 3,
+        orbit_float: 4,
+      };
+      const modeIdx = modeMap[mode] || 0;
+      outPtr = inst.fastart_alloc(32); // 4 * sizeof(f64)
+      if (!outPtr) return identity;
+      inst.fastart_motion_track_c(
+        time,
+        clipStartTime,
+        clipDuration,
+        modeIdx,
+        intensity,
+        outPtr,
+        outPtr + 8,
+        outPtr + 16,
+        outPtr + 24
+      );
+      const f64View = new Float64Array(inst.memory.buffer, outPtr, 4);
+      return { dx: f64View[0], dy: f64View[1], dScale: f64View[2], dRot: f64View[3] };
+    } catch (error) {
+      console.error("[RustCoreBridge] Rust motion tracking failed:", error);
+      return identity;
+    } finally {
+      if (outPtr) this.wasmInstance?.fastart_dealloc(outPtr, 32);
     }
-
-    return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
   }
 
   public evaluateObjectTrackTrajectory(
@@ -1080,70 +1242,77 @@ class RustCoreBridgeService {
     cameraZoom = 1.25,
     cameraLockCenter = true,
   ): { dx: number; dy: number; dScale: number; dRot: number } {
+    const identity = { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
     if (!trajectory || trajectory.length === 0) {
-      return { dx: 0, dy: 0, dScale: 1.0, dRot: 0 };
+      return identity;
     }
-    let origin = trajectory[0];
-    if (anchorTime !== undefined && Number.isFinite(anchorTime)) {
-      let bestDist = Infinity;
-      for (let i = 0; i < trajectory.length; i++) {
-        const dist = Math.abs(trajectory[i].time - anchorTime);
-        if (dist < bestDist) {
-          bestDist = dist;
-          origin = trajectory[i];
-        }
-      }
+    const inst = this.wasmInstance;
+    if (
+      this.backendType !== "web_wasm" ||
+      !inst?.fastart_evaluate_object_track_c
+    ) {
+      return identity;
     }
-    const first = trajectory[0];
-    const last = trajectory[trajectory.length - 1];
-    let pt: TrajectoryPoint;
-    if (trajectory.length === 1 || time <= first.time) {
-      pt = first;
-    } else if (time >= last.time) {
-      pt = last;
-    } else {
-      let low = 0;
-      let high = trajectory.length - 1;
-      while (low + 1 < high) {
-        const mid = (low + high) >> 1;
-        if (trajectory[mid].time <= time) low = mid;
-        else high = mid;
+    const count = trajectory.length;
+    const valuesBytes = count * Float64Array.BYTES_PER_ELEMENT;
+    const outputBytes = 4 * Float64Array.BYTES_PER_ELEMENT;
+    const totalBytes = valuesBytes * 5 + outputBytes;
+    const scratch = typeof inst.fastart_get_scratchpad === "function";
+    const basePtr = scratch
+      ? inst.fastart_get_scratchpad!(totalBytes)
+      : inst.fastart_alloc(totalBytes);
+    if (!basePtr) return identity;
+    try {
+      const timesPtr = basePtr;
+      const xPtr = timesPtr + valuesBytes;
+      const yPtr = xPtr + valuesBytes;
+      const scalesPtr = yPtr + valuesBytes;
+      const rotationsPtr = scalesPtr + valuesBytes;
+      const outputPtr = rotationsPtr + valuesBytes;
+      const memory = inst.memory.buffer;
+      const times = new Float64Array(memory, timesPtr, count);
+      const xs = new Float64Array(memory, xPtr, count);
+      const ys = new Float64Array(memory, yPtr, count);
+      const scales = new Float64Array(memory, scalesPtr, count);
+      const rotations = new Float64Array(memory, rotationsPtr, count);
+      for (let index = 0; index < count; index++) {
+        const point = trajectory[index];
+        times[index] = point.time;
+        xs[index] = point.x;
+        ys[index] = point.y;
+        scales[index] = point.scale;
+        rotations[index] = point.rotation;
       }
-      const p0 = trajectory[low];
-      const p1 = trajectory[high];
-      const dt = Math.max(0.0001, p1.time - p0.time);
-      const t = Math.min(1, Math.max(0, (time - p0.time) / dt));
-      pt = {
+      const output = new Float64Array(memory, outputPtr, 4);
+      const success = inst.fastart_evaluate_object_track_c(
         time,
-        x: p0.x + (p1.x - p0.x) * t,
-        y: p0.y + (p1.y - p0.y) * t,
-        scale: p0.scale + (p1.scale - p0.scale) * t,
-        rotation: p0.rotation + (p1.rotation - p0.rotation) * t,
-        confidence: p0.confidence + (p1.confidence - p0.confidence) * t,
-      };
+        timesPtr,
+        xPtr,
+        yPtr,
+        scalesPtr,
+        rotationsPtr,
+        count,
+        anchorTime ?? Number.NaN,
+        Number(trackScale),
+        Number(trackRotation),
+        Number(cameraCenter),
+        Number(cameraFitToScreen),
+        cameraZoom,
+        Number(cameraLockCenter),
+        outputPtr,
+        outputPtr + 8,
+        outputPtr + 16,
+        outputPtr + 24,
+      );
+      return success === 1
+        ? { dx: output[0], dy: output[1], dScale: output[2], dRot: output[3] }
+        : identity;
+    } catch (error) {
+      console.error("[RustCoreBridge] Rust object tracking failed:", error);
+      return identity;
+    } finally {
+      if (!scratch) inst.fastart_dealloc(basePtr, totalBytes);
     }
-    let dx = pt.x - origin.x;
-    let dy = pt.y - origin.y;
-    const originScale = origin.scale || 1.0;
-    let dScale = trackScale ? Math.max(0.2, Math.min(5.0, (pt.scale || 1.0) / originScale)) : 1.0;
-    const rawRot = (pt.rotation || 0) - (origin.rotation || 0);
-    const dRot = trackRotation ? Math.max(-15, Math.min(15, rawRot)) : 0;
-    if (cameraCenter) {
-      if (cameraLockCenter) {
-        // Lock target to exact center (50%, 50%) of canvas
-        dx = -(pt.x - 50);
-        dy = -(pt.y - 50);
-      } else {
-        dx = -dx;
-        dy = -dy;
-      }
-      // Fit to screen: automatically zoom video to prevent black borders
-      if (cameraFitToScreen) {
-        const targetZoom = Math.max(1.0, cameraZoom || 1.25);
-        dScale = dScale * targetZoom;
-      }
-    }
-    return { dx, dy, dScale: Math.max(0.1, Math.min(10, dScale)), dRot };
   }
 
   public isWasmReady(): boolean {
@@ -1151,8 +1320,7 @@ class RustCoreBridgeService {
   }
 
   /**
-   * High-Performance Native Chroma Keying with Despill in Rust/WASM
-   * Operates directly on RGBA pixel buffer in linear memory with zero GC churn
+   * Synchronous WASM chroma keying for browser canvas rendering.
    */
   public processChromaCutout(
     pixels: Uint8ClampedArray,
@@ -1165,7 +1333,7 @@ class RustCoreBridgeService {
   ): boolean {
     const inst = this.wasmInstance;
     if (!inst) {
-      return this.processChromaCutoutJS(pixels, width, height, keyHex, threshold, feather, despill);
+      throw new Error("Synchronous chroma cutout requires the Rust WASM backend");
     }
 
     try {
@@ -1180,7 +1348,7 @@ class RustCoreBridgeService {
         ? inst.fastart_get_scratchpad!(totalBytes)
         : inst.fastart_alloc(totalBytes);
       if (!pixelsPtr) {
-        return this.processChromaCutoutJS(pixels, width, height, keyHex, threshold, feather, despill);
+        throw new Error("Rust WASM could not allocate chroma cutout memory");
       }
 
       // Copy input pixels to WebAssembly linear memory
@@ -1207,90 +1375,122 @@ class RustCoreBridgeService {
       }
       return true;
     } catch (err) {
-      console.warn("[RustCoreBridge] processChromaCutout wasm error, falling back to JS:", err);
-      return this.processChromaCutoutJS(pixels, width, height, keyHex, threshold, feather, despill);
+      throw new Error(`Rust WASM chroma cutout failed: ${String(err)}`);
     }
   }
 
-  /**
-   * Pure JavaScript Chroma Keying Fallback Engine
-   * Provides 100% reliable chroma cutout on mobile browsers and environments where WebAssembly is loading or unavailable.
-   * Matches Rec. 709 Euclidean perceptual color distance, smooth Hermite S-curve interpolation, and despill suppression.
-   */
-  public processChromaCutoutJS(
-    pixels: Uint8ClampedArray,
+  /** Runs a cutout pixel buffer through the active native Rust or WASM backend. */
+  public async processChromaCutoutFrame(
+    pixels: Uint8Array | Uint8ClampedArray,
     width: number,
     height: number,
     keyHex: string,
     threshold: number,
     feather: number,
-    despill = true
-  ): boolean {
-    const hex = keyHex.startsWith("#") ? keyHex.slice(1) : keyHex;
-    const rKey = parseInt(hex.slice(0, 2), 16) || 0;
-    const gKey = parseInt(hex.slice(2, 4), 16) || 0;
-    const bKey = parseInt(hex.slice(4, 6), 16) || 0;
-
-    const w_r = 0.299;
-    const w_g = 0.587;
-    const w_b = 0.114;
-
-    const clampedThresh = Math.max(0.01, Math.min(1.0, threshold)) * 180.0;
-    const thresh_sq = clampedThresh * clampedThresh;
-    const clampedFeather = Math.max(1.0, Math.max(0.01, Math.min(1.0, feather)) * 80.0);
-    const outer = clampedThresh + clampedFeather;
-    const outer_sq = outer * outer;
-    const inv_feather = 1.0 / clampedFeather;
-
-    const is_green_screen = gKey > rKey && gKey > bKey;
-    const is_blue_screen = bKey > rKey && bKey > gKey;
-
-    const total = width * height;
-    for (let i = 0; i < total; i++) {
-      const idx = i * 4;
-      const r = pixels[idx];
-      let g = pixels[idx + 1];
-      let b = pixels[idx + 2];
-      const origA = pixels[idx + 3];
-      if (origA === 0) continue;
-
-      const dr = r - rKey;
-      const dg = g - gKey;
-      const db = b - bKey;
-
-      const dist_sq = w_r * dr * dr + w_g * dg * dg + w_b * db * db;
-
-      if (dist_sq <= thresh_sq) {
-        pixels[idx + 3] = 0;
-        continue;
-      }
-
-      let alpha = 1.0;
-      if (dist_sq < outer_sq) {
-        const dist = Math.sqrt(dist_sq);
-        const u = (dist - clampedThresh) * inv_feather;
-        alpha = u * u * (3.0 - 2.0 * u);
-      }
-
-      if (despill) {
-        if (is_green_screen) {
-          const max_rb = Math.max(r, b);
-          if (g > max_rb) {
-            g = Math.round(g * 0.35 + max_rb * 0.65);
-            pixels[idx + 1] = g;
-          }
-        } else if (is_blue_screen) {
-          const max_rg = Math.max(r, g);
-          if (b > max_rg) {
-            b = Math.round(b * 0.35 + max_rg * 0.65);
-            pixels[idx + 2] = b;
-          }
-        }
-      }
-
-      pixels[idx + 3] = Math.round(origA * alpha);
+    despill = true,
+  ): Promise<Uint8Array> {
+    await this.init();
+    if (width < 1 || height < 1 || pixels.length !== width * height * 4) {
+      throw new Error("Invalid RGBA frame for Rust chroma cutout");
     }
-    return true;
+
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.processChromaCutout !== "function") {
+        throw new Error("Rust chroma cutout is not exposed by the native module");
+      }
+      const hex = keyHex.replace(/^#/, "");
+      const rgb = parseInt(hex.slice(0, 6), 16) || 0;
+      const result = await FastArtRust.processChromaCutout(
+        encodeNativeBytes(pixels), width, height, rgb, threshold, feather, despill,
+      );
+      if (typeof result !== "string") {
+        throw new Error("Rust chroma cutout returned an invalid frame");
+      }
+      const decoded = Uint8Array.from(Buffer.from(result, "base64"));
+      if (decoded.length !== pixels.length) throw new Error("Rust chroma cutout returned an invalid frame");
+      return decoded;
+    }
+
+    if (this.backendType === "web_wasm") {
+      const output = new Uint8Array(pixels);
+      if (!this.processChromaCutout(new Uint8ClampedArray(output.buffer), width, height, keyHex, threshold, feather, despill)) {
+        throw new Error("Rust WASM chroma cutout failed");
+      }
+      return output;
+    }
+
+    throw new Error("Rust core is unavailable; chroma cutout requires Rust");
+  }
+
+  /** Generate preview transform samples with the active Rust backend. */
+  public async generateAnimationKeyframes(
+    preset: string,
+    category: "in" | "out" | "loop" | "combo",
+    frameCount = 24,
+  ): Promise<AnimationKeyframe[]> {
+    await this.init();
+    const count = Math.max(2, Math.min(240, Math.floor(frameCount)));
+
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.generateAnimationKeyframes !== "function") {
+        throw new Error("Rust animation keyframe generation is not exposed by the native module");
+      }
+      const response = await FastArtRust.generateAnimationKeyframes(preset, category, count);
+      const parsed = typeof response === "string" ? JSON.parse(response) : response;
+      if (!Array.isArray(parsed?.frames) || parsed.frames.length !== count) {
+        throw new Error("Native Rust returned invalid animation keyframes");
+      }
+      return parsed.frames as AnimationKeyframe[];
+    }
+
+    if (this.backendType === "web_wasm" && this.wasmInstance) {
+      const inst = this.wasmInstance;
+      const generate = inst.fastart_generate_animation_keyframes_c;
+      if (typeof generate !== "function") {
+        throw new Error("Rust WASM animation keyframe generation is not exported");
+      }
+
+      const encoder = new TextEncoder();
+      const presetBytes = encoder.encode(preset);
+      const categoryBytes = encoder.encode(category);
+      const outputCount = count * 6;
+      const outputBytes = outputCount * Float32Array.BYTES_PER_ELEMENT;
+      const presetPtr = inst.fastart_alloc(presetBytes.length);
+      const categoryPtr = inst.fastart_alloc(categoryBytes.length);
+      const outputPtr = inst.fastart_alloc(outputBytes);
+      if (!presetPtr || !categoryPtr || !outputPtr) {
+        if (presetPtr) inst.fastart_dealloc(presetPtr, presetBytes.length);
+        if (categoryPtr) inst.fastart_dealloc(categoryPtr, categoryBytes.length);
+        if (outputPtr) inst.fastart_dealloc(outputPtr, outputBytes);
+        throw new Error("Rust WASM could not allocate animation keyframe memory");
+      }
+
+      try {
+        new Uint8Array(inst.memory.buffer, presetPtr, presetBytes.length).set(presetBytes);
+        new Uint8Array(inst.memory.buffer, categoryPtr, categoryBytes.length).set(categoryBytes);
+        const written = generate(
+          presetPtr,
+          presetBytes.length,
+          categoryPtr,
+          categoryBytes.length,
+          count,
+          outputPtr,
+        );
+        if (written !== outputCount) {
+          throw new Error("Rust WASM returned invalid animation keyframes");
+        }
+        const flat = new Float32Array(inst.memory.buffer, outputPtr, written).slice();
+        return Array.from({ length: count }, (_, index) =>
+          Array.from(flat.subarray(index * 6, index * 6 + 6)) as unknown as AnimationKeyframe,
+        );
+      } finally {
+        inst.fastart_dealloc(presetPtr, presetBytes.length);
+        inst.fastart_dealloc(categoryPtr, categoryBytes.length);
+        inst.fastart_dealloc(outputPtr, outputBytes);
+      }
+    }
+
+    throw new Error("Rust core is unavailable; animation preview requires Rust");
   }
 
   /**
@@ -1669,23 +1869,8 @@ class RustCoreBridgeService {
     progress: number
   ): number {
     const inst = this.wasmInstance;
-    if (!inst || !points || points.length === 0) {
-      if (!points || points.length === 0) return 1.0;
-      const p = Math.max(0, Math.min(1, progress));
-      if (p <= points[0].t) return points[0].s;
-      if (p >= points[points.length - 1].t) return points[points.length - 1].s;
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        if (p >= p1.t && p <= p2.t) {
-          const ratio = (p - p1.t) / (p2.t - p1.t || 1);
-          const smoothRatio = ratio * ratio * (3 - 2 * ratio);
-          return p1.s + smoothRatio * (p2.s - p1.s);
-        }
-      }
-      return 1.0;
-    }
-
+    if (!points || points.length === 0) return 1.0;
+    if (this.backendType !== "web_wasm" || !inst || typeof inst.fastart_evaluate_speed_curve_c !== "function") return 1.0;
     try {
       const count = points.length;
       const bytesPerDouble = 8;
@@ -1792,153 +1977,26 @@ class RustCoreBridgeService {
   public processSegmentationMask(
     pixels: Uint8ClampedArray,
     width: number,
-    height: number
+    height: number,
   ): { isValid: boolean; maxConfidence: number } {
     const inst = this.wasmInstance;
-    if (!inst) {
-      // Fallback in JS if WASM is not yet initialized
-      const u32 = new Uint32Array(pixels.buffer);
-      const len = u32.length;
-      let highConfCount = 0;
-      let maxConf = 0;
-      for (let i = 0; i < len; i++) {
-        const conf = u32[i] & 0xff;
-        if (conf > maxConf) maxConf = conf;
-        let alpha = 0;
-        if (conf >= 210) {
-          alpha = 255;
-          highConfCount++;
-        } else if (conf > 25) {
-          const t = (conf - 25) / 185.0;
-          alpha = Math.round(t * t * (3.0 - 2.0 * t) * 255.0);
-          if (conf >= 90) highConfCount++;
-        }
-        u32[i] = ((alpha << 24) >>> 0) | 0x00ffffff;
-      }
-      return {
-        isValid: maxConf >= 110 && highConfCount >= Math.max(80, Math.floor(len * 0.005)),
-        maxConfidence: maxConf,
-      };
+    const expected = width * height * 4;
+    if (this.backendType !== "web_wasm" || !inst || pixels.length !== expected) {
+      throw new Error("Rust WASM segmentation-mask processing is unavailable");
     }
-
+    const ptr = inst.fastart_alloc(expected);
+    if (!ptr) throw new Error("Rust WASM allocation failed for segmentation mask");
     try {
-      const totalBytes = width * height * 4;
-      const ptr = inst.fastart_alloc(totalBytes);
-      if (!ptr) return { isValid: false, maxConfidence: 0 };
-
-      new Uint8Array(inst.memory.buffer, ptr, totalBytes).set(pixels);
-      const packedResult = inst.fastart_process_segmentation_confidence_c(ptr, width, height);
-      pixels.set(new Uint8Array(inst.memory.buffer, ptr, totalBytes));
-      inst.fastart_dealloc(ptr, totalBytes);
-
-      const isValid = (packedResult & 1) === 1;
-      const maxConfidence = (packedResult >> 8) & 0xff;
-      return { isValid, maxConfidence };
-    } catch (e) {
-      console.warn("[RustCoreBridge] processSegmentationMask error:", e);
-      return { isValid: false, maxConfidence: 0 };
+      new Uint8Array(inst.memory.buffer, ptr, expected).set(pixels);
+      const packed = inst.fastart_process_segmentation_confidence_c(ptr, width, height);
+      pixels.set(new Uint8Array(inst.memory.buffer, ptr, expected));
+      return {
+        isValid: (packed & 1) === 1,
+        maxConfidence: (packed >> 8) & 0xff,
+      };
+    } finally {
+      inst.fastart_dealloc(ptr, expected);
     }
-  }
-
-  /**
-   * High-Precision Fast Guided Filter Alpha Matting in native Rust/WASM
-   * Aligns coarse neural segmentation masks directly to RGB video frame boundaries.
-   */
-  public refineCutoutMatte(
-    rgbaPixels: Uint8ClampedArray,
-    maskPixels: Uint8ClampedArray,
-    width: number,
-    height: number,
-    threshold: number = 0.45,
-    feather: number = 0.15,
-    despill: boolean = true
-  ): boolean {
-    const inst = this.wasmInstance;
-    if (inst) {
-      try {
-        const totalBytes = width * height * 4;
-        let rgbaPtr = 0;
-        let maskPtr = 0;
-        let isScratch = false;
-
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const scratchPtr = inst.fastart_get_scratchpad(totalBytes * 2);
-          if (scratchPtr) {
-            rgbaPtr = scratchPtr;
-            maskPtr = scratchPtr + totalBytes;
-            isScratch = true;
-          }
-        }
-
-        if (!rgbaPtr || !maskPtr) {
-          rgbaPtr = inst.fastart_alloc(totalBytes);
-          maskPtr = inst.fastart_alloc(totalBytes);
-          if (!rgbaPtr || !maskPtr) {
-            if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, totalBytes);
-            if (maskPtr) inst.fastart_dealloc(maskPtr, totalBytes);
-            return false;
-          }
-        }
-
-        new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes).set(rgbaPixels);
-        new Uint8Array(inst.memory.buffer, maskPtr, totalBytes).set(maskPixels);
-
-        inst.fastart_refine_cutout_c(
-          rgbaPtr,
-          maskPtr,
-          width,
-          height,
-          threshold,
-          feather,
-          despill ? 1 : 0
-        );
-
-        rgbaPixels.set(new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes));
-        if (!isScratch) {
-          inst.fastart_dealloc(rgbaPtr, totalBytes);
-          inst.fastart_dealloc(maskPtr, totalBytes);
-        }
-        return true;
-      } catch (e) {
-        console.warn("[RustCoreBridge] refineCutoutMatte error:", e);
-      }
-    }
-
-    // High-quality JavaScript fallback
-    const len = width * height;
-    const thresh = Math.max(0.05, Math.min(0.95, threshold));
-    const soft = Math.max(0.02, Math.min(0.5, feather) * 0.35);
-    const tLow = Math.max(0.0, thresh - soft);
-    const tHigh = Math.min(1.0, thresh + soft);
-    const invRange = 1.0 / Math.max(0.001, tHigh - tLow);
-
-    for (let i = 0; i < len; i++) {
-      const idx = i * 4;
-      const aVal = maskPixels[idx + 3];
-      const mVal = (aVal > 0 && aVal < 255
-        ? aVal
-        : (maskPixels[idx] === maskPixels[idx + 1] && maskPixels[idx + 1] === maskPixels[idx + 2]
-            ? Math.max(aVal, maskPixels[idx])
-            : aVal)) / 255.0;
-      let alpha = 0.0;
-      if (mVal >= tHigh) {
-        alpha = 1.0;
-      } else if (mVal > tLow) {
-        const u = (mVal - tLow) * invRange;
-        alpha = u * u * (3.0 - 2.0 * u);
-      }
-      const origA = rgbaPixels[idx + 3] / 255.0;
-      const finalA = Math.max(0.0, Math.min(1.0, alpha * origA));
-      rgbaPixels[idx + 3] = Math.round(finalA * 255.0);
-
-      if (despill && finalA > 0.02 && finalA < 0.85) {
-        const factor = 0.88 + 0.12 * finalA;
-        rgbaPixels[idx] = Math.round(rgbaPixels[idx] * factor);
-        rgbaPixels[idx + 1] = Math.round(rgbaPixels[idx + 1] * factor);
-        rgbaPixels[idx + 2] = Math.round(rgbaPixels[idx + 2] * factor);
-      }
-    }
-    return true;
   }
 
   /**
@@ -1947,65 +2005,42 @@ class RustCoreBridgeService {
    */
   public prepareModnetInput(
     rgbaPixels: Uint8ClampedArray,
-    width: number = 512,
-    height: number = 512,
-    outFloatBuffer?: Float32Array
+    width = 512,
+    height = 512,
+    outFloatBuffer?: Float32Array,
   ): Float32Array {
-    const totalOutFloats = width * height * 3;
-    const isBufferValid =
-      outFloatBuffer &&
-      outFloatBuffer.length === totalOutFloats &&
-      outFloatBuffer.byteLength > 0 &&
-      outFloatBuffer.buffer &&
-      outFloatBuffer.buffer.byteLength > 0;
-    const dest = isBufferValid ? outFloatBuffer : new Float32Array(totalOutFloats);
     const inst = this.wasmInstance;
+    const floats = 512 * 512 * 3;
+    const bytes = width * height * 4;
+    if (this.backendType !== "web_wasm" || !inst || !inst.fastart_prepare_modnet_input_c) {
+      throw new Error("Rust WASM MODNet input processing is unavailable");
+    }
+    if (rgbaPixels.length !== bytes) throw new Error("Invalid RGBA input dimensions for MODNet");
 
-    if (inst && typeof inst.fastart_prepare_modnet_input_c === "function") {
-      try {
-        const inBytes = width * height * 4;
-        const outBytes = totalOutFloats * 4;
-        const totalNeeded = inBytes + outBytes;
-
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
-          if (scratchPtr) {
-            const rgbaPtr = scratchPtr;
-            const tensorPtr = scratchPtr + inBytes;
-            new Uint8Array(inst.memory.buffer, rgbaPtr, inBytes).set(rgbaPixels);
-            inst.fastart_prepare_modnet_input_c(rgbaPtr, width, height, tensorPtr);
-            dest.set(new Float32Array(inst.memory.buffer, tensorPtr, totalOutFloats));
-            return dest;
-          }
-        }
-
-        const rgbaPtr = inst.fastart_alloc(inBytes);
-        const tensorPtr = inst.fastart_alloc(outBytes);
-
-        if (rgbaPtr && tensorPtr) {
-          new Uint8Array(inst.memory.buffer, rgbaPtr, inBytes).set(rgbaPixels);
-          inst.fastart_prepare_modnet_input_c(rgbaPtr, width, height, tensorPtr);
-          dest.set(new Float32Array(inst.memory.buffer, tensorPtr, totalOutFloats));
-          inst.fastart_dealloc(rgbaPtr, inBytes);
-          inst.fastart_dealloc(tensorPtr, outBytes);
-          return dest;
-        }
-        if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, inBytes);
-        if (tensorPtr) inst.fastart_dealloc(tensorPtr, outBytes);
-      } catch (e) {
-        console.warn("[RustCoreBridge] prepareModnetInput error:", e);
+    const dest = outFloatBuffer?.length === floats ? outFloatBuffer : new Float32Array(floats);
+    const outputBytes = floats * Float32Array.BYTES_PER_ELEMENT;
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let rgbaPtr = 0;
+    let tensorPtr = 0;
+    try {
+      if (isScratch) {
+        rgbaPtr = inst.fastart_get_scratchpad!(bytes + outputBytes);
+        tensorPtr = rgbaPtr + bytes;
+      } else {
+        rgbaPtr = inst.fastart_alloc(bytes);
+        tensorPtr = inst.fastart_alloc(outputBytes);
+      }
+      if (!rgbaPtr || !tensorPtr) throw new Error("Rust WASM allocation failed");
+      new Uint8Array(inst.memory.buffer, rgbaPtr, bytes).set(rgbaPixels);
+      inst.fastart_prepare_modnet_input_c(rgbaPtr, width, height, tensorPtr);
+      dest.set(new Float32Array(inst.memory.buffer, tensorPtr, floats));
+      return dest;
+    } finally {
+      if (!isScratch) {
+        if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, bytes);
+        if (tensorPtr) inst.fastart_dealloc(tensorPtr, outputBytes);
       }
     }
-
-    // High-performance fallback
-    const total = 512 * 512;
-    for (let i = 0; i < total; i++) {
-      const idx4 = i << 2;
-      dest[i] = (rgbaPixels[idx4] - 127.5) / 127.5;
-      dest[i + total] = (rgbaPixels[idx4 + 1] - 127.5) / 127.5;
-      dest[i + 2 * total] = (rgbaPixels[idx4 + 2] - 127.5) / 127.5;
-    }
-    return dest;
   }
 
   /**
@@ -2014,111 +2049,78 @@ class RustCoreBridgeService {
    */
   public packAlphaRLE(alpha: Uint8Array): Uint8Array {
     const inst = this.wasmInstance;
-    if (inst && typeof inst.fastart_pack_alpha_rle_c === "function") {
-      try {
-        const inLen = alpha.length;
-        const maxOutLen = inLen + 1024;
-        const total = inLen + maxOutLen;
-
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const basePtr = inst.fastart_get_scratchpad(total);
-          if (basePtr) {
-            const inPtr = basePtr;
-            const outPtr = basePtr + inLen;
-            new Uint8Array(inst.memory.buffer, inPtr, inLen).set(alpha);
-            const outLen = inst.fastart_pack_alpha_rle_c(inPtr, inLen, outPtr, maxOutLen);
-            const result = new Uint8Array(outLen);
-            result.set(new Uint8Array(inst.memory.buffer, outPtr, outLen));
-            return result;
-          }
-        }
-
-        const inPtr = inst.fastart_alloc(inLen);
-        const outPtr = inst.fastart_alloc(maxOutLen);
-        if (inPtr && outPtr) {
-          new Uint8Array(inst.memory.buffer, inPtr, inLen).set(alpha);
-          const outLen = inst.fastart_pack_alpha_rle_c(inPtr, inLen, outPtr, maxOutLen);
-          const result = new Uint8Array(outLen);
-          result.set(new Uint8Array(inst.memory.buffer, outPtr, outLen));
-          inst.fastart_dealloc(inPtr, inLen);
-          inst.fastart_dealloc(outPtr, maxOutLen);
-          return result;
-        }
-        if (inPtr) inst.fastart_dealloc(inPtr, inLen);
-        if (outPtr) inst.fastart_dealloc(outPtr, maxOutLen);
-      } catch (e) {
-        console.warn("[RustCoreBridge] packAlphaRLE error:", e);
-      }
+    if (this.backendType !== "web_wasm" || !inst?.fastart_pack_alpha_rle_c) {
+      throw new Error("Rust WASM alpha compression is unavailable");
     }
-
-    // High-performance JS fallback
-    const out: number[] = [];
-    if (alpha.length === 0) return new Uint8Array(0);
-    let curr = alpha[0];
-    let count = 1;
-    for (let i = 1; i < alpha.length; i++) {
-      if (alpha[i] === curr && count < 255) {
-        count++;
+    const inputLen = alpha.length;
+    const outputCapacity = inputLen * 2;
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let inputPtr = 0;
+    let outputPtr = 0;
+    try {
+      if (isScratch) {
+        inputPtr = inst.fastart_get_scratchpad!(inputLen + outputCapacity);
+        outputPtr = inputPtr + inputLen;
       } else {
-        out.push(count, curr);
-        curr = alpha[i];
-        count = 1;
+        inputPtr = inst.fastart_alloc(inputLen);
+        outputPtr = inst.fastart_alloc(outputCapacity);
+      }
+      if (!inputPtr || !outputPtr) throw new Error("Rust WASM allocation failed");
+      new Uint8Array(inst.memory.buffer, inputPtr, inputLen).set(alpha);
+      const written = inst.fastart_pack_alpha_rle_c(inputPtr, inputLen, outputPtr, outputCapacity);
+      if (written <= 0 || written > outputCapacity) throw new Error("Rust WASM alpha compression failed");
+      return new Uint8Array(new Uint8Array(inst.memory.buffer, outputPtr, written));
+    } finally {
+      if (!isScratch) {
+        if (inputPtr) inst.fastart_dealloc(inputPtr, inputLen);
+        if (outputPtr) inst.fastart_dealloc(outputPtr, outputCapacity);
       }
     }
-    out.push(count, curr);
-    return new Uint8Array(out);
   }
 
-  /**
-   * Decompresses an RLE buffer into an 8-bit alpha buffer via native Rust/WASM.
-   */
+  public async packAlphaRLEForPlatform(alpha: Uint8Array): Promise<Uint8Array> {
+    await this.init();
+    if (this.backendType === "web_wasm") return this.packAlphaRLE(alpha);
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.packAlphaRLE !== "function") {
+        throw new Error("Rust alpha compression is not exposed by the native module");
+      }
+      const encoded = await FastArtRust.packAlphaRLE(encodeNativeBytes(alpha));
+      if (typeof encoded !== "string" || encoded.length === 0) throw new Error("Native Rust alpha compression failed");
+      return Uint8Array.from(Buffer.from(encoded, "base64"));
+    }
+    throw new Error("Rust core is unavailable; alpha compression requires Rust");
+  }
+
   public unpackAlphaRLE(rle: Uint8Array, outLen: number): Uint8Array {
-    const dest = new Uint8Array(outLen);
     const inst = this.wasmInstance;
-    if (inst && typeof inst.fastart_unpack_alpha_rle_c === "function") {
-      try {
-        const rleLen = rle.length;
-        const total = rleLen + outLen;
-
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const basePtr = inst.fastart_get_scratchpad(total);
-          if (basePtr) {
-            const inPtr = basePtr;
-            const outPtr = basePtr + rleLen;
-            new Uint8Array(inst.memory.buffer, inPtr, rleLen).set(rle);
-            inst.fastart_unpack_alpha_rle_c(inPtr, rleLen, outPtr, outLen);
-            dest.set(new Uint8Array(inst.memory.buffer, outPtr, outLen));
-            return dest;
-          }
-        }
-
-        const inPtr = inst.fastart_alloc(rleLen);
-        const outPtr = inst.fastart_alloc(outLen);
-        if (inPtr && outPtr) {
-          new Uint8Array(inst.memory.buffer, inPtr, rleLen).set(rle);
-          inst.fastart_unpack_alpha_rle_c(inPtr, rleLen, outPtr, outLen);
-          dest.set(new Uint8Array(inst.memory.buffer, outPtr, outLen));
-          inst.fastart_dealloc(inPtr, rleLen);
-          inst.fastart_dealloc(outPtr, outLen);
-          return dest;
-        }
-        if (inPtr) inst.fastart_dealloc(inPtr, rleLen);
-        if (outPtr) inst.fastart_dealloc(outPtr, outLen);
-      } catch (e) {
-        console.warn("[RustCoreBridge] unpackAlphaRLE error:", e);
+    if (this.backendType !== "web_wasm" || !inst?.fastart_unpack_alpha_rle_c) {
+      throw new Error("Rust WASM alpha decompression is unavailable");
+    }
+    const output = new Uint8Array(outLen);
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let inputPtr = 0;
+    let outputPtr = 0;
+    try {
+      if (isScratch) {
+        inputPtr = inst.fastart_get_scratchpad!(rle.length + outLen);
+        outputPtr = inputPtr + rle.length;
+      } else {
+        inputPtr = inst.fastart_alloc(rle.length);
+        outputPtr = inst.fastart_alloc(outLen);
+      }
+      if (!inputPtr || !outputPtr) throw new Error("Rust WASM allocation failed");
+      new Uint8Array(inst.memory.buffer, inputPtr, rle.length).set(rle);
+      const written = inst.fastart_unpack_alpha_rle_c(inputPtr, rle.length, outputPtr, outLen);
+      if (written !== outLen) throw new Error("Rust WASM alpha decompression failed");
+      output.set(new Uint8Array(inst.memory.buffer, outputPtr, outLen));
+      return output;
+    } finally {
+      if (!isScratch) {
+        if (inputPtr) inst.fastart_dealloc(inputPtr, rle.length);
+        if (outputPtr) inst.fastart_dealloc(outputPtr, outLen);
       }
     }
-
-    // JS fallback
-    let outIdx = 0;
-    for (let i = 0; i < rle.length && outIdx < outLen; i += 2) {
-      const cnt = rle[i];
-      const val = rle[i + 1];
-      const end = Math.min(outLen, outIdx + cnt);
-      dest.fill(val, outIdx, end);
-      outIdx = end;
-    }
-    return dest;
   }
 
   /**
@@ -2127,101 +2129,78 @@ class RustCoreBridgeService {
   public processModnetOutput(
     rawAlpha: Float32Array,
     outRgbaPixels?: Uint8ClampedArray,
-    threshold: number = 0.0,
-    feather: number = 0.0
+    threshold = 0.0,
+    feather = 0.0,
   ): Uint8ClampedArray {
-    const totalPixels = 512 * 512;
-    const totalBytes = totalPixels * 4;
-    const dest = outRgbaPixels || new Uint8ClampedArray(totalBytes);
     const inst = this.wasmInstance;
+    const pixels = 512 * 512;
+    const bytes = pixels * 4;
+    if (this.backendType !== "web_wasm" || !inst || !inst.fastart_process_modnet_output_c) {
+      throw new Error("Rust WASM MODNet output processing is unavailable");
+    }
+    if (rawAlpha.length !== pixels) throw new Error("Invalid MODNet output dimensions");
 
-    if (inst && typeof inst.fastart_process_modnet_output_c === "function") {
-      try {
-        const inBytes = totalPixels * 4;
-        const total = inBytes + totalBytes;
-
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const basePtr = inst.fastart_get_scratchpad(total);
-          if (basePtr) {
-            const alphaPtr = basePtr;
-            const rgbaPtr = basePtr + inBytes;
-            new Float32Array(inst.memory.buffer, alphaPtr, totalPixels).set(rawAlpha);
-            inst.fastart_process_modnet_output_c(alphaPtr, rgbaPtr, threshold, feather);
-            dest.set(new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes));
-            return dest;
-          }
-        }
-
-        const alphaPtr = inst.fastart_alloc(inBytes);
-        const rgbaPtr = inst.fastart_alloc(totalBytes);
-
-        if (alphaPtr && rgbaPtr) {
-          new Float32Array(inst.memory.buffer, alphaPtr, totalPixels).set(rawAlpha);
-          inst.fastart_process_modnet_output_c(alphaPtr, rgbaPtr, threshold, feather);
-          dest.set(new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes));
-          inst.fastart_dealloc(alphaPtr, inBytes);
-          inst.fastart_dealloc(rgbaPtr, totalBytes);
-          return dest;
-        }
-        if (alphaPtr) inst.fastart_dealloc(alphaPtr, inBytes);
-        if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, totalBytes);
-      } catch (e) {
-        console.warn("[RustCoreBridge] processModnetOutput error:", e);
+    const dest = outRgbaPixels?.length === bytes ? outRgbaPixels : new Uint8ClampedArray(bytes);
+    const alphaBytes = rawAlpha.byteLength;
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let alphaPtr = 0;
+    let rgbaPtr = 0;
+    try {
+      if (isScratch) {
+        alphaPtr = inst.fastart_get_scratchpad!(alphaBytes + bytes);
+        rgbaPtr = alphaPtr + alphaBytes;
+      } else {
+        alphaPtr = inst.fastart_alloc(alphaBytes);
+        rgbaPtr = inst.fastart_alloc(bytes);
+      }
+      if (!alphaPtr || !rgbaPtr) throw new Error("Rust WASM allocation failed");
+      new Float32Array(inst.memory.buffer, alphaPtr, pixels).set(rawAlpha);
+      inst.fastart_process_modnet_output_c(alphaPtr, rgbaPtr, threshold, feather);
+      dest.set(new Uint8Array(inst.memory.buffer, rgbaPtr, bytes));
+      return dest;
+    } finally {
+      if (!isScratch) {
+        if (alphaPtr) inst.fastart_dealloc(alphaPtr, alphaBytes);
+        if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, bytes);
       }
     }
-
-    // JS fallback
-    for (let i = 0; i < totalPixels; i++) {
-      const a = (rawAlpha[i] * 255) | 0;
-      const clamped = a < 0 ? 0 : a > 255 ? 255 : a;
-      const idx4 = i << 2;
-      dest[idx4] = clamped;
-      dest[idx4 + 1] = clamped;
-      dest[idx4 + 2] = clamped;
-      dest[idx4 + 3] = clamped;
-    }
-    return dest;
   }
 
-  private reusableAlpha512: Uint8Array | null = null;
-
-  /**
-   * Directly converts neural model output alpha floats into compressed RLE alpha bytes in 0.3ms
-   * with zero canvas allocation, zero GPU readback, and zero garbage collection pressure.
-   */
   public modnetAlphaToRLE(
     rawAlpha: Float32Array,
     threshold: number = 0.0,
     feather: number = 0.0
   ): Uint8Array {
-    const totalPixels = 512 * 512;
-    if (!this.reusableAlpha512) {
-      this.reusableAlpha512 = new Uint8Array(totalPixels);
+    const inst = this.wasmInstance;
+    if (this.backendType !== "web_wasm" || !inst || !inst.fastart_modnet_alpha_to_rle_c) {
+      throw new Error("Rust WASM MODNet post-processing is unavailable");
     }
-    const alpha8 = this.reusableAlpha512;
-    const useCurve = threshold > 0.0 || feather > 0.0;
-    const thresh = Math.max(0, Math.min(1, threshold));
-    const soft = Math.max(0.01, Math.min(1, feather));
-    const invSoft = 1.0 / soft;
-
-    for (let i = 0; i < totalPixels; i++) {
-      const val = rawAlpha[i];
-      let a: number;
-      if (useCurve) {
-        if (val >= thresh + soft) {
-          a = 255;
-        } else if (val <= thresh) {
-          a = 0;
-        } else {
-          const u = (val - thresh) * invSoft;
-          a = (u * u * (3.0 - 2.0 * u) * 255) | 0;
-        }
+    const maxOutLen = rawAlpha.length * 2;
+    const inputBytes = rawAlpha.byteLength;
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let alphaPtr = 0;
+    let outputPtr = 0;
+    try {
+      if (isScratch) {
+        alphaPtr = inst.fastart_get_scratchpad!(inputBytes + maxOutLen);
+        outputPtr = alphaPtr + inputBytes;
       } else {
-        a = (val * 255) | 0;
+        alphaPtr = inst.fastart_alloc(inputBytes);
+        outputPtr = inst.fastart_alloc(maxOutLen);
       }
-      alpha8[i] = a < 0 ? 0 : a > 255 ? 255 : a;
+      if (!alphaPtr || !outputPtr) throw new Error("Rust WASM allocation failed");
+      new Float32Array(inst.memory.buffer, alphaPtr, rawAlpha.length).set(rawAlpha);
+      const written = inst.fastart_modnet_alpha_to_rle_c(
+        alphaPtr, rawAlpha.length, threshold, feather, outputPtr, maxOutLen,
+      );
+      if (written <= 0 || written > maxOutLen) throw new Error("Rust WASM RLE encoding failed");
+      return new Uint8Array(new Uint8Array(inst.memory.buffer, outputPtr, written));
+    } finally {
+      if (!isScratch) {
+        if (alphaPtr) inst.fastart_dealloc(alphaPtr, inputBytes);
+        if (outputPtr) inst.fastart_dealloc(outputPtr, maxOutLen);
+      }
     }
-    return this.packAlphaRLE(alpha8);
   }
 
   /**
@@ -2364,39 +2343,29 @@ class RustCoreBridgeService {
   /**
    * Applies AI noise gate & dynamic speech boost to waveform peaks in native Rust/WASM
    */
-  public denoiseWaveformPeaks(peaks: number[]): number[] {
+  public async denoiseWaveformPeaks(peaks: number[]): Promise<number[]> {
+    await this.init();
     const inst = this.wasmInstance;
-    if (!inst) {
-      // JS fallback
-      const noiseFloor = 0.22;
-      return peaks.map((val) => {
-        if (val <= noiseFloor) {
-          const factor = val / noiseFloor;
-          return Math.max(0.02, factor * factor * 0.05);
-        }
-        const above = (val - noiseFloor) / (1.0 - noiseFloor);
-        return Math.min(1.0, Math.max(0.04, 0.05 + Math.pow(above, 0.85) * 0.95));
-      });
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.denoiseWaveformPeaks !== "function") {
+        throw new Error("Rust waveform denoising is not exposed by the native module");
+      }
+      return await FastArtRust.denoiseWaveformPeaks(peaks);
     }
-
+    if (this.backendType !== "web_wasm" || !inst?.fastart_denoise_waveform_peaks_c) {
+      throw new Error("Rust waveform denoising is unavailable");
+    }
+    const count = peaks.length;
+    const bytes = count * Float32Array.BYTES_PER_ELEMENT;
+    const ptr = inst.fastart_alloc(bytes);
+    if (!ptr && bytes > 0) throw new Error("Rust WASM allocation failed for waveform denoising");
     try {
-      const count = peaks.length;
-      const bytes = count * 4;
-      const ptr = inst.fastart_alloc(bytes);
-      if (!ptr) return peaks;
-
       const f32View = new Float32Array(inst.memory.buffer, ptr, count);
-      for (let i = 0; i < count; i++) f32View[i] = peaks[i];
-
+      f32View.set(peaks);
       inst.fastart_denoise_waveform_peaks_c(ptr, count);
-
-      const result = new Array<number>(count);
-      for (let i = 0; i < count; i++) result[i] = f32View[i];
-
-      inst.fastart_dealloc(ptr, bytes);
-      return result;
-    } catch {
-      return peaks;
+      return Array.from(f32View);
+    } finally {
+      if (ptr) inst.fastart_dealloc(ptr, bytes);
     }
   }
 
@@ -2545,547 +2514,115 @@ class RustCoreBridgeService {
    * @param feather  Edge softness 0.0–1.0
    * @returns        Alpha Uint8Array, length = w×h (0=transparent, 255=opaque)
    */
-  public segmentFrameRgba(
+  public async segmentFrameRgba(
     rgba: Uint8Array | Uint8ClampedArray,
     w: number,
     h: number,
     threshold = 0.45,
     feather = 0.25,
-  ): Uint8Array {
-    const total = w * h;
-
-    // ── 1. Native Mobile Rust (FastArtRust native module) ────────────────────
-    if (
-      Platform.OS !== "web" &&
-      FastArtRust &&
-      typeof FastArtRust.segmentFrameRgba === "function"
-    ) {
-      try {
-        const nativeRes = FastArtRust.segmentFrameRgba(rgba, w, h, threshold, feather);
-        if (nativeRes && nativeRes.length === total) {
-          return nativeRes instanceof Uint8Array ? nativeRes : new Uint8Array(nativeRes);
-        }
-      } catch (e) {
-        console.warn("[RustCoreBridge] Native segmentFrameRgba fallback:", e);
-      }
+  ): Promise<Uint8Array> {
+    await this.init();
+    const pixels = w * h;
+    if (w < 1 || h < 1 || rgba.length !== pixels * 4) {
+      throw new Error("Invalid RGBA frame for Rust segmentation");
     }
 
-    // ── 2. WebAssembly Rust Core Engine ──────────────────────────────────────
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.segmentFrameRgba !== "function") {
+        throw new Error("Rust segmentation is not exposed by the native module");
+      }
+      const result = await FastArtRust.segmentFrameRgba(Array.from(rgba), w, h, threshold, feather);
+      if (!result || result.length !== pixels) {
+        throw new Error("Rust segmentation returned an invalid alpha mask");
+      }
+      return Uint8Array.from(result);
+    }
+
     const inst = this.wasmInstance;
-    if (inst && typeof inst.fastart_segment_frame_rgba_c === "function") {
-      try {
-        const rgbaBytes = total * 4;
-        const outBytes = total;
-        const totalNeeded = rgbaBytes + outBytes;
-
-        let rgbaPtr = 0, outPtr = 0;
-        let isScratch = false;
-
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
-          if (scratchPtr) {
-            isScratch = true;
-            rgbaPtr = scratchPtr;
-            outPtr = rgbaPtr + rgbaBytes;
-          }
-        }
-        if (!rgbaPtr) {
-          rgbaPtr = inst.fastart_alloc(rgbaBytes);
-          outPtr = inst.fastart_alloc(outBytes);
-        }
-        if (rgbaPtr && outPtr) {
-          new Uint8Array(inst.memory.buffer, rgbaPtr, rgbaBytes).set(rgba);
-          const written = inst.fastart_segment_frame_rgba_c(
-            rgbaPtr,
-            w,
-            h,
-            threshold,
-            feather,
-            0,
-            0,
-            outPtr,
-            outBytes
-          );
-          if (written > 0) {
-            const result = new Uint8Array(outBytes);
-            result.set(new Uint8Array(inst.memory.buffer, outPtr, outBytes));
-            if (!isScratch) {
-              inst.fastart_dealloc(rgbaPtr, rgbaBytes);
-              inst.fastart_dealloc(outPtr, outBytes);
-            }
-            return result;
-          }
-        }
-        if (!isScratch) {
-          if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, rgbaBytes);
-          if (outPtr) inst.fastart_dealloc(outPtr, outBytes);
-        }
-      } catch (e) {
-        console.warn("[RustCoreBridge] segmentFrameRgba WASM error, using fallback:", e);
-      }
+    if (this.backendType !== "web_wasm" || !inst || typeof inst.fastart_segment_frame_rgba_c !== "function") {
+      throw new Error("Rust core is unavailable; segmentation requires Rust");
     }
 
-    // ── 3. High-Precision Cross-Platform JS Engine ───────────────────────────
-    return this._segmentFrameRgbaJS(rgba, w, h, threshold, feather);
+    const rgbaBytes = pixels * 4;
+    const totalNeeded = rgbaBytes + pixels;
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let rgbaPtr = 0;
+    let alphaPtr = 0;
+    try {
+      if (isScratch) {
+        rgbaPtr = inst.fastart_get_scratchpad!(totalNeeded);
+        alphaPtr = rgbaPtr + rgbaBytes;
+      } else {
+        rgbaPtr = inst.fastart_alloc(rgbaBytes);
+        alphaPtr = inst.fastart_alloc(pixels);
+      }
+      if (!rgbaPtr || !alphaPtr) throw new Error("Rust WASM memory allocation failed");
+      new Uint8Array(inst.memory.buffer, rgbaPtr, rgbaBytes).set(rgba);
+      const written = inst.fastart_segment_frame_rgba_c(
+        rgbaPtr, w, h, threshold, feather, 0, 0, alphaPtr, pixels,
+      );
+      if (written !== pixels) throw new Error("Rust WASM segmentation failed");
+      return new Uint8Array(new Uint8Array(inst.memory.buffer, alphaPtr, pixels));
+    } finally {
+      if (!isScratch) {
+        if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, rgbaBytes);
+        if (alphaPtr) inst.fastart_dealloc(alphaPtr, pixels);
+      }
+    }
   }
 
-  private _segmentFrameRgbaJS(
+  public encodeRGBAPng(rgba: Uint8Array | Uint8ClampedArray, w: number, h: number): Uint8Array {
+    const inst = this.wasmInstance;
+    if (this.backendType !== "web_wasm" || !inst?.fastart_encode_rgba_png_c) {
+      throw new Error("Rust WASM PNG encoding is unavailable");
+    }
+    const inputLen = w * h * 4;
+    if (rgba.length !== inputLen) throw new Error("Invalid RGBA buffer for Rust PNG encoding");
+    const outputCapacity = inputLen + 16384;
+    const isScratch = typeof inst.fastart_get_scratchpad === "function";
+    let inputPtr = 0;
+    let outputPtr = 0;
+    try {
+      if (isScratch) {
+        inputPtr = inst.fastart_get_scratchpad!(inputLen + outputCapacity);
+        outputPtr = inputPtr + inputLen;
+      } else {
+        inputPtr = inst.fastart_alloc(inputLen);
+        outputPtr = inst.fastart_alloc(outputCapacity);
+      }
+      if (!inputPtr || !outputPtr) throw new Error("Rust WASM allocation failed");
+      new Uint8Array(inst.memory.buffer, inputPtr, inputLen).set(rgba);
+      const written = inst.fastart_encode_rgba_png_c(inputPtr, w, h, outputPtr, outputCapacity);
+      if (written <= 0 || written > outputCapacity) throw new Error("Rust WASM PNG encoding failed");
+      return new Uint8Array(new Uint8Array(inst.memory.buffer, outputPtr, written));
+    } finally {
+      if (!isScratch) {
+        if (inputPtr) inst.fastart_dealloc(inputPtr, inputLen);
+        if (outputPtr) inst.fastart_dealloc(outputPtr, outputCapacity);
+      }
+    }
+  }
+
+  public async encodeRGBAPngForPlatform(
     rgba: Uint8Array | Uint8ClampedArray,
     w: number,
     h: number,
-    threshold: number,
-    feather: number,
-  ): Uint8Array {
-    const total = w * h;
-
-    // ── 1. Border Background Sampling ─────────────────────────────────────────
-    const topH = Math.max(2, Math.floor(h * 0.08));
-    const botH = Math.max(topH, h - topH);
-    const leftW = Math.max(2, Math.floor(w * 0.08));
-    const rightW = Math.max(leftW, w - leftW);
-
-    const bgSamples: number[][] = [];
-    const stepX = Math.max(1, Math.floor(w / 64));
-    const stepY = Math.max(1, Math.floor(h / 64));
-
-    for (let y = 0; y < topH; y++) {
-      const row = y * w;
-      for (let x = 0; x < w; x += stepX) {
-        const idx = (row + x) * 4;
-        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
+  ): Promise<Uint8Array> {
+    await this.init();
+    if (this.backendType === "web_wasm") return this.encodeRGBAPng(rgba, w, h);
+    if (this.backendType === "android_native" || this.backendType === "ios_native") {
+      if (!FastArtRust || typeof FastArtRust.encodeRgbaPng !== "function") {
+        throw new Error("Rust PNG encoding is not exposed by the native module");
       }
+      const png = await FastArtRust.encodeRgbaPng(encodeNativeBytes(rgba), w, h);
+      if (typeof png !== "string" || png.length === 0) throw new Error("Native Rust PNG encoding failed");
+      const pngBytes = Uint8Array.from(Buffer.from(png, "base64"));
+      if (pngBytes.length < 8) throw new Error("Native Rust PNG encoding failed");
+      return pngBytes;
     }
-    for (let y = botH; y < h; y++) {
-      const row = y * w;
-      for (let x = 0; x < w; x += stepX) {
-        const idx = (row + x) * 4;
-        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
-      }
-    }
-    for (let y = topH; y < botH; y += stepY) {
-      const row = y * w;
-      for (let x = 0; x < leftW; x++) {
-        const idx = (row + x) * 4;
-        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
-      }
-      for (let x = rightW; x < w; x++) {
-        const idx = (row + x) * 4;
-        bgSamples.push([rgba[idx], rgba[idx + 1], rgba[idx + 2]]);
-      }
-    }
-
-    const bgClusters: number[][] = [];
-    if (bgSamples.length > 0) {
-      let sumR = 0, sumG = 0, sumB = 0;
-      for (let i = 0; i < bgSamples.length; i++) {
-        sumR += bgSamples[i][0];
-        sumG += bgSamples[i][1];
-        sumB += bgSamples[i][2];
-      }
-      const n = bgSamples.length;
-      bgClusters.push([sumR / n, sumG / n, sumB / n]);
-
-      for (let i = 0; i < bgSamples.length; i++) {
-        if (bgClusters.length >= 6) break;
-        const s = bgSamples[i];
-        const isDiverse = bgClusters.every((c) => {
-          const dr = s[0] - c[0], dg = s[1] - c[1], db = s[2] - c[2];
-          return Math.sqrt(dr * dr + dg * dg + db * db) > 28;
-        });
-        if (isDiverse) bgClusters.push(s);
-      }
-    }
-
-    // ── 2. Foreground Subject Sampling ────────────────────────────────────────
-    const cx = w * 0.5;
-    const cy = h * 0.44;
-    const rx = Math.max(2, w * 0.32);
-    const ry = Math.max(2, h * 0.42);
-    const fgSamples: number[][] = [];
-
-    const yStart = Math.floor(h * 0.2);
-    const yEnd = Math.floor(h * 0.8);
-    const xStart = Math.floor(w * 0.2);
-    const xEnd = Math.floor(w * 0.8);
-
-    for (let y = yStart; y < yEnd; y++) {
-      const row = y * w;
-      const dy = (y - cy) / ry;
-      if (Math.abs(dy) > 1.0) continue;
-
-      for (let x = xStart; x < xEnd; x++) {
-        const dx = (x - cx) / rx;
-        if (dx * dx + dy * dy <= 1.0) {
-          const idx = (row + x) * 4;
-          const r = rgba[idx], g = rgba[idx + 1], b = rgba[idx + 2];
-
-          const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-          const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-          const isSkin = cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && r > g && g > b * 0.9;
-
-          if (isSkin) {
-            fgSamples.push([r, g, b]);
-          } else {
-            let distBg = Infinity;
-            for (let c = 0; c < bgClusters.length; c++) {
-              const bc = bgClusters[c];
-              const dr = r - bc[0], dg = g - bc[1], db = b - bc[2];
-              const d = Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
-              if (d < distBg) distBg = d;
-            }
-            if (distBg > 25) fgSamples.push([r, g, b]);
-          }
-        }
-      }
-    }
-
-    const fgClusters: number[][] = [];
-    if (fgSamples.length > 0) {
-      let sumR = 0, sumG = 0, sumB = 0;
-      for (let i = 0; i < fgSamples.length; i++) {
-        sumR += fgSamples[i][0];
-        sumG += fgSamples[i][1];
-        sumB += fgSamples[i][2];
-      }
-      const n = fgSamples.length;
-      fgClusters.push([sumR / n, sumG / n, sumB / n]);
-
-      for (let i = 0; i < fgSamples.length; i++) {
-        if (fgClusters.length >= 6) break;
-        const s = fgSamples[i];
-        const isDiverse = fgClusters.every((c) => {
-          const dr = s[0] - c[0], dg = s[1] - c[1], db = s[2] - c[2];
-          return Math.sqrt(dr * dr + dg * dg + db * db) > 24;
-        });
-        if (isDiverse) fgClusters.push(s);
-      }
-    } else {
-      const cyIdx = Math.min(h - 1, Math.floor(cy));
-      const cxIdx = Math.min(w - 1, Math.floor(cx));
-      const cIdx = (cyIdx * w + cxIdx) * 4;
-      fgClusters.push([rgba[cIdx], rgba[cIdx + 1], rgba[cIdx + 2]]);
-    }
-
-    // ── 3. Contrast & Saliency Energy Map ────────────────────────────────────
-    const rawMask = new Float32Array(total);
-    const sensitivity = 0.85 + (threshold - 0.45) * 0.80;
-
-    for (let y = 0; y < h; y++) {
-      const row = y * w;
-      const dy = (y - cy) / ry;
-
-      for (let x = 0; x < w; x++) {
-        const idx = (row + x) * 4;
-        const r = rgba[idx], g = rgba[idx + 1], b = rgba[idx + 2];
-
-        let minDistBg = 255;
-        for (let c = 0; c < bgClusters.length; c++) {
-          const bc = bgClusters[c];
-          const dr = r - bc[0], dg = g - bc[1], db = b - bc[2];
-          const d = Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
-          if (d < minDistBg) minDistBg = d;
-        }
-
-        let minDistFg = 255;
-        for (let c = 0; c < fgClusters.length; c++) {
-          const fc = fgClusters[c];
-          const dr = r - fc[0], dg = g - fc[1], db = b - fc[2];
-          const d = Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
-          if (d < minDistFg) minDistFg = d;
-        }
-
-        const dBgSq = minDistBg * minDistBg;
-        const dFgSq = minDistFg * minDistFg;
-        let prob = dBgSq / (dBgSq + dFgSq * sensitivity + 49.0);
-
-        const dx = (x - cx) / rx;
-        const dSpatialSq = dx * dx + dy * dy;
-
-        if (dSpatialSq > 2.25) {
-          prob *= 0.08;
-        } else if (dSpatialSq > 1.2) {
-          const falloff = (2.25 - dSpatialSq) / 1.05;
-          prob *= Math.max(0.08, Math.min(1.0, falloff));
-        } else {
-          prob = Math.min(1.0, prob * 1.15);
-        }
-
-        const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-        const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-        if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && dSpatialSq < 1.4) {
-          prob = Math.min(1.0, prob + 0.40);
-        }
-
-        const isOuterBorder = x < leftW || x >= rightW || y < topH || y >= botH;
-        if (isOuterBorder && minDistBg < 40) {
-          prob = 0.0;
-        }
-
-        rawMask[row + x] = Math.max(0.0, Math.min(1.0, prob));
-      }
-    }
-
-    // ── 4. Fast Guided Image Filter Edge Snapping ────────────────────────────
-    const radius = Math.max(3, Math.min(12, Math.floor(w / 40)));
-    const eps = 1e-3;
-
-    const iNorm = new Float32Array(total);
-    for (let i = 0; i < total; i++) {
-      const idx = i * 4;
-      iNorm[i] = (0.2126 * rgba[idx] + 0.7152 * rgba[idx + 1] + 0.0722 * rgba[idx + 2]) / 255;
-    }
-
-    const meanI = new Float32Array(total);
-    const meanP = new Float32Array(total);
-    this._boxFilter(iNorm, meanI, w, h, radius);
-    this._boxFilter(rawMask, meanP, w, h, radius);
-
-    const ii = new Float32Array(total);
-    const ip = new Float32Array(total);
-    for (let i = 0; i < total; i++) {
-      ii[i] = iNorm[i] * iNorm[i];
-      ip[i] = iNorm[i] * rawMask[i];
-    }
-
-    const meanII = new Float32Array(total);
-    const meanIP = new Float32Array(total);
-    this._boxFilter(ii, meanII, w, h, radius);
-    this._boxFilter(ip, meanIP, w, h, radius);
-
-    const aCoeff = new Float32Array(total);
-    const bCoeff = new Float32Array(total);
-    for (let i = 0; i < total; i++) {
-      const varI = Math.max(0, meanII[i] - meanI[i] * meanI[i]);
-      const covIP = meanIP[i] - meanI[i] * meanP[i];
-      const aVal = covIP / (varI + eps);
-      aCoeff[i] = aVal;
-      bCoeff[i] = meanP[i] - aVal * meanI[i];
-    }
-
-    const meanA = new Float32Array(total);
-    const meanB = new Float32Array(total);
-    this._boxFilter(aCoeff, meanA, w, h, radius);
-    this._boxFilter(bCoeff, meanB, w, h, radius);
-
-    // ── 5. User Soft Threshold Transfer ──────────────────────────────────────
-    const tBase = Math.max(0.12, Math.min(0.88, 0.28 + threshold * 0.35));
-    const soft = Math.max(0.03, Math.min(0.40, feather * 0.20 + 0.04));
-    const tLow = Math.max(0.0, tBase - soft);
-    const tHigh = Math.min(1.0, tBase + soft);
-    const invRange = 1.0 / Math.max(0.001, tHigh - tLow);
-
-    const outAlpha = new Uint8Array(total);
-    for (let i = 0; i < total; i++) {
-      const q = Math.max(0.0, Math.min(1.0, meanA[i] * iNorm[i] + meanB[i]));
-      if (q >= tHigh) {
-        outAlpha[i] = 255;
-      } else if (q > tLow) {
-        const u = (q - tLow) * invRange;
-        outAlpha[i] = Math.round(u * u * (3.0 - 2.0 * u) * 255);
-      } else {
-        outAlpha[i] = 0;
-      }
-    }
-
-    return outAlpha;
+    throw new Error("Rust core is unavailable; PNG encoding requires Rust");
   }
 
-  private _boxFilter(src: Float32Array, dst: Float32Array, w: number, h: number, r: number) {
-    const rad = Math.max(1, Math.min(r, Math.min(w, h) - 1));
-    const temp = new Float32Array(w * h);
-
-    // Horizontal pass
-    for (let y = 0; y < h; y++) {
-      const rowOffset = y * w;
-      let windowSum = 0;
-      for (let kx = 0; kx <= Math.min(rad, w - 1); kx++) {
-        windowSum += src[rowOffset + kx];
-      }
-      for (let x = 0; x < w; x++) {
-        const left = Math.max(0, x - rad);
-        const right = Math.min(w - 1, x + rad);
-        const count = right - left + 1;
-        if (x > 0) {
-          if (x + rad < w) windowSum += src[rowOffset + x + rad];
-          if (x - rad - 1 >= 0) windowSum -= src[rowOffset + x - rad - 1];
-        }
-        temp[rowOffset + x] = windowSum / count;
-      }
-    }
-
-    // Vertical pass
-    for (let x = 0; x < w; x++) {
-      let windowSum = 0;
-      for (let ky = 0; ky <= Math.min(rad, h - 1); ky++) {
-        windowSum += temp[ky * w + x];
-      }
-      for (let y = 0; y < h; y++) {
-        const top = Math.max(0, y - rad);
-        const bottom = Math.min(h - 1, y + rad);
-        const count = bottom - top + 1;
-        if (y > 0) {
-          if (y + rad < h) windowSum += temp[(y + rad) * w + x];
-          if (y - rad - 1 >= 0) windowSum -= temp[(y - rad - 1) * w + x];
-        }
-        dst[y * w + x] = windowSum / count;
-      }
-    }
-  }
-
-  /**
-   * Encodes a flat RGBA Uint8Array into a minimal valid PNG (store compression, no zlib deflate overhead).
-   * Works on both Web and Native — no canvas, no DOM, no FileSystem needed.
-   * Returns raw PNG bytes as Uint8Array.
-   */
-  public encodeRGBAPng(rgba: Uint8Array | Uint8ClampedArray, w: number, h: number): Uint8Array {
-    // 1. Mobile Native Rust
-    if (
-      Platform.OS !== "web" &&
-      FastArtRust &&
-      typeof FastArtRust.encodeRgbaPng === "function"
-    ) {
-      try {
-        const nativePng = FastArtRust.encodeRgbaPng(rgba, w, h);
-        if (nativePng && nativePng.length > 8) {
-          return nativePng instanceof Uint8Array ? nativePng : new Uint8Array(nativePng);
-        }
-      } catch (e) {
-        console.warn("[RustCoreBridge] Native encodeRgbaPng fallback:", e);
-      }
-    }
-
-    // 2. WebAssembly Rust Core
-    const inst = this.wasmInstance;
-    if (inst && typeof inst.fastart_encode_rgba_png_c === "function") {
-      try {
-        const total = w * h;
-        const rgbaBytes = total * 4;
-        const maxOut = rgbaBytes + 16384;
-        const totalNeeded = rgbaBytes + maxOut;
-
-        let rgbaPtr = 0, outPtr = 0;
-        let isScratch = false;
-        if (typeof inst.fastart_get_scratchpad === "function") {
-          const scratchPtr = inst.fastart_get_scratchpad(totalNeeded);
-          if (scratchPtr) {
-            isScratch = true;
-            rgbaPtr = scratchPtr;
-            outPtr = rgbaPtr + rgbaBytes;
-          }
-        }
-        if (!rgbaPtr) {
-          rgbaPtr = inst.fastart_alloc(rgbaBytes);
-          outPtr = inst.fastart_alloc(maxOut);
-        }
-        if (rgbaPtr && outPtr) {
-          new Uint8Array(inst.memory.buffer, rgbaPtr, rgbaBytes).set(rgba);
-          const pngLen = inst.fastart_encode_rgba_png_c(rgbaPtr, w, h, outPtr, maxOut);
-          if (pngLen > 0) {
-            const pngBytes = new Uint8Array(pngLen);
-            pngBytes.set(new Uint8Array(inst.memory.buffer, outPtr, pngLen));
-            if (!isScratch) {
-              inst.fastart_dealloc(rgbaPtr, rgbaBytes);
-              inst.fastart_dealloc(outPtr, maxOut);
-            }
-            return pngBytes;
-          }
-        }
-        if (!isScratch) {
-          if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, rgbaBytes);
-          if (outPtr) inst.fastart_dealloc(outPtr, maxOut);
-        }
-      } catch (e) {
-        console.warn("[RustCoreBridge] WASM encodeRgbaPng fallback:", e);
-      }
-    }
-
-    // 3. Fallback pure-JS PNG encoder
-    const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
-
-    const ihdr = new Uint8Array(13);
-    const ihdrDv = new DataView(ihdr.buffer);
-    ihdrDv.setUint32(0, w);
-    ihdrDv.setUint32(4, h);
-    ihdr[8] = 8; ihdr[9] = 6;
-
-    const rowStride = w * 4;
-    const rawLen = h * (1 + rowStride);
-    const raw = new Uint8Array(rawLen);
-    for (let y = 0; y < h; y++) {
-      raw[y * (rowStride + 1)] = 0;
-      raw.set(
-        rgba instanceof Uint8ClampedArray
-          ? new Uint8Array(rgba.buffer, rgba.byteOffset + y * rowStride, rowStride)
-          : rgba.subarray(y * rowStride, (y + 1) * rowStride),
-        y * (rowStride + 1) + 1,
-      );
-    }
-
-    const zlib = this._zlibStore(raw);
-    return this._assemblePng(sig, ihdr, zlib);
-  }
-
-  private _crc32Table: Uint32Array | null = null;
-  private _getCrc32Table(): Uint32Array {
-    if (!this._crc32Table) {
-      this._crc32Table = new Uint32Array(256);
-      for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
-        this._crc32Table[n] = c;
-      }
-    }
-    return this._crc32Table;
-  }
-  private _crc32(data: Uint8Array, start = 0, end = data.length): number {
-    const t = this._getCrc32Table();
-    let crc = 0xFFFFFFFF;
-    for (let i = start; i < end; i++) crc = t[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
-    return (crc ^ 0xFFFFFFFF) >>> 0;
-  }
-  private _makeChunk(type: string, data: Uint8Array): Uint8Array {
-    const typeBytes = new TextEncoder().encode(type);
-    const chunk = new Uint8Array(4 + 4 + data.length + 4);
-    const dv = new DataView(chunk.buffer);
-    dv.setUint32(0, data.length);
-    chunk.set(typeBytes, 4);
-    chunk.set(data, 8);
-    dv.setUint32(8 + data.length, this._crc32(chunk, 4, 8 + data.length));
-    return chunk;
-  }
-  private _zlibStore(data: Uint8Array): Uint8Array {
-    const MAX = 65535;
-    const blocks = Math.ceil(data.length / MAX) || 1;
-    const out = new Uint8Array(2 + data.length + blocks * 5 + 4);
-    const dv = new DataView(out.buffer);
-    out[0] = 0x78; out[1] = 0x01;
-    let pos = 2, offset = 0;
-    for (let b = 0; b < blocks; b++) {
-      const bLen = Math.min(MAX, data.length - offset);
-      out[pos++] = b === blocks - 1 ? 1 : 0;
-      dv.setUint16(pos, bLen, true); pos += 2;
-      dv.setUint16(pos, (~bLen) & 0xFFFF, true); pos += 2;
-      out.set(data.subarray(offset, offset + bLen), pos);
-      pos += bLen; offset += bLen;
-    }
-    let s1 = 1, s2 = 0;
-    for (let i = 0; i < data.length; i++) { s1 = (s1 + data[i]) % 65521; s2 = (s2 + s1) % 65521; }
-    dv.setUint32(pos, (s2 << 16) | s1);
-    return out.subarray(0, pos + 4);
-  }
-  private _assemblePng(sig: Uint8Array, ihdr: Uint8Array, idat: Uint8Array): Uint8Array {
-    const ihdrChunk = this._makeChunk("IHDR", ihdr);
-    const idatChunk = this._makeChunk("IDAT", idat);
-    const iendChunk = this._makeChunk("IEND", new Uint8Array(0));
-    const total = sig.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
-    const out = new Uint8Array(total);
-    let pos = 0;
-    out.set(sig, pos); pos += sig.length;
-    out.set(ihdrChunk, pos); pos += ihdrChunk.length;
-    out.set(idatChunk, pos); pos += idatChunk.length;
-    out.set(iendChunk, pos);
-    return out;
-  }
 }
 
 export const rustCoreBridge = new RustCoreBridgeService();

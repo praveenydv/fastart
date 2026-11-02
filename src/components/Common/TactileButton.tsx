@@ -9,7 +9,6 @@ import {
   GestureResponderEvent,
 } from 'react-native';
 import { triggerHaptic, HapticType } from '../../utils/haptics';
-import { soundEngine } from '../../utils/audioEngine';
 
 export interface TactileButtonProps extends Omit<PressableProps, 'style'> {
   /** Style for the button (object, array, or function based on pressed state) */
@@ -24,8 +23,6 @@ export interface TactileButtonProps extends Omit<PressableProps, 'style'> {
   rippleBorderless?: boolean;
   /** Haptic feedback type on press (default: 'selection'; false to disable) */
   haptic?: HapticType | boolean;
-  /** Optional sound effect name to play on press */
-  sfx?: 'click' | 'pop' | 'split' | 'whoosh' | null;
   /** Hit slop padding for easier mobile tapping (default: 8px on all sides if not specified) */
   hitSlop?: PressableProps['hitSlop'];
   /** Children (ReactNode or function based on pressed state) */
@@ -48,7 +45,6 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
       rippleColor = DEFAULT_RIPPLE_COLOR,
       rippleBorderless = false,
       haptic = 'selection',
-      sfx = null,
       hitSlop = DEFAULT_HIT_SLOP,
       disabled,
       onPress,
@@ -68,9 +64,6 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
         if (haptic !== false) {
           const hapticType = typeof haptic === 'string' ? haptic : 'selection';
           triggerHaptic(hapticType);
-        }
-        if (sfx) {
-          soundEngine.playSfx(sfx);
         }
       }
       onPress?.(e);
@@ -97,14 +90,24 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
           ((state: { pressed: boolean }) => {
             const resolvedStyle =
               typeof style === 'function' ? style(state) : style;
-            const flatStyle = (StyleSheet.flatten(resolvedStyle) || {}) as ViewStyle;
+            const flatStyle = { ...((StyleSheet.flatten(resolvedStyle) || {}) as ViewStyle) };
+
+            // Critical defensive safeguard: remove null/undefined transform to prevent React Native processTransform crash
+            if (flatStyle.transform === null || flatStyle.transform === undefined) {
+              delete flatStyle.transform;
+            } else if (Array.isArray(flatStyle.transform)) {
+              flatStyle.transform = flatStyle.transform.filter(Boolean);
+              if (flatStyle.transform.length === 0) {
+                delete flatStyle.transform;
+              }
+            }
 
             if (disabled) {
               return [flatStyle, { opacity: (flatStyle.opacity ?? 1) * 0.45 }];
             }
 
             if (state.pressed) {
-              const existingTransforms = (flatStyle.transform as any[]) || [];
+              const existingTransforms = Array.isArray(flatStyle.transform) ? flatStyle.transform : [];
               const hasScale = activeScale !== 1;
               const combinedTransforms = hasScale
                 ? [...existingTransforms, { scale: activeScale }]

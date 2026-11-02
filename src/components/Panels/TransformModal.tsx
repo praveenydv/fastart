@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { ClipTransform, CustomCrop } from "../../types/project";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 
@@ -308,7 +307,6 @@ export default function TransformModal({
 
   // Dedicated Crop Handlers
   const handleSelectAspectPreset = (preset: (typeof ASPECT_PRESETS)[0]) => {
-    soundEngine.playSfx("click");
     setSelectedRatio(preset.id);
     if (!preset.ratio) {
       // Free / original full frame
@@ -346,7 +344,6 @@ export default function TransformModal({
   };
 
   const handleResetCrop = () => {
-    soundEngine.playSfx("pop");
     setCropWidth(100);
     setCropHeight(100);
     setCropX(0);
@@ -358,7 +355,6 @@ export default function TransformModal({
   };
 
   const handleApplyCrop = () => {
-    soundEngine.playSfx("whoosh");
     syncTransform({
       crop: { x: cropX, y: cropY, width: cropWidth, height: cropHeight },
     });
@@ -366,21 +362,18 @@ export default function TransformModal({
 
   // Dedicated Flip Handlers
   const handleToggleFlipX = () => {
-    soundEngine.playSfx("click");
     const next = !flipX;
     setFlipX(next);
     syncTransform({ flipX: next });
   };
 
   const handleToggleFlipY = () => {
-    soundEngine.playSfx("click");
     const next = !flipY;
     setFlipY(next);
     syncTransform({ flipY: next });
   };
 
   const handleResetFlip = () => {
-    soundEngine.playSfx("pop");
     setFlipX(false);
     setFlipY(false);
     syncTransform({ flipX: false, flipY: false });
@@ -388,34 +381,29 @@ export default function TransformModal({
 
   // Dedicated Rotate Handlers
   const handleRotate90 = () => {
-    soundEngine.playSfx("click");
     const next = (Math.round(rotation / 90) * 90 + 90) % 360;
     setRotation(next);
     syncTransform({ rotation: next });
   };
 
   const handleSelectRotatePreset = (deg: number) => {
-    soundEngine.playSfx("click");
     setRotation(deg);
     syncTransform({ rotation: deg });
   };
 
   const handleResetRotation = () => {
-    soundEngine.playSfx("pop");
     setRotation(0);
     syncTransform({ rotation: 0 });
   };
 
   // Dedicated Stretch Handlers
   const handleSelectStretchPreset = (preset: (typeof STRETCH_PRESETS)[0]) => {
-    soundEngine.playSfx("click");
     setScaleX(preset.scaleX);
     setScaleY(preset.scaleY);
     syncTransform({ scaleX: preset.scaleX, scaleY: preset.scaleY });
   };
 
   const handleResetStretch = () => {
-    soundEngine.playSfx("pop");
     setScaleX(1.0);
     setScaleY(1.0);
     syncTransform({ scaleX: 1.0, scaleY: 1.0 });
@@ -459,7 +447,6 @@ export default function TransformModal({
 
   // Dedicated 3D Angle & Distance Handlers
   const handleSelectAnglePreset = (preset: (typeof ANGLE_3D_PRESETS)[0]) => {
-    soundEngine.playSfx("click");
     setRotateX(preset.rotateX);
     setRotateY(preset.rotateY);
     setSkewX(preset.skewX);
@@ -473,7 +460,6 @@ export default function TransformModal({
   };
 
   const handleResetAngle = () => {
-    soundEngine.playSfx("pop");
     setRotateX(0);
     setRotateY(0);
     setSkewX(0);
@@ -549,7 +535,6 @@ export default function TransformModal({
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === "crop" && styles.tabBtnActive]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("crop");
             }}
             activeOpacity={0.7}
@@ -575,7 +560,6 @@ export default function TransformModal({
               activeTab === "rotate" && styles.tabBtnActive,
             ]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("rotate");
             }}
             activeOpacity={0.7}
@@ -598,7 +582,6 @@ export default function TransformModal({
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === "flip" && styles.tabBtnActive]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("flip");
             }}
             activeOpacity={0.7}
@@ -624,7 +607,6 @@ export default function TransformModal({
               activeTab === "stretch" && styles.tabBtnActive,
             ]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("stretch");
             }}
             activeOpacity={0.7}
@@ -651,7 +633,6 @@ export default function TransformModal({
               activeTab === "angle" && styles.tabBtnActive,
             ]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("angle");
             }}
             activeOpacity={0.7}
@@ -944,7 +925,6 @@ export default function TransformModal({
               <TouchableOpacity
                 style={styles.primaryActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx("whoosh");
                   syncTransform({ rotation });
                 }}
                 activeOpacity={0.8}
@@ -1037,7 +1017,6 @@ export default function TransformModal({
               <TouchableOpacity
                 style={styles.primaryActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx("whoosh");
                   syncTransform({ flipX, flipY });
                 }}
                 activeOpacity={0.8}
@@ -1097,7 +1076,6 @@ export default function TransformModal({
                     isAspectLinked && styles.lockBtnActive,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     setIsAspectLinked(!isAspectLinked);
                   }}
                   activeOpacity={0.7}
@@ -1253,7 +1231,6 @@ export default function TransformModal({
               <TouchableOpacity
                 style={styles.primaryActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx("whoosh");
                   syncTransform({ scaleX, scaleY });
                 }}
                 activeOpacity={0.8}
@@ -1561,7 +1538,6 @@ export default function TransformModal({
               <TouchableOpacity
                 style={styles.primaryActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx("whoosh");
                   syncTransform({ rotateX, rotateY, skewX, perspective });
                 }}
                 activeOpacity={0.8}

@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text, ScrollView } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { TEXT_TEMPLATES } from "../../../constants/sampleMedia";
 import { ANIMATION_OPTIONS } from "./textModalConstants";
 import { styles } from "./TextModalStyles";
@@ -36,7 +35,6 @@ export default function TextAnimTab({
                 key={anim.id}
                 style={[styles.animPill, isActive && styles.animPillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedAnim(anim.id);
                 }}
                 activeOpacity={0.7}

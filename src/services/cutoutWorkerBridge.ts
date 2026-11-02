@@ -1,283 +1,133 @@
-/**
- * FastArt Studio Cutout Web Worker Bridge
- *
- * Runs heavy ONNX neural matting (MODNet) in a dedicated background Web Worker thread.
- * Guarantees the main UI thread stays locked at 60 FPS with zero freezing, zero stuttering,
- * and zero "Page Unresponsive" browser warnings.
- */
-
+/** Runs the shared Rust WASM MODNet runtime off the browser UI thread. */
 class CutoutWorkerBridge {
   private worker: Worker | null = null;
-  private isInitializing = false;
   private initPromise: Promise<boolean> | null = null;
-  private reqIdCounter = 0;
-  private pendingRequests = new Map<
-    number,
-    {
-      resolve: (data: any) => void;
-      reject: (err: any) => void;
-      timeoutTimer: any;
-    }
-  >();
-  private workerSupported: boolean | null = null;
+  private ready = false;
+  private nextId = 0;
+  private pending = new Map<number, { resolve: (value: Float32Array | null) => void; timer: ReturnType<typeof setTimeout> }>();
 
   public isSupported(): boolean {
-    if (this.workerSupported !== null) return this.workerSupported;
-    if (
-      typeof window === "undefined" ||
-      typeof Worker === "undefined" ||
-      typeof Blob === "undefined"
-    ) {
-      this.workerSupported = false;
-      return false;
-    }
-    this.workerSupported = true;
-    return true;
+    return typeof window !== "undefined" && typeof Worker !== "undefined" && typeof Blob !== "undefined";
   }
 
-  public isReady(): boolean {
-    return this.worker !== null;
-  }
+  public isReady(): boolean { return this.ready; }
 
-  private createWorkerInstance(): Worker | null {
+  private createWorker(): Worker | null {
     if (!this.isSupported()) return null;
-
-    try {
-      const baseOrigin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-      const workerScript = `
-        const baseOrigin = "${baseOrigin}";
-        let ort = null;
-        let session = null;
-        let isSessionInitializing = false;
-
-        async function initOrtSession() {
-          if (session) return true;
-          if (isSessionInitializing) {
-            let retries = 30;
-            while (!session && retries > 0) {
-              await new Promise(r => setTimeout(r, 100));
-              retries--;
-            }
-            return !!session;
-          }
-
-          isSessionInitializing = true;
-          try {
-            const scriptUrl = baseOrigin ? baseOrigin + '/onnxruntime/ort.min.js' : '/onnxruntime/ort.min.js';
-            try {
-              importScripts(scriptUrl);
-            } catch (loadErr) {
-              console.warn('[CutoutWorker] importScripts failed:', loadErr);
-              isSessionInitializing = false;
-              return false;
-            }
-            ort = self.ort;
-            if (!ort) {
-              isSessionInitializing = false;
-              return false;
-            }
-
-            ort.env.wasm.wasmPaths = baseOrigin ? baseOrigin + '/onnxruntime/' : '/onnxruntime/';
-            ort.env.wasm.numThreads = Math.min(2, (self.navigator && self.navigator.hardwareConcurrency) || 2);
-            ort.env.logLevel = 'error';
-
-            const localModelUrl = baseOrigin ? baseOrigin + '/models/modnet.onnx' : '/models/modnet.onnx';
-            let modelSource = localModelUrl;
-
-            try {
-              const res = await fetch(localModelUrl);
-              if (res.ok && res.status < 400) {
-                modelSource = await res.arrayBuffer();
-              } else {
-                throw new Error('Local model not served directly');
-              }
-            } catch (err) {
-              const remoteModelUrl = 'https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx';
-              if (typeof caches !== 'undefined') {
-                try {
-                  const cache = await caches.open('fastart-models');
-                  let cachedResp = await cache.match(remoteModelUrl);
-                  if (!cachedResp) {
-                    await cache.add(remoteModelUrl);
-                    cachedResp = await cache.match(remoteModelUrl);
-                  }
-                  if (cachedResp) {
-                    modelSource = await cachedResp.arrayBuffer();
-                  } else {
-                    modelSource = remoteModelUrl;
-                  }
-                } catch {
-                  modelSource = remoteModelUrl;
-                }
-              } else {
-                modelSource = remoteModelUrl;
-              }
-            }
-
-            const hasWebGpu = typeof self.navigator !== 'undefined' && !!self.navigator.gpu;
-            const eps = hasWebGpu ? ['webgpu', 'wasm'] : ['wasm'];
-            session = await ort.InferenceSession.create(modelSource, {
-              executionProviders: eps,
-              graphOptimizationLevel: 'all',
-              logSeverityLevel: 3,
+    const assetOrigin = window.location.origin;
+    const workerCode = `
+      const assetOrigin = ${JSON.stringify(assetOrigin)};
+      let wasm = null;
+      let wasmInstance = null;
+      let ready = false;
+      let initializePromise = null;
+      const INPUT = 3 * 512 * 512, OUTPUT = 512 * 512;
+      async function initialize() {
+        if (ready) return true;
+        if (!initializePromise) {
+          initializePromise = (async () => {
+            const wasmUrl = new URL('/wasm/fastart_wasm.wasm', assetOrigin).toString();
+            const wasmResponse = await fetch(wasmUrl);
+            if (!wasmResponse.ok) throw new Error('Rust WASM request failed (' + wasmResponse.status + ')');
+            const result = await WebAssembly.instantiate(await wasmResponse.arrayBuffer(), {
+              env: { fastart_fill_random: (ptr, len) => {
+                const cryptoApi = self.crypto;
+                if (!cryptoApi || !wasmInstance) return 0;
+                const bytes = new Uint8Array(wasmInstance.exports.memory.buffer, ptr, len);
+                for (let offset = 0; offset < len; offset += 65536) cryptoApi.getRandomValues(bytes.subarray(offset, Math.min(len, offset + 65536)));
+                return 1;
+              } },
+              wasi_snapshot_preview1: {}
             });
-
-            isSessionInitializing = false;
+            wasmInstance = result.instance;
+            wasm = wasmInstance.exports;
+            const modelUrl = new URL('/models/modnet.onnx', assetOrigin).toString();
+            const modelResponse = await fetch(modelUrl);
+            if (!modelResponse.ok) throw new Error('MODNet model request failed (' + modelResponse.status + ')');
+            const model = new Uint8Array(await modelResponse.arrayBuffer());
+            const modelPtr = wasm.fastart_alloc(model.length);
+            new Uint8Array(wasm.memory.buffer, modelPtr, model.length).set(model);
+            try { ready = wasm.fastart_init_modnet_c(modelPtr, model.length) === 1; }
+            finally { wasm.fastart_dealloc(modelPtr, model.length); }
+            if (!ready) throw new Error('Rust rejected the MODNet model');
             return true;
-          } catch (e) {
-            isSessionInitializing = false;
-            return false;
-          }
+          })();
         }
-
-        let workerInferencePromise = Promise.resolve();
-
-        self.onmessage = async (e) => {
-          const { id, type, floatData } = e.data;
-
-          if (type === 'init') {
-            const ok = await initOrtSession();
-            self.postMessage({ id, type: 'init_result', success: ok });
-            return;
-          }
-
-          if (type === 'infer') {
-            workerInferencePromise = workerInferencePromise.then(async () => {
-              try {
-                if (!session) {
-                  const ok = await initOrtSession();
-                  if (!ok) {
-                    self.postMessage({ id, type: 'infer_result', success: false, error: 'Model init failed' });
-                    return;
-                  }
-                }
-
-                const tensor = new ort.Tensor('float32', floatData, [1, 3, 512, 512]);
-                const results = await session.run({ input: tensor });
-                const rawAlpha = results.output.data; // Float32Array (512x512)
-
-                // Make a standalone copy so ONNX Runtime's internal tensor buffer is never detached
-                const alphaCopy = new Float32Array(rawAlpha);
-                self.postMessage(
-                  { id, type: 'infer_result', success: true, rawAlpha: alphaCopy },
-                  [alphaCopy.buffer]
-                );
-              } catch (err) {
-                self.postMessage({ id, type: 'infer_result', success: false, error: String(err) });
-              }
-            }).catch((err) => {
-              self.postMessage({ id, type: 'infer_result', success: false, error: String(err) });
-            });
-          }
-        };
-      `;
-
-      const blob = new Blob([workerScript], { type: "application/javascript" });
-      const blobUrl = URL.createObjectURL(blob);
-      const w = new Worker(blobUrl);
-      try {
-        URL.revokeObjectURL(blobUrl);
-      } catch {}
-
-      w.onmessage = (e) => {
-        const { id, success, rawAlpha, error } = e.data;
-        const pending = this.pendingRequests.get(id);
-        if (pending) {
-          clearTimeout(pending.timeoutTimer);
-          this.pendingRequests.delete(id);
-          if (success) {
-            pending.resolve(rawAlpha);
-          } else {
-            pending.reject(new Error(error || "Worker inference error"));
-          }
+        try {
+          return await initializePromise;
+        } finally {
+          if (!ready) initializePromise = null;
         }
+      }
+      self.onmessage = async ({data}) => {
+        const {id, type, floatData} = data;
+        try {
+          if (type === 'init') { const success = await initialize(); self.postMessage({id, success, rawAlpha: success ? new Float32Array(0) : null}); return; }
+          if (type !== 'infer' || !floatData || floatData.length !== INPUT) throw new Error('Invalid MODNet input');
+          if (!await initialize()) throw new Error('Rust MODNet initialization failed');
+          const inBytes = INPUT * 4, outBytes = OUTPUT * 4;
+          const inPtr = wasm.fastart_alloc(inBytes), outPtr = wasm.fastart_alloc(outBytes);
+          try {
+            new Float32Array(wasm.memory.buffer, inPtr, INPUT).set(floatData);
+            if (wasm.fastart_run_modnet_c(inPtr, INPUT, outPtr, OUTPUT) !== 1) throw new Error('Rust MODNet inference failed');
+            const copy = new Float32Array(new Float32Array(wasm.memory.buffer, outPtr, OUTPUT));
+            self.postMessage({id, success: true, rawAlpha: copy}, [copy.buffer]);
+          } finally { wasm.fastart_dealloc(inPtr, inBytes); wasm.fastart_dealloc(outPtr, outBytes); }
+        } catch (error) { self.postMessage({id, success: false, error: String(error)}); }
       };
-
-      w.onerror = (err: any) => {
-        const msg = err?.message || (typeof err === "string" ? err : "Background worker encountered an issue");
-        console.warn("[CutoutWorkerBridge] Worker error:", msg);
-      };
-
-      return w;
-    } catch (e) {
-      console.warn("[CutoutWorkerBridge] Failed to create Worker:", e);
-      return null;
-    }
+    `;
+    const url = URL.createObjectURL(new Blob([workerCode], { type: "application/javascript" }));
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    worker.onmessage = ({data}) => {
+      const pending = this.pending.get(data.id);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      this.pending.delete(data.id);
+      if (!data.success) console.warn("[CutoutWorkerBridge] Rust inference request failed:", data.error || "unknown worker error");
+      pending.resolve(data.success ? data.rawAlpha ?? null : null);
+    };
+    worker.onerror = () => this.terminate();
+    return worker;
   }
 
   public async init(): Promise<boolean> {
-    if (this.worker) return true;
+    if (this.ready) return true;
     if (this.initPromise) return this.initPromise;
-
-    this.initPromise = new Promise<boolean>((resolve) => {
-      const w = this.createWorkerInstance();
-      if (!w) {
-        resolve(false);
-        return;
-      }
-      this.worker = w;
-
-      const reqId = ++this.reqIdCounter;
-      const timeoutTimer = setTimeout(() => {
-        this.pendingRequests.delete(reqId);
-        resolve(false);
-      }, 15000);
-
-      this.pendingRequests.set(reqId, {
-        resolve: () => resolve(true),
-        reject: () => resolve(false),
-        timeoutTimer,
-      });
-
-      w.postMessage({ id: reqId, type: "init" });
-    });
-
+    this.initPromise = (async () => {
+      if (!this.worker) this.worker = this.createWorker();
+      if (!this.worker) return false;
+      const result = await this.request("init", undefined, 120_000);
+      this.ready = !!result;
+      if (!this.ready) this.terminate();
+      return this.ready;
+    })().finally(() => { this.initPromise = null; });
     return this.initPromise;
   }
 
-  public async runInference(floatData: Float32Array): Promise<Float32Array | null> {
-    if (!floatData || floatData.byteLength === 0 || floatData.length !== 512 * 512 * 3) {
-      return null;
-    }
-
-    if (!this.worker) {
-      const ready = await this.init();
-      if (!ready || !this.worker) return null;
-    }
-
-    return new Promise<Float32Array | null>((resolve) => {
-      const reqId = ++this.reqIdCounter;
-      // 10 second timeout guard
-      const timeoutTimer = setTimeout(() => {
-        this.pendingRequests.delete(reqId);
-        resolve(null);
-      }, 10000);
-
-      this.pendingRequests.set(reqId, {
-        resolve: (rawAlpha: Float32Array) => resolve(rawAlpha),
-        reject: () => resolve(null),
-        timeoutTimer,
-      });
-
-      // Send floatData to worker (structured clone avoids detaching main thread buffer)
-      try {
-        this.worker!.postMessage({ id: reqId, type: "infer", floatData });
-      } catch (err) {
-        clearTimeout(timeoutTimer);
-        this.pendingRequests.delete(reqId);
-        resolve(null);
-      }
+  private request(type: "init" | "infer", floatData?: Float32Array, timeout = 30_000): Promise<Float32Array | null> {
+    if (!this.worker) return Promise.resolve(null);
+    const id = ++this.nextId;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.pending.delete(id); resolve(null); }, timeout);
+      this.pending.set(id, { resolve, timer });
+      this.worker!.postMessage({ id, type, floatData });
     });
   }
 
-  public terminate() {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
+  public async runInference(floatData: Float32Array): Promise<Float32Array | null> {
+    if (floatData.length !== 3 * 512 * 512) return null;
+    if (!(await this.init())) return null;
+    return this.request("infer", floatData);
+  }
+
+  public terminate(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    this.ready = false;
+    this.pending.forEach(({timer, resolve}) => { clearTimeout(timer); resolve(null); });
+    this.pending.clear();
     this.initPromise = null;
-    this.pendingRequests.forEach((p) => clearTimeout(p.timeoutTimer));
-    this.pendingRequests.clear();
   }
 }
 

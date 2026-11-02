@@ -6,7 +6,6 @@ import {
   ExportFormat,
   ExportResult,
 } from "../../../utils/videoRenderer";
-import { soundEngine } from "../../../utils/audioEngine";
 import { addNotification } from "../../../utils/storage";
 import {
   MEDIA_FORMATS,
@@ -137,7 +136,6 @@ export function useExportProcess(
     setStatus("rendering");
     setErrorMessage(null);
     setProgress(0);
-    soundEngine.playSfx("whoosh");
 
     try {
       const renderDuration = Math.max(totalDuration || 2.0, 1.0);
@@ -187,7 +185,6 @@ export function useExportProcess(
       setExportedResult(result);
       setExportedUrl(result.videoUrl);
       setStatus("done");
-      soundEngine.playSfx("pop");
       addNotification({
         title: "Export Ready",
         message: `"${project?.title || "Project"}" exported as ${resolution} ${mediaType.toUpperCase()}.`,
@@ -226,7 +223,9 @@ export function useExportProcess(
   };
 
   const handleMobileCanvasProgress = (pct: number) => {
-    updateProgressMonotonic(pct);
+    // Map WebView progress across the 15%..99% interval so progress advances visibly without ever stalling
+    const mapped = Math.max(15, Math.min(99, Math.round(15 + (pct / 100) * 84)));
+    updateProgressMonotonic(mapped);
   };
 
   const getProgressStatusMessage = () => {

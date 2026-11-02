@@ -438,7 +438,6 @@ export interface AppSettings {
   autoAddEnding: boolean;
   magneticSnapping: boolean;
   hapticFeedback: boolean;
-  soundEffects: boolean;
   hardwareAcceleration: boolean;
   cachedSizeMb: number;
   language: string;
@@ -455,7 +454,6 @@ export const defaultSettings: AppSettings = {
   autoAddEnding: false,
   magneticSnapping: true,
   hapticFeedback: true,
-  soundEffects: false,
   hardwareAcceleration: true,
   cachedSizeMb: 142.8,
   language: 'English (US)',

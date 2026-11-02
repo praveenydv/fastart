@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { Platform } from "react-native";
-import { soundEngine } from "../utils/audioEngine";
 import { pauseActiveVideoRenderer } from "../utils/videoRenderer";
 import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
 
@@ -68,14 +67,12 @@ export function useKeyboardShortcuts({
       if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
         if (totalDuration <= 0) {
-          soundEngine.playSfx("click");
           pauseActiveVideoRenderer();
           pauseAllAudio();
           setIsPlaying(false);
           setCurrentTime(0);
           return;
         }
-        soundEngine.playSfx("click");
         if (isPlaying) {
           pauseActiveVideoRenderer();
           pauseAllAudio();
@@ -112,7 +109,6 @@ export function useKeyboardShortcuts({
       if ((e.key === "c" || e.key === "C" || e.key === "s" || e.key === "S") && !isCmdOrCtrl) {
         if (selectedClipId && routeScreen === "editor" && !activeModal) {
           e.preventDefault();
-          soundEngine.playSfx("split");
           handleSplitClip();
         }
         return;
@@ -120,7 +116,6 @@ export function useKeyboardShortcuts({
       if (isCmdOrCtrl && (e.key === "k" || e.key === "K")) {
         if (selectedClipId && routeScreen === "editor" && !activeModal) {
           e.preventDefault();
-          soundEngine.playSfx("split");
           handleSplitClip();
         }
         return;
@@ -129,13 +124,11 @@ export function useKeyboardShortcuts({
       // J-K-L Shuttle Controls
       if ((e.key === "j" || e.key === "J") && !isCmdOrCtrl) {
         e.preventDefault();
-        soundEngine.playSfx("click");
         setCurrentTime((t) => Math.max(0, t - 1.0));
         return;
       }
       if ((e.key === "k" || e.key === "K") && !isCmdOrCtrl) {
         e.preventDefault();
-        soundEngine.playSfx("click");
         pauseActiveVideoRenderer();
         pauseAllAudio();
         setIsPlaying(false);
@@ -143,7 +136,6 @@ export function useKeyboardShortcuts({
       }
       if ((e.key === "l" || e.key === "L") && !isCmdOrCtrl) {
         e.preventDefault();
-        soundEngine.playSfx("click");
         if (!isPlaying) {
           setIsPlaying(true);
         } else {
@@ -155,7 +147,6 @@ export function useKeyboardShortcuts({
       // Open Shortcuts Help (?)
       if (e.key === "?" && onOpenShortcuts) {
         e.preventDefault();
-        soundEngine.playSfx("click");
         onOpenShortcuts();
         return;
       }
@@ -176,7 +167,6 @@ export function useKeyboardShortcuts({
       if ((e.key === "d" || e.key === "D") && !e.shiftKey) {
         if (selectedClipId && routeScreen === "editor" && !activeModal) {
           e.preventDefault();
-          soundEngine.playSfx("pop");
           handleDuplicateClip();
         }
         return;

@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from './Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../utils/audioEngine';
 
 export interface ConfirmDeleteModalProps {
   visible: boolean;
@@ -117,13 +116,11 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   };
 
   const handleCancel = () => {
-    soundEngine.playSfx('click');
     onCancel();
     setModalVisible(false);
   };
 
   const handleConfirm = () => {
-    soundEngine.playSfx('pop');
     onConfirm();
     setModalVisible(false);
   };

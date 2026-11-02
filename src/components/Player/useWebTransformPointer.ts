@@ -1,6 +1,5 @@
 import { useRef, useEffect } from "react";
 import { Platform } from "react-native";
-import { soundEngine } from "../../utils/audioEngine";
 import { getPointerCoords } from "../Timeline";
 import { ActiveTransformItem } from "./playerTypes";
 
@@ -53,7 +52,6 @@ export function useWebTransformPointer({
     const targetItem = overrideItem || activeTransformItem;
     if (!targetItem) return;
 
-    soundEngine.playSfx("click");
 
     const now = Date.now();
     if (
@@ -63,7 +61,6 @@ export function useWebTransformPointer({
       now - lastTapRef.current.time < 320
     ) {
       lastTapRef.current = { time: 0, id: "" };
-      soundEngine.playSfx("click");
       if (targetItem.type === "text" || targetItem.type === "sticker") {
         onOpenEditModal?.(targetItem.id, targetItem.type);
       }

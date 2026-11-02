@@ -469,7 +469,8 @@ export async function exportFastArtProject(
   // 4. Video Export (MP4 & WebM)
   // -------------------------------------------------------------------------
   if (format === "mp4" || format === "webm") {
-    // A. Web Browser: Hardware-accelerated Canvas + MediaRecorder with GPU video decoders
+    // A. Web Browser: Non-blocking Hardware Canvas + MediaRecorder
+    // Never run heavy synchronous loops on the main JavaScript UI thread in Web browsers
     if (Platform.OS === "web" && typeof document !== "undefined") {
       let renderer = existingRenderer;
       if (!renderer || !renderer.canvas) {
@@ -503,11 +504,12 @@ export async function exportFastArtProject(
     }
 
     // B. Native Mobile (Android & iOS): High-Performance Native Rust Core Engine
-    onProgress?.(25, 0, duration);
+    // Executes in background native thread/coroutine without blocking the UI
+    onProgress?.(15, 0, duration);
     try {
       const isRustReady = await rustCoreBridge.isAvailable();
       if (isRustReady) {
-        onProgress?.(60, 0, duration);
+        onProgress?.(40, 0, duration);
         const filename = `${cleanTitle}_video_${Date.now()}.mp4`;
         const targetFileUri = `${targetDir}${filename}`;
         const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
@@ -550,7 +552,7 @@ export async function exportFastArtProject(
       console.warn("[unifiedExporter] Native Rust MP4 export:", err);
     }
 
-    // When native Rust engine is unavailable, signal to engage headless mobile canvas bridge
+    // When native Rust engine is unavailable on mobile, signal to engage headless mobile canvas bridge
     throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
   }
 

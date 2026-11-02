@@ -10,7 +10,6 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { EFFECT_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
-import { soundEngine } from '../../utils/audioEngine';
 import { EffectClip } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
@@ -191,7 +190,6 @@ export default function EffectsModal({
   });
 
   const handleSelect = (item: any) => {
-    soundEngine.playSfx('pop');
     const effId = item.type || item.id;
     setSelectedEffectId(effId);
 
@@ -237,14 +235,12 @@ export default function EffectsModal({
   };
 
   const handleClear = () => {
-    soundEngine.playSfx('click');
     setSelectedEffectId('none');
     const noneItem = EFFECT_PRESETS.find((p) => p.id === 'none') || { id: 'none', type: 'none', name: 'None' };
     handleSelect(noneItem);
   };
 
   const handleIntensityChange = (val: number) => {
-    soundEngine.playSfx('click');
     setIntensity(val);
     if (selectedEffectId === 'none') return;
 
@@ -349,7 +345,6 @@ export default function EffectsModal({
                     key={cat.id}
                     style={[styles.categoryPill, isActive && styles.categoryPillActive]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       setActiveCategory(cat.id);
                     }}
                     activeOpacity={0.7}

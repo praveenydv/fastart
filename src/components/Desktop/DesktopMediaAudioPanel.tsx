@@ -11,7 +11,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { FastArtProject, AudioClip } from '../../types/project';
 import { persistLargeMedia, pickWebMedia } from '../../utils/largeMediaStorage';
 import { registerMediaDimensions } from '../Player/playerUtils';
@@ -150,7 +149,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             registerMediaDimensions(mediaId, saved.width, saved.height);
           }
 
-          soundEngine.playSfx('pop');
           onAddMedia(clip);
           addNotification({
             title: isVideo ? 'Video Imported' : 'Photo Imported',
@@ -205,7 +203,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
             fadeOut: 0,
           };
 
-          soundEngine.playSfx('pop');
           onAddAudio(clip);
           addNotification({
             title: 'Audio Imported',
@@ -316,7 +313,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                 key={tab.id}
                 style={[styles.tabBtn, isActive && styles.tabBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   onSelectTab(tab.id);
                 }}
                 activeOpacity={0.7}
@@ -465,7 +461,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                             style={styles.deleteDirectBtn}
                             onPress={(e) => {
                               e.stopPropagation?.();
-                              soundEngine.playSfx('cut');
                               onDeleteMedia(clip.id, clip.type || 'video');
                             }}
                             activeOpacity={0.7}
@@ -477,7 +472,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                         <TouchableOpacity
                           style={styles.addDirectBtn}
                           onPress={() => {
-                            soundEngine.playSfx('pop');
                             onAddMedia({
                               ...clip,
                               id: `clip-copy-${Date.now()}`,
@@ -562,7 +556,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                     <TouchableOpacity
                       style={[styles.previewPlayCircle, isPlaying && styles.previewPlayCircleActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         setPlayingPreviewId(isPlaying ? null : audioClip.id);
                       }}
                       activeOpacity={0.7}
@@ -588,7 +581,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                         <TouchableOpacity
                           style={styles.deleteDirectBtn}
                           onPress={() => {
-                            soundEngine.playSfx('cut');
                             onDeleteMedia(audioClip.id, 'audio');
                           }}
                           activeOpacity={0.7}
@@ -600,7 +592,6 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
                       <TouchableOpacity
                         style={styles.addDirectBtn}
                         onPress={() => {
-                          soundEngine.playSfx('pop');
                           onAddAudio({
                             ...audioClip,
                             id: `audio-copy-${Date.now()}`,

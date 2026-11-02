@@ -230,22 +230,6 @@ export const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "500",
   },
-  uploadFontBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.25)",
-  },
-  uploadFontBtnText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "500",
-  },
   fontCard: {
     width: 68,
     height: 50,

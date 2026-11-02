@@ -13,7 +13,6 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { soundEngine } from '../../utils/audioEngine';
 import { addNotification } from '../../utils/storage';
 import {
   persistLargeMedia,
@@ -104,7 +103,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
             icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
           });
 
-          soundEngine.playSfx('pop');
           onAddMedia(clip);
           onClose();
         } finally {
@@ -190,7 +188,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
               icon: clip.type === 'video' ? 'videocam-outline' : 'image-outline',
             });
 
-            soundEngine.playSfx('pop');
             onAddMedia(clip);
             onClose();
           }
@@ -337,7 +334,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                           <TouchableOpacity
                             style={styles.importedDeleteBtn}
                             onPress={() => {
-                              soundEngine.playSfx('cut');
                               onDeleteMedia(clip.id, clip.type || 'video');
                             }}
                             activeOpacity={0.7}
@@ -349,7 +345,6 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                         <TouchableOpacity
                           style={styles.importedAddBtn}
                           onPress={() => {
-                            soundEngine.playSfx('pop');
                             onAddMedia({
                               ...clip,
                               id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

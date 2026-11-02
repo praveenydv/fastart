@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { THEME_COLORS, DESIGN_CONSTANTS } from '../../constants/designConstants';
 
 export interface DesktopLeftSidebarProps {
@@ -57,7 +56,6 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               key={item.id}
               style={[styles.sidebarBtn, isActive && styles.sidebarBtnActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 onSelectTab(item.id);
               }}
               activeOpacity={0.7}
@@ -88,7 +86,6 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               <TouchableOpacity
                 style={styles.clipActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   onSplitClip();
                 }}
                 activeOpacity={0.7}
@@ -103,7 +100,6 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               <TouchableOpacity
                 style={styles.clipActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   onDuplicateClip();
                 }}
                 activeOpacity={0.7}
@@ -118,7 +114,6 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               <TouchableOpacity
                 style={styles.clipActionBtn}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   onRotateClip();
                 }}
                 activeOpacity={0.7}
@@ -133,7 +128,6 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               <TouchableOpacity
                 style={[styles.clipActionBtn, styles.deleteBtn]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   onDeleteClip();
                 }}
                 activeOpacity={0.7}

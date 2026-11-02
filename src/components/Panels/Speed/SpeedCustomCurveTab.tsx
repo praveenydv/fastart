@@ -9,7 +9,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { SpeedCurvePoint } from '../../../types/project';
-import { soundEngine } from '../../../utils/audioEngine';
 import {
   getClipWaveformPeaks,
   extractRealMediaAudioPeaks,
@@ -91,9 +90,13 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
     }
   }, [audioSource?.url, audioSource?.id]);
 
-  const waveformPeaks = useMemo(() => {
-    if (!audioSource?.url) return [];
-    return getClipWaveformPeaks(
+  const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
+  useEffect(() => {
+    let active = true;
+    if (!audioSource?.url) {
+      return () => { active = false; };
+    }
+    void getClipWaveformPeaks(
       audioSource.id,
       audioSource.url,
       graphWidth,
@@ -105,8 +108,15 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
       false,
       audioSource.peaks,
       audioSource.mediaDuration,
-    );
+    ).then((value) => {
+      if (active) setWaveformPeaks(value);
+    }).catch((error) => {
+      console.warn("[SpeedCustomCurveTab] Rust waveform processing failed:", error);
+      if (active) setWaveformPeaks([]);
+    });
+    return () => { active = false; };
   }, [audioSource, graphWidth]);
+  const activeWaveformPeaks = audioSource?.url ? waveformPeaks : [];
 
   // 2. Safe Mathematical Coordinate Mapping
   const pointToCoord = useCallback(
@@ -171,7 +181,6 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             setSelectedPointIndex(bestIdx);
             const coord = pointToCoord(points[bestIdx]);
             startPointCoordRef.current = { x: coord.x, y: coord.y };
-            soundEngine.playSfx('click');
           } else {
             draggedPointIdxRef.current = -1;
             startPointCoordRef.current = null;
@@ -318,7 +327,6 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
   };
 
   const handleAddPoint = () => {
-    soundEngine.playSfx('pop');
     const idx = selectedPointIndex >= 0 ? selectedPointIndex : 1;
     const p1 = customPoints[idx] || customPoints[0];
     const p2 = customPoints[Math.min(customPoints.length - 1, idx + 1)] || customPoints[customPoints.length - 1];
@@ -333,14 +341,12 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
   const handleDeletePoint = () => {
     if (customPoints.length <= 2) return;
     if (selectedPointIndex === 0 || selectedPointIndex === customPoints.length - 1) return;
-    soundEngine.playSfx('click');
     const updated = customPoints.filter((_, i) => i !== selectedPointIndex);
     setCustomPoints(updated);
     setSelectedPointIndex(Math.max(0, selectedPointIndex - 1));
   };
 
   const handleResetCurve = () => {
-    soundEngine.playSfx('click');
     const defaultPoints: SpeedCurvePoint[] = [
       { t: 0.0, s: 1.0 },
       { t: 0.25, s: 2.5 },
@@ -411,7 +417,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           ))}
 
         {/* 2. NATIVE MOBILE: Audio Waveform Peak Bars */}
-        {Platform.OS !== 'web' && waveformPeaks.length > 0 && (
+        {Platform.OS !== 'web' && activeWaveformPeaks.length > 0 && (
           <View
             style={{
               position: 'absolute',
@@ -426,7 +432,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             }}
             pointerEvents="none"
           >
-            {waveformPeaks.map((peak, idx) => (
+            {activeWaveformPeaks.map((peak, idx) => (
               <View
                 key={`native-wave-${idx}`}
                 style={{
@@ -458,9 +464,9 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             </defs>
 
             {/* Audio Waveform Bars */}
-            {waveformPeaks.length > 0 ? (
-              waveformPeaks.map((peak, idx) => {
-                const numBars = waveformPeaks.length;
+            {activeWaveformPeaks.length > 0 ? (
+              activeWaveformPeaks.map((peak, idx) => {
+                const numBars = activeWaveformPeaks.length;
                 const barWidth = 2.4;
                 const gap = (graphWidth - numBars * barWidth) / Math.max(1, numBars - 1);
                 const maxWaveH = 34;
@@ -516,7 +522,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
         )}
 
         {/* Audio Waveform Status Badge at Lower-Left */}
-        {waveformPeaks.length > 0 && (
+        {activeWaveformPeaks.length > 0 && (
           <View style={styles.waveformBadge} pointerEvents="none">
             <Ionicons
               name="musical-notes"

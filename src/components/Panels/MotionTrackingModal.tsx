@@ -17,7 +17,6 @@ import {
   FastArtProject,
   VideoClip,
 } from "../../types/project";
-import { soundEngine } from "../../utils/audioEngine";
 import { triggerHaptic } from "../../utils/haptics";
 import { ObjectTrackerEngine } from "../../utils/objectTrackerEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
@@ -253,7 +252,6 @@ export default function MotionTrackingModal({
 
   // Run Real Computer-Vision Tracking
   const handleStartTracking = useCallback(async () => {
-    soundEngine.playSfx("whoosh");
     triggerHaptic("medium");
     setIsScanning(true);
     setScanProgress(0);
@@ -310,7 +308,6 @@ export default function MotionTrackingModal({
         },
       });
 
-      soundEngine.playSfx("whoosh");
       triggerHaptic("success");
       setTrajectory(generatedTrajectory);
       setEnabled(true);
@@ -369,7 +366,6 @@ export default function MotionTrackingModal({
       abortControllerRef.current.abort();
     }
     setIsScanning(false);
-    soundEngine.playSfx("pop");
     triggerHaptic("warning");
     syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
   }, [trajectory.length, syncTracking]);
@@ -378,7 +374,6 @@ export default function MotionTrackingModal({
     if (!trajectory || trajectory.length === 0 || !project || !updateProjectWithHistory) {
       return;
     }
-    soundEngine.playSfx("whoosh");
     triggerHaptic("success");
 
     let targetClip = selectedClip;
@@ -478,7 +473,6 @@ export default function MotionTrackingModal({
   ]);
 
   const handleReset = useCallback(() => {
-    soundEngine.playSfx("click");
     triggerHaptic("selection");
     setEnabled(false);
     setTrajectory([]);
@@ -606,7 +600,6 @@ export default function MotionTrackingModal({
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === "censor" && styles.tabBtnActive]}
             onPress={() => {
-              soundEngine.playSfx("click");
               triggerHaptic("selection");
               setActiveTab("censor");
               setActionType("mosaic_censor");
@@ -627,7 +620,6 @@ export default function MotionTrackingModal({
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === "pin" && styles.tabBtnActive]}
             onPress={() => {
-              soundEngine.playSfx("click");
               triggerHaptic("selection");
               setActiveTab("pin");
               setActionType("pin_element");
@@ -648,7 +640,6 @@ export default function MotionTrackingModal({
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === "camera" && styles.tabBtnActive]}
             onPress={() => {
-              soundEngine.playSfx("click");
               triggerHaptic("selection");
               setActiveTab("camera");
               setActionType("camera_center");
@@ -750,7 +741,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.togglePill, trackScale && styles.togglePillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   const nextVal = !trackScale;
                   setTrackScale(nextVal);
@@ -771,7 +761,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.togglePill, trackRotation && styles.togglePillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   const nextVal = !trackRotation;
                   setTrackRotation(nextVal);
@@ -800,7 +789,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.segmentBtn, mosaicShape === "rectangle" && styles.segmentBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   setMosaicShape("rectangle");
                   syncTracking({ mosaicShape: "rectangle" });
@@ -821,7 +809,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.segmentBtn, mosaicShape === "circle" && styles.segmentBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   setMosaicShape("circle");
                   syncTracking({ mosaicShape: "circle" });
@@ -845,7 +832,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.segmentBtn, mosaicStyle === "blur" && styles.segmentBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   setMosaicStyle("blur");
                   syncTracking({ mosaicStyle: "blur" });
@@ -866,7 +852,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.segmentBtn, mosaicStyle === "pixelate" && styles.segmentBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   setMosaicStyle("pixelate");
                   syncTracking({ mosaicStyle: "pixelate" });
@@ -921,7 +906,6 @@ export default function MotionTrackingModal({
                   {pinnedClipId ? (
                     <TouchableOpacity
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         triggerHaptic("selection");
                         setPinnedClipId("");
                         syncTracking({ pinnedClipId: "", actionType: "pin_element" });
@@ -947,7 +931,6 @@ export default function MotionTrackingModal({
                         key={c.id}
                         style={[styles.pinClipRow, isSelected && styles.pinClipRowActive]}
                         onPress={() => {
-                          soundEngine.playSfx("click");
                           triggerHaptic("selection");
                           const nextId = isSelected ? "" : c.id;
                           setPinnedClipId(nextId);
@@ -997,7 +980,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.togglePill, trackScale && styles.togglePillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   const nextVal = !trackScale;
                   setTrackScale(nextVal);
@@ -1018,7 +1000,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.togglePill, trackRotation && styles.togglePillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   const nextVal = !trackRotation;
                   setTrackRotation(nextVal);
@@ -1053,7 +1034,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.togglePill, cameraFitToScreen && styles.togglePillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   const nextVal = !cameraFitToScreen;
                   setCameraFitToScreen(nextVal);
@@ -1074,7 +1054,6 @@ export default function MotionTrackingModal({
               <TouchableOpacity
                 style={[styles.togglePill, cameraLockCenter && styles.togglePillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   triggerHaptic("selection");
                   const nextVal = !cameraLockCenter;
                   setCameraLockCenter(nextVal);

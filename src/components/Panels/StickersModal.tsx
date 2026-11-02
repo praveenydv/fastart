@@ -10,7 +10,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { STICKER_LIBRARY } from '../../constants/sampleMedia';
-import { soundEngine } from '../../utils/audioEngine';
 
 import { StickerClip } from '../../types/project';
 
@@ -86,7 +85,6 @@ export default function StickersModal({
         animation: editingClip.animation,
         scale: isBadge ? 1.0 : (editingClip.scale || 1.2),
       };
-      soundEngine.playSfx('pop');
       onUpdateSticker(updated);
       if (!isInline) onClose();
       return;
@@ -102,7 +100,6 @@ export default function StickersModal({
       rotation: 0,
       animation: undefined,
     };
-    soundEngine.playSfx('pop');
     onAddSticker(stickerClip);
     if (!isInline) onClose();
   };
@@ -157,7 +154,6 @@ export default function StickersModal({
                     key={cat.id}
                     style={[styles.categoryPill, isActive && styles.categoryPillActive]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       setActiveCategory(cat.id);
                     }}
                   >

@@ -1,6 +1,34 @@
 use std::collections::HashMap;
 use std::slice;
 
+/// Loads a MODNet ONNX model into the shared Rust inference runtime.
+#[no_mangle]
+pub extern "C" fn fastart_init_modnet_c(model_ptr: *const u8, model_len: usize) -> u32 {
+    if model_ptr.is_null() || model_len == 0 {
+        return 0;
+    }
+    let model = unsafe { slice::from_raw_parts(model_ptr, model_len) };
+    u32::from(fastart_core::initialize_modnet(model).is_ok())
+}
+
+/// Runs Rust MODNet inference over a prepared 512x512 NCHW input tensor.
+#[no_mangle]
+pub extern "C" fn fastart_run_modnet_c(
+    input_ptr: *const f32,
+    input_len: usize,
+    output_ptr: *mut f32,
+    output_len: usize,
+) -> u32 {
+    const INPUT_LEN: usize = 3 * 512 * 512;
+    const OUTPUT_LEN: usize = 512 * 512;
+    if input_ptr.is_null() || output_ptr.is_null() || input_len != INPUT_LEN || output_len < OUTPUT_LEN {
+        return 0;
+    }
+    let input = unsafe { slice::from_raw_parts(input_ptr, input_len) };
+    let output = unsafe { slice::from_raw_parts_mut(output_ptr, OUTPUT_LEN) };
+    u32::from(fastart_core::infer_modnet(input, output).is_ok())
+}
+
 use fastart_core::{FastArtEngine, FastArtProject};
 
 static mut SCRATCHPAD: Option<Vec<u8>> = None;
@@ -94,6 +122,35 @@ pub extern "C" fn fastart_generate_waveform_c(
     peaks.len()
 }
 
+#[no_mangle]
+pub extern "C" fn fastart_decode_audio_peaks_c(
+    data_ptr: *const u8,
+    data_len: usize,
+    num_points: usize,
+    out_peaks_ptr: *mut f32,
+    out_capacity: usize,
+    out_duration_ptr: *mut f64,
+) -> usize {
+    if data_ptr.is_null() || out_peaks_ptr.is_null() || out_duration_ptr.is_null() {
+        return 0;
+    }
+    let data = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+    let Some(parsed) = fastart_core::decode_media_audio_peaks(data, num_points)
+        .or_else(|| fastart_core::parse_wav_peaks(data, num_points))
+    else {
+        return 0;
+    };
+    if parsed.peaks.len() > out_capacity {
+        return 0;
+    }
+    unsafe {
+        std::slice::from_raw_parts_mut(out_peaks_ptr, parsed.peaks.len())
+            .copy_from_slice(&parsed.peaks);
+        *out_duration_ptr = parsed.duration;
+    }
+    parsed.peaks.len()
+}
+
 /// Renders a project frame and encodes directly to PNG bytes into WebAssembly linear memory
 #[no_mangle]
 pub extern "C" fn fastart_render_snapshot_c(
@@ -121,7 +178,8 @@ pub extern "C" fn fastart_render_snapshot_c(
     };
 
     let media_cache = HashMap::new();
-    let png_bytes = FastArtEngine::render_snapshot_png(&project, time_sec, width, height, &media_cache);
+    let png_bytes =
+        FastArtEngine::render_snapshot_png(&project, time_sec, width, height, &media_cache);
     let to_copy = png_bytes.len().min(max_out_len);
 
     unsafe {
@@ -154,11 +212,104 @@ pub extern "C" fn fastart_motion_track_c(
     };
     let res = fastart_core::evaluate_motion_track(time, clip_start, clip_duration, mode, intensity);
     unsafe {
-        if !out_dx.is_null() { *out_dx = res.dx; }
-        if !out_dy.is_null() { *out_dy = res.dy; }
-        if !out_scale.is_null() { *out_scale = res.d_scale; }
-        if !out_rot.is_null() { *out_rot = res.d_rot; }
+        if !out_dx.is_null() {
+            *out_dx = res.dx;
+        }
+        if !out_dy.is_null() {
+            *out_dy = res.dy;
+        }
+        if !out_scale.is_null() {
+            *out_scale = res.d_scale;
+        }
+        if !out_rot.is_null() {
+            *out_rot = res.d_rot;
+        }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn fastart_evaluate_object_track_c(
+    time: f64,
+    times_ptr: *const f64,
+    x_ptr: *const f64,
+    y_ptr: *const f64,
+    scales_ptr: *const f64,
+    rotations_ptr: *const f64,
+    count: usize,
+    anchor_time: f64,
+    track_scale: u32,
+    track_rotation: u32,
+    camera_center: u32,
+    camera_fit_to_screen: u32,
+    camera_zoom: f64,
+    camera_lock_center: u32,
+    out_dx: *mut f64,
+    out_dy: *mut f64,
+    out_scale: *mut f64,
+    out_rotation: *mut f64,
+) -> u32 {
+    if count == 0
+        || times_ptr.is_null()
+        || x_ptr.is_null()
+        || y_ptr.is_null()
+        || scales_ptr.is_null()
+        || rotations_ptr.is_null()
+        || out_dx.is_null()
+        || out_dy.is_null()
+        || out_scale.is_null()
+        || out_rotation.is_null()
+    {
+        return 0;
+    }
+    let times = unsafe { std::slice::from_raw_parts(times_ptr, count) };
+    let xs = unsafe { std::slice::from_raw_parts(x_ptr, count) };
+    let ys = unsafe { std::slice::from_raw_parts(y_ptr, count) };
+    let scales = unsafe { std::slice::from_raw_parts(scales_ptr, count) };
+    let rotations = unsafe { std::slice::from_raw_parts(rotations_ptr, count) };
+    let trajectory: Vec<fastart_core::TrajectoryPoint> = (0..count)
+        .map(|index| fastart_core::TrajectoryPoint {
+            time: times[index],
+            x: xs[index],
+            y: ys[index],
+            scale: scales[index],
+            rotation: rotations[index],
+            confidence: 0.0,
+            box_width: None,
+            box_height: None,
+        })
+        .collect();
+    let anchor_index = if anchor_time.is_finite() {
+        times
+            .iter()
+            .enumerate()
+            .min_by(|(_, left), (_, right)| {
+                (*left - anchor_time)
+                    .abs()
+                    .total_cmp(&(*right - anchor_time).abs())
+            })
+            .map(|(index, _)| index)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let result = fastart_core::evaluate_object_track_trajectory_with_options(
+        time,
+        &trajectory,
+        anchor_index,
+        track_scale != 0,
+        track_rotation != 0,
+        camera_center != 0,
+        camera_fit_to_screen != 0,
+        camera_lock_center != 0,
+        camera_zoom,
+    );
+    unsafe {
+        *out_dx = result.dx;
+        *out_dy = result.dy;
+        *out_scale = result.d_scale;
+        *out_rotation = result.d_rot;
+    }
+    1
 }
 
 /// High-Performance Chroma Keying with Despill in WebAssembly
@@ -261,11 +412,19 @@ pub extern "C" fn fastart_detect_uniform_backdrop_c(
     let total_len = (width as usize) * (height as usize) * 4;
     let pixels = unsafe { slice::from_raw_parts(pixels_ptr, total_len) };
 
-    if let Some((r, g, b)) = fastart_core::detect_uniform_backdrop(pixels, width as usize, height as usize) {
+    if let Some((r, g, b)) =
+        fastart_core::detect_uniform_backdrop(pixels, width as usize, height as usize)
+    {
         unsafe {
-            if !out_r.is_null() { *out_r = r; }
-            if !out_g.is_null() { *out_g = g; }
-            if !out_b.is_null() { *out_b = b; }
+            if !out_r.is_null() {
+                *out_r = r;
+            }
+            if !out_g.is_null() {
+                *out_g = g;
+            }
+            if !out_b.is_null() {
+                *out_b = b;
+            }
         }
         1
     } else {
@@ -449,6 +608,30 @@ pub extern "C" fn fastart_unpack_alpha_rle_c(
     fastart_core::unpack_alpha_rle(rle, out_alpha)
 }
 
+/// Applies MODNet threshold/feather and RLE compression in one Rust call.
+#[no_mangle]
+pub extern "C" fn fastart_modnet_alpha_to_rle_c(
+    alpha_ptr: *const f32,
+    alpha_len: usize,
+    threshold: f32,
+    feather: f32,
+    out_ptr: *mut u8,
+    out_capacity: usize,
+) -> usize {
+    if alpha_ptr.is_null() || alpha_len == 0 || out_ptr.is_null() || out_capacity == 0 {
+        return 0;
+    }
+    let alpha = unsafe { slice::from_raw_parts(alpha_ptr, alpha_len) };
+    let encoded = fastart_core::modnet_alpha_to_rle(alpha, threshold, feather);
+    if encoded.len() > out_capacity {
+        return 0;
+    }
+    unsafe {
+        slice::from_raw_parts_mut(out_ptr, encoded.len()).copy_from_slice(&encoded);
+    }
+    encoded.len()
+}
+
 /// Expands an 8-bit alpha buffer into 32-bit RGBA mask pixels in WebAssembly.
 #[no_mangle]
 pub extern "C" fn fastart_alpha_to_rgba_c(
@@ -457,7 +640,11 @@ pub extern "C" fn fastart_alpha_to_rgba_c(
     out_rgba_ptr: *mut u8,
     max_out_len: usize,
 ) {
-    if alpha_ptr.is_null() || out_rgba_ptr.is_null() || alpha_len == 0 || max_out_len < alpha_len * 4 {
+    if alpha_ptr.is_null()
+        || out_rgba_ptr.is_null()
+        || alpha_len == 0
+        || max_out_len < alpha_len * 4
+    {
         return;
     }
     let alpha = unsafe { slice::from_raw_parts(alpha_ptr, alpha_len) };
@@ -492,7 +679,15 @@ pub extern "C" fn fastart_segment_frame_rgba_c(
         None
     };
     let out_alpha = unsafe { slice::from_raw_parts_mut(out_alpha_ptr, total) };
-    fastart_core::segment_frame_rgba(rgba, width as usize, height as usize, threshold, feather, seed_mask, out_alpha);
+    fastart_core::segment_frame_rgba(
+        rgba,
+        width as usize,
+        height as usize,
+        threshold,
+        feather,
+        seed_mask,
+        out_alpha,
+    );
     total as u32
 }
 
@@ -544,13 +739,19 @@ pub extern "C" fn fastart_search_template_ncc_c(
     out_best_angle: *mut f32,
     out_best_score: *mut f32,
 ) {
-    if frame_ptr.is_null() || template_ptr.is_null() || scales_ptr.is_null() || num_scales == 0 || dim == 0 {
+    if frame_ptr.is_null()
+        || template_ptr.is_null()
+        || scales_ptr.is_null()
+        || num_scales == 0
+        || dim == 0
+    {
         return;
     }
 
     let frame_len = (fw as usize) * (fh as usize) * 4;
     let frame_slice = unsafe { slice::from_raw_parts(frame_ptr, frame_len) };
-    let template_slice = unsafe { slice::from_raw_parts(template_ptr, (dim as usize) * (dim as usize)) };
+    let template_slice =
+        unsafe { slice::from_raw_parts(template_ptr, (dim as usize) * (dim as usize)) };
     let scales_slice = unsafe { slice::from_raw_parts(scales_ptr, num_scales as usize) };
 
     let (bx, by, bscale, bangle, bscore) = fastart_core::search_template_ncc(
@@ -572,11 +773,21 @@ pub extern "C" fn fastart_search_template_ncc_c(
     );
 
     unsafe {
-        if !out_best_x.is_null() { *out_best_x = bx; }
-        if !out_best_y.is_null() { *out_best_y = by; }
-        if !out_best_scale.is_null() { *out_best_scale = bscale; }
-        if !out_best_angle.is_null() { *out_best_angle = bangle; }
-        if !out_best_score.is_null() { *out_best_score = bscore; }
+        if !out_best_x.is_null() {
+            *out_best_x = bx;
+        }
+        if !out_best_y.is_null() {
+            *out_best_y = by;
+        }
+        if !out_best_scale.is_null() {
+            *out_best_scale = bscale;
+        }
+        if !out_best_angle.is_null() {
+            *out_best_angle = bangle;
+        }
+        if !out_best_score.is_null() {
+            *out_best_score = bscore;
+        }
     }
 }
 
@@ -614,11 +825,21 @@ pub extern "C" fn fastart_evaluate_keyframes_c(
 ) {
     if kf_count == 0 || kf_times_ptr.is_null() {
         unsafe {
-            if !out_x.is_null() { *out_x = base_x; }
-            if !out_y.is_null() { *out_y = base_y; }
-            if !out_scale.is_null() { *out_scale = base_scale; }
-            if !out_rot.is_null() { *out_rot = base_rotation; }
-            if !out_opacity.is_null() { *out_opacity = base_opacity; }
+            if !out_x.is_null() {
+                *out_x = base_x;
+            }
+            if !out_y.is_null() {
+                *out_y = base_y;
+            }
+            if !out_scale.is_null() {
+                *out_scale = base_scale;
+            }
+            if !out_rot.is_null() {
+                *out_rot = base_rotation;
+            }
+            if !out_opacity.is_null() {
+                *out_opacity = base_opacity;
+            }
         }
         return;
     }
@@ -670,11 +891,21 @@ pub extern "C" fn fastart_evaluate_keyframes_c(
     }
 
     unsafe {
-        if !out_x.is_null() { *out_x = res_x; }
-        if !out_y.is_null() { *out_y = res_y; }
-        if !out_scale.is_null() { *out_scale = res_scale; }
-        if !out_rot.is_null() { *out_rot = res_rot; }
-        if !out_opacity.is_null() { *out_opacity = res_opacity; }
+        if !out_x.is_null() {
+            *out_x = res_x;
+        }
+        if !out_y.is_null() {
+            *out_y = res_y;
+        }
+        if !out_scale.is_null() {
+            *out_scale = res_scale;
+        }
+        if !out_rot.is_null() {
+            *out_rot = res_rot;
+        }
+        if !out_opacity.is_null() {
+            *out_opacity = res_opacity;
+        }
     }
 }
 
@@ -954,3 +1185,50 @@ pub extern "C" fn fastart_export_mp4_c(
     to_copy
 }
 
+/// Generate animation keyframes (WASM export).
+///
+/// `preset_ptr` / `preset_len` – UTF-8 bytes of the preset id string (e.g. "fade_in").
+/// `category_ptr` / `category_len` – UTF-8 bytes of the category ("in", "out", "loop").
+/// `frames`  – number of frames to generate.
+/// `out_ptr` – caller-allocated f32 buffer, length must be >= frames * 6.
+///
+/// Returns the number of f32 values written (frames * 6), or 0 on error.
+#[no_mangle]
+pub extern "C" fn fastart_generate_animation_keyframes_c(
+    preset_ptr: *const u8,
+    preset_len: usize,
+    category_ptr: *const u8,
+    category_len: usize,
+    frames: usize,
+    out_ptr: *mut f32,
+) -> usize {
+    if preset_ptr.is_null() || category_ptr.is_null() || out_ptr.is_null() || frames == 0 {
+        return 0;
+    }
+
+    let preset = unsafe {
+        let bytes = slice::from_raw_parts(preset_ptr, preset_len);
+        match std::str::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        }
+    };
+
+    let category = unsafe {
+        let bytes = slice::from_raw_parts(category_ptr, category_len);
+        match std::str::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        }
+    };
+
+    let keyframes = fastart_core::generate_animation_keyframes(preset, category, frames);
+    let count = keyframes.len();
+
+    unsafe {
+        let out_slice = slice::from_raw_parts_mut(out_ptr, count);
+        out_slice.copy_from_slice(&keyframes);
+    }
+
+    count
+}

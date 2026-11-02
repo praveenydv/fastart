@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text, Platform } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { ClipTransform, KeyframeEasing } from "../../../types/project";
 import { styles } from "./KeyframeModalStyles";
 import { CompactSliderInput } from "../../Common/CompactSliderInput";
@@ -45,7 +44,6 @@ export default function KeyframePropertyControls({
     key: "scale" | "rotation" | "x" | "y" | "opacity",
     value: number,
   ) => {
-    soundEngine.playSfx("click");
     if (onUpdateKeyframeTransform) {
       if (key === "opacity") {
         onUpdateKeyframeTransform(localTime, activeTransform, value, activeEasing);
@@ -61,7 +59,6 @@ export default function KeyframePropertyControls({
   };
 
   const handleUpdateEasing = (easing: KeyframeEasing) => {
-    soundEngine.playSfx("pop");
     if (onUpdateKeyframeTransform) {
       onUpdateKeyframeTransform(localTime, activeTransform, activeOpacity, easing);
     }
@@ -213,7 +210,6 @@ export default function KeyframePropertyControls({
             <TouchableOpacity
               style={styles.nudgeCenterBtn}
               onPress={() => {
-                soundEngine.playSfx("pop");
                 if (onUpdateKeyframeTransform) {
                   onUpdateKeyframeTransform(
                     localTime,

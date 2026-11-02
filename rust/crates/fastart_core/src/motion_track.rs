@@ -94,6 +94,30 @@ pub fn evaluate_object_track_trajectory(
     track_rotation: bool,
     camera_center: bool,
 ) -> MotionTrackTransform {
+    evaluate_object_track_trajectory_with_options(
+        time,
+        trajectory,
+        0,
+        track_scale,
+        track_rotation,
+        camera_center,
+        false,
+        false,
+        1.0,
+    )
+}
+
+pub fn evaluate_object_track_trajectory_with_options(
+    time: f64,
+    trajectory: &[TrajectoryPoint],
+    anchor_index: usize,
+    track_scale: bool,
+    track_rotation: bool,
+    camera_center: bool,
+    camera_fit_to_screen: bool,
+    camera_lock_center: bool,
+    camera_zoom: f64,
+) -> MotionTrackTransform {
     if trajectory.is_empty() {
         return MotionTrackTransform {
             dx: 0.0,
@@ -103,7 +127,7 @@ pub fn evaluate_object_track_trajectory(
         };
     }
 
-    let origin = &trajectory[0];
+    let origin = &trajectory[anchor_index.min(trajectory.len() - 1)];
     let current = match interpolate_trajectory(trajectory, time) {
         Some(p) => p,
         None => return MotionTrackTransform {
@@ -117,13 +141,24 @@ pub fn evaluate_object_track_trajectory(
     // Calculate delta relative to origin point at t0
     let mut dx = current.x - origin.x;
     let mut dy = current.y - origin.y;
-    let d_scale = if track_scale { current.scale } else { 1.0 };
+    let mut d_scale = if track_scale {
+        (current.scale / origin.scale.max(0.0001)).clamp(0.2, 5.0)
+    } else {
+        1.0
+    };
     let d_rot = if track_rotation { (current.rotation - origin.rotation).clamp(-15.0, 15.0) } else { 0.0 };
 
     if camera_center {
-        // Counter-act subject motion to lock it in the center of the viewport
-        dx = -dx;
-        dy = -dy;
+        if camera_lock_center {
+            dx = -(current.x - 50.0);
+            dy = -(current.y - 50.0);
+        } else {
+            dx = -dx;
+            dy = -dy;
+        }
+        if camera_fit_to_screen {
+            d_scale *= camera_zoom.max(1.0);
+        }
     }
 
     MotionTrackTransform {

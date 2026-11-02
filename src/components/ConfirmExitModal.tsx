@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from './Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../utils/audioEngine';
 import { FastArtProject } from '../types/project';
 
 export interface ConfirmExitModalProps {
@@ -100,12 +99,10 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
   };
 
   const handleCancel = () => {
-    soundEngine.playSfx('pop');
     closeWithAnimation(onCancel);
   };
 
   const handleConfirm = () => {
-    soundEngine.playSfx('whoosh');
     closeWithAnimation(onConfirmExit);
   };
 

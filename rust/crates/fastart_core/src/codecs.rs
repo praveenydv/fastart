@@ -616,17 +616,17 @@ pub fn macroblock_has_changed(
     let start_y = mby * 16;
 
     let mut diff_sum: u32 = 0;
-    for py in (0..16).step_by(2) {
+    for py in (0..16).step_by(4) {
         let cy = (start_y + py).min(height - 1);
         let offset = cy * curr.stride;
-        for px in (0..16).step_by(2) {
+        for px in (0..16).step_by(4) {
             let cx = (start_x + px).min(width - 1);
             let idx = offset + cx * 4;
             let dr = (curr.data[idx] as i32 - prev.data[idx] as i32).abs() as u32;
             let dg = (curr.data[idx + 1] as i32 - prev.data[idx + 1] as i32).abs() as u32;
             let db = (curr.data[idx + 2] as i32 - prev.data[idx + 2] as i32).abs() as u32;
             diff_sum += dr + dg + db;
-            if diff_sum > 256 {
+            if diff_sum > 96 {
                 return true;
             }
         }
@@ -669,6 +669,7 @@ pub fn encode_h264_pframe_into(
                 // Table 7-13 in H.264 spec: mb_type 30 is I_PCM for P-slices
                 bw.write_ue(30);
                 bw.align_zero();
+                bw.data.reserve(384);
 
                 let start_x = mbx * 16;
                 let start_y = mby * 16;

@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { TextClip } from "../../types/project";
 import {
   startLiveSpeechRecognition,
@@ -91,11 +90,9 @@ export default function TextModal({
         recognitionSessionRef.current = null;
       }
       setIsListening(false);
-      soundEngine.playSfx("click");
       return;
     }
 
-    soundEngine.playSfx("pop");
     if (isLiveSpeechRecognitionSupported()) {
       const session = startLiveSpeechRecognition(
         "auto",
@@ -291,7 +288,6 @@ export default function TextModal({
     if (tmpl.style?.fontSize) setSelectedFontSize(tmpl.style.fontSize);
     if (tmpl.style?.borderColor) setSelectedBorderColor(tmpl.style.borderColor);
     if (tmpl.style?.textEffect) setSelectedTextEffect(tmpl.style.textEffect);
-    soundEngine.playSfx("click");
   };
 
   const handleAddTextClip = () => {
@@ -308,7 +304,6 @@ export default function TextModal({
       animation: undefined,
       style: baseStyle,
     };
-    soundEngine.playSfx("pop");
     onAddText(textClip);
   };
 
@@ -467,7 +462,6 @@ export default function TextModal({
                   activeTab === "font" && styles.tabBtnActive,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setActiveTab("font");
                 }}
                 activeOpacity={0.7}
@@ -493,7 +487,6 @@ export default function TextModal({
                   activeTab === "style" && styles.tabBtnActive,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setActiveTab("style");
                 }}
                 activeOpacity={0.7}
@@ -519,7 +512,6 @@ export default function TextModal({
                   activeTab === "effects" && styles.tabBtnActive,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setActiveTab("effects");
                 }}
                 activeOpacity={0.7}

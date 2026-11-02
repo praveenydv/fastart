@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { MaskConfig, MaskShape } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
@@ -126,7 +125,6 @@ export default function MaskModal({
   };
 
   const handleReset = () => {
-    soundEngine.playSfx('pop');
     setMaskShape('none');
     setMaskSize(60);
     setMaskWidth(60);
@@ -163,12 +161,10 @@ export default function MaskModal({
   const isModified = maskShape !== 'none';
 
   const handleCancel = () => {
-    soundEngine.playSfx('pop');
     onClose();
   };
 
   const handleApply = () => {
-    soundEngine.playSfx('whoosh');
     if (onApply) {
       onApply();
     } else {
@@ -234,7 +230,6 @@ export default function MaskModal({
                       key={m.id}
                       style={[styles.maskCard, isSelected && styles.maskCardActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         setMaskShape(m.id);
                         triggerUpdate({ shape: m.id });
                       }}
@@ -286,7 +281,6 @@ export default function MaskModal({
                     <TouchableOpacity
                       style={[styles.kfStepBtn, !hasPrevKeyframe && styles.kfStepBtnDisabled]}
                       onPress={() => {
-                        soundEngine.playSfx('pop');
                         onJumpPrevKeyframe?.();
                       }}
                       disabled={!hasPrevKeyframe}
@@ -307,7 +301,6 @@ export default function MaskModal({
                         hasKeyframeAtCurrentTime && styles.kfDiamondBtnActive,
                       ]}
                       onPress={() => {
-                        soundEngine.playSfx(hasKeyframeAtCurrentTime ? 'pop' : 'whoosh');
                         onAddKeyframe?.();
                       }}
                       activeOpacity={0.7}
@@ -346,7 +339,6 @@ export default function MaskModal({
                     <TouchableOpacity
                       style={[styles.kfStepBtn, !hasNextKeyframe && styles.kfStepBtnDisabled]}
                       onPress={() => {
-                        soundEngine.playSfx('pop');
                         onJumpNextKeyframe?.();
                       }}
                       disabled={!hasNextKeyframe}
@@ -374,7 +366,6 @@ export default function MaskModal({
                     <TouchableOpacity
                       style={[styles.lockBtn, isAspectLocked && styles.lockBtnActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         setIsAspectLocked(!isAspectLocked);
                       }}
                       activeOpacity={0.7}
@@ -405,7 +396,6 @@ export default function MaskModal({
                           key={preset.label}
                           style={[styles.ratioPill, isActive && styles.ratioPillActive]}
                           onPress={() => {
-                            soundEngine.playSfx('click');
                             setMaskWidth(preset.w);
                             setMaskHeight(preset.h);
                             setMaskSize(Math.max(preset.w, preset.h));
@@ -558,7 +548,6 @@ export default function MaskModal({
                       {(maskX !== 0 || maskY !== 0) && (
                         <TouchableOpacity
                           onPress={() => {
-                            soundEngine.playSfx('click');
                             setMaskX(0);
                             setMaskY(0);
                             triggerUpdate({ x: 0, y: 0 });
@@ -617,7 +606,6 @@ export default function MaskModal({
                   <TouchableOpacity
                     style={styles.toggleRow}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       const next = !maskInverted;
                       setMaskInverted(next);
                       triggerUpdate({ inverted: next });

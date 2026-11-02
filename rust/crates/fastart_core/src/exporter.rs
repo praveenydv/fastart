@@ -92,9 +92,23 @@ impl FastArtExporter {
 
             let fit = clip.fit.as_deref().unwrap_or("contain");
 
-            if fit == "contain" && (src_frame.width != width || src_frame.height != height) {
-                let mut blur_bg = src_frame.clone();
-                apply_fast_blur(&mut blur_bg, 8);
+            if project.canvas_background == "blur" && (src_frame.width != width || src_frame.height != height) {
+                // Downsample to 128x72 for instant 0.05ms blur instead of 50ms 1080p full blur
+                let thumb_w = 128u32;
+                let thumb_h = ((128.0 * src_frame.height as f32 / src_frame.width.max(1) as f32) as u32).clamp(32, 128);
+                let mut blur_bg = FrameBuffer::new(thumb_w, thumb_h);
+                for ty in 0..thumb_h {
+                    let sy = (ty as usize * src_frame.height as usize) / thumb_h as usize;
+                    let src_row = sy * src_frame.stride;
+                    let dst_row = ty as usize * blur_bg.stride;
+                    for tx in 0..thumb_w {
+                        let sx = (tx as usize * src_frame.width as usize) / thumb_w as usize;
+                        let s_idx = src_row + sx * 4;
+                        let d_idx = dst_row + tx as usize * 4;
+                        blur_bg.data[d_idx..d_idx + 4].copy_from_slice(&src_frame.data[s_idx..s_idx + 4]);
+                    }
+                }
+                apply_fast_blur(&mut blur_bg, 3);
                 let mut bg_transform = transform;
                 bg_transform.opacity = (bg_transform.opacity * 0.45).clamp(0.0, 1.0);
                 composite_transformed(
@@ -453,7 +467,7 @@ impl FastArtExporter {
             }
 
             let _ = writer.append_frame(&nal_out);
-            prev_fb.data.copy_from_slice(&curr_fb.data);
+            std::mem::swap(&mut curr_fb, &mut prev_fb);
         }
 
         match writer.finish() {
@@ -525,7 +539,7 @@ impl FastArtExporter {
             }
 
             writer.append_frame(&nal_out)?;
-            prev_fb.data.copy_from_slice(&curr_fb.data);
+            std::mem::swap(&mut curr_fb, &mut prev_fb);
         }
 
         writer.finish()?;

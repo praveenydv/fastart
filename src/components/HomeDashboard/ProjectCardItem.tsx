@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { theme } from '../../constants/theme';
 import { formatPlayheadTime } from '../Timeline/timelineUtils';
 
@@ -55,7 +54,6 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
           isHovered && styles.gridCardHovered,
         ]}
         onPress={() => {
-          soundEngine.playSfx('whoosh');
           onOpenProject(project.id);
         }}
         activeOpacity={0.88}
@@ -131,7 +129,6 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
             style={styles.gridMoreBtn}
             onPress={(e: any) => {
               e?.stopPropagation?.();
-              soundEngine.playSfx('click');
               onOptionsPress(project);
             }}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -149,7 +146,6 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
     <TouchableOpacity
       style={styles.listCard}
       onPress={() => {
-        soundEngine.playSfx('whoosh');
         onOpenProject(project.id);
       }}
       activeOpacity={0.8}
@@ -184,7 +180,6 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
             style={styles.listMoreButton}
             onPress={(e: any) => {
               e?.stopPropagation?.();
-              soundEngine.playSfx('click');
               onOptionsPress(project);
             }}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}

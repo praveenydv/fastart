@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import * as ExpoSplashScreen from "expo-splash-screen";
-import { soundEngine } from "../utils/audioEngine";
 import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia, setupAutoReconnectListener } from "../utils/largeMediaStorage";
 import { restoreClipMasksFromStorage } from "../services/selfieSegmentationService";
 import {
@@ -67,7 +66,6 @@ export function useAppBootstrap({
   useEffect(() => {
     let isMounted = true;
     if (settings) {
-      soundEngine.setEnabled(settings.soundEffects === true);
     }
 
     setSplashStatus("Connecting local workspace...");
@@ -83,7 +81,6 @@ export function useAppBootstrap({
         setSettings(currentSettings);
         setNotifications(currentNotifs);
         setLastSession(session);
-        soundEngine.setEnabled(currentSettings.soundEffects === true);
 
         if (route.screen === "editor" && route.projectKey) {
           const key = route.projectKey;
@@ -349,7 +346,6 @@ export function useAppBootstrap({
   const handleUpdateSettings = useCallback((newSettings: any) => {
     const updated = saveSettings(newSettings);
     setSettings(updated);
-    soundEngine.setEnabled(updated.soundEffects === true);
   }, []);
 
   const handleReloadAllData = useCallback(() => {
@@ -361,7 +357,6 @@ export function useAppBootstrap({
     setSettings(currentSettings);
     setNotifications(currentNotifs);
     setLastSession(currentSession);
-    soundEngine.setEnabled(currentSettings.soundEffects === true);
     setProject(projs.length > 0 ? projs[0] : null);
   }, []);
 

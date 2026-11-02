@@ -9,7 +9,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
@@ -112,7 +111,7 @@ const getAnimPreviewStyle = (id: string, category: string): any => {
   }
 };
 
-interface AnimationModalProps {
+export interface AnimationModalProps {
   visible: boolean;
   onClose: () => void;
   selectedClip: any;
@@ -224,7 +223,6 @@ export default function AnimationModal({
   }, [activeCategory]);
 
   const handleSelectPreset = (presetId: string) => {
-    soundEngine.playSfx('click');
     if (!project || !selectedClip) return;
 
     const tracks = { ...project.tracks };
@@ -277,7 +275,6 @@ export default function AnimationModal({
   };
 
   const handleClearAll = () => {
-    soundEngine.playSfx('pop');
     if (!project || !selectedClip) return;
 
     const tracks = { ...project.tracks };
@@ -301,7 +298,6 @@ export default function AnimationModal({
   };
 
   const handleDurationChange = (val: number) => {
-    soundEngine.playSfx('click');
     if (!project || !selectedClip) return;
 
     if (activeCategory === 'in') {
@@ -373,7 +369,6 @@ export default function AnimationModal({
         <TouchableOpacity
           style={[styles.tabItem, activeCategory === 'in' && styles.tabItemActive]}
           onPress={() => {
-            soundEngine.playSfx('click');
             setActiveCategory('in');
           }}
           activeOpacity={0.7}
@@ -387,7 +382,6 @@ export default function AnimationModal({
         <TouchableOpacity
           style={[styles.tabItem, activeCategory === 'out' && styles.tabItemActive]}
           onPress={() => {
-            soundEngine.playSfx('click');
             setActiveCategory('out');
           }}
           activeOpacity={0.7}
@@ -401,7 +395,6 @@ export default function AnimationModal({
         <TouchableOpacity
           style={[styles.tabItem, activeCategory === 'loop' && styles.tabItemActive]}
           onPress={() => {
-            soundEngine.playSfx('click');
             setActiveCategory('loop');
           }}
           activeOpacity={0.7}

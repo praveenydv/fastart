@@ -3,7 +3,6 @@ import { View, Text, Modal, Image } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { styles } from './HomeDashboardStyles';
-import { soundEngine } from '../../utils/audioEngine';
 import { theme } from '../../constants/theme';
 
 interface ProjectOptionsMenuProps {
@@ -74,7 +73,6 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
               style={styles.sheetActionItem}
               onPress={() => {
                 if (optionsProject) {
-                  soundEngine.playSfx('whoosh');
                   onOpenProject(optionsProject.id);
                   onClose();
                 }
@@ -104,7 +102,6 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
               style={styles.sheetActionItem}
               onPress={() => {
                 if (optionsProject) {
-                  soundEngine.playSfx('pop');
                   onDuplicateProject(optionsProject.id);
                   onClose();
                 }
@@ -120,7 +117,6 @@ export const ProjectOptionsMenu: React.FC<ProjectOptionsMenuProps> = ({
               style={styles.sheetActionItem}
               onPress={() => {
                 if (optionsProject) {
-                  soundEngine.playSfx('click');
                   onSelectDelete(optionsProject);
                   onClose();
                 }

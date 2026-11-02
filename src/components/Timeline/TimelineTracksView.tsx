@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { UnifiedClipItem, TRACK_ROW_HEIGHT, MAX_TRACKS } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
 import { TimelineClipWaveform } from "./TimelineClipWaveform";
@@ -246,7 +245,6 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
               ]}
               onPress={() => {
                 if (selectedClipId) {
-                  soundEngine.playSfx("click");
                   onSelectClip("", "video");
                 }
               }}
@@ -420,7 +418,6 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                       onPress={(e: any) => {
                         if (e?.stopPropagation) e.stopPropagation();
                         e?.nativeEvent?.stopPropagation?.();
-                        soundEngine.playSfx("click");
                         handleRemoveTrack(trackIdx);
                       }}
                       {...(Platform.OS === "web"
@@ -495,7 +492,6 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                             },
                             onDoubleClick: (e: any) => {
                               if (e?.stopPropagation) e.stopPropagation();
-                              soundEngine.playSfx("click");
                               onSelectClip(clip.id, clip.type);
                               onOpenEditModal?.(clip.id, clip.type);
                             },
@@ -997,7 +993,6 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
         style={{ flex: 1, minHeight: 48, width: "100%" }}
         onPress={() => {
           if (selectedClipId) {
-            soundEngine.playSfx("click");
             onSelectClip("", "video");
           }
         }}

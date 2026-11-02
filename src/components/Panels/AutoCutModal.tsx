@@ -10,7 +10,6 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { openMediaService, OpenAudioItem, OpenMediaItem } from '../../services/openMediaService';
 import { loadUploadedMedia, loadUploadedAudio } from '../../utils/storage';
 import { FastArtProject } from '../../types/project';
@@ -171,7 +170,6 @@ export default function AutoCutModal({
   }, [visible, currentProject]);
 
   const toggleClipSelection = (id: string) => {
-    soundEngine.playSfx('click');
     setSelectedClips((prev) => {
       if (prev.includes(id)) {
         if (prev.length <= 1) return prev;
@@ -183,13 +181,11 @@ export default function AutoCutModal({
   };
 
   const handleSelectTemplate = (template: AutoCutTemplate) => {
-    soundEngine.playSfx('click');
     setSelectedTemplate(template.id);
     setClipPace(template.pace);
   };
 
   const handlePickMedia = async () => {
-    soundEngine.playSfx("click");
     try {
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["videos", "images"],
@@ -209,7 +205,6 @@ export default function AutoCutModal({
         });
         setCustomClips((prev) => [...newClips, ...prev]);
         setSelectedClips((prev) => [...newClips.map((c) => c.id), ...prev]);
-        soundEngine.playSfx('whoosh');
       }
     } catch (err) {
       console.warn("AutoCut image picker error:", err);
@@ -219,7 +214,6 @@ export default function AutoCutModal({
   const allAvailableClips = [...customClips, ...availableVideos];
 
   const handleGenerate = () => {
-    soundEngine.playSfx('whoosh');
     const newProject = generateAutoCutProject({
       allAvailableClips,
       selectedClips,
@@ -242,7 +236,6 @@ export default function AutoCutModal({
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => {
-              soundEngine.playSfx('click');
               onClose();
             }}
             style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
@@ -389,7 +382,6 @@ export default function AutoCutModal({
                       key={pace.id}
                       style={[styles.paceCard, isSelected && styles.paceCardActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         setClipPace(pace.id as any);
                       }}
                       activeOpacity={0.7}
@@ -432,7 +424,6 @@ export default function AutoCutModal({
                       key={music.id}
                       style={[styles.audioCard, isSelected && styles.audioCardActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         setSelectedMusicId(music.id);
                       }}
                       activeOpacity={0.7}

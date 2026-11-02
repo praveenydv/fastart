@@ -387,6 +387,103 @@ pub fn composite_transformed(
     let center_sy = src_h * 0.5;
     let stride = dst.stride;
 
+    // Ultra-Fast Axis-Aligned Scanline Path (Covers 99% of all standard video playback)
+    if transform.rotation_rad.abs() < 0.001 {
+        let inv_sx = if transform.flip_x { -1.0 / total_sx } else { 1.0 / total_sx };
+        let inv_sy = if transform.flip_y { -1.0 / total_sy } else { 1.0 / total_sy };
+
+        // Determine destination bounds that actually overlap the source image
+        let (min_u_px, max_u_px) = if inv_sx > 0.0 {
+            ((-center_sx) / inv_sx + center_dx, (src_w - center_sx) / inv_sx + center_dx)
+        } else {
+            ((src_w - center_sx) / inv_sx + center_dx, (-center_sx) / inv_sx + center_dx)
+        };
+        let min_dx = (min_u_px.floor().max(0.0) as usize).min(dst.width as usize);
+        let max_dx = (max_u_px.ceil().max(0.0) as usize).min(dst.width as usize);
+
+        let (min_v_py, max_v_py) = if inv_sy > 0.0 {
+            ((-center_sy) / inv_sy + center_dy, (src_h - center_sy) / inv_sy + center_dy)
+        } else {
+            ((src_h - center_sy) / inv_sy + center_dy, (-center_sy) / inv_sy + center_dy)
+        };
+        let min_dy = (min_v_py.floor().max(0.0) as usize).min(dst.height as usize);
+        let max_dy = (max_v_py.ceil().max(0.0) as usize).min(dst.height as usize);
+
+        if min_dx >= max_dx || min_dy >= max_dy {
+            return;
+        }
+
+        let process_fast_row = |dy: usize, row_bytes: &mut [u8]| {
+            let py = dy as f32 - center_dy;
+            let v = py * inv_sy + center_sy;
+            if v < 0.0 || v >= src_h {
+                return;
+            }
+
+            let y0 = v.floor() as u32;
+            let y1 = (y0 + 1).min(src.height - 1);
+            let fy = v - y0 as f32;
+            let fy1 = 1.0 - fy;
+            let row0_offset = (y0 as usize) * src.stride;
+            let row1_offset = (y1 as usize) * src.stride;
+
+            for dx in min_dx..max_dx {
+                let px = dx as f32 - center_dx;
+                let u = px * inv_sx + center_sx;
+                if u < 0.0 || u >= src_w {
+                    continue;
+                }
+
+                let x0 = u.floor() as u32;
+                let x1 = (x0 + 1).min(src.width - 1);
+                let fx = u - x0 as f32;
+                let fx1 = 1.0 - fx;
+
+                let w00 = fx1 * fy1;
+                let w10 = fx * fy1;
+                let w01 = fx1 * fy;
+                let w11 = fx * fy;
+
+                let idx00 = row0_offset + (x0 as usize) * 4;
+                let idx10 = row0_offset + (x1 as usize) * 4;
+                let idx01 = row1_offset + (x0 as usize) * 4;
+                let idx11 = row1_offset + (x1 as usize) * 4;
+
+                let r = (src.data[idx00] as f32 * w00 + src.data[idx10] as f32 * w10 + src.data[idx01] as f32 * w01 + src.data[idx11] as f32 * w11) as u8;
+                let g = (src.data[idx00 + 1] as f32 * w00 + src.data[idx10 + 1] as f32 * w10 + src.data[idx01 + 1] as f32 * w01 + src.data[idx11 + 1] as f32 * w11) as u8;
+                let b = (src.data[idx00 + 2] as f32 * w00 + src.data[idx10 + 2] as f32 * w10 + src.data[idx01 + 2] as f32 * w01 + src.data[idx11 + 2] as f32 * w11) as u8;
+                let mut a = (src.data[idx00 + 3] as f32 * w00 + src.data[idx10 + 3] as f32 * w10 + src.data[idx01 + 3] as f32 * w01 + src.data[idx11 + 3] as f32 * w11) as u8;
+
+                if a == 0 {
+                    continue;
+                }
+
+                if let Some(m) = mask {
+                    let norm_x = (u - center_sx) / center_sx;
+                    let norm_y = (v - center_sy) / center_sy;
+                    a = (a as f32 * evaluate_mask(m, norm_x, norm_y)) as u8;
+                }
+
+                if let Some(c) = cutout {
+                    a = (a as f32 * evaluate_cutout(c, r, g, b)) as u8;
+                }
+
+                if a > 0 {
+                    let idx = dx * 4;
+                    let dst_px: &mut [u8; 4] = (&mut row_bytes[idx..idx + 4]).try_into().unwrap();
+                    blend_pixel_over(dst_px, r, g, b, a, transform.opacity, blend_mode);
+                }
+            }
+        };
+
+        for dy in min_dy..max_dy {
+            let row_start = dy * stride;
+            let row_bytes = &mut dst.data[row_start..row_start + stride];
+            process_fast_row(dy, row_bytes);
+        }
+        return;
+    }
+
     let process_row = |dy: usize, row_bytes: &mut [u8]| {
         let py = dy as f32 - center_dy;
 

@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../utils/audioEngine";
 import { AppNotification, formatNotificationTime } from "../utils/storage";
 import { theme } from "../constants/theme";
 
@@ -101,7 +100,6 @@ export default function NotificationsScreen({
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
-              soundEngine.playSfx("click");
               onBack();
             }}
             activeOpacity={0.7}
@@ -125,7 +123,6 @@ export default function NotificationsScreen({
               <TouchableOpacity
                 style={styles.markReadBtn}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   onMarkAllAsRead();
                 }}
                 activeOpacity={0.7}
@@ -144,7 +141,6 @@ export default function NotificationsScreen({
               <TouchableOpacity
                 style={styles.clearBtn}
                 onPress={() => {
-                  soundEngine.playSfx("pop");
                   onClearAll();
                 }}
                 activeOpacity={0.7}
@@ -179,7 +175,6 @@ export default function NotificationsScreen({
                     filter === "all" && styles.filterPillActive,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     setFilter("all");
                   }}
                   activeOpacity={0.7}
@@ -200,7 +195,6 @@ export default function NotificationsScreen({
                     filter === "unread" && styles.filterPillActive,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     setFilter("unread");
                   }}
                   activeOpacity={0.7}
@@ -259,7 +253,6 @@ export default function NotificationsScreen({
                     activeOpacity={hasAction ? 0.75 : 0.95}
                     onPress={() => {
                       if (hasAction && onActionClick) {
-                        soundEngine.playSfx("whoosh");
                         onActionClick(item);
                       }
                     }}
@@ -329,7 +322,6 @@ export default function NotificationsScreen({
                             <TouchableOpacity
                               style={styles.actionBtn}
                               onPress={() => {
-                                soundEngine.playSfx("whoosh");
                                 onActionClick?.(item);
                               }}
                               activeOpacity={0.7}
@@ -355,7 +347,6 @@ export default function NotificationsScreen({
                         style={styles.deleteItemBtn}
                         onPress={(e) => {
                           e.stopPropagation?.();
-                          soundEngine.playSfx("pop");
                           onDeleteNotification(item.id);
                         }}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

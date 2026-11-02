@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text, ScrollView } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import {
   COLOR_SWATCHES,
   BG_SWATCHES,
@@ -55,7 +54,6 @@ export default function TextStyleTab({
                   isSelected && styles.colorCircleSelected,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedColor(color);
                 }}
                 activeOpacity={0.75}
@@ -105,7 +103,6 @@ export default function TextStyleTab({
                   isSelected && styles.bgOptionPillActive,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedBg(bg.value);
                 }}
                 activeOpacity={0.75}
@@ -159,7 +156,6 @@ export default function TextStyleTab({
             <View style={styles.stepperBox}>
               <TouchableOpacity
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedStrokeWidth(
                     Math.max(0.5, Number((selectedStrokeWidth - 0.5).toFixed(1)))
                   );
@@ -174,7 +170,6 @@ export default function TextStyleTab({
               </Text>
               <TouchableOpacity
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedStrokeWidth(
                     Math.min(16, Number((selectedStrokeWidth + 0.5).toFixed(1)))
                   );
@@ -205,7 +200,6 @@ export default function TextStyleTab({
                   isSelected && styles.presetChipActive,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedStrokeWidth(sw.value);
                   if (
                     sw.value > 0 &&
@@ -259,7 +253,6 @@ export default function TextStyleTab({
                     },
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     setSelectedStrokeColor("none");
                     setSelectedStrokeWidth(0);
                   }}
@@ -283,7 +276,6 @@ export default function TextStyleTab({
                   isSelected && styles.colorCircleSelected,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedStrokeColor(swatch.value);
                   if (!selectedStrokeWidth || selectedStrokeWidth === 0) {
                     setSelectedStrokeWidth(2.5);

@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text, ScrollView } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { TEXT_EFFECT_OPTIONS, BORDER_OPTIONS } from "./textModalConstants";
 import { styles } from "./TextModalStyles";
 
@@ -37,7 +36,6 @@ export default function TextEffectsTab({
                 key={eff.id}
                 style={[styles.effectPill, isActive && styles.effectPillActive]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedTextEffect(eff.id);
                 }}
                 activeOpacity={0.7}
@@ -83,7 +81,6 @@ export default function TextEffectsTab({
                   isSelected && styles.bgOptionPillActive,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setSelectedBorderColor(b.color);
                 }}
                 activeOpacity={0.75}

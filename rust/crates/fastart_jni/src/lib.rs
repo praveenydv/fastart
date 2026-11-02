@@ -5,6 +5,42 @@ use std::collections::HashMap;
 
 use fastart_core::{FastArtEngine, FastArtProject};
 
+fn initialize_modnet_path(mut env: JNIEnv, path: JString) -> jstring {
+    let result = (|| -> Result<(), String> {
+        let path: String = env.get_string(&path).map_err(|error| format!("Invalid MODNet path: {error}"))?.into();
+        let model = std::fs::read(&path).map_err(|error| format!("Could not read MODNet model at {path}: {error}"))?;
+        fastart_core::initialize_modnet(&model)
+    })();
+    let message = result.map(|_| "ok".to_string()).unwrap_or_else(|error| error);
+    env.new_string(message).expect("create MODNet init result").into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeInitializeModnet(
+    env: JNIEnv, _class: JClass, path: JString,
+) -> jstring { initialize_modnet_path(env, path) }
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeInitializeModnet(
+    env: JNIEnv, class: JClass, path: JString,
+) -> jstring { Java_com_fastart_FastArtRustModule_00024Companion_nativeInitializeModnet(env, class, path) }
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeInferModnetRgba(
+    env: JNIEnv, _class: JClass, j_rgba: JByteArray, width: jint, height: jint,
+    threshold: jni::sys::jfloat, feather: jni::sys::jfloat,
+) -> jbyteArray {
+    let len = match env.get_array_length(&j_rgba) { Ok(len) => len as usize, Err(_) => return env.new_byte_array(0).unwrap().into_raw() };
+    let mut signed = vec![0i8; len];
+    if env.get_byte_array_region(&j_rgba, 0, &mut signed).is_err() { return env.new_byte_array(0).unwrap().into_raw(); }
+    let rgba: Vec<u8> = signed.into_iter().map(|byte| byte as u8).collect();
+    let Ok(alpha) = fastart_core::infer_modnet_rgba(&rgba, width.max(0) as usize, height.max(0) as usize, threshold, feather) else { return env.new_byte_array(0).unwrap().into_raw(); };
+    let output = env.new_byte_array(alpha.len() as jsize).unwrap();
+    let signed_alpha: Vec<i8> = alpha.into_iter().map(|byte| byte as i8).collect();
+    let _ = env.set_byte_array_region(&output, 0, &signed_alpha);
+    output.into_raw()
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeInit(
     _env: JNIEnv,
@@ -26,7 +62,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeDetectBeats(
     };
 
     let mut samples = vec![0.0f32; len];
-    if env.get_float_array_region(&j_samples, 0, &mut samples).is_err() {
+    if env
+        .get_float_array_region(&j_samples, 0, &mut samples)
+        .is_err()
+    {
         return env.new_string("{}").unwrap().into_raw();
     }
 
@@ -48,7 +87,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeGenerateWaveform
     };
 
     let mut samples = vec![0.0f32; len];
-    if env.get_float_array_region(&j_samples, 0, &mut samples).is_err() {
+    if env
+        .get_float_array_region(&j_samples, 0, &mut samples)
+        .is_err()
+    {
         return env.new_float_array(0).unwrap().into_raw();
     }
 
@@ -60,6 +102,51 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeGenerateWaveform
 
     let _ = env.set_float_array_region(&result_array, 0, &peaks);
     result_array.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeDecodeAudioPeaks(
+    env: JNIEnv,
+    _class: JClass,
+    j_data: JByteArray,
+    num_points: jint,
+) -> jstring {
+    let len = match env.get_array_length(&j_data) {
+        Ok(len) => len as usize,
+        Err(_) => return env.new_string("").unwrap().into_raw(),
+    };
+    let mut data = vec![0i8; len];
+    if env.get_byte_array_region(&j_data, 0, &mut data).is_err() {
+        return env.new_string("").unwrap().into_raw();
+    }
+    let bytes: Vec<u8> = data.into_iter().map(|byte| byte as u8).collect();
+    let Some(parsed) = fastart_core::decode_media_audio_peaks(&bytes, num_points.max(1) as usize)
+        .or_else(|| fastart_core::parse_wav_peaks(&bytes, num_points.max(1) as usize))
+    else {
+        return env.new_string("").unwrap().into_raw();
+    };
+    let json = serde_json::to_string(&parsed).unwrap_or_default();
+    env.new_string(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeDecodeAudioPeaks(
+    env: JNIEnv,
+    class: JClass,
+    data: JByteArray,
+    num_points: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustBridge_nativeDecodeAudioPeaks(env, class, data, num_points)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeDecodeAudioPeaks(
+    env: JNIEnv,
+    class: JClass,
+    data: JByteArray,
+    num_points: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustBridge_nativeDecodeAudioPeaks(env, class, data, num_points)
 }
 
 #[no_mangle]
@@ -228,6 +315,215 @@ pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportMp4(
 
 // Aliases for com.fastart.FastArtRustModule direct invocations
 #[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeDetectBeats(
+    env: JNIEnv,
+    class: JClass,
+    samples: JFloatArray,
+    sample_rate: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustBridge_nativeDetectBeats(env, class, samples, sample_rate)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeDetectBeats(
+    env: JNIEnv,
+    class: JClass,
+    samples: JFloatArray,
+    sample_rate: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustBridge_nativeDetectBeats(env, class, samples, sample_rate)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeGenerateWaveform(
+    env: JNIEnv,
+    class: JClass,
+    samples: JFloatArray,
+    buckets: jint,
+) -> jfloatArray {
+    Java_com_fastart_FastArtRustBridge_nativeGenerateWaveform(env, class, samples, buckets)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeGenerateWaveform(
+    env: JNIEnv,
+    class: JClass,
+    samples: JFloatArray,
+    buckets: jint,
+) -> jfloatArray {
+    Java_com_fastart_FastArtRustBridge_nativeGenerateWaveform(env, class, samples, buckets)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeDenoiseWaveformPeaks(
+    env: JNIEnv,
+    _class: JClass,
+    j_peaks: JFloatArray,
+) -> jfloatArray {
+    let len = match env.get_array_length(&j_peaks) {
+        Ok(len) => len as usize,
+        Err(_) => return env.new_float_array(0).unwrap().into_raw(),
+    };
+    let mut peaks = vec![0.0f32; len];
+    if env.get_float_array_region(&j_peaks, 0, &mut peaks).is_err() {
+        return env.new_float_array(0).unwrap().into_raw();
+    }
+    fastart_core::denoise_waveform_peaks(&mut peaks);
+    let result = match env.new_float_array(len as jsize) {
+        Ok(array) => array,
+        Err(_) => return env.new_float_array(0).unwrap().into_raw(),
+    };
+    let _ = env.set_float_array_region(&result, 0, &peaks);
+    result.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeDenoiseWaveformPeaks(
+    env: JNIEnv,
+    class: JClass,
+    peaks: JFloatArray,
+) -> jfloatArray {
+    Java_com_fastart_FastArtRustBridge_nativeDenoiseWaveformPeaks(env, class, peaks)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeDenoiseWaveformPeaks(
+    env: JNIEnv,
+    class: JClass,
+    peaks: JFloatArray,
+) -> jfloatArray {
+    Java_com_fastart_FastArtRustBridge_nativeDenoiseWaveformPeaks(env, class, peaks)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeSegmentFrameRgba(
+    env: JNIEnv,
+    class: JClass,
+    rgba: JByteArray,
+    width: jint,
+    height: jint,
+    threshold: jfloat,
+    feather: jfloat,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeSegmentFrameRgba(
+        env, class, rgba, width, height, threshold, feather,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeSegmentFrameRgba(
+    env: JNIEnv,
+    class: JClass,
+    rgba: JByteArray,
+    width: jint,
+    height: jint,
+    threshold: jfloat,
+    feather: jfloat,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeSegmentFrameRgba(
+        env, class, rgba, width, height, threshold, feather,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeProcessChroma(
+    env: JNIEnv,
+    class: JClass,
+    rgba: JByteArray,
+    width: jint,
+    height: jint,
+    r: jint,
+    g: jint,
+    b: jint,
+    threshold: jfloat,
+    feather: jfloat,
+    despill: jboolean,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeProcessChroma(
+        env, class, rgba, width, height, r, g, b, threshold, feather, despill,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeProcessChroma(
+    env: JNIEnv,
+    class: JClass,
+    rgba: JByteArray,
+    width: jint,
+    height: jint,
+    r: jint,
+    g: jint,
+    b: jint,
+    threshold: jfloat,
+    feather: jfloat,
+    despill: jboolean,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeProcessChroma(
+        env, class, rgba, width, height, r, g, b, threshold, feather, despill,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativePackAlphaRLE(
+    env: JNIEnv,
+    class: JClass,
+    alpha: JByteArray,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativePackAlphaRLE(env, class, alpha)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativePackAlphaRLE(
+    env: JNIEnv,
+    class: JClass,
+    alpha: JByteArray,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativePackAlphaRLE(env, class, alpha)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeUnpackAlphaRLE(
+    env: JNIEnv,
+    class: JClass,
+    rle: JByteArray,
+    output_len: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeUnpackAlphaRLE(env, class, rle, output_len)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeUnpackAlphaRLE(
+    env: JNIEnv,
+    class: JClass,
+    rle: JByteArray,
+    output_len: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeUnpackAlphaRLE(env, class, rle, output_len)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeEncodeRgbaPng(
+    env: JNIEnv,
+    class: JClass,
+    rgba: JByteArray,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeEncodeRgbaPng(env, class, rgba, width, height)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeEncodeRgbaPng(
+    env: JNIEnv,
+    class: JClass,
+    rgba: JByteArray,
+    width: jint,
+    height: jint,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustBridge_nativeEncodeRgbaPng(env, class, rgba, width, height)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeRenderSnapshot(
     env: JNIEnv,
     class: JClass,
@@ -236,7 +532,14 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeRenderSnapshot(
     width: jint,
     height: jint,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeRenderSnapshot(env, class, j_project_json, time_sec, width, height)
+    Java_com_fastart_FastArtRustBridge_nativeRenderSnapshot(
+        env,
+        class,
+        j_project_json,
+        time_sec,
+        width,
+        height,
+    )
 }
 
 #[no_mangle]
@@ -248,7 +551,14 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeR
     width: jint,
     height: jint,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeRenderSnapshot(env, class, j_project_json, time_sec, width, height)
+    Java_com_fastart_FastArtRustBridge_nativeRenderSnapshot(
+        env,
+        class,
+        j_project_json,
+        time_sec,
+        width,
+        height,
+    )
 }
 
 #[no_mangle]
@@ -260,7 +570,14 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeRenderFrameRgba(
     width: jint,
     height: jint,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(env, class, j_project_json, time_sec, width, height)
+    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(
+        env,
+        class,
+        j_project_json,
+        time_sec,
+        width,
+        height,
+    )
 }
 
 #[no_mangle]
@@ -272,7 +589,14 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeR
     width: jint,
     height: jint,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(env, class, j_project_json, time_sec, width, height)
+    Java_com_fastart_FastArtRustBridge_nativeRenderFrameRgba(
+        env,
+        class,
+        j_project_json,
+        time_sec,
+        width,
+        height,
+    )
 }
 
 #[no_mangle]
@@ -285,7 +609,15 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportGif(
     height: jint,
     duration: f64,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeExportGif(env, class, j_project_json, fps, width, height, duration)
+    Java_com_fastart_FastArtRustBridge_nativeExportGif(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+    )
 }
 
 #[no_mangle]
@@ -298,7 +630,15 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeE
     height: jint,
     duration: f64,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeExportGif(env, class, j_project_json, fps, width, height, duration)
+    Java_com_fastart_FastArtRustBridge_nativeExportGif(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+    )
 }
 
 #[no_mangle]
@@ -309,7 +649,13 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportWav(
     sample_rate: jint,
     duration: f64,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeExportWav(env, class, j_project_json, sample_rate, duration)
+    Java_com_fastart_FastArtRustBridge_nativeExportWav(
+        env,
+        class,
+        j_project_json,
+        sample_rate,
+        duration,
+    )
 }
 
 #[no_mangle]
@@ -320,7 +666,13 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeE
     sample_rate: jint,
     duration: f64,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeExportWav(env, class, j_project_json, sample_rate, duration)
+    Java_com_fastart_FastArtRustBridge_nativeExportWav(
+        env,
+        class,
+        j_project_json,
+        sample_rate,
+        duration,
+    )
 }
 
 #[no_mangle]
@@ -333,7 +685,15 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportMp4(
     height: jint,
     duration: f64,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeExportMp4(env, class, j_project_json, fps, width, height, duration)
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+    )
 }
 
 #[no_mangle]
@@ -346,7 +706,15 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeE
     height: jint,
     duration: f64,
 ) -> jbyteArray {
-    Java_com_fastart_FastArtRustBridge_nativeExportMp4(env, class, j_project_json, fps, width, height, duration)
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+    )
 }
 
 #[no_mangle]
@@ -446,12 +814,7 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeExportWav(
     };
 
     let audio_cache = HashMap::new();
-    let wav_bytes = FastArtEngine::export_wav(
-        &project,
-        sample_rate as u32,
-        duration,
-        &audio_cache,
-    );
+    let wav_bytes = FastArtEngine::export_wav(&project, sample_rate as u32, duration, &audio_cache);
 
     let j_bytes = match env.new_byte_array(wav_bytes.len() as jsize) {
         Ok(arr) => arr,
@@ -630,7 +993,16 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportMp4File(
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(env, class, j_project_json, fps, width, height, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -644,7 +1016,16 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeE
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(env, class, j_project_json, fps, width, height, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -658,7 +1039,16 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportGifFile(
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(env, class, j_project_json, fps, width, height, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -672,7 +1062,16 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeE
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(env, class, j_project_json, fps, width, height, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -684,7 +1083,14 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeExportWavFile(
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(env, class, j_project_json, sample_rate, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(
+        env,
+        class,
+        j_project_json,
+        sample_rate,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -696,7 +1102,14 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeE
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(env, class, j_project_json, sample_rate, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(
+        env,
+        class,
+        j_project_json,
+        sample_rate,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -710,7 +1123,16 @@ pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportMp4File(
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(env, class, j_project_json, fps, width, height, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportMp4File(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -724,7 +1146,16 @@ pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportGifFile(
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(env, class, j_project_json, fps, width, height, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportGifFile(
+        env,
+        class,
+        j_project_json,
+        fps,
+        width,
+        height,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -736,7 +1167,14 @@ pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeExportWavFile(
     duration: f64,
     j_output_path: JString,
 ) -> jboolean {
-    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(env, class, j_project_json, sample_rate, duration, j_output_path)
+    Java_com_fastart_FastArtRustBridge_nativeExportWavFile(
+        env,
+        class,
+        j_project_json,
+        sample_rate,
+        duration,
+        j_output_path,
+    )
 }
 
 #[no_mangle]
@@ -754,7 +1192,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeSegmentFrameRgba
         Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
     };
     let mut rgba_signed = vec![0i8; len];
-    if env.get_byte_array_region(&j_rgba, 0, &mut rgba_signed).is_err() {
+    if env
+        .get_byte_array_region(&j_rgba, 0, &mut rgba_signed)
+        .is_err()
+    {
         return env.new_byte_array(0).unwrap().into_raw();
     }
     let rgba: Vec<u8> = rgba_signed.into_iter().map(|b| b as u8).collect();
@@ -799,7 +1240,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeProcessChroma(
         Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
     };
     let mut rgba_signed = vec![0i8; len];
-    if env.get_byte_array_region(&j_rgba, 0, &mut rgba_signed).is_err() {
+    if env
+        .get_byte_array_region(&j_rgba, 0, &mut rgba_signed)
+        .is_err()
+    {
         return env.new_byte_array(0).unwrap().into_raw();
     }
     let mut rgba: Vec<u8> = rgba_signed.into_iter().map(|b| b as u8).collect();
@@ -832,7 +1276,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativePackAlphaRLE(
         Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
     };
     let mut alpha_signed = vec![0i8; len];
-    if env.get_byte_array_region(&j_alpha, 0, &mut alpha_signed).is_err() {
+    if env
+        .get_byte_array_region(&j_alpha, 0, &mut alpha_signed)
+        .is_err()
+    {
         return env.new_byte_array(0).unwrap().into_raw();
     }
     let alpha: Vec<u8> = alpha_signed.into_iter().map(|b| b as u8).collect();
@@ -859,7 +1306,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeUnpackAlphaRLE(
         Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
     };
     let mut rle_signed = vec![0i8; len];
-    if env.get_byte_array_region(&j_rle, 0, &mut rle_signed).is_err() {
+    if env
+        .get_byte_array_region(&j_rle, 0, &mut rle_signed)
+        .is_err()
+    {
         return env.new_byte_array(0).unwrap().into_raw();
     }
     let rle: Vec<u8> = rle_signed.into_iter().map(|b| b as u8).collect();
@@ -889,7 +1339,10 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeEncodeRgbaPng(
         Err(_) => return env.new_byte_array(0).unwrap().into_raw(),
     };
     let mut rgba_signed = vec![0i8; len];
-    if env.get_byte_array_region(&j_rgba, 0, &mut rgba_signed).is_err() {
+    if env
+        .get_byte_array_region(&j_rgba, 0, &mut rgba_signed)
+        .is_err()
+    {
         return env.new_byte_array(0).unwrap().into_raw();
     }
     let rgba: Vec<u8> = rgba_signed.into_iter().map(|b| b as u8).collect();
@@ -904,4 +1357,79 @@ pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeEncodeRgbaPng(
     j_bytes.into_raw()
 }
 
+/// Generate animation keyframes from Rust.
+/// Returns a JSON string: {"frames": [[opacity,scaleX,scaleY,translateX,translateY,rotation], ...]}
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustBridge_nativeGenerateAnimationKeyframes(
+    mut env: JNIEnv,
+    _class: JClass,
+    j_preset: JString,
+    j_category: JString,
+    frames: jint,
+) -> jstring {
+    let fallback = env.new_string("{}").unwrap().into_raw();
+    let preset: String = match env.get_string(&j_preset) {
+        Ok(v) => v.into(),
+        Err(_) => return fallback,
+    };
+    let category: String = match env.get_string(&j_category) {
+        Ok(v) => v.into(),
+        Err(_) => return fallback,
+    };
+    let n = frames.max(2) as usize;
+    let flat = fastart_core::generate_animation_keyframes(&preset, &category, n);
+    // Serialise as JSON array of 6-element arrays for easy JS consumption
+    let mut json = String::from("{\"frames\":[");
+    for chunk in flat.chunks(6) {
+        if chunk.len() < 6 { break; }
+        json.push('[');
+        for (i, v) in chunk.iter().enumerate() {
+            if i > 0 { json.push(','); }
+            // 4 decimal places is plenty for animation
+            json.push_str(&format!("{:.4}", v));
+        }
+        json.push(']');
+        json.push(',');
+    }
+    if json.ends_with(',') { json.pop(); }
+    json.push_str("]}");
+    env.new_string(json).unwrap_or_else(|_| env.new_string("{}").unwrap()).into_raw()
+}
 
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeGenerateAnimationKeyframes(
+    env: JNIEnv,
+    class: JClass,
+    preset: JString,
+    category: JString,
+    frames: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustBridge_nativeGenerateAnimationKeyframes(
+        env, class, preset, category, frames,
+    )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeGenerateAnimationKeyframes(
+    env: JNIEnv,
+    class: JClass,
+    preset: JString,
+    category: JString,
+    frames: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustModule_00024Companion_nativeGenerateAnimationKeyframes(
+        env, class, preset, category, frames,
+    )
+}
+
+// Alias under the alternative package prefix used elsewhere in this codebase
+#[no_mangle]
+pub extern "system" fn Java_com_FastArt_FastArtRustBridge_nativeGenerateAnimationKeyframes(
+    env: JNIEnv,
+    class: JClass,
+    j_preset: JString,
+    j_category: JString,
+    frames: jint,
+) -> jstring {
+    Java_com_fastart_FastArtRustBridge_nativeGenerateAnimationKeyframes(env, class, j_preset, j_category, frames)
+}

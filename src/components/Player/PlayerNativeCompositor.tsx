@@ -1,8 +1,10 @@
 import React from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
-import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from "react-native";
 import { Image as ExpoImage } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import { MaskedView } from "@expo/ui/community/masked-view";
+import { SvgXml } from "react-native-svg";
+import type { MaskConfig } from "../../types/project";
+import { buildMaskSvg, maskSvgDataUri } from "../../utils/maskGeometry";
 import { LinearGradient } from "expo-linear-gradient";
 import { getNativeMaskUri, setOnMaskUpdated, getClipBakedFps } from "../../services/selfieSegmentationService";
 import { styles } from "./PlayerStyles";
@@ -12,7 +14,6 @@ import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking, FILTER_CSS_MAP, scaleCssFilter } from "../../utils/renderer/rendererEffects";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
-import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import {
   buildHslCssFilter,
   isHslActive,
@@ -1068,295 +1069,38 @@ function renderNativeClipEffectOverlay(
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+const CachedMaskSvg = React.memo(function CachedMaskSvg({
+  xml,
+  width,
+  height,
+}: {
+  xml: string;
+  width: number;
+  height: number;
+}) {
+  return <SvgXml xml={xml} width={width} height={height} />;
+});
+
 function renderMaskedClipContent(
   mediaNode: React.ReactNode,
-  mask: any,
+  mask: MaskConfig | null | undefined,
   w: number,
   h: number,
-  canvasBg: string = "#000000",
 ) {
-  if (!mask || !mask.shape || mask.shape === "none") {
-    return mediaNode;
-  }
+  if (!mask || !mask.shape || mask.shape === "none") return mediaNode;
+  const svg = buildMaskSvg(mask, w, h);
+  if (!svg) return mediaNode;
+  if (Platform.OS === "web") return mediaNode;
 
-  const effectiveCanvasBg =
-    (canvasBg && canvasBg.startsWith("color:")
-      ? canvasBg.replace("color:", "")
-      : canvasBg) || "#000000";
-
-  const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
-  const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
-  const posX = mask.x || 0; // % offset from clip center (-50..50)
-  const posY = mask.y || 0; // % offset from clip center (-50..50)
-  const rotDeg = mask.rotation || 0;
-  const inverted = Boolean(mask.inverted);
-  const roundness = mask.roundness !== undefined ? mask.roundness : 16;
-  const shape = mask.shape;
-
-  // Use isotropic minDim for circular, star and heart shapes to guarantee 1:1 roundness matching overlay reticle
-  const minDim = Math.min(w, h);
-  let boxW = Math.max(4, Math.round((minDim * effW) / 100));
-  let boxH = Math.max(4, Math.round((minDim * effH) / 100));
-  if (shape === "rectangle") {
-    boxW = Math.max(4, Math.round((w * effW) / 100));
-    boxH = Math.max(4, Math.round((h * effH) / 100));
-  } else if (shape === "mirror") {
-    boxW = Math.max(w, h) * 3;
-    boxH = Math.max(4, Math.round((h * effH) / 100));
-  } else if (shape === "linear") {
-    boxW = Math.max(w, h) * 3;
-    boxH = Math.max(w, h) * 3;
-  }
-
-  const cx = w / 2 + (posX / 100) * w;
-  const cy = h / 2 + (posY / 100) * h;
-  const span = Math.max(w, h) * 3;
-
-  // Inverted Mask: solid shape covering the inside
-  if (inverted) {
-    let bRadius = 0;
-    if (shape === "circle") {
-      bRadius = Math.round(Math.min(boxW, boxH) / 2);
-    } else if (shape === "rectangle") {
-      bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
-    } else if (shape === "heart" || shape === "star") {
-      bRadius = Math.round(Math.min(boxW, boxH) * 0.25);
-    }
-
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        {mediaNode}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            left: Math.round(cx - boxW / 2),
-            top: Math.round(cy - boxH / 2),
-            width: boxW,
-            height: boxH,
-            borderRadius: bRadius,
-            backgroundColor: effectiveCanvasBg,
-            transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-          }}
-        />
-      </View>
-    );
-  }
-
-  // 1. HEART & STAR MASK
-  if (shape === "heart" || shape === "star") {
-    const svgPath =
-      shape === "heart"
-        ? "M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z"
-        : "M 50 2 L 63 38 L 100 38 L 69 60 L 82 98 L 50 75 L 18 98 L 31 60 L 0 38 L 37 38 Z";
-
-    const svgXml = !inverted
-      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill-rule="evenodd" d="M 0 0 H 100 V 100 H 0 Z ${svgPath}" fill="${effectiveCanvasBg}"/></svg>`
-      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="${svgPath}" fill="${effectiveCanvasBg}"/></svg>`;
-
-    const uri = `data:image/svg+xml;utf8,${encodeURIComponent(svgXml)}`;
-
-    if (inverted) {
-      return (
-        <View style={StyleSheet.absoluteFill}>
-          {mediaNode}
-          <View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              left: Math.round(cx - boxW / 2),
-              top: Math.round(cy - boxH / 2),
-              width: boxW,
-              height: boxH,
-              transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-            }}
-          >
-            <ExpoImage
-              source={{ uri }}
-              style={StyleSheet.absoluteFill}
-              contentFit="fill"
-              cachePolicy="memory"
-            />
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View
-        style={{
-          position: "absolute",
-          left: Math.round(cx - boxW / 2),
-          top: Math.round(cy - boxH / 2),
-          width: boxW,
-          height: boxH,
-          overflow: "hidden",
-          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-        }}
-      >
-        <View
-          style={{
-            position: "absolute",
-            left: Math.round(boxW / 2 - span / 2),
-            top: Math.round(boxH / 2 - span / 2),
-            width: span,
-            height: span,
-            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
-          }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              left: Math.round(span / 2 - cx),
-              top: Math.round(span / 2 - cy),
-              width: w,
-              height: h,
-            }}
-          >
-            {mediaNode}
-          </View>
-        </View>
-        <ExpoImage
-          source={{ uri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="fill"
-          cachePolicy="memory"
-          pointerEvents="none"
-        />
-      </View>
-    );
-  }
-
-  // 2. CIRCLE & RECTANGLE (Hardware-Accelerated Native Clipping)
-  if (shape === "circle" || shape === "rectangle") {
-    let bRadius = 0;
-    if (shape === "circle") {
-      bRadius = Math.round(Math.min(boxW, boxH) / 2);
-    } else if (shape === "rectangle") {
-      bRadius = Math.max(0, Math.min(Math.round(Math.min(boxW, boxH) / 2), roundness));
-    }
-
-    return (
-      <View
-        style={{
-          position: "absolute",
-          left: Math.round(cx - boxW / 2),
-          top: Math.round(cy - boxH / 2),
-          width: boxW,
-          height: boxH,
-          borderRadius: bRadius,
-          overflow: "hidden",
-          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-        }}
-      >
-        <View
-          style={{
-            position: "absolute",
-            left: Math.round(boxW / 2 - span / 2),
-            top: Math.round(boxH / 2 - span / 2),
-            width: span,
-            height: span,
-            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
-          }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              left: Math.round(span / 2 - cx),
-              top: Math.round(span / 2 - cy),
-              width: w,
-              height: h,
-            }}
-          >
-            {mediaNode}
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // 2. LINEAR SPLIT MASK
-  if (shape === "linear") {
-    const halfSpan = span / 2;
-    return (
-      <View
-        style={{
-          position: "absolute",
-          left: Math.round(cx - span / 2),
-          top: Math.round(cy),
-          width: span,
-          height: halfSpan,
-          overflow: "hidden",
-          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-        }}
-      >
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            top: -halfSpan,
-            width: span,
-            height: span,
-            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
-          }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              left: Math.round(span / 2 - cx),
-              top: Math.round(span / 2 - cy),
-              width: w,
-              height: h,
-            }}
-          >
-            {mediaNode}
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // 3. MIRROR MASK
-  if (shape === "mirror") {
-    return (
-      <View
-        style={{
-          position: "absolute",
-          left: Math.round(cx - span / 2),
-          top: Math.round(cy - boxH / 2),
-          width: span,
-          height: boxH,
-          overflow: "hidden",
-          transform: rotDeg ? [{ rotate: `${rotDeg}deg` }] : undefined,
-        }}
-      >
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            top: Math.round(boxH / 2 - span / 2),
-            width: span,
-            height: span,
-            transform: rotDeg ? [{ rotate: `${-rotDeg}deg` }] : undefined,
-          }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              left: Math.round(span / 2 - cx),
-              top: Math.round(span / 2 - cy),
-              width: w,
-              height: h,
-            }}
-          >
-            {mediaNode}
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  return mediaNode;
+  return (
+    <MaskedView
+      style={{ width: w, height: h }}
+      maskElement={<CachedMaskSvg xml={svg} width={w} height={h} />}
+    >
+      {mediaNode}
+    </MaskedView>
+  );
 }
 
 const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = ({
@@ -1543,111 +1287,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const cy = canvasHeight / 2 + posY + motionY;
 
         const mask = (isTrans && activeTransient?.mask) ? activeTransient.mask : (kfT?.mask || vid.mask || vid.transform?.mask);
-        let maskBorderRadius: number | undefined = undefined;
-        let hasMaskShape = false;
-        let webMaskStyle: any = undefined;
-        if (mask && mask.shape && mask.shape !== "none") {
-          hasMaskShape = true;
-          const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
-          const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
-          const rawFeather = Math.max(0, Math.min(80, mask.feather ?? 0));
-          const posX = 50 + (mask.x || 0);
-          const posY = 50 + (mask.y || 0);
-          const rotDeg = mask.rotation || 0;
-
-          if (Platform.OS === "web") {
-            if (mask.shape === "circle") {
-              const radX = effW / 2;
-              const radY = effH / 2;
-              if (rawFeather === 0 && !mask.inverted && rotDeg === 0) {
-                const clipPath = `ellipse(${radX}% ${radY}% at ${posX}% ${posY}%)`;
-                webMaskStyle = {
-                  clipPath,
-                  WebkitClipPath: clipPath,
-                };
-              } else {
-                const stop1X = Math.max(0, radX - (rawFeather * 0.35));
-                const stop2X = Math.min(100, radX + (rawFeather * 0.35));
-                const grad = mask.inverted
-                  ? `radial-gradient(${radX}% ${radY}% at ${posX}% ${posY}%, rgba(0,0,0,0) ${stop1X}%, black ${stop2X}%)`
-                  : `radial-gradient(${radX}% ${radY}% at ${posX}% ${posY}%, black ${stop1X}%, rgba(0,0,0,0) ${stop2X}%)`;
-                webMaskStyle = {
-                  WebkitMaskImage: grad,
-                  maskImage: grad,
-                };
-              }
-            } else if (mask.shape === "rectangle") {
-              const rectHalfW = effW / 2;
-              const rectHalfH = effH / 2;
-              const left = Math.max(0, posX - rectHalfW);
-              const right = Math.max(0, 100 - (posX + rectHalfW));
-              const top = Math.max(0, posY - rectHalfH);
-              const btm = Math.max(0, 100 - (posY + rectHalfH));
-              const rad = Math.max(0, mask.roundness ?? 16);
-
-              if (rawFeather === 0 && !mask.inverted && rotDeg === 0) {
-                const clipPath = `inset(${top}% ${right}% ${btm}% ${left}% round ${rad}px)`;
-                webMaskStyle = {
-                  clipPath,
-                  WebkitClipPath: clipPath,
-                };
-              } else {
-                const f = Math.max(0.1, rawFeather * 0.35);
-                const l1 = posX - rectHalfW;
-                const r1 = posX + rectHalfW;
-                const t1 = posY - rectHalfH;
-                const b1 = posY + rectHalfH;
-                const grad = mask.inverted
-                  ? `linear-gradient(${rotDeg}deg, black, black)`
-                  : `linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,0) ${l1 - f}%, black ${l1 + f}%, black ${r1 - f}%, rgba(0,0,0,0) ${r1 + f}%, rgba(0,0,0,0) 100%)`;
-                webMaskStyle = {
-                  WebkitMaskImage: grad,
-                  maskImage: grad,
-                };
-              }
-            } else if (mask.shape === "linear") {
-              const splitPct = 50 - effH / 2;
-              const stop1 = Math.max(0, splitPct - (rawFeather * 0.35));
-              const stop2 = Math.min(100, splitPct + (rawFeather * 0.35));
-              const grad = mask.inverted
-                ? `linear-gradient(${180 + rotDeg}deg, black ${stop1}%, rgba(0,0,0,0) ${stop2}%)`
-                : `linear-gradient(${180 + rotDeg}deg, rgba(0,0,0,0) ${stop1}%, black ${stop2}%)`;
-              webMaskStyle = {
-                WebkitMaskImage: grad,
-                maskImage: grad,
-              };
-            } else if (mask.shape === "mirror") {
-              const bandHalf = effH / 2;
-              const topSplit = 50 - bandHalf;
-              const btmSplit = 50 + bandHalf;
-              const f = rawFeather * 0.3;
-              const grad = mask.inverted
-                ? `linear-gradient(${180 + rotDeg}deg, black 0%, black ${topSplit - f}%, rgba(0,0,0,0) ${topSplit + f}%, rgba(0,0,0,0) ${btmSplit - f}%, black ${btmSplit + f}%, black 100%)`
-                : `linear-gradient(${180 + rotDeg}deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) ${topSplit - f}%, black ${topSplit + f}%, black ${btmSplit - f}%, rgba(0,0,0,0) ${btmSplit + f}%, rgba(0,0,0,0) 100%)`;
-              webMaskStyle = {
-                WebkitMaskImage: grad,
-                maskImage: grad,
-              };
-            } else if (mask.shape === "heart" || mask.shape === "star") {
-              const svgData = mask.shape === "heart"
-                ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="black"/></svg>`
-                : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38" fill="black"/></svg>`;
-              const uri = `url("data:image/svg+xml;utf8,${encodeURIComponent(svgData)}")`;
-              webMaskStyle = {
-                WebkitMaskImage: uri,
-                maskImage: uri,
-                WebkitMaskRepeat: "no-repeat",
-                maskRepeat: "no-repeat",
-                WebkitMaskPosition: `${posX}% ${posY}%`,
-                maskPosition: `${posX}% ${posY}%`,
-                WebkitMaskSize: `${effW}% ${effH}%`,
-                maskSize: `${effW}% ${effH}%`,
-                transform: [{ rotate: `${rotDeg}deg` }],
-              };
-            }
-          }
-        }
-
         const crop = vid.crop || vid.transform?.crop;
         const hasCrop =
           !!crop &&
@@ -1655,6 +1294,26 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
             crop.height < 100 ||
             crop.x > 0 ||
             crop.y > 0);
+
+        const hasMaskShape = Boolean(mask?.shape && mask.shape !== "none");
+        let webMaskStyle: any = undefined;
+        if (hasMaskShape && Platform.OS === "web") {
+          const maskWidth = hasCrop ? Math.round(fullW * Math.max(0.01, crop.width / 100)) : w;
+          const maskHeight = hasCrop ? Math.round(fullH * Math.max(0.01, crop.height / 100)) : h;
+          const maskUri = maskSvgDataUri(mask, maskWidth, maskHeight);
+          if (maskUri) {
+            webMaskStyle = {
+              maskImage: `url("${maskUri}")`,
+              WebkitMaskImage: `url("${maskUri}")`,
+              maskSize: "100% 100%",
+              WebkitMaskSize: "100% 100%",
+              maskRepeat: "no-repeat",
+              WebkitMaskRepeat: "no-repeat",
+              maskPosition: "center",
+              WebkitMaskPosition: "center",
+            };
+          }
+        }
 
         // Pre-warm & transition states for seamless 60fps cuts
         const isInside = currentTime >= vid.startTime && currentTime <= vid.startTime + vid.duration;
@@ -1753,14 +1412,14 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const persp = vid.transform?.perspective ?? kfT?.perspective ?? 800;
 
         const clipTransformArray: any[] = [
-          { perspective: persp },
-          { rotateX: `${rotX}deg` },
-          { rotateY: `${rotY}deg` },
-          { rotate: `${effRot + vidAnimRot}deg` },
-          ...(skewX !== 0 ? [{ skewX: `${skewX}deg` }] : []),
-          { scaleX: effScaleX },
-          { scaleY: effScaleY },
-        ];
+          { perspective: isNaN(persp) ? 800 : persp },
+          { rotateX: `${isNaN(rotX) ? 0 : rotX}deg` },
+          { rotateY: `${isNaN(rotY) ? 0 : rotY}deg` },
+          { rotate: `${isNaN(effRot + vidAnimRot) ? 0 : effRot + vidAnimRot}deg` },
+          ...(skewX && !isNaN(skewX) && skewX !== 0 ? [{ skewX: `${skewX}deg` }] : []),
+          { scaleX: isNaN(effScaleX) ? 1.0 : effScaleX },
+          { scaleY: isNaN(effScaleY) ? 1.0 : effScaleY },
+        ].filter(Boolean);
 
         if (hasCrop) {
           const cropW = Math.max(0.01, crop.width / 100);
@@ -1802,7 +1461,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   width: croppedContainerW,
                   height: croppedContainerH,
                   overflow: "hidden",
-                  borderRadius: maskBorderRadius,
                   opacity: effectiveOpacity,
                   zIndex: vidZ,
                   elevation: vidElevation,
@@ -1865,7 +1523,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                 mask,
                 croppedContainerW,
                 croppedContainerH,
-                canvasBackground,
               )}
             </TouchableOpacity>
           );
@@ -1906,7 +1563,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                 alignItems: "center",
                 opacity: effectiveOpacity,
                 overflow: hasMaskShape ? "hidden" : "visible",
-                borderRadius: maskBorderRadius,
                 zIndex: vidZ,
                 elevation: vidElevation,
                 transform: clipTransformArray,
@@ -1965,7 +1621,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               mask,
               w,
               h,
-              canvasBackground,
             )}
           </TouchableOpacity>
         );

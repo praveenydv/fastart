@@ -14,11 +14,9 @@ android {
   }
   sourceSets {
     main {
-      jniLibs.srcDirs = [
-        'src/main/jniLibs',
-        file("../../../rust/target/release"),
-        file("../../../android/app/src/main/jniLibs")
-      ]
+      // Keep the Rust library in the Expo module only. Importing the generated
+      // app jniLibs directory as well causes Gradle to merge the same .so twice.
+      jniLibs.srcDirs = ['src/main/jniLibs']
     }
   }
 }

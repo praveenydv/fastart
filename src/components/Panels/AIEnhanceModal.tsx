@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 interface AIEnhanceModalProps {
@@ -94,7 +93,6 @@ export default function AIEnhanceModal({
   };
 
   const handleReset = () => {
-    soundEngine.playSfx('pop');
     setSkinSmoothing(0);
     setFaceRadiance(0);
     setHdr(false);
@@ -112,7 +110,6 @@ export default function AIEnhanceModal({
   const isModified = skinSmoothing > 0 || faceRadiance > 0 || hdr || sharpness > 0 || colorBoost > 0;
 
   const handleCancel = () => {
-    soundEngine.playSfx('pop');
     onClose();
   };
 
@@ -155,7 +152,6 @@ export default function AIEnhanceModal({
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'beauty' && styles.tabBtnActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 setActiveTab('beauty');
               }}
               activeOpacity={0.8}
@@ -176,7 +172,6 @@ export default function AIEnhanceModal({
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'clarity' && styles.tabBtnActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 setActiveTab('clarity');
               }}
               activeOpacity={0.8}
@@ -255,7 +250,6 @@ export default function AIEnhanceModal({
                 <TouchableOpacity
                   style={styles.toggleCard}
                   onPress={() => {
-                    soundEngine.playSfx('click');
                     const next = !hdr;
                     setHdr(next);
                     triggerUpdate({ hdr: next });

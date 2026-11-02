@@ -15,7 +15,6 @@ import {
   VoiceEffectId,
 } from "../types/project";
 import { getMediaDuration } from "../utils/mediaDuration";
-import { soundEngine } from "../utils/audioEngine";
 import { isHslActive } from "../utils/hslEngine";
 
 import {
@@ -430,7 +429,6 @@ export function useProjectFilterEffects({
           });
         }
 
-        soundEngine.playSfx("click");
         updateProjectWithHistory({
           ...current,
           tracks: { ...current.tracks, video: videoClips },
@@ -469,7 +467,6 @@ export function useProjectFilterEffects({
           trimOut: newTrimOut,
         };
 
-        soundEngine.playSfx("click");
         updateProjectWithHistory({
           ...current,
           tracks: { ...current.tracks, audio: audioClips },
@@ -547,7 +544,6 @@ export function useProjectFilterEffects({
         ...current,
         tracks: { ...current.tracks, audio: audioClips },
       });
-      soundEngine.playSfx(nextDenoise ? "pop" : "click");
       return nextDenoise;
     }
 
@@ -571,7 +567,6 @@ export function useProjectFilterEffects({
         ...current,
         tracks: { ...current.tracks, video: videoClips },
       });
-      soundEngine.playSfx(nextDenoise ? "pop" : "click");
       return nextDenoise;
     }
   }, [project, projectRef, selectedClipType, resolveTargetClipId, updateProjectWithHistory]);
@@ -650,7 +645,6 @@ export function useProjectFilterEffects({
 
       const updatedAudio = [...(current.tracks.audio || []), newAudioClip];
 
-      soundEngine.playSfx("split");
       updateProjectWithHistory({
         ...current,
         tracks: {

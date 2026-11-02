@@ -7,7 +7,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { HSLAdjustments, HSLColorChannel, HSLChannelConfig } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
@@ -65,7 +64,6 @@ export default function HSLAdjustModal({
     adjustments[activeChannel] || { ...DEFAULT_CONFIG };
 
   const handleUpdate = (field: keyof HSLChannelConfig, delta: number) => {
-    soundEngine.playSfx('click');
     const newConfig: HSLChannelConfig = {
       ...currentConfig,
       [field]: Math.max(
@@ -98,7 +96,6 @@ export default function HSLAdjustModal({
   };
 
   const handleResetChannel = () => {
-    soundEngine.playSfx('click');
     const next = { ...adjustments };
     delete next[activeChannel];
     setAdjustments(next);
@@ -106,13 +103,11 @@ export default function HSLAdjustModal({
   };
 
   const handleResetAll = () => {
-    soundEngine.playSfx('click');
     setAdjustments({});
     onApply({});
   };
 
   const handleDone = () => {
-    soundEngine.playSfx('pop');
     onApply(adjustments);
     onClose();
   };
@@ -179,7 +174,6 @@ export default function HSLAdjustModal({
                     isSelected && styles.swatchBtnSelected,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx('click');
                     setActiveChannel(ch.id);
                   }}
                   activeOpacity={0.8}

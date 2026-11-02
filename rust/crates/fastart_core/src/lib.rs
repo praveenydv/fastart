@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod animation;
 pub mod codecs;
 pub mod compositor;
 pub mod cutout;
@@ -6,11 +7,13 @@ pub mod effects;
 pub mod engine;
 pub mod exporter;
 pub mod motion_track;
+pub mod modnet;
 pub mod speed_curve;
 pub mod transform;
 pub mod types;
 
 pub use audio::*;
+pub use animation::*;
 pub use codecs::*;
 pub use compositor::*;
 pub use cutout::*;
@@ -18,6 +21,7 @@ pub use effects::*;
 pub use engine::*;
 pub use exporter::*;
 pub use motion_track::*;
+pub use modnet::*;
 pub use speed_curve::*;
 pub use transform::*;
 pub use types::*;

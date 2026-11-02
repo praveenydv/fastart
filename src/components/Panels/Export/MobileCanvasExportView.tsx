@@ -71,6 +71,23 @@ async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<Fast
   return cloned;
 }
 
+function cleanBase64Payload(raw: string): string {
+  if (!raw) return "";
+  let s = raw;
+  const commaIdx = s.indexOf(",");
+  if (commaIdx >= 0) {
+    s = s.slice(commaIdx + 1);
+  }
+  // Strip whitespace, linebreaks, and illegal characters
+  s = s.replace(/[^A-Za-z0-9+/=]/g, "");
+  // Pad with '=' to guarantee 4-character alignment required by Android Base64.decode
+  const mod = s.length % 4;
+  if (mod === 2) s += "==";
+  else if (mod === 3) s += "=";
+  else if (mod === 1) s = s.slice(0, -1);
+  return s;
+}
+
 export default function MobileCanvasExportView({
   isExporting,
   project,
@@ -82,7 +99,13 @@ export default function MobileCanvasExportView({
   const [htmlUri, setHtmlUri] = useState<string | null>(null);
   const webViewRef = useRef<any>(null);
   const isDoneRef = useRef(false);
-  const currentChunkedFileRef = useRef<{ uri: string; mimeType: string; extension: string; fileSize?: number } | null>(null);
+  const currentChunkedFileRef = useRef<{
+    uri: string;
+    mimeType: string;
+    extension: string;
+    fileSize?: number;
+    chunks: string[];
+  } | null>(null);
 
   useEffect(() => {
     if (!isExporting) {
@@ -106,7 +129,8 @@ export default function MobileCanvasExportView({
         });
 
         if (isMounted) {
-          setHtmlUri(`${tempPath}?t=${Date.now()}`);
+          // Never append query parameters (e.g. ?t=...) to local file:// URIs on Android
+          setHtmlUri(tempPath);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -142,26 +166,28 @@ export default function MobileCanvasExportView({
         const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
         const targetFileUri = `${dir}${cleanTitle}_${Date.now()}.${data.extension || "mp4"}`;
 
-        // Initialize empty file
-        await FileSystem.writeAsStringAsync(targetFileUri, "", { encoding: FileSystem.EncodingType.UTF8 });
         currentChunkedFileRef.current = {
           uri: targetFileUri,
           mimeType: data.mimeType || "video/mp4",
           extension: data.extension || "mp4",
           fileSize: data.fileSize,
+          chunks: [],
         };
       } else if (data.type === "CHUNK_DATA" && currentChunkedFileRef.current) {
         if (data.chunk) {
-          await FileSystem.writeAsStringAsync(currentChunkedFileRef.current.uri, data.chunk, {
-            encoding: FileSystem.EncodingType.Base64,
-            append: true,
-          });
+          currentChunkedFileRef.current.chunks.push(data.chunk);
         }
       } else if (data.type === "CHUNK_END" && currentChunkedFileRef.current && !isDoneRef.current) {
         isDoneRef.current = true;
         const info = currentChunkedFileRef.current;
-        const fileStat = await FileSystem.getInfoAsync(info.uri);
+        const joinedBase64 = cleanBase64Payload(info.chunks.join(""));
+        info.chunks = []; // free memory
 
+        await FileSystem.writeAsStringAsync(info.uri, joinedBase64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        const fileStat = await FileSystem.getInfoAsync(info.uri);
         const result: ExportResult = {
           blob: { size: fileStat.exists ? (fileStat as any).size : (info.fileSize || 0), type: info.mimeType } as any,
           videoUrl: info.uri,
@@ -184,7 +210,8 @@ export default function MobileCanvasExportView({
         const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
         const targetFileUri = `${dir}${cleanTitle}_${Date.now()}.${extension}`;
 
-        await FileSystem.writeAsStringAsync(targetFileUri, base64, {
+        const cleanB64 = cleanBase64Payload(base64);
+        await FileSystem.writeAsStringAsync(targetFileUri, cleanB64, {
           encoding: FileSystem.EncodingType.Base64,
         });
 
@@ -194,7 +221,7 @@ export default function MobileCanvasExportView({
           mimeType,
           format: options.format || "mp4",
           extension,
-          fileSize: fileSize || Math.round(base64.length * 0.75),
+          fileSize: fileSize || Math.round(cleanB64.length * 0.75),
         };
 
         onComplete(result);

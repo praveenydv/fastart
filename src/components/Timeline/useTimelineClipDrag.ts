@@ -1,6 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from "react";
 import { PanResponder, Platform } from "react-native";
-import { soundEngine } from "../../utils/audioEngine";
 import { triggerHaptic } from "../../utils/haptics";
 import {
   UnifiedClipItem,
@@ -323,13 +322,11 @@ export function useTimelineClipDrag({
         lastTapRef.current.clipId === clipId
       ) {
         lastTapRef.current = { time: 0, clipId: "" };
-        soundEngine.playSfx("click");
         triggerHaptic("selection", isHapticEnabledRef.current);
         onSelectClip(clipId, trackType);
         onOpenEditModal?.(clipId, trackType);
       } else {
         lastTapRef.current = { time: now, clipId };
-        soundEngine.playSfx("click");
         triggerHaptic("selection", isHapticEnabledRef.current);
         onSelectClip(clipId, trackType);
       }
@@ -384,7 +381,6 @@ export function useTimelineClipDrag({
 
       // 200ms hold timer to lift clip and start drag mode
       const timer = setTimeout(() => {
-        soundEngine.playSfx("pop");
         triggerHaptic("medium", isHapticEnabledRef.current);
         onSelectClip(clip.id, clip.type);
         setIsDraggingClip(true);
@@ -553,7 +549,6 @@ export function useTimelineClipDrag({
             finalTrack !== state.initialTrack;
 
           if (hasPositionChanged) {
-            soundEngine.playSfx("pop");
             triggerHaptic("light", isHapticEnabledRef.current);
             onMoveClipRef.current(
               state.clipId,
@@ -604,7 +599,6 @@ export function useTimelineClipDrag({
       initialTrackIndex: number,
       duration: number,
     ) => {
-      soundEngine.playSfx("pop");
       triggerHaptic("medium", isHapticEnabledRef.current);
       onSelectClip(clipId, trackType);
       setIsDraggingClip(true);
@@ -684,7 +678,6 @@ export function useTimelineClipDrag({
             setIsDraggingClip(true);
             cachedDraggingClipRef.current = allClipsRef.current.find((c) => c.id === clipId);
             cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clipId);
-            soundEngine.playSfx("click");
             triggerHaptic("selection", isHapticEnabledRef.current);
             onSelectClip(clipId, trackType);
           } else {
@@ -759,7 +752,6 @@ export function useTimelineClipDrag({
           setDragState(null);
           previousIsInsertingRef.current = false;
           previousInsertTrackRef.current = null;
-          soundEngine.playSfx("pop");
           triggerHaptic("light", isHapticEnabledRef.current);
           if (onMoveClipRef.current) {
             const isInsert = !!currentDrag?.isInsertingNewTrack;
@@ -803,7 +795,6 @@ export function useTimelineClipDrag({
         setIsDraggingClip(true);
         cachedDraggingClipRef.current = clip;
         cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clip.id);
-        soundEngine.playSfx("pop");
         triggerHaptic("medium", isHapticEnabledRef.current);
         clipDragStartInfoRef.current = {
           clipId: clip.id,
@@ -910,7 +901,6 @@ export function useTimelineClipDrag({
             finalTrack !== info.initialTrack;
 
           if (hasPositionChanged) {
-            soundEngine.playSfx("pop");
             triggerHaptic("light", isHapticEnabledRef.current);
             onMoveClipRef.current(
               info.clipId,

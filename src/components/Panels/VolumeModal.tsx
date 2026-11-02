@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 
 interface VolumeModalProps {
@@ -89,12 +88,10 @@ export default function VolumeModal({
   const handleToggleDenoise = () => {
     const next = !denoise;
     setDenoise(next);
-    soundEngine.playSfx(next ? "pop" : "click");
     onApplyVolume(volume, fadeIn, fadeOut, next);
   };
 
   const handleReset = () => {
-    soundEngine.playSfx("click");
     setVolume(1.0);
     setFadeIn(0);
     setFadeOut(0);
@@ -206,7 +203,6 @@ export default function VolumeModal({
                     isSelected && styles.presetCardActive,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx("pop");
                     handleVolumeChange(p.val);
                   }}
                 >

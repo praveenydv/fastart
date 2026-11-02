@@ -10,7 +10,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { THEME_COLORS } from "../../constants/designConstants";
-import { soundEngine } from "../../utils/audioEngine";
 import { FastArtProject } from "../../types/project";
 
 export interface UndoHistoryModalProps {
@@ -140,7 +139,6 @@ export const UndoHistoryModal: React.FC<UndoHistoryModalProps> = ({
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onClose();
               }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -176,7 +174,6 @@ export const UndoHistoryModal: React.FC<UndoHistoryModalProps> = ({
                   key={`hist-${originalIdx}`}
                   style={styles.historyRow}
                   onPress={() => {
-                    soundEngine.playSfx("pop");
                     onJumpToState(originalIdx);
                     onClose();
                   }}

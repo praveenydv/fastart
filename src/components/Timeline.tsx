@@ -22,7 +22,6 @@ import {
 } from "./Timeline/timelineTypes";
 import { formatPlayheadTime, getPointerCoords } from "./Timeline/timelineUtils";
 import { styles } from "./Timeline/TimelineStyles";
-import { soundEngine } from "../utils/audioEngine";
 import { useTimelineClips } from "./Timeline/useTimelineClips";
 import { useTimelineResize } from "./Timeline/useTimelineResize";
 import { useTimelineScrubbing } from "./Timeline/useTimelineScrubbing";
@@ -872,7 +871,6 @@ export const Timeline: React.FC<TimelineProps> = ({
                         const rect = e.currentTarget.getBoundingClientRect();
                         const dropX = Math.max(0, e.clientX - rect.left);
                         const dropTime = Math.max(0, dropX / pxPerSec);
-                        soundEngine.playSfx("whoosh");
                         if (data.type === "media" && onAddMedia) {
                           onAddMedia({
                             ...data.clip,

@@ -7,7 +7,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { BlendMode } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
@@ -128,19 +127,16 @@ export default function BlendModeModal({
   if (!visible) return null;
 
   const handleSelect = (mode: BlendMode) => {
-    soundEngine.playSfx('click');
     setSelectedMode(mode);
     onApply(mode, opacity);
   };
 
   const handleDone = () => {
-    soundEngine.playSfx('pop');
     onApply(selectedMode, opacity);
     onClose();
   };
 
   const handleReset = () => {
-    soundEngine.playSfx('click');
     setSelectedMode('normal');
     setOpacity(1.0);
     onApply('normal', 1.0);
@@ -206,7 +202,6 @@ export default function BlendModeModal({
                 onApply(selectedMode, nextOp);
               }}
               onReset={() => {
-                soundEngine.playSfx('click');
                 setOpacity(1.0);
                 onApply(selectedMode, 1.0);
               }}
@@ -220,7 +215,6 @@ export default function BlendModeModal({
                     Math.abs(opacity - val) < 0.03 && styles.opacityPillActive,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx('click');
                     setOpacity(val);
                     onApply(selectedMode, val);
                   }}

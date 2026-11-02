@@ -240,21 +240,22 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   // Quantize available width to nearest integer to avoid sub-pixel canvas redraw thrashing
   const availableWidth = Math.max(10, Math.round(width - horizontalInset * 2));
 
-  const peaks = useMemo(() => {
-    if (!shouldRenderWaveform) return [];
-    return getClipWaveformPeaks(
-      clip.id,
-      url,
-      availableWidth,
-      duration,
-      trimIn,
-      speed,
-      barWidth,
-      barGap,
-      isDenoised,
-      clipPeaks,
-      clipMediaDuration,
-    );
+  const [peaks, setPeaks] = useState<number[]>([]);
+  useEffect(() => {
+    let active = true;
+    if (!shouldRenderWaveform) {
+      return () => { active = false; };
+    }
+    void getClipWaveformPeaks(
+      clip.id, url, availableWidth, duration, trimIn, speed,
+      barWidth, barGap, isDenoised, clipPeaks, clipMediaDuration,
+    ).then((value) => {
+      if (active) setPeaks(value);
+    }).catch((error) => {
+      console.warn("[TimelineClipWaveform] Rust waveform processing failed:", error);
+      if (active) setPeaks([]);
+    });
+    return () => { active = false; };
   }, [
     shouldRenderWaveform,
     clip.id,
@@ -272,10 +273,11 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
 
   // On Native, generate dense, high-detail peaks with tight spacing
   const effectivePeaks = useMemo(() => {
+    if (!shouldRenderWaveform) return [];
     if (Platform.OS === "web" || peaks.length <= 48) return peaks;
     const maxNativeBars = Math.min(
       peaks.length,
-      Math.max(30, Math.min(800, Math.floor(availableWidth / 3.0))),
+      Math.max(24, Math.min(100, Math.floor(availableWidth / 3.0))),
     );
     if (maxNativeBars >= peaks.length) return peaks;
 

@@ -1,6 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from "react";
 import { PanResponder, Platform } from "react-native";
-import { soundEngine } from "../../utils/audioEngine";
 import { triggerHaptic } from "../../utils/haptics";
 import { getMediaDuration, isImageClip, isExtendableClip } from "../../utils/mediaDuration";
 import { UnifiedClipItem } from "./timelineTypes";
@@ -88,7 +87,6 @@ export function useTimelineClipTrim({
         if (!clip) return;
         isTrimmingActiveRef.current = true;
         setActiveTrimming({ clipId: clip.id, side: "left" });
-        soundEngine.playSfx("click");
         triggerHaptic("selection", isHapticEnabledRef.current);
         trimStartInfoRef.current = {
           clipId: clip.id,
@@ -175,7 +173,6 @@ export function useTimelineClipTrim({
         setActiveTrimDelta(null);
         setActiveTrimming(null);
         trimStartInfoRef.current = null;
-        soundEngine.playSfx("pop");
         triggerHaptic("light", isHapticEnabledRef.current);
         setTimeout(() => {
           isTrimmingActiveRef.current = false;
@@ -208,7 +205,6 @@ export function useTimelineClipTrim({
         if (!clip) return;
         isTrimmingActiveRef.current = true;
         setActiveTrimming({ clipId: clip.id, side: "right" });
-        soundEngine.playSfx("click");
         triggerHaptic("selection", isHapticEnabledRef.current);
         trimStartInfoRef.current = {
           clipId: clip.id,
@@ -300,7 +296,6 @@ export function useTimelineClipTrim({
         setActiveTrimDelta(null);
         setActiveTrimming(null);
         trimStartInfoRef.current = null;
-        soundEngine.playSfx("pop");
         triggerHaptic("light", isHapticEnabledRef.current);
         setTimeout(() => {
           isTrimmingActiveRef.current = false;
@@ -333,7 +328,6 @@ export function useTimelineClipTrim({
       e.stopPropagation?.();
       e.nativeEvent?.stopPropagation?.();
       if (e.cancelable && e.preventDefault) e.preventDefault();
-      soundEngine.playSfx("click");
       triggerHaptic("selection", isHapticEnabledRef.current);
       isTrimmingActiveRef.current = true;
       setActiveTrimming({ clipId, side: "left" });
@@ -398,7 +392,6 @@ export function useTimelineClipTrim({
         setTimeout(() => {
           isTrimmingActiveRef.current = false;
         }, 50);
-        soundEngine.playSfx("pop");
         triggerHaptic("light", isHapticEnabledRef.current);
         if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
           window.removeEventListener("mousemove", onMove);
@@ -434,7 +427,6 @@ export function useTimelineClipTrim({
       e.stopPropagation?.();
       e.nativeEvent?.stopPropagation?.();
       if (e.cancelable && e.preventDefault) e.preventDefault();
-      soundEngine.playSfx("click");
       triggerHaptic("selection", isHapticEnabledRef.current);
       isTrimmingActiveRef.current = true;
       setActiveTrimming({ clipId, side: "right" });
@@ -498,7 +490,6 @@ export function useTimelineClipTrim({
         setTimeout(() => {
           isTrimmingActiveRef.current = false;
         }, 50);
-        soundEngine.playSfx("pop");
         triggerHaptic("light", isHapticEnabledRef.current);
         if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
           window.removeEventListener("mousemove", onMove);

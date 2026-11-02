@@ -7,7 +7,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import { VoiceEffectId } from '../../types/project';
 
 export interface VoiceEffectsModalProps {
@@ -106,19 +105,16 @@ export default function VoiceEffectsModal({
   if (!visible) return null;
 
   const handleSelect = (effectId: VoiceEffectId) => {
-    soundEngine.playSfx('click');
     setSelectedEffect(effectId);
     onApply(effectId);
   };
 
   const handleDone = () => {
-    soundEngine.playSfx('pop');
     onApply(selectedEffect);
     onClose();
   };
 
   const handleReset = () => {
-    soundEngine.playSfx('click');
     setSelectedEffect('none');
     onApply('none');
   };

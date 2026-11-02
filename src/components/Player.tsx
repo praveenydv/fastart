@@ -8,7 +8,6 @@ import React, {
 import { View, Text, Platform, ActivityIndicator } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../utils/audioEngine";
 import { PlayerProps, TransientTransformState } from "./Player/playerTypes";
 import {
   getItemBaseDimensions,
@@ -598,13 +597,11 @@ function Player({
 
   const handleJumpPrevKeyframe = useCallback(() => {
     if (!prevKeyframe || !activeClip) return;
-    soundEngine.playSfx("pop");
     onSeek(Math.max(0, (activeClip.startTime || 0) + prevKeyframe.time));
   }, [prevKeyframe, activeClip, onSeek]);
 
   const handleJumpNextKeyframe = useCallback(() => {
     if (!nextKeyframe || !activeClip) return;
-    soundEngine.playSfx("pop");
     onSeek(Math.max(0, (activeClip.startTime || 0) + nextKeyframe.time));
   }, [nextKeyframe, activeClip, onSeek]);
 

@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Platform, useWindowDimensions } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { styles } from "./PlayerStyles";
 import { ActiveTransformItem } from "./playerTypes";
 import { applyMotionTracking } from "../../utils/renderer/rendererEffects";
@@ -631,7 +630,6 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   isSmallScreen && styles.floatingActionBtnIconOnly,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   onOpenEditModal?.(
                     activeTransformItem.id,
                     activeTransformItem.type,
@@ -641,7 +639,6 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   ? ({
                       onClick: (e: any) => {
                         e.stopPropagation?.();
-                        soundEngine.playSfx("click");
                         onOpenEditModal?.(
                           activeTransformItem.id,
                           activeTransformItem.type,
@@ -666,14 +663,12 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   isSmallScreen && styles.floatingActionBtnIconOnly,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   handleEnterCropMode(activeTransformItem.id);
                 }}
                 {...(Platform.OS === "web"
                   ? ({
                       onClick: (e: any) => {
                         e.stopPropagation?.();
-                        soundEngine.playSfx("click");
                         handleEnterCropMode(activeTransformItem.id);
                       },
                       onMouseDown: (e: any) => e.stopPropagation?.(),
@@ -695,14 +690,12 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   isSmallScreen && styles.floatingActionBtnIconOnly,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   onOpenMaskModal?.(activeTransformItem.id);
                 }}
                 {...(Platform.OS === "web"
                   ? ({
                       onClick: (e: any) => {
                         e.stopPropagation?.();
-                        soundEngine.playSfx("click");
                         onOpenMaskModal?.(activeTransformItem.id);
                       },
                       onMouseDown: (e: any) => e.stopPropagation?.(),
@@ -728,14 +721,12 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   isSmallScreen && styles.floatingActionBtnIconOnly,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   onOpenAnimationModal();
                 }}
                 {...(Platform.OS === "web"
                   ? ({
                       onClick: (e: any) => {
                         e.stopPropagation?.();
-                        soundEngine.playSfx("click");
                         onOpenAnimationModal();
                       },
                       onMouseDown: (e: any) => e.stopPropagation?.(),
@@ -761,7 +752,6 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   isSmallScreen && styles.floatingActionBtnIconOnly,
                 ]}
                 onPress={() => {
-                  soundEngine.playSfx("pop");
                   onDuplicateClip(
                     activeTransformItem.id,
                     activeTransformItem.type,
@@ -771,7 +761,6 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                   ? ({
                       onClick: (e: any) => {
                         e.stopPropagation?.();
-                        soundEngine.playSfx("pop");
                         onDuplicateClip(
                           activeTransformItem.id,
                           activeTransformItem.type,
@@ -800,14 +789,12 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                 isSmallScreen && styles.floatingActionBtnIconOnly,
               ]}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
               }}
               {...(Platform.OS === "web"
                 ? ({
                     onClick: (e: any) => {
                       e.stopPropagation?.();
-                      soundEngine.playSfx("click");
                       onDeleteClip?.(activeTransformItem.id, activeTransformItem.type);
                     },
                     onMouseDown: (e: any) => e.stopPropagation?.(),
@@ -832,7 +819,6 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                 isSmallScreen && styles.floatingActionBtnIconOnly,
               ]}
               onPress={() => {
-                soundEngine.playSfx("pop");
                 onSelectClip?.(null);
               }}
               activeOpacity={0.7}

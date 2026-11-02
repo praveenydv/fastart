@@ -1,10 +1,9 @@
-import React, { useState } from "react";
-import { View, Text, ScrollView, Platform } from "react-native";
+import React from "react";
+import { View, Text, ScrollView } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { FONT_OPTIONS } from "./textModalConstants";
-import { FontDefinition, loadGoogleFont, registerCustomFont } from "../../../utils/fontCatalog";
+import { FontDefinition, loadGoogleFont } from "../../../utils/fontCatalog";
 import { styles } from "./TextModalStyles";
 
 interface TextFontTabProps {
@@ -22,32 +21,9 @@ export default function TextFontTab({
   selectedFontSize,
   setSelectedFontSize,
 }: TextFontTabProps) {
-  const [fontsList, setFontsList] = useState<FontDefinition[]>(FONT_OPTIONS);
-
   const handleSelectFont = (font: FontDefinition) => {
-    soundEngine.playSfx("click");
     loadGoogleFont(font);
     setSelectedFont(font.fontFamily || font.id);
-  };
-
-  const handleCustomFontUpload = () => {
-    if (Platform.OS === "web" && typeof document !== "undefined") {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = ".ttf,.otf,.woff2";
-      input.onchange = async (e: any) => {
-        const file = e.target?.files?.[0];
-        if (file) {
-          const registered = await registerCustomFont(file.name, file);
-          if (registered) {
-            setFontsList((prev) => [registered, ...prev]);
-            setSelectedFont(registered.fontFamily);
-            soundEngine.playSfx("pop");
-          }
-        }
-      };
-      input.click();
-    }
   };
 
   return (
@@ -63,16 +39,6 @@ export default function TextFontTab({
           }}
         >
           <Text style={styles.sectionTitle}>TYPOGRAPHY & FONTS</Text>
-          {Platform.OS === "web" && (
-            <TouchableOpacity
-              style={styles.uploadFontBtn}
-              onPress={handleCustomFontUpload}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="cloud-upload-outline" size={12} color="#00F2FE" />
-              <Text style={styles.uploadFontBtnText}>Upload Font</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Linear Horizontal Scroll of Font Family Cards */}
@@ -82,7 +48,7 @@ export default function TextFontTab({
           style={styles.horizontalRow}
           contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
         >
-          {fontsList.map((f) => {
+          {FONT_OPTIONS.map((f) => {
             const isActive = selectedFont === f.id || selectedFont === f.fontFamily;
             return (
               <TouchableOpacity
@@ -124,7 +90,6 @@ export default function TextFontTab({
             <TouchableOpacity
               style={styles.stepperBtn}
               onPress={() => {
-                soundEngine.playSfx("click");
                 setSelectedFontSize(Math.max(12, selectedFontSize - 2));
               }}
               activeOpacity={0.7}
@@ -135,7 +100,6 @@ export default function TextFontTab({
             <TouchableOpacity
               style={styles.stepperBtn}
               onPress={() => {
-                soundEngine.playSfx("click");
                 setSelectedFontSize(Math.min(96, selectedFontSize + 2));
               }}
               activeOpacity={0.7}
@@ -152,7 +116,6 @@ export default function TextFontTab({
                   key={sz}
                   style={[styles.presetChip, isSelected && styles.presetChipActive]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     setSelectedFontSize(sz);
                   }}
                   activeOpacity={0.7}

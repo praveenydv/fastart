@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { PanResponder, Platform } from "react-native";
-import { soundEngine } from "../../utils/audioEngine";
 import { triggerHaptic } from "../../utils/haptics";
 import { UnifiedClipItem } from "./timelineTypes";
 import { getPointerCoords } from "./timelineUtils";
@@ -137,7 +136,6 @@ export function useTimelineScrubbing({
       onPanResponderGrant: () => {
         isDraggingPlayhead.current = true;
         setIsScrubbingRuler(true);
-        soundEngine.playSfx("click");
         triggerHaptic("selection", isHapticEnabledRef.current);
         dragStartTimeRef.current = currentTimeRef.current;
       },
@@ -190,7 +188,6 @@ export function useTimelineScrubbing({
       onPanResponderGrant: (evt) => {
         isDraggingPlayhead.current = true;
         setIsScrubbingRuler(true);
-        soundEngine.playSfx("click");
         triggerHaptic("selection", isHapticEnabledRef.current);
 
         let clickX = 0;
@@ -267,7 +264,6 @@ export function useTimelineScrubbing({
     (e: any) => {
       isDraggingPlayhead.current = true;
       setIsScrubbingRuler(true);
-      soundEngine.playSfx("click");
       triggerHaptic("selection", isHapticEnabledRef.current);
       updateSeekFromPointer(e);
     },
@@ -280,7 +276,6 @@ export function useTimelineScrubbing({
       if (e?.preventDefault && e.cancelable) e.preventDefault();
       isDraggingPlayhead.current = true;
       setIsScrubbingRuler(true);
-      soundEngine.playSfx("click");
       triggerHaptic("selection", isHapticEnabledRef.current);
       updateSeekFromPointer(e);
     },

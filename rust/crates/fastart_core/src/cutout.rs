@@ -731,6 +731,32 @@ pub fn unpack_alpha_rle(rle: &[u8], out_alpha: &mut [u8]) -> usize {
     out_idx
 }
 
+/// Applies MODNet alpha thresholds and compresses the result without a JS pixel loop.
+pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u8> {
+    let use_curve = threshold > 0.0 || feather > 0.0;
+    let threshold = threshold.clamp(0.0, 1.0);
+    let softness = feather.clamp(0.01, 1.0);
+    let inv_softness = 1.0 / softness;
+    let mut alpha8 = Vec::with_capacity(alpha.len());
+
+    for &value in alpha {
+        let byte = if use_curve {
+            if value >= threshold + softness {
+                255
+            } else if value <= threshold {
+                0
+            } else {
+                let u = (value - threshold) * inv_softness;
+                (u * u * (3.0 - 2.0 * u) * 255.0) as i32
+            }
+        } else {
+            (value * 255.0) as i32
+        };
+        alpha8.push(byte.clamp(0, 255) as u8);
+    }
+    pack_alpha_rle(&alpha8)
+}
+
 /// Expands a single-channel 8-bit alpha buffer into a 32-bit RGBA mask.
 pub fn alpha_to_rgba(alpha: &[u8], out_rgba: &mut [u8]) {
     let count = alpha.len().min(out_rgba.len() / 4);

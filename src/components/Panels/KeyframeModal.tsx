@@ -6,7 +6,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { ClipTransform, KeyframePoint } from "../../types/project";
 import {
   cleanAndSortKeyframes,
@@ -63,7 +62,6 @@ export default function KeyframeModal({
 
   useEffect(() => {
     if (visible) {
-      soundEngine.playSfx("click");
     }
   }, [visible]);
 
@@ -112,7 +110,6 @@ export default function KeyframeModal({
   const nextKeyframe = keyframes.find((k) => k.time > localTime + 0.12);
 
   const handleJumpToKeyframe = (time: number) => {
-    soundEngine.playSfx("pop");
     if (onSeek) {
       onSeek(clipStart + time);
     }
@@ -140,7 +137,6 @@ export default function KeyframeModal({
             {keyframes.length > 0 && (
               <TouchableOpacity
                 onPress={() => {
-                  soundEngine.playSfx("pop");
                   onClearAllKeyframes?.();
                 }}
                 style={[styles.closeBtn, { width: 'auto', paddingHorizontal: 8, height: 24, backgroundColor: 'rgba(239, 68, 68, 0.12)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
@@ -154,7 +150,6 @@ export default function KeyframeModal({
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onClose();
               }}
               activeOpacity={0.7}

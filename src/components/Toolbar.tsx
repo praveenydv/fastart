@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { soundEngine } from "../utils/audioEngine";
 import { theme } from "../constants/theme";
 import { mediaHasAudioTrack } from "../utils/mediaAudioDetector";
 import FastArtLogo from "./FastArtLogo";
@@ -281,7 +280,6 @@ function ToolbarComponent({
   }, [selectedClip, selectedClipType]);
 
   const handleToolAction = (toolId: string) => {
-    soundEngine.playSfx("click");
     // If user clicks the currently active tool, toggle it closed to make timeline visible again
     if (activeToolId === toolId && onCloseModal) {
       onCloseModal();
@@ -393,7 +391,6 @@ function ToolbarComponent({
         else if (onOpenCanvasModal) onOpenCanvasModal();
         break;
       case "split":
-        soundEngine.playSfx("split");
         onSplitClip();
         break;
       case "freeze":

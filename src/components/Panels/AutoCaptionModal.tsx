@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { FastArtProject, CaptionClip } from "../../types/project";
 import {
   generateAutoCaptions,
@@ -389,7 +388,6 @@ export default function AutoCaptionModal({
                 getActiveStyleOverrides(),
               );
               if (parsedCaptions.length > 0) {
-                soundEngine.playSfx("pop");
                 onAddCaptions(parsedCaptions);
                 setActiveTab("captions");
               } else {
@@ -420,7 +418,6 @@ export default function AutoCaptionModal({
       getActiveStyleOverrides(),
     );
     if (parsed.length > 0) {
-      soundEngine.playSfx("pop");
       onAddCaptions(parsed);
       setPastedSrtText("");
       setShowPasteSrtBox(false);
@@ -446,7 +443,6 @@ export default function AutoCaptionModal({
           getActiveStyleOverrides(),
         );
         if (aligned && aligned.length > 0) {
-          soundEngine.playSfx("pop");
           onAddCaptions(aligned);
           setPastedSrtText("");
           setShowPasteSrtBox(false);
@@ -488,7 +484,6 @@ export default function AutoCaptionModal({
   const handleDeleteCue = useCallback(
     (cueId: string) => {
       if (!currentProject || !onUpdateProject) return;
-      soundEngine.playSfx("pop");
       const list = currentProject?.tracks?.captions || [];
       const filtered = list.filter((c) => c.id !== cueId);
       onUpdateProject({
@@ -500,7 +495,6 @@ export default function AutoCaptionModal({
 
   const handleAddNewCueAtPlayhead = () => {
     if (!currentProject || !onUpdateProject) return;
-    soundEngine.playSfx("pop");
     const styleOverrides = getActiveStyleOverrides();
     const newCue: CaptionClip = {
       id: `cap-${Date.now()}`,
@@ -543,14 +537,12 @@ export default function AutoCaptionModal({
 
   const handleClearAllCaptions = () => {
     if (!currentProject || !onUpdateProject) return;
-    soundEngine.playSfx("click");
     onUpdateProject({
       tracks: { ...currentProject.tracks, captions: [] },
     });
   };
 
   const handleResetToDefaults = () => {
-    soundEngine.playSfx("click");
     setSelectedPresetId(defaultCaptionSettings.presetId);
     setEnableHighlight(defaultCaptionSettings.enableHighlight);
     setHighlightColor(defaultCaptionSettings.highlightColor);
@@ -575,7 +567,6 @@ export default function AutoCaptionModal({
   const handleRechunkTimelineCaptions = () => {
     if (!currentProject || !onUpdateProject || existingCaptions.length === 0)
       return;
-    soundEngine.playSfx("pop");
     const rechunked = rechunkCaptionClips(
       existingCaptions,
       maxWordsPerCue,
@@ -590,7 +581,6 @@ export default function AutoCaptionModal({
   };
 
   const handleApplyPreset = (preset: CaptionStylePreset) => {
-    soundEngine.playSfx("click");
     setSelectedPresetId(preset.id);
     setTextColor(preset.color);
     setBackgroundColor(preset.bgColor || "transparent");
@@ -621,7 +611,6 @@ export default function AutoCaptionModal({
   const handleApplyStyleToAll = () => {
     if (!currentProject || !onUpdateProject || existingCaptions.length === 0)
       return;
-    soundEngine.playSfx("pop");
 
     const updatedSettings: CaptionSettings = {
       presetId: selectedPresetId,
@@ -678,7 +667,6 @@ export default function AutoCaptionModal({
 
   const handleApplyStyleToSelected = () => {
     if (!currentProject || !onUpdateProject || !selectedClipId) return;
-    soundEngine.playSfx("pop");
 
     const updatedSettings: CaptionSettings = {
       presetId: selectedPresetId,
@@ -745,7 +733,6 @@ export default function AutoCaptionModal({
       return;
     }
 
-    soundEngine.playSfx("click");
     setErrorMessage(null);
     setIsGenerating(true);
     setProgressPct(10);
@@ -772,7 +759,6 @@ export default function AutoCaptionModal({
         );
       }
 
-      soundEngine.playSfx("pop");
       onAddCaptions(generated);
       setStatusText(`Generated ${generated.length} caption cues!`);
     } catch (err: any) {
@@ -780,7 +766,6 @@ export default function AutoCaptionModal({
       const msg = err?.message || "Failed to generate captions.";
       setStatusText(msg);
       setErrorMessage(msg);
-      soundEngine.playSfx("click");
     } finally {
       setIsGenerating(false);
     }
@@ -828,7 +813,6 @@ export default function AutoCaptionModal({
               activeTab === "captions" && styles.segmentBtnActive,
             ]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("captions");
             }}
           >
@@ -854,7 +838,6 @@ export default function AutoCaptionModal({
               activeTab === "style" && styles.segmentBtnActive,
             ]}
             onPress={() => {
-              soundEngine.playSfx("click");
               setActiveTab("style");
             }}
           >
@@ -974,7 +957,6 @@ export default function AutoCaptionModal({
                                 isSelected && styles.chunkChipActive,
                               ]}
                               onPress={() => {
-                                soundEngine.playSfx("click");
                                 setChunkMode(opt.value as any);
                                 setMaxWordsPerCue(opt.maxWords);
                                 persistSettings({
@@ -1297,7 +1279,6 @@ export default function AutoCaptionModal({
                             isSelected && styles.highlightChipActive,
                           ]}
                           onPress={() => {
-                            soundEngine.playSfx("click");
                             setHighlightStyle(opt.value);
                             persistSettings({ highlightStyle: opt.value });
                           }}
@@ -1334,7 +1315,6 @@ export default function AutoCaptionModal({
                             isSelected && styles.swatchCircleSelected,
                           ]}
                           onPress={() => {
-                            soundEngine.playSfx("click");
                             setHighlightColor(swatch.value);
                             persistSettings({ highlightColor: swatch.value });
                           }}
@@ -1380,7 +1360,6 @@ export default function AutoCaptionModal({
                   <TouchableOpacity
                     style={styles.stepperAction}
                     onPress={() => {
-                      soundEngine.playSfx("click");
                       const next = Math.max(10, fontSize - 2);
                       setFontSize(next);
                       persistSettings({ fontSize: next });
@@ -1392,7 +1371,6 @@ export default function AutoCaptionModal({
                   <TouchableOpacity
                     style={styles.stepperAction}
                     onPress={() => {
-                      soundEngine.playSfx("click");
                       const next = Math.min(52, fontSize + 2);
                       setFontSize(next);
                       persistSettings({ fontSize: next });
@@ -1417,7 +1395,6 @@ export default function AutoCaptionModal({
                         isSelected && styles.fontChipActive,
                       ]}
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         setFontFamily(f.value);
                         persistSettings({ fontFamily: f.value });
                       }}
@@ -1450,7 +1427,6 @@ export default function AutoCaptionModal({
                           isSelected && styles.microBtnActive,
                         ]}
                         onPress={() => {
-                          soundEngine.playSfx("click");
                           setFontWeight(fw.value);
                           persistSettings({ fontWeight: fw.value });
                         }}
@@ -1472,7 +1448,6 @@ export default function AutoCaptionModal({
                 <TouchableOpacity
                   style={[styles.microBtn, uppercase && styles.microBtnActive]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     const next = !uppercase;
                     setUppercase(next);
                     persistSettings({ uppercase: next });
@@ -1497,7 +1472,6 @@ export default function AutoCaptionModal({
                         key={al.value}
                         style={[styles.alignItem, isSelected && styles.alignItemActive]}
                         onPress={() => {
-                          soundEngine.playSfx("click");
                           setTextAlign(al.value as any);
                           persistSettings({ textAlign: al.value as any });
                         }}
@@ -1531,7 +1505,6 @@ export default function AutoCaptionModal({
                         isSelected && styles.swatchCircleSelected,
                       ]}
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         setTextColor(swatch.value);
                         persistSettings({ textColor: swatch.value });
                       }}
@@ -1576,7 +1549,6 @@ export default function AutoCaptionModal({
                         key={sw.value}
                         style={[styles.microBtn, isSelected && styles.microBtnActive]}
                         onPress={() => {
-                          soundEngine.playSfx("click");
                           setStrokeWidth(sw.value);
                           persistSettings({ strokeWidth: sw.value });
                         }}
@@ -1612,7 +1584,6 @@ export default function AutoCaptionModal({
                           isSelected && styles.swatchCircleSelected,
                         ]}
                         onPress={() => {
-                          soundEngine.playSfx("click");
                           setStrokeColor(swatch.value);
                           persistSettings({ strokeColor: swatch.value });
                         }}
@@ -1655,7 +1626,6 @@ export default function AutoCaptionModal({
                       key={box.value}
                       style={[styles.boxChip, isSelected && styles.boxChipActive]}
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         setBackgroundColor(box.value);
                         persistSettings({ backgroundColor: box.value });
                       }}
@@ -1696,7 +1666,6 @@ export default function AutoCaptionModal({
                         isSelected && styles.chipBtnActive,
                       ]}
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         setTextEffect(eff.value);
                         persistSettings({ textEffect: eff.value });
                       }}
@@ -1735,7 +1704,6 @@ export default function AutoCaptionModal({
                         isSelected && styles.posChipActive,
                       ]}
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         setCaptionPositionY(pos.value);
                         persistSettings({ positionY: pos.value });
                       }}
@@ -2792,7 +2760,6 @@ const CaptionCueItem = React.memo(function CaptionCueItem({
             <TouchableOpacity
               style={styles.cueIconBtn}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onSeek(cap.startTime);
               }}
               accessibilityLabel="Play at cue"

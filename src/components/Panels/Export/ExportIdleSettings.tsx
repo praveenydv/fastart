@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { View, Text, TextInput, useWindowDimensions } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { ExportFormat } from "../../../utils/videoRenderer";
 import {
   MEDIA_FORMATS,
@@ -141,7 +140,6 @@ export default function ExportIdleSettings({
               style={[styles.formatChip, isSelected && styles.formatChipActive]}
               onPress={() => {
                 setMediaType(fmt.id);
-                soundEngine.playSfx("click");
               }}
               activeOpacity={0.7}
             >
@@ -208,7 +206,6 @@ export default function ExportIdleSettings({
                   ]}
                   onPress={() => {
                     setResolution(r);
-                    soundEngine.playSfx("click");
                   }}
                   activeOpacity={0.7}
                 >
@@ -265,7 +262,6 @@ export default function ExportIdleSettings({
                   ]}
                   onPress={() => {
                     setFps(f);
-                    soundEngine.playSfx("click");
                   }}
                   activeOpacity={0.7}
                 >

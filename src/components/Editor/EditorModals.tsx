@@ -1,8 +1,13 @@
-import React, { useRef, useEffect } from "react";
-import { View, Text, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Easing,
+  Platform,
+} from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import MediaPickerModal from "../Panels/MediaPickerModal";
 import TextModal from "../Panels/TextModal";
 import AudioModal from "../Panels/AudioModal";
@@ -21,13 +26,12 @@ import CanvasModal from "../Panels/CanvasModal";
 import BackgroundModal from "../Panels/BackgroundModal";
 import AIEnhanceModal from "../Panels/AIEnhanceModal";
 import CutoutModal from "../Panels/CutoutModal";
-import MobileCutoutBridgeView from "../Panels/Cutout/MobileCutoutBridgeView";
 import MaskModal from "../Panels/MaskModal";
 import MotionTrackingModal from "../Panels/MotionTrackingModal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import KeyframeModal from "../Panels/KeyframeModal";
 import AutoCaptionModal from "../Panels/AutoCaptionModal";
-import AnimationModal from "../Panels/AnimationModal";
+import UnifiedAnimationModal from "../Panels/UnifiedAnimationModal";
 import BlendModeModal from "../Panels/BlendModeModal";
 import HSLAdjustModal from "../Panels/HSLAdjustModal";
 import VoiceEffectsModal from "../Panels/VoiceEffectsModal";
@@ -71,25 +75,39 @@ interface EditorModalsProps {
   setClipToDelete: (val: any) => void;
   handleAddMedia: (media: any[]) => void;
   handleApplyCutout: (cutout: any, clipId?: string) => void;
-  cutoutInitialMode?: 'auto' | 'chroma';
+  cutoutInitialMode?: "auto" | "chroma";
   handleApplyMotionTracking: (track: any) => void;
   handleAddText: (clip: TextClip) => void;
   handleUpdateText: (clip: TextClip) => void;
   handleAddAudio: (item: any) => void;
-  handleApplyFilter: (lut: string, customLut?: any, applyToAll?: boolean, intensity?: number) => void;
+  handleApplyFilter: (
+    lut: string,
+    customLut?: any,
+    applyToAll?: boolean,
+    intensity?: number,
+  ) => void;
   handleAddEffect: (effect: any) => void;
   handleUpdateEffect: (clip: EffectClip) => void;
   handleAddSticker: (sticker: any) => void;
   handleUpdateSticker: (clip: StickerClip) => void;
   handleApplyTransition: (transition: any) => void;
-  handleApplySpeed: (speed: number, curve?: any, smoothSlowMo?: "none" | "blend" | "optical_flow") => void;
+  handleApplySpeed: (
+    speed: number,
+    curve?: any,
+    smoothSlowMo?: "none" | "blend" | "optical_flow",
+  ) => void;
   handleUpdateSettings: (updates: any) => void;
   handleReloadAllData: () => void;
   handleMarkAllAsRead: () => void;
   handleClearAllNotifications: () => void;
   handleDeleteNotification: (id: string) => void;
   handleNotificationAction: (notif: any) => void;
-  handleApplyVolume: (vol: number, fadeIn: number, fadeOut: number, denoise?: boolean) => void;
+  handleApplyVolume: (
+    vol: number,
+    fadeIn: number,
+    fadeOut: number,
+    denoise?: boolean,
+  ) => void;
   handleExtractAudioFromVideo?: () => void;
   handleApplyTransform: (t: any, ratio?: any, mask?: any) => void;
   handleAutoCutGenerated: (proj: any) => void;
@@ -104,7 +122,12 @@ interface EditorModalsProps {
   hasNextKeyframe?: boolean;
   handleJumpPrevKeyframe?: () => void;
   handleJumpNextKeyframe?: () => void;
-  handleUpdateKeyframeTransform: (time: number, transform: any, opacity?: number, easing?: any) => void;
+  handleUpdateKeyframeTransform: (
+    time: number,
+    transform: any,
+    opacity?: number,
+    easing?: any,
+  ) => void;
   handleDeleteKeyframeAtTime: (time?: number) => void;
   handleClearAllKeyframes: () => void;
   handleAddMaskKeyframe?: () => void;
@@ -118,11 +141,16 @@ interface EditorModalsProps {
   handleConfirmDeleteClip: () => void;
   handleAddCaptions?: (captions: any[]) => void;
   handleUpdateCaption?: (clip: any) => void;
-  transformInitialTab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle';
+  transformInitialTab?: "crop" | "flip" | "rotate" | "stretch" | "angle";
   onOpenScreenCrop?: () => void;
   setIsCroppingPreview?: (c: boolean) => void;
   isInline?: boolean;
-  handleUpdateClipMask?: (clipId: string, mask: any, isFinal?: boolean, timeOverride?: number) => void;
+  handleUpdateClipMask?: (
+    clipId: string,
+    mask: any,
+    isFinal?: boolean,
+    timeOverride?: number,
+  ) => void;
   handleMoveClip?: (
     clipId: string,
     trackType: "video" | "audio" | "text" | "sticker" | "effects" | "caption",
@@ -159,31 +187,31 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
 }
 
 export const INLINE_MODAL_KEYS = new Set([
-  'media',
-  'audio',
-  'filters',
-  'transform',
-  'mask',
-  'speed',
-  'volume',
-  'text',
-  'stickers',
-  'effects',
-  'captions',
-  'transitions',
-  'enhance',
-  'autocut',
-  'canvas',
-  'background',
-  'keyframe',
-  'cutout',
-  'tracking',
-  'opacity',
-  'animation',
-  'audio_effects',
-  'voice_effects',
-  'blend',
-  'hsl',
+  "media",
+  "audio",
+  "filters",
+  "transform",
+  "mask",
+  "speed",
+  "volume",
+  "text",
+  "stickers",
+  "effects",
+  "captions",
+  "transitions",
+  "enhance",
+  "autocut",
+  "canvas",
+  "background",
+  "keyframe",
+  "cutout",
+  "tracking",
+  "opacity",
+  "animation",
+  "audio_effects",
+  "voice_effects",
+  "blend",
+  "hsl",
 ]);
 
 const EditorModalsComponent: React.FC<EditorModalsProps> = ({
@@ -266,7 +294,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
 
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [fadeAnim] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     if (activeModal && isInline && Platform.OS !== "web") {
@@ -278,7 +306,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         useNativeDriver: true,
       }).start();
     }
-  }, [activeModal, isInline]);
+  }, [activeModal, isInline, fadeAnim]);
 
   // When isInline is true, only render if activeModal is an inline modal tool
   if (isInline && (!activeModal || !INLINE_MODAL_KEYS.has(activeModal))) {
@@ -423,39 +451,40 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "text" && (() => {
-        let editingTarget: any = null;
-        if (
-          selectedClip &&
-          (selectedClipType === "text" ||
-            (selectedClipType !== "caption" &&
-              selectedClipType !== "captions" &&
-              typeof (selectedClip as any).text === "string" &&
-              !(selectedClip as any).words))
-        ) {
-          editingTarget = selectedClip;
-        } else if (selectedClipId && project) {
-          editingTarget =
-            project.tracks?.text?.find((c) => c.id === selectedClipId) ||
-            null;
-        }
+      {activeModal === "text" &&
+        (() => {
+          let editingTarget: any = null;
+          if (
+            selectedClip &&
+            (selectedClipType === "text" ||
+              (selectedClipType !== "caption" &&
+                selectedClipType !== "captions" &&
+                typeof (selectedClip as any).text === "string" &&
+                !(selectedClip as any).words))
+          ) {
+            editingTarget = selectedClip;
+          } else if (selectedClipId && project) {
+            editingTarget =
+              project.tracks?.text?.find((c) => c.id === selectedClipId) ||
+              null;
+          }
 
-        return (
-          <TextModal
-            visible={true}
-            onClose={handleCancel}
-            onAddText={handleAddText}
-            editingClip={editingTarget}
-            onUpdateText={(clip) => {
-              if (handleUpdateText) {
-                handleUpdateText(clip);
-              }
-            }}
-            currentPlayheadTime={currentTime}
-            isInline={isInline}
-          />
-        );
-      })()}
+          return (
+            <TextModal
+              visible={true}
+              onClose={handleCancel}
+              onAddText={handleAddText}
+              editingClip={editingTarget}
+              onUpdateText={(clip) => {
+                if (handleUpdateText) {
+                  handleUpdateText(clip);
+                }
+              }}
+              currentPlayheadTime={currentTime}
+              isInline={isInline}
+            />
+          );
+        })()}
 
       {activeModal === "audio" && (
         <AudioModal
@@ -474,11 +503,16 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           onClose={handleCancel}
           onApply={handleApply}
           activeFilter={
-            selectedClipType === "video" || selectedClipType === "photo" || selectedClipType === "image"
+            selectedClipType === "video" ||
+            selectedClipType === "photo" ||
+            selectedClipType === "image"
               ? (selectedClip as VideoClip)?.filter || "normal"
               : selectedClipType === "effects" || selectedClipType === "effect"
-              ? (selectedClip as EffectClip)?.filter || ((selectedClip as EffectClip)?.type?.startsWith("filter_") ? (selectedClip as EffectClip).type.replace(/^filter_/, "") : "normal")
-              : "normal"
+                ? (selectedClip as EffectClip)?.filter ||
+                  ((selectedClip as EffectClip)?.type?.startsWith("filter_")
+                    ? (selectedClip as EffectClip).type.replace(/^filter_/, "")
+                    : "normal")
+                : "normal"
           }
           onSelectFilter={handleApplyFilter}
           isInline={isInline}
@@ -495,18 +529,24 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           activeEffect={
             selectedClipType === "effects" || selectedClipType === "effect"
               ? (selectedClip as EffectClip)?.type
-              : (selectedClipType === "video" || selectedClipType === "photo" || selectedClipType === "image")
-              ? (typeof (selectedClip as VideoClip)?.effect === "string"
+              : selectedClipType === "video" ||
+                  selectedClipType === "photo" ||
+                  selectedClipType === "image"
+                ? typeof (selectedClip as VideoClip)?.effect === "string"
                   ? (selectedClip as VideoClip)?.effect
-                  : (selectedClip as any)?.effect?.type || (selectedClip as any)?.effect?.id || "none")
-              : "none"
+                  : (selectedClip as any)?.effect?.type ||
+                    (selectedClip as any)?.effect?.id ||
+                    "none"
+                : "none"
           }
           activeIntensity={
             selectedClipType === "effects" || selectedClipType === "effect"
               ? (selectedClip as EffectClip)?.intensity
-              : (selectedClipType === "video" || selectedClipType === "photo" || selectedClipType === "image")
-              ? (selectedClip as any)?.effectIntensity
-              : undefined
+              : selectedClipType === "video" ||
+                  selectedClipType === "photo" ||
+                  selectedClipType === "image"
+                ? (selectedClip as any)?.effectIntensity
+                : undefined
           }
           onAddEffect={handleAddEffect}
           editingClip={
@@ -543,9 +583,8 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           onClose={handleCancel}
           onApply={handleApply}
           activeTransition={
-            project?.tracks?.video?.find(
-              (c) => c.id === transitionTargetClipId,
-            )?.transition
+            project?.tracks?.video?.find((c) => c.id === transitionTargetClipId)
+              ?.transition
           }
           onApplyTransition={handleApplyTransition}
           isInline={isInline}
@@ -600,58 +639,75 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         />
       )}
 
-      {activeModal === "volume" && (selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)) && (
-        <VolumeModal
-          visible={true}
-          onClose={handleCancel}
-          onApply={handleApply}
-          currentVolume={selectedClip?.volume ?? 1.0}
-          currentFadeIn={selectedClip?.fadeIn ?? 0}
-          currentFadeOut={selectedClip?.fadeOut ?? 0}
-          currentDenoise={Boolean(selectedClip?.denoise)}
-          isFromVideo={selectedClipType === "video"}
-          hasAudio={selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)}
-          onApplyVolume={handleApplyVolume}
-          onExtractAudio={handleExtractAudioFromVideo}
-          isInline={isInline}
-        />
-      )}
-
-      {activeModal === "mask" && (() => {
-        const targetVideoClip =
-          selectedClip?.id && (selectedClipType === "video" || selectedClipType === "photo" || !selectedClipType)
-            ? selectedClip
-            : (project?.tracks?.video || []).find((v) => currentTime >= v.startTime && currentTime <= v.startTime + v.duration) ||
-              (project?.tracks?.video || [])[0];
-
-        const currentInterpMask = targetVideoClip
-          ? (getInterpolatedMask(targetVideoClip, currentTime) || targetVideoClip.mask || targetVideoClip.transform?.mask)
-          : undefined;
-
-        return (
-          <MaskModal
+      {activeModal === "volume" &&
+        (selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)) && (
+          <VolumeModal
             visible={true}
             onClose={handleCancel}
             onApply={handleApply}
-            currentMask={currentInterpMask}
-            onApplyMask={(newMask) => {
-              if (handleUpdateClipMask && targetVideoClip?.id) {
-                handleUpdateClipMask(targetVideoClip.id, newMask, true, currentTime);
-              }
-            }}
+            currentVolume={selectedClip?.volume ?? 1.0}
+            currentFadeIn={selectedClip?.fadeIn ?? 0}
+            currentFadeOut={selectedClip?.fadeOut ?? 0}
+            currentDenoise={Boolean(selectedClip?.denoise)}
+            isFromVideo={selectedClipType === "video"}
+            hasAudio={
+              selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)
+            }
+            onApplyVolume={handleApplyVolume}
+            onExtractAudio={handleExtractAudioFromVideo}
             isInline={isInline}
-            selectedClip={targetVideoClip}
-            currentTime={currentTime}
-            onSeek={setCurrentTime}
-            onAddKeyframe={handleAddMaskKeyframe}
-            hasKeyframeAtCurrentTime={isMaskKeyframeAtPlayhead}
-            hasPrevKeyframe={hasPrevMaskKeyframe}
-            hasNextKeyframe={hasNextMaskKeyframe}
-            onJumpPrevKeyframe={handleJumpPrevMaskKeyframe}
-            onJumpNextKeyframe={handleJumpNextMaskKeyframe}
           />
-        );
-      })()}
+        )}
+
+      {activeModal === "mask" &&
+        (() => {
+          const targetVideoClip =
+            selectedClip?.id &&
+            (selectedClipType === "video" ||
+              selectedClipType === "photo" ||
+              !selectedClipType)
+              ? selectedClip
+              : (project?.tracks?.video || []).find(
+                  (v) =>
+                    currentTime >= v.startTime &&
+                    currentTime <= v.startTime + v.duration,
+                ) || (project?.tracks?.video || [])[0];
+
+          const currentInterpMask = targetVideoClip
+            ? getInterpolatedMask(targetVideoClip, currentTime) ||
+              targetVideoClip.mask ||
+              targetVideoClip.transform?.mask
+            : undefined;
+
+          return (
+            <MaskModal
+              visible={true}
+              onClose={handleCancel}
+              onApply={handleApply}
+              currentMask={currentInterpMask}
+              onApplyMask={(newMask) => {
+                if (handleUpdateClipMask && targetVideoClip?.id) {
+                  handleUpdateClipMask(
+                    targetVideoClip.id,
+                    newMask,
+                    true,
+                    currentTime,
+                  );
+                }
+              }}
+              isInline={isInline}
+              selectedClip={targetVideoClip}
+              currentTime={currentTime}
+              onSeek={setCurrentTime}
+              onAddKeyframe={handleAddMaskKeyframe}
+              hasKeyframeAtCurrentTime={isMaskKeyframeAtPlayhead}
+              hasPrevKeyframe={hasPrevMaskKeyframe}
+              hasNextKeyframe={hasNextMaskKeyframe}
+              onJumpPrevKeyframe={handleJumpPrevMaskKeyframe}
+              onJumpNextKeyframe={handleJumpNextMaskKeyframe}
+            />
+          );
+        })()}
 
       {activeModal === "transform" && (
         <TransformModal
@@ -713,39 +769,43 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
       )}
 
       {/* Modern Sleek Keyframe Animation Studio Modal */}
-      {activeModal === "keyframe" && (() => {
-        let effectiveClip = selectedClip;
-        let effectiveType = selectedClipType || "video";
-        if (!effectiveClip && project) {
-          const videoAtTime = project.tracks.video?.find(
-            (c) => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
-          ) || project.tracks.video?.[0];
-          if (videoAtTime) {
-            effectiveClip = videoAtTime;
-            effectiveType = "video";
+      {activeModal === "keyframe" &&
+        (() => {
+          let effectiveClip = selectedClip;
+          let effectiveType = selectedClipType || "video";
+          if (!effectiveClip && project) {
+            const videoAtTime =
+              project.tracks.video?.find(
+                (c) =>
+                  currentTime >= c.startTime &&
+                  currentTime <= c.startTime + c.duration,
+              ) || project.tracks.video?.[0];
+            if (videoAtTime) {
+              effectiveClip = videoAtTime;
+              effectiveType = "video";
+            }
           }
-        }
 
-        return (
-          <KeyframeModal
-            visible={true}
-            onClose={handleCancel}
-            onApply={handleApply}
-            selectedClip={effectiveClip}
-            selectedClipType={effectiveType}
-            currentTime={currentTime}
-            onSeek={(t) => setCurrentTime(t)}
-            onAddKeyframe={handleAddKeyframe}
-            hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
-            onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
-            onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
-            onClearAllKeyframes={handleClearAllKeyframes}
-            onDeleteMaskKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
-            onClearAllMaskKeyframes={handleClearAllMaskKeyframes}
-            isInline={isInline}
-          />
-        );
-      })()}
+          return (
+            <KeyframeModal
+              visible={true}
+              onClose={handleCancel}
+              onApply={handleApply}
+              selectedClip={effectiveClip}
+              selectedClipType={effectiveType}
+              currentTime={currentTime}
+              onSeek={(t) => setCurrentTime(t)}
+              onAddKeyframe={handleAddKeyframe}
+              hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
+              onUpdateKeyframeTransform={handleUpdateKeyframeTransform}
+              onDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
+              onClearAllKeyframes={handleClearAllKeyframes}
+              onDeleteMaskKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
+              onClearAllMaskKeyframes={handleClearAllMaskKeyframes}
+              isInline={isInline}
+            />
+          );
+        })()}
 
       {/* AI Speech Auto-Captions Studio Modal */}
       {activeModal === "captions" && (
@@ -770,14 +830,16 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         />
       )}
 
-
-
       {/* Opacity Panel */}
       {activeModal === "opacity" && selectedClip && (
         <View style={modalStyles.panelContainer}>
           <CompactSliderInput
             label="Layer Opacity"
-            value={selectedClip?.opacity !== undefined ? Math.round(selectedClip.opacity * 100) : 100}
+            value={
+              selectedClip?.opacity !== undefined
+                ? Math.round(selectedClip.opacity * 100)
+                : 100
+            }
             min={0}
             max={100}
             step={1}
@@ -788,24 +850,33 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             accentColor="#00F2FE"
             onChange={(val) => handleUpdateOpacity(val)}
             onReset={() => {
-              soundEngine.playSfx("click");
               handleUpdateOpacity(100);
             }}
           />
           <View style={[modalStyles.chipRow, { marginTop: 10 }]}>
             {[100, 75, 50, 25, 0].map((op) => {
-              const curOp = selectedClip?.opacity !== undefined ? Math.round(selectedClip.opacity * 100) : 100;
+              const curOp =
+                selectedClip?.opacity !== undefined
+                  ? Math.round(selectedClip.opacity * 100)
+                  : 100;
               const isSel = curOp === op;
               return (
                 <TouchableOpacity
                   key={op}
-                  style={[modalStyles.chipBtn, isSel && modalStyles.chipBtnActive]}
+                  style={[
+                    modalStyles.chipBtn,
+                    isSel && modalStyles.chipBtnActive,
+                  ]}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     handleUpdateOpacity(op);
                   }}
                 >
-                  <Text style={[modalStyles.chipText, isSel && modalStyles.chipTextActive]}>
+                  <Text
+                    style={[
+                      modalStyles.chipText,
+                      isSel && modalStyles.chipTextActive,
+                    ]}
+                  >
                     {op}%
                   </Text>
                 </TouchableOpacity>
@@ -817,8 +888,8 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
 
       {/* Animation Presets Panel */}
       {activeModal === "animation" && selectedClip && (
-        <AnimationModal
-          visible={true}
+        <UnifiedAnimationModal
+          visible
           onClose={handleCancel}
           selectedClip={selectedClip}
           selectedClipType={selectedClipType}
@@ -835,7 +906,9 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           onClose={handleCancel}
           isInline={isInline}
           currentMode={selectedClip?.transform?.blendMode || "normal"}
-          currentOpacity={selectedClip?.opacity !== undefined ? selectedClip.opacity : 1.0}
+          currentOpacity={
+            selectedClip?.opacity !== undefined ? selectedClip.opacity : 1.0
+          }
           onApply={(mode, op) => {
             if (handleApplyBlendMode) {
               handleApplyBlendMode(mode, op);
@@ -891,7 +964,6 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         onConfirm={handleConfirmDeleteClip}
         onCancel={() => setClipToDelete(null)}
       />
-      {Platform.OS !== "web" && <MobileCutoutBridgeView />}
     </>
   );
 
@@ -908,9 +980,11 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             overflow: "hidden",
             opacity: fadeAnim,
           },
-          Platform.OS === "web" && ({
-            animation: "fastartInlineEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-          } as any),
+          Platform.OS === "web" &&
+            ({
+              animation:
+                "fastartInlineEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            } as any),
         ]}
       >
         {renderedContent}

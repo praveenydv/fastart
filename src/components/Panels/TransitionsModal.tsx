@@ -10,7 +10,6 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { TRANSITION_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
-import { soundEngine } from '../../utils/audioEngine';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
 interface TransitionsModalProps {
@@ -163,7 +162,6 @@ export default function TransitionsModal({
   const durations = [0.3, 0.5, 0.8, 1.0];
 
   const handleSelect = (item: any) => {
-    soundEngine.playSfx('whoosh');
     setSelectedType(item.id);
     onApplyTransition({
       type: item.id,
@@ -172,7 +170,6 @@ export default function TransitionsModal({
   };
 
   const handleClear = () => {
-    soundEngine.playSfx('click');
     setSelectedType('none');
     onApplyTransition({
       type: 'none',
@@ -249,7 +246,6 @@ export default function TransitionsModal({
                     key={d}
                     style={[styles.durationPill, Math.abs(duration - d) < 0.05 && styles.durationPillActive]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       setDuration(d);
                       onApplyTransition({
                         type: selectedType,

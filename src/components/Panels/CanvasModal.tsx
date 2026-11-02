@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 import { FastArtProject, AspectRatio } from "../../types/project";
 
 interface CanvasModalProps {
@@ -79,7 +78,6 @@ export default function CanvasModal({
   const currentRatio = project.aspectRatio || "9:16";
 
   const handleSelectRatio = (ratio: AspectRatio) => {
-    soundEngine.playSfx("pop");
     onUpdateProject({ aspectRatio: ratio });
   };
 

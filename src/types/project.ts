@@ -29,6 +29,7 @@ export interface MaskKeyframePoint {
 export interface CutoutConfig {
   enabled: boolean;
   mode: 'chroma' | 'auto';
+  quality?: 'fast' | 'studio'; // 'fast' = CapCut speed (256p, 10x speed), 'studio' = 512p deep matting
   keyColor: string; // e.g. '#00FF00', '#0000FF'
   intensity: number; // 0..100 (similarity tolerance)
   shadow: number; // 0..100 (edge smoothness/feather)

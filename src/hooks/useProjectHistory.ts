@@ -6,7 +6,6 @@ import {
   setStorageItem,
   removeStorageItem,
 } from "../utils/storage";
-import { soundEngine } from "../utils/audioEngine";
 
 // High-performance structured clone of project snapshot without JSON.stringify/parse overhead
 export function cloneProjectSnapshot(project: FastArtProject): FastArtProject {
@@ -87,6 +86,7 @@ export function useProjectHistory({
   const pendingRedoTimerRef = useRef<any>(null);
   const lastHistoryPushTimeRef = useRef<number>(0);
   const burstSnapshotRef = useRef<FastArtProject | null>(null);
+  const hasPreviewChangesRef = useRef<boolean>(false);
 
   // Flush pending project save to disk immediately
   const flushPendingSave = useCallback(() => {
@@ -195,6 +195,7 @@ export function useProjectHistory({
   const updateProjectPreview = useCallback((updatedProject: any) => {
     const current = projectRef.current;
     if (!current) return;
+    hasPreviewChangesRef.current = true;
     const fullProject: FastArtProject = {
       ...current,
       ...(updatedProject || {}),
@@ -208,22 +209,32 @@ export function useProjectHistory({
   // Pushes the pre-modal snapshot to undo stack once, saves the current project, and clears redo stack.
   const commitPreview = useCallback((snapshot: FastArtProject) => {
     const current = projectRef.current;
-    if (!current) return;
-    if (JSON.stringify(current) !== JSON.stringify(snapshot)) {
-      setHistoryStack((prev) => [
-        ...prev.slice(-20),
-        cloneProjectSnapshot(snapshot),
-      ]);
-      setRedoStack([]);
-      const saved = saveProject(current);
-      projectRef.current = saved;
-      setProject(saved);
-      setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+    if (!current || current === snapshot || !hasPreviewChangesRef.current) {
+      hasPreviewChangesRef.current = false;
+      return;
     }
-  }, [projectRef, setProject, setProjects]);
+    hasPreviewChangesRef.current = false;
+    setHistoryStack((prev) => [
+      ...prev.slice(-20),
+      cloneProjectSnapshot(snapshot),
+    ]);
+    setRedoStack([]);
+
+    // Debounce save so modal closing is instantaneous (0ms) without stalling on disk I/O
+    if (pendingSaveTimerRef.current) {
+      clearTimeout(pendingSaveTimerRef.current);
+    }
+    pendingSaveTimerRef.current = setTimeout(() => {
+      pendingSaveTimerRef.current = null;
+      if (projectRef.current) {
+        saveProject(projectRef.current);
+      }
+    }, 150);
+  }, [projectRef]);
 
   // Discard preview changes: restores project to pre-modal snapshot without touching history stack
   const discardPreview = useCallback((snapshot: FastArtProject) => {
+    hasPreviewChangesRef.current = false;
     const rollback = JSON.parse(JSON.stringify(snapshot));
     projectRef.current = rollback;
     setProject(rollback);
@@ -245,7 +256,6 @@ export function useProjectHistory({
     projectRef.current = saved;
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
-    soundEngine.playSfx("click");
   }, [flushPendingSave, historyStack, projectRef, setProject, setProjects]);
 
   const handleRedo = useCallback(() => {
@@ -265,7 +275,6 @@ export function useProjectHistory({
     projectRef.current = saved;
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
-    soundEngine.playSfx("click");
   }, [flushPendingSave, redoStack, projectRef, setProject, setProjects]);
 
   const handleJumpToState = useCallback((targetIndex: number) => {
@@ -287,7 +296,6 @@ export function useProjectHistory({
     projectRef.current = saved;
     setProject(saved);
     setProjects((all) => all.map((p) => (p.id === saved.id ? saved : p)));
-    soundEngine.playSfx("whoosh");
   }, [flushPendingSave, historyStack, projectRef, setProject, setProjects]);
 
   return {

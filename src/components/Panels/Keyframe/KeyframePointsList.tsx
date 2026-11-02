@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { View, Text } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { KeyframePoint, MaskKeyframePoint } from "../../../types/project";
 import { styles } from "./KeyframeModalStyles";
 
@@ -100,7 +99,6 @@ export default function KeyframePointsList({
                     <TouchableOpacity
                       style={styles.kfDeleteBtn}
                       onPress={() => {
-                        soundEngine.playSfx("pop");
                         onDeleteKeyframeAtTime(kf.time);
                       }}
                     >
@@ -121,7 +119,6 @@ export default function KeyframePointsList({
                   <TouchableOpacity
                     style={styles.confirmClearYesBtn}
                     onPress={() => {
-                      soundEngine.playSfx("pop");
                       onClearAllKeyframes();
                       setConfirmClear(false);
                     }}
@@ -217,7 +214,6 @@ export default function KeyframePointsList({
                     <TouchableOpacity
                       style={styles.kfDeleteBtn}
                       onPress={() => {
-                        soundEngine.playSfx("pop");
                         onDeleteMaskKeyframeAtTime(mkf.time);
                       }}
                     >
@@ -238,7 +234,6 @@ export default function KeyframePointsList({
                   <TouchableOpacity
                     style={styles.confirmClearYesBtn}
                     onPress={() => {
-                      soundEngine.playSfx("pop");
                       onClearAllMaskKeyframes();
                       setConfirmClearMask(false);
                     }}

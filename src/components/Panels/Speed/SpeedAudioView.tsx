@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../../utils/audioEngine';
 import { styles } from './SpeedModalStyles';
 import { CompactSliderInput } from '../../Common/CompactSliderInput';
 
@@ -71,7 +70,6 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
               key={item.label}
               style={[styles.audioPresetCard, isActive && styles.audioPresetCardActive]}
               onPress={() => {
-                soundEngine.playSfx('click');
                 onSelectSpeed(item.value);
               }}
               activeOpacity={0.75}
@@ -108,7 +106,6 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
       <TouchableOpacity
         style={[styles.pitchCard, keepPitch && styles.pitchCardActive]}
         onPress={() => {
-          soundEngine.playSfx('click');
           onToggleKeepPitch();
         }}
         activeOpacity={0.8}

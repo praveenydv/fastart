@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { THEME_COLORS, DESIGN_CONSTANTS } from "../../constants/designConstants";
-import { soundEngine } from "../../utils/audioEngine";
 
 export interface KeyboardShortcutsModalProps {
   visible: boolean;
@@ -116,7 +115,6 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onClose();
               }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -156,7 +154,6 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
                     key={cat}
                     style={[styles.categoryPill, isActive && styles.categoryPillActive]}
                     onPress={() => {
-                      soundEngine.playSfx("click");
                       setSelectedCategory(cat);
                     }}
                   >

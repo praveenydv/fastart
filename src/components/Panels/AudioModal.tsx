@@ -11,7 +11,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { soundEngine } from '../../utils/audioEngine';
 import { AudioClip, FastArtProject } from '../../types/project';
 import {
   persistLargeMedia,
@@ -110,7 +109,6 @@ export default function AudioModal({
               url: saved.url,
             };
 
-            soundEngine.playSfx('pop');
             onAddAudio(audioClip);
             onClose();
           } finally {
@@ -171,7 +169,6 @@ export default function AudioModal({
               volume: 1.0,
               url: persistentUri,
             };
-            soundEngine.playSfx('pop');
             onAddAudio(audioClip);
             onClose();
           }
@@ -289,7 +286,6 @@ export default function AudioModal({
                     <TouchableOpacity
                       style={styles.importedAddBtn}
                       onPress={() => {
-                        soundEngine.playSfx("pop");
                         onAddAudio({
                           id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                           sourceMediaId: asset.sourceMediaId || asset.id,

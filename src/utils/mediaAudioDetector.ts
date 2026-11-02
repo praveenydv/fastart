@@ -188,295 +188,12 @@ export function mediaHasAudioTrack(clip: any): boolean {
  * - Ambient noise floor (< 0.22) is attenuated to a quiet baseline (0.02 - 0.04)
  * - Dialogue, speech harmonics, and prominent audio transients are cleanly boosted
  */
-export function applyDenoiseToPeaks(rawPeaks: number[]): number[] {
+export async function applyDenoiseToPeaks(rawPeaks: number[]): Promise<number[]> {
   return rustCoreBridge.denoiseWaveformPeaks(rawPeaks);
 }
 
 /**
- * Direct pure-JS 16-bit / 8-bit PCM WAV peak and RMS parser.
- * Reads genuine audio amplitudes directly from ArrayBuffer in <2ms.
- */
-export function parseWavPeaks(
-  buf: ArrayBuffer,
-  numPoints: number = 3200,
-): { duration: number; peaks: number[] } | null {
-  if (buf.byteLength < 44) return null;
-  const view = new DataView(buf);
-  const riff = String.fromCharCode(
-    view.getUint8(0),
-    view.getUint8(1),
-    view.getUint8(2),
-    view.getUint8(3),
-  );
-  const wave = String.fromCharCode(
-    view.getUint8(8),
-    view.getUint8(9),
-    view.getUint8(10),
-    view.getUint8(11),
-  );
-  if (riff !== "RIFF" || wave !== "WAVE") return null;
-
-  let offset = 12;
-  let numChannels = 1;
-  let sampleRate = 44100;
-  let bitsPerSample = 16;
-  let dataOffset = -1;
-  let dataLength = 0;
-
-  while (offset + 8 <= buf.byteLength) {
-    const chunkId = String.fromCharCode(
-      view.getUint8(offset),
-      view.getUint8(offset + 1),
-      view.getUint8(offset + 2),
-      view.getUint8(offset + 3),
-    );
-    const chunkSize = view.getUint32(offset + 4, true);
-
-    if (chunkId === "fmt ") {
-      numChannels = view.getUint16(offset + 10, true);
-      sampleRate = view.getUint32(offset + 12, true);
-      bitsPerSample = view.getUint16(offset + 22, true);
-    } else if (chunkId === "data") {
-      dataOffset = offset + 8;
-      dataLength = Math.min(chunkSize, buf.byteLength - dataOffset);
-      break;
-    }
-    offset += 8 + chunkSize;
-  }
-
-  if (dataOffset < 0 || dataLength <= 0) return null;
-
-  const bytesPerSample = bitsPerSample / 8;
-  const bytesPerFrame = bytesPerSample * numChannels;
-  const totalFrames = Math.floor(dataLength / bytesPerFrame);
-  if (totalFrames <= 0) return null;
-
-  const duration = totalFrames / sampleRate;
-  const points = Math.min(numPoints, totalFrames);
-  const framesPerPoint = Math.max(1, Math.floor(totalFrames / points));
-  const rawPeaks = new Float32Array(points);
-  let maxPeak = 0.0001;
-
-  for (let i = 0; i < points; i++) {
-    const startFrame = i * framesPerPoint;
-    const endFrame = Math.min(startFrame + framesPerPoint, totalFrames);
-    let peak = 0;
-    const step = Math.max(1, Math.floor((endFrame - startFrame) / 32));
-    for (let f = startFrame; f < endFrame; f += step) {
-      const sampleOffset = dataOffset + f * bytesPerFrame;
-      if (sampleOffset + 2 <= buf.byteLength) {
-        let val = 0;
-        if (bitsPerSample === 16) {
-          val = Math.abs(view.getInt16(sampleOffset, true)) / 32768.0;
-        } else if (bitsPerSample === 8) {
-          val = Math.abs(view.getUint8(sampleOffset) - 128) / 128.0;
-        }
-        if (val > peak) peak = val;
-      }
-    }
-    rawPeaks[i] = peak;
-    if (peak > maxPeak) maxPeak = peak;
-  }
-
-  const result = new Array<number>(points);
-  for (let i = 0; i < points; i++) {
-    result[i] = Math.max(0.04, Math.min(1.0, Math.pow(rawPeaks[i] / maxPeak, 0.78)));
-  }
-
-  return { duration, peaks: result };
-}
-
-/**
- * Direct pure-JS MP4 / MOV / M4A ISO-BMFF container parser.
- * Locates the audio track (`soun`), extracts the `stsz` sample size table,
- * and derives the real acoustic amplitude profile across the entire media file in <5ms.
- */
-export function parseMp4AudioPeaks(
-  buf: ArrayBuffer,
-  numPoints: number = 3200,
-): { hasAudio: boolean; peaks: number[] } | null {
-  if (buf.byteLength < 32) return null;
-  const view = new DataView(buf);
-  const len = buf.byteLength;
-
-  function findBox(start: number, end: number, targetType: string) {
-    let pos = start;
-    while (pos + 8 <= end) {
-      let size = view.getUint32(pos);
-      const type = String.fromCharCode(
-        view.getUint8(pos + 4),
-        view.getUint8(pos + 5),
-        view.getUint8(pos + 6),
-        view.getUint8(pos + 7),
-      );
-      if (size === 1) {
-        if (pos + 16 > end) break;
-        size = Number(view.getBigUint64(pos + 8));
-      } else if (size === 0) {
-        size = end - pos;
-      }
-      if (size < 8) break;
-      if (type === targetType) {
-        return {
-          pos,
-          size,
-          dataStart: pos + 8,
-          dataEnd: Math.min(pos + size, end),
-        };
-      }
-      pos += size;
-    }
-    return null;
-  }
-
-  function findAllBoxes(start: number, end: number, targetType: string) {
-    const list: Array<{
-      pos: number;
-      size: number;
-      dataStart: number;
-      dataEnd: number;
-    }> = [];
-    let pos = start;
-    while (pos + 8 <= end) {
-      let size = view.getUint32(pos);
-      const type = String.fromCharCode(
-        view.getUint8(pos + 4),
-        view.getUint8(pos + 5),
-        view.getUint8(pos + 6),
-        view.getUint8(pos + 7),
-      );
-      if (size === 1) {
-        if (pos + 16 > end) break;
-        size = Number(view.getBigUint64(pos + 8));
-      } else if (size === 0) {
-        size = end - pos;
-      }
-      if (size < 8) break;
-      if (type === targetType) {
-        list.push({
-          pos,
-          size,
-          dataStart: pos + 8,
-          dataEnd: Math.min(pos + size, end),
-        });
-      }
-      pos += size;
-    }
-    return list;
-  }
-
-  const moov = findBox(0, len, "moov");
-  if (!moov) return null;
-
-  // Search through all traks to find sound track
-  const traks = findAllBoxes(moov.dataStart, moov.dataEnd, "trak");
-  for (const trak of traks) {
-    const mdia = findBox(trak.dataStart, trak.dataEnd, "mdia");
-    if (!mdia) continue;
-    const hdlr = findBox(mdia.dataStart, mdia.dataEnd, "hdlr");
-    if (!hdlr) continue;
-
-    if (hdlr.dataStart + 12 > hdlr.dataEnd) continue;
-    const handlerType = String.fromCharCode(
-      view.getUint8(hdlr.dataStart + 8),
-      view.getUint8(hdlr.dataStart + 9),
-      view.getUint8(hdlr.dataStart + 10),
-      view.getUint8(hdlr.dataStart + 11),
-    );
-
-    if (handlerType === "soun") {
-      const minf = findBox(mdia.dataStart, mdia.dataEnd, "minf");
-      if (!minf) continue;
-      const stbl = findBox(minf.dataStart, minf.dataEnd, "stbl");
-      if (!stbl) continue;
-
-      const stsz = findBox(stbl.dataStart, stbl.dataEnd, "stsz");
-      if (!stsz || stsz.dataStart + 12 > stsz.dataEnd) continue;
-
-      const sampleSize = view.getUint32(stsz.dataStart + 4);
-      const sampleCount = view.getUint32(stsz.dataStart + 8);
-
-      if (sampleCount <= 0) return { hasAudio: false, peaks: [] };
-
-      const sampleSizes: number[] = [];
-      if (sampleSize === 0) {
-        let p = stsz.dataStart + 12;
-        for (let i = 0; i < sampleCount && p + 4 <= stsz.dataEnd; i++, p += 4) {
-          sampleSizes.push(view.getUint32(p));
-        }
-      } else {
-        for (let i = 0; i < sampleCount; i++) {
-          sampleSizes.push(sampleSize);
-        }
-      }
-
-      if (sampleSizes.length === 0) return { hasAudio: false, peaks: [] };
-
-      const points = Math.min(numPoints, sampleSizes.length);
-      const blockSize = Math.max(1, Math.floor(sampleSizes.length / points));
-      const rawPeaks = new Float32Array(points);
-      let maxVal = 1;
-      let minVal = Infinity;
-
-      for (let i = 0; i < points; i++) {
-        const start = i * blockSize;
-        const end = Math.min(start + blockSize, sampleSizes.length);
-        let maxSample = 0;
-        let sumSquares = 0;
-        let count = 0;
-        for (let j = start; j < end; j++) {
-          const s = sampleSizes[j];
-          if (s > maxSample) maxSample = s;
-          sumSquares += s * s;
-          count++;
-        }
-        const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0;
-        const val = maxSample * 0.72 + rms * 0.28;
-        rawPeaks[i] = val;
-        if (val > maxVal) maxVal = val;
-        if (val < minVal) minVal = val;
-      }
-
-      const dynamicSpan = maxVal - minVal;
-      const result = new Array<number>(points);
-      for (let i = 0; i < points; i++) {
-        if (dynamicSpan > 25) {
-          const normalized = Math.max(0, (rawPeaks[i] - minVal) / dynamicSpan);
-          result[i] = Math.max(0.04, Math.min(1.0, Math.pow(normalized, 0.82)));
-        } else {
-          result[i] = Math.max(0.04, Math.min(1.0, Math.pow(rawPeaks[i] / maxVal, 0.78)));
-        }
-      }
-
-      return { hasAudio: true, peaks: result };
-    }
-  }
-
-  return null;
-}
-
-let sharedAudioCtx: any = null;
-
-function getSharedAudioContext(): any {
-  if (typeof window === "undefined") return null;
-  const AudioCtxClass =
-    (window as any).AudioContext || (window as any).webkitAudioContext;
-  if (!AudioCtxClass) return null;
-
-  if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
-    try {
-      sharedAudioCtx = new AudioCtxClass();
-    } catch {
-      return null;
-    }
-  }
-  return sharedAudioCtx;
-}
-
-/**
- * Extracts genuine audio waveform peaks (normalized 0.0 - 1.0) from media URL
- * using Web Audio API or pure-JS binary MP4/WAV decoding.
- * Computes true RMS and peak amplitude. Never falls back to synthetic sine waves.
+ * Decodes media and reduces it to waveform peaks in the shared Rust core.
  */
 export async function extractRealMediaAudioPeaks(
   url: string,
@@ -529,138 +246,23 @@ export async function extractRealMediaAudioPeaks(
       // 1. Fetch binary data using multi-strategy loader (handles blob URLs, mobile FileSystem, XHR, and IndexedDB)
       const arrayBuf = await getMediaBinaryBuffer(url, clipId);
       if (!arrayBuf || arrayBuf.byteLength === 0) {
-        return null;
-      }
-
-      // 2. Try Web Audio API if available (Web browsers - sample-accurate PCM audio)
-      const ctx = getSharedAudioContext();
-      if (ctx) {
-        try {
-          // Pass a cloned buffer slice because decodeAudioData detaches the passed ArrayBuffer in spec
-          const bufferToDecode = arrayBuf.slice(0);
-          const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
-            try {
-              const res = ctx.decodeAudioData(
-                bufferToDecode,
-                (buf: AudioBuffer) => resolve(buf),
-                (err: any) => reject(err),
-              );
-              if (res && typeof res.then === "function") {
-                res.then(resolve).catch(reject);
-              }
-            } catch (err) {
-              reject(err);
-            }
-          });
-
-          if (
-            audioBuffer &&
-            audioBuffer.numberOfChannels > 0 &&
-            audioBuffer.length > 0
-          ) {
-            const duration = audioBuffer.duration;
-            const length = audioBuffer.length;
-            const numChannels = audioBuffer.numberOfChannels;
-            const ch0 = audioBuffer.getChannelData(0);
-            const ch1 = numChannels > 1 ? audioBuffer.getChannelData(1) : null;
-
-            const numPoints = Math.min(
-              24000,
-              Math.max(2400, Math.floor(duration * 150)),
-            );
-
-            // Fast path 1: Try Rust native / WASM SIMD waveform generator
-            try {
-              if (await rustCoreBridge.isAvailable()) {
-                const rustPeaks = await rustCoreBridge.generateWaveform(ch0, numPoints);
-                if (rustPeaks && rustPeaks.length > 0) {
-                  setCachedMediaPeaks(url, rustPeaks, duration);
-                  if (clipId) setCachedMediaPeaks(clipId, rustPeaks, duration);
-                  return rustPeaks;
-                }
-              }
-            } catch (_) {}
-
-            // Fast path 2: Highly vectorized typed array sampling with strided window
-            const blockSize = Math.floor(length / numPoints);
-            const rawPeaks = new Float32Array(numPoints);
-            let maxVal = 0.0001;
-
-            for (let i = 0; i < numPoints; i++) {
-              const start = i * blockSize;
-              const end = Math.min(start + blockSize, length);
-              let peak = 0;
-              let sumSquares = 0;
-              const step = Math.max(1, Math.floor((end - start) / 50));
-              let count = 0;
-
-              for (let j = start; j < end; j += step) {
-                let s = Math.abs(ch0[j]);
-                if (ch1) {
-                  s = (s + Math.abs(ch1[j])) * 0.5;
-                }
-                if (s > peak) peak = s;
-                sumSquares += s * s;
-                count++;
-              }
-
-              const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0;
-              const combined = peak * 0.72 + rms * 0.28;
-              rawPeaks[i] = combined;
-              if (combined > maxVal) {
-                maxVal = combined;
-              }
-            }
-
-            const hasSound = maxVal > 0.003;
-            if (hasSound) {
-              const normalizedPeaks = new Array<number>(numPoints);
-              for (let i = 0; i < numPoints; i++) {
-                const norm = Math.min(1.0, rawPeaks[i] / maxVal);
-                normalizedPeaks[i] = Math.max(0.04, Math.pow(norm, 0.78));
-              }
-              setCachedMediaPeaks(url, normalizedPeaks, duration);
-              if (clipId) setCachedMediaPeaks(clipId, normalizedPeaks, duration);
-              return normalizedPeaks;
-            } else {
-              setMediaHasAudio(url, false);
-              if (clipId) setMediaHasAudio(clipId, false);
-              mediaPeaksCache.set(url, []);
-              notifyAudioChange();
-              return [];
-            }
-          }
-        } catch (_) {
-          // If browser decodeAudioData failed, seamlessly proceed to pure-JS container decoders
-        }
-      }
-
-      // 3. Try fast WAV parser
-      const wavParsed = parseWavPeaks(arrayBuf);
-      if (wavParsed && wavParsed.peaks.length > 0) {
-        setCachedMediaPeaks(url, wavParsed.peaks, wavParsed.duration);
-        if (clipId) setCachedMediaPeaks(clipId, wavParsed.peaks, wavParsed.duration);
-        return wavParsed.peaks;
-      }
-
-      // 4. Try fast ISO-BMFF MP4 / MOV / M4A audio parser
-      const mp4Parsed = parseMp4AudioPeaks(arrayBuf);
-      if (mp4Parsed && mp4Parsed.hasAudio && mp4Parsed.peaks.length > 0) {
-        setCachedMediaPeaks(url, mp4Parsed.peaks);
-        if (clipId) setCachedMediaPeaks(clipId, mp4Parsed.peaks);
-        return mp4Parsed.peaks;
-      }
-
-      // If pure-JS container decoders did not extract peaks, check if media is a photo
-      const isPhoto = /\.(jpg|jpeg|png|webp|gif|bmp|svg|avif)$/i.test(cleanUrl);
-      if (isPhoto) {
-        setMediaHasAudio(url, false);
-        if (clipId) setMediaHasAudio(clipId, false);
-      } else {
-        // Video files (MP4/MOV) play audio natively even if pure-JS parser did not generate visual peaks
         setMediaHasAudio(url, true);
         if (clipId) setMediaHasAudio(clipId, true);
+        mediaPeaksCache.set(url, []);
+        notifyAudioChange(url);
+        return [];
       }
+
+      const audioParsed = await rustCoreBridge.decodeAudioPeaks(arrayBuf, 24000);
+      if (audioParsed?.peaks.length) {
+        setCachedMediaPeaks(url, audioParsed.peaks, audioParsed.duration);
+        if (clipId) setCachedMediaPeaks(clipId, audioParsed.peaks, audioParsed.duration);
+        return audioParsed.peaks;
+      }
+
+      // Compressed formats without a platform decoder keep native playback but have no fabricated peaks.
+      setMediaHasAudio(url, true);
+      if (clipId) setMediaHasAudio(clipId, true);
       mediaPeaksCache.set(url, []);
       notifyAudioChange(url);
       return [];
@@ -709,7 +311,7 @@ export function probeVideoHasAudio(url: string, clipId?: string): void {
  * for a clip based on its actual decoded audio peaks, respecting duration, trimIn, and speed.
  * Never outputs synthetic dummy waveforms.
  */
-export function getClipWaveformPeaks(
+export async function getClipWaveformPeaks(
   clipId: string,
   url: string | undefined,
   width: number,
@@ -721,7 +323,7 @@ export function getClipWaveformPeaks(
   denoise: boolean = false,
   clipPeaks?: number[],
   clipMediaDuration?: number,
-): number[] {
+): Promise<number[]> {
   const targetStep = barWidth + barGap;
   const maxBars = Platform.OS !== "web" ? 800 : 8000;
   const numBars = Math.max(
@@ -785,7 +387,7 @@ export function getClipWaveformPeaks(
 
     // Apply spectral noise gate transfer function when Denoise is active
     if (denoise) {
-      return applyDenoiseToPeaks(result);
+      return await applyDenoiseToPeaks(result);
     }
 
     return result;

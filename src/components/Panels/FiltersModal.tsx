@@ -10,7 +10,6 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { FILTER_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
-import { soundEngine } from '../../utils/audioEngine';
 import { CustomLutConfig } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 
@@ -88,13 +87,11 @@ export default function FiltersModal({
   const filterColorMap = FILTER_COLOR_MAP;
 
   const handleSelectFilter = (presetId: string) => {
-    soundEngine.playSfx('click');
     setSelectedFilterId(presetId);
     onSelectFilter(presetId, undefined, isWholeProject, filterIntensity / 100);
   };
 
   const handleResetToNormal = () => {
-    soundEngine.playSfx('click');
     setSelectedFilterId('normal');
     onSelectFilter('normal', undefined, isWholeProject, 1.0);
   };
@@ -185,7 +182,6 @@ export default function FiltersModal({
                 key={cat.id}
                 style={[styles.categoryPill, isActive && styles.categoryPillActive]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   setActiveCategory(cat.id);
                 }}
                 activeOpacity={0.7}

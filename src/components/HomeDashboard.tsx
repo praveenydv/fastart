@@ -13,7 +13,6 @@ import {
   Feather,
 } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
-import { soundEngine } from "../utils/audioEngine";
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import { styles } from "./HomeDashboard/HomeDashboardStyles";
 import { ProjectCardItem } from "./HomeDashboard/ProjectCardItem";
@@ -76,7 +75,6 @@ function HomeDashboard({
   const handleSaveRename = () => {
     const trimmed = newTitleText.trim();
     if (renamingProject && trimmed && onRenameProject) {
-      soundEngine.playSfx("pop");
       onRenameProject(renamingProject.id, trimmed);
     }
     setRenamingProject(null);
@@ -111,7 +109,6 @@ function HomeDashboard({
   }, [projects, searchQuery, sortBy]);
 
   const cycleSortOrder = () => {
-    soundEngine.playSfx("click");
     if (sortBy === "updated") setSortBy("title");
     else if (sortBy === "title") setSortBy("duration");
     else setSortBy("updated");
@@ -178,7 +175,6 @@ function HomeDashboard({
               <TouchableOpacity
                 style={styles.desktopNewProjectBtn}
                 onPress={() => {
-                  soundEngine.playSfx("whoosh");
                   onCreateNewProject();
                 }}
                 activeOpacity={0.85}
@@ -194,7 +190,6 @@ function HomeDashboard({
               activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onOpenNotifications();
               }}
               accessibilityLabel="Notifications"
@@ -215,7 +210,6 @@ function HomeDashboard({
               activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               onPress={() => {
-                soundEngine.playSfx("click");
                 onOpenSettings();
               }}
               accessibilityLabel="Settings"
@@ -243,7 +237,6 @@ function HomeDashboard({
                 <TouchableOpacity
                   style={styles.mobileNewProjectButton}
                   onPress={() => {
-                    soundEngine.playSfx("whoosh");
                     onCreateNewProject();
                   }}
                   activeOpacity={0.85}
@@ -323,7 +316,6 @@ function HomeDashboard({
                   <TouchableOpacity
                     style={styles.emptyCreateBtn}
                     onPress={() => {
-                      soundEngine.playSfx("whoosh");
                       onCreateNewProject();
                     }}
                     activeOpacity={0.85}
@@ -344,7 +336,6 @@ function HomeDashboard({
                     newTileHovered && styles.desktopNewProjectTileHovered,
                   ]}
                   onPress={() => {
-                    soundEngine.playSfx("whoosh");
                     onCreateNewProject();
                   }}
                   activeOpacity={0.85}

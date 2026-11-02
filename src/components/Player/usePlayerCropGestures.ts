@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Platform, PanResponder } from "react-native";
-import { soundEngine } from "../../utils/audioEngine";
 import { CustomCrop, FastArtProject } from "../../types/project";
 import { CROP_PRESETS } from "./playerUtils";
 import { CropDragState } from "./playerTypes";
@@ -144,7 +143,6 @@ export function usePlayerCropGestures({
   const cropPixelH = (cropBox.height / 100) * mediaDisplayH;
 
   const handleEnterCropMode = (clipId?: string) => {
-    soundEngine.playSfx("click");
     const target =
       (project.tracks.video || []).find((v) => v.id === clipId) ||
       targetCropClip;
@@ -257,7 +255,6 @@ export function usePlayerCropGestures({
   };
 
   const handleApplyPresetCrop = (presetId: string) => {
-    soundEngine.playSfx("click");
     setCropPreset(presetId);
     if (presetId === "free") {
       return;
@@ -288,13 +285,11 @@ export function usePlayerCropGestures({
   };
 
   const handleResetCrop = () => {
-    soundEngine.playSfx("click");
     setCropBox({ x: 0, y: 0, width: 100, height: 100 });
     setCropPreset("free");
   };
 
   const handleCancelCrop = () => {
-    soundEngine.playSfx("click");
     rendererRef.current?.setPreviewCropMode(null);
     if (onToggleCropPreview) {
       onToggleCropPreview(false);
@@ -313,7 +308,6 @@ export function usePlayerCropGestures({
   };
 
   const handleConfirmCrop = () => {
-    soundEngine.playSfx("click");
     const targetId = cropTargetClipId || selectedClipId || activeVideos[0]?.id;
     if (targetId && onUpdateClipCropRef.current) {
       onUpdateClipCropRef.current(

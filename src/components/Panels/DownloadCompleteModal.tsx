@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 
 export interface DownloadCompleteModalProps {
   visible: boolean;
@@ -42,7 +41,6 @@ export default function DownloadCompleteModal({
 }: DownloadCompleteModalProps) {
   React.useEffect(() => {
     if (visible) {
-      soundEngine.playSfx("pop");
     }
   }, [visible]);
 
@@ -169,7 +167,6 @@ export default function DownloadCompleteModal({
               <TouchableOpacity
                 style={styles.primaryBtn}
                 onPress={() => {
-                  soundEngine.playSfx("pop");
                   onClose();
                 }}
                 activeOpacity={0.8}
@@ -183,7 +180,6 @@ export default function DownloadCompleteModal({
                 <TouchableOpacity
                   style={styles.secondaryBtn}
                   onPress={() => {
-                    soundEngine.playSfx("click");
                     onDownloadAgain();
                   }}
                   activeOpacity={0.7}

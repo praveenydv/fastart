@@ -1,11 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 
 const MODEL_DIR = path.join(__dirname, '..', 'public', 'models');
 const MODEL_PATH = path.join(MODEL_DIR, 'modnet.onnx');
-const MODEL_URL = 'https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx';
+const MODEL_URL = 'https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx';
 const EXPECTED_MIN_BYTES = 25000000; // ~25.8 MB
+const EXPECTED_SHA256 = '07c308cf0fc7e6e8b2065a12ed7fc07e1de8febb7dc7839d7b7f15dd66584df9';
+
+function verifyModel() {
+  const bytes = fs.readFileSync(MODEL_PATH);
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (bytes.length < EXPECTED_MIN_BYTES || digest !== EXPECTED_SHA256) {
+    throw new Error(`MODNet integrity check failed (size=${bytes.length}, sha256=${digest})`);
+  }
+}
 
 function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
@@ -63,8 +73,13 @@ async function main() {
   if (fs.existsSync(MODEL_PATH)) {
     const stats = fs.statSync(MODEL_PATH);
     if (stats.size >= EXPECTED_MIN_BYTES) {
+      try {
+        verifyModel();
       console.log(`[download-models] MODNet model already exists (${(stats.size / (1024 * 1024)).toFixed(1)}MB). Skipping download.`);
       return;
+      } catch (_) {
+        console.log('[download-models] Existing model hash differs from the pinned model; replacing it...');
+      }
     }
     console.log('[download-models] Existing model file is incomplete or corrupted, re-downloading...');
     try { fs.unlinkSync(MODEL_PATH); } catch (_) {}
@@ -74,6 +89,7 @@ async function main() {
   try {
     await downloadFile(MODEL_URL, MODEL_PATH);
     const finalStats = fs.statSync(MODEL_PATH);
+    verifyModel();
     console.log(`[download-models] Verified model file: ${(finalStats.size / (1024 * 1024)).toFixed(1)}MB saved to public/models/modnet.onnx`);
   } catch (err) {
     console.error('[download-models] Failed to download model:', err.message);

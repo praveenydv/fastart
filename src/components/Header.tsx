@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../utils/audioEngine";
 import { ASPECT_RATIOS } from "../constants/sampleMedia";
 import { FastArtProject } from "../types/project";
 import { THEME_COLORS } from "../constants/theme";
@@ -82,7 +81,6 @@ function Header({
         <TouchableOpacity
           style={[styles.ratioPill, isSmallScreen && styles.ratioPillCompact]}
           onPress={() => {
-            soundEngine.playSfx("click");
             if (onOpenCanvasModal) onOpenCanvasModal();
           }}
           activeOpacity={0.7}
@@ -104,7 +102,6 @@ function Header({
           <TouchableOpacity
             style={styles.titlePill}
             onPress={() => {
-              soundEngine.playSfx("click");
               setEditedTitle(displayTitle);
               setIsRenaming(true);
             }}
@@ -150,7 +147,6 @@ function Header({
           ]}
           onPress={onUndo}
           onLongPress={onOpenUndoHistory ? () => {
-            soundEngine.playSfx("pop");
             onOpenUndoHistory();
           } : undefined}
           disabled={!canUndo}
@@ -223,7 +219,6 @@ function Header({
               maxLength={40}
               onSubmitEditing={() => {
                 if (editedTitle.trim()) {
-                  soundEngine.playSfx("whoosh");
                   onUpdateProject({ title: editedTitle.trim() });
                 }
                 setIsRenaming(false);
@@ -234,7 +229,6 @@ function Header({
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={() => {
-                  soundEngine.playSfx("click");
                   setIsRenaming(false);
                 }}
                 activeOpacity={0.7}
@@ -249,7 +243,6 @@ function Header({
                 disabled={!editedTitle.trim()}
                 onPress={() => {
                   if (editedTitle.trim()) {
-                    soundEngine.playSfx("whoosh");
                     onUpdateProject({ title: editedTitle.trim() });
                   }
                   setIsRenaming(false);

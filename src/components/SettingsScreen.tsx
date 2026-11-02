@@ -10,7 +10,6 @@ import {
 import { TactileTouchable as TouchableOpacity } from "./Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import FastArtLogo from "./FastArtLogo";
-import { soundEngine } from "../utils/audioEngine";
 import { triggerHaptic } from "../utils/haptics";
 import { clearAppCache } from "../utils/storage";
 import { theme } from "../constants/theme";
@@ -46,7 +45,6 @@ export default function SettingsScreen({
   }, [settings]);
 
   const toggleSwitch = (key: string) => {
-    soundEngine.playSfx("click");
     const updatedVal = !localSettings[key];
     const isHapticOn =
       key === "hapticFeedback"
@@ -60,7 +58,6 @@ export default function SettingsScreen({
   };
 
   const setOption = (key: string, val: any) => {
-    soundEngine.playSfx("click");
     triggerHaptic("selection", localSettings.hapticFeedback !== false);
     const updated = { ...localSettings, [key]: val };
     setLocalSettings(updated);
@@ -68,7 +65,6 @@ export default function SettingsScreen({
   };
 
   const handleClearCache = () => {
-    soundEngine.playSfx("pop");
     triggerHaptic("medium", localSettings.hapticFeedback !== false);
     const newSize = clearAppCache();
     setCachedSize(newSize);
@@ -114,7 +110,6 @@ export default function SettingsScreen({
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
-              soundEngine.playSfx("click");
               triggerHaptic("light", localSettings.hapticFeedback !== false);
               onBack();
             }}
@@ -350,33 +345,6 @@ export default function SettingsScreen({
                 onValueChange={() => toggleSwitch("hapticFeedback")}
                 trackColor={{ false: "#1B2234", true: "#FFFFFF" }}
                 thumbColor={localSettings.hapticFeedback !== false ? "#000000" : "#94A3B8"}
-              />
-            </View>
-
-            <View style={styles.divider} />
-
-            {/* Sound Effects */}
-            <View style={styles.toggleItem}>
-              <View style={styles.toggleLeft}>
-                <View style={styles.iconCircle}>
-                  <Ionicons
-                    name="volume-medium-outline"
-                    size={14}
-                    color="#FFFFFF"
-                  />
-                </View>
-                <View style={styles.toggleTextGroup}>
-                  <Text style={styles.toggleTitle}>Sound Effects (SFX)</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Acoustic feedback on button taps and edits
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={localSettings.soundEffects === true}
-                onValueChange={() => toggleSwitch("soundEffects")}
-                trackColor={{ false: "#1B2234", true: "#FFFFFF" }}
-                thumbColor={localSettings.soundEffects === true ? "#000000" : "#94A3B8"}
               />
             </View>
 

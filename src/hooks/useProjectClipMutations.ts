@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { Alert } from "react-native";
 import { FastArtProject } from "../types/project";
-import { soundEngine } from "../utils/audioEngine";
 import { triggerHaptic } from "../utils/haptics";
 import { deleteMedia } from "../utils/largeMediaStorage";
 import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
@@ -94,7 +93,6 @@ export function useProjectClipMutations({
 
     const curTime = currentTimeRef.current;
     if (curTime <= clipStart + 0.05 || curTime >= clipEnd - 0.05) {
-      soundEngine.playSfx("click");
       Alert.alert(
         "Split Position",
         "Move the playhead inside the selected clip to split it into two sections.",
@@ -102,7 +100,6 @@ export function useProjectClipMutations({
       return;
     }
 
-    soundEngine.playSfx("split");
     triggerHaptic("medium", settings?.hapticFeedback !== false);
     startProcessing?.("Splitting Clip at Playhead...", 350);
 
@@ -224,7 +221,6 @@ export function useProjectClipMutations({
       return;
     }
 
-    soundEngine.playSfx("pop");
     triggerHaptic("medium", settings?.hapticFeedback !== false);
     startProcessing?.("Generating Freeze Frame...", 350);
 
@@ -485,7 +481,6 @@ export function useProjectClipMutations({
     };
     setSelectedClipId(null);
     setSelectedClipType(null);
-    soundEngine.playSfx("pop");
     triggerHaptic("warning", settings?.hapticFeedback !== false);
     updateProjectWithHistory(updated);
     setClipToDelete(null);

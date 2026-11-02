@@ -23,7 +23,6 @@ import {
 } from "../Desktop/DesktopMediaAudioPanel";
 import { DesktopInspector } from "../Desktop/DesktopInspector";
 import { INLINE_MODAL_KEYS } from "./EditorModals";
-import { soundEngine } from "../../utils/audioEngine";
 import {
   FastArtProject,
   EffectClip,
@@ -358,7 +357,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
   const handleOpenEditModal = React.useCallback(
     (clipId: string, clipType?: string) => {
-      soundEngine.playSfx("click");
       setSelectedClipId(clipId);
       let resolvedType = clipType || selectedClipType;
       if (!resolvedType && project) {
@@ -410,7 +408,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   );
 
   const handleCloseMenu = React.useCallback(() => {
-    soundEngine.playSfx("click");
     if (onCloseModal) {
       onCloseModal();
     } else if (closeModal) {
@@ -1533,14 +1530,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
         onTogglePlay={() => {
           if (totalDuration <= 0) {
-            soundEngine.playSfx("click");
             pauseActiveVideoRenderer();
             pauseAllAudio();
             setIsPlaying(false);
             setCurrentTime(0);
             return;
           }
-          soundEngine.playSfx("click");
           if (isPlaying) {
             pauseActiveVideoRenderer();
             pauseAllAudio();
@@ -1583,11 +1578,9 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         onUpdateClipTransform={handleUpdateClipTransform}
         onOpenEditModal={handleOpenEditModal}
         onDeleteClip={(clipId, clipType) => {
-          soundEngine.playSfx("click");
           handleDeleteClip(clipId, clipType);
         }}
         onDuplicateClip={(clipId, clipType) => {
-          soundEngine.playSfx("click");
           handleDuplicateClip(clipId, clipType);
         }}
         onSplitClip={handleSplitClip}
@@ -2214,8 +2207,20 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
             />
           </View>
 
-          {/* Direct Root Content: Active Modal Tool OR Timeline + Toolbar */}
-          {isMobileInlineActive ? (
+          {/* Direct Root Content: Active Modal Tool OR Timeline + Toolbar (Timeline stays mounted with display:none to guarantee instant 0ms modal open/close) */}
+          <View
+            style={[
+              styles.timelineContentRoot,
+              isMobileInlineActive && { display: "none" },
+            ]}
+          >
+            <View style={styles.timelineBodyWrap}>
+              {renderTimelineOnly()}
+            </View>
+            {renderToolbar("horizontal")}
+          </View>
+
+          {isMobileInlineActive && (
             <View style={styles.modalContentRoot}>
               <View style={styles.modalHeaderBar}>
                 <TouchableOpacity
@@ -2246,13 +2251,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
               <View style={styles.modalBodyWrap}>
                 {renderModals ? renderModals(true) : null}
               </View>
-            </View>
-          ) : (
-            <View style={styles.timelineContentRoot}>
-              <View style={styles.timelineBodyWrap}>
-                {renderTimelineOnly()}
-              </View>
-              {renderToolbar("horizontal")}
             </View>
           )}
         </Animated.View>

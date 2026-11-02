@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { Platform, Dimensions, PanResponder } from "react-native";
-import { soundEngine } from "../../utils/audioEngine";
 import { TRACK_ROW_HEIGHT } from "./timelineTypes";
 
 interface UseTimelineResizeProps {
@@ -111,7 +110,6 @@ export function useTimelineResize({
         window.localStorage.removeItem(storageKey);
       } catch (_) {}
     }
-    soundEngine.playSfx("pop");
   }, [storageKey, defaultHeight]);
 
   // Pointer / Mouse / Touch down handler for Web

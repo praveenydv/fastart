@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  Platform,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { CutoutConfig } from "../../../types/project";
-import { soundEngine } from "../../../utils/audioEngine";
 import { CompactSliderInput } from "../../Common/CompactSliderInput";
 import { CustomColorPickerButton } from "../../Common/CustomColorPickerButton";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
@@ -68,6 +66,7 @@ export interface CutoutControlsProps {
   totalFramesToProcess?: number;
   isAlreadyProcessed?: boolean;
   processedCount?: number;
+  errorMessage?: string | null;
   onPreviewFrame?: () => void;
   onProcessVideo?: () => void;
   onCancelProcessing?: () => void;
@@ -78,7 +77,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
   config,
   onChange,
   selectedClip,
-  isPlaying = false,
   isProcessingFrames = false,
   isProcessingActiveFrame = false,
   frameProgress = 0,
@@ -86,6 +84,7 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
   totalFramesToProcess = 0,
   isAlreadyProcessed = false,
   processedCount = 0,
+  errorMessage,
   onPreviewFrame,
   onProcessVideo,
   onCancelProcessing,
@@ -100,7 +99,35 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
   const strokeColor = config?.strokeColor ?? "none";
   const strokeWidth = config?.strokeWidth ?? 3;
 
+  const [localQuality, setLocalQuality] = useState<"fast" | "studio">(
+    config?.quality ?? "fast"
+  );
+
+  useEffect(() => {
+    if (config?.quality) {
+      setLocalQuality(config.quality);
+    }
+  }, [config?.quality]);
+
+  const quality = config?.quality ?? localQuality;
+
   const [finishTab, setFinishTab] = useState<"bg" | "outline">("bg");
+
+  const handleSelectQuality = (q: "fast" | "studio") => {
+    setLocalQuality(q);
+    // Preserve ALL existing config fields — only update quality, never clobber mode or other settings
+    onChange({
+      enabled: config?.enabled ?? true,
+      mode: config?.mode ?? "auto",
+      keyColor: config?.keyColor ?? "#00FF00",
+      intensity: config?.intensity ?? 45,
+      shadow: config?.shadow ?? 25,
+      strokeColor: config?.strokeColor ?? "none",
+      strokeWidth: config?.strokeWidth ?? 3,
+      bgColor: config?.bgColor ?? "none",
+      quality: q,
+    });
+  };
 
   const isVideoClip =
     selectedClip?.type === "video" ||
@@ -113,7 +140,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
   // ── Actions ───────────────────────────────────────────────────────────────
 
   const handleModeChange = (mode: CutoutMode) => {
-    soundEngine.playSfx("click");
     if (mode === "none") {
       onChange({
         ...config,
@@ -126,14 +152,10 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
         enabled: true,
         mode,
       });
-      if (onPreviewFrame && !isPlaying) {
-        onPreviewFrame();
-      }
     }
   };
 
   const handleOpenEyeDropper = async () => {
-    soundEngine.playSfx("click");
     if (typeof window !== "undefined" && (window as any).EyeDropper) {
       try {
         const eyeDropper = new (window as any).EyeDropper();
@@ -151,7 +173,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
   };
 
   const handleAutoDetectBackdrop = () => {
-    soundEngine.playSfx("click");
     try {
       const activeMedia = getActiveMediaElement(selectedClip?.id || selectedClip?.url || "");
       if (activeMedia) {
@@ -177,7 +198,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
               mode: "chroma",
               keyColor: detected.hex,
             });
-            if (onPreviewFrame && !isPlaying) onPreviewFrame();
             return;
           }
         }
@@ -191,7 +211,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
       mode: "chroma",
       keyColor: "#00FF00",
     });
-    if (onPreviewFrame && !isPlaying) onPreviewFrame();
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -252,6 +271,12 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
         </TouchableOpacity>
       </View>
 
+      {errorMessage ? (
+        <Text accessibilityRole="alert" style={{ color: "#FCA5A5", fontSize: 12, lineHeight: 17 }}>
+          {errorMessage}
+        </Text>
+      ) : null}
+
       {/* Mode Content */}
       {cutoutMode === "none" ? (
         <View style={sc.compactNoneBox}>
@@ -279,7 +304,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
                           isSelected && sc.compactPresetSwatchSelected,
                         ]}
                         onPress={() => {
-                          soundEngine.playSfx("click");
                           onChange({ ...config, enabled: true, mode: "chroma", keyColor: p.color });
                         }}
                         activeOpacity={0.8}
@@ -421,6 +445,71 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
               {!isProcessingFrames && (
                 <View style={sc.actionsContainer}>
                   <View style={{ gap: 8 }}>
+                    {isVideoClip && (
+                      <View style={sc.qualitySelectorContainer}>
+                        <View style={sc.qualitySelectorHeader}>
+                          <Text style={sc.qualitySelectorTitle}>SPEED & QUALITY</Text>
+                          <Text style={sc.qualitySelectorSubtitle}>
+                            {quality === "fast" ? "⚡ 10x Fast • Smart Skip" : "💎 Studio Ultra • Every Frame"}
+                          </Text>
+                        </View>
+                        <View style={sc.qualityButtonGroup}>
+                          <TouchableOpacity
+                            style={[
+                              sc.qualityBtn,
+                              quality === "fast" && sc.qualityBtnActive,
+                            ]}
+                            onPress={() => handleSelectQuality("fast")}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: quality === "fast" }}
+                          >
+                            <Ionicons
+                              name="flash"
+                              size={11}
+                              color={quality === "fast" ? "#00F2FE" : "#64748B"}
+                            />
+                            <Text
+                              style={[
+                                sc.qualityBtnText,
+                                quality === "fast" && sc.qualityBtnTextActive,
+                              ]}
+                            >
+                              CapCut Fast
+                            </Text>
+                            <View style={[sc.speedBadge, quality === "fast" && sc.speedBadgeActive]}>
+                              <Text style={[sc.speedBadgeText, quality === "fast" && sc.speedBadgeTextActive]}>10x</Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[
+                              sc.qualityBtn,
+                              quality === "studio" && sc.qualityBtnActiveStudio,
+                            ]}
+                            onPress={() => handleSelectQuality("studio")}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: quality === "studio" }}
+                          >
+                            <Ionicons
+                              name="diamond"
+                              size={11}
+                              color={quality === "studio" ? "#A78BFA" : "#64748B"}
+                            />
+                            <Text
+                              style={[
+                                sc.qualityBtnText,
+                                quality === "studio" && sc.qualityBtnTextActiveStudio,
+                              ]}
+                            >
+                              Studio Ultra
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+
                     {isVideoClip && onProcessVideo && (
                       <TouchableOpacity onPress={onProcessVideo} style={sc.heroBtn} activeOpacity={0.8}>
                         <Ionicons name={isAlreadyProcessed ? "refresh" : "sparkles"} size={14} color="#08090E" />
@@ -589,7 +678,6 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
                         isSelected && sc.colorSwatchSelected,
                       ]}
                       onPress={() => {
-                        soundEngine.playSfx("click");
                         onChange({ ...config, strokeColor: sp.color });
                       }}
                       activeOpacity={0.8}
@@ -878,6 +966,86 @@ const sc = StyleSheet.create({
   },
   actionsContainer: {
     gap: 6,
+  },
+  qualitySelectorContainer: {
+    backgroundColor: "#0D111A",
+    borderRadius: 6,
+    padding: 6,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+  },
+  qualitySelectorHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
+  qualitySelectorTitle: {
+    fontSize: 8.5,
+    fontWeight: "700",
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+  },
+  qualitySelectorSubtitle: {
+    fontSize: 8,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  qualityButtonGroup: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  qualityBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "#161D2E",
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  qualityBtnActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "#00F2FE",
+  },
+  qualityBtnActiveStudio: {
+    backgroundColor: "rgba(167, 139, 250, 0.12)",
+    borderColor: "#A78BFA",
+  },
+  qualityBtnText: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  qualityBtnTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+  qualityBtnTextActiveStudio: {
+    color: "#A78BFA",
+    fontWeight: "700",
+  },
+  speedBadge: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  speedBadgeActive: {
+    backgroundColor: "#00F2FE",
+  },
+  speedBadgeText: {
+    fontSize: 7.5,
+    fontWeight: "800",
+    color: "#64748B",
+  },
+  speedBadgeTextActive: {
+    color: "#08090E",
   },
   heroBtn: {
     flexDirection: "row",

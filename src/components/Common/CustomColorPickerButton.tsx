@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "./TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../utils/audioEngine";
 
 // Comprehensive palette of 32 vibrant colors across all spectrums
 const EXTENDED_PALETTE = [
@@ -90,7 +89,6 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
   const calculatedIconSize = iconSize || Math.max(11, Math.round(size * 0.52));
 
   const handleOpen = () => {
-    soundEngine.playSfx("click");
     if (Platform.OS === "web") {
       // On web, if native input is supported, trigger it; else show native modal
       if (webInputRef.current) {
@@ -104,7 +102,6 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
   };
 
   const handleSelectColor = (col: string) => {
-    soundEngine.playSfx("click");
     setTempColor(col);
     setHexInput(col.toUpperCase());
   };
@@ -119,7 +116,6 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
   };
 
   const handleApply = () => {
-    soundEngine.playSfx("click");
     let finalColor = hexInput;
     if (!finalColor.startsWith("#")) finalColor = `#${finalColor}`;
     if (/^#[0-9A-Fa-f]{3,8}$/.test(finalColor)) {

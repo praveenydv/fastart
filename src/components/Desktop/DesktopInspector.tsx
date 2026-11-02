@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../../utils/audioEngine';
 import {
   FastArtProject,
   ClipTransform,
@@ -156,7 +155,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     key={ratio}
                     style={[styles.chip, isActive && styles.chipActive]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       onUpdateProject({ aspectRatio: ratio });
                     }}
                     activeOpacity={0.7}
@@ -181,7 +179,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     key={res}
                     style={[styles.chip, isActive && styles.chipActive]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       onUpdateProject({ resolution: res });
                     }}
                     activeOpacity={0.7}
@@ -206,7 +203,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     key={fps}
                     style={[styles.chip, isActive && styles.chipActive]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       onUpdateProject({ fps });
                     }}
                     activeOpacity={0.7}
@@ -235,7 +231,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                       isSelected && styles.colorSwatchActive,
                     ]}
                     onPress={() => {
-                      soundEngine.playSfx('click');
                       onUpdateProject({ canvasBackground: col });
                     }}
                     activeOpacity={0.7}
@@ -455,7 +450,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     <TouchableOpacity
                       style={[styles.actionBtn, isFlipX && styles.actionBtnActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         handleTransformChange({ flipX: !isFlipX });
                       }}
                       activeOpacity={0.7}
@@ -473,7 +467,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     <TouchableOpacity
                       style={[styles.actionBtn, isFlipY && styles.actionBtnActive]}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         handleTransformChange({ flipY: !isFlipY });
                       }}
                       activeOpacity={0.7}
@@ -491,7 +484,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     <TouchableOpacity
                       style={styles.actionBtn}
                       onPress={() => {
-                        soundEngine.playSfx('click');
                         handleTransformChange({
                           scale: 1,
                           x: 0,
@@ -535,7 +527,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                             key={`insp-lyr-${lvl}`}
                             style={[styles.chip, { flex: 1, paddingVertical: 6 }, isActive && styles.chipActive]}
                             onPress={() => {
-                              soundEngine.playSfx('click');
                               const tracks = { ...project.tracks };
                               const targetList = (tracks as any)[selectedClipType] || tracks.video;
                               const idx = targetList.findIndex((c: any) => c.id === selectedClip.id);
@@ -616,7 +607,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
               <TouchableOpacity
                 style={[styles.actionBtn, selectedClip.denoise && styles.actionBtnActive]}
                 onPress={() => {
-                  soundEngine.playSfx('click');
                   const nextDenoise = !selectedClip.denoise;
                   onApplyVolume?.(selectedClip.volume ?? 1.0, selectedClip.fadeIn || 0, selectedClip.fadeOut || 0, nextDenoise);
                 }}

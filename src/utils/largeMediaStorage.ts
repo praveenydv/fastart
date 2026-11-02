@@ -780,15 +780,28 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
 
   // 3. Mobile FileSystem read for file://, content://, or local paths (React Native Android & iOS)
   if (Platform.OS !== 'web' && url && (url.startsWith('file:') || url.startsWith('content:') || url.startsWith('/'))) {
-    try {
-      const { File } = await import('expo-file-system');
-      const file = new File(url);
-      const ab = await file.arrayBuffer();
-      if (ab && ab.byteLength > 0) return ab;
-    } catch (_) {}
+    const cleanLower = url.split('?')[0].toLowerCase();
+    const isVideo = /\.(mp4|mov|webm|m4v|3gp|mkv|ts)$/i.test(cleanLower);
+    // Never attempt full binary in-memory decode for video files on mobile — videos are streamed directly by native player
+    if (isVideo) {
+      return null;
+    }
 
     try {
       const FileSystemLegacy = await import('expo-file-system/legacy');
+      const fileInfo = await FileSystemLegacy.getInfoAsync(url);
+      // Hard memory safeguard: never attempt Base64/in-memory buffering for large media files (> 15MB) or unknown size on mobile
+      if (!fileInfo.exists || typeof fileInfo.size !== 'number' || fileInfo.size > 15 * 1024 * 1024) {
+        return null;
+      }
+
+      try {
+        const { File } = await import('expo-file-system');
+        const file = new File(url);
+        const ab = await file.arrayBuffer();
+        if (ab && ab.byteLength > 0) return ab;
+      } catch (_) {}
+
       const base64Data = await FileSystemLegacy.readAsStringAsync(url, {
         encoding: FileSystemLegacy.EncodingType.Base64,
       });
@@ -796,8 +809,8 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
         const buf = base64ToArrayBuffer(base64Data);
         if (buf && buf.byteLength > 0) return buf;
       }
-    } catch (e) {
-      console.warn('[largeMediaStorage] Mobile FileSystem binary read failed:', e);
+    } catch (_) {
+      return null;
     }
   }
 

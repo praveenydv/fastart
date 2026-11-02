@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from './Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
-import { soundEngine } from '../utils/audioEngine';
 
 interface ProjectNotFoundScreenProps {
   projectKey: string;
@@ -34,7 +33,6 @@ export default function ProjectNotFoundScreen({
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => {
-              soundEngine.playSfx('whoosh');
               onCreateNew();
             }}
           >
@@ -46,7 +44,6 @@ export default function ProjectNotFoundScreen({
             <TouchableOpacity
               style={styles.secondaryBtn}
               onPress={() => {
-                soundEngine.playSfx('click');
                 onOpenDefault();
               }}
             >
@@ -57,7 +54,6 @@ export default function ProjectNotFoundScreen({
           <TouchableOpacity
             style={styles.textBtn}
             onPress={() => {
-              soundEngine.playSfx('click');
               onGoHome();
             }}
           >

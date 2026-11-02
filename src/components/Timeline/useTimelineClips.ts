@@ -3,7 +3,6 @@ import { Platform } from "react-native";
 import { FastArtProject } from "../../types/project";
 import { UnifiedClipItem, MAX_TRACKS, TimelineDragState } from "./timelineTypes";
 import { probeAndCacheMediaDuration, isImageClip } from "../../utils/mediaDuration";
-import { soundEngine } from "../../utils/audioEngine";
 import { THEME_COLORS } from "../../constants/theme";
 
 interface UseTimelineClipsProps {
@@ -184,12 +183,10 @@ export function useTimelineClips({
   );
 
   const handleAddTrack = useCallback(() => {
-    soundEngine.playSfx("click");
     setPersistentTrackCount((prev) => Math.min(MAX_TRACKS, prev + 1));
   }, []);
 
   const handleRemoveTrack = useCallback((trackIdx: number) => {
-    soundEngine.playSfx("click");
 
     // Shift all clips located on tracks after trackIdx down by 1 track
     const shiftClip = <T extends { trackIndex?: number }>(

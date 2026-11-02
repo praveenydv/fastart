@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { soundEngine } from "../../../utils/audioEngine";
 import { noClipStyles } from "./KeyframeNoClipStyles";
 
 interface KeyframeNoClipViewProps {
@@ -65,7 +64,6 @@ export default function KeyframeNoClipView({ onClose }: KeyframeNoClipViewProps)
       <TouchableOpacity
         style={noClipStyles.gotItBtn}
         onPress={() => {
-          soundEngine.playSfx("pop");
           onClose();
         }}
         activeOpacity={0.8}

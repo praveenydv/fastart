@@ -26,7 +26,6 @@ import { useProjectKeyframes } from "./src/hooks/useProjectKeyframes";
 import { useKeyboardShortcuts } from "./src/hooks/useKeyboardShortcuts";
 import { usePlaybackLoop } from "./src/hooks/usePlaybackLoop";
 import { computeTotalDuration, FastArtProject } from "./src/types/project";
-import { soundEngine } from "./src/utils/audioEngine";
 import { saveLastSession, LastEditSession, saveProject } from "./src/utils/storage";
 import { mediaHasAudioTrack } from "./src/utils/mediaAudioDetector";
 import { deleteMedia } from "./src/utils/largeMediaStorage";
@@ -137,14 +136,14 @@ export default function App() {
       modalInitialSnapshotRef.current = null;
     }
     setActiveModal(modalName);
-    if (route.screen === "editor" && projectRef.current) {
+    if (Platform.OS === "web" && route.screen === "editor" && projectRef.current) {
       navigate(`/project/${projectRef.current.id}?tool=${modalName}`, { replace: true });
     }
   }, [route.screen, navigate, selectedClipId]);
 
   const closeModal = useCallback(() => {
     setActiveModal(null);
-    if (route.screen === "editor" && projectRef.current) {
+    if (Platform.OS === "web" && route.screen === "editor" && projectRef.current) {
       navigate(`/project/${projectRef.current.id}`, { replace: true });
     }
   }, [route.screen, navigate]);
@@ -249,7 +248,6 @@ export default function App() {
         modalInitialSnapshotRef.current = cloneProjectSnapshot(projectRef.current);
       }
     }
-    soundEngine.playSfx("whoosh");
     // Modal stays open so user can keep editing or viewing results
   }, [commitPreview]);
 
@@ -431,7 +429,6 @@ export default function App() {
         },
       });
 
-      soundEngine.playSfx("cut");
     },
     [project, projectRef, selectedClipId, updateProjectDispatcher, setSelectedClipId],
   );
@@ -517,7 +514,6 @@ export default function App() {
   // Stable memoized callbacks for EditorWorkspace to preserve React.memo and prevent render thrashing
   const handleOpenExport = useCallback(() => openModal("export"), [openModal]);
   const handleBackToHome = useCallback(() => {
-    soundEngine.playSfx("pop");
     setShowExitConfirmModal(true);
   }, []);
   const handleOpenKeyframeModal = useCallback(() => {
@@ -549,7 +545,6 @@ export default function App() {
     openModal("volume");
   }, [ensureSelectedVideoClip, selectedClipType, openModal]);
   const handleOpenCropModal = useCallback(() => {
-    soundEngine.playSfx("click");
     setIsCroppingPreview(true);
   }, [setIsCroppingPreview]);
   const handleOpenTransformModal = useCallback((tab?: 'crop' | 'flip' | 'rotate' | 'stretch' | 'angle') => {
@@ -684,7 +679,6 @@ export default function App() {
     flushSessionAndProject();
     setShowExitConfirmModal(false);
     setIsPlaying(false);
-    soundEngine.playSfx("click");
     navigate("/");
   }, [flushSessionAndProject, navigate]);
 
@@ -743,7 +737,6 @@ export default function App() {
         }
 
         // Prompt user to confirm exit to home (preventing OS app exit)
-        soundEngine.playSfx("pop");
         setShowExitConfirmModal(true);
         return true;
       }
@@ -753,7 +746,6 @@ export default function App() {
         routeRef.current.screen === "settings" ||
         routeRef.current.screen === "notifications"
       ) {
-        soundEngine.playSfx("click");
         navigate("/");
         return true;
       }
@@ -856,7 +848,6 @@ export default function App() {
               transformInitialTab={transformInitialTab}
               setIsCroppingPreview={setIsCroppingPreview}
               onOpenScreenCrop={() => {
-                soundEngine.playSfx("click");
                 closeModal();
                 setIsCroppingPreview(true);
               }}
