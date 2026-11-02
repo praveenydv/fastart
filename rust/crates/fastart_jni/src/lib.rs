@@ -8,7 +8,8 @@ use fastart_core::{FastArtEngine, FastArtProject};
 fn initialize_modnet_path(mut env: JNIEnv, path: JString) -> jstring {
     let result = (|| -> Result<(), String> {
         let path: String = env.get_string(&path).map_err(|error| format!("Invalid MODNet path: {error}"))?.into();
-        let model = std::fs::read(&path).map_err(|error| format!("Could not read MODNet model at {path}: {error}"))?;
+        let local_path = fastart_core::local_model_path(&path)?;
+        let model = std::fs::read(&local_path).map_err(|error| format!("Could not read MODNet model at {local_path}: {error}"))?;
         fastart_core::initialize_modnet(&model)
     })();
     let message = result.map(|_| "ok".to_string()).unwrap_or_else(|error| error);
@@ -39,6 +40,21 @@ pub extern "system" fn Java_com_fastart_FastArtRustModule_00024Companion_nativeI
     let signed_alpha: Vec<i8> = alpha.into_iter().map(|byte| byte as i8).collect();
     let _ = env.set_byte_array_region(&output, 0, &signed_alpha);
     output.into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_fastart_FastArtRustModule_nativeInferModnetRgba(
+    env: JNIEnv,
+    class: JClass,
+    j_rgba: JByteArray,
+    width: jint,
+    height: jint,
+    threshold: jni::sys::jfloat,
+    feather: jni::sys::jfloat,
+) -> jbyteArray {
+    Java_com_fastart_FastArtRustModule_00024Companion_nativeInferModnetRgba(
+        env, class, j_rgba, width, height, threshold, feather,
+    )
 }
 
 #[no_mangle]

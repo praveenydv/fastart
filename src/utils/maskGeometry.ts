@@ -3,18 +3,31 @@ import type { MaskConfig } from "../types/project";
 const svgCache = new Map<string, string>();
 
 /** Build the canonical alpha-mask SVG used by CSS on web and SvgXml on native. */
-export function buildMaskSvg(mask: MaskConfig, width: number, height: number): string | null {
+export function buildMaskSvg(
+  mask: MaskConfig,
+  width: number,
+  height: number,
+  native = false,
+): string | null {
   const shape = mask.shape;
   if (!shape || shape === "none" || width <= 0 || height <= 0) return null;
 
+  const feather = Math.max(0, Math.min(80, mask.feather ?? 0));
+  const targetBlur = feather * (Math.min(width, height) / 100) * 0.5;
+  // Android's react-native-svg Gaussian blur clamps its RenderScript radius to
+  // 25 px. Render the mask geometry in a reduced coordinate plane, then scale
+  // it back up so large softness values retain their intended spread.
+  const nativeScale = native && targetBlur > 25 ? Math.ceil(targetBlur / 25) : 1;
+  const geometryWidth = width / nativeScale;
+  const geometryHeight = height / nativeScale;
   const effW = mask.width ?? mask.size ?? 60;
   const effH = mask.height ?? mask.size ?? 60;
-  const minDim = Math.min(width, height);
-  const cx = width / 2 + ((mask.x ?? 0) / 100) * width;
-  const cy = height / 2 + ((mask.y ?? 0) / 100) * height;
+  const minDim = Math.min(geometryWidth, geometryHeight);
+  const cx = geometryWidth / 2 + ((mask.x ?? 0) / 100) * geometryWidth;
+  const cy = geometryHeight / 2 + ((mask.y ?? 0) / 100) * geometryHeight;
   const rotation = mask.rotation ?? 0;
-  const roundness = Math.max(0, mask.roundness ?? 16);
-  const key = `${shape}:${width}:${height}:${effW}:${effH}:${cx}:${cy}:${rotation}:${roundness}:${mask.feather ?? 0}:${!!mask.inverted}`;
+  const roundness = Math.max(0, (mask.roundness ?? 16) / nativeScale);
+  const key = `${shape}:${width}:${height}:${effW}:${effH}:${cx}:${cy}:${rotation}:${roundness}:${feather}:${!!mask.inverted}:${native}`;
   const cached = svgCache.get(key);
   if (cached) return cached;
 
@@ -25,16 +38,16 @@ export function buildMaskSvg(mask: MaskConfig, width: number, height: number): s
     const ry = Math.max(1, (minDim * effH) / 200);
     body = `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${rotation} ${cx} ${cy})"/>`;
   } else if (shape === "rectangle") {
-    const rw = (width * effW) / 100;
-    const rh = (height * effH) / 100;
+    const rw = (geometryWidth * effW) / 100;
+    const rh = (geometryHeight * effH) / 100;
     const radius = Math.min(roundness, rw / 2, rh / 2);
     body = `<rect x="${-rw / 2}" y="${-rh / 2}" width="${rw}" height="${rh}" rx="${radius}" transform="${transform}"/>`;
   } else if (shape === "linear") {
-    const extent = Math.max(width, height) * 5;
+    const extent = Math.max(geometryWidth, geometryHeight) * 5;
     body = `<path d="M ${-extent} 0 H ${extent} V ${extent} H ${-extent} Z" transform="${transform}"/>`;
   } else if (shape === "mirror") {
-    const bandH = Math.max(2, (height * effH) / 100);
-    const extent = Math.max(width, height) * 5;
+    const bandH = Math.max(2 / nativeScale, (geometryHeight * effH) / 100);
+    const extent = Math.max(geometryWidth, geometryHeight) * 5;
     body = `<rect x="${-extent}" y="${-bandH / 2}" width="${extent * 2}" height="${bandH}" transform="${transform}"/>`;
   } else if (shape === "heart") {
     const hw = Math.max(1, (minDim * effW) / 100);
@@ -51,9 +64,10 @@ export function buildMaskSvg(mask: MaskConfig, width: number, height: number): s
     return null;
   }
 
-  // Feather is 0..80 in the UI. Keep the full range and expand the filter
-  // region so high softness is not clipped back to a sharp edge on native SVG.
-  const blur = Math.max(0, Math.min(80, mask.feather ?? 0)) * (minDim / 100) * 0.5;
+  // Feather is 0..80 in the UI. Keep the full range and expand both filter and
+  // mask regions; the native coordinate scale below works around Android's
+  // 25 px Gaussian blur cap without changing the visible geometry.
+  const blur = native ? targetBlur / nativeScale / 2 : targetBlur;
   // SVG's default filter and mask regions are only slightly larger than the
   // target bounds (often 10%). That clips most of a large feather on native
   // SVG, making the edge look almost hard even though the blur is configured.
@@ -65,7 +79,8 @@ export function buildMaskSvg(mask: MaskConfig, width: number, height: number): s
   const shapeFill = mask.inverted ? "black" : "white";
   const backgroundFill = mask.inverted ? "white" : "black";
   const filterAttr = filter ? ` filter="url(#f)"` : "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${filter}<mask id="m" maskUnits="userSpaceOnUse" x="${-width}" y="${-height}" width="${width * 3}" height="${height * 3}"><rect width="${width}" height="${height}" fill="${backgroundFill}"/><g fill="${shapeFill}"${filterAttr}>${body}</g></mask></defs><rect width="${width}" height="${height}" fill="white" mask="url(#m)"/></svg>`;
+  const nativeGroupTransform = nativeScale > 1 ? ` transform="scale(${nativeScale})"` : "";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${filter}<mask id="m" maskUnits="userSpaceOnUse" x="${-width}" y="${-height}" width="${width * 3}" height="${height * 3}"><rect width="${width}" height="${height}" fill="${backgroundFill}"/><g fill="${shapeFill}"${nativeGroupTransform}${filterAttr}>${body}</g></mask></defs><rect width="${width}" height="${height}" fill="white" mask="url(#m)"/></svg>`;
   if (svgCache.size > 256) svgCache.clear();
   svgCache.set(key, svg);
   return svg;

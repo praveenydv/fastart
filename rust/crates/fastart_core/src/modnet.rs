@@ -33,6 +33,33 @@ fn model_slot() -> &'static RwLock<Option<Arc<TypedRunnableModel>>> {
     MODNET_RUNNABLE.get_or_init(|| RwLock::new(None))
 }
 
+/// Converts the `file://` URI returned by Expo FileSystem into a native path.
+/// Other native callers may already pass a plain filesystem path.
+pub fn local_model_path(path: &str) -> Result<String, String> {
+    let uri_path = path.strip_prefix("file://").unwrap_or(path);
+    let bytes = uri_path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return Err("MODNet file URI contains an incomplete escape".into());
+            }
+            let high = (bytes[index + 1] as char).to_digit(16);
+            let low = (bytes[index + 2] as char).to_digit(16);
+            let (Some(high), Some(low)) = (high, low) else {
+                return Err("MODNet file URI contains an invalid escape".into());
+            };
+            decoded.push(((high << 4) | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).map_err(|_| "MODNet file path is not valid UTF-8".into())
+}
+
 /// Loads and optimizes a MODNet ONNX model once for reuse by all frame inference calls.
 pub fn initialize_modnet(model_bytes: &[u8]) -> Result<(), String> {
     if model_bytes.is_empty() {

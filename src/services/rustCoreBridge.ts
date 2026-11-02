@@ -453,14 +453,25 @@ class RustCoreBridgeService {
     try {
       const fileSystem = await import("expo-file-system/legacy");
       const modelUrl = "https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx";
-      const modelPath = `${fileSystem.cacheDirectory}fastart-modnet-pr6.onnx`;
+      // The hash in the filename invalidates same-sized stale downloads when
+      // the pinned model artifact changes between app versions.
+      const modelPath = `${fileSystem.cacheDirectory}fastart-modnet-07c308cf.onnx`;
       const existing = await fileSystem.getInfoAsync(modelPath);
       if (!existing.exists || (existing.size ?? 0) < 25_000_000) {
         await fileSystem.downloadAsync(modelUrl, modelPath);
       }
-      const initialized = !!(await FastArtRust.initializeModnet(modelPath));
+      let result: unknown = await FastArtRust.initializeModnet(modelPath);
+      let initialized = result === true || result === "ok";
+      if (!initialized && typeof result === "string" && result.includes("checksum")) {
+        console.warn("[RustCoreBridge] Cached MODNet checksum is stale; downloading the pinned model again");
+        await fileSystem.deleteAsync(modelPath, { idempotent: true });
+        await fileSystem.downloadAsync(modelUrl, modelPath);
+        result = await FastArtRust.initializeModnet(modelPath);
+        initialized = result === true || result === "ok";
+      }
       if (!initialized) {
-        console.warn("[RustCoreBridge] Rust MODNet rejected the downloaded model; automatic cutout is unavailable");
+        const reason = typeof result === "string" ? `: ${result}` : "";
+        console.warn(`[RustCoreBridge] Rust MODNet initialization failed${reason}; automatic cutout is unavailable`);
       }
       return initialized;
     } catch (error) {

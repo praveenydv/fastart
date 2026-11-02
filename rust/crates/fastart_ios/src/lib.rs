@@ -39,7 +39,8 @@ pub extern "C" fn fastart_ios_generate_animation_keyframes(
 pub extern "C" fn fastart_ios_initialize_modnet(path: *const c_char) -> bool {
     if path.is_null() { return false; }
     let Ok(path) = (unsafe { CStr::from_ptr(path) }).to_str() else { return false; };
-    let Ok(bytes) = std::fs::read(path) else { return false; };
+    let Ok(local_path) = fastart_core::local_model_path(path) else { return false; };
+    let Ok(bytes) = std::fs::read(local_path) else { return false; };
     fastart_core::initialize_modnet(&bytes).is_ok()
 }
 

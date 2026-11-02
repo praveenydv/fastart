@@ -1089,7 +1089,7 @@ function renderMaskedClipContent(
   h: number,
 ) {
   if (!mask || !mask.shape || mask.shape === "none") return mediaNode;
-  const svg = buildMaskSvg(mask, w, h);
+  const svg = buildMaskSvg(mask, w, h, Platform.OS === "android");
   if (!svg) return mediaNode;
   if (Platform.OS === "web") return mediaNode;
 
