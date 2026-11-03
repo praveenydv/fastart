@@ -2,7 +2,7 @@
  * FastArt Studio AI Neural Matting & Background Removal Engine
  *
  * Implements CapCut-grade multi-stage background removal:
- * 1. Deep Learning Portrait Matting (MODNet ONNX via WebAssembly/WebGPU):
+ * 1. Deep Learning Portrait Matting (MODNet ONNX through the platform runtime):
  *    Classifies every pixel into semantic foreground vs background,
  *    completely eliminating outdoor fences, tree foliage, and complex clutter.
  * 2. Continuous Alpha Matte Prediction (Sub-Pixel Edge Matting):
@@ -18,6 +18,7 @@ import { Platform } from "react-native";
 import { rustCoreBridge, registerMaskProvider } from "./rustCoreBridge";
 import { persistMasksRLE, loadMasksRLE, removeMasksRLE } from "../utils/largeMediaStorage";
 import { cutoutWorkerBridge } from "./cutoutWorkerBridge";
+import { LruCache } from "../utils/lruCache";
 
 let _cachedThumbnails: any = null;
 let _cachedFS: any = null;
@@ -66,9 +67,30 @@ export function registerMediaProvider(
 
 // Frame-by-frame compressed 8-bit RLE mask storage (95%+ RAM reduction)
 // Key: `${clipId}_${frameIndex}` -> Uint8Array (Run-Length Encoded 8-bit alpha)
-const clipMaskRLECache = new Map<string, Uint8Array>();
+const clipMaskRLECache = new LruCache<string, Uint8Array>(300);
 const clipMaskFpsMap = new Map<string, number>();
 const clipFrameIndicesMap = new Map<string, number[]>();
+const FAST_CUTOUT_SAMPLE_FPS = 6;
+
+function getCutoutFrameStep(sourceFps: number, quality: "fast" | "studio"): number {
+  return quality === "fast"
+    ? Math.max(1, Math.ceil(sourceFps / FAST_CUTOUT_SAMPLE_FPS))
+    : 1;
+}
+
+function getCutoutSampleFrameIndex(
+  sampleIndex: number,
+  sampleCount: number,
+  sourceFrameCount: number,
+  frameStep: number,
+): number {
+  // Always include the final source frame, even when the stride does not divide
+  // the clip length evenly.
+  if (sampleCount <= 1) return 0;
+  return sampleIndex === sampleCount - 1
+    ? sourceFrameCount - 1
+    : Math.min(sampleIndex * frameStep, sourceFrameCount - 1);
+}
 
 export function getClipBakedFps(clipId: string): number {
   return clipMaskFpsMap.get(clipId) || 20;
@@ -373,6 +395,8 @@ export function getFrameMask(
 }
 
 export function hasClipMasks(clipId: string): boolean {
+  const nativeIndices = nativeMaskFrameIndicesMap.get(clipId);
+  if (nativeIndices?.length) return true;
   for (const key of clipMaskRLECache.keys()) {
     if (key.startsWith(`${clipId}_`)) return true;
   }
@@ -384,6 +408,7 @@ export function hasClipMasks(clipId: string): boolean {
 
 export function hasFrameMask(clipId: string, frameIdx: number): boolean {
   return (
+    nativeMaskUriCache.has(`${clipId}_${frameIdx}`) ||
     clipMaskRLECache.has(`${clipId}_${frameIdx}`) ||
     lruCanvasCache.has(`${clipId}_${frameIdx}`)
   );
@@ -436,6 +461,8 @@ export function updateActiveFrameMatteParams(
 }
 
 export function getClipProcessedCount(clipId: string): number {
+  const nativeCount = nativeMaskFrameIndicesMap.get(clipId)?.length ?? 0;
+  if (nativeCount > 0) return nativeCount;
   let count = 0;
   for (const key of clipMaskRLECache.keys()) {
     if (key.startsWith(`${clipId}_`)) count++;
@@ -479,6 +506,9 @@ export function clearClipMasks(clipId?: string): void {
     lastModnetRawAlphaClipId = "";
     lastModnetRawAlphaFrameIdx = -1;
     lastModnetRawAlphaMediaTime = -1;
+  }
+  if (!clipId || _lastDecodedFrame?.key.startsWith(`${clipId}_`)) {
+    _lastDecodedFrame = null;
   }
   notifyMaskUpdated();
 
@@ -800,8 +830,9 @@ export function requestHumanSegmentation(
       : effectiveClipTime;
     const effectiveFps = (clipId && clipMaskFpsMap.get(clipId)) || 20;
 
-    // 1. If video is actively playing, use real-time WebGL GPU tracking (30 FPS, 6ms)
-    // to track the subject live across the entire video without freezing on one frame!
+    // Keep live inference asynchronous and rate-limited so model work never blocks
+    // the preview renderer. Native builds use their configured ONNX providers;
+    // web builds run the Rust/WASM model in a worker.
     if (isVideo && !mediaElement.paused) {
       const frameIdx = Math.max(
         0,
@@ -888,7 +919,8 @@ export function requestHumanSegmentation(
     lastProcessedSrc = currentSrc;
     lastSegmentedClipId = clipId || "";
 
-    // Studio MODNet Neural Matting (CapCut quality, zero fence/trees)
+    // Studio MODNet neural matting. Output quality depends on the model,
+    // source footage, and runtime backend.
     if (isStudioCutoutReady() || cutoutWorkerBridge.isSupported()) {
       segmentWithStudioEngine(sourceToFeed)
         .then((matte) => {
@@ -932,8 +964,8 @@ export function requestHumanSegmentation(
 }
 
 /**
- * Ultra-fast GPU-accelerated background matting (< 20ms).
- * Executes in WebGL shaders on the GPU via MediaPipe with sub-pixel edge refinement.
+ * Runs the platform's configured neural matting backend and returns a refined
+ * alpha matte. Native builds may use Core ML or NNAPI; web builds use Rust/WASM.
  * Provides the same instantaneous responsiveness that CapCut users expect.
  */
 export async function segmentWithFastEngine(
@@ -1178,8 +1210,7 @@ export async function processClipStudioCutout(
       }
     }
 
-    // 2. High-speed Fast Path: If Studio Neural Engine is not yet warmed up,
-    // immediately fire Fast GPU Segmentation (< 20ms) so the user gets instant feedback!
+    // 2. Try neural matting first when its native runtime or web worker is available.
     let maskCanvas: HTMLCanvasElement | null = null;
     if (isStudioCutoutReady() || cutoutWorkerBridge.isSupported()) {
       try {
@@ -1236,8 +1267,7 @@ export async function processClipStudioCutout(
 }
 
 /**
- * Process an entire video clip frame-by-frame with Studio Neural Matting.
- * Guarantees 100% clean background removal during video playback, scrubbing, and export.
+ * Bake a matte for each requested source-time sample with Studio Neural Matting.
  */
 export async function processVideoFrameByFrame(
   videoUrl: string,
@@ -1245,28 +1275,25 @@ export async function processVideoFrameByFrame(
   duration: number,
   trimIn = 0,
   speed = 1,
-  fps = 20,
+  fps = 30,
   threshold = 0.0,
   feather = 0.0,
   onProgress?: (pct: number, current: number, total: number) => void,
   signal?: AbortSignal,
   quality: "fast" | "studio" = "fast",
+  reverse = false,
 ): Promise<number> {
   if (typeof document === "undefined") return 0;
-  if (!(await rustCoreBridge.init())) {
-    throw new Error("Rust WASM is required for video cutout processing");
+  if (!cutoutWorkerBridge.isSupported() || !(await cutoutWorkerBridge.init())) {
+    throw new Error("The Rust cutout worker could not be initialized");
   }
 
-  const isFast = quality === "fast";
-  const effectiveFps = isFast ? (duration > 60 ? 4 : Math.min(fps, 8)) : fps;
+  // Keep the source timebase for mask lookup and analyze every source frame.
+  // Parallel hardware inference is used where available instead of lowering
+  // web temporal coverage to make the bake appear faster.
+  void quality;
+  const effectiveFps = Math.min(Math.max(1, fps), 240);
   clipMaskFpsMap.set(clipId, effectiveFps);
-
-  // Initialize Studio MODNet Engine & Background Worker in parallel
-  await Promise.all([
-    cutoutWorkerBridge.init().catch(() => {}),
-    initStudioNeuralEngine().catch(() => {}),
-    initSelfieSegmentation().catch(() => {}),
-  ]);
 
   return new Promise<number>((resolve) => {
     const video = document.createElement("video");
@@ -1278,23 +1305,13 @@ export async function processVideoFrameByFrame(
     video.preload = "auto";
     video.src = videoUrl;
 
-    const totalFrames = Math.max(1, Math.ceil(duration * effectiveFps));
+    const sourceFrameCount = Math.max(
+      1,
+      Math.ceil(duration * Math.max(0.1, speed) * effectiveFps),
+    );
+    const frameStep = 1;
+    const totalFrames = Math.ceil(sourceFrameCount / frameStep);
     let currentFrame = 0;
-    // CapCut speed optimization: 8 FPS keyframes with step 2 for fast mode (4 FPS inference), 1 step for studio
-    const frameStep = isFast ? 2 : 1;
-
-    // Motion-adaptive 16x16 thumbnail canvas to detect static frames
-    let motionCanvas: HTMLCanvasElement | null = null;
-    let motionCtx: CanvasRenderingContext2D | null = null;
-    let lastMotionData: Uint8Array | null = null;
-    let lastRle: Uint8Array | null = null;
-
-    try {
-      motionCanvas = document.createElement("canvas");
-      motionCanvas.width = 16;
-      motionCanvas.height = 16;
-      motionCtx = motionCanvas.getContext("2d", { willReadFrequently: true });
-    } catch (_) {}
 
     const cleanup = () => {
       video.pause();
@@ -1303,65 +1320,84 @@ export async function processVideoFrameByFrame(
     };
 
     let isProcessing = false;
+    let completedSamples = 0;
+    let processedMasks = 0;
+    let finished = false;
+    const inFlight = new Set<Promise<void>>();
+    const maxInFlight = cutoutWorkerBridge.getConcurrency();
+
+    const finish = async () => {
+      if (finished) return;
+      finished = true;
+      while (inFlight.size > 0) {
+        await Promise.all(Array.from(inFlight));
+      }
+      const rleData: Record<string, Uint8Array> = {};
+      for (const [key, value] of clipMaskRLECache.entries()) {
+        if (key.startsWith(`${clipId}_`)) rleData[key] = value;
+      }
+      if (Object.keys(rleData).length > 0) {
+        persistMasksRLE(clipId, rleData).catch(() => {});
+      }
+      cleanup();
+      resolve(processedMasks);
+    };
+
+    const markSampleComplete = (succeeded: boolean) => {
+      completedSamples++;
+      if (succeeded) processedMasks++;
+      onProgress?.(
+        Math.min(100, Math.round((completedSamples / totalFrames) * 100)),
+        completedSamples,
+        totalFrames,
+      );
+      notifyMaskUpdated();
+    };
+
     const processNextFrame = async () => {
+      if (finished) return;
       if (isProcessing) return;
       isProcessing = true;
       if (signal?.aborted || currentFrame >= totalFrames) {
-        cleanup();
-        resolve(currentFrame);
+        isProcessing = false;
+        await finish();
         return;
       }
 
-      const targetTime = Math.max(0, trimIn + (currentFrame / effectiveFps) * speed);
-
-      const onSeeked = async () => {
+      // Decode ahead only while an inference slot is available. This overlaps
+      // video seeking/preprocessing with bounded worker inference without
+      // buffering the whole clip in memory.
+      if (inFlight.size >= maxInFlight) {
+        await Promise.race(inFlight);
         if (signal?.aborted) {
-          cleanup();
-          resolve(currentFrame);
+          isProcessing = false;
+          await finish();
+          return;
+        }
+      }
+
+      const outputFrameIdx = getCutoutSampleFrameIndex(
+        currentFrame,
+        totalFrames,
+        sourceFrameCount,
+        frameStep,
+      );
+      const sourceFrameIdx = reverse
+        ? sourceFrameCount - outputFrameIdx - 1
+        : outputFrameIdx;
+      const targetTime = Math.max(0, trimIn + sourceFrameIdx / effectiveFps);
+
+      const onSeeked = () => {
+        if (finished) return;
+        if (signal?.aborted) {
+          isProcessing = false;
+          void finish();
           return;
         }
 
+        let inferenceSubmitted = false;
         try {
-          // Motion-adaptive static frame skip: if subject hasn't moved (<2.5% delta), instant 0ms reuse!
-          let isStatic = false;
-          if (motionCtx && lastMotionData && lastRle) {
-            try {
-              motionCtx.drawImage(video, 0, 0, 16, 16);
-              const mData = motionCtx.getImageData(0, 0, 16, 16).data;
-              let diff = 0;
-              for (let mi = 0; mi < 256 * 4; mi += 4) {
-                diff +=
-                  Math.abs(mData[mi] - lastMotionData[mi]) +
-                  Math.abs(mData[mi + 1] - lastMotionData[mi + 1]) +
-                  Math.abs(mData[mi + 2] - lastMotionData[mi + 2]);
-              }
-              const avgDiff = diff / (256 * 3);
-              if (avgDiff < 6.0) {
-                isStatic = true;
-              } else {
-                for (let j = 0; j < mData.length; j++) {
-                  lastMotionData[j] = mData[j];
-                }
-              }
-            } catch (_) {}
-          } else if (motionCtx) {
-            try {
-              motionCtx.drawImage(video, 0, 0, 16, 16);
-              const initData = motionCtx.getImageData(0, 0, 16, 16).data;
-              lastMotionData = new Uint8Array(initData);
-            } catch (_) {}
-          }
-
-          if (isStatic && lastRle) {
-            clipMaskRLECache.set(`${clipId}_${currentFrame}`, lastRle);
-            registerClipFrameIndex(clipId, currentFrame);
-            if (frameStep > 1 && currentFrame + 1 < totalFrames) {
-              clipMaskRLECache.set(`${clipId}_${currentFrame + 1}`, lastRle);
-              registerClipFrameIndex(clipId, currentFrame + 1);
-            }
-          } else {
             // Always use 512×512 for MODNet (model is trained at this resolution).
-            // Fast-mode speedup comes from reduced effectiveFps (4–8 FPS) + frameStep=2, not from canvas resizing.
             if (!modnetInputCanvas) {
               modnetInputCanvas = document.createElement("canvas");
               modnetInputCanvas.width = 512;
@@ -1377,87 +1413,60 @@ export async function processVideoFrameByFrame(
             if (modnetInputCtx) {
               modnetInputCtx.drawImage(video, 0, 0, 512, 512);
               const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
-              if (!modnetFloatData || modnetFloatData.length !== 512 * 512 * 3) {
-                modnetFloatData = new Float32Array(3 * 512 * 512);
-              }
-              const floatData = rustCoreBridge.prepareModnetInput(
-                imgData.data,
-                512,
-                512,
-                modnetFloatData,
-              );
-
-              let rawAlpha: Float32Array | null = null;
-
-              // 1. Worker off-main-thread inference (zero main-thread freezing)
               if (cutoutWorkerBridge.isSupported()) {
-                try {
-                  rawAlpha = await cutoutWorkerBridge.runInference(floatData);
-                } catch (err) {
-                  console.warn(
-                    "[StudioCutout] Worker inference error in video loop:",
-                    err,
-                  );
-                }
-              }
-
-              if (rawAlpha) {
-                // Cache first frame's raw neural tensor for instant (0.1ms) slider tweaking via Rust WASM
-                if (currentFrame === 0) {
-                  if (
-                    !lastModnetRawAlpha ||
-                    lastModnetRawAlpha.length !== rawAlpha.length
-                  ) {
-                    lastModnetRawAlpha = new Float32Array(rawAlpha.length);
-                  }
-                  lastModnetRawAlpha.set(rawAlpha);
-                  lastModnetRawAlphaClipId = clipId;
-                  lastModnetRawAlphaFrameIdx = 0;
-                }
-
-                // Ultra-fast zero-copy direct memory RLE compression (0.3ms vs 30ms canvas readback)
-                const rle = rustCoreBridge.modnetAlphaToRLE(
-                  rawAlpha,
+                inferenceSubmitted = true;
+                let task: Promise<void>;
+                task = cutoutWorkerBridge.runFrame(
+                  imgData.data,
                   threshold,
                   feather,
-                );
-                lastRle = rle;
-                clipMaskRLECache.set(`${clipId}_${currentFrame}`, rle);
-                registerClipFrameIndex(clipId, currentFrame);
-                if (frameStep > 1 && currentFrame + 1 < totalFrames) {
-                  // Zero-copy reference: identical mask for adjacent stepped frame
-                  clipMaskRLECache.set(`${clipId}_${currentFrame + 1}`, rle);
-                  registerClipFrameIndex(clipId, currentFrame + 1);
-                }
-                if (currentFrame === 0) {
-                  clipMaskRLECache.set(`${clipId}_0`, rle);
-                  registerClipFrameIndex(clipId, 0);
-                }
-                lastProcessedMediaTime = targetTime;
-                lastSegmentedClipId = clipId;
-                hasValidHumanSubject = true;
+                  outputFrameIdx === 0,
+                )
+                  .then((result) => {
+                    if (result?.rle) {
+                      const rawAlpha = result.rawAlpha;
+                      if (outputFrameIdx === 0) {
+                        if (rawAlpha && (!lastModnetRawAlpha || lastModnetRawAlpha.length !== rawAlpha.length)) {
+                          lastModnetRawAlpha = new Float32Array(rawAlpha.length);
+                        }
+                        if (rawAlpha && lastModnetRawAlpha) {
+                          lastModnetRawAlpha.set(rawAlpha);
+                          lastModnetRawAlphaClipId = clipId;
+                          lastModnetRawAlphaFrameIdx = 0;
+                        }
+                      }
+
+                      const rle = result.rle;
+                      clipMaskRLECache.set(`${clipId}_${outputFrameIdx}`, rle);
+                      registerClipFrameIndex(clipId, outputFrameIdx);
+                      if (outputFrameIdx === 0) {
+                        clipMaskRLECache.set(`${clipId}_0`, rle);
+                        registerClipFrameIndex(clipId, 0);
+                      }
+                      lastProcessedMediaTime = targetTime;
+                      lastSegmentedClipId = clipId;
+                      hasValidHumanSubject = true;
+                      markSampleComplete(true);
+                    } else {
+                      markSampleComplete(false);
+                    }
+                  })
+                  .catch((error) => {
+                    console.warn("[StudioCutout] Worker inference error in video loop:", error);
+                    markSampleComplete(false);
+                  })
+                  .finally(() => inFlight.delete(task));
+                inFlight.add(task);
+              } else {
+                markSampleComplete(false);
               }
             }
-          }
         } catch (e) {
           console.warn("[StudioCutout] Frame processing error:", e);
+          if (!inferenceSubmitted) markSampleComplete(false);
         }
 
-        currentFrame += frameStep;
-        if (onProgress) {
-          onProgress(
-            Math.min(100, Math.round((currentFrame / totalFrames) * 100)),
-            currentFrame,
-            totalFrames,
-          );
-        }
-
-        if (onMaskUpdatedCallback) {
-          try {
-            onMaskUpdatedCallback();
-          } catch {}
-        }
-
+        currentFrame += 1;
         isProcessing = false;
         if (currentFrame < totalFrames && !signal?.aborted) {
           // Yield to browser paint loop so the progress dialog stays silky smooth without artificial lag
@@ -1467,18 +1476,7 @@ export async function processVideoFrameByFrame(
             setTimeout(processNextFrame, 0);
           }
         } else {
-          // Persist all compressed RLE masks for this clip to IndexedDB
-          const rleData: Record<string, Uint8Array> = {};
-          for (const [k, v] of clipMaskRLECache.entries()) {
-            if (k.startsWith(`${clipId}_`)) {
-              rleData[k] = v;
-            }
-          }
-          if (Object.keys(rleData).length > 0) {
-            persistMasksRLE(clipId, rleData).catch(() => {});
-          }
-          cleanup();
-          resolve(currentFrame);
+          void finish();
         }
       };
 
@@ -1488,20 +1486,28 @@ export async function processVideoFrameByFrame(
       ) {
         onSeeked();
       } else {
-        let seekTimer: any = null;
+        let seekTimer: ReturnType<typeof setTimeout> | null = null;
         const safeOnSeeked = () => {
           if (seekTimer) clearTimeout(seekTimer);
           video.removeEventListener("seeked", safeOnSeeked);
           onSeeked();
         };
-        seekTimer = setTimeout(safeOnSeeked, 300);
+        // Never infer a mask after a seek timeout: the video element may still
+        // expose the previous decoded frame, which would cache a wrong matte at
+        // this frame index. Exact-time baking is preferable to silently stale
+        // masks. `fastSeek` is intentionally avoided because it may seek only
+        // to a nearby keyframe.
+        seekTimer = setTimeout(() => {
+          video.removeEventListener("seeked", safeOnSeeked);
+          console.warn(
+            `[StudioCutout] Timed out seeking to source time ${targetTime.toFixed(3)}s; stopping the bake to avoid a stale mask.`,
+          );
+          isProcessing = false;
+          void finish();
+        }, 10_000);
         video.addEventListener("seeked", safeOnSeeked, { once: true });
         try {
-          if (typeof (video as any).fastSeek === "function") {
-            (video as any).fastSeek(targetTime);
-          } else {
-            video.currentTime = targetTime;
-          }
+          video.currentTime = targetTime;
         } catch {
           video.currentTime = targetTime;
         }
@@ -1531,8 +1537,8 @@ export async function processVideoFrameByFrame(
         "[StudioCutout] Video element error during frame-by-frame:",
         e,
       );
-      cleanup();
-      resolve(0);
+      isProcessing = false;
+      void finish();
     };
   });
 }
@@ -1571,7 +1577,7 @@ export async function renderCutoutToVideoBlob(
       duration,
       trimIn,
       speed,
-      15,
+      20,
       threshold,
       feather,
       (pct, curr, total) => {
@@ -1777,15 +1783,27 @@ export async function renderCutoutToVideoBlob(
 
 /**
  * In-memory URI cache: clipId_frameIdx -> data/file URI of the processed RGBA PNG.
+ * Bounded with LRU eviction to prevent runaway memory usage during long editing sessions.
  * Used by PlayerNativeCompositor on native to render the cutout as an Image overlay.
  */
-const nativeMaskUriCache = new Map<string, string>();
+const nativeMaskUriCache = new LruCache<string, string>(160);
 
 const nativeMaskFrameIndicesMap = new Map<string, number[]>();
 
-export function findNearestNativeMaskUri(clipId: string, frameIdx: number): string | null {
+export function findNearestNativeMaskUri(
+  clipId: string,
+  frameIdx: number,
+  maxDiffFrames?: number,
+): string | null {
   const list = nativeMaskFrameIndicesMap.get(clipId);
   if (!list || list.length === 0) return null;
+  const fps = clipMaskFpsMap.get(clipId) || 20;
+  // Bounded temporal window (~350ms): prevent stale frame reuse across shots
+  const maxDiff =
+    maxDiffFrames !== undefined
+      ? maxDiffFrames
+      : Math.max(4, Math.round(fps * 0.35));
+
   let low = 0;
   let high = list.length - 1;
   while (low <= high) {
@@ -1802,16 +1820,19 @@ export function findNearestNativeMaskUri(clipId: string, frameIdx: number): stri
   }
   if (high >= 0 && Math.abs(list[high] - frameIdx) < minDiff) {
     bestIdx = list[high];
+    minDiff = Math.abs(list[high] - frameIdx);
+  }
+  if (minDiff > maxDiff) {
+    return null;
   }
   return nativeMaskUriCache.get(`${clipId}_${bestIdx}`) || null;
 }
 
-export function getNativeMaskUri(clipId: string, frameIdx = 0): string | null {
+export function getNativeMaskUri(clipId: string, frameIdx = 0, isVideo = true): string | null {
   return (
     nativeMaskUriCache.get(`${clipId}_${frameIdx}`) ??
     findNearestNativeMaskUri(clipId, frameIdx) ??
-    nativeMaskUriCache.get(`${clipId}_0`) ??
-    null
+    (!isVideo || frameIdx <= 6 ? (nativeMaskUriCache.get(`${clipId}_0`) ?? null) : null)
   );
 }
 
@@ -1922,10 +1943,10 @@ async function _cacheMaskAsUri(
       uri = `${path}?t=${Date.now()}`;
     }
 
-    nativeMaskUriCache.set(`${clipId}_${frameIdx}`, uri);
-    if (frameIdx !== 0 && !nativeMaskUriCache.has(`${clipId}_0`)) {
-      nativeMaskUriCache.set(`${clipId}_0`, uri);
-    }
+    // Register sampled native frames as well as storing their URI. The player
+    // asks for 30fps frame indices; this sorted index lets it use the nearest
+    // processed matte instead of silently falling back to the first frame.
+    setNativeMaskUri(clipId, frameIdx, uri);
     return true;
   } catch (e) {
     console.warn("[SelfieSegmentation] _cacheMaskAsUri error:", e);
@@ -2036,8 +2057,6 @@ export async function processFramePixelsUnified(
     const key = `${clipId}_${frameIdx}`;
     clipMaskRLECache.set(key, rle);
     registerKey(key);
-    clipMaskFpsMap.set(clipId, 20);
-
     if (frameIdx !== 0) {
       const key0 = `${clipId}_0`;
       if (!clipMaskRLECache.has(key0)) {
@@ -2198,9 +2217,9 @@ export async function processVideoUnified(
   onProgress?: (pct: number, current: number, total: number) => void,
   signal?: AbortSignal,
   quality: "fast" | "studio" = "fast",
+  reverse = false,
 ): Promise<number> {
-  const isFast = quality === "fast";
-  const effectiveFps = isFast ? (duration > 60 ? 4 : Math.min(fps, 8)) : fps;
+  let effectiveFps = Math.min(Math.max(1, fps), 240);
   clipMaskFpsMap.set(clipId, effectiveFps);
 
   if (typeof document !== "undefined") {
@@ -2216,24 +2235,105 @@ export async function processVideoUnified(
       onProgress,
       signal,
       quality,
+      reverse,
     );
   }
 
+  if (Platform.OS === "android" || Platform.OS === "ios") {
+    if (mode === "auto" && !(await initStudioNeuralEngine())) {
+      throw new Error("Native accelerated MODNet is unavailable");
+    }
+    const frameInfo = await rustCoreBridge.getNativeVideoFrameInfo(videoUri);
+    if (!frameInfo) throw new Error("Could not read source video frame timing for native cutout");
+    // Cache one matte per source frame across the clip's source-time span.
+    // This keeps playback selection aligned with decoded video frames at any speed.
+    effectiveFps = frameInfo.frameRate;
+    clipMaskFpsMap.set(clipId, effectiveFps);
+    const sourceFramesRemaining = Math.max(
+      1,
+      frameInfo.frameCount - Math.floor(Math.max(0, trimIn) * effectiveFps),
+    );
+    const sourceFrameCount = Math.max(1, Math.min(
+      sourceFramesRemaining,
+      Math.ceil(duration * Math.max(0.1, speed) * effectiveFps),
+    ));
+    const frameStep = getCutoutFrameStep(effectiveFps, quality);
+    const totalFrames = Math.ceil(sourceFrameCount / frameStep);
+    onProgress?.(0, 0, totalFrames);
+    let processed = 0;
+    let lastNotifyAt = 0;
+    try {
+      for (let sampleIndex = 0; sampleIndex < totalFrames; sampleIndex++) {
+        if (signal?.aborted) break;
+        const frameIdx = getCutoutSampleFrameIndex(
+          sampleIndex,
+          totalFrames,
+          sourceFrameCount,
+          frameStep,
+        );
+        const sourceFrameIdx = reverse ? sourceFrameCount - frameIdx - 1 : frameIdx;
+        const frameTime = trimIn + sourceFrameIdx / effectiveFps;
+        const maskUri = await rustCoreBridge.processVideoFrameNative(
+          videoUri,
+          clipId,
+          frameIdx,
+          frameTime,
+          threshold,
+          feather,
+          mode,
+          keyColor,
+        );
+        if (!maskUri) {
+          throw new Error(`${Platform.OS} native video frame cutout is unavailable`);
+        }
+        setNativeMaskUri(clipId, frameIdx, maskUri);
+        registerClipFrameIndex(clipId, frameIdx);
+        processed++;
+        onProgress?.(
+          Math.round(((sampleIndex + 1) / totalFrames) * 100),
+          sampleIndex + 1,
+          totalFrames,
+        );
+        const now = Date.now();
+        if (now - lastNotifyAt >= 100 || sampleIndex + 1 === totalFrames) {
+          lastNotifyAt = now;
+          notifyMaskUpdated();
+        }
+      }
+    } finally {
+      await rustCoreBridge.releaseVideoCutoutDecoder(videoUri);
+    }
+    clipMaskFpsMap.set(clipId, effectiveFps);
+    return processed;
+  }
+
   // 2. Resilient Fallback to sequential frame extraction
-  const nativeFps = Math.min(fps, 6);
-  const totalFrames = Math.max(1, Math.ceil(duration * nativeFps));
+  const nativeFps = Math.min(Math.max(1, fps), 240);
+  const sourceFrameCount = Math.max(
+    1,
+    Math.ceil(duration * Math.max(0.1, speed) * nativeFps),
+  );
+  const frameStep = getCutoutFrameStep(nativeFps, quality);
+  const totalFrames = Math.ceil(sourceFrameCount / frameStep);
   let processed = 0;
 
   clipMaskFpsMap.set(clipId, nativeFps);
 
-  for (let fi = 0; fi < totalFrames; fi++) {
+  for (let sampleIndex = 0; sampleIndex < totalFrames; sampleIndex++) {
     if (signal?.aborted) break;
 
-    const frameTime = trimIn + (fi / nativeFps) * speed;
+    const frameIdx = getCutoutSampleFrameIndex(
+      sampleIndex,
+      totalFrames,
+      sourceFrameCount,
+      frameStep,
+    );
+    const sourceFrameIdx = reverse ? sourceFrameCount - frameIdx - 1 : frameIdx;
+    const frameTime = trimIn + sourceFrameIdx / nativeFps;
     const ok = await processClipUnified(
       videoUri,
       clipId,
-      fi,
+      frameIdx,
       frameTime,
       threshold,
       feather,
@@ -2242,8 +2342,8 @@ export async function processVideoUnified(
     );
     if (ok) processed++;
     onProgress?.(
-      Math.round(((fi + 1) / totalFrames) * 100),
-      fi + 1,
+      Math.round(((sampleIndex + 1) / totalFrames) * 100),
+      sampleIndex + 1,
       totalFrames,
     );
   }

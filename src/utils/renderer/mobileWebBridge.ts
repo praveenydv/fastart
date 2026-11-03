@@ -793,7 +793,7 @@ export function generateCanvasBridgeHtml(
       // -----------------------------------------------------------------------
       // 6. Embedded GIF89a LZW Encoder (For Lossless Animated GIF Exports)
       // -----------------------------------------------------------------------
-      function encodeGifFromCanvas(frames, delayMs) {
+      function createGifEncoder(delayMs) {
         var out = [];
         function writeStr(s) { for (var i=0; i<s.length; i++) out.push(s.charCodeAt(i)); }
         function writeU16(v) { out.push(v & 0xff, (v >> 8) & 0xff); }
@@ -812,8 +812,7 @@ export function generateCanvasBridgeHtml(
 
         var delay = Math.max(2, Math.round(delayMs / 10));
 
-        for (var f = 0; f < frames.length; f++) {
-          var rgba = frames[f];
+        function addFrame(rgba) {
           // Simple 256-color palette quantization
           var palette = [[0,0,0], [255,255,255]];
           var colorMap = new Map();
@@ -921,8 +920,12 @@ export function generateCanvasBridgeHtml(
           out.push(0x00);
         }
 
-        out.push(0x3b);
-        return new Uint8Array(out);
+        function finish() {
+          out.push(0x3b);
+          return new Uint8Array(out);
+        }
+
+        return { addFrame: addFrame, finish: finish };
       }
 
       // -----------------------------------------------------------------------
@@ -955,19 +958,19 @@ export function generateCanvasBridgeHtml(
           const totalFrames = Math.max(1, Math.ceil(EXPORT_OPTIONS.duration * gifFps));
           const frameInterval = 1 / gifFps;
           const delayMs = Math.round(1000 / gifFps);
-          const frames = [];
+          const gifEncoder = createGifEncoder(delayMs);
 
           for (let f = 0; f < totalFrames; f++) {
             const frameTime = f * frameInterval;
             renderFrame(frameTime);
             const imgData = ctx.getImageData(0, 0, width, height);
-            frames.push(new Uint8Array(imgData.data));
+            gifEncoder.addFrame(imgData.data);
             const pct = Math.round(10 + (f / totalFrames) * 75);
             sendToNative({ type: "PROGRESS", progress: pct, status: "Compositing GIF frame " + (f + 1) + "/" + totalFrames });
           }
 
           sendToNative({ type: "PROGRESS", progress: 90, status: "Quantizing & encoding GIF..." });
-          const gifBytes = encodeGifFromCanvas(frames, delayMs);
+          const gifBytes = gifEncoder.finish();
           let binary = "";
           const chunkSize = 16384;
           for (let i = 0; i < gifBytes.length; i += chunkSize) {
@@ -1083,7 +1086,6 @@ export function generateCanvasBridgeHtml(
 
         // Adaptive Bitrate: 4K (28Mbps), 1080p (14Mbps), 720p (7Mbps)
         const targetBps = width >= 3840 ? 28000000 : width >= 1920 ? 14000000 : 7000000;
-        const chunks = [];
         let recorder = null;
 
         try {
@@ -1103,61 +1105,41 @@ export function generateCanvasBridgeHtml(
           }
         }
 
+        let transferQueue = Promise.resolve();
+        let transferredBytes = 0;
+        let transferFailed = false;
+
         recorder.ondataavailable = function(e) {
-          if (e.data && e.data.size > 0) {
-            chunks.push(e.data);
-          }
+          if (!e.data || e.data.size <= 0 || transferFailed) return;
+          // Convert and forward each recorder segment as it arrives. This avoids
+          // retaining the entire encoded video and a second full-size base64 copy.
+          transferQueue = transferQueue.then(async function() {
+            const bytes = new Uint8Array(await e.data.arrayBuffer());
+            let binary = "";
+            const binaryChunkSize = 32768;
+            for (let i = 0; i < bytes.length; i += binaryChunkSize) {
+              binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + binaryChunkSize, bytes.length)));
+            }
+            sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
+            transferredBytes += bytes.length;
+          }).catch(function(err) {
+            transferFailed = true;
+            sendToNative({ type: "ERROR", message: "Could not stream encoded video: " + (err.message || err) });
+          });
         };
 
         recorder.onstop = function() {
-          const finalBlob = new Blob(chunks, { type: mimeType });
-          const reader = new FileReader();
-          reader.onloadend = function() {
-            const res = reader.result;
-            let base64 = "";
-            if (typeof res === "string") {
-              const commaIdx = res.indexOf(",");
-              base64 = commaIdx >= 0 ? res.slice(commaIdx + 1) : res;
-              base64 = base64.replace(/[\r\n\s]+/g, "");
-            }
-            const CHUNK_SIZE = 256 * 1024; // 256KB binary chunk streaming
-            if (base64.length > CHUNK_SIZE) {
-              const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
-              sendToNative({
-                type: "CHUNK_START",
-                totalChunks: totalChunks,
-                mimeType: mimeType,
-                extension: extension,
-                fileSize: finalBlob.size
-              });
-              for (let i = 0; i < totalChunks; i++) {
-                const chunkSlice = base64.substr(i * CHUNK_SIZE, CHUNK_SIZE);
-                sendToNative({
-                  type: "CHUNK_DATA",
-                  index: i,
-                  chunk: chunkSlice
-                });
-              }
-              sendToNative({
-                type: "CHUNK_END",
-                mimeType: mimeType,
-                extension: extension,
-                fileSize: finalBlob.size
-              });
-            } else {
-              sendToNative({
-                type: "COMPLETE",
-                base64: base64,
-                mimeType: mimeType,
-                extension: extension,
-                fileSize: finalBlob.size
-              });
-            }
-          };
-          reader.onerror = function() {
-            sendToNative({ type: "ERROR", message: "FileReader base64 conversion failed" });
-          };
-          reader.readAsDataURL(finalBlob);
+          transferQueue.then(function() {
+            if (transferFailed) return;
+            sendToNative({
+              type: "CHUNK_END",
+              mimeType: mimeType,
+              extension: extension,
+              fileSize: transferredBytes
+            });
+          }).catch(function(err) {
+            sendToNative({ type: "ERROR", message: "Could not finish video transfer: " + (err.message || err) });
+          });
         };
 
         recorder.onerror = function(err) {
@@ -1166,9 +1148,13 @@ export function generateCanvasBridgeHtml(
 
         // Prime video elements and start recording
         renderFrame(0);
+        sendToNative({ type: "CHUNK_START", mimeType: mimeType, extension: extension });
         recorder.start(100);
         const startTime = performance.now();
         const durationSec = Math.max(1.0, EXPORT_OPTIONS.duration);
+        const targetFrameInterval = 1 / Math.max(1, EXPORT_OPTIONS.fps || 30);
+        let lastRenderedTime = 0;
+        let lastProgressSentAt = 0;
 
         function tick() {
           const now = performance.now();
@@ -1209,10 +1195,20 @@ export function generateCanvasBridgeHtml(
             }
           }
 
-          renderFrame(curTime);
+          // The WebView may refresh at 60/90/120 Hz while export is configured
+          // for a lower rate. Avoid repeating the expensive full composition on
+          // display-only frames; the canvas stream is configured to the export
+          // frame rate above.
+          if (curTime - lastRenderedTime >= targetFrameInterval - 0.001 || elapsed >= durationSec) {
+            renderFrame(curTime);
+            lastRenderedTime = curTime;
+          }
 
-          const progress = Math.min(99, Math.round(20 + (curTime / durationSec) * 79));
-          sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });
+          if (now - lastProgressSentAt >= 100 || elapsed >= durationSec) {
+            lastProgressSentAt = now;
+            const progress = Math.min(99, Math.round(20 + (curTime / durationSec) * 79));
+            sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });
+          }
 
           if (elapsed < durationSec) {
             requestAnimationFrame(tick);

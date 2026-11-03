@@ -1,5 +1,7 @@
 // FastArt 8-Channel Selective HSL Color Grading Engine
 import { HSLAdjustments, HSLColorChannel, HSLChannelConfig } from '../types/project';
+import { rustCoreBridge } from '../services/rustCoreBridge';
+import { LruCache } from './lruCache';
 
 export interface ChannelMetrics {
   id: HSLColorChannel;
@@ -30,7 +32,7 @@ export const HSL_CHANNEL_KEYS: HSLColorChannel[] = [
   'magenta',
 ];
 
-const hslCssFilterCache = new Map<string, string>();
+const hslCssFilterCache = new LruCache<string, string>(120);
 
 /**
  * Checks whether any HSL channel has a non-zero adjustment without allocating arrays.
@@ -246,6 +248,9 @@ export function applyHslToImageData(imageData: ImageData, adjustments: HSLAdjust
   if (!isHslActive(adjustments)) return;
 
   const data = imageData.data;
+  if (rustCoreBridge.applyHslColorGrading(data, imageData.width, imageData.height, adjustments)) {
+    return;
+  }
   const len = data.length;
 
   for (let i = 0; i < len; i += 4) {

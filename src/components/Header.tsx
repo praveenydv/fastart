@@ -29,7 +29,7 @@ interface HeaderProps {
   isSaving?: boolean;
 }
 
-function Header({
+function HeaderComponent({
   project,
   onUpdateProject,
   onBackToHome,
@@ -482,4 +482,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default React.memo(Header);
+export const Header = React.memo(HeaderComponent);
+export default Header;

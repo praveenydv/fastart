@@ -48,7 +48,7 @@ interface CutoutModalProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function CutoutModal({
+function CutoutModalComponent({
   visible,
   onClose,
   onApply,
@@ -241,11 +241,18 @@ export default function CutoutModal({
     setIsProcessingFrames(true);
     setFrameProgress(0);
 
-    const isFast = (processingConfig.quality || "fast") === "fast";
     const clipDuration = Math.max(0.1, selectedClip.duration || 1.0);
-    const targetFps = isFast ? (clipDuration > 60 ? 4 : 8) : (bakedFps || 20);
+    // Native decoders read the clip's actual frame rate. On web, use source
+    // metadata when available and otherwise process at standard 30 fps.
+    const declaredSourceFps = Number(
+      selectedClip.sourceFrameRate ?? selectedClip.frameRate ?? 30,
+    );
+    const targetFps = Number.isFinite(declaredSourceFps) && declaredSourceFps > 0
+      ? Math.min(240, Math.max(1, declaredSourceFps))
+      : 30;
     const estTotal = Math.max(1, Math.ceil(clipDuration * targetFps));
     setTotalFramesToProcess(estTotal);
+    let lastProgressUpdateAt = 0;
 
     try {
       setProcessingError(null);
@@ -261,12 +268,16 @@ export default function CutoutModal({
         processingConfig.mode || "auto",
         processingConfig.keyColor || "#00FF00",
         (pct, cur, tot) => {
+          const now = Date.now();
+          if (pct < 100 && now - lastProgressUpdateAt < 100) return;
+          lastProgressUpdateAt = now;
           setFrameProgress(pct);
           setProcessedFrames(cur);
           setTotalFramesToProcess(tot);
         },
         abortCtrlRef.current.signal,
-        processingConfig.quality || "fast"
+        processingConfig.quality || "fast",
+        !!selectedClip.reverse,
       );
       if (processed === 0) setProcessingError("No frames were processed. Check clip access and cutout engine readiness, then retry.");
     } catch (e) {
@@ -447,3 +458,6 @@ const s = StyleSheet.create({
     padding: 8,
   },
 });
+
+export const CutoutModal = React.memo(CutoutModalComponent);
+export default CutoutModal;

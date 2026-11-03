@@ -18,4 +18,5 @@ Pod::Spec.new do |s|
 
   s.dependency "ExpoModulesCore"
   s.dependency "React-Core"
+  s.dependency "onnxruntime-objc", "1.31.1"
 end

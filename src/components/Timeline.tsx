@@ -48,7 +48,7 @@ export {
 
 const EMPTY_TRACK_ROWS: UnifiedClipItem[][] = [];
 
-export const Timeline: React.FC<TimelineProps> = ({
+const TimelineComponent: React.FC<TimelineProps> = ({
   project,
   suspendHeavyContent = false,
   totalDuration,
@@ -975,4 +975,5 @@ export const Timeline: React.FC<TimelineProps> = ({
   );
 };
 
-export default React.memo(Timeline);
+export const Timeline = React.memo(TimelineComponent);
+export default Timeline;

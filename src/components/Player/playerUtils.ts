@@ -112,17 +112,30 @@ export function computeVideoClipDimensions(
   };
 }
 
+const itemBaseDimCache = new Map<string, { baseW: number; baseH: number }>();
+const MAX_ITEM_BASE_DIM_CACHE = 128;
+
 export function getItemBaseDimensions(
   type: "text" | "sticker" | "video" | "caption",
   clip: any,
   boxWidth: number,
   canvasHeight: number,
 ): { baseW: number; baseH: number } {
+  const cacheKey = `${type}_${clip?.id || ""}_${clip?.text || ""}_${clip?.style?.fontSize || ""}_${clip?.style?.fontWeight || ""}_${clip?.style?.fontFamily || ""}_${clip?.width || ""}_${clip?.height || ""}_${boxWidth}_${canvasHeight}`;
+  const cached = itemBaseDimCache.get(cacheKey);
+  if (cached) return cached;
+
   const previewScale = Math.max(0.2, (boxWidth || 360) / 360);
 
   if (type === "video") {
     const { baseW, baseH } = computeVideoClipDimensions(clip, boxWidth, canvasHeight);
-    return { baseW, baseH };
+    const result = { baseW, baseH };
+    if (itemBaseDimCache.size >= MAX_ITEM_BASE_DIM_CACHE) {
+      const first = itemBaseDimCache.keys().next().value;
+      if (first) itemBaseDimCache.delete(first);
+    }
+    itemBaseDimCache.set(cacheKey, result);
+    return result;
   }
 
   if (type === "text" || type === "caption") {
@@ -175,7 +188,13 @@ export function getItemBaseDimensions(
     );
     const lineHeight = fontSize * 1.35;
     const baseH = Math.max(Math.round(28 * previewScale), Math.round(totalLines * lineHeight + padY * 2));
-    return { baseW, baseH };
+    const result = { baseW, baseH };
+    if (itemBaseDimCache.size >= MAX_ITEM_BASE_DIM_CACHE) {
+      const first = itemBaseDimCache.keys().next().value;
+      if (first) itemBaseDimCache.delete(first);
+    }
+    itemBaseDimCache.set(cacheKey, result);
+    return result;
   }
   if (type === "sticker") {
     const isBadge = (clip.char || "").length > 2;
@@ -185,7 +204,13 @@ export function getItemBaseDimensions(
         : 56) * previewScale,
     );
     const baseH = Math.round((isBadge ? 36 : 56) * previewScale);
-    return { baseW: Math.max(20, baseW), baseH: Math.max(20, baseH) };
+    const result = { baseW: Math.max(20, baseW), baseH: Math.max(20, baseH) };
+    if (itemBaseDimCache.size >= MAX_ITEM_BASE_DIM_CACHE) {
+      const first = itemBaseDimCache.keys().next().value;
+      if (first) itemBaseDimCache.delete(first);
+    }
+    itemBaseDimCache.set(cacheKey, result);
+    return result;
   }
   return { baseW: boxWidth, baseH: canvasHeight };
 }

@@ -31,7 +31,7 @@ function NativeAudioTrackPlayerComponent({
   );
 }
 
-function NativeAudioPlayerInstance({
+const NativeAudioPlayerInstance = React.memo(function NativeAudioPlayerInstance({
   uri,
   startTime,
   duration,
@@ -175,6 +175,7 @@ function NativeAudioPlayerInstance({
   }, [player, isPlaying, isInside]);
 
   return <View style={{ width: 0, height: 0 }} pointerEvents="none" />;
-}
+});
 
-export default React.memo(NativeAudioTrackPlayerComponent);
+export const NativeAudioTrackPlayer = React.memo(NativeAudioTrackPlayerComponent);
+export default NativeAudioTrackPlayer;

@@ -293,6 +293,7 @@ name = "fastart_core"
 version = "1.0.0"
 dependencies = [
  "byteorder",
+ "fastart_cutout_ops",
  "getrandom",
  "rayon",
  "serde",
@@ -300,6 +301,17 @@ dependencies = [
  "sha2",
  "symphonia",
  "tract-onnx",
+]
+
+[[package]]
+name = "fastart_cutout_ops"
+version = "1.0.0"
+
+[[package]]
+name = "fastart_cutout_wasm"
+version = "1.0.0"
+dependencies = [
+ "fastart_cutout_ops",
 ]
 
 [[package]]

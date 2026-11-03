@@ -6,7 +6,7 @@ import {
   WhisperBridgeTask,
 } from "../../services/mobileWhisperBridge";
 
-export default function MobileWhisperTranscriberView() {
+function MobileWhisperTranscriberViewComponent() {
   const [currentTask, setCurrentTask] = useState<WhisperBridgeTask | null>(null);
   const webViewRef = useRef<any>(null);
   const activeTaskRef = useRef<WhisperBridgeTask | null>(null);
@@ -92,3 +92,6 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
 });
+
+export const MobileWhisperTranscriberView = React.memo(MobileWhisperTranscriberViewComponent);
+export default MobileWhisperTranscriberView;

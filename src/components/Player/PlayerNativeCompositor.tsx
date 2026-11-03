@@ -407,68 +407,77 @@ function renderNativeHslOverlay(hslAdjustments?: any) {
   );
 }
 
-function renderNativeCutoutOverlay(_vid: any) {
-  // Cutout strokes are applied as a silhouette glow directly onto the transparent alpha matte,
-  // preventing unwanted rectangular box lines from appearing around the clip container.
-  return null;
-}
-
-/**
- * Renders the AI-cutout or Chroma Key processed frame as an Image overlay on native.
- * Shows when cutout is enabled and a processed PNG URI exists.
- * The PNG has a transparent background from Rust/JS segmentation.
- */
-function NativeCutoutLayer({
-  clipId,
-  frameIdx,
+/** Keeps native video live and applies the locally generated alpha matte to it. */
+function NativeVideoCutout({
+  clip,
+  currentTime,
+  isPlaying,
+  opacity,
   cutout,
+  maskUri,
 }: {
-  clipId: string;
-  frameIdx: number;
+  clip: any;
+  currentTime: number;
+  isPlaying: boolean;
+  opacity: number;
   cutout: any;
+  maskUri: string | null;
 }) {
-  const [, forceUpdate] = React.useState(0);
+  const video = (
+    <NativeVideoClipPlayer
+      clip={clip}
+      currentTime={currentTime}
+      isPlaying={isPlaying}
+      opacity={opacity}
+    />
+  );
+  if (!cutout?.enabled || !maskUri) return video;
 
-  React.useEffect(() => {
-    const onMask = () => forceUpdate((v) => v + 1);
-    const unsub = setOnMaskUpdated(onMask);
-    return () => {
-      unsub();
-    };
-  }, [clipId]);
-
-  const maskUri = getNativeMaskUri(clipId, frameIdx) ?? getNativeMaskUri(clipId, 0);
-
-  if (!maskUri || !cutout?.enabled) return null;
-
+  const hasBackground =
+    cutout.bgColor && cutout.bgColor !== "none" && cutout.bgColor !== "transparent";
   const hasStroke =
     cutout.strokeColor &&
     cutout.strokeColor !== "none" &&
     cutout.strokeColor !== "transparent" &&
-    cutout.strokeWidth &&
     cutout.strokeWidth > 0;
-  const strokeW = Math.max(1, Math.min(16, cutout.strokeWidth || 3));
+  const strokeWidth = Math.max(1, Math.min(16, cutout.strokeWidth || 3));
   const strokeColor = cutout.strokeColor || "#00F2FE";
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {cutout.bgColor && cutout.bgColor !== "none" && cutout.bgColor !== "transparent" && (
+      {hasBackground && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: cutout.bgColor }]} />
       )}
-      <ExpoImage
-        source={{ uri: maskUri }}
-        style={[
-          StyleSheet.absoluteFill,
-          hasStroke && {
-            shadowColor: strokeColor,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.95,
-            shadowRadius: strokeW * 2,
-          },
-        ]}
-        contentFit="contain"
-        cachePolicy="none"
-      />
+      {hasStroke && (
+        <ExpoImage
+          source={{ uri: maskUri }}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              tintColor: strokeColor,
+              shadowColor: strokeColor,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.95,
+              shadowRadius: strokeWidth * 2,
+            },
+          ]}
+          contentFit="contain"
+          cachePolicy="memory"
+        />
+      )}
+      <MaskedView
+        style={StyleSheet.absoluteFill}
+        maskElement={
+          <ExpoImage
+            source={{ uri: maskUri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="contain"
+            cachePolicy="memory"
+          />
+        }
+      >
+        {video}
+      </MaskedView>
     </View>
   );
 }
@@ -1489,36 +1498,29 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                 >
                   {(() => {
                     const isCutoutActive = Platform.OS !== "web" && !!vid.cutout?.enabled;
+                    const isPhoto = vid.type === "photo";
                     const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
                     const effSpeed = Math.max(0.1, vid.speed || 1.0);
                     const bakedFps = getClipBakedFps(vid.id) || 20;
-                    const activeFrameIdx = Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
+                    const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
                     const cutoutMaskUri = isCutoutActive
-                      ? (getNativeMaskUri(vid.id, activeFrameIdx) ?? getNativeMaskUri(vid.id, 0))
+                      ? getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto)
                       : null;
-                    const hideUnderlying = isCutoutActive && !!cutoutMaskUri;
-
                     return (
                       <>
-                        <NativeVideoClipPlayer
+                        <NativeVideoCutout
                           clip={vid}
                           currentTime={currentTime}
                           isPlaying={isPlaying}
-                          opacity={hideUnderlying ? 0 : effectiveOpacity}
+                          opacity={effectiveOpacity}
+                          cutout={vid.cutout}
+                          maskUri={cutoutMaskUri}
                         />
                         {renderClipEnhanceOverlay(vid)}
                         {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
                         {renderNativeHslOverlay(vid.hslAdjustments)}
                         {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
                         {renderMosaicCensor(vid, w, h, currentTime)}
-                        {renderNativeCutoutOverlay(vid)}
-                        {isCutoutActive && (
-                          <NativeCutoutLayer
-                            clipId={vid.id}
-                            frameIdx={activeFrameIdx}
-                            cutout={vid.cutout}
-                          />
-                        )}
                       </>
                     );
                   })()}
@@ -1587,36 +1589,29 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               >
                 {(() => {
                   const isCutoutActive = Platform.OS !== "web" && !!vid.cutout?.enabled;
+                  const isPhoto = vid.type === "photo";
                   const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
                   const effSpeed = Math.max(0.1, vid.speed || 1.0);
                   const bakedFps = getClipBakedFps(vid.id) || 20;
-                  const activeFrameIdx = Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
+                  const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
                   const cutoutMaskUri = isCutoutActive
-                    ? (getNativeMaskUri(vid.id, activeFrameIdx) ?? getNativeMaskUri(vid.id, 0))
+                    ? getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto)
                     : null;
-                  const hideUnderlying = isCutoutActive && !!cutoutMaskUri;
-
                   return (
                     <>
-                      <NativeVideoClipPlayer
+                      <NativeVideoCutout
                         clip={vid}
                         currentTime={currentTime}
                         isPlaying={isPlaying}
-                        opacity={hideUnderlying ? 0 : effectiveOpacity}
+                        opacity={effectiveOpacity}
+                        cutout={vid.cutout}
+                        maskUri={cutoutMaskUri}
                       />
                       {renderClipEnhanceOverlay(vid)}
                       {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}
                       {renderNativeHslOverlay(vid.hslAdjustments)}
                       {renderNativeClipEffectOverlay(vid, w, h, currentTime)}
                       {renderMosaicCensor(vid, w, h, currentTime)}
-                      {renderNativeCutoutOverlay(vid)}
-                      {isCutoutActive && (
-                        <NativeCutoutLayer
-                          clipId={vid.id}
-                          frameIdx={activeFrameIdx}
-                          cutout={vid.cutout}
-                        />
-                      )}
                     </>
                   );
                 })()}

@@ -21,7 +21,7 @@ interface PlayerTrackingReticleProps {
 
 type DragHandleType = 'pan' | 'nw' | 'ne' | 'sw' | 'se';
 
-export const PlayerTrackingReticle: React.FC<PlayerTrackingReticleProps> = ({
+const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
   targetRect,
   onChangeTargetRect,
   boxWidth,
@@ -511,3 +511,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 });
+
+export const PlayerTrackingReticle = React.memo(PlayerTrackingReticleComponent);
+export default PlayerTrackingReticle;

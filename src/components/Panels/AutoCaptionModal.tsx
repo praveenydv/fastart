@@ -152,7 +152,11 @@ export const CHUNK_MODE_OPTIONS = [
   { label: "Sentence (6+w)", value: "sentence", maxWords: 8 },
 ];
 
-export default function AutoCaptionModal({
+const CaptionSeparator = React.memo(function CaptionSeparator() {
+  return <View style={{ height: 5 }} />;
+});
+
+function AutoCaptionModalComponent({
   visible,
   onClose,
   onApply,
@@ -491,6 +495,20 @@ export default function AutoCaptionModal({
       });
     },
     [currentProject, onUpdateProject],
+  );
+
+  const renderCaptionItem = useCallback(
+    ({ item, index }: { item: CaptionClip; index: number }) => (
+      <CaptionCueItem
+        cap={item}
+        idx={index}
+        isSelected={selectedClipId === item.id}
+        onSeek={onSeek}
+        onDeleteCue={handleDeleteCue}
+        onUpdateCueText={handleUpdateCueText}
+      />
+    ),
+    [selectedClipId, onSeek, handleDeleteCue, handleUpdateCueText]
   );
 
   const handleAddNewCueAtPlayhead = () => {
@@ -1028,17 +1046,8 @@ export default function AutoCaptionModal({
               </Text>
             </View>
           }
-          renderItem={({ item, index }) => (
-            <CaptionCueItem
-              cap={item}
-              idx={index}
-              isSelected={selectedClipId === item.id}
-              onSeek={onSeek}
-              onDeleteCue={handleDeleteCue}
-              onUpdateCueText={handleUpdateCueText}
-            />
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: 5 }} />}
+          renderItem={renderCaptionItem}
+          ItemSeparatorComponent={CaptionSeparator}
         />
       )}
 
@@ -1820,6 +1829,9 @@ export default function AutoCaptionModal({
   if (!visible) return null;
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
+
+export const AutoCaptionModal = React.memo(AutoCaptionModalComponent);
+export default AutoCaptionModal;
 
 const styles = StyleSheet.create({
   inlineWrapper: {

@@ -17,7 +17,7 @@ interface PlayerCropOverlayProps {
   cropResponders?: Record<string, any>;
 }
 
-export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
+const PlayerCropOverlayComponent: React.FC<PlayerCropOverlayProps> = ({
   cropPixelX,
   cropPixelY,
   cropPixelW,
@@ -207,4 +207,5 @@ export const PlayerCropOverlay: React.FC<PlayerCropOverlayProps> = ({
   );
 };
 
-export default React.memo(PlayerCropOverlay);
+export const PlayerCropOverlay = React.memo(PlayerCropOverlayComponent);
+export default PlayerCropOverlay;

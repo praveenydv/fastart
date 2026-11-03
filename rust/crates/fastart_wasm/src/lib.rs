@@ -473,6 +473,44 @@ pub extern "C" fn fastart_apply_color_adjustments_c(
     fastart_core::apply_color_adjustments_raw(pixels, brightness, contrast, saturation);
 }
 
+/// In-place selective 8-channel HSL grading in Rust/WASM.
+/// Settings are packed as hue/saturation/luminance triples in channel order:
+/// red, orange, yellow, green, cyan, blue, purple, magenta.
+#[no_mangle]
+pub extern "C" fn fastart_apply_hsl_color_grading_c(
+    pixels_ptr: *mut u8,
+    width: u32,
+    height: u32,
+    settings_ptr: *const f32,
+    settings_len: usize,
+) -> u32 {
+    if pixels_ptr.is_null() || settings_ptr.is_null() || width == 0 || height == 0 || settings_len != 24 {
+        return 0;
+    }
+    let Some(total_bytes) = (width as usize).checked_mul(height as usize).and_then(|pixels| pixels.checked_mul(4)) else {
+        return 0;
+    };
+    let pixels = unsafe { slice::from_raw_parts_mut(pixels_ptr, total_bytes) };
+    let values = unsafe { slice::from_raw_parts(settings_ptr, settings_len) };
+    let channel = |index: usize| fastart_core::HslChannelConfig {
+        hue: values[index * 3],
+        saturation: values[index * 3 + 1],
+        luminance: values[index * 3 + 2],
+    };
+    let grading = fastart_core::HslColorGrading {
+        red: channel(0),
+        orange: channel(1),
+        yellow: channel(2),
+        green: channel(3),
+        cyan: channel(4),
+        blue: channel(5),
+        purple: channel(6),
+        magenta: channel(7),
+    };
+    fastart_core::apply_hsl_color_grading_raw(pixels, &grading);
+    1
+}
+
 /// In-place Vignette falloff directly in WebAssembly
 #[no_mangle]
 pub extern "C" fn fastart_apply_vignette_c(

@@ -6,7 +6,7 @@
 
 import { NativeModules, Platform } from "react-native";
 import { Buffer } from "buffer";
-import { FastArtProject, TrajectoryPoint, CutoutConfig } from "../types/project";
+import { FastArtProject, TrajectoryPoint, CutoutConfig, HSLAdjustments } from "../types/project";
 
 export interface MaskProvider {
   getFrameMask: (clipId: string, clipTime: number, fps?: number, fallbackClipId?: string) => HTMLCanvasElement | null;
@@ -31,6 +31,11 @@ function encodeNativeBytes(bytes: Uint8Array | Uint8ClampedArray): string {
   return Buffer.from(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength).toString("base64");
 }
 
+function decodeBase64ToUint8(b64: string): Uint8Array {
+  const buf = Buffer.from(b64, "base64");
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
+
 export interface RustBeatResult {
   bpm: number;
   beats: number[];
@@ -38,6 +43,33 @@ export interface RustBeatResult {
 
 export type RustBackendType = "android_native" | "ios_native" | "web_wasm" | "fallback";
 export type AnimationKeyframe = readonly [number, number, number, number, number, number];
+
+export interface NativeVideoFrameInfo {
+  frameRate: number;
+  frameCount: number;
+  duration: number;
+}
+
+/**
+ * The Rust project renderer currently accepts no decoded media buffers from the
+ * JS/native bridge. Only route projects with no raster media through its
+ * project-level exporters; otherwise those exporters render placeholders or
+ * silence instead of the user's source assets.
+ */
+function rustProjectHasVisualMedia(project: FastArtProject): boolean {
+  const tracks = project?.tracks;
+  return !!(
+    tracks?.video?.length ||
+    tracks?.text?.length ||
+    tracks?.captions?.length ||
+    tracks?.stickers?.length ||
+    tracks?.filters?.length
+  );
+}
+
+function rustProjectHasAudioMedia(project: FastArtProject): boolean {
+  return !!(project?.tracks?.audio?.length || project?.tracks?.video?.length);
+}
 
 let internalMaskCanvas: HTMLCanvasElement | null = null;
 let internalMaskCtx: CanvasRenderingContext2D | null = null;
@@ -165,6 +197,13 @@ interface WasmExports {
     intensity: number,
     radius: number
   ) => void;
+  fastart_apply_hsl_color_grading_c?: (
+    pixelsPtr: number,
+    width: number,
+    height: number,
+    settingsPtr: number,
+    settingsLen: number,
+  ) => number;
   fastart_process_segmentation_confidence_c: (
     pixelsPtr: number,
     width: number,
@@ -495,7 +534,52 @@ class RustCoreBridgeService {
       encodeNativeBytes(rgba), width, height, threshold, feather,
     );
     if (typeof result !== "string") throw new Error("Native Rust MODNet returned no alpha mask");
-    return Uint8Array.from(Buffer.from(result, "base64"));
+    return decodeBase64ToUint8(result);
+  }
+
+  /** Decode and cut out a native video frame entirely inside the platform module. */
+  public async processVideoFrameNative(
+    videoUri: string,
+    clipId: string,
+    frameIndex: number,
+    timeSeconds: number,
+    threshold: number,
+    feather: number,
+    mode: "auto" | "chroma" = "auto",
+    keyColor = "#00FF00",
+  ): Promise<string | null> {
+    await this.init();
+    if ((this.backendType !== "android_native" && this.backendType !== "ios_native") ||
+        typeof FastArtRust?.processVideoFrameNative !== "function") return null;
+    const uri = await FastArtRust.processVideoFrameNative(
+      videoUri, clipId, frameIndex, timeSeconds, threshold, feather, mode, keyColor,
+    );
+    return typeof uri === "string" && uri.length > 0 ? uri : null;
+  }
+
+  public async getNativeVideoFrameInfo(videoUri: string): Promise<NativeVideoFrameInfo | null> {
+    await this.init();
+    if ((this.backendType !== "android_native" && this.backendType !== "ios_native") ||
+        typeof FastArtRust?.getVideoFrameInfo !== "function") return null;
+    const info = await FastArtRust.getVideoFrameInfo(videoUri);
+    const frameRate = Number(info?.frameRate);
+    const frameCount = Number(info?.frameCount);
+    const duration = Number(info?.duration);
+    if (!Number.isFinite(frameRate) || frameRate <= 0 || !Number.isFinite(duration) || duration <= 0) return null;
+    return {
+      frameRate,
+      frameCount: Number.isFinite(frameCount) && frameCount > 0 ? Math.floor(frameCount) : Math.ceil(frameRate * duration),
+      duration,
+    };
+  }
+
+  public async releaseVideoCutoutDecoder(videoUri: string): Promise<void> {
+    if (typeof FastArtRust?.releaseVideoCutoutDecoder !== "function") return;
+    try {
+      await FastArtRust.releaseVideoCutoutDecoder(videoUri);
+    } catch (error) {
+      console.warn("[RustCoreBridge] Could not release native video decoder:", error);
+    }
   }
 
   /**
@@ -703,8 +787,9 @@ class RustCoreBridgeService {
   }
 
   /**
-   * Renders composite project frame at timestamp t into a PNG base64 data URI
-   * Fully hardware-accelerated in native Rust
+   * Renders media-free project frames in Rust. Source video/image and overlay
+   * pixels must be supplied by a platform renderer, so media-bearing projects
+   * are left to that renderer.
    */
   public async renderSnapshot(
     project: FastArtProject,
@@ -712,6 +797,7 @@ class RustCoreBridgeService {
     width: number = 720,
     height: number = 1280
   ): Promise<string | null> {
+    if (rustProjectHasVisualMedia(project)) return null;
     await this.init();
 
     const projectJson = JSON.stringify(project);
@@ -785,6 +871,7 @@ class RustCoreBridgeService {
     height: number,
     targetBuffer?: Uint8Array
   ): Promise<Uint8Array | null> {
+    if (rustProjectHasVisualMedia(project)) return null;
     await this.init();
 
     const projectJson = JSON.stringify(project);
@@ -870,6 +957,7 @@ class RustCoreBridgeService {
     duration?: number,
     targetFilePath?: string
   ): Promise<string | null> {
+    if (rustProjectHasVisualMedia(project)) return null;
     await this.init();
 
     const dur = duration || (project as any).duration || 5.0;
@@ -987,6 +1075,7 @@ class RustCoreBridgeService {
     duration?: number,
     targetFilePath?: string
   ): Promise<Uint8Array | string | null> {
+    if (rustProjectHasAudioMedia(project)) return null;
     await this.init();
 
     const dur = duration || (project as any).duration || 5.0;
@@ -1082,8 +1171,8 @@ class RustCoreBridgeService {
   }
 
   /**
-   * Complete multi-track H.264 MP4 export directly in native Rust
-   * Composites frames, encodes NAL slices, and muxes ISOBMFF container
+   * Exports media-free projects in Rust. Projects with real video, audio, or
+   * raster overlays must use a platform media renderer with decoded sources.
    */
   public async exportProjectMp4(
     project: FastArtProject,
@@ -1093,6 +1182,7 @@ class RustCoreBridgeService {
     duration?: number,
     targetFilePath?: string
   ): Promise<Uint8Array | string | null> {
+    if (rustProjectHasVisualMedia(project) || rustProjectHasAudioMedia(project)) return null;
     await this.init();
 
     const dur = duration || (project as any).duration || 5.0;
@@ -1417,7 +1507,7 @@ class RustCoreBridgeService {
       if (typeof result !== "string") {
         throw new Error("Rust chroma cutout returned an invalid frame");
       }
-      const decoded = Uint8Array.from(Buffer.from(result, "base64"));
+      const decoded = decodeBase64ToUint8(result);
       if (decoded.length !== pixels.length) throw new Error("Rust chroma cutout returned an invalid frame");
       return decoded;
     }
@@ -1947,6 +2037,51 @@ class RustCoreBridgeService {
     }
   }
 
+  /** Applies selective 8-channel HSL grading to RGBA pixels in Rust/WASM. */
+  public applyHslColorGrading(
+    pixels: Uint8ClampedArray,
+    width: number,
+    height: number,
+    adjustments: HSLAdjustments,
+  ): boolean {
+    const inst = this.wasmInstance;
+    const apply = inst?.fastart_apply_hsl_color_grading_c;
+    const totalBytes = width * height * 4;
+    if (
+      this.backendType !== "web_wasm" || !inst || !apply ||
+      width <= 0 || height <= 0 || pixels.length !== totalBytes
+    ) return false;
+
+    const channels = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta"] as const;
+    const settings = new Float32Array(24);
+    channels.forEach((channel, index) => {
+      const value = adjustments[channel];
+      settings[index * 3] = value?.hue ?? 0;
+      settings[index * 3 + 1] = value?.saturation ?? 0;
+      settings[index * 3 + 2] = value?.luminance ?? 0;
+    });
+
+    const settingsBytes = settings.byteLength;
+    const totalScratchBytes = totalBytes + settingsBytes;
+    const scratchAvailable = typeof inst.fastart_get_scratchpad === "function";
+    let basePtr = scratchAvailable ? inst.fastart_get_scratchpad!(totalScratchBytes) : 0;
+    const isScratch = basePtr !== 0;
+    if (!basePtr) basePtr = inst.fastart_alloc(totalScratchBytes);
+    if (!basePtr) return false;
+    const settingsPtr = basePtr + totalBytes;
+    try {
+      new Uint8Array(inst.memory.buffer, basePtr, totalBytes).set(pixels);
+      new Float32Array(inst.memory.buffer, settingsPtr, settings.length).set(settings);
+      if (apply(basePtr, width, height, settingsPtr, settings.length) !== 1) return false;
+      pixels.set(new Uint8Array(inst.memory.buffer, basePtr, totalBytes));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (!isScratch) inst.fastart_dealloc(basePtr, totalScratchBytes);
+    }
+  }
+
   /**
    * Applies in-place vignette falloff in native Rust/WASM
    */
@@ -2098,7 +2233,7 @@ class RustCoreBridgeService {
       }
       const encoded = await FastArtRust.packAlphaRLE(encodeNativeBytes(alpha));
       if (typeof encoded !== "string" || encoded.length === 0) throw new Error("Native Rust alpha compression failed");
-      return Uint8Array.from(Buffer.from(encoded, "base64"));
+      return decodeBase64ToUint8(encoded);
     }
     throw new Error("Rust core is unavailable; alpha compression requires Rust");
   }
@@ -2548,7 +2683,7 @@ class RustCoreBridgeService {
       if (typeof encoded !== "string") {
         throw new Error("Rust segmentation returned an invalid alpha mask");
       }
-      const result = Uint8Array.from(Buffer.from(encoded, "base64"));
+      const result = decodeBase64ToUint8(encoded);
       if (result.length !== pixels) {
         throw new Error("Rust segmentation returned an invalid alpha mask");
       }
@@ -2633,7 +2768,7 @@ class RustCoreBridgeService {
       }
       const png = await FastArtRust.encodeRgbaPng(encodeNativeBytes(rgba), w, h);
       if (typeof png !== "string" || png.length === 0) throw new Error("Native Rust PNG encoding failed");
-      const pngBytes = Uint8Array.from(Buffer.from(png, "base64"));
+      const pngBytes = decodeBase64ToUint8(png);
       if (pngBytes.length < 8) throw new Error("Native Rust PNG encoding failed");
       return pngBytes;
     }

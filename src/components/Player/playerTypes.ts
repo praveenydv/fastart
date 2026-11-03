@@ -47,6 +47,8 @@ export interface PlayerProps {
   processingMessage?: string;
   activeModal?: string | null;
   isResizing?: boolean;
+  containerWidth?: number;
+  containerHeight?: number;
   onUpdateClipMotionTrack?: (track: MotionTrackConfig) => void;
   onRelinkClip?: (
     clipId: string,

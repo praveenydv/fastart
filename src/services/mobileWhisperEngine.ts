@@ -124,6 +124,9 @@ async function transcribeWithNativeSpeech(
   if (onProgress) onProgress(45, "Transcribing spoken dialogue from video...");
 
   const audioEncoding = encodingAndroid?.ENCODING_PCM_16BIT ?? 2;
+  const supportsOnDevice = typeof speechModule.supportsOnDeviceRecognitionAsync === "function"
+    ? await speechModule.supportsOnDeviceRecognitionAsync().catch(() => false)
+    : false;
 
   return new Promise<CaptionSegment[]>((resolve, reject) => {
     let capturedSegments: CaptionSegment[] = [];
@@ -201,7 +204,7 @@ async function transcribeWithNativeSpeech(
         lang: language === "auto" ? "en-US" : language,
         interimResults: true,
         continuous: true,
-        requiresOnDeviceRecognition: false,
+        requiresOnDeviceRecognition: supportsOnDevice,
         audioSource: {
           uri: audioUri,
           audioEncoding,
@@ -249,7 +252,41 @@ export async function transcribeMobileSpeech(
     }
   }
 
-  // 2. Free on-device Whisper AI via Web Bridge (zero API keys, zero mic permissions, browser parity)
+  // 2. High-performance on-device native speech recognition (iOS Apple Speech / Android Google Speech)
+  // Zero model downloads, zero API keys, near-instant inference directly through platform ANE / NPU
+  const nativeSpeech = await loadNativeSpeechModule();
+  if (nativeSpeech) {
+    try {
+      if (onProgress) onProgress(20, "Extracting audio for on-device recognition...");
+      const { exportProjectAudioToWavBytes } = await import("../utils/audioExporter");
+      const { writeBinaryFileSafely } = await import("../utils/renderer/unifiedExporter");
+      const wavBytes = await exportProjectAudioToWavBytes(project, totalDuration, 16000);
+      const tempWavUri = `${FileSystemLegacy.cacheDirectory || ""}speech_rec_${Date.now()}.wav`;
+      await writeBinaryFileSafely(tempWavUri, wavBytes);
+
+      try {
+        const nativeSegments = await transcribeWithNativeSpeech(
+          tempWavUri,
+          nativeSpeech.module,
+          nativeSpeech.encodingAndroid,
+          language,
+          totalDuration,
+          onProgress,
+        );
+        if (nativeSegments && nativeSegments.length > 0) {
+          return nativeSegments;
+        }
+      } finally {
+        try {
+          await FileSystemLegacy.deleteAsync(tempWavUri, { idempotent: true });
+        } catch (_) {}
+      }
+    } catch (nativeSpeechErr) {
+      console.warn("FastArt: Native speech recognition failed, falling back to local Whisper bridge:", nativeSpeechErr);
+    }
+  }
+
+  // 3. Free on-device Whisper AI via Web Bridge (zero API keys, zero mic permissions, browser parity)
   const { requestWhisperTranscription } = await import("./mobileWhisperBridge");
   return requestWhisperTranscription(project, totalDuration, language, onProgress);
 }

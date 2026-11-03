@@ -11,6 +11,7 @@ serde_json = "1.0"
 sha2 = "0.10"
 getrandom = "0.4"
 byteorder = "1.5"
+fastart_cutout_ops = { path = "../fastart_cutout_ops" }
 rayon = { version = "1.10", optional = true }
 tract-onnx = { version = "0.23.7", default-features = false }
 symphonia = { version = "0.6.1", default-features = false, features = ["aac", "alac", "flac", "mp3", "isomp4", "wav", "pcm", "ogg", "vorbis", "opt-simd"] }

@@ -29,12 +29,18 @@ impl Default for ChromaKeyParams {
     }
 }
 
-/// Fast O(1) box sum helper using horizontal + vertical running buffers
-fn box_filter_f32(src: &[f32], dst: &mut [f32], width: usize, height: usize, radius: usize) {
+/// Fast O(1) box sum helper using cache-friendly sequential row-major passes and reusable scratch memory
+fn box_filter_f32(
+    src: &[f32],
+    dst: &mut [f32],
+    temp: &mut [f32],
+    width: usize,
+    height: usize,
+    radius: usize,
+) {
     let r = radius.max(1);
-    let mut temp = vec![0.0f32; width * height];
 
-    // Horizontal pass with sliding window
+    // 1. Horizontal pass with sliding window (sequential row-major)
     for y in 0..height {
         let row_offset = y * width;
         let mut window_sum = 0.0f32;
@@ -62,29 +68,46 @@ fn box_filter_f32(src: &[f32], dst: &mut [f32], width: usize, height: usize, rad
         }
     }
 
-    // Vertical pass with sliding window
-    for x in 0..width {
-        let mut window_sum = 0.0f32;
-
-        for ky in 0..=r.min(height - 1) {
-            window_sum += temp[ky * width + x];
+    // 2. Cache-friendly Row-Major Vertical pass (sequential memory access across lines)
+    let mut col_sums = vec![0.0f32; width];
+    let init_r = r.min(height - 1);
+    for ky in 0..=init_r {
+        let row_offset = ky * width;
+        for x in 0..width {
+            col_sums[x] += temp[row_offset + x];
         }
+    }
 
-        for y in 0..height {
-            let top = y.saturating_sub(r);
-            let bottom = (y + r).min(height - 1);
-            let count = (bottom - top + 1) as f32;
+    for y in 0..height {
+        let top = y.saturating_sub(r);
+        let bottom = (y + r).min(height - 1);
+        let count = (bottom - top + 1) as f32;
+        let inv_count = 1.0 / count;
 
-            if y > 0 {
-                if y + r < height {
-                    window_sum += temp[(y + r) * width + x];
+        if y > 0 {
+            let add_row = y + r;
+            if add_row < height && y > r {
+                let add_offset = add_row * width;
+                let sub_offset = (y - r - 1) * width;
+                for x in 0..width {
+                    col_sums[x] += temp[add_offset + x] - temp[sub_offset + x];
                 }
-                if y > r {
-                    window_sum -= temp[(y - r - 1) * width + x];
+            } else if add_row < height {
+                let add_offset = add_row * width;
+                for x in 0..width {
+                    col_sums[x] += temp[add_offset + x];
+                }
+            } else if y > r {
+                let sub_offset = (y - r - 1) * width;
+                for x in 0..width {
+                    col_sums[x] -= temp[sub_offset + x];
                 }
             }
+        }
 
-            dst[y * width + x] = window_sum / count;
+        let dst_row_offset = y * width;
+        for x in 0..width {
+            dst[dst_row_offset + x] = col_sums[x] * inv_count;
         }
     }
 }
@@ -93,6 +116,7 @@ fn box_filter_f32(src: &[f32], dst: &mut [f32], width: usize, height: usize, rad
 ///
 /// Refines coarse masks into hair-fine, halo-free alpha mattes using local linear
 /// covariance between the RGB guide image and the input mask.
+/// Optimized with reusable heap buffers and zero dynamic allocations inside filter passes.
 pub fn guided_filter_matting(
     guide_rgb: &[u8],
     input_mask: &[u8],
@@ -110,6 +134,7 @@ pub fn guided_filter_matting(
     // Convert guide to normalized luminance [0..1] and mask to [0..1]
     let mut i_norm = vec![0.0f32; total_pixels];
     let mut p_norm = vec![0.0f32; total_pixels];
+    let mut scratch = vec![0.0f32; total_pixels];
 
     for idx in 0..total_pixels {
         let px_idx = idx * 4;
@@ -133,23 +158,26 @@ pub fn guided_filter_matting(
 
     let mut mean_i = vec![0.0f32; total_pixels];
     let mut mean_p = vec![0.0f32; total_pixels];
-    box_filter_f32(&i_norm, &mut mean_i, width, height, radius);
-    box_filter_f32(&p_norm, &mut mean_p, width, height, radius);
+    box_filter_f32(&i_norm, &mut mean_i, &mut scratch, width, height, radius);
+    box_filter_f32(&p_norm, &mut mean_p, &mut scratch, width, height, radius);
 
-    // Compute I * I and I * p
-    let mut ii = vec![0.0f32; total_pixels];
-    let mut ip = vec![0.0f32; total_pixels];
-    for idx in 0..total_pixels {
-        ii[idx] = i_norm[idx] * i_norm[idx];
-        ip[idx] = i_norm[idx] * p_norm[idx];
-    }
-
+    // Compute I * I and I * p into scratch
     let mut mean_ii = vec![0.0f32; total_pixels];
     let mut mean_ip = vec![0.0f32; total_pixels];
-    box_filter_f32(&ii, &mut mean_ii, width, height, radius);
-    box_filter_f32(&ip, &mut mean_ip, width, height, radius);
 
-    // Compute variance and covariance
+    for idx in 0..total_pixels {
+        mean_ii[idx] = i_norm[idx] * i_norm[idx];
+    }
+    box_filter_f32(&mean_ii, &mut scratch, &mut mean_ip, width, height, radius);
+    mean_ii.copy_from_slice(&scratch);
+
+    for idx in 0..total_pixels {
+        mean_ip[idx] = i_norm[idx] * p_norm[idx];
+    }
+    box_filter_f32(&mean_ip, &mut scratch, &mut p_norm, width, height, radius);
+    mean_ip.copy_from_slice(&scratch);
+
+    // Compute variance and covariance directly into a and b
     let mut a = vec![0.0f32; total_pixels];
     let mut b = vec![0.0f32; total_pixels];
     for idx in 0..total_pixels {
@@ -164,8 +192,8 @@ pub fn guided_filter_matting(
 
     let mut mean_a = vec![0.0f32; total_pixels];
     let mut mean_b = vec![0.0f32; total_pixels];
-    box_filter_f32(&a, &mut mean_a, width, height, radius);
-    box_filter_f32(&b, &mut mean_b, width, height, radius);
+    box_filter_f32(&a, &mut mean_a, &mut scratch, width, height, radius);
+    box_filter_f32(&b, &mut mean_b, &mut scratch, width, height, radius);
 
     // Compute final refined alpha q = mean_a * I + mean_b
     for idx in 0..total_pixels {
@@ -454,10 +482,11 @@ pub fn refine_cutout_matte(
     let radius = (6 / s).max(1);
     let eps = 1e-3f32;
 
+    let mut scratch = vec![0.0f32; sub_total];
     let mut mean_i = vec![0.0f32; sub_total];
     let mut mean_p = vec![0.0f32; sub_total];
-    box_filter_f32(&i_sub, &mut mean_i, sub_w, sub_h, radius);
-    box_filter_f32(&p_sub, &mut mean_p, sub_w, sub_h, radius);
+    box_filter_f32(&i_sub, &mut mean_i, &mut scratch, sub_w, sub_h, radius);
+    box_filter_f32(&p_sub, &mut mean_p, &mut scratch, sub_w, sub_h, radius);
 
     let mut ii = vec![0.0f32; sub_total];
     let mut ip = vec![0.0f32; sub_total];
@@ -468,8 +497,8 @@ pub fn refine_cutout_matte(
 
     let mut mean_ii = vec![0.0f32; sub_total];
     let mut mean_ip = vec![0.0f32; sub_total];
-    box_filter_f32(&ii, &mut mean_ii, sub_w, sub_h, radius);
-    box_filter_f32(&ip, &mut mean_ip, sub_w, sub_h, radius);
+    box_filter_f32(&ii, &mut mean_ii, &mut scratch, sub_w, sub_h, radius);
+    box_filter_f32(&ip, &mut mean_ip, &mut scratch, sub_w, sub_h, radius);
 
     let mut a = vec![0.0f32; sub_total];
     let mut b = vec![0.0f32; sub_total];
@@ -483,8 +512,8 @@ pub fn refine_cutout_matte(
 
     let mut mean_a = vec![0.0f32; sub_total];
     let mut mean_b = vec![0.0f32; sub_total];
-    box_filter_f32(&a, &mut mean_a, sub_w, sub_h, radius);
-    box_filter_f32(&b, &mut mean_b, sub_w, sub_h, radius);
+    box_filter_f32(&a, &mut mean_a, &mut scratch, sub_w, sub_h, radius);
+    box_filter_f32(&b, &mut mean_b, &mut scratch, sub_w, sub_h, radius);
 
     // Dynamic thresholds based on user intensity and softness
     let thresh = threshold.clamp(0.05, 0.95);
@@ -561,6 +590,20 @@ pub fn refine_cutout_matte(
 /// Directly computes into WebAssembly linear memory using SIMD/vectorized instructions.
 /// If input dimensions match 512x512, normalizes directly.
 /// If input dimensions differ, resizes bilinearly into 512x512 while normalizing in a single pass!
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
+#[cfg(feature = "parallel")]
+fn ensure_cutout_thread_pool() {
+    static INIT_POOL: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    let _ = INIT_POOL.get_or_init(|| {
+        let workers = std::thread::available_parallelism()
+            .map(|n| n.get().saturating_sub(1).clamp(1, 6))
+            .unwrap_or(1);
+        let _ = rayon::ThreadPoolBuilder::new().num_threads(workers).build_global();
+    });
+}
+
 pub fn prepare_modnet_input_tensor(
     rgba_pixels: &[u8],
     width: usize,
@@ -572,72 +615,137 @@ pub fn prepare_modnet_input_tensor(
         return;
     }
 
-    let offset_g = total_out;
-    let offset_b = total_out * 2;
     let inv_scale = 1.0f32 / 127.5f32;
 
-    if width == 512 && height == 512 {
-        if rgba_pixels.len() < total_out * 4 {
-            return;
-        }
-        for i in 0..total_out {
-            let idx = i * 4;
-            out_tensor[i] = (rgba_pixels[idx] as f32 - 127.5f32) * inv_scale;
-            out_tensor[offset_g + i] = (rgba_pixels[idx + 1] as f32 - 127.5f32) * inv_scale;
-            out_tensor[offset_b + i] = (rgba_pixels[idx + 2] as f32 - 127.5f32) * inv_scale;
-        }
-    } else if width > 0 && height > 0 {
-        if rgba_pixels.len() < width * height * 4 {
-            return;
-        }
-        let scale_x = width as f32 / 512.0f32;
-        let scale_y = height as f32 / 512.0f32;
-
-        for dy in 0..512 {
-            let sy = (dy as f32 * scale_y).clamp(0.0, (height - 1) as f32);
-            let y0 = sy.floor() as usize;
-            let y1 = (y0 + 1).min(height - 1);
-            let ty = sy - y0 as f32;
-            let row0 = y0 * width;
-            let row1 = y1 * width;
-            let out_row = dy * 512;
-
-            for dx in 0..512 {
-                let sx = (dx as f32 * scale_x).clamp(0.0, (width - 1) as f32);
-                let x0 = sx.floor() as usize;
-                let x1 = (x0 + 1).min(width - 1);
-                let tx = sx - x0 as f32;
-
-                let idx00 = (row0 + x0) * 4;
-                let idx10 = (row0 + x1) * 4;
-                let idx01 = (row1 + x0) * 4;
-                let idx11 = (row1 + x1) * 4;
-
-                let w00 = (1.0 - tx) * (1.0 - ty);
-                let w10 = tx * (1.0 - ty);
-                let w01 = (1.0 - tx) * ty;
-                let w11 = tx * ty;
-
-                let r = rgba_pixels[idx00] as f32 * w00
-                    + rgba_pixels[idx10] as f32 * w10
-                    + rgba_pixels[idx01] as f32 * w01
-                    + rgba_pixels[idx11] as f32 * w11;
-                let g = rgba_pixels[idx00 + 1] as f32 * w00
-                    + rgba_pixels[idx10 + 1] as f32 * w10
-                    + rgba_pixels[idx01 + 1] as f32 * w01
-                    + rgba_pixels[idx11 + 1] as f32 * w11;
-                let b = rgba_pixels[idx00 + 2] as f32 * w00
-                    + rgba_pixels[idx10 + 2] as f32 * w10
-                    + rgba_pixels[idx01 + 2] as f32 * w01
-                    + rgba_pixels[idx11 + 2] as f32 * w11;
-
-                let out_idx = out_row + dx;
-                out_tensor[out_idx] = (r - 127.5) * inv_scale;
-                out_tensor[offset_g + out_idx] = (g - 127.5) * inv_scale;
-                out_tensor[offset_b + out_idx] = (b - 127.5) * inv_scale;
-            }
-        }
+    if width == 0 || height == 0 || rgba_pixels.len() < width.saturating_mul(height).saturating_mul(4) {
+        return;
     }
+
+    let (red, rest) = out_tensor[..total_out * 3].split_at_mut(total_out);
+    let (green, blue) = rest.split_at_mut(total_out);
+
+    #[cfg(feature = "parallel")]
+    let process_rows = |red: &mut [f32], green: &mut [f32], blue: &mut [f32]| {
+        red.par_chunks_mut(512)
+            .zip(green.par_chunks_mut(512))
+            .zip(blue.par_chunks_mut(512))
+            .enumerate()
+            .for_each(|(dy, ((red_row, green_row), blue_row))| {
+                prepare_modnet_row(rgba_pixels, width, height, dy, red_row, green_row, blue_row, inv_scale);
+            });
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        // Leave a core available for playback/UI work on phones.
+        ensure_cutout_thread_pool();
+        process_rows(red, green, blue);
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    for dy in 0..512 {
+        let row = dy * 512;
+        prepare_modnet_row(
+            rgba_pixels,
+            width,
+            height,
+            dy,
+            &mut red[row..row + 512],
+            &mut green[row..row + 512],
+            &mut blue[row..row + 512],
+            inv_scale,
+        );
+    }
+}
+
+/// Applies threshold/feather post-processing while resizing MODNet's 512²
+/// matte to the decoded frame dimensions. Output remains a single-channel mask.
+pub fn process_modnet_alpha(
+    raw_alpha: &[f32],
+    width: usize,
+    height: usize,
+    threshold: f32,
+    feather: f32,
+) -> Result<Vec<u8>, String> {
+    if raw_alpha.len() < 512 * 512 || width == 0 || height == 0 {
+        return Err("MODNet alpha input has invalid dimensions".into());
+    }
+    let pixel_count = width.checked_mul(height).ok_or("Invalid alpha output dimensions")?;
+    let mut output = vec![0u8; pixel_count];
+    process_modnet_alpha_into(raw_alpha, width, height, threshold, feather, &mut output)?;
+    Ok(output)
+}
+
+/// Writes the resized and feathered MODNet matte into caller-owned storage.
+/// This avoids an intermediate allocation in native frame-processing paths.
+pub fn process_modnet_alpha_into(
+    raw_alpha: &[f32],
+    width: usize,
+    height: usize,
+    threshold: f32,
+    feather: f32,
+    output: &mut [u8],
+) -> Result<(), String> {
+    const MODEL_PIXELS: usize = 512 * 512;
+    if raw_alpha.len() < MODEL_PIXELS || width == 0 || height == 0 {
+        return Err("MODNet alpha input has invalid dimensions".into());
+    }
+    let pixel_count = width.checked_mul(height).ok_or("Invalid alpha output dimensions")?;
+    if output.len() < pixel_count {
+        return Err("MODNet alpha output buffer is too small".into());
+    }
+    let cut = threshold.clamp(0.0, 1.0);
+    let soft = feather.clamp(0.01, 1.0);
+    let output = &mut output[..pixel_count];
+
+    #[cfg(feature = "parallel")]
+    {
+        ensure_cutout_thread_pool();
+        output.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
+            process_modnet_alpha_row(raw_alpha, row, y, width, height, cut, soft);
+        });
+    }
+    #[cfg(not(feature = "parallel"))]
+    for (y, row) in output.chunks_mut(width).enumerate() {
+        process_modnet_alpha_row(raw_alpha, row, y, width, height, cut, soft);
+    }
+
+    Ok(())
+}
+
+#[inline]
+fn process_modnet_alpha_row(
+    raw_alpha: &[f32],
+    output_row: &mut [u8],
+    y: usize,
+    width: usize,
+    height: usize,
+    cut: f32,
+    soft: f32,
+) {
+    let source_y = y * 512 / height;
+    for (x, alpha) in output_row.iter_mut().enumerate() {
+        let value = raw_alpha[source_y * 512 + x * 512 / width];
+        let u = (value - cut) / soft;
+        let opacity = if value >= cut + soft { 1.0 } else if value <= cut { 0.0 } else { u * u * (3.0 - 2.0 * u) };
+        *alpha = (opacity * 255.0).round().clamp(0.0, 255.0) as u8;
+    }
+}
+
+#[inline]
+fn prepare_modnet_row(
+    rgba_pixels: &[u8],
+    width: usize,
+    height: usize,
+    dy: usize,
+    red: &mut [f32],
+    green: &mut [f32],
+    blue: &mut [f32],
+    _inv_scale: f32,
+) {
+    fastart_cutout_ops::prepare_modnet_row(
+        rgba_pixels, width, height, dy, red, green, blue,
+    );
 }
 
 /// Converts raw neural model output alpha floats into packed 32-bit RGBA mask pixels.
@@ -733,28 +841,7 @@ pub fn unpack_alpha_rle(rle: &[u8], out_alpha: &mut [u8]) -> usize {
 
 /// Applies MODNet alpha thresholds and compresses the result without a JS pixel loop.
 pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u8> {
-    let use_curve = threshold > 0.0 || feather > 0.0;
-    let threshold = threshold.clamp(0.0, 1.0);
-    let softness = feather.clamp(0.01, 1.0);
-    let inv_softness = 1.0 / softness;
-    let mut alpha8 = Vec::with_capacity(alpha.len());
-
-    for &value in alpha {
-        let byte = if use_curve {
-            if value >= threshold + softness {
-                255
-            } else if value <= threshold {
-                0
-            } else {
-                let u = (value - threshold) * inv_softness;
-                (u * u * (3.0 - 2.0 * u) * 255.0) as i32
-            }
-        } else {
-            (value * 255.0) as i32
-        };
-        alpha8.push(byte.clamp(0, 255) as u8);
-    }
-    pack_alpha_rle(&alpha8)
+    fastart_cutout_ops::modnet_alpha_to_rle(alpha, threshold, feather)
 }
 
 /// Expands a single-channel 8-bit alpha buffer into a 32-bit RGBA mask.

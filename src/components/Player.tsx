@@ -35,6 +35,17 @@ import { usePlaybackTime } from "../utils/playbackTimeStore";
 
 const EMPTY_ARRAY: any[] = Object.freeze([]) as any[];
 
+function stabilizeArrayRef<T extends { id?: string }>(prev: T[], next: T[]): T[] {
+  if (prev === next) return prev;
+  if (prev.length !== next.length) return next;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (a !== b && (!a?.id || a.id !== b?.id)) return next;
+  }
+  return prev;
+}
+
 type TimedItem = { startTime: number; duration: number };
 type TimedIntervalIndex<T extends TimedItem> = {
   items: { item: T; order: number }[];
@@ -121,10 +132,20 @@ function Player({
   processingMessage,
   activeModal,
   isResizing = false,
+  containerWidth,
+  containerHeight,
   onUpdateClipMotionTrack,
   onRelinkClip,
 }: PlayerProps) {
   const currentTime = usePlaybackTime();
+  const prevCaptionsRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevTextsRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevStickersRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevVideosRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevBufferedVideosRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevAudiosRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevBufferedAudiosRef = useRef<any[]>(EMPTY_ARRAY);
+  const prevEffectsRef = useRef<any[]>(EMPTY_ARRAY);
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const [internalMaskingMode, setInternalMaskingMode] = useState(false);
   const isMaskingMode =
@@ -177,7 +198,13 @@ function Player({
     canvasHeight,
     boxWidth,
     handleViewportLayout,
-  } = usePlayerViewport({ project, fullscreen, isResizing });
+  } = usePlayerViewport({
+    project,
+    fullscreen,
+    isResizing,
+    containerWidth,
+    containerHeight,
+  });
 
   // Freeze canvas buffer resolution during drag/resize to prevent context wiping and glitching
   const stableResolutionRef = useRef<{ width: number; height: number }>({
@@ -373,7 +400,10 @@ function Player({
       (c) =>
         currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
     );
-    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const stable = stabilizeArrayRef(prevCaptionsRef.current, next);
+    prevCaptionsRef.current = stable;
+    return stable;
   }, [project.tracks.captions, captionIndex, currentTime]);
 
   const activeTexts = useMemo(() => {
@@ -383,7 +413,10 @@ function Player({
       (t) =>
         currentTime >= t.startTime && currentTime <= t.startTime + t.duration,
     );
-    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const stable = stabilizeArrayRef(prevTextsRef.current, next);
+    prevTextsRef.current = stable;
+    return stable;
   }, [project.tracks.text, textIndex, currentTime]);
 
   const activeStickers = useMemo(() => {
@@ -393,7 +426,10 @@ function Player({
       (s) =>
         currentTime >= s.startTime && currentTime <= s.startTime + s.duration,
     );
-    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const stable = stabilizeArrayRef(prevStickersRef.current, next);
+    prevStickersRef.current = stable;
+    return stable;
   }, [project.tracks.stickers, stickerIndex, currentTime]);
 
   // Precomputed set of video clip IDs that have adjacent next clips on the same track.
@@ -445,7 +481,10 @@ function Player({
       }
       return currentTime >= start && currentTime <= end;
     });
-    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const stable = stabilizeArrayRef(prevVideosRef.current, next);
+    prevVideosRef.current = stable;
+    return stable;
   }, [project.tracks.video, videoIndex, currentTime, adjacentNextClipIds]);
 
   // Buffered native media: keep decoder memory bounded. 4K sources can consume
@@ -466,7 +505,10 @@ function Player({
       return false;
     });
 
-    if (filtered.length === 0) return EMPTY_ARRAY;
+    if (filtered.length === 0) {
+      prevBufferedVideosRef.current = EMPTY_ARRAY;
+      return EMPTY_ARRAY;
+    }
 
     // Prioritize visible media first, then the closest upcoming clip. Keep the
     // decoder budget conservative because Android allocates source-sized codec
@@ -499,7 +541,10 @@ function Player({
       if (!existing || clip.startTime < existing.startTime) upcomingPhotosByTrack.set(trackIndex, clip);
     }
     const bufferedPhotos = [...activePhotos, ...upcomingPhotosByTrack.values()];
-    return [...bufferedPhotos, ...bufferedVideoDecoders];
+    const next = [...bufferedPhotos, ...bufferedVideoDecoders];
+    const stable = stabilizeArrayRef(prevBufferedVideosRef.current, next);
+    prevBufferedVideosRef.current = stable;
+    return stable;
   }, [project.tracks.video, videoIndex, currentTime, adjacentNextClipIds]);
 
   const activeEffects = useMemo(() => {
@@ -518,7 +563,10 @@ function Player({
         intensity: v.effectIntensity !== undefined ? v.effectIntensity : 0.8,
       }));
     const combined = [...trackEffs, ...clipEffs];
-    return combined.length > 0 ? combined : EMPTY_ARRAY;
+    const next = combined.length > 0 ? combined : EMPTY_ARRAY;
+    const stable = stabilizeArrayRef(prevEffectsRef.current, next);
+    prevEffectsRef.current = stable;
+    return stable;
   }, [project.tracks.effects, effectIndex, activeVideos, currentTime]);
 
   const activeAudios = useMemo(() => {
@@ -528,7 +576,10 @@ function Player({
       (a) =>
         currentTime >= a.startTime && currentTime <= a.startTime + a.duration,
     );
-    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
+    const stable = stabilizeArrayRef(prevAudiosRef.current, next);
+    prevAudiosRef.current = stable;
+    return stable;
   }, [project.tracks.audio, audioIndex, currentTime]);
 
   // Buffered native audio tracks: includes 1.5s lookahead pre-warming
@@ -542,7 +593,10 @@ function Player({
       if (currentTime < start && start - currentTime <= 1.5) return true;
       return false;
     });
-    if (filtered.length === 0) return EMPTY_ARRAY;
+    if (filtered.length === 0) {
+      prevBufferedAudiosRef.current = EMPTY_ARRAY;
+      return EMPTY_ARRAY;
+    }
     const active = filtered.filter((audio) =>
       currentTime >= audio.startTime && currentTime <= audio.startTime + audio.duration,
     );
@@ -556,7 +610,10 @@ function Player({
       if (upcoming.length > 2) upcoming.pop();
       upcomingByTrack.set(trackIndex, upcoming);
     }
-    return [...active, ...Array.from(upcomingByTrack.values()).flat()];
+    const next = [...active, ...Array.from(upcomingByTrack.values()).flat()];
+    const stable = stabilizeArrayRef(prevBufferedAudiosRef.current, next);
+    prevBufferedAudiosRef.current = stable;
+    return stable;
   }, [project.tracks.audio, audioIndex, currentTime]);
 
   // Crop Gestures Hook
@@ -813,7 +870,6 @@ function Player({
             {
               width: boxWidth,
               height: canvasHeight,
-              aspectRatio: targetRatio,
               maxWidth: "100%",
               maxHeight: "100%",
               backgroundColor: effectiveCanvasBg,

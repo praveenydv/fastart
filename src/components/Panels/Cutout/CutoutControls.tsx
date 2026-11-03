@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
@@ -73,7 +74,7 @@ export interface CutoutControlsProps {
   onReset?: () => void;
 }
 
-export const CutoutControls: React.FC<CutoutControlsProps> = ({
+const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   config,
   onChange,
   selectedClip,
@@ -451,12 +452,18 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
               {!isProcessingFrames && (
                 <View style={sc.actionsContainer}>
                   <View style={{ gap: 8 }}>
-                    {isVideoClip && (
+                    {isVideoClip && Platform.OS === "web" && (
+                      <Text style={sc.qualitySelectorSubtitle}>
+                        Full-frame cutout • WebGPU or optimized WASM, Rust fallback
+                      </Text>
+                    )}
+
+                    {isVideoClip && Platform.OS !== "web" && (
                       <View style={sc.qualitySelectorContainer}>
                         <View style={sc.qualitySelectorHeader}>
                           <Text style={sc.qualitySelectorTitle}>SPEED & QUALITY</Text>
                           <Text style={sc.qualitySelectorSubtitle}>
-                            {quality === "fast" ? "⚡ 10x Fast • Smart Skip" : "💎 Studio Ultra • Every Frame"}
+                            {quality === "fast" ? "⚡ Fast • up to 6 mask samples/sec" : "💎 Studio • every source frame"}
                           </Text>
                         </View>
                         <View style={sc.qualityButtonGroup}>
@@ -481,10 +488,12 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
                                 quality === "fast" && sc.qualityBtnTextActive,
                               ]}
                             >
-                              CapCut Fast
+                              Fast
                             </Text>
                             <View style={[sc.speedBadge, quality === "fast" && sc.speedBadgeActive]}>
-                              <Text style={[sc.speedBadgeText, quality === "fast" && sc.speedBadgeTextActive]}>10x</Text>
+                              <Text style={[sc.speedBadgeText, quality === "fast" && sc.speedBadgeTextActive]}>
+                                {quality === "fast" ? "6 FPS" : "FULL"}
+                              </Text>
                             </View>
                           </TouchableOpacity>
 
@@ -1159,3 +1168,6 @@ const sc = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.3)",
   },
 });
+
+export const CutoutControls = React.memo(CutoutControlsComponent);
+export default CutoutControls;

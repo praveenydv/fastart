@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "crates/fastart_core",
+    "crates/fastart_cutout_ops",
+    "crates/fastart_cutout_wasm",
     "crates/fastart_jni",
     "crates/fastart_wasm",
     "crates/fastart_ios",

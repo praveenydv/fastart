@@ -7,11 +7,20 @@ use crate::codecs::{
 use crate::compositor::{render_canvas_background, BlendMode};
 use crate::effects::{apply_color_adjustments, apply_fast_blur, apply_vignette};
 use crate::transform::{composite_transformed, evaluate_keyframes, evaluate_mask_keyframes, EvaluatedTransform};
-use crate::types::{FastArtProject, FrameBuffer, VideoClip};
+use crate::types::{FastArtProject, FrameBuffer};
 
 pub struct FastArtExporter;
 
 impl FastArtExporter {
+    fn sorted_video_order(project: &FastArtProject) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..project.tracks.video.len()).collect();
+        order.sort_by_key(|&idx| {
+            let clip = &project.tracks.video[idx];
+            clip.layer.unwrap_or(clip.track_index.unwrap_or(0))
+        });
+        order
+    }
+
     /// Renders a single composite project frame at time_sec into an existing RGBA FrameBuffer.
     /// Eliminates heap allocations during export rendering loops.
     pub fn render_frame_into(
@@ -19,6 +28,17 @@ impl FastArtExporter {
         time_sec: f64,
         fb: &mut FrameBuffer,
         media_cache: &HashMap<String, FrameBuffer>,
+    ) {
+        let video_order = Self::sorted_video_order(project);
+        Self::render_frame_into_ordered(project, time_sec, fb, media_cache, &video_order);
+    }
+
+    fn render_frame_into_ordered(
+        project: &FastArtProject,
+        time_sec: f64,
+        fb: &mut FrameBuffer,
+        media_cache: &HashMap<String, FrameBuffer>,
+        video_order: &[usize],
     ) {
         let width = fb.width;
         let height = fb.height;
@@ -31,10 +51,8 @@ impl FastArtExporter {
         }
 
         // 2. Video and Photo Clips sorted by track layer
-        let mut sorted_video_clips: Vec<&VideoClip> = project.tracks.video.iter().collect();
-        sorted_video_clips.sort_by_key(|c| c.layer.unwrap_or(c.track_index.unwrap_or(0)));
-
-        for clip in sorted_video_clips {
+        for &video_idx in video_order {
+            let clip = &project.tracks.video[video_idx];
             let start = clip.start_time;
             let duration = clip.duration.max(0.001);
             let end = start + duration;
@@ -379,9 +397,10 @@ impl FastArtExporter {
         };
 
         let mut curr_fb = FrameBuffer::new(width, height);
+        let video_order = Self::sorted_video_order(project);
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+            Self::render_frame_into_ordered(project, time_sec, &mut curr_fb, media_cache, &video_order);
             let _ = writer.append_frame(&curr_fb, delay_ms);
         }
 
@@ -433,6 +452,7 @@ impl FastArtExporter {
 
         let mut curr_fb = FrameBuffer::new(width, height);
         let mut prev_fb = FrameBuffer::new(width, height);
+        let video_order = Self::sorted_video_order(project);
         let gop_size = (fps * 2).clamp(30, 60) as usize;
 
         let mut bw = BitWriter::new((mb_w * mb_h * 64) as usize + 2048);
@@ -441,7 +461,7 @@ impl FastArtExporter {
 
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+            Self::render_frame_into_ordered(project, time_sec, &mut curr_fb, media_cache, &video_order);
 
             let is_keyframe = frame_idx == 0 || (frame_idx % gop_size == 0);
             if is_keyframe {
@@ -505,6 +525,7 @@ impl FastArtExporter {
 
         let mut curr_fb = FrameBuffer::new(width, height);
         let mut prev_fb = FrameBuffer::new(width, height);
+        let video_order = Self::sorted_video_order(project);
         let gop_size = (fps * 2).clamp(30, 60) as usize;
 
         let mut bw = BitWriter::new((mb_w * mb_h * 64) as usize + 2048);
@@ -513,7 +534,7 @@ impl FastArtExporter {
 
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+            Self::render_frame_into_ordered(project, time_sec, &mut curr_fb, media_cache, &video_order);
 
             let is_keyframe = frame_idx == 0 || (frame_idx % gop_size == 0);
             if is_keyframe {
@@ -567,9 +588,10 @@ impl FastArtExporter {
         let mut writer = crate::codecs::GifStreamWriter::new(buf_writer, width as u16, height as u16)?;
 
         let mut curr_fb = FrameBuffer::new(width, height);
+        let video_order = Self::sorted_video_order(project);
         for frame_idx in 0..total_frames {
             let time_sec = frame_idx as f64 / fps as f64;
-            Self::render_frame_into(project, time_sec, &mut curr_fb, media_cache);
+            Self::render_frame_into_ordered(project, time_sec, &mut curr_fb, media_cache, &video_order);
             writer.append_frame(&curr_fb, delay_ms)?;
         }
 

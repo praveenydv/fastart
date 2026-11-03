@@ -1042,11 +1042,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         if (rafHandle === null) {
           rafHandle = requestAnimationFrame(() => {
             rafHandle = null;
+            const currentDy = lastDy;
             if (isMobileInlineActive) {
               // Strictly clamp height; never translate downwards to dismiss
               const targetH = Math.max(
                 minMobileToolHeight,
-                Math.min(maxMobileToolHeight, startHeight - dy),
+                Math.min(maxMobileToolHeight, startHeight - currentDy),
               );
               setMobileModalHeight(targetH);
               bottomTranslateY.setValue(0);
@@ -1054,7 +1055,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
               bottomTranslateY.setValue(0);
               const nextH = Math.max(
                 180,
-                Math.min(maxMobileToolHeight, startHeight - dy),
+                Math.min(maxMobileToolHeight, startHeight - currentDy),
               );
               setCurrentTimelineHeight(nextH);
             }
@@ -1086,6 +1087,13 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           } else if (lastDy > 35) {
             setMobileModalHeight(defaultMobileToolHeight);
           }
+        } else {
+          bottomTranslateY.setValue(0);
+          const finalH = Math.max(
+            180,
+            Math.min(maxMobileToolHeight, startHeight - lastDy),
+          );
+          setCurrentTimelineHeight(finalH);
         }
       };
 
@@ -1129,11 +1137,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         if (rafHandle === null) {
           rafHandle = requestAnimationFrame(() => {
             rafHandle = null;
+            const currentDy = accumulatedDy;
             if (isMobileInlineActive) {
               // Strictly clamp height; never translate downwards to dismiss
               const targetH = Math.max(
                 minMobileToolHeight,
-                Math.min(maxMobileToolHeight, startHeight - gs.dy),
+                Math.min(maxMobileToolHeight, startHeight - currentDy),
               );
               setMobileModalHeight(targetH);
               bottomTranslateY.setValue(0);
@@ -1141,7 +1150,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
               bottomTranslateY.setValue(0);
               const nextH = Math.max(
                 180,
-                Math.min(maxMobileToolHeight, startHeight - gs.dy),
+                Math.min(maxMobileToolHeight, startHeight - currentDy),
               );
               setCurrentTimelineHeight(nextH);
             }
@@ -1156,15 +1165,23 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         isDraggingBottomRef.current = false;
         setIsDraggingBottom(false);
 
+        const currentDy = gs.dy !== undefined ? gs.dy : accumulatedDy;
         if (isMobileInlineActive) {
           // Never dismiss modal on drag-down; only snap between height bounds.
           // Modals close ONLY with the explicit close button or check/done button.
           bottomTranslateY.setValue(0);
-          if (accumulatedDy < -35) {
+          if (currentDy < -35) {
             setMobileModalHeight(maxMobileToolHeight);
-          } else if (accumulatedDy > 35) {
+          } else if (currentDy > 35) {
             setMobileModalHeight(defaultMobileToolHeight);
           }
+        } else {
+          bottomTranslateY.setValue(0);
+          const finalH = Math.max(
+            180,
+            Math.min(maxMobileToolHeight, startHeight - currentDy),
+          );
+          setCurrentTimelineHeight(finalH);
         }
       },
       onPanResponderTerminate: () => {
@@ -1515,17 +1532,27 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   };
 
   // Player JSX shared between desktop and mobile
-  const renderPlayer = () => (
-    <ErrorBoundary fallbackTitle="Player Preview">
-      <Player
-        project={project}
-        currentTime={getPlaybackTime()}
-        isPlaying={isPlaying}
-        totalDuration={totalDuration}
-        fullscreen={isFullscreen}
-        isProcessing={isProcessing}
-        isResizing={isDraggingBottom || isTimelineResizing}
-        processingMessage={processingMessage}
+  const renderPlayer = () => {
+    const isMobileLayout = !isDesktop;
+    const HEADER_HEIGHT = 54;
+    const expectedContainerHeight = isMobileLayout
+      ? (isFullscreen ? windowHeight : Math.max(100, windowHeight - HEADER_HEIGHT - activeBottomHeight))
+      : undefined;
+    const expectedContainerWidth = isMobileLayout ? windowWidth : undefined;
+
+    return (
+      <ErrorBoundary fallbackTitle="Player Preview">
+        <Player
+          project={project}
+          currentTime={getPlaybackTime()}
+          isPlaying={isPlaying}
+          totalDuration={totalDuration}
+          fullscreen={isFullscreen}
+          isProcessing={isProcessing}
+          isResizing={isDraggingBottom || isTimelineResizing}
+          containerWidth={expectedContainerWidth}
+          containerHeight={expectedContainerHeight}
+          processingMessage={processingMessage}
         onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
         onTogglePlay={() => {
           if (totalDuration <= 0) {
@@ -1605,6 +1632,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       />
     </ErrorBoundary>
   );
+};
 
   // ─────────────────────────────────────────────
   // DESKTOP LAYOUT:
@@ -2625,7 +2653,7 @@ const styles = StyleSheet.create({
   playerStage: {
     flex: 1,
     width: "100%",
-    minHeight: 210,
+    minHeight: 100,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden" as any,

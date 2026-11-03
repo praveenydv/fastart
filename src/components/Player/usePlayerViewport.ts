@@ -6,9 +6,17 @@ interface UsePlayerViewportProps {
   project: FastArtProject;
   fullscreen: boolean;
   isResizing?: boolean;
+  containerWidth?: number;
+  containerHeight?: number;
 }
 
-export function usePlayerViewport({ project, fullscreen, isResizing = false }: UsePlayerViewportProps) {
+export function usePlayerViewport({
+  project,
+  fullscreen,
+  isResizing = false,
+  containerWidth,
+  containerHeight,
+}: UsePlayerViewportProps) {
   const { width: winW, height: winH } = useWindowDimensions();
   const isMobile = winW < 640;
 
@@ -20,24 +28,42 @@ export function usePlayerViewport({ project, fullscreen, isResizing = false }: U
 
   const rafLayoutRef = useRef<number | null>(null);
 
-  const applyDims = useCallback((width: number, height: number) => {
-    if (rafLayoutRef.current !== null) {
-      cancelAnimationFrame(rafLayoutRef.current);
-    }
-    rafLayoutRef.current = requestAnimationFrame(() => {
-      rafLayoutRef.current = null;
-      setViewportDims((prev) => {
-        if (
-          prev &&
-          Math.abs(prev.width - width) < 2 &&
-          Math.abs(prev.height - height) < 2
-        ) {
-          return prev;
+  const applyDims = useCallback(
+    (width: number, height: number) => {
+      // During active resize/drag, update dimensions without frame delays or deadband dropping
+      if (isResizing) {
+        if (rafLayoutRef.current !== null) {
+          cancelAnimationFrame(rafLayoutRef.current);
+          rafLayoutRef.current = null;
         }
-        return { width, height };
+        setViewportDims((prev) => {
+          if (prev && prev.width === width && prev.height === height) {
+            return prev;
+          }
+          return { width, height };
+        });
+        return;
+      }
+
+      if (rafLayoutRef.current !== null) {
+        cancelAnimationFrame(rafLayoutRef.current);
+      }
+      rafLayoutRef.current = requestAnimationFrame(() => {
+        rafLayoutRef.current = null;
+        setViewportDims((prev) => {
+          if (
+            prev &&
+            Math.abs(prev.width - width) < 2 &&
+            Math.abs(prev.height - height) < 2
+          ) {
+            return prev;
+          }
+          return { width, height };
+        });
       });
-    });
-  }, []);
+    },
+    [isResizing],
+  );
 
   const handleViewportLayout = useCallback((e: any) => {
     const layout = e.nativeEvent?.layout;
@@ -92,13 +118,22 @@ export function usePlayerViewport({ project, fullscreen, isResizing = false }: U
       return { width: Math.round(w), height: Math.round(h) };
     }
 
-    const availW = viewportDims
-      ? Math.max(60, viewportDims.width - (isMobile ? 12 : 24))
-      : Math.max(60, winW - (isMobile ? 24 : 50));
+    const effectiveContainerW =
+      containerWidth && containerWidth > 0
+        ? containerWidth
+        : viewportDims
+        ? viewportDims.width
+        : winW;
 
-    const availH = viewportDims
-      ? Math.max(60, viewportDims.height - 10)
-      : Math.max(60, winH - (isMobile ? 240 : 280));
+    const effectiveContainerH =
+      containerHeight && containerHeight > 0
+        ? containerHeight
+        : viewportDims
+        ? viewportDims.height
+        : winH - (isMobile ? 240 : 280);
+
+    const availW = Math.max(60, effectiveContainerW - (isMobile ? 12 : 24));
+    const availH = Math.max(60, effectiveContainerH - (isMobile ? 10 : 16));
 
     let w = availH * targetRatio;
     let h = availH;

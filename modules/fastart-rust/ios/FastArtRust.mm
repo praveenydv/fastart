@@ -1,7 +1,56 @@
 #import "FastArtRust.h"
+#import <onnxruntime_objc/onnxruntime_objc.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+#import <UIKit/UIKit.h>
 #import <vector>
 #include <cstdint>
 #include <cstring>
+#include <cmath>
+
+static ORTEnv *gModnetOrtEnv;
+static ORTSessionOptions *gModnetOrtOptions;
+static ORTSession *gModnetOrtSession;
+static NSString *gModnetInputName;
+static NSString *gModnetOutputName;
+static NSLock *gModnetLock;
+static NSLock *gVideoDecodeLock;
+static NSString *gVideoDecodeUri;
+static AVAssetImageGenerator *gVideoImageGenerator;
+static NSMutableData *gModnetInputData;
+
+extern "C" {
+  bool fastart_ios_prepare_modnet_input(const uint8_t *rgba_ptr, size_t rgba_len, size_t width, size_t height, float *out_ptr, size_t out_len);
+  bool fastart_ios_process_modnet_alpha(const float *raw_ptr, size_t raw_len, size_t width, size_t height, float threshold, float feather, uint8_t *out_ptr, size_t out_len);
+}
+
+static NSData *FastArtInferModnetAlpha(NSData *rgba, NSInteger width, NSInteger height, float threshold, float feather, NSError **error) {
+  if (!gModnetOrtSession || width <= 0 || height <= 0 || rgba.length != (NSUInteger)width * (NSUInteger)height * 4) return nil;
+  const size_t plane = 512 * 512;
+  const size_t inputBytes = plane * 3 * sizeof(float);
+  if (!gModnetInputData || gModnetInputData.length != inputBytes) {
+    gModnetInputData = [NSMutableData dataWithLength:inputBytes];
+  }
+  if (!fastart_ios_prepare_modnet_input((const uint8_t *)rgba.bytes, rgba.length, (size_t)width, (size_t)height,
+                                        (float *)gModnetInputData.mutableBytes, plane * 3)) {
+    if (error) *error = [NSError errorWithDomain:@"FastArtCutout" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Rust MODNet input preparation failed"}];
+    return nil;
+  }
+  ORTValue *input = [[ORTValue alloc] initWithTensorData:gModnetInputData elementType:ORTTensorElementDataTypeFloat shape:@[@1, @3, @512, @512] error:error];
+  if (!input) return nil;
+  NSDictionary<NSString *, ORTValue *> *outputs = [gModnetOrtSession runWithInputs:@{gModnetInputName: input} outputNames:[NSSet setWithObject:gModnetOutputName] runOptions:nil error:error];
+  ORTValue *matteValue = outputs[gModnetOutputName];
+  NSMutableData *matteData = [matteValue tensorDataWithError:error];
+  if (!matteData || matteData.length < plane * sizeof(float)) return nil;
+  const size_t pixels = (size_t)width * (size_t)height;
+  NSMutableData *alpha = [NSMutableData dataWithLength:pixels];
+  if (!fastart_ios_process_modnet_alpha((const float *)matteData.bytes, plane, (size_t)width, (size_t)height,
+                                        threshold, feather, (uint8_t *)alpha.mutableBytes, pixels)) {
+    if (error) *error = [NSError errorWithDomain:@"FastArtCutout" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Rust MODNet alpha processing failed"}];
+    return nil;
+  }
+  return alpha;
+}
 
 // Forward declaration of C-FFI functions from libfastart_ios.a
 extern "C" {
@@ -35,6 +84,11 @@ extern "C" {
 
 RCT_EXPORT_MODULE(FastArtRust);
 
++ (void)load {
+  gModnetLock = [NSLock new];
+  gVideoDecodeLock = [NSLock new];
+}
+
 + (BOOL)requiresMainQueueSetup {
   return NO;
 }
@@ -64,20 +118,172 @@ RCT_EXPORT_METHOD(generateAnimationKeyframes:(NSString *)preset category:(NSStri
 }
 
 RCT_EXPORT_METHOD(initializeModnet:(NSString *)modelPath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
-  const char *path = [modelPath UTF8String];
-  resolve(@(path && fastart_ios_initialize_modnet(path)));
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    [gModnetLock lock];
+    @try {
+      if (gModnetOrtSession) { resolve(@("ok")); return; }
+      NSError *error = nil;
+      ORTEnv *env = [[ORTEnv alloc] initWithLoggingLevel:ORTLoggingLevelError error:&error];
+      ORTSessionOptions *options = [[ORTSessionOptions alloc] initWithError:&error];
+      if (!env || !options) { reject(@"ORT_INIT", error.localizedDescription ?: @"ONNX Runtime initialization failed", error); return; }
+      NSURL *modelUrl = [NSURL URLWithString:modelPath];
+      NSString *localModelPath = modelUrl.isFileURL ? modelUrl.path : modelPath;
+      [options setIntraOpNumThreads:(int)MAX(2, MIN(6, (int)NSProcessInfo.processInfo.activeProcessorCount - 1)) error:nil];
+      [options setGraphOptimizationLevel:ORTGraphOptimizationLevelAll error:nil];
+      // Core ML schedules compatible graph partitions across CPU, GPU, and ANE.
+      // Unsupported nodes stay on ORT's native CPU provider.
+      NSError *providerError = nil;
+      ORTSessionOptions *sessionOptions = options;
+      BOOL coreMLAdded = [options appendExecutionProvider:@"CoreML"
+                       providerOptions:@{@"MLComputeUnits": @"ALL", @"ModelFormat": @"MLProgram", @"RequireStaticInputShapes": @"0"}
+                                 error:&providerError];
+      [options appendExecutionProvider:@"xnnpack" providerOptions:@{@"intra_op_num_threads": @"4"} error:nil];
+      ORTSession *session = [[ORTSession alloc] initWithEnv:env modelPath:localModelPath sessionOptions:options error:&error];
+      if (!session || !coreMLAdded) {
+        // A Core ML provider can be unavailable on a simulator or unsupported OS.
+        ORTSessionOptions *cpuOptions = [[ORTSessionOptions alloc] initWithError:&error];
+        [cpuOptions setIntraOpNumThreads:(int)MAX(2, MIN(6, (int)NSProcessInfo.processInfo.activeProcessorCount - 1)) error:nil];
+        [cpuOptions setGraphOptimizationLevel:ORTGraphOptimizationLevelAll error:nil];
+        [cpuOptions appendExecutionProvider:@"xnnpack" providerOptions:@{@"intra_op_num_threads": @"4"} error:nil];
+        session = [[ORTSession alloc] initWithEnv:env modelPath:localModelPath sessionOptions:cpuOptions error:&error];
+        sessionOptions = cpuOptions;
+      }
+      NSArray<NSString *> *inputs = [session inputNamesWithError:&error];
+      NSArray<NSString *> *outputs = [session outputNamesWithError:&error];
+      if (!session || inputs.count == 0 || outputs.count == 0) {
+        reject(@"ORT_MODEL", error.localizedDescription ?: @"Could not create MODNet session", error);
+        return;
+      }
+      gModnetOrtEnv = env;
+      gModnetOrtOptions = sessionOptions;
+      gModnetOrtSession = session;
+      gModnetInputName = inputs.firstObject;
+      gModnetOutputName = outputs.firstObject;
+      resolve(@("ok"));
+    } @catch (NSException *exception) {
+      reject(@"ORT_INIT", exception.reason ?: @"ONNX Runtime initialization failed", nil);
+    } @finally {
+      [gModnetLock unlock];
+    }
+  });
 }
 
 RCT_EXPORT_METHOD(inferModnetRgba:(NSString *)rgbaBase64 width:(NSInteger)width height:(NSInteger)height threshold:(double)threshold feather:(double)feather resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSData *rgbaData = [[NSData alloc] initWithBase64EncodedString:rgbaBase64 options:NSDataBase64DecodingIgnoreUnknownCharacters];
-    const size_t rgbaCount = (size_t)width * (size_t)height * 4;
-    if (width <= 0 || height <= 0 || rgbaData.length != rgbaCount) { reject(@"INVALID_FRAME", @"Invalid RGBA input for MODNet", nil); return; }
-    std::vector<uint8_t> rgba((const uint8_t *)rgbaData.bytes, (const uint8_t *)rgbaData.bytes + rgbaCount), alpha((NSUInteger)width * (NSUInteger)height);
-    if (!fastart_ios_infer_modnet_rgba(rgba.data(), rgba.size(), width, height, (float)threshold, (float)feather, alpha.data(), alpha.size())) { reject(@"RUST_PROCESSING_ERROR", @"Rust MODNet inference failed", nil); return; }
-    NSData *result = [NSData dataWithBytes:alpha.data() length:alpha.size()];
-    resolve([result base64EncodedStringWithOptions:0]);
+    [gModnetLock lock];
+    @try {
+      const size_t pixelCount = (size_t)width * (size_t)height;
+      NSData *rgba = [[NSData alloc] initWithBase64EncodedString:rgbaBase64 options:NSDataBase64DecodingIgnoreUnknownCharacters];
+      if (width <= 0 || height <= 0 || rgba.length != pixelCount * 4) { reject(@"INVALID_FRAME", @"Invalid RGBA input for MODNet", nil); return; }
+      if (!gModnetOrtSession) { reject(@"ORT_NOT_READY", @"Core ML MODNet session is not initialized", nil); return; }
+
+      NSError *error = nil;
+      NSData *alpha = FastArtInferModnetAlpha(rgba, width, height, (float)threshold, (float)feather, &error);
+      if (!alpha) { reject(@"ORT_INFERENCE", error.localizedDescription ?: @"MODNet returned invalid output", error); return; }
+      resolve([alpha base64EncodedStringWithOptions:0]);
+    } @catch (NSException *exception) {
+      reject(@"ORT_INFERENCE", exception.reason ?: @"MODNet inference failed", nil);
+    } @finally {
+      [gModnetLock unlock];
+    }
   });
+}
+
+RCT_EXPORT_METHOD(processVideoFrameNative:(NSString *)videoUri clipId:(NSString *)clipId frameIdx:(NSInteger)frameIdx timeSeconds:(double)timeSeconds threshold:(double)threshold feather:(double)feather mode:(NSString *)mode keyColor:(NSString *)keyColor resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    @autoreleasepool {
+      NSError *error = nil;
+      NSURL *url = [NSURL URLWithString:videoUri];
+      if (!url.isFileURL && !url.scheme) url = [NSURL fileURLWithPath:videoUri];
+      [gVideoDecodeLock lock];
+      if (![gVideoDecodeUri isEqualToString:videoUri] || !gVideoImageGenerator) {
+        AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
+        gVideoImageGenerator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+        gVideoImageGenerator.appliesPreferredTrackTransform = YES;
+        gVideoImageGenerator.maximumSize = CGSizeMake(512, 512);
+        gVideoDecodeUri = [videoUri copy];
+      }
+      CGImageRef image = [gVideoImageGenerator copyCGImageAtTime:CMTimeMakeWithSeconds(MAX(0, timeSeconds), 600) actualTime:nil error:&error];
+      [gVideoDecodeLock unlock];
+      if (!image) { reject(@"VIDEO_DECODE", error.localizedDescription ?: @"Could not decode video frame", error); return; }
+
+      const size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image), pixels = width * height;
+      NSMutableData *rgba = [NSMutableData dataWithLength:pixels * 4];
+      CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+      CGContextRef context = CGBitmapContextCreate(rgba.mutableBytes, width, height, 8, width * 4, colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+      CGColorSpaceRelease(colorSpace);
+      if (!context) { CGImageRelease(image); reject(@"VIDEO_DECODE", @"Could not allocate video frame buffer", nil); return; }
+      CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+      CGContextRelease(context);
+      CGImageRelease(image);
+
+      NSData *alpha = nil;
+      if ([mode isEqualToString:@"chroma"]) {
+        unsigned int color = 0;
+        NSScanner *scanner = [NSScanner scannerWithString:[keyColor stringByReplacingOccurrencesOfString:@"#" withString:@""]];
+        [scanner scanHexInt:&color];
+        NSMutableData *processed = [rgba mutableCopy];
+        fastart_ios_process_chroma((uint8_t *)processed.mutableBytes, processed.length, width, height,
+                                   (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff,
+                                   (float)threshold, (float)feather, true);
+        NSMutableData *chromaAlpha = [NSMutableData dataWithLength:pixels];
+        uint8_t *outAlpha = (uint8_t *)chromaAlpha.mutableBytes, *processedBytes = (uint8_t *)processed.mutableBytes;
+        for (size_t i = 0; i < pixels; i++) outAlpha[i] = processedBytes[i * 4 + 3];
+        alpha = chromaAlpha;
+      } else {
+        [gModnetLock lock];
+        alpha = FastArtInferModnetAlpha(rgba, width, height, (float)threshold, (float)feather, &error);
+        [gModnetLock unlock];
+      }
+      if (!alpha) { reject(@"ORT_INFERENCE", error.localizedDescription ?: @"MODNet inference failed", error); return; }
+
+      NSMutableData *maskPixels = [NSMutableData dataWithLength:pixels * 4];
+      uint8_t *mask = (uint8_t *)maskPixels.mutableBytes, *a = (uint8_t *)alpha.bytes;
+      for (size_t i = 0; i < pixels; i++) { mask[i*4] = 255; mask[i*4+1] = 255; mask[i*4+2] = 255; mask[i*4+3] = a[i]; }
+      CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
+      CGDataProviderRef provider = CGDataProviderCreateWithCFData((__bridge CFDataRef)maskPixels);
+      CGImageRef maskImage = CGImageCreate(width, height, 8, 32, width * 4, rgb, kCGImageAlphaLast | kCGBitmapByteOrder32Big, provider, NULL, false, kCGRenderingIntentDefault);
+      CGColorSpaceRelease(rgb);
+      CGDataProviderRelease(provider);
+      if (!maskImage) { reject(@"MASK_ENCODE", @"Could not create mask image", nil); return; }
+      NSData *png = UIImagePNGRepresentation([UIImage imageWithCGImage:maskImage]);
+      CGImageRelease(maskImage);
+
+      NSString *safeId = [[clipId componentsSeparatedByCharactersInSet:[[NSCharacterSet alphanumericCharacterSet] invertedSet]] componentsJoinedByString:@"_"];
+      NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"fastart-cutout"];
+      [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+      NSString *path = [directory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%ld.png", safeId, (long)frameIdx]];
+      if (![png writeToFile:path atomically:NO]) { reject(@"MASK_WRITE", @"Could not save native cutout mask", nil); return; }
+      resolve([NSURL fileURLWithPath:path].absoluteString);
+    }
+  });
+}
+
+RCT_EXPORT_METHOD(getVideoFrameInfo:(NSString *)videoUri resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    NSURL *url = [NSURL URLWithString:videoUri];
+    if (!url.isFileURL && !url.scheme) url = [NSURL fileURLWithPath:videoUri];
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
+    AVAssetTrack *track = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+    const double duration = CMTimeGetSeconds(asset.duration);
+    const double frameRate = track.nominalFrameRate;
+    if (!track || !isfinite(duration) || duration <= 0 || !isfinite(frameRate) || frameRate <= 0) {
+      reject(@"VIDEO_METADATA", @"Could not read source video frame timing", nil);
+      return;
+    }
+    const NSInteger frameCount = (NSInteger)ceil(duration * frameRate);
+    resolve(@{@"frameRate": @(frameRate), @"frameCount": @(frameCount), @"duration": @(duration)});
+  });
+}
+
+RCT_EXPORT_METHOD(releaseVideoCutoutDecoder:(NSString *)videoUri resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [gVideoDecodeLock lock];
+  if ([gVideoDecodeUri isEqualToString:videoUri]) {
+    gVideoImageGenerator = nil;
+    gVideoDecodeUri = nil;
+  }
+  [gVideoDecodeLock unlock];
+  resolve(nil);
 }
 
 RCT_EXPORT_METHOD(detectBeats:(NSArray *)samplesArray sampleRate:(NSInteger)sampleRate resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {

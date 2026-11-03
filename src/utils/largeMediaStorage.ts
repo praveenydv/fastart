@@ -2,6 +2,8 @@
 // Handles gigabyte-scale video, 4K footage, and audio with IndexedDB & hardware decoder safety
 
 import { Platform } from 'react-native';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { Buffer } from 'buffer';
 
 const DB_NAME = 'fastart_media_db';
 const DB_VERSION = 5;
@@ -1466,14 +1468,49 @@ export function setupAutoReconnectListener(
   window.addEventListener('keydown', tryReconnectAll, { capture: true, once: true });
 }
 
+function getMobileMaskDir(): string {
+  const base = FileSystemLegacy.cacheDirectory || FileSystemLegacy.documentDirectory || '';
+  return `${base}fastart_masks/`;
+}
+
+async function ensureMobileMaskDir(): Promise<string> {
+  const dir = getMobileMaskDir();
+  try {
+    const info = await FileSystemLegacy.getInfoAsync(dir);
+    if (!info.exists) {
+      await FileSystemLegacy.makeDirectoryAsync(dir, { intermediates: true });
+    }
+  } catch {}
+  return dir;
+}
+
 /**
- * Persists compressed 8-bit RLE cutout masks into IndexedDB for instant, persistent recovery.
+ * Persists compressed 8-bit RLE cutout masks into IndexedDB (web) or filesystem cache (mobile)
+ * for instant, persistent recovery.
  */
 export async function persistMasksRLE(
   clipId: string,
   masks: Record<string, Uint8Array>,
 ): Promise<void> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (!clipId || !masks) return;
+
+  if (Platform.OS !== 'web') {
+    try {
+      const sanitized = clipId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dir = await ensureMobileMaskDir();
+      const filePath = `${dir}${sanitized}.json`;
+      const serializable: Record<string, string> = {};
+      for (const [k, v] of Object.entries(masks)) {
+        serializable[k] = Buffer.from(v).toString('base64');
+      }
+      await FileSystemLegacy.writeAsStringAsync(filePath, JSON.stringify(serializable));
+    } catch (e) {
+      console.warn('[largeMediaStorage] Failed to persist mobile masks:', e);
+    }
+    return;
+  }
+
+  if (typeof window === 'undefined') return;
   try {
     const db = await getIndexedDB();
     if (!db.objectStoreNames.contains(STORE_MASKS)) return;
@@ -1490,12 +1527,36 @@ export async function persistMasksRLE(
 }
 
 /**
- * Loads compressed 8-bit RLE cutout masks from IndexedDB.
+ * Loads compressed 8-bit RLE cutout masks from IndexedDB (web) or filesystem cache (mobile).
  */
 export async function loadMasksRLE(
   clipId: string,
 ): Promise<Record<string, Uint8Array> | null> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  if (!clipId) return null;
+
+  if (Platform.OS !== 'web') {
+    try {
+      const sanitized = clipId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dir = getMobileMaskDir();
+      const filePath = `${dir}${sanitized}.json`;
+      const info = await FileSystemLegacy.getInfoAsync(filePath);
+      if (!info.exists) return null;
+      const raw = await FileSystemLegacy.readAsStringAsync(filePath);
+      const parsed = JSON.parse(raw);
+      const result: Record<string, Uint8Array> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string') {
+          const buf = Buffer.from(v, 'base64');
+          result[k] = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+        }
+      }
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof window === 'undefined') return null;
   try {
     const db = await getIndexedDB();
     if (!db.objectStoreNames.contains(STORE_MASKS)) return null;
@@ -1515,7 +1576,19 @@ export async function loadMasksRLE(
 
 /** Removes a clip's persisted cutout masks after reset or clip deletion. */
 export async function removeMasksRLE(clipId: string): Promise<void> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (!clipId) return;
+
+  if (Platform.OS !== 'web') {
+    try {
+      const sanitized = clipId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dir = getMobileMaskDir();
+      const filePath = `${dir}${sanitized}.json`;
+      await FileSystemLegacy.deleteAsync(filePath, { idempotent: true });
+    } catch {}
+    return;
+  }
+
+  if (typeof window === 'undefined') return;
   try {
     const db = await getIndexedDB();
     if (!db.objectStoreNames.contains(STORE_MASKS)) return;
@@ -1532,11 +1605,24 @@ export async function removeMasksRLE(clipId: string): Promise<void> {
 }
 
 /**
- * Persists all projects JSON into IndexedDB as a resilient tier-2 storage backup
- * that survives browser local storage quota limits and tab crashes.
+ * Persists all projects JSON into IndexedDB (web) or document storage (mobile)
+ * as a resilient tier-2 storage backup that survives app crashes and storage resets.
  */
 export async function persistProjectsToIndexedDB(projectsJson: string): Promise<void> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (!projectsJson) return;
+
+  if (Platform.OS !== 'web') {
+    try {
+      const base = FileSystemLegacy.documentDirectory || FileSystemLegacy.cacheDirectory || '';
+      const filePath = `${base}fastart_projects_backup.json`;
+      await FileSystemLegacy.writeAsStringAsync(filePath, projectsJson);
+    } catch (e) {
+      console.warn('[largeMediaStorage] Failed to persist mobile projects backup:', e);
+    }
+    return;
+  }
+
+  if (typeof window === 'undefined') return;
   try {
     const db = await getIndexedDB();
     if (!db.objectStoreNames.contains(STORE_PROJECTS)) return;
@@ -1551,10 +1637,23 @@ export async function persistProjectsToIndexedDB(projectsJson: string): Promise<
 }
 
 /**
- * Loads projects JSON backup from IndexedDB if local storage is missing or corrupted.
+ * Loads projects JSON backup from IndexedDB (web) or document storage (mobile)
+ * if primary local storage is missing or corrupted.
  */
 export async function loadProjectsFromIndexedDB(): Promise<string | null> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  if (Platform.OS !== 'web') {
+    try {
+      const base = FileSystemLegacy.documentDirectory || FileSystemLegacy.cacheDirectory || '';
+      const filePath = `${base}fastart_projects_backup.json`;
+      const info = await FileSystemLegacy.getInfoAsync(filePath);
+      if (info.exists) {
+        return await FileSystemLegacy.readAsStringAsync(filePath);
+      }
+    } catch {}
+    return null;
+  }
+
+  if (typeof window === 'undefined') return null;
   try {
     const db = await getIndexedDB();
     if (!db.objectStoreNames.contains(STORE_PROJECTS)) return null;

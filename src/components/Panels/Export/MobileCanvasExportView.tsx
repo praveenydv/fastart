@@ -104,7 +104,8 @@ export default function MobileCanvasExportView({
     mimeType: string;
     extension: string;
     fileSize?: number;
-    chunks: string[];
+    writeQueue: Promise<void>;
+    writeError?: Error;
   } | null>(null);
 
   useEffect(() => {
@@ -166,26 +167,43 @@ export default function MobileCanvasExportView({
         const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
         const targetFileUri = `${dir}${cleanTitle}_${Date.now()}.${data.extension || "mp4"}`;
 
-        currentChunkedFileRef.current = {
+        const output: NonNullable<typeof currentChunkedFileRef.current> = {
           uri: targetFileUri,
           mimeType: data.mimeType || "video/mp4",
           extension: data.extension || "mp4",
           fileSize: data.fileSize,
-          chunks: [],
+          writeQueue: Promise.resolve(),
         };
+        currentChunkedFileRef.current = output;
+        output.writeQueue = FileSystem.writeAsStringAsync(targetFileUri, "", {
+          encoding: FileSystem.EncodingType.Base64,
+        }).catch((err) => {
+          output.writeError = err instanceof Error ? err : new Error(String(err));
+        });
       } else if (data.type === "CHUNK_DATA" && currentChunkedFileRef.current) {
-        if (data.chunk) {
-          currentChunkedFileRef.current.chunks.push(data.chunk);
+        const output = currentChunkedFileRef.current;
+        if (data.chunk && !output.writeError) {
+          // Serialize appends because WebView messages can arrive before the
+          // prior native filesystem write has completed. The bridge's chunks
+          // are base64-aligned, so each append decodes independently.
+          output.writeQueue = output.writeQueue
+            .then(() => output.writeError ? undefined : FileSystem.writeAsStringAsync(output.uri, data.chunk, {
+                encoding: FileSystem.EncodingType.Base64,
+                append: true,
+              }))
+            .catch((err) => {
+              output.writeError = err instanceof Error ? err : new Error(String(err));
+            });
         }
       } else if (data.type === "CHUNK_END" && currentChunkedFileRef.current && !isDoneRef.current) {
         isDoneRef.current = true;
         const info = currentChunkedFileRef.current;
-        const joinedBase64 = cleanBase64Payload(info.chunks.join(""));
-        info.chunks = []; // free memory
-
-        await FileSystem.writeAsStringAsync(info.uri, joinedBase64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        await info.writeQueue;
+        if (info.writeError) {
+          currentChunkedFileRef.current = null;
+          onError(info.writeError);
+          return;
+        }
 
         const fileStat = await FileSystem.getInfoAsync(info.uri);
         const result: ExportResult = {
@@ -196,6 +214,7 @@ export default function MobileCanvasExportView({
           extension: info.extension,
           fileSize: fileStat.exists ? (fileStat as any).size : info.fileSize,
         };
+        currentChunkedFileRef.current = null;
         onComplete(result);
       } else if (data.type === "COMPLETE" && !isDoneRef.current) {
         isDoneRef.current = true;

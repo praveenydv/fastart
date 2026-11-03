@@ -186,6 +186,7 @@ export function useTimelineResize({
 
   // PanResponder for Native iOS and Android
   const panStartHeightRef = useRef(0);
+  const latestTargetHeightRef = useRef(0);
   const nativeRafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -205,6 +206,7 @@ export function useTimelineResize({
           Math.abs(gestureState.dy) > 2,
         onPanResponderGrant: () => {
           panStartHeightRef.current = timelineHeightRef.current;
+          latestTargetHeightRef.current = timelineHeightRef.current;
           setIsResizingHeight(true);
         },
         onPanResponderMove: (_, gestureState) => {
@@ -217,13 +219,13 @@ export function useTimelineResize({
               ),
             ),
           );
-          if (nativeRafRef.current !== null) {
-            cancelAnimationFrame(nativeRafRef.current);
+          latestTargetHeightRef.current = newH;
+          if (nativeRafRef.current === null) {
+            nativeRafRef.current = requestAnimationFrame(() => {
+              nativeRafRef.current = null;
+              setUserTimelineHeight(latestTargetHeightRef.current);
+            });
           }
-          nativeRafRef.current = requestAnimationFrame(() => {
-            nativeRafRef.current = null;
-            setUserTimelineHeight(newH);
-          });
         },
         onPanResponderRelease: (_, gestureState) => {
           if (nativeRafRef.current !== null) {

@@ -66,11 +66,11 @@ const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
     requestMediaThumbnail(clip);
   }, [clip]);
 
-  // Compute number of filmstrip frames that fit in this clip
+  // Compute number of filmstrip frames that fit in this clip (capped on mobile to prevent view hierarchy bloat)
   const frameCount = useMemo(() => {
     if (width <= 0) return 0;
     const count = Math.max(1, Math.ceil(width / FRAME_WIDTH));
-    return isWeb ? count : Math.min(count, 32);
+    return isWeb ? count : Math.min(count, 10);
   }, [width]);
 
   if (!isVisual) return null;

@@ -37,7 +37,7 @@ interface PlayerMaskOverlayProps {
   canvasBoxRef?: React.RefObject<any>;
 }
 
-export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
+const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
   targetClip,
   boxWidth,
   canvasHeight,
@@ -1399,6 +1399,9 @@ export const PlayerMaskOverlay: React.FC<PlayerMaskOverlayProps> = ({
     </View>
   );
 };
+
+export const PlayerMaskOverlay = React.memo(PlayerMaskOverlayComponent);
+export default PlayerMaskOverlay;
 
 const styles = StyleSheet.create({
   featherHandleWrap: {

@@ -333,7 +333,7 @@ export async function requestMediaThumbnail(clip: any, forceRefresh = false): Pr
         const seekMs = Math.max(100, Math.round((trimIn + 0.1) * 1000));
         const result = await getThumbnailAsync(mediaUrl, {
           time: seekMs,
-          quality: 0.85,
+          quality: 0.6,
         });
         if (result && result.uri) {
           globalThumbnailCache.set(clipId, result.uri);

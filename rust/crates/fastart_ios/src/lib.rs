@@ -45,6 +45,45 @@ pub extern "C" fn fastart_ios_initialize_modnet(path: *const c_char) -> bool {
 }
 
 #[no_mangle]
+pub extern "C" fn fastart_ios_prepare_modnet_input(
+    rgba_ptr: *const u8,
+    rgba_len: usize,
+    width: usize,
+    height: usize,
+    out_ptr: *mut f32,
+    out_len: usize,
+) -> bool {
+    const INPUT_FLOATS: usize = 3 * 512 * 512;
+    let Some(expected_rgba_len) = width.checked_mul(height).and_then(|n| n.checked_mul(4)) else { return false; };
+    if rgba_ptr.is_null() || out_ptr.is_null() || width == 0 || height == 0
+        || rgba_len != expected_rgba_len || out_len < INPUT_FLOATS { return false; }
+    let rgba = unsafe { slice::from_raw_parts(rgba_ptr, rgba_len) };
+    let output = unsafe { slice::from_raw_parts_mut(out_ptr, INPUT_FLOATS) };
+    fastart_core::prepare_modnet_input_tensor(rgba, width, height, output);
+    true
+}
+
+#[no_mangle]
+pub extern "C" fn fastart_ios_process_modnet_alpha(
+    raw_ptr: *const f32,
+    raw_len: usize,
+    width: usize,
+    height: usize,
+    threshold: f32,
+    feather: f32,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> bool {
+    const MODEL_PIXELS: usize = 512 * 512;
+    let Some(output_len) = width.checked_mul(height) else { return false; };
+    if raw_ptr.is_null() || out_ptr.is_null() || width == 0 || height == 0
+        || raw_len < MODEL_PIXELS || out_len < output_len { return false; }
+    let raw = unsafe { slice::from_raw_parts(raw_ptr, raw_len) };
+    let output = unsafe { slice::from_raw_parts_mut(out_ptr, output_len) };
+    fastart_core::process_modnet_alpha_into(raw, width, height, threshold, feather, output).is_ok()
+}
+
+#[no_mangle]
 pub extern "C" fn fastart_ios_infer_modnet_rgba(
     rgba_ptr: *const u8, rgba_len: usize, width: usize, height: usize,
     threshold: f32, feather: f32, out_ptr: *mut u8, out_len: usize,

@@ -114,7 +114,7 @@ function NativeVideoClipPlayerComponent({
   );
 }
 
-function VideoClipRenderer({
+const VideoClipRenderer = React.memo(function VideoClipRenderer({
   uri,
   clipId,
   targetMediaTime,
@@ -142,11 +142,21 @@ function VideoClipRenderer({
   }, [uri]);
   const lastSeekTargetRef = React.useRef<number>(-1);
   const lastSeekTimestampRef = React.useRef<number>(0);
+  const pendingSeekTimeoutRef = React.useRef<any>(null);
   const isPlayingRef = React.useRef<boolean>(false);
   const wasPlayingRef = React.useRef<boolean>(false);
   const pauseTimestampRef = React.useRef<number>(0);
   const targetMediaTimeRef = React.useRef<number>(targetMediaTime);
   targetMediaTimeRef.current = targetMediaTime;
+
+  useEffect(() => {
+    return () => {
+      if (pendingSeekTimeoutRef.current) {
+        clearTimeout(pendingSeekTimeoutRef.current);
+        pendingSeekTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
@@ -243,21 +253,44 @@ function VideoClipRenderer({
     } catch {}
   }, [player, isPlaying, isInside, hasError]);
 
-  // Throttled scrub/seek only when paused
+  // Bounded latest-frame-wins scrub/seek queue when paused
   useEffect(() => {
     if (!player || hasError || isPlaying) return;
     const now = Date.now();
     if (now - pauseTimestampRef.current < 250) return;
-    try {
-      if (
-        Math.abs(lastSeekTargetRef.current - targetMediaTime) > 0.03 &&
-        now - lastSeekTimestampRef.current > 25
-      ) {
-        lastSeekTimestampRef.current = now;
-        lastSeekTargetRef.current = targetMediaTime;
-        player.currentTime = targetMediaTime;
+
+    const diff = Math.abs(lastSeekTargetRef.current - targetMediaTime);
+    if (diff <= 0.03) return;
+
+    const timeSinceLastSeek = now - lastSeekTimestampRef.current;
+    const MIN_SEEK_INTERVAL_MS = 45; // ~22 FPS maximum seek cadence to protect hardware decoders
+
+    if (timeSinceLastSeek >= MIN_SEEK_INTERVAL_MS) {
+      if (pendingSeekTimeoutRef.current) {
+        clearTimeout(pendingSeekTimeoutRef.current);
+        pendingSeekTimeoutRef.current = null;
       }
-    } catch {}
+      lastSeekTimestampRef.current = now;
+      lastSeekTargetRef.current = targetMediaTime;
+      try {
+        player.currentTime = targetMediaTime;
+      } catch {}
+    } else {
+      // Schedule trailing seek so the latest scrub position always wins
+      if (pendingSeekTimeoutRef.current) {
+        clearTimeout(pendingSeekTimeoutRef.current);
+      }
+      const delay = MIN_SEEK_INTERVAL_MS - timeSinceLastSeek;
+      pendingSeekTimeoutRef.current = setTimeout(() => {
+        pendingSeekTimeoutRef.current = null;
+        if (!player || hasError || isPlayingRef.current) return;
+        lastSeekTimestampRef.current = Date.now();
+        lastSeekTargetRef.current = targetMediaTimeRef.current;
+        try {
+          player.currentTime = targetMediaTimeRef.current;
+        } catch {}
+      }, delay);
+    }
   }, [player, targetMediaTime, isPlaying, hasError]);
 
   // Periodic drift check during active playback (interval instead of per-frame effect)
@@ -306,7 +339,7 @@ function VideoClipRenderer({
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   fullMedia: {

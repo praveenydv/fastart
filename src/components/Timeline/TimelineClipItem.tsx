@@ -48,7 +48,7 @@ interface TimelineClipItemProps {
   clipMovePanResponder: any;
 }
 
-export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
+const TimelineClipItemComponent: React.FC<TimelineClipItemProps> = ({
   clip,
   trackIdx,
   clipIndexInRow,
@@ -468,4 +468,5 @@ export const TimelineClipItem: React.FC<TimelineClipItemProps> = ({
   );
 };
 
-export default React.memo(TimelineClipItem);
+export const TimelineClipItem = React.memo(TimelineClipItemComponent);
+export default TimelineClipItem;

@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Svg, Path } from "react-native-svg";
 import { UnifiedClipItem } from "./timelineTypes";
 import {
   clipHasAudio,
@@ -297,6 +298,50 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
     return sampled;
   }, [peaks, availableWidth]);
 
+  // Maximum bar height in audio track: 34px (fills track beautifully with headroom)
+  const maxBarHeight = 34;
+  const minBarHeight = 2.5;
+
+  const numBars = effectivePeaks.length;
+  const effectiveBarWidth =
+    Platform.OS === "web"
+      ? barWidth
+      : Math.min(
+          2.5,
+          Math.max(
+            1.5,
+            (availableWidth / Math.max(1, numBars)) * 0.65,
+          ),
+        );
+  const dynamicGap =
+    numBars > 1
+      ? Math.max(
+          0.5,
+          (availableWidth - numBars * effectiveBarWidth) / (numBars - 1),
+        )
+      : 1.0;
+
+  const nativeSvgPath = useMemo(() => {
+    if (Platform.OS === "web" || effectivePeaks.length === 0) return "";
+    const len = effectivePeaks.length;
+    const targetH = isAudio ? maxBarHeight : 16;
+    const isBottom = !isAudio;
+    let d = "";
+    const r = Math.min(1.0, effectiveBarWidth / 2);
+    for (let i = 0; i < len; i++) {
+      const p = effectivePeaks[i];
+      const h = Math.max(minBarHeight, Math.min(targetH, Math.round(p * targetH)));
+      const x = i * (effectiveBarWidth + dynamicGap);
+      const y = isBottom ? targetH - h : (targetH - h) / 2;
+      if (r > 0.2 && h > 2 * r && effectiveBarWidth > 2 * r) {
+        d += `M${(x + r).toFixed(1)},${y.toFixed(1)} h${(effectiveBarWidth - 2 * r).toFixed(1)} a${r},${r} 0 0 1 ${r},${r} v${(h - 2 * r).toFixed(1)} a${r},${r} 0 0 1 -${r},${r} h-${(effectiveBarWidth - 2 * r).toFixed(1)} a${r},${r} 0 0 1 -${r},-${r} v-${(h - 2 * r).toFixed(1)} a${r},${r} 0 0 1 ${r},-${r} Z `;
+      } else {
+        d += `M${x.toFixed(1)},${y.toFixed(1)} h${effectiveBarWidth.toFixed(1)} v${h.toFixed(1)} h-${effectiveBarWidth.toFixed(1)} Z `;
+      }
+    }
+    return d;
+  }, [isAudio, effectivePeaks, effectiveBarWidth, dynamicGap]);
+
   const isDecoding = isMediaAudioDecoding(url);
 
   // If peaks are still decoding in the background, show clean processing skeleton
@@ -355,29 +400,6 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
     return null;
   }
 
-  const numBars = effectivePeaks.length;
-  const effectiveBarWidth =
-    Platform.OS === "web"
-      ? barWidth
-      : Math.min(
-          2.5,
-          Math.max(
-            1.5,
-            (availableWidth / Math.max(1, numBars)) * 0.65,
-          ),
-        );
-  const dynamicGap =
-    numBars > 1
-      ? Math.max(
-          0.5,
-          (availableWidth - numBars * effectiveBarWidth) / (numBars - 1),
-        )
-      : 1.0;
-
-  // Maximum bar height in audio track: 34px (fills track beautifully with headroom)
-  const maxBarHeight = 34;
-  const minBarHeight = 2.5;
-
   // Audio clip: full-height centered waveform across the whole clip
   if (isAudio) {
     const barColor = isDenoised
@@ -408,28 +430,10 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
             />
           </View>
         ) : (
-          <View style={styles.barsRow}>
-            {effectivePeaks.map((peak, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.waveBar,
-                  {
-                    width: effectiveBarWidth,
-                    height: Math.max(
-                      minBarHeight,
-                      Math.min(maxBarHeight, Math.round(peak * maxBarHeight)),
-                    ),
-                    backgroundColor: barColor,
-                    marginRight: idx === numBars - 1 ? 0 : dynamicGap,
-                    shadowColor: isDenoised ? "#10B981" : "transparent",
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: isDenoised ? 0.6 : 0,
-                    shadowRadius: 2,
-                  },
-                ]}
-              />
-            ))}
+          <View style={[styles.barsRow, { width: availableWidth, height: maxBarHeight, justifyContent: "center", alignItems: "center" }]}>
+            <Svg width={availableWidth} height={maxBarHeight} pointerEvents="none">
+              <Path d={nativeSvgPath} fill={barColor} />
+            </Svg>
           </View>
         )}
       </View>
@@ -479,25 +483,10 @@ const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
               />
             </View>
           ) : (
-            <View style={styles.barsRowBottom}>
-              {effectivePeaks.map((peak, idx) => (
-                <View
-                  key={idx}
-                  style={[
-                    styles.waveBar,
-                    {
-                      width: effectiveBarWidth,
-                      height: Math.max(
-                        minBarHeight,
-                        Math.min(16, Math.round(peak * 16)),
-                      ),
-                      backgroundColor: videoBarColor,
-                      marginRight: idx === numBars - 1 ? 0 : dynamicGap,
-                      opacity: isMuted ? 0.6 : 0.95,
-                    },
-                  ]}
-                />
-              ))}
+            <View style={[styles.barsRowBottom, { width: availableWidth, height: 16, justifyContent: "flex-end" }]}>
+              <Svg width={availableWidth} height={16} pointerEvents="none">
+                <Path d={nativeSvgPath} fill={videoBarColor} opacity={isMuted ? 0.6 : 0.95} />
+              </Svg>
             </View>
           )}
         </View>

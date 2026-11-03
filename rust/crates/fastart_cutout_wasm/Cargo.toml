@@ -1,0 +1,10 @@
+[package]
+name = "fastart_cutout_wasm"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fastart_cutout_ops = { path = "../fastart_cutout_ops" }

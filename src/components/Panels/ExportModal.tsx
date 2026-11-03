@@ -9,7 +9,7 @@ import ExportIdleSettings from "./Export/ExportIdleSettings";
 import ExportResultView from "./Export/ExportResultView";
 import MobileCanvasExportView from "./Export/MobileCanvasExportView";
 
-export default function ExportModal({
+function ExportModalComponent({
   visible,
   onClose,
   project,
@@ -298,3 +298,6 @@ export default function ExportModal({
     </Modal>
   );
 }
+
+export const ExportModal = React.memo(ExportModalComponent);
+export default ExportModal;
