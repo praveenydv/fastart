@@ -112,6 +112,7 @@ export class VideoRenderer {
       : 32;
   public previewCropClipId: string | null = null;
   public isPlaying: boolean = false;
+  public isScrubbing: boolean = false;
   private maskFramePending: boolean = false;
   private blurCanvas: HTMLCanvasElement | null = null;
   private blurCtx: CanvasRenderingContext2D | null = null;
@@ -994,6 +995,7 @@ export class VideoRenderer {
         onFrameNeeded: this.onFrameNeeded,
         preloadClip: (c) => this.preloadClip(c),
         ensureOffscreen: (cw, ch) => this.ensureOffscreen(cw, ch),
+        isScrubbing: this.isScrubbing,
       },
       transitionState,
     );

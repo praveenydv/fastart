@@ -102,6 +102,7 @@ export const canvasStyles = {
     maxWidth: "100%",
     overflow: "hidden" as any,
     minHeight: 0,
+    paddingVertical: 4,
   },
   canvasBox: {
     backgroundColor: "#000000",
@@ -117,6 +118,7 @@ export const canvasStyles = {
     elevation: 8,
     maxWidth: "100%",
     maxHeight: "100%",
+    flexShrink: 1,
   },
   interactiveCanvasLayer: {
     ...StyleSheet.absoluteFill,

@@ -107,8 +107,8 @@ export function usePlayerViewport({
     const targetRatio = ratioMap[project.aspectRatio] || 9 / 16;
 
     if (fullscreen) {
-      const maxFsH = Math.max(120, winH - 64);
-      const maxFsW = Math.max(120, winW - 20);
+      const maxFsH = Math.max(120, winH - (isMobile ? 24 : 64));
+      const maxFsW = Math.max(120, winW - (isMobile ? 16 : 24));
       let w = maxFsH * targetRatio;
       let h = maxFsH;
       if (w > maxFsW) {
@@ -117,6 +117,9 @@ export function usePlayerViewport({
       }
       return { width: Math.round(w), height: Math.round(h) };
     }
+
+    // Chrome vertical footprint: Desktop header (28px, only on desktop); Control bar (38px); border (1px)
+    const chromeH = fullscreen ? 0 : isMobile ? 39 : 67;
 
     const effectiveContainerW =
       containerWidth && containerWidth > 0
@@ -127,13 +130,13 @@ export function usePlayerViewport({
 
     const effectiveContainerH =
       containerHeight && containerHeight > 0
-        ? containerHeight
+        ? Math.max(40, containerHeight - chromeH)
         : viewportDims
         ? viewportDims.height
-        : winH - (isMobile ? 240 : 280);
+        : Math.max(40, winH - (isMobile ? 240 : 280) - chromeH);
 
-    const availW = Math.max(60, effectiveContainerW - (isMobile ? 12 : 24));
-    const availH = Math.max(60, effectiveContainerH - (isMobile ? 10 : 16));
+    const availW = Math.max(40, effectiveContainerW - (isMobile ? 16 : 24));
+    const availH = Math.max(40, effectiveContainerH - (isMobile ? 12 : 16));
 
     let w = availH * targetRatio;
     let h = availH;

@@ -605,18 +605,18 @@ function ToolbarComponent({
               ]}
               onPress={() => handleToolAction(tool.id)}
               activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 3, right: 3 }}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             >
               <MaterialCommunityIcons
                 name={tool.icon}
-                size={19}
+                size={21}
                 color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#E2E8F0"}
               />
               <Text
                 style={[
                   styles.horizontalToolLabel,
                   isDelete && { color: "#EF4444" },
-                  isActive && { color: "#00E5FF", fontWeight: "500" },
+                  isActive && { color: "#00E5FF", fontWeight: "600" },
                 ]}
                 numberOfLines={1}
               >
@@ -769,20 +769,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#08090E",
     borderTopWidth: 1,
     borderTopColor: "#1F2637",
-    height: 56,
+    height: 60,
     paddingHorizontal: 6,
   },
   horizontalToolBtnActive: {
-    backgroundColor: "rgba(0, 229, 255, 0.08)",
-    borderRadius: 7,
+    backgroundColor: "rgba(0, 229, 255, 0.12)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 255, 0.3)",
   },
   horizontalToolBtnDelete: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   mobileBackBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#0F131D",
@@ -792,33 +794,33 @@ const styles = StyleSheet.create({
   },
   mobileBackDivider: {
     width: 1,
-    height: 20,
+    height: 24,
     backgroundColor: "#1F2637",
     marginRight: 6,
   },
   mobileBackText: {
     color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "400",
+    fontSize: 9.5,
+    fontWeight: "500",
   },
   horizontalScrollContent: {
     alignItems: "center",
     paddingHorizontal: 2,
-    gap: 3,
+    gap: 4,
   },
   horizontalToolBtn: {
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 46,
-    height: 44,
-    paddingHorizontal: 3,
-    borderRadius: 7,
+    minWidth: 52,
+    height: 50,
+    paddingHorizontal: 4,
+    borderRadius: 8,
   },
   horizontalToolLabel: {
     color: "#8E95A5",
-    fontSize: 9,
-    fontWeight: "400",
-    marginTop: 1.5,
+    fontSize: 10,
+    fontWeight: "500",
+    marginTop: 2,
     textAlign: "center",
     letterSpacing: 0,
   },

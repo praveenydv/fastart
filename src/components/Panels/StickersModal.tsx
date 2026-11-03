@@ -10,6 +10,8 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { STICKER_LIBRARY } from '../../constants/sampleMedia';
+import { ModalHeader } from '../Common/ModalHeader';
+import { SegmentedPillTabs } from '../Common/SegmentedPillTabs';
 
 import { StickerClip } from '../../types/project';
 
@@ -110,23 +112,11 @@ export default function StickersModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.sheetHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Ionicons name="happy-outline" size={16} color="#00F2FE" />
-            <Text style={styles.sheetTitle}>
-              {editingClip ? 'Edit Sticker' : 'Stickers & Badges'}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.closeBtn}
-            activeOpacity={0.7}
-            accessibilityLabel="Close panel"
-          >
-            <Ionicons name="close" size={16} color="#A1A1AA" />
-          </TouchableOpacity>
-        </View>
+        <ModalHeader
+          title={editingClip ? 'Edit Sticker' : 'Stickers & Badges'}
+          iconName="happy-outline"
+          onClose={onClose}
+        />
       ) : null}
 
           {/* Search Bar */}
@@ -148,24 +138,13 @@ export default function StickersModal({
             </View>
 
             {/* Category Pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-              {categories.map((cat) => {
-                const isActive = activeCategory === cat.id;
-                return (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[styles.categoryPill, isActive && styles.categoryPillActive]}
-                    onPress={() => {
-                      setActiveCategory(cat.id);
-                    }}
-                  >
-                    <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
-                      {cat.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <View style={{ marginTop: 8 }}>
+              <SegmentedPillTabs
+                tabs={categories}
+                activeTab={activeCategory}
+                onTabChange={setActiveCategory}
+              />
+            </View>
 
           </View>
 

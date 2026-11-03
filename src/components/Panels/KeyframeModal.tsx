@@ -14,6 +14,7 @@ import {
   getInterpolatedTransform,
 } from "../../utils/keyframeEngine";
 import { styles } from "./Keyframe/KeyframeModalStyles";
+import { ModalHeader } from "../Common/ModalHeader";
 import KeyframeNoClipView from "./Keyframe/KeyframeNoClipView";
 import KeyframePropertyControls from "./Keyframe/KeyframePropertyControls";
 import KeyframePointsList from "./Keyframe/KeyframePointsList";
@@ -125,40 +126,13 @@ export default function KeyframeModal({
     <View style={[styles.modalCard, { flex: 1, maxHeight: '100%', borderTopLeftRadius: 0, borderTopRightRadius: 0, borderWidth: 0 } as any]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.header}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={styles.diamondBadge}>
-              <Ionicons name="diamond" size={13} color="#00F2FE" />
-            </View>
-            <Text style={styles.headerTitle}>Keyframe Animation</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {keyframes.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  onClearAllKeyframes?.();
-                }}
-                style={[styles.closeBtn, { width: 'auto', paddingHorizontal: 8, height: 24, backgroundColor: 'rgba(239, 68, 68, 0.12)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-                activeOpacity={0.7}
-                accessibilityLabel="Clear all keyframes"
-              >
-                <Text style={{ color: '#EF4444', fontSize: 10, fontWeight: '700' }}>Clear All</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => {
-                onClose();
-              }}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={14} color="#94A3B8" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Keyframe Animation"
+          iconName="diamond"
+          onClose={onClose}
+          onReset={keyframes.length > 0 && onClearAllKeyframes ? onClearAllKeyframes : undefined}
+          resetText="Clear All"
+        />
       ) : null}
 
           {/* Body Content */}

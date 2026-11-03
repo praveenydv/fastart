@@ -9,6 +9,7 @@ import {
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
+import { ModalHeader } from "../Common";
 
 interface VolumeModalProps {
   visible: boolean;
@@ -30,7 +31,7 @@ interface VolumeModalProps {
   isInline?: boolean;
 }
 
-export default function VolumeModal({
+function VolumeModalComponent({
   visible,
   onClose,
   onApply,
@@ -105,35 +106,13 @@ export default function VolumeModal({
     >
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <View style={styles.titleIconBox}>
-              <Ionicons name="volume-high" size={15} color="#FFFFFF" />
-            </View>
-            <Text style={styles.headerTitle}>Volume & Fade</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset volume to 100%"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
-              <Text style={[styles.resetBtnText, { fontSize: 11 }]}>100%</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.doneBtnCircle}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Volume & Fade"
+          iconName="volume-high"
+          onClose={onClose}
+          onReset={handleReset}
+          resetText="100%"
+        />
       ) : null}
 
       <ScrollView
@@ -343,6 +322,9 @@ export default function VolumeModal({
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
+export const VolumeModal = React.memo(VolumeModalComponent);
+export default VolumeModal;
+
 const styles = StyleSheet.create({
   inlineWrapper: {
     flex: 1,
@@ -444,9 +426,9 @@ const styles = StyleSheet.create({
     borderColor: "#1F2637",
   },
   doneBtnCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",

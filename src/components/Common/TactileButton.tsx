@@ -74,6 +74,7 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
         ref={ref}
         disabled={disabled}
         hitSlop={hitSlop}
+        unstable_pressDelay={0}
         android_ripple={
           disabled
             ? null
@@ -91,6 +92,13 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
             const resolvedStyle =
               typeof style === 'function' ? style(state) : style;
             const flatStyle = { ...((StyleSheet.flatten(resolvedStyle) || {}) as ViewStyle) };
+
+            if (Platform.OS === 'web') {
+              (flatStyle as any).cursor = disabled ? 'default' : 'pointer';
+              (flatStyle as any).touchAction = 'manipulation';
+              (flatStyle as any).userSelect = 'none';
+              (flatStyle as any).WebkitTapHighlightColor = 'transparent';
+            }
 
             // Critical defensive safeguard: remove null/undefined transform to prevent React Native processTransform crash
             if (flatStyle.transform === null || flatStyle.transform === undefined) {

@@ -16,6 +16,7 @@ import { FastArtProject } from '../../types/project';
 import { getLivePlayerCanvasSnapshot } from '../../utils/videoRenderer';
 import { getMediaThumbnail } from '../../utils/mediaThumbnailGenerator';
 import { CustomColorPickerButton } from '../Common/CustomColorPickerButton';
+import { ModalHeader } from '../Common';
 
 interface BackgroundModalProps {
   visible: boolean;
@@ -247,34 +248,13 @@ function BackgroundModalContent({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal to avoid duplicate header on desktop */}
       {!isInline ? (
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="color-palette-outline" size={14} color="#00F2FE" />
-            <Text style={styles.headerTitle}>Background</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, isDefault && { opacity: 0.4 }, { paddingHorizontal: 6, height: 22 }]}
-              disabled={isDefault}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset background to default"
-            >
-              <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 2 }} />
-              <Text style={[styles.resetText, { fontSize: 9 }]}>Default</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={14} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Background"
+          iconName="color-palette-outline"
+          onClose={onClose}
+          onReset={handleReset}
+          resetText="Default"
+        />
       ) : null}
 
       {/* Navigation Tabs: Color, Image, Blur */}
@@ -738,9 +718,9 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',

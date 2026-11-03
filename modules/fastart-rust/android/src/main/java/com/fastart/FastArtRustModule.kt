@@ -449,14 +449,14 @@ class FastArtRustModule : Module() {
             } else {
                 inferAlphaRgba(rgba, targetWidth, targetHeight, threshold, feather)
             }
-            val maskPixels = IntArray(alpha.size) { (alpha[it].toInt().and(0xff) shl 24) }
-            val mask = Bitmap.createBitmap(maskPixels, targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+            val mask = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ALPHA_8)
+            mask.copyPixelsFromBuffer(ByteBuffer.wrap(alpha))
             val directory = File(context.cacheDir, "cutout")
-            if (!directory.exists() && !directory.mkdirs()) throw IllegalStateException("Could not create native cutout cache")
+            if (!directory.exists()) directory.mkdirs()
             val safeClipId = clipId.replace(Regex("[^A-Za-z0-9_-]"), "_")
             val output = File(directory, "${safeClipId}_${frameIdx}.png")
             FileOutputStream(output).use { stream ->
-                if (!mask.compress(Bitmap.CompressFormat.PNG, 100, stream)) throw IllegalStateException("Could not encode native cutout mask")
+                if (!mask.compress(Bitmap.CompressFormat.PNG, 85, stream)) throw IllegalStateException("Could not encode native cutout mask")
             }
             mask.recycle()
             return Uri.fromFile(output).toString()

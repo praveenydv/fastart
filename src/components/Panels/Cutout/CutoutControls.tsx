@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CutoutConfig } from "../../../types/project";
 import { CompactSliderInput } from "../../Common/CompactSliderInput";
 import { CustomColorPickerButton } from "../../Common/CustomColorPickerButton";
+import { SegmentedPillTabs } from "../../Common/SegmentedPillTabs";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
 import { getActiveMediaElement } from "../../../utils/videoRenderer";
 
@@ -51,6 +52,12 @@ export const QUICK_BG_COLORS = BG_COLOR_PRESETS.slice(0, 5);
 export const QUICK_STROKE_COLORS = STROKE_PRESETS.slice(0, 5);
 
 export type CutoutMode = "none" | "chroma" | "auto";
+
+export const CUTOUT_TABS: { id: CutoutMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { id: "none", label: "None", icon: "close-circle-outline" },
+  { id: "auto", label: "Auto Cutout", icon: "sparkles" },
+  { id: "chroma", label: "Chroma Key", icon: "color-filter" },
+];
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -225,58 +232,12 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   return (
     <View style={sc.container}>
       {/* Sleek Segmented Mode Switcher */}
-      <View style={sc.modeSegmentedBar}>
-        <TouchableOpacity
-          style={[sc.modeSegmentItem, cutoutMode === "none" && sc.modeSegmentItemActive]}
-          onPress={() => handleModeChange("none")}
-          activeOpacity={0.8}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: cutoutMode === "none" }}
-        >
-          <Ionicons
-            name="close-circle-outline"
-            size={13}
-            color={cutoutMode === "none" ? "#00F2FE" : "#94A3B8"}
-          />
-          <Text style={[sc.modeSegmentText, cutoutMode === "none" && sc.modeSegmentTextActive]}>
-            None
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[sc.modeSegmentItem, cutoutMode === "auto" && sc.modeSegmentItemActive]}
-          onPress={() => handleModeChange("auto")}
-          activeOpacity={0.8}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: cutoutMode === "auto" }}
-        >
-          <Ionicons
-            name="sparkles"
-            size={13}
-            color={cutoutMode === "auto" ? "#00F2FE" : "#94A3B8"}
-          />
-          <Text style={[sc.modeSegmentText, cutoutMode === "auto" && sc.modeSegmentTextActive]}>
-            Auto Cutout
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[sc.modeSegmentItem, cutoutMode === "chroma" && sc.modeSegmentItemActive]}
-          onPress={() => handleModeChange("chroma")}
-          activeOpacity={0.8}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: cutoutMode === "chroma" }}
-        >
-          <Ionicons
-            name="color-filter"
-            size={13}
-            color={cutoutMode === "chroma" ? "#00F2FE" : "#94A3B8"}
-          />
-          <Text style={[sc.modeSegmentText, cutoutMode === "chroma" && sc.modeSegmentTextActive]}>
-            Chroma Key
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <SegmentedPillTabs
+        tabs={CUTOUT_TABS}
+        activeTab={cutoutMode}
+        onTabChange={handleModeChange}
+        containerStyle={{ marginBottom: 12 }}
+      />
 
       {errorMessage ? (
         <Text accessibilityRole="alert" style={{ color: "#FCA5A5", fontSize: 12, lineHeight: 17 }}>

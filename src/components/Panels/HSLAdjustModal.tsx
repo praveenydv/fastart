@@ -41,7 +41,7 @@ const DEFAULT_CONFIG: HSLChannelConfig = {
   luminance: 0,
 };
 
-export default function HSLAdjustModal({
+function HSLAdjustModalComponent({
   visible,
   onClose,
   onApply,
@@ -370,6 +370,9 @@ export default function HSLAdjustModal({
     </View>
   );
 }
+
+export const HSLAdjustModal = React.memo(HSLAdjustModalComponent);
+export default HSLAdjustModal;
 
 const styles = StyleSheet.create({
   inlineWrapper: {

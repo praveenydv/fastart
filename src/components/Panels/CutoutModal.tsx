@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
+import { ModalHeader } from "../Common";
 import { Ionicons } from "@expo/vector-icons";
 import { CutoutConfig } from "../../types/project";
 import {
@@ -331,33 +332,13 @@ function CutoutModalComponent({
     <View style={s.modalWrapper}>
       <View style={[s.sheetContainer, isInline && s.inlineSheet]}>
         {!isInline && (
-          <View style={s.header}>
-            <View style={s.titleRow}>
-              <Ionicons name="person-remove-outline" size={14} color="#00F2FE" />
-              <Text style={s.sheetTitle}>Cutout</Text>
-            </View>
-
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <TouchableOpacity
-                onPress={handleReset}
-                style={s.resetBtn}
-                activeOpacity={0.7}
-                accessibilityLabel="Reset cutout"
-              >
-                <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 2 }} />
-                <Text style={s.resetText}>Reset</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={onClose}
-                style={s.doneBtn}
-                activeOpacity={0.7}
-                accessibilityLabel="Close cutout"
-              >
-                <Ionicons name="close" size={14} color="#A1A1AA" />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <ModalHeader
+            title="Cutout"
+            iconName="person-remove-outline"
+            onClose={onClose}
+            onReset={handleReset}
+            resetText="Reset"
+          />
         )}
 
         <ScrollView
@@ -444,9 +425,9 @@ const s = StyleSheet.create({
     fontWeight: "500",
   },
   doneBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",

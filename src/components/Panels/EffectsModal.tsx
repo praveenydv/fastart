@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { EFFECT_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { EffectClip } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common';
 
 interface EffectsModalProps {
   visible: boolean;
@@ -271,36 +272,13 @@ export default function EffectsModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.sheetHeader}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="sparkles" size={16} color="#00F2FE" />
-            <Text style={styles.sheetTitle}>
-              {editingClip ? 'Edit Effect' : 'Video Effects'}
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleClear}
-              style={[styles.resetBtn, isNone && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26, flexDirection: 'row', alignItems: 'center' }]}
-              disabled={isNone}
-              activeOpacity={0.7}
-              accessibilityLabel="Clear effect"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]} numberOfLines={1}>None</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title={editingClip ? "Edit Effect" : "Video Effects"}
+          iconName="sparkles"
+          onClose={onClose}
+          onReset={handleClear}
+          resetText="None"
+        />
       ) : null}
 
           {/* Category Tabs & Intensity Row */}
@@ -608,9 +586,9 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   doneBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',

@@ -842,7 +842,7 @@ function Player({
       )}
 
       {/* CapCut Desktop Player Header Bar */}
-      {!fullscreen && (
+      {!fullscreen && !isMobile && (
         <View style={styles.playerHeaderBar}>
           <View style={styles.playerHeaderTitleRow}>
             <Ionicons name="tv-outline" size={13} color={THEME_COLORS.textSecondary} />

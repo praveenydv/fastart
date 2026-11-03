@@ -21,6 +21,7 @@ export interface ClipRenderContext {
   onFrameNeeded?: () => void;
   preloadClip: (clip: VideoClip) => Promise<HTMLVideoElement | HTMLImageElement | null>;
   ensureOffscreen: (cw: number, ch: number) => HTMLCanvasElement | null;
+  isScrubbing?: boolean;
 }
 
 export interface TransitionRenderState {
@@ -411,12 +412,14 @@ export function drawClip(
     const elapsedClipTime = clipLocalTime * effectiveSpeed;
 
     const rawCutout = clip.cutout || clip.transform?.cutout;
+    const isScrubbing = renderCtx.isScrubbing || false;
     const cutout = rawCutout
       ? {
           ...rawCutout,
           clipId: clip.id,
           sourceMediaId: clip.sourceMediaId,
           clipTime: elapsedClipTime,
+          isScrubbing,
         }
       : rawCutout;
 

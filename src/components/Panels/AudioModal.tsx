@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
+import { ModalHeader } from '../Common';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { AudioClip, FastArtProject } from '../../types/project';
@@ -193,21 +194,11 @@ export default function AudioModal({
       <View style={styles.sheetContainer}>
         {/* Unified Live Panel Header - only shown in standalone modal */}
         {!isInline && (
-          <View style={styles.unifiedHeader}>
-            <View style={styles.headerTitleRow}>
-              <Ionicons name="musical-notes" size={16} color="#00F2FE" />
-              <Text style={styles.sheetTitle}>Audio Studio</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtnCircle}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
+          <ModalHeader
+            title="Audio Studio"
+            iconName="musical-notes"
+            onClose={onClose}
+          />
         )}
 
         <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
@@ -349,9 +340,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   closeBtnCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',

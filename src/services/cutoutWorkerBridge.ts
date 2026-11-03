@@ -19,9 +19,9 @@ class CutoutWorkerBridge {
 
   public isReady(): boolean { return this.ready; }
 
-  /** Keep model duplication bounded; avoid multiple model copies on memory-limited devices. */
+  /** Overlap video frame decoding and neural worker inference without GPU/CPU idle gaps. */
   public getConcurrency(): number {
-    return this.ready ? Math.max(1, this.workers.length) : 1;
+    return this.ready ? Math.max(2, this.workers.length * 2) : 1;
   }
 
   private desiredWorkerCount(): number {

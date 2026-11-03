@@ -11,6 +11,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { TRANSITION_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common';
 
 interface TransitionsModalProps {
   visible: boolean;
@@ -188,34 +189,13 @@ export default function TransitionsModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.sheetHeader}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="flash-outline" size={16} color="#00F2FE" />
-            <Text style={styles.sheetTitle}>Transitions</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleClear}
-              style={[styles.resetBtn, isNone && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
-              disabled={isNone}
-              activeOpacity={0.7}
-              accessibilityLabel="Remove transition"
-            >
-              <Ionicons name="close-circle-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]}>None</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Transitions"
+          iconName="flash-outline"
+          onClose={onClose}
+          onReset={handleClear}
+          resetText="None"
+        />
       ) : null}
 
           {/* Transition Duration Slider (Continuous 0.1s - 3.0s + Presets) */}
@@ -445,9 +425,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   doneBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',

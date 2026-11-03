@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FILTER_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { CustomLutConfig } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common';
 
 interface FiltersModalProps {
   visible: boolean;
@@ -51,7 +52,7 @@ const FILTER_COLOR_MAP: Record<string, string> = {
   solar_pop: '#A855F7',
 };
 
-export default function FiltersModal({
+function FiltersModalComponent({
   visible,
   onClose,
   onApply,
@@ -107,37 +108,13 @@ export default function FiltersModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Panel Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.unifiedHeader}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="color-filter-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.sheetTitle}>Filters</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleResetToNormal}
-              style={[
-                styles.resetBtn,
-                isNormal && { opacity: 0.4 },
-              ]}
-              disabled={isNormal}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset to original filter"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.resetText} numberOfLines={1}>Original</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtnCircle}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Filters"
+          iconName="color-filter-outline"
+          onClose={onClose}
+          onReset={handleResetToNormal}
+          resetText="Original"
+        />
       ) : null}
 
       {/* Top Bar: Category Pills */}
@@ -331,6 +308,9 @@ export default function FiltersModal({
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
+export const FiltersModal = React.memo(FiltersModalComponent);
+export default FiltersModal;
+
 const styles = StyleSheet.create({
   inlineWrapper: {
     flex: 1,
@@ -349,9 +329,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#08090E',
   },
   closeBtnCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
@@ -429,10 +409,10 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },

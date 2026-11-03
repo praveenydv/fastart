@@ -9,6 +9,7 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlendMode } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common';
 
 export interface BlendModeModalProps {
   visible: boolean;
@@ -107,7 +108,7 @@ const BLEND_PRESETS: BlendPreset[] = [
   },
 ];
 
-export default function BlendModeModal({
+function BlendModeModalComponent({
   visible,
   onClose,
   onApply,
@@ -147,32 +148,14 @@ export default function BlendModeModal({
       <View style={styles.sheetContainer}>
         {/* Standardized Header - only shown in standalone modal */}
         {!isInline && (
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={20} color="#EF4444" />
-            </TouchableOpacity>
-
-            <View style={styles.headerTitleRow}>
-              <View style={styles.headerIconBadge}>
-                <MaterialCommunityIcons name="layers" size={16} color="#00F2FE" />
-              </View>
-              <Text style={styles.headerTitle}>Blend Mode</Text>
-            </View>
-
-            <View style={styles.headerRightActions}>
-              <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
-                <Text style={styles.resetBtnText}>Reset</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.applyBtn} onPress={handleDone}>
-                <Ionicons name="checkmark" size={18} color="#0B0D13" />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <ModalHeader
+            title="Blend Mode"
+            iconName="layers"
+            onClose={onClose}
+            onReset={handleReset}
+            resetText="Reset"
+            onDone={handleDone}
+          />
         )}
 
         <ScrollView
@@ -286,6 +269,9 @@ export default function BlendModeModal({
     </View>
   );
 }
+
+export const BlendModeModal = React.memo(BlendModeModalComponent);
+export default BlendModeModal;
 
 const styles = StyleSheet.create({
   inlineWrapper: {

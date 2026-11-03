@@ -33,6 +33,7 @@ import {
 } from "../../utils/storage";
 import { THEME_COLORS, DESIGN_CONSTANTS } from "../../constants/designConstants";
 import { CustomColorPickerButton } from "../Common/CustomColorPickerButton";
+import { ModalHeader } from "../Common/ModalHeader";
 
 interface AutoCaptionModalProps {
   visible: boolean;
@@ -793,33 +794,13 @@ function AutoCaptionModalComponent({
     <View style={styles.sheetContainer}>
       {/* Top Header - Rendered only in Standalone Modal Mode (Hidden in Inline Mobile Sheet) */}
       {!isInline && (
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="chatbox-ellipses-outline" size={15} color={THEME_COLORS.accent} />
-            <Text style={styles.headerTitle}>Auto Captions</Text>
-          </View>
-
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <TouchableOpacity
-              onPress={handleResetToDefaults}
-              style={styles.headerActionBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset defaults"
-            >
-              <Ionicons name="refresh-outline" size={11} color={THEME_COLORS.accent} />
-              <Text style={styles.headerActionText}>Reset</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={14} color={THEME_COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Auto Captions"
+          iconName="chatbox-ellipses-outline"
+          onClose={onClose}
+          onReset={handleResetToDefaults}
+          resetText="Reset"
+        />
       )}
 
       {/* Modern Clean Segmented Navigation Bar */}

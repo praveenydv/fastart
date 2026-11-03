@@ -11,6 +11,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedia';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common/ModalHeader';
 
 export interface AnimationPresetItem {
   id: string;
@@ -339,29 +340,13 @@ export default function AnimationModal({
     <View style={[styles.container, isInline && styles.inlineContainer]}>
       {/* Header - only shown in standalone modal */}
       {!isInline && (
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <Ionicons name="play-circle-outline" size={17} color="#00F2FE" />
-            <Text style={styles.titleText}>Clip Animation</Text>
-          </View>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.resetBtn, isNoneActive && styles.resetBtnDisabled]}
-              disabled={isNoneActive}
-              onPress={handleClearAll}
-              activeOpacity={0.7}
-              accessibilityLabel="Remove all animations"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 4 }} />
-              <Text style={styles.resetBtnText}>None</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.7}>
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Clip Animation"
+          iconName="play-circle-outline"
+          onClose={onClose}
+          onReset={!isNoneActive ? handleClearAll : undefined}
+          resetText="None"
+        />
       )}
 
       {/* Tabs: IN | OUT | COMBO */}

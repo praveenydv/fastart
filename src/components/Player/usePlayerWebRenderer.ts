@@ -40,6 +40,8 @@ export function usePlayerWebRenderer({
   canvasHeightRef.current = canvasHeight;
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
+  const lastRenderTimeRef = useRef<number>(0);
+  const scrubSettleTimerRef = useRef<any>(null);
 
   // Initialize VideoRenderer for Web
   useIsomorphicLayoutEffect(() => {
@@ -73,6 +75,9 @@ export function usePlayerWebRenderer({
     }
 
     return () => {
+      if (scrubSettleTimerRef.current) {
+        clearTimeout(scrubSettleTimerRef.current);
+      }
       if (rendererRef.current) {
         rendererRef.current.cleanup();
       }
@@ -166,6 +171,16 @@ export function usePlayerWebRenderer({
       if (isResizing) {
         return;
       }
+
+      const now = performance.now();
+      const timeSinceLastRender = now - lastRenderTimeRef.current;
+      lastRenderTimeRef.current = now;
+
+      // When frames arrive in rapid succession while paused (< 80ms), user is actively scrubbing the timeline!
+      // Set isScrubbing = true so background/cutout renders at lightweight preview resolution (60fps fluid).
+      const isScrubbingActive = timeSinceLastRender < 80;
+      rendererRef.current.isScrubbing = isScrubbingActive;
+
       rendererRef.current.renderFrame(
         project,
         currentTime,
@@ -173,6 +188,25 @@ export function usePlayerWebRenderer({
         boxWidth,
         canvasHeight,
       );
+
+      // Settle timer: Once user releases or stops scrubbing (100ms idle), automatically render in full pristine 1080p quality!
+      if (scrubSettleTimerRef.current) {
+        clearTimeout(scrubSettleTimerRef.current);
+      }
+      if (isScrubbingActive) {
+        scrubSettleTimerRef.current = setTimeout(() => {
+          if (rendererRef.current && !isPlayingRef.current) {
+            rendererRef.current.isScrubbing = false;
+            rendererRef.current.renderFrame(
+              projectRef.current,
+              currentTimeRef.current,
+              false,
+              boxWidthRef.current,
+              canvasHeightRef.current,
+            );
+          }
+        }, 100);
+      }
     }
   }, [currentTime, project, isPlaying, boxWidth, canvasHeight, isResizing]);
 

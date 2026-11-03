@@ -233,8 +233,8 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
       {/* Track Lanes */}
       {reversedTrackIndices.map((trackIdx) => {
         const rowClips = trackRows[trackIdx] || [];
-        const visibleMinX = Math.max(0, visibleStartX - windowWidth);
-        const visibleMaxX = visibleStartX + windowWidth * 3;
+        const visibleMinX = Math.max(0, visibleStartX - windowWidth * 1.5);
+        const visibleMaxX = visibleStartX + windowWidth * 3.5;
         const visibleRowClips = suspendHeavyContent
           ? []
           : rowClips.filter((clip) => {

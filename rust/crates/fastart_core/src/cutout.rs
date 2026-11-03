@@ -839,6 +839,12 @@ pub fn unpack_alpha_rle(rle: &[u8], out_alpha: &mut [u8]) -> usize {
     out_idx
 }
 
+/// Unpacks RLE-encoded alpha bytes directly into a 32-bit RGBA mask buffer in a single pass.
+/// Each pixel gets R=G=B=A=alpha, eliminating intermediate buffers and removing JS byte loops completely.
+pub fn unpack_alpha_rle_rgba(rle: &[u8], out_rgba: &mut [u8]) -> usize {
+    fastart_cutout_ops::unpack_alpha_rle_rgba(rle, out_rgba)
+}
+
 /// Applies MODNet alpha thresholds and compresses the result without a JS pixel loop.
 pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u8> {
     fastart_cutout_ops::modnet_alpha_to_rle(alpha, threshold, feather)

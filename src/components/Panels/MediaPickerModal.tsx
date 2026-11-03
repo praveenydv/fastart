@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
+import { ModalHeader } from '../Common';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -214,30 +215,12 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
 
       {/* Standardized Header */}
       {!isInline && (
-        <View style={styles.sheetHeader}>
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.closeBtn}
-            activeOpacity={0.7}
-            accessibilityLabel="Cancel"
-          >
-            <Ionicons name="close" size={15} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Ionicons name="images-outline" size={15} color="#00F2FE" />
-            <Text style={styles.sheetTitle}>Import Media</Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: '#00F2FE', borderColor: '#00F2FE' }]}
-            activeOpacity={0.7}
-            accessibilityLabel="Done"
-          >
-            <Ionicons name="checkmark" size={15} color="#08090E" />
-          </TouchableOpacity>
-        </View>
+        <ModalHeader
+          title="Import Media"
+          iconName="images-outline"
+          onClose={onClose}
+          onDone={onClose}
+        />
       )}
 
       <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
@@ -440,9 +423,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   closeBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',

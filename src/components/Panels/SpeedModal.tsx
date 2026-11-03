@@ -7,12 +7,20 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { SpeedCurvePoint } from '../../types/project';
+import { ModalHeader } from '../Common/ModalHeader';
+import { SegmentedPillTabs, TabItem } from '../Common/SegmentedPillTabs';
 import { styles } from './Speed/SpeedModalStyles';
 import { SpeedNormalTab } from './Speed/SpeedNormalTab';
 import { SpeedPresetCurvesTab } from './Speed/SpeedPresetCurvesTab';
 import { SpeedCustomCurveTab } from './Speed/SpeedCustomCurveTab';
 import { SpeedSlowMoSection } from './Speed/SpeedSlowMoSection';
 import { SpeedAudioView } from './Speed/SpeedAudioView';
+
+const SPEED_TABS: TabItem<'normal' | 'curve' | 'custom'>[] = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'curve', label: 'Curves' },
+  { id: 'custom', label: 'Custom' },
+];
 
 interface SpeedModalProps {
   visible: boolean;
@@ -33,7 +41,7 @@ interface SpeedModalProps {
   projectAudioTracks?: any[];
 }
 
-export default function SpeedModal({
+function SpeedModalComponent({
   visible,
   onClose,
   onApply,
@@ -117,91 +125,36 @@ export default function SpeedModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.sheetHeader}>
-          <View style={styles.titleRow}>
-            <Ionicons
-              name={isAudio ? "musical-notes-outline" : "speedometer-outline"}
-              size={16}
-              color="#00F2FE"
-            />
-            <Text style={styles.sheetTitle}>
-              {isAudio ? "Audio Speed" : "Speed & Curve"}
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleResetSpeed}
-              style={[styles.resetBtn, isDefaultSpeed && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
-              disabled={isDefaultSpeed}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset speed to 1.0x"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={[styles.resetText, { fontSize: 11 }]}>1.0x</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title={isAudio ? "Audio Speed" : "Speed & Curve"}
+          iconName={isAudio ? "musical-notes-outline" : "speedometer-outline"}
+          onClose={onClose}
+          onReset={!isDefaultSpeed ? handleResetSpeed : undefined}
+          resetText="1.0x"
+        />
       ) : null}
 
-          {/* Sub-Tabs: Normal / Curves / Custom (Only for Video clips) */}
-          {!isAudio && (
-            <View style={[styles.tabsRow, isInline && { marginTop: 8 }]}>
-              {isInline && !isDefaultSpeed && (
-                <TouchableOpacity
-                  style={[styles.tabBtn, { borderColor: '#00F2FE', backgroundColor: 'rgba(0, 242, 254, 0.12)', maxWidth: 48 }]}
-                  onPress={handleResetSpeed}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.tabText, { color: '#00F2FE', fontWeight: '700' }]}>1.0x</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.tabBtn, activeTab === 'normal' && styles.tabBtnActive]}
-                onPress={() => {
-                  setActiveTab('normal');
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.tabText, activeTab === 'normal' && styles.tabTextActive]}>
-                  Normal
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.tabBtn, activeTab === 'curve' && styles.tabBtnActive]}
-                onPress={() => {
-                  setActiveTab('curve');
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.tabText, activeTab === 'curve' && styles.tabTextActive]}>
-                  Curves
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.tabBtn, activeTab === 'custom' && styles.tabBtnActive]}
-                onPress={() => {
-                  setActiveTab('custom');
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.tabText, activeTab === 'custom' && styles.tabTextActive]}>
-                  Custom
-                </Text>
-              </TouchableOpacity>
-            </View>
+      {/* Sub-Tabs: Normal / Curves / Custom (Only for Video clips) */}
+      {!isAudio && (
+        <View style={{ paddingHorizontal: 12, marginTop: isInline ? 6 : 2, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {isInline && !isDefaultSpeed && (
+            <TouchableOpacity
+              style={[styles.tabBtn, { borderColor: '#00F2FE', backgroundColor: 'rgba(0, 242, 254, 0.12)', maxWidth: 48 }]}
+              onPress={handleResetSpeed}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, { color: '#00F2FE', fontWeight: '700' }]}>1.0x</Text>
+            </TouchableOpacity>
           )}
+          <View style={{ flex: 1 }}>
+            <SegmentedPillTabs<'normal' | 'curve' | 'custom'>
+              tabs={SPEED_TABS}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
+          </View>
+        </View>
+      )}
 
           <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
             {isAudio ? (
@@ -255,3 +208,6 @@ export default function SpeedModal({
   if (!visible) return null;
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
+
+export const SpeedModal = React.memo(SpeedModalComponent);
+export default SpeedModal;

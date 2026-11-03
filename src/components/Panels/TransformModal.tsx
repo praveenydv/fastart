@@ -10,6 +10,7 @@ import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { ClipTransform, CustomCrop } from "../../types/project";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
+import { ModalHeader } from "../Common";
 
 interface TransformModalProps {
   visible: boolean;
@@ -112,7 +113,7 @@ const ANGLE_3D_PRESETS = [
   },
 ];
 
-export default function TransformModal({
+function TransformModalComponent({
   visible,
   onClose,
   onApply,
@@ -471,58 +472,19 @@ export default function TransformModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <MaterialCommunityIcons
-              name="vector-arrange-below"
-              size={18}
-              color="#00F2FE"
-            />
-            <Text style={styles.headerTitle}>Transform</Text>
-          </View>
-
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => {
-                if (activeTab === "crop") handleResetCrop();
-                else if (activeTab === "rotate") handleResetRotation();
-                else if (activeTab === "flip") handleResetFlip();
-                else if (activeTab === "stretch") handleResetStretch();
-                else handleResetAngle();
-              }}
-              style={[
-                styles.resetBtn,
-                {
-                  paddingHorizontal: 10,
-                  height: 26,
-                  flexDirection: "row",
-                  alignItems: "center",
-                },
-              ]}
-              activeOpacity={0.7}
-              accessibilityLabel={`Reset ${activeTab}`}
-            >
-              <Ionicons
-                name="refresh-outline"
-                size={12}
-                color="#00F2FE"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={[styles.resetBtnText, { fontSize: 11 }]}>
-                Reset {activeTab.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={14} color="#94A3B8" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Transform"
+          iconName="move"
+          onClose={onClose}
+          onReset={() => {
+            if (activeTab === "crop") handleResetCrop();
+            else if (activeTab === "rotate") handleResetRotation();
+            else if (activeTab === "flip") handleResetFlip();
+            else if (activeTab === "stretch") handleResetStretch();
+            else handleResetAngle();
+          }}
+          resetText={`Reset ${activeTab.toUpperCase()}`}
+        />
       ) : null}
 
       {/* 5 Main Tabs: Crop, Rotate, Flip, Stretch, 3D Angle */}
@@ -1556,6 +1518,9 @@ export default function TransformModal({
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
+export const TransformModal = React.memo(TransformModalComponent);
+export default TransformModal;
+
 const styles = StyleSheet.create({
   inlineWrapper: {
     flex: 1,
@@ -1649,17 +1614,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
   closeBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",

@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { ModalHeader } from '../Common/ModalHeader';
 import { VoiceEffectId } from '../../types/project';
 
 export interface VoiceEffectsModalProps {
@@ -124,32 +125,14 @@ export default function VoiceEffectsModal({
       <View style={styles.sheetContainer}>
         {/* Standardized Header */}
         {!isInline && (
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onClose}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="close" size={14} color="#EF4444" />
-            </TouchableOpacity>
-
-            <View style={styles.headerTitleRow}>
-              <View style={styles.headerIconBadge}>
-                <MaterialCommunityIcons name="account-voice" size={13} color="#00F2FE" />
-              </View>
-              <Text style={styles.headerTitle}>Voice Changer & Audio FX</Text>
-            </View>
-
-            <View style={styles.headerRightActions}>
-              <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
-                <Text style={styles.resetBtnText}>Reset</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.applyBtn} onPress={handleDone}>
-                <Ionicons name="checkmark" size={14} color="#0B0D13" />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <ModalHeader
+            title="Voice Changer & Audio FX"
+            iconName="mic-outline"
+            onClose={onClose}
+            onReset={handleReset}
+            resetText="Reset"
+            onDone={handleDone}
+          />
         )}
 
         <ScrollView

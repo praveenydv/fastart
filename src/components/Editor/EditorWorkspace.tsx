@@ -36,6 +36,7 @@ import { pauseActiveVideoRenderer } from "../../utils/videoRenderer";
 import { pauseAllAudio } from "../Player/usePlayerAudioSync";
 import { getPlaybackTime } from "../../utils/playbackTimeStore";
 import { ErrorBoundary } from "../Common/ErrorBoundary";
+import { ModalHeader } from "../Common";
 import KeyboardShortcutsModal from "../Panels/KeyboardShortcutsModal";
 import UndoHistoryModal from "../Panels/UndoHistoryModal";
 
@@ -187,6 +188,8 @@ interface EditorWorkspaceProps {
   openModal: (modal: string) => void;
   closeModal?: () => void;
   onCloseModal?: () => void;
+  onApplyModal?: () => void;
+  onCancelModal?: () => void;
   updateProjectWithHistory: (updates: any) => void;
   handleUpdateClipTransform: (
     clipId: string,
@@ -295,6 +298,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   openModal,
   closeModal,
   onCloseModal,
+  onApplyModal,
+  onCancelModal,
   updateProjectWithHistory,
   handleUpdateClipTransform,
   handleUpdateClipCrop,
@@ -1397,7 +1402,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       handleResetResizeHeight={handleResetResizeHeight}
       project={project}
       currentTime={getPlaybackTime()}
-      suspendHeavyContent={isMobileInlineActive}
+      suspendHeavyContent={isDraggingBottom || isTimelineResizing}
       totalDuration={totalDuration}
       isPlaying={isPlaying}
       onSeek={setCurrentTime}
@@ -2249,31 +2254,13 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
           {isMobileInlineActive && (
             <View style={styles.modalContentRoot}>
-              <View style={styles.modalHeaderBar}>
-                <TouchableOpacity
-                  style={styles.modalHeaderBtn}
-                  onPress={handleCloseMenu}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Close tool"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-
-                <Text style={styles.modalHeaderTitle} numberOfLines={1}>
-                  {getConfigPanelTitle()}
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.modalHeaderDoneBtn}
-                  onPress={handleCloseMenu}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Done"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="checkmark" size={15} color="#00E5FF" />
-                </TouchableOpacity>
-              </View>
+              <ModalHeader
+                title={getConfigPanelTitle()}
+                onClose={onCancelModal || handleCloseMenu}
+                closeAriaLabel="Close tool"
+                onDone={onApplyModal || handleCloseMenu}
+                doneAriaLabel="Apply"
+              />
 
               <View style={styles.modalBodyWrap}>
                 {renderModals ? renderModals(true) : null}
@@ -2683,7 +2670,7 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   bottomDragHandle: {
-    height: 15,
+    height: 20,
     width: "100%",
     backgroundColor: "#0D111A",
     borderBottomWidth: 1,
@@ -2700,14 +2687,14 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(0, 242, 254, 0.4)",
   },
   bottomDragPill: {
-    width: 32,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: "#4B5563",
+    width: 36,
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: "#64748B",
   },
   bottomDragPillActive: {
     backgroundColor: "#00F2FE",
-    width: 40,
+    width: 44,
   },
   modalContentRoot: {
     flex: 1,
@@ -2716,38 +2703,41 @@ const styles = StyleSheet.create({
     overflow: "hidden" as any,
   },
   modalHeaderBar: {
-    height: 30,
+    height: 48,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#1F2637",
     backgroundColor: "#0D111A",
   },
   modalHeaderBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   modalHeaderTitle: {
     color: "#FFFFFF",
-    fontSize: 11.5,
-    fontWeight: "500",
-    letterSpacing: 0.1,
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   modalHeaderDoneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0, 229, 255, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(0, 229, 255, 0.25)",
+    backgroundColor: "#00F2FE",
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 4,
   },
   modalBodyWrap: {
     flex: 1,

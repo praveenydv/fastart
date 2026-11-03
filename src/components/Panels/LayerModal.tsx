@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import { ModalHeader } from "../Common/ModalHeader";
 import { FastArtProject, VideoClip, TextClip, CaptionClip, StickerClip } from "../../types/project";
 import { triggerHaptic } from "../../utils/haptics";
 import { MAX_TRACKS } from "../Timeline/timelineTypes";
@@ -200,15 +201,11 @@ function LayerModalContent({
     <View style={s.container}>
       {/* Header */}
       {!isInline && (
-        <View style={s.header}>
-          <View style={s.headerTitleRow}>
-            <Ionicons name="layers-outline" size={18} color="#00F2FE" />
-            <Text style={s.headerTitle}>Layer Order</Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-            <Ionicons name="close" size={20} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
+        <ModalHeader
+          title="Layer Order"
+          iconName="layers-outline"
+          onClose={onClose}
+        />
       )}
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>

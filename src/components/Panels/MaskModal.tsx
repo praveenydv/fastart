@@ -1,15 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Platform,
-} from 'react-native';
-import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
-import { Ionicons } from '@expo/vector-icons';
-import { MaskConfig, MaskShape } from '../../types/project';
-import { CompactSliderInput } from '../Common/CompactSliderInput';
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
+import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
+import { Ionicons } from "@expo/vector-icons";
+import { MaskConfig, MaskShape } from "../../types/project";
+import { CompactSliderInput } from "../Common/CompactSliderInput";
+import { ModalHeader } from "../Common";
 
 interface MaskModalProps {
   visible: boolean;
@@ -29,17 +24,47 @@ interface MaskModalProps {
   onJumpNextKeyframe?: () => void;
 }
 
-const MASK_SHAPES: { id: MaskShape; label: string; icon: string; desc: string }[] = [
-  { id: 'none', label: 'None', icon: 'close-circle-outline', desc: 'Full Video' },
-  { id: 'circle', label: 'Radial Circle', icon: 'radio-button-on-outline', desc: 'Spotlight' },
-  { id: 'rectangle', label: 'Rounded Box', icon: 'square-outline', desc: 'Pill Box' },
-  { id: 'linear', label: 'Split Line', icon: 'remove-outline', desc: 'Half Screen' },
-  { id: 'mirror', label: 'Mirror Band', icon: 'pause-outline', desc: 'Center Band' },
-  { id: 'heart', label: 'Love Heart', icon: 'heart-outline', desc: 'Vignette' },
-  { id: 'star', label: 'Star', icon: 'star-outline', desc: 'Badge' },
+const MASK_SHAPES: {
+  id: MaskShape;
+  label: string;
+  icon: string;
+  desc: string;
+}[] = [
+  {
+    id: "none",
+    label: "None",
+    icon: "close-circle-outline",
+    desc: "Full Video",
+  },
+  {
+    id: "circle",
+    label: "Radial Circle",
+    icon: "radio-button-on-outline",
+    desc: "Spotlight",
+  },
+  {
+    id: "rectangle",
+    label: "Rounded Box",
+    icon: "square-outline",
+    desc: "Pill Box",
+  },
+  {
+    id: "linear",
+    label: "Split Line",
+    icon: "remove-outline",
+    desc: "Half Screen",
+  },
+  {
+    id: "mirror",
+    label: "Mirror Band",
+    icon: "pause-outline",
+    desc: "Center Band",
+  },
+  { id: "heart", label: "Love Heart", icon: "heart-outline", desc: "Vignette" },
+  { id: "star", label: "Star", icon: "star-outline", desc: "Badge" },
 ];
 
-export default function MaskModal({
+function MaskModalComponent({
   visible,
   onClose,
   onApply,
@@ -56,22 +81,36 @@ export default function MaskModal({
   onJumpPrevKeyframe,
   onJumpNextKeyframe,
 }: MaskModalProps) {
-  const [maskShape, setMaskShape] = useState<MaskShape>(currentMask?.shape || 'none');
+  const [maskShape, setMaskShape] = useState<MaskShape>(
+    currentMask?.shape || "none",
+  );
   const [maskSize, setMaskSize] = useState<number>(currentMask?.size || 60);
-  const [maskWidth, setMaskWidth] = useState<number>(currentMask?.width || currentMask?.size || 60);
-  const [maskHeight, setMaskHeight] = useState<number>(currentMask?.height || currentMask?.size || 60);
+  const [maskWidth, setMaskWidth] = useState<number>(
+    currentMask?.width || currentMask?.size || 60,
+  );
+  const [maskHeight, setMaskHeight] = useState<number>(
+    currentMask?.height || currentMask?.size || 60,
+  );
   const [isAspectLocked, setIsAspectLocked] = useState<boolean>(false);
-  const [maskFeather, setMaskFeather] = useState<number>(currentMask?.feather || 0);
-  const [maskRoundness, setMaskRoundness] = useState<number>(currentMask?.roundness || 16);
-  const [maskInverted, setMaskInverted] = useState<boolean>(currentMask?.inverted || false);
+  const [maskFeather, setMaskFeather] = useState<number>(
+    currentMask?.feather || 0,
+  );
+  const [maskRoundness, setMaskRoundness] = useState<number>(
+    currentMask?.roundness || 16,
+  );
+  const [maskInverted, setMaskInverted] = useState<boolean>(
+    currentMask?.inverted || false,
+  );
   const [maskX, setMaskX] = useState<number>(currentMask?.x || 0);
   const [maskY, setMaskY] = useState<number>(currentMask?.y || 0);
-  const [maskRotation, setMaskRotation] = useState<number>(currentMask?.rotation || 0);
+  const [maskRotation, setMaskRotation] = useState<number>(
+    currentMask?.rotation || 0,
+  );
   const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
 
   useEffect(() => {
     if (visible) {
-      setMaskShape(currentMask?.shape || 'none');
+      setMaskShape(currentMask?.shape || "none");
       const s = currentMask?.size || 60;
       setMaskSize(s);
       setMaskWidth(currentMask?.width !== undefined ? currentMask.width : s);
@@ -97,16 +136,23 @@ export default function MaskModal({
     y?: number;
     rotation?: number;
   }) => {
-    const nextShape = overrides?.shape !== undefined ? overrides.shape : maskShape;
+    const nextShape =
+      overrides?.shape !== undefined ? overrides.shape : maskShape;
     const nextSize = overrides?.size !== undefined ? overrides.size : maskSize;
-    const nextWidth = overrides?.width !== undefined ? overrides.width : maskWidth;
-    const nextHeight = overrides?.height !== undefined ? overrides.height : maskHeight;
-    const nextFeather = overrides?.feather !== undefined ? overrides.feather : maskFeather;
-    const nextRoundness = overrides?.roundness !== undefined ? overrides.roundness : maskRoundness;
-    const nextInverted = overrides?.inverted !== undefined ? overrides.inverted : maskInverted;
+    const nextWidth =
+      overrides?.width !== undefined ? overrides.width : maskWidth;
+    const nextHeight =
+      overrides?.height !== undefined ? overrides.height : maskHeight;
+    const nextFeather =
+      overrides?.feather !== undefined ? overrides.feather : maskFeather;
+    const nextRoundness =
+      overrides?.roundness !== undefined ? overrides.roundness : maskRoundness;
+    const nextInverted =
+      overrides?.inverted !== undefined ? overrides.inverted : maskInverted;
     const nextX = overrides?.x !== undefined ? overrides.x : maskX;
     const nextY = overrides?.y !== undefined ? overrides.y : maskY;
-    const nextRotation = overrides?.rotation !== undefined ? overrides.rotation : maskRotation;
+    const nextRotation =
+      overrides?.rotation !== undefined ? overrides.rotation : maskRotation;
 
     const newMask: MaskConfig = {
       shape: nextShape,
@@ -125,7 +171,7 @@ export default function MaskModal({
   };
 
   const handleReset = () => {
-    setMaskShape('none');
+    setMaskShape("none");
     setMaskSize(60);
     setMaskWidth(60);
     setMaskHeight(60);
@@ -138,7 +184,7 @@ export default function MaskModal({
     setMaskRotation(0);
 
     triggerUpdate({
-      shape: 'none',
+      shape: "none",
       size: 60,
       width: 60,
       height: 60,
@@ -154,11 +200,15 @@ export default function MaskModal({
   const formatSec = (s: number) => {
     const min = Math.floor(s / 60);
     const sec = s % 60;
-    return `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec.toFixed(2)}`;
+    return `${min < 10 ? "0" : ""}${min}:${sec < 10 ? "0" : ""}${sec.toFixed(2)}`;
   };
-  const keyframeCount = (selectedClip?.maskKeyframes || selectedClip?.mask?.keyframes || []).length;
+  const keyframeCount = (
+    selectedClip?.maskKeyframes ||
+    selectedClip?.mask?.keyframes ||
+    []
+  ).length;
 
-  const isModified = maskShape !== 'none';
+  const isModified = maskShape !== "none";
 
   const handleCancel = () => {
     onClose();
@@ -177,496 +227,544 @@ export default function MaskModal({
       style={[
         styles.sheetContainer,
         styles.inlineSheetContainer,
-        Platform.OS === 'web' ? ({ pointerEvents: 'auto' } as any) : undefined,
+        Platform.OS === "web" ? ({ pointerEvents: "auto" } as any) : undefined,
       ]}
       pointerEvents="auto"
     >
       {/* Unified Live Panel Header - only shown in standalone modal */}
       {!isInline && (
-        <View style={styles.unifiedHeader}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="shapes-outline" size={16} color="#00F2FE" />
-            <Text style={styles.sheetTitle}>Mask</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, !isModified && { opacity: 0.4 }, { paddingHorizontal: 10, height: 26 }]}
-              disabled={!isModified}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset mask"
-            >
-              <Ionicons name="refresh-outline" size={12} color="#00F2FE" style={{ marginRight: 3 }} />
-              <Text style={styles.resetText}>Reset</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtnCircle}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Mask"
+          iconName="shapes-outline"
+          onClose={onClose}
+          onReset={handleReset}
+          resetText="Reset"
+        />
       )}
 
-          <ScrollView
-            style={styles.contentScroll}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={!isSliderDragging}
-            nestedScrollEnabled={true}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.groupContainer}>
-              {/* Mask Shapes Grid */}
-              <View style={styles.maskGrid}>
-                {MASK_SHAPES.map((m) => {
-                  const isSelected = maskShape === m.id;
+      <ScrollView
+        style={styles.contentScroll}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!isSliderDragging}
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.groupContainer}>
+          {/* Mask Shapes Grid */}
+          <View style={styles.maskGrid}>
+            {MASK_SHAPES.map((m) => {
+              const isSelected = maskShape === m.id;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.maskCard, isSelected && styles.maskCardActive]}
+                  onPress={() => {
+                    setMaskShape(m.id);
+                    triggerUpdate({ shape: m.id });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={m.icon as any}
+                    size={16}
+                    color={isSelected ? "#00F2FE" : "#8E95A5"}
+                  />
+                  <Text
+                    style={[
+                      styles.maskCardTitle,
+                      isSelected && styles.maskCardTitleActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {maskShape !== "none" && (
+            <View style={styles.keyframeBar}>
+              <View style={styles.kfLeftGroup}>
+                <View style={styles.kfTimePill}>
+                  <Ionicons name="time-outline" size={11} color="#00F2FE" />
+                  <Text style={styles.kfTimeText}>
+                    {formatSec(currentTime)}
+                    {selectedClip?.startTime !== undefined && (
+                      <Text style={styles.kfOffsetTime}>
+                        {" "}
+                        +
+                        {Math.max(
+                          0,
+                          currentTime - selectedClip.startTime,
+                        ).toFixed(2)}
+                        s
+                      </Text>
+                    )}
+                  </Text>
+                </View>
+                {keyframeCount > 0 && (
+                  <View style={styles.kfCountBadge}>
+                    <Ionicons name="diamond" size={9} color="#A855F7" />
+                    <Text style={styles.kfCountText}>
+                      {keyframeCount} mask kf
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.kfActionGroup}>
+                {/* Prev Keyframe Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.kfStepBtn,
+                    !hasPrevKeyframe && styles.kfStepBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    onJumpPrevKeyframe?.();
+                  }}
+                  disabled={!hasPrevKeyframe}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Jump to previous mask keyframe"
+                >
+                  <Ionicons
+                    name="caret-back"
+                    size={13}
+                    color={hasPrevKeyframe ? "#00F2FE" : "#475569"}
+                  />
+                </TouchableOpacity>
+
+                {/* Stamp / Remove Keyframe Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.kfDiamondBtn,
+                    hasKeyframeAtCurrentTime && styles.kfDiamondBtnActive,
+                  ]}
+                  onPress={() => {
+                    onAddKeyframe?.();
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Stamp or remove keyframe"
+                >
+                  <Ionicons
+                    name={
+                      hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"
+                    }
+                    size={13}
+                    color={hasKeyframeAtCurrentTime ? "#00F2FE" : "#94A3B8"}
+                  />
+                  <Text
+                    style={[
+                      styles.kfDiamondText,
+                      hasKeyframeAtCurrentTime && styles.kfDiamondTextActive,
+                    ]}
+                  >
+                    {hasKeyframeAtCurrentTime ? "Remove" : "Keyframe"}
+                  </Text>
+                  <View
+                    style={[
+                      styles.kfDiamondBadge,
+                      hasKeyframeAtCurrentTime
+                        ? styles.kfDiamondBadgeRemove
+                        : styles.kfDiamondBadgeAdd,
+                    ]}
+                  >
+                    <Ionicons
+                      name={hasKeyframeAtCurrentTime ? "remove" : "add"}
+                      size={7}
+                      color="#FFFFFF"
+                    />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Next Keyframe Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.kfStepBtn,
+                    !hasNextKeyframe && styles.kfStepBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    onJumpNextKeyframe?.();
+                  }}
+                  disabled={!hasNextKeyframe}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Jump to next mask keyframe"
+                >
+                  <Ionicons
+                    name="caret-forward"
+                    size={13}
+                    color={hasNextKeyframe ? "#00F2FE" : "#475569"}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {maskShape !== "none" && (
+            <View style={styles.controlsCard}>
+              {/* Dimensions & Deformation Header */}
+              <View style={styles.dimHeaderRow}>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <Ionicons name="resize-outline" size={13} color="#00F2FE" />
+                  <Text style={styles.dimLabel}>Dimensions & Deformation</Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.lockBtn,
+                    isAspectLocked && styles.lockBtnActive,
+                  ]}
+                  onPress={() => {
+                    setIsAspectLocked(!isAspectLocked);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={isAspectLocked ? "lock-closed" : "lock-open-outline"}
+                    size={11}
+                    color={isAspectLocked ? "#00F2FE" : "#8E95A5"}
+                  />
+                  <Text
+                    style={[
+                      styles.lockBtnText,
+                      isAspectLocked && styles.lockBtnTextActive,
+                    ]}
+                  >
+                    {isAspectLocked ? "Linked" : "Free Deform"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Deformation Aspect Ratio Quick Presets */}
+              <View style={styles.ratioPillsRow}>
+                {[
+                  { label: "1:1 Square", w: 60, h: 60 },
+                  { label: "16:9 Wide", w: 80, h: 45 },
+                  { label: "9:16 Tall", w: 45, h: 80 },
+                  { label: "2:1 Pill", w: 84, h: 42 },
+                  { label: "4:3 Standard", w: 72, h: 54 },
+                ].map((preset) => {
+                  const isActive =
+                    maskWidth === preset.w && maskHeight === preset.h;
                   return (
                     <TouchableOpacity
-                      key={m.id}
-                      style={[styles.maskCard, isSelected && styles.maskCardActive]}
+                      key={preset.label}
+                      style={[
+                        styles.ratioPill,
+                        isActive && styles.ratioPillActive,
+                      ]}
                       onPress={() => {
-                        setMaskShape(m.id);
-                        triggerUpdate({ shape: m.id });
+                        setMaskWidth(preset.w);
+                        setMaskHeight(preset.h);
+                        setMaskSize(Math.max(preset.w, preset.h));
+                        triggerUpdate({
+                          width: preset.w,
+                          height: preset.h,
+                          size: Math.max(preset.w, preset.h),
+                        });
                       }}
                       activeOpacity={0.7}
                     >
-                      <Ionicons
-                        name={m.icon as any}
-                        size={16}
-                        color={isSelected ? '#00F2FE' : '#8E95A5'}
-                      />
                       <Text
                         style={[
-                          styles.maskCardTitle,
-                          isSelected && styles.maskCardTitleActive,
+                          styles.ratioPillText,
+                          isActive && styles.ratioPillTextActive,
                         ]}
-                        numberOfLines={1}
                       >
-                        {m.label}
+                        {preset.label}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              {maskShape !== 'none' && (
-                <View style={styles.keyframeBar}>
-                  <View style={styles.kfLeftGroup}>
-                    <View style={styles.kfTimePill}>
-                      <Ionicons name="time-outline" size={11} color="#00F2FE" />
-                      <Text style={styles.kfTimeText}>
-                        {formatSec(currentTime)}
-                        {selectedClip?.startTime !== undefined && (
-                          <Text style={styles.kfOffsetTime}>
-                            {" "}+{Math.max(0, currentTime - selectedClip.startTime).toFixed(2)}s
-                          </Text>
-                        )}
-                      </Text>
-                    </View>
-                    {keyframeCount > 0 && (
-                      <View style={styles.kfCountBadge}>
-                        <Ionicons name="diamond" size={9} color="#A855F7" />
-                        <Text style={styles.kfCountText}>{keyframeCount} mask kf</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.kfActionGroup}>
-                    {/* Prev Keyframe Button */}
-                    <TouchableOpacity
-                      style={[styles.kfStepBtn, !hasPrevKeyframe && styles.kfStepBtnDisabled]}
-                      onPress={() => {
-                        onJumpPrevKeyframe?.();
-                      }}
-                      disabled={!hasPrevKeyframe}
-                      activeOpacity={0.7}
-                      accessibilityLabel="Jump to previous mask keyframe"
-                    >
-                      <Ionicons
-                        name="caret-back"
-                        size={13}
-                        color={hasPrevKeyframe ? "#00F2FE" : "#475569"}
-                      />
-                    </TouchableOpacity>
-
-                    {/* Stamp / Remove Keyframe Button */}
-                    <TouchableOpacity
-                      style={[
-                        styles.kfDiamondBtn,
-                        hasKeyframeAtCurrentTime && styles.kfDiamondBtnActive,
-                      ]}
-                      onPress={() => {
-                        onAddKeyframe?.();
-                      }}
-                      activeOpacity={0.7}
-                      accessibilityLabel="Stamp or remove keyframe"
-                    >
-                      <Ionicons
-                        name={hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"}
-                        size={13}
-                        color={hasKeyframeAtCurrentTime ? "#00F2FE" : "#94A3B8"}
-                      />
-                      <Text
-                        style={[
-                          styles.kfDiamondText,
-                          hasKeyframeAtCurrentTime && styles.kfDiamondTextActive,
-                        ]}
-                      >
-                        {hasKeyframeAtCurrentTime ? "Remove" : "Keyframe"}
-                      </Text>
-                      <View
-                        style={[
-                          styles.kfDiamondBadge,
-                          hasKeyframeAtCurrentTime
-                            ? styles.kfDiamondBadgeRemove
-                            : styles.kfDiamondBadgeAdd,
-                        ]}
-                      >
-                        <Ionicons
-                          name={hasKeyframeAtCurrentTime ? "remove" : "add"}
-                          size={7}
-                          color="#FFFFFF"
-                        />
-                      </View>
-                    </TouchableOpacity>
-
-                    {/* Next Keyframe Button */}
-                    <TouchableOpacity
-                      style={[styles.kfStepBtn, !hasNextKeyframe && styles.kfStepBtnDisabled]}
-                      onPress={() => {
-                        onJumpNextKeyframe?.();
-                      }}
-                      disabled={!hasNextKeyframe}
-                      activeOpacity={0.7}
-                      accessibilityLabel="Jump to next mask keyframe"
-                    >
-                      <Ionicons
-                        name="caret-forward"
-                        size={13}
-                        color={hasNextKeyframe ? "#00F2FE" : "#475569"}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {maskShape !== 'none' && (
-                <View style={styles.controlsCard}>
-                  {/* Dimensions & Deformation Header */}
-                  <View style={styles.dimHeaderRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Ionicons name="resize-outline" size={13} color="#00F2FE" />
-                      <Text style={styles.dimLabel}>Dimensions & Deformation</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.lockBtn, isAspectLocked && styles.lockBtnActive]}
-                      onPress={() => {
-                        setIsAspectLocked(!isAspectLocked);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={isAspectLocked ? 'lock-closed' : 'lock-open-outline'}
-                        size={11}
-                        color={isAspectLocked ? '#00F2FE' : '#8E95A5'}
-                      />
-                      <Text style={[styles.lockBtnText, isAspectLocked && styles.lockBtnTextActive]}>
-                        {isAspectLocked ? 'Linked' : 'Free Deform'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Deformation Aspect Ratio Quick Presets */}
-                  <View style={styles.ratioPillsRow}>
-                    {[
-                      { label: '1:1 Square', w: 60, h: 60 },
-                      { label: '16:9 Wide', w: 80, h: 45 },
-                      { label: '9:16 Tall', w: 45, h: 80 },
-                      { label: '2:1 Pill', w: 84, h: 42 },
-                      { label: '4:3 Standard', w: 72, h: 54 },
-                    ].map((preset) => {
-                      const isActive = maskWidth === preset.w && maskHeight === preset.h;
-                      return (
-                        <TouchableOpacity
-                          key={preset.label}
-                          style={[styles.ratioPill, isActive && styles.ratioPillActive]}
-                          onPress={() => {
-                            setMaskWidth(preset.w);
-                            setMaskHeight(preset.h);
-                            setMaskSize(Math.max(preset.w, preset.h));
-                            triggerUpdate({
-                              width: preset.w,
-                              height: preset.h,
-                              size: Math.max(preset.w, preset.h),
-                            });
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[styles.ratioPillText, isActive && styles.ratioPillTextActive]}>
-                            {preset.label}
-                          </Text>
-                        </TouchableOpacity>
+              {/* Mask Width Slider */}
+              <View style={styles.sliderRow}>
+                <CompactSliderInput
+                  label="Mask Width"
+                  value={maskWidth}
+                  min={10}
+                  max={150}
+                  step={1}
+                  unit="%"
+                  defaultValue={60}
+                  accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
+                  onChange={(val) => {
+                    setMaskWidth(val);
+                    if (isAspectLocked) {
+                      const ratio = maskWidth > 0 ? maskHeight / maskWidth : 1;
+                      const newH = Math.round(
+                        Math.max(10, Math.min(150, val * ratio)),
                       );
-                    })}
-                  </View>
+                      setMaskHeight(newH);
+                      triggerUpdate({
+                        width: val,
+                        height: newH,
+                        size: Math.max(val, newH),
+                      });
+                    } else {
+                      triggerUpdate({
+                        width: val,
+                        size: Math.max(val, maskHeight),
+                      });
+                    }
+                  }}
+                />
+              </View>
 
-                  {/* Mask Width Slider */}
-                  <View style={styles.sliderRow}>
-                    <CompactSliderInput
-                      label="Mask Width"
-                      value={maskWidth}
-                      min={10}
-                      max={150}
-                      step={1}
-                      unit="%"
-                      defaultValue={60}
-                      accentColor="#00F2FE"
-                      showSteppers={true}
-                      onDragStart={() => setIsSliderDragging(true)}
-                      onDragEnd={() => setIsSliderDragging(false)}
-                      onChange={(val) => {
-                        setMaskWidth(val);
-                        if (isAspectLocked) {
-                          const ratio = maskWidth > 0 ? maskHeight / maskWidth : 1;
-                          const newH = Math.round(Math.max(10, Math.min(150, val * ratio)));
-                          setMaskHeight(newH);
-                          triggerUpdate({ width: val, height: newH, size: Math.max(val, newH) });
-                        } else {
-                          triggerUpdate({ width: val, size: Math.max(val, maskHeight) });
-                        }
-                      }}
-                    />
-                  </View>
+              {/* Mask Height Slider */}
+              <View style={styles.sliderRow}>
+                <CompactSliderInput
+                  label="Mask Height"
+                  value={maskHeight}
+                  min={10}
+                  max={150}
+                  step={1}
+                  unit="%"
+                  defaultValue={60}
+                  accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
+                  onChange={(val) => {
+                    setMaskHeight(val);
+                    if (isAspectLocked) {
+                      const ratio = maskHeight > 0 ? maskWidth / maskHeight : 1;
+                      const newW = Math.round(
+                        Math.max(10, Math.min(150, val * ratio)),
+                      );
+                      setMaskWidth(newW);
+                      triggerUpdate({
+                        height: val,
+                        width: newW,
+                        size: Math.max(newW, val),
+                      });
+                    } else {
+                      triggerUpdate({
+                        height: val,
+                        size: Math.max(maskWidth, val),
+                      });
+                    }
+                  }}
+                />
+              </View>
 
-                  {/* Mask Height Slider */}
-                  <View style={styles.sliderRow}>
-                    <CompactSliderInput
-                      label="Mask Height"
-                      value={maskHeight}
-                      min={10}
-                      max={150}
-                      step={1}
-                      unit="%"
-                      defaultValue={60}
-                      accentColor="#00F2FE"
-                      showSteppers={true}
-                      onDragStart={() => setIsSliderDragging(true)}
-                      onDragEnd={() => setIsSliderDragging(false)}
-                      onChange={(val) => {
-                        setMaskHeight(val);
-                        if (isAspectLocked) {
-                          const ratio = maskHeight > 0 ? maskWidth / maskHeight : 1;
-                          const newW = Math.round(Math.max(10, Math.min(150, val * ratio)));
-                          setMaskWidth(newW);
-                          triggerUpdate({ height: val, width: newW, size: Math.max(newW, val) });
-                        } else {
-                          triggerUpdate({ height: val, size: Math.max(maskWidth, val) });
-                        }
-                      }}
-                    />
-                  </View>
+              {/* Edge Softness (Feather) */}
+              <View style={styles.sliderRow}>
+                <CompactSliderInput
+                  label="Edge Softness (Feather)"
+                  value={maskFeather}
+                  min={0}
+                  max={80}
+                  step={1}
+                  unit="%"
+                  defaultValue={0}
+                  accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
+                  onChange={(val) => {
+                    setMaskFeather(val);
+                    triggerUpdate({ feather: val });
+                  }}
+                />
+              </View>
 
-                  {/* Edge Softness (Feather) */}
-                  <View style={styles.sliderRow}>
-                    <CompactSliderInput
-                      label="Edge Softness (Feather)"
-                      value={maskFeather}
-                      min={0}
-                      max={80}
-                      step={1}
-                      unit="%"
-                      defaultValue={0}
-                      accentColor="#00F2FE"
-                      showSteppers={true}
-                      onDragStart={() => setIsSliderDragging(true)}
-                      onDragEnd={() => setIsSliderDragging(false)}
-                      onChange={(val) => {
-                        setMaskFeather(val);
-                        triggerUpdate({ feather: val });
-                      }}
-                    />
-                  </View>
-
-                  {/* Box Roundness (if rectangle) */}
-                  {maskShape === 'rectangle' && (
-                    <View style={styles.sliderRow}>
-                      <CompactSliderInput
-                        label="Corner Roundness"
-                        value={maskRoundness}
-                        min={0}
-                        max={60}
-                        step={1}
-                        unit="px"
-                        defaultValue={16}
-                        accentColor="#00F2FE"
-                        showSteppers={true}
-                        onDragStart={() => setIsSliderDragging(true)}
-                        onDragEnd={() => setIsSliderDragging(false)}
-                        onChange={(val) => {
-                          setMaskRoundness(val);
-                          triggerUpdate({ roundness: val });
-                        }}
-                      />
-                    </View>
-                  )}
-
-                  {/* Rotation Angle Slider */}
-                  <View style={styles.sliderRow}>
-                    <CompactSliderInput
-                      label="Rotation Angle"
-                      value={maskRotation}
-                      min={-180}
-                      max={180}
-                      step={1}
-                      unit="°"
-                      defaultValue={0}
-                      showReset={true}
-                      showSteppers={true}
-                      accentColor="#00F2FE"
-                      onDragStart={() => setIsSliderDragging(true)}
-                      onDragEnd={() => setIsSliderDragging(false)}
-                      onChange={(val) => {
-                        setMaskRotation(val);
-                        triggerUpdate({ rotation: val });
-                      }}
-                      onReset={() => {
-                        setMaskRotation(0);
-                        triggerUpdate({ rotation: 0 });
-                      }}
-                    />
-                  </View>
-
-                  {/* Position HUD & Sliders */}
-                  <View style={styles.sliderRow}>
-                    <View style={styles.labelValueRow}>
-                      <Text style={styles.sliderLabel}>Position Offset</Text>
-                      {(maskX !== 0 || maskY !== 0) && (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setMaskX(0);
-                            setMaskY(0);
-                            triggerUpdate({ x: 0, y: 0 });
-                          }}
-                          style={{
-                            backgroundColor: 'rgba(0, 242, 254, 0.15)',
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            borderRadius: 6,
-                          }}
-                        >
-                          <Text style={{ color: '#00F2FE', fontSize: 10, fontWeight: '700' }}>Center</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    <CompactSliderInput
-                      label="Position X"
-                      value={maskX}
-                      min={-100}
-                      max={100}
-                      step={1}
-                      unit="%"
-                      defaultValue={0}
-                      accentColor="#00F2FE"
-                      showSteppers={true}
-                      onDragStart={() => setIsSliderDragging(true)}
-                      onDragEnd={() => setIsSliderDragging(false)}
-                      onChange={(val) => {
-                        setMaskX(val);
-                        triggerUpdate({ x: val });
-                      }}
-                    />
-                    <CompactSliderInput
-                      label="Position Y"
-                      value={maskY}
-                      min={-100}
-                      max={100}
-                      step={1}
-                      unit="%"
-                      defaultValue={0}
-                      accentColor="#00F2FE"
-                      showSteppers={true}
-                      onDragStart={() => setIsSliderDragging(true)}
-                      onDragEnd={() => setIsSliderDragging(false)}
-                      onChange={(val) => {
-                        setMaskY(val);
-                        triggerUpdate({ y: val });
-                      }}
-                    />
-                    <Text style={{ color: '#64748B', fontSize: 10.5, marginTop: 4 }}>
-                      💡 Tip: Drag, rotate & scale mask directly on preview
-                    </Text>
-                  </View>
-
-                  {/* Invert Mask Toggle */}
-                  <TouchableOpacity
-                    style={styles.toggleRow}
-                    onPress={() => {
-                      const next = !maskInverted;
-                      setMaskInverted(next);
-                      triggerUpdate({ inverted: next });
+              {/* Box Roundness (if rectangle) */}
+              {maskShape === "rectangle" && (
+                <View style={styles.sliderRow}>
+                  <CompactSliderInput
+                    label="Corner Roundness"
+                    value={maskRoundness}
+                    min={0}
+                    max={60}
+                    step={1}
+                    unit="px"
+                    defaultValue={16}
+                    accentColor="#00F2FE"
+                    showSteppers={true}
+                    onDragStart={() => setIsSliderDragging(true)}
+                    onDragEnd={() => setIsSliderDragging(false)}
+                    onChange={(val) => {
+                      setMaskRoundness(val);
+                      triggerUpdate({ roundness: val });
                     }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.sliderLabel}>Invert Mask (Outside Area)</Text>
-                    <Ionicons
-                      name={maskInverted ? 'checkbox' : 'square-outline'}
-                      size={20}
-                      color={maskInverted ? '#00F2FE' : '#8E95A5'}
-                    />
-                  </TouchableOpacity>
+                  />
                 </View>
               )}
+
+              {/* Rotation Angle Slider */}
+              <View style={styles.sliderRow}>
+                <CompactSliderInput
+                  label="Rotation Angle"
+                  value={maskRotation}
+                  min={-180}
+                  max={180}
+                  step={1}
+                  unit="°"
+                  defaultValue={0}
+                  showReset={true}
+                  showSteppers={true}
+                  accentColor="#00F2FE"
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
+                  onChange={(val) => {
+                    setMaskRotation(val);
+                    triggerUpdate({ rotation: val });
+                  }}
+                  onReset={() => {
+                    setMaskRotation(0);
+                    triggerUpdate({ rotation: 0 });
+                  }}
+                />
+              </View>
+
+              {/* Position HUD & Sliders */}
+              <View style={styles.sliderRow}>
+                <View style={styles.labelValueRow}>
+                  <Text style={styles.sliderLabel}>Position Offset</Text>
+                  {(maskX !== 0 || maskY !== 0) && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setMaskX(0);
+                        setMaskY(0);
+                        triggerUpdate({ x: 0, y: 0 });
+                      }}
+                      style={{
+                        backgroundColor: "rgba(0, 242, 254, 0.15)",
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#00F2FE",
+                          fontSize: 10,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Center
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <CompactSliderInput
+                  label="Position X"
+                  value={maskX}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  unit="%"
+                  defaultValue={0}
+                  accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
+                  onChange={(val) => {
+                    setMaskX(val);
+                    triggerUpdate({ x: val });
+                  }}
+                />
+                <CompactSliderInput
+                  label="Position Y"
+                  value={maskY}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  unit="%"
+                  defaultValue={0}
+                  accentColor="#00F2FE"
+                  showSteppers={true}
+                  onDragStart={() => setIsSliderDragging(true)}
+                  onDragEnd={() => setIsSliderDragging(false)}
+                  onChange={(val) => {
+                    setMaskY(val);
+                    triggerUpdate({ y: val });
+                  }}
+                />
+                <Text
+                  style={{ color: "#64748B", fontSize: 10.5, marginTop: 4 }}
+                >
+                  💡 Tip: Drag, rotate & scale mask directly on preview
+                </Text>
+              </View>
+
+              {/* Invert Mask Toggle */}
+              <TouchableOpacity
+                style={styles.toggleRow}
+                onPress={() => {
+                  const next = !maskInverted;
+                  setMaskInverted(next);
+                  triggerUpdate({ inverted: next });
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sliderLabel}>
+                  Invert Mask (Outside Area)
+                </Text>
+                <Ionicons
+                  name={maskInverted ? "checkbox" : "square-outline"}
+                  size={20}
+                  color={maskInverted ? "#00F2FE" : "#8E95A5"}
+                />
+              </TouchableOpacity>
             </View>
-          </ScrollView>
+          )}
         </View>
+      </ScrollView>
+    </View>
   );
 
   if (!visible) return null;
   return <View style={styles.inlineWrapper}>{sheetContent}</View>;
 }
 
+export const MaskModal = React.memo(MaskModalComponent);
+export default MaskModal;
+
 const styles = StyleSheet.create({
   inlineWrapper: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#0F131D',
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#0F131D",
   },
   unifiedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
-    backgroundColor: '#08090E',
+    borderBottomColor: "#1F2637",
+    backgroundColor: "#08090E",
   },
   sheetTitle: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 11.5,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   closeBtnCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    backgroundColor: '#131826',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: '#1F2637',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#1F2637",
+    alignItems: "center",
+    justifyContent: "center",
   },
+
   inlineSheetContainer: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    maxHeight: '100%',
+    width: "100%",
+    height: "100%",
+    maxHeight: "100%",
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
     borderTopWidth: 0,
@@ -674,72 +772,70 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'flex-end',
+    backgroundColor: "transparent",
+    justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
+    backgroundColor: "#0F131D",
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
-    maxHeight: '75%',
+    maxHeight: "75%",
     borderTopWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: "#1F2637",
     paddingBottom: 8,
   },
   sheetHandle: {
     width: 28,
     height: 2.5,
     borderRadius: 1.5,
-    backgroundColor: '#1F2637',
-    alignSelf: 'center',
+    backgroundColor: "#1F2637",
+    alignSelf: "center",
     marginTop: 4,
     marginBottom: 2,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#08090E',
+    backgroundColor: "#08090E",
     borderBottomWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: "#1F2637",
   },
   headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 11.5,
-    fontWeight: '500',
+    fontWeight: "500",
     letterSpacing: 0.1,
   },
   doneBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    backgroundColor: '#131826',
-    borderWidth: 1,
-    borderColor: '#1F2637',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#00F2FE",
+    alignItems: "center",
+    justifyContent: "center",
   },
   resetBtn: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: "#131826",
     borderWidth: 1,
-    borderColor: '#1F2637',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderColor: "#1F2637",
+    flexDirection: "row",
+    alignItems: "center",
   },
   resetText: {
-    color: '#8E95A5',
+    color: "#8E95A5",
     fontSize: 9.5,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   contentScroll: {
     paddingHorizontal: 6,
@@ -750,166 +846,166 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   maskGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 4,
   },
   maskCard: {
-    width: '23.8%',
-    backgroundColor: '#131826',
+    width: "23.8%",
+    backgroundColor: "#131826",
     borderRadius: 5,
     paddingVertical: 5,
     paddingHorizontal: 2,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: "#1F2637",
   },
   maskCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   maskCardTitle: {
-    color: '#8E95A5',
+    color: "#8E95A5",
     fontSize: 8.5,
-    fontWeight: '400',
+    fontWeight: "400",
     marginTop: 2,
-    textAlign: 'center',
+    textAlign: "center",
   },
   maskCardTitleActive: {
-    color: '#00F2FE',
-    fontWeight: '500',
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   controlsCard: {
-    backgroundColor: '#131826',
+    backgroundColor: "#131826",
     borderRadius: 6,
     padding: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: "#1F2637",
     gap: 5,
   },
   sliderRow: {
     gap: 3,
   },
   labelValueRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   sliderLabel: {
-    color: '#8E95A5',
+    color: "#8E95A5",
     fontSize: 9.5,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   badge: {
-    color: '#00F2FE',
+    color: "#00F2FE",
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 4,
     borderTopWidth: 1,
-    borderTopColor: '#1F2637',
+    borderTopColor: "#1F2637",
   },
   stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     marginTop: 2,
   },
   stepBtn: {
-    backgroundColor: '#1B2234',
+    backgroundColor: "#1B2234",
     width: 22,
     height: 22,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#1F2637',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#1F2637",
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepperVal: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: "500",
     minWidth: 32,
-    textAlign: 'center',
+    textAlign: "center",
   },
   dimHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingBottom: 3,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A2130',
+    borderBottomColor: "#1A2130",
   },
   dimLabel: {
-    color: '#CBD5E1',
+    color: "#CBD5E1",
     fontSize: 9.5,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   lockBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 3,
-    backgroundColor: '#161D2B',
+    backgroundColor: "#161D2B",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#242F45',
+    borderColor: "#242F45",
   },
   lockBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "#00F2FE",
   },
   lockBtnText: {
-    color: '#8E95A5',
+    color: "#8E95A5",
     fontSize: 8.5,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   lockBtnTextActive: {
-    color: '#00F2FE',
-    fontWeight: '500',
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   ratioPillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 4,
     marginVertical: 2,
   },
   ratioPill: {
-    backgroundColor: '#131826',
+    backgroundColor: "#131826",
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: "#1F2637",
   },
   ratioPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
-    borderColor: '#00F2FE',
+    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderColor: "#00F2FE",
   },
   ratioPillText: {
-    color: '#8E95A5',
+    color: "#8E95A5",
     fontSize: 8.5,
-    fontWeight: '400',
+    fontWeight: "400",
   },
   ratioPillTextActive: {
-    color: '#00F2FE',
-    fontWeight: '500',
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   keyframeBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
     gap: 6,
-    backgroundColor: '#121724',
+    backgroundColor: "#121724",
     borderWidth: 1,
-    borderColor: '#1E2638',
+    borderColor: "#1E2638",
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -917,100 +1013,100 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   kfLeftGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   kfTimePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.25)',
+    borderColor: "rgba(0, 242, 254, 0.25)",
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3.5,
     gap: 4,
   },
   kfTimeText: {
-    color: '#00F2FE',
+    color: "#00F2FE",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   kfOffsetTime: {
-    color: '#94A3B8',
+    color: "#94A3B8",
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   kfCountBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1B2234',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1B2234",
     borderRadius: 5,
     paddingHorizontal: 5,
     paddingVertical: 2.5,
     gap: 3,
   },
   kfCountText: {
-    color: '#CBD5E1',
+    color: "#CBD5E1",
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   kfActionGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   kfStepBtn: {
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: '#182030',
+    backgroundColor: "#182030",
     borderWidth: 1,
-    borderColor: '#26334A',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#26334A",
+    alignItems: "center",
+    justifyContent: "center",
   },
   kfStepBtnDisabled: {
     opacity: 0.35,
-    backgroundColor: '#121724',
+    backgroundColor: "#121724",
   },
   kfDiamondBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
-    backgroundColor: '#182030',
+    backgroundColor: "#182030",
     borderWidth: 1,
-    borderColor: '#26334A',
+    borderColor: "#26334A",
     borderRadius: 7,
     paddingHorizontal: 9,
     paddingVertical: 4.5,
-    position: 'relative',
+    position: "relative",
   },
   kfDiamondBtnActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "#00F2FE",
   },
   kfDiamondText: {
-    color: '#94A3B8',
+    color: "#94A3B8",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   kfDiamondTextActive: {
-    color: '#00F2FE',
+    color: "#00F2FE",
   },
   kfDiamondBadge: {
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginLeft: 1,
   },
   kfDiamondBadgeAdd: {
-    backgroundColor: '#00F2FE',
+    backgroundColor: "#00F2FE",
   },
   kfDiamondBadgeRemove: {
-    backgroundColor: '#EF4444',
+    backgroundColor: "#EF4444",
   },
 });

@@ -783,6 +783,171 @@ export default function App() {
     };
   }, [closeModal, navigate]);
 
+  const handleOpenScreenCrop = useCallback(() => {
+    closeModal();
+    setIsCroppingPreview(true);
+  }, [closeModal, setIsCroppingPreview]);
+
+  const renderSharedModals = useCallback(
+    (isInline?: boolean) => (
+      <EditorModals
+        key={isInline ? "inline-modals" : "overlay-modals"}
+        activeModal={activeModal}
+        closeModal={handleCancelModal}
+        onCancelModal={handleCancelModal}
+        onApplyModal={handleApplyModal}
+        project={project}
+        route={route}
+        totalDuration={totalDuration}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        setCurrentTime={setCurrentTime}
+        selectedClipId={selectedClipId}
+        selectedClip={selectedClip}
+        selectedClipType={selectedClipType}
+        settings={settings}
+        notifications={notifications}
+        transitionTargetClipId={transitionTargetClipId}
+        clipToDelete={clipToDelete}
+        setClipToDelete={setClipToDelete}
+        handleAddMedia={handleAddMedia}
+        handleApplyCutout={handleApplyCutout}
+        cutoutInitialMode={cutoutInitialMode}
+        transformInitialTab={transformInitialTab}
+        setIsCroppingPreview={setIsCroppingPreview}
+        onOpenScreenCrop={handleOpenScreenCrop}
+        handleApplyMotionTracking={handleApplyMotionTracking}
+        handleAddText={handleAddText}
+        handleUpdateText={handleUpdateText}
+        handleAddAudio={handleAddAudio}
+        handleApplyFilter={handleApplyFilter}
+        handleAddEffect={handleAddEffect}
+        handleUpdateEffect={handleUpdateEffect}
+        handleAddSticker={handleAddSticker}
+        handleUpdateSticker={handleUpdateSticker}
+        handleApplyTransition={handleApplyTransition}
+        handleApplySpeed={handleApplySpeed}
+        handleUpdateSettings={handleUpdateSettings}
+        handleReloadAllData={handleReloadAllData}
+        handleMarkAllAsRead={handleMarkAllAsRead}
+        handleClearAllNotifications={handleClearAllNotifications}
+        handleDeleteNotification={handleDeleteNotification}
+        handleNotificationAction={handleNotificationAction}
+        handleApplyVolume={handleApplyVolume}
+        handleExtractAudioFromVideo={handleExtractAudioFromVideo}
+        handleApplyTransform={handleApplyTransform}
+        handleAutoCutGenerated={handleAutoCutGenerated}
+        updateProjectWithHistory={updateProjectDispatcher}
+        handleApplyEnhance={handleApplyEnhance}
+        handleApplyBlendMode={handleApplyBlendMode}
+        handleApplyHSL={handleApplyHSL}
+        handleApplyVoiceEffect={handleApplyVoiceEffect}
+        handleAddKeyframe={handleAddKeyframe}
+        isKeyframeAtPlayhead={isKeyframeAtPlayhead}
+        hasPrevKeyframe={hasPrevKeyframe}
+        hasNextKeyframe={hasNextKeyframe}
+        handleJumpPrevKeyframe={handleJumpPrevKeyframe}
+        handleJumpNextKeyframe={handleJumpNextKeyframe}
+        handleUpdateKeyframeTransform={handleUpdateKeyframeTransform}
+        handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
+        handleClearAllKeyframes={handleClearAllKeyframes}
+        handleAddMaskKeyframe={handleAddMaskKeyframe}
+        isMaskKeyframeAtPlayhead={isMaskKeyframeAtPlayhead}
+        hasPrevMaskKeyframe={hasPrevMaskKeyframe}
+        hasNextMaskKeyframe={hasNextMaskKeyframe}
+        handleJumpPrevMaskKeyframe={handleJumpPrevMaskKeyframe}
+        handleJumpNextMaskKeyframe={handleJumpNextMaskKeyframe}
+        handleDeleteMaskKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
+        handleClearAllMaskKeyframes={handleClearAllMaskKeyframes}
+        handleConfirmDeleteClip={handleConfirmDeleteClip}
+        handleDeleteClip={handleDeleteClip}
+        handleDeleteProjectAsset={handleDeleteProjectAsset}
+        handleAddCaptions={handleAddCaptions}
+        handleUpdateCaption={handleUpdateCaption}
+        handleMoveClip={handleMoveClip}
+        handleUpdateClipMask={handleUpdateClipMask}
+        handleSelectClip={handleSelectClip}
+        isInline={isInline}
+      />
+    ),
+    [
+      activeModal,
+      handleCancelModal,
+      handleApplyModal,
+      project,
+      route,
+      totalDuration,
+      currentTime,
+      isPlaying,
+      setCurrentTime,
+      selectedClipId,
+      selectedClip,
+      selectedClipType,
+      settings,
+      notifications,
+      transitionTargetClipId,
+      clipToDelete,
+      setClipToDelete,
+      handleAddMedia,
+      handleApplyCutout,
+      cutoutInitialMode,
+      transformInitialTab,
+      setIsCroppingPreview,
+      handleOpenScreenCrop,
+      handleApplyMotionTracking,
+      handleAddText,
+      handleUpdateText,
+      handleAddAudio,
+      handleApplyFilter,
+      handleAddEffect,
+      handleUpdateEffect,
+      handleAddSticker,
+      handleUpdateSticker,
+      handleApplyTransition,
+      handleApplySpeed,
+      handleUpdateSettings,
+      handleReloadAllData,
+      handleMarkAllAsRead,
+      handleClearAllNotifications,
+      handleDeleteNotification,
+      handleNotificationAction,
+      handleApplyVolume,
+      handleExtractAudioFromVideo,
+      handleApplyTransform,
+      handleAutoCutGenerated,
+      updateProjectDispatcher,
+      handleApplyEnhance,
+      handleApplyBlendMode,
+      handleApplyHSL,
+      handleApplyVoiceEffect,
+      handleAddKeyframe,
+      isKeyframeAtPlayhead,
+      hasPrevKeyframe,
+      hasNextKeyframe,
+      handleJumpPrevKeyframe,
+      handleJumpNextKeyframe,
+      handleUpdateKeyframeTransform,
+      handleDeleteKeyframeAtTime,
+      handleClearAllKeyframes,
+      handleAddMaskKeyframe,
+      isMaskKeyframeAtPlayhead,
+      hasPrevMaskKeyframe,
+      hasNextMaskKeyframe,
+      handleJumpPrevMaskKeyframe,
+      handleJumpNextMaskKeyframe,
+      handleDeleteMaskKeyframeAtTime,
+      handleClearAllMaskKeyframes,
+      handleConfirmDeleteClip,
+      handleDeleteClip,
+      handleDeleteProjectAsset,
+      handleAddCaptions,
+      handleUpdateCaption,
+      handleMoveClip,
+      handleUpdateClipMask,
+      handleSelectClip,
+    ],
+  );
+
   return (
     <View style={styles.rootWrapper}>
       <StatusBar barStyle="light-content" />
@@ -847,97 +1012,9 @@ export default function App() {
         />
 
         {/* 5. FULL VIDEO EDITOR SUITE */}
-        {(() => {
-          const renderSharedModals = (isInline?: boolean) => (
-            <EditorModals
-              key={isInline ? "inline-modals" : "overlay-modals"}
-              activeModal={activeModal}
-              closeModal={handleCancelModal}
-              onCancelModal={handleCancelModal}
-              onApplyModal={handleApplyModal}
-              project={project}
-              route={route}
-              totalDuration={totalDuration}
-              currentTime={currentTime}
-              isPlaying={isPlaying}
-              setCurrentTime={setCurrentTime}
-              selectedClipId={selectedClipId}
-              selectedClip={selectedClip}
-              selectedClipType={selectedClipType}
-              settings={settings}
-              notifications={notifications}
-              transitionTargetClipId={transitionTargetClipId}
-              clipToDelete={clipToDelete}
-              setClipToDelete={setClipToDelete}
-              handleAddMedia={handleAddMedia}
-              handleApplyCutout={handleApplyCutout}
-              cutoutInitialMode={cutoutInitialMode}
-              transformInitialTab={transformInitialTab}
-              setIsCroppingPreview={setIsCroppingPreview}
-              onOpenScreenCrop={() => {
-                closeModal();
-                setIsCroppingPreview(true);
-              }}
-              handleApplyMotionTracking={handleApplyMotionTracking}
-              handleAddText={handleAddText}
-              handleUpdateText={handleUpdateText}
-              handleAddAudio={handleAddAudio}
-              handleApplyFilter={handleApplyFilter}
-              handleAddEffect={handleAddEffect}
-              handleUpdateEffect={handleUpdateEffect}
-              handleAddSticker={handleAddSticker}
-              handleUpdateSticker={handleUpdateSticker}
-              handleApplyTransition={handleApplyTransition}
-              handleApplySpeed={handleApplySpeed}
-              handleUpdateSettings={handleUpdateSettings}
-              handleReloadAllData={handleReloadAllData}
-              handleMarkAllAsRead={handleMarkAllAsRead}
-              handleClearAllNotifications={handleClearAllNotifications}
-              handleDeleteNotification={handleDeleteNotification}
-              handleNotificationAction={handleNotificationAction}
-              handleApplyVolume={handleApplyVolume}
-              handleExtractAudioFromVideo={handleExtractAudioFromVideo}
-              handleApplyTransform={handleApplyTransform}
-              handleAutoCutGenerated={handleAutoCutGenerated}
-              updateProjectWithHistory={updateProjectDispatcher}
-              handleApplyEnhance={handleApplyEnhance}
-              handleApplyBlendMode={handleApplyBlendMode}
-              handleApplyHSL={handleApplyHSL}
-              handleApplyVoiceEffect={handleApplyVoiceEffect}
-              handleAddKeyframe={handleAddKeyframe}
-              isKeyframeAtPlayhead={isKeyframeAtPlayhead}
-              hasPrevKeyframe={hasPrevKeyframe}
-              hasNextKeyframe={hasNextKeyframe}
-              handleJumpPrevKeyframe={handleJumpPrevKeyframe}
-              handleJumpNextKeyframe={handleJumpNextKeyframe}
-              handleUpdateKeyframeTransform={handleUpdateKeyframeTransform}
-              handleDeleteKeyframeAtTime={handleDeleteKeyframeAtTime}
-              handleClearAllKeyframes={handleClearAllKeyframes}
-              handleAddMaskKeyframe={handleAddMaskKeyframe}
-              isMaskKeyframeAtPlayhead={isMaskKeyframeAtPlayhead}
-              hasPrevMaskKeyframe={hasPrevMaskKeyframe}
-              hasNextMaskKeyframe={hasNextMaskKeyframe}
-              handleJumpPrevMaskKeyframe={handleJumpPrevMaskKeyframe}
-              handleJumpNextMaskKeyframe={handleJumpNextMaskKeyframe}
-              handleDeleteMaskKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
-              handleClearAllMaskKeyframes={handleClearAllMaskKeyframes}
-              handleConfirmDeleteClip={handleConfirmDeleteClip}
-              handleDeleteClip={handleDeleteClip}
-              handleDeleteProjectAsset={handleDeleteProjectAsset}
-              handleAddCaptions={handleAddCaptions}
-              handleUpdateCaption={handleUpdateCaption}
-              handleMoveClip={handleMoveClip}
-              handleUpdateClipMask={handleUpdateClipMask}
-              handleSelectClip={handleSelectClip}
-              isInline={isInline}
-            />
-          );
-
-          return (
-            <>
-              {(route.screen === "editor" || route.screen === "export") && project && (
-                <ErrorBoundary fallbackTitle="Editor Workspace Error">
-                  <EditorWorkspace
+        {(route.screen === "editor" || route.screen === "export") && project && (
+          <ErrorBoundary fallbackTitle="Editor Workspace Error">
+            <EditorWorkspace
                   project={project}
                   currentTime={currentTime}
                   setCurrentTime={setCurrentTime}
@@ -976,6 +1053,8 @@ export default function App() {
                   openModal={openModal}
                   closeModal={closeModal}
                   onCloseModal={handleCancelModal}
+                  onApplyModal={handleApplyModal}
+                  onCancelModal={handleCancelModal}
                   updateProjectWithHistory={updateProjectDispatcher}
                   handleUpdateClipTransform={handleUpdateClipTransform}
                   handleUpdateClipCrop={handleUpdateClipCrop}
@@ -1020,11 +1099,8 @@ export default function App() {
               </ErrorBoundary>
             )}
 
-              {/* OVERLAY / FULLSCREEN MODALS (media picker, audio picker, export, settings, notifications, delete confirm) */}
-              {renderSharedModals(false)}
-            </>
-          );
-        })()}
+            {/* OVERLAY / FULLSCREEN MODALS (media picker, audio picker, export, settings, notifications, delete confirm) */}
+            {renderSharedModals(false)}
 
         {/* Confirmation Modal to Exit Project to Home */}
         <ConfirmExitModal

@@ -80,3 +80,18 @@ pub extern "C" fn fastart_cutout_modnet_alpha_to_rle(
     }
     encoded.len()
 }
+
+#[no_mangle]
+pub extern "C" fn fastart_cutout_unpack_alpha_rle_rgba(
+    rle_pointer: *const u8,
+    rle_length: usize,
+    output_pointer: *mut u8,
+    output_capacity: usize,
+) -> usize {
+    if rle_pointer.is_null() || output_pointer.is_null() || rle_length == 0 || output_capacity == 0 {
+        return 0;
+    }
+    let rle = unsafe { slice::from_raw_parts(rle_pointer, rle_length) };
+    let out_rgba = unsafe { slice::from_raw_parts_mut(output_pointer, output_capacity) };
+    fastart_cutout_ops::unpack_alpha_rle_rgba(rle, out_rgba)
+}

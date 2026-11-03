@@ -197,9 +197,10 @@ const TimelineComponent: React.FC<TimelineProps> = ({
   const rulerScrollRef = useRef<any>(null);
   const currentScrollXRef = useRef(0);
   const isSyncingScrollRef = useRef(false);
+  const activeScrollInitiatorRef = useRef<"tracks" | "ruler" | null>(null);
   const [visibleWindowStartX, setVisibleWindowStartX] = useState(0);
   const visibleWindowStartRef = useRef(0);
-  const visibleWindowStep = Math.max(240, screenWidth * 0.75);
+  const visibleWindowStep = Math.max(800, screenWidth * 2);
   const updateVisibleWindow = useCallback((scrollX: number) => {
     const nextStart = Math.max(
       0,
@@ -210,11 +211,12 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     setVisibleWindowStartX(nextStart);
   }, [visibleWindowStep]);
 
-  // Synchronize tracks horizontal scroll with ruler
+  // Synchronize tracks horizontal scroll with ruler (with loop prevention)
   const handleTracksScroll = useCallback((e: any) => {
     const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
     currentScrollXRef.current = scrollX;
     updateVisibleWindow(scrollX);
+    if (activeScrollInitiatorRef.current === "ruler") return;
     if (isSyncingScrollRef.current) return;
     isSyncingScrollRef.current = true;
     if (Platform.OS === "web") {
@@ -231,13 +233,14 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     });
   }, [updateVisibleWindow]);
 
-  // Synchronize ruler horizontal scroll with tracks
+  // Synchronize ruler horizontal scroll with tracks (with loop prevention)
   const handleRulerScroll = useCallback((e: any) => {
     const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
-    if (isSyncingScrollRef.current) return;
-    isSyncingScrollRef.current = true;
     currentScrollXRef.current = scrollX;
     updateVisibleWindow(scrollX);
+    if (activeScrollInitiatorRef.current === "tracks") return;
+    if (isSyncingScrollRef.current) return;
+    isSyncingScrollRef.current = true;
     if (Platform.OS === "web") {
       const el = scrollRef.current;
       const dom = (el as any)?._inputRef || el;
@@ -545,8 +548,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     }
     return list;
   }, [totalDuration, pxPerSec]);
-  const visibleXMin = Math.max(0, visibleWindowStartX - screenWidth);
-  const visibleXMax = visibleWindowStartX + screenWidth * 3;
+  const visibleXMin = Math.max(0, visibleWindowStartX - screenWidth * 1.5);
+  const visibleXMax = visibleWindowStartX + screenWidth * 3.5;
   const visibleTicks = useMemo(
     () => suspendHeavyContent
       ? []
@@ -801,6 +804,19 @@ const TimelineComponent: React.FC<TimelineProps> = ({
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={handleRulerScroll}
+          onScrollBeginDrag={() => {
+            activeScrollInitiatorRef.current = "ruler";
+          }}
+          onMomentumScrollEnd={() => {
+            activeScrollInitiatorRef.current = null;
+          }}
+          onScrollEndDrag={() => {
+            setTimeout(() => {
+              if (activeScrollInitiatorRef.current === "ruler") {
+                activeScrollInitiatorRef.current = null;
+              }
+            }, 120);
+          }}
           style={styles.rulerHorizontalScroll}
           contentContainerStyle={{
             width: timelineContentWidth,
@@ -882,6 +898,19 @@ const TimelineComponent: React.FC<TimelineProps> = ({
             scrollEnabled={!isInteractingWithTimeline}
             scrollEventThrottle={16}
             onScroll={handleTracksScroll}
+            onScrollBeginDrag={() => {
+              activeScrollInitiatorRef.current = "tracks";
+            }}
+            onMomentumScrollEnd={() => {
+              activeScrollInitiatorRef.current = null;
+            }}
+            onScrollEndDrag={() => {
+              setTimeout(() => {
+                if (activeScrollInitiatorRef.current === "tracks") {
+                  activeScrollInitiatorRef.current = null;
+                }
+              }, 120);
+            }}
             style={[
               styles.timelineScroll,
               {

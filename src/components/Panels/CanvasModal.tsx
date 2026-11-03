@@ -7,6 +7,7 @@ import {
   Platform,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
+import { ModalHeader } from "../Common";
 import { Ionicons } from "@expo/vector-icons";
 import { FastArtProject, AspectRatio } from "../../types/project";
 
@@ -87,23 +88,11 @@ export default function CanvasModal({
     >
       {/* Unified Live Header - only shown in standalone modal to avoid duplicate header on desktop */}
       {!isInline ? (
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="scan-outline" size={16} color="#00F2FE" />
-            <Text style={styles.headerTitle}>Canvas Ratio</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={16} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Canvas Ratio"
+          iconName="scan-outline"
+          onClose={onClose}
+        />
       ) : null}
 
       {/* Aspect Ratios Grid */}
@@ -247,9 +236,9 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",

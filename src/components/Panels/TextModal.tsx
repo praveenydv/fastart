@@ -8,6 +8,7 @@ import {
   Alert,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
+import { ModalHeader } from "../Common";
 import { Ionicons } from "@expo/vector-icons";
 import { TextClip } from "../../types/project";
 import {
@@ -319,51 +320,14 @@ export default function TextModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal to avoid duplicate header on desktop */}
       {!isInline ? (
-        <View style={styles.sheetHeader}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="text" size={16} color="#FFFFFF" />
-            <Text style={styles.sheetTitle}>
-              {editingClip ? "Edit Text" : "Add Text"}
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {!editingClip && (
-              <TouchableOpacity
-                onPress={handleAddTextClip}
-                style={[
-                  {
-                    paddingHorizontal: 10,
-                    height: 24,
-                    borderRadius: 6,
-                    backgroundColor: '#FFFFFF',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 4,
-                  },
-                  !inputText.trim() && { opacity: 0.4 },
-                ]}
-                disabled={!inputText.trim()}
-                activeOpacity={0.7}
-                accessibilityLabel="Add text to track"
-              >
-                <Ionicons name="add" size={13} color="#08090E" />
-                <Text style={{ color: '#08090E', fontSize: 10.5, fontWeight: '700' }}>
-                  Add to Track
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={14} color="#94A3B8" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title={editingClip ? "Edit Text" : "Add Text"}
+          iconName="text"
+          onClose={onClose}
+          onDone={handleSave}
+          doneText={editingClip ? "Save" : "Add"}
+          doneDisabled={!inputText.trim()}
+        />
       ) : null}
 
           <ScrollView

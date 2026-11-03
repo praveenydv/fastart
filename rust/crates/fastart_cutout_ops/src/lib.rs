@@ -91,6 +91,30 @@ pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u
     encoded
 }
 
+/// Unpacks RLE-encoded alpha bytes directly into a 32-bit RGBA mask buffer in a single pass.
+/// Each pixel gets R=G=B=A=alpha, eliminating intermediate buffers and removing JS byte loops completely.
+pub fn unpack_alpha_rle_rgba(rle: &[u8], out_rgba: &mut [u8]) -> usize {
+    if rle.len() < 2 {
+        return 0;
+    }
+    let max_pixels = out_rgba.len() / 4;
+    let mut pixel_idx = 0;
+    let mut i = 0;
+    let out_u32: &mut [u32] = unsafe {
+        std::slice::from_raw_parts_mut(out_rgba.as_mut_ptr() as *mut u32, max_pixels)
+    };
+    while i + 1 < rle.len() && pixel_idx < max_pixels {
+        let count = rle[i] as usize;
+        let val = rle[i + 1] as u32;
+        let val32 = val | (val << 8) | (val << 16) | (val << 24);
+        let end = (pixel_idx + count).min(max_pixels);
+        out_u32[pixel_idx..end].fill(val32);
+        pixel_idx = end;
+        i += 2;
+    }
+    pixel_idx * 4
+}
+
 #[inline]
 fn alpha_to_byte(
     value: f32,

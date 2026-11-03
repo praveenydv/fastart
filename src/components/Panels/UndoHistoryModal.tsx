@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
+import { ModalHeader } from "../Common/ModalHeader";
 import { THEME_COLORS } from "../../constants/designConstants";
 import { FastArtProject } from "../../types/project";
 
@@ -124,28 +125,12 @@ export const UndoHistoryModal: React.FC<UndoHistoryModalProps> = ({
         />
         <View style={[styles.card, isMobile && styles.cardMobile]}>
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="time-outline" size={18} color={THEME_COLORS.accent} />
-              </View>
-              <View>
-                <Text style={styles.title}>Edit History</Text>
-                <Text style={styles.subtitle}>
-                  {historyStack.length} undo step{historyStack.length !== 1 ? "s" : ""} available
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => {
-                onClose();
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close" size={20} color={THEME_COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          <ModalHeader
+            title="Edit History"
+            subtitle={`${historyStack.length} undo step${historyStack.length !== 1 ? "s" : ""} available`}
+            iconName="time-outline"
+            onClose={onClose}
+          />
 
           {/* Timeline Stack List */}
           <ScrollView style={styles.scrollList} contentContainerStyle={styles.scrollContent}>

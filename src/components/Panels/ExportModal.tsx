@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, Modal, ScrollView, Platform, useWindowDimensions, StyleSheet } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
+import { ModalHeader } from "../Common/ModalHeader";
 import { ExportModalProps } from "./Export/exportTypes";
 import { styles } from "./Export/ExportModalStyles";
 import { useExportProcess } from "./Export/useExportProcess";
@@ -81,98 +82,40 @@ function ExportModalComponent({
           {!isDesktop && <View style={styles.sheetHandle} />}
 
           {/* Header */}
-          <View style={[styles.sheetHeader, isDesktop && styles.sheetHeaderDesktop]}>
-            {isDesktop ? (
-              <>
-                <View style={styles.headerTitleRow}>
-                  <View style={styles.desktopIconBadge}>
-                    <Ionicons
-                      name="cloud-download-outline"
-                      size={18}
-                      color="#00F2FE"
-                    />
-                  </View>
-                  <View>
-                    <Text style={styles.sheetTitle}>Export Project</Text>
-                    <Text style={styles.sheetSubtitle}>Configure format, resolution, and render settings</Text>
-                  </View>
+          <ModalHeader
+            title={isDesktop ? "Export Project" : "Export Video"}
+            subtitle={
+              isDesktop
+                ? "Configure format, resolution, and render settings"
+                : undefined
+            }
+            iconName="cloud-download-outline"
+            onClose={() => {
+              if (status === "rendering") {
+                handleCancelExport();
+              }
+              onClose();
+            }}
+            onDone={
+              status === "idle"
+                ? handleStartExport
+                : status === "done"
+                ? onClose
+                : undefined
+            }
+            doneLoading={status === "rendering"}
+            rightNode={
+              isDesktop ? (
+                <View style={styles.headerFormatBadge}>
+                  <Ionicons name={selectedFormatConfig.icon} size={12} color="#00F2FE" />
+                  <Text style={styles.headerFormatBadgeText}>
+                    {selectedFormatConfig.shortLabel}
+                    {mediaType !== "wav" && mediaType !== "png" ? ` • ${resolution}` : ""}
+                  </Text>
                 </View>
-
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <View style={styles.headerFormatBadge}>
-                    <Ionicons name={selectedFormatConfig.icon} size={12} color="#00F2FE" />
-                    <Text style={styles.headerFormatBadgeText}>
-                      {selectedFormatConfig.shortLabel}
-                      {mediaType !== "wav" && mediaType !== "png" ? ` • ${resolution}` : ""}
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (status === "rendering") {
-                        handleCancelExport();
-                      }
-                      onClose();
-                    }}
-                    style={styles.closeBtn}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Close"
-                  >
-                    <Ionicons name="close" size={16} color="#94A3B8" />
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (status === "rendering") {
-                      handleCancelExport();
-                    }
-                    onClose();
-                  }}
-                  style={styles.closeBtn}
-                  activeOpacity={0.7}
-                  accessibilityLabel={
-                    status === "rendering" ? "Cancel Export and Close" : "Cancel"
-                  }
-                >
-                  <Ionicons name="close" size={15} color="#94A3B8" />
-                </TouchableOpacity>
-
-                <View style={styles.headerTitleRow}>
-                  <Ionicons
-                    name="cloud-download-outline"
-                    size={16}
-                    color="#00F2FE"
-                  />
-                  <Text style={styles.sheetTitle}>Export Video</Text>
-                </View>
-
-                {status === "idle" ? (
-                  <TouchableOpacity
-                    onPress={handleStartExport}
-                    style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Start Export"
-                  >
-                    <Ionicons name="checkmark" size={16} color="#08090E" />
-                  </TouchableOpacity>
-                ) : status === "done" ? (
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={[styles.closeBtn, { backgroundColor: "#00F2FE", borderColor: "#00F2FE" }]}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Done"
-                  >
-                    <Ionicons name="checkmark" size={16} color="#08090E" />
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ width: 30 }} />
-                )}
-              </>
-            )}
-          </View>
+              ) : undefined
+            }
+          />
 
           <ScrollView
             style={[styles.sheetBody, isDesktop && styles.sheetBodyDesktop]}

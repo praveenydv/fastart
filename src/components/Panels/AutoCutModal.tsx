@@ -10,6 +10,7 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { ModalHeader } from '../Common/ModalHeader';
 import { openMediaService, OpenAudioItem, OpenMediaItem } from '../../services/openMediaService';
 import { loadUploadedMedia, loadUploadedAudio } from '../../utils/storage';
 import { FastArtProject } from '../../types/project';
@@ -233,35 +234,13 @@ export default function AutoCutModal({
 
       {/* Standardized Header */}
       {!isInline && (
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => {
-              onClose();
-            }}
-            style={[styles.closeBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
-            activeOpacity={0.7}
-            accessibilityLabel="Cancel changes"
-          >
-            <Ionicons name="close" size={17} color="#EF4444" />
-          </TouchableOpacity>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={styles.headerIconCircle}>
-              <Ionicons name="flash" size={15} color="#00F2FE" />
-            </View>
-            <Text style={styles.headerTitle}>AutoCut Reel</Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={handleGenerate}
-            style={[styles.closeBtn, { backgroundColor: '#00F2FE' }, selectedClips.length === 0 && { opacity: 0.4 }]}
-            disabled={selectedClips.length === 0}
-            activeOpacity={0.7}
-            accessibilityLabel="Generate Reel"
-          >
-            <Ionicons name="checkmark" size={18} color="#000000" />
-          </TouchableOpacity>
-        </View>
+        <ModalHeader
+          title="AutoCut Reel"
+          iconName="flash"
+          onClose={onClose}
+          onDone={handleGenerate}
+          doneDisabled={selectedClips.length === 0}
+        />
       )}
 
           <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>

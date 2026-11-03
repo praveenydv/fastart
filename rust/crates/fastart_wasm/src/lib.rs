@@ -646,6 +646,24 @@ pub extern "C" fn fastart_unpack_alpha_rle_c(
     fastart_core::unpack_alpha_rle(rle, out_alpha)
 }
 
+/// Decompresses an RLE buffer directly into a 32-bit RGBA mask buffer in WebAssembly.
+/// Writes 4 bytes per pixel (R=G=B=A=alpha) with single-pass SIMD vector writes.
+/// Eliminates intermediate 8-bit alpha buffers and removes JS byte loops completely.
+#[no_mangle]
+pub extern "C" fn fastart_unpack_alpha_rle_rgba_c(
+    rle_ptr: *const u8,
+    rle_len: usize,
+    out_rgba_ptr: *mut u8,
+    max_out_len: usize,
+) -> usize {
+    if rle_ptr.is_null() || out_rgba_ptr.is_null() || rle_len == 0 || max_out_len == 0 {
+        return 0;
+    }
+    let rle = unsafe { slice::from_raw_parts(rle_ptr, rle_len) };
+    let out_rgba = unsafe { slice::from_raw_parts_mut(out_rgba_ptr, max_out_len) };
+    fastart_core::unpack_alpha_rle_rgba(rle, out_rgba)
+}
+
 /// Applies MODNet threshold/feather and RLE compression in one Rust call.
 #[no_mangle]
 pub extern "C" fn fastart_modnet_alpha_to_rle_c(

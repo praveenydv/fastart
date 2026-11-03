@@ -1136,7 +1136,7 @@ export const EditorModals = React.memo(
       return !needsTime;
     }
 
-    return false;
+    return true;
   },
 );
 export default EditorModals;

@@ -21,6 +21,7 @@ import { triggerHaptic } from "../../utils/haptics";
 import { ObjectTrackerEngine } from "../../utils/objectTrackerEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { THEME_COLORS } from "../../constants/designConstants";
+import { ModalHeader } from "../Common/ModalHeader";
 
 interface MotionTrackingModalProps {
   visible: boolean;
@@ -493,43 +494,14 @@ export default function MotionTrackingModal({
     <View style={[styles.container, isInline && styles.inlineSheetContainer]}>
       {/* Header for standalone modal */}
       {!isInline && (
-        <View style={styles.sheetHeader}>
-          <View style={styles.headerLeft}>
-            <View style={styles.headerIconWrap}>
-              <Ionicons name="scan-outline" size={15} color={THEME_COLORS.accent} />
-            </View>
-            <Text style={styles.sheetTitle}>Motion Tracking</Text>
-            {hasTrajectory && (
-              <View style={styles.statusBadge}>
-                <View style={styles.statusDotActive} />
-                <Text style={styles.statusBadgeText}>{trajectory.length} pts</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.headerRight}>
-            {hasTrajectory && (
-              <TouchableOpacity
-                onPress={handleReset}
-                style={styles.clearBtn}
-                activeOpacity={0.7}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                <Ionicons name="trash-outline" size={12} color="#EF4444" style={{ marginRight: 3 }} />
-                <Text style={styles.clearBtnText}>Clear</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="close" size={14} color="#94A3B8" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="Motion Tracking"
+          subtitle={hasTrajectory ? `${trajectory.length} pts` : undefined}
+          iconName="scan-outline"
+          onClose={onClose}
+          onReset={hasTrajectory ? handleReset : undefined}
+          resetText="Clear"
+        />
       )}
 
       {/* Inline Subheader / Quick Status bar */}

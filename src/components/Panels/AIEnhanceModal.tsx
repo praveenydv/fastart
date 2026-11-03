@@ -9,6 +9,7 @@ import {
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Ionicons } from '@expo/vector-icons';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common';
 
 interface AIEnhanceModalProps {
   visible: boolean;
@@ -117,34 +118,13 @@ export default function AIEnhanceModal({
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="sparkles" size={14} color="#00F2FE" />
-            <Text style={styles.headerTitle}>AI Enhance</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity
-              onPress={handleReset}
-              style={[styles.resetBtn, !isModified && { opacity: 0.4 }, { paddingHorizontal: 6, height: 22, flexDirection: 'row', alignItems: 'center' }]}
-              disabled={!isModified}
-              activeOpacity={0.7}
-              accessibilityLabel="Reset enhancements"
-            >
-              <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 2 }} />
-              <Text style={[styles.resetText, { fontSize: 9 }]}>Reset</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.doneBtn}
-              activeOpacity={0.7}
-              accessibilityLabel="Close panel"
-            >
-              <Ionicons name="close" size={14} color="#A1A1AA" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ModalHeader
+          title="AI Enhance"
+          iconName="sparkles"
+          onClose={onClose}
+          onReset={handleReset}
+          resetText="Reset"
+        />
       ) : null}
 
           {/* Tabs: Beauty vs Clarity */}
@@ -399,9 +379,9 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   doneBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#131826',
     borderWidth: 1,
     borderColor: '#1F2637',
