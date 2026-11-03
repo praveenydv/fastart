@@ -487,7 +487,7 @@ export default function AutoCutModal({
   return (
     <Modal
       visible={visible}
-      animationType={Platform.OS === "web" ? "fade" : "slide"}
+      animationType={Platform.OS === "web" ? "fade" : "none"}
       transparent
       onRequestClose={onClose}
     >

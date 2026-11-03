@@ -99,22 +99,28 @@ export function useProjectKeyframes({
   const maskKeyframeCount = rawMaskKeyframes.length;
 
   const handleJumpPrevMaskKeyframe = useCallback(() => {
-    if (!prevMaskKeyframe || !activeClip) return;
-    const targetTime = Math.max(0, (activeClip.startTime || 0) + prevMaskKeyframe.time);
+    if (!activeClip) return;
+    const localTime = currentTimeRef.current - (activeClip.startTime || 0);
+    const targetKeyframe = [...rawMaskKeyframes].reverse().find((keyframe) => keyframe.time < localTime - 0.06);
+    if (!targetKeyframe) return;
+    const targetTime = Math.max(0, (activeClip.startTime || 0) + targetKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
     }
     return targetTime;
-  }, [prevMaskKeyframe, activeClip, setCurrentTime]);
+  }, [rawMaskKeyframes, activeClip, currentTimeRef, setCurrentTime]);
 
   const handleJumpNextMaskKeyframe = useCallback(() => {
-    if (!nextMaskKeyframe || !activeClip) return;
-    const targetTime = Math.max(0, (activeClip.startTime || 0) + nextMaskKeyframe.time);
+    if (!activeClip) return;
+    const localTime = currentTimeRef.current - (activeClip.startTime || 0);
+    const targetKeyframe = rawMaskKeyframes.find((keyframe) => keyframe.time > localTime + 0.06);
+    if (!targetKeyframe) return;
+    const targetTime = Math.max(0, (activeClip.startTime || 0) + targetKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
     }
     return targetTime;
-  }, [nextMaskKeyframe, activeClip, setCurrentTime]);
+  }, [rawMaskKeyframes, activeClip, currentTimeRef, setCurrentTime]);
 
   // Add or Remove Mask Keyframe to active video clip
   const handleAddMaskKeyframe = useCallback((): { action: "added" | "removed"; time: number } | void => {
@@ -280,22 +286,28 @@ export function useProjectKeyframes({
   }, [selectedClip, project, selectedClipId, selectedClipType, updateProjectWithHistory]);
 
   const handleJumpPrevKeyframe = useCallback(() => {
-    if (!prevKeyframe || !activeClip) return;
-    const targetTime = Math.max(0, (activeClip.startTime || 0) + prevKeyframe.time);
+    if (!activeClip) return;
+    const localTime = currentTimeRef.current - (activeClip.startTime || 0);
+    const targetKeyframe = [...rawKeyframes].reverse().find((keyframe) => keyframe.time < localTime - 0.06);
+    if (!targetKeyframe) return;
+    const targetTime = Math.max(0, (activeClip.startTime || 0) + targetKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
     }
     return targetTime;
-  }, [prevKeyframe, activeClip, setCurrentTime]);
+  }, [rawKeyframes, activeClip, currentTimeRef, setCurrentTime]);
 
   const handleJumpNextKeyframe = useCallback(() => {
-    if (!nextKeyframe || !activeClip) return;
-    const targetTime = Math.max(0, (activeClip.startTime || 0) + nextKeyframe.time);
+    if (!activeClip) return;
+    const localTime = currentTimeRef.current - (activeClip.startTime || 0);
+    const targetKeyframe = rawKeyframes.find((keyframe) => keyframe.time > localTime + 0.06);
+    if (!targetKeyframe) return;
+    const targetTime = Math.max(0, (activeClip.startTime || 0) + targetKeyframe.time);
     if (setCurrentTime) {
       setCurrentTime(targetTime);
     }
     return targetTime;
-  }, [nextKeyframe, activeClip, setCurrentTime]);
+  }, [rawKeyframes, activeClip, currentTimeRef, setCurrentTime]);
 
   // Add or Remove Keyframe to active clip
   const handleAddKeyframe = useCallback((): { action: "added" | "removed"; time: number } | void => {

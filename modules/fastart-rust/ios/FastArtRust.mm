@@ -1,6 +1,7 @@
 #import "FastArtRust.h"
 #import <vector>
 #include <cstdint>
+#include <cstring>
 
 // Forward declaration of C-FFI functions from libfastart_ios.a
 extern "C" {
@@ -171,26 +172,30 @@ RCT_EXPORT_METHOD(processChromaCutout:(NSString *)rgbaBase64 width:(NSInteger)wi
   });
 }
 
-RCT_EXPORT_METHOD(segmentFrameRgba:(NSArray *)rgbaArray width:(NSInteger)width height:(NSInteger)height threshold:(double)threshold feather:(double)feather resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+RCT_EXPORT_METHOD(segmentFrameRgba:(NSString *)rgbaBase64 width:(NSInteger)width height:(NSInteger)height threshold:(double)threshold feather:(double)feather resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    if (width <= 0 || height <= 0 || (uint64_t)width > SIZE_MAX / 4 / (uint64_t)height) {
+      reject(@"INVALID_FRAME", @"Invalid RGBA frame dimensions", nil);
+      return;
+    }
     const size_t pixelCount = (size_t)width * (size_t)height;
     const size_t rgbaCount = pixelCount * 4;
-    if (width <= 0 || height <= 0 || rgbaArray.count != rgbaCount) {
+    NSData *rgbaData = [[NSData alloc] initWithBase64EncodedString:rgbaBase64 options:NSDataBase64DecodingIgnoreUnknownCharacters];
+    if (rgbaData == nil || rgbaData.length != rgbaCount) {
       reject(@"INVALID_FRAME", @"Invalid RGBA frame for Rust segmentation", nil);
       return;
     }
     std::vector<uint8_t> rgba(rgbaCount);
     std::vector<uint8_t> alpha(pixelCount);
-    for (size_t i = 0; i < rgbaCount; i++) rgba[i] = (uint8_t)[rgbaArray[i] unsignedCharValue];
+    memcpy(rgba.data(), rgbaData.bytes, rgbaCount);
     const bool ok = fastart_ios_segment_frame_rgba(rgba.data(), rgba.size(), width, height,
       (float)threshold, (float)feather, alpha.data(), alpha.size());
     if (!ok) {
       reject(@"RUST_PROCESSING_ERROR", @"Rust segmentation failed", nil);
       return;
     }
-    NSMutableArray *result = [NSMutableArray arrayWithCapacity:alpha.size()];
-    for (uint8_t value : alpha) [result addObject:@(value)];
-    resolve(result);
+    NSData *alphaData = [NSData dataWithBytes:alpha.data() length:alpha.size()];
+    resolve([alphaData base64EncodedStringWithOptions:0]);
   });
 }
 

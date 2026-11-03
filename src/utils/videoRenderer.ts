@@ -115,11 +115,11 @@ export class VideoRenderer {
   private maskFramePending: boolean = false;
   private blurCanvas: HTMLCanvasElement | null = null;
   private blurCtx: CanvasRenderingContext2D | null = null;
-  private _activeVideoItems: Array<{
+  private _activeVideoItems: {
     clip: VideoClip;
     trackIndex: number;
     transitionState?: TransitionRenderState | null;
-  }> = [];
+  }[] = [];
   private _handledVideoIds = new Set<string>();
   private _clipsByTrack = new Map<number, VideoClip[]>();
   private _activeVideosScratch: VideoClip[] = [];
@@ -127,18 +127,18 @@ export class VideoRenderer {
   private _activeTextsScratch: any[] = [];
   private _activeStickersScratch: any[] = [];
   private _activeEffectsScratch: any[] = [];
-  private _visualItems: Array<{
+  private _visualItems: {
     kind: "video" | "caption" | "text" | "sticker" | "effect";
     clip: any;
     trackIndex: number;
     transitionState?: TransitionRenderState | null;
-  }> = [];
-  private _visualItemPool: Array<{
+  }[] = [];
+  private _visualItemPool: {
     kind: "video" | "caption" | "text" | "sticker" | "effect";
     clip: any;
     trackIndex: number;
     transitionState?: TransitionRenderState | null;
-  }> = [];
+  }[] = [];
   private snapshotCanvas: HTMLCanvasElement | null = null;
   private snapshotCtx: CanvasRenderingContext2D | null = null;
 

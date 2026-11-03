@@ -8,6 +8,29 @@ export { LruCache };
 
 // In-memory thumbnail cache keyed by clipId or mediaUrl (bounded to 120 entries)
 export const globalThumbnailCache = new LruCache<string, string>(120);
+const MAX_CONCURRENT_NATIVE_THUMBNAILS = 2;
+let activeNativeThumbnailJobs = 0;
+const nativeThumbnailWaiters: (() => void)[] = [];
+
+async function acquireNativeThumbnailSlot(): Promise<() => void> {
+  const makeRelease = () => {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = nativeThumbnailWaiters.shift();
+      if (next) next();
+      else activeNativeThumbnailJobs = Math.max(0, activeNativeThumbnailJobs - 1);
+    };
+  };
+  if (activeNativeThumbnailJobs < MAX_CONCURRENT_NATIVE_THUMBNAILS) {
+    activeNativeThumbnailJobs += 1;
+    return makeRelease();
+  }
+  return await new Promise<() => void>((resolve) => {
+    nativeThumbnailWaiters.push(() => resolve(makeRelease()));
+  });
+}
 
 type ThumbnailListener = (clipId: string, thumbUrl: string) => void;
 const listeners = new Set<ThumbnailListener>();
@@ -304,6 +327,7 @@ export async function requestMediaThumbnail(clip: any, forceRefresh = false): Pr
 
     // NATIVE (iOS / Android): Extract thumbnail via expo-video-thumbnails
     if (Platform.OS !== "web") {
+      const releaseThumbnailSlot = await acquireNativeThumbnailSlot();
       try {
         const { getThumbnailAsync } = await import("expo-video-thumbnails");
         const seekMs = Math.max(100, Math.round((trimIn + 0.1) * 1000));
@@ -325,7 +349,12 @@ export async function requestMediaThumbnail(clip: any, forceRefresh = false): Pr
           notifyThumbnailListeners(clipId, result.uri);
           return result.uri;
         }
-      } catch (err) {}
+      } catch (err) {
+        // Thumbnail extraction is best effort; the timeline remains usable
+        // without a filmstrip while the request is retried on demand.
+      } finally {
+        releaseThumbnailSlot();
+      }
     }
   } catch (err) {
   } finally {

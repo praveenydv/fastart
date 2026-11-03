@@ -420,12 +420,12 @@ function ToolbarComponent({
   };
 
   const activeTools = React.useMemo(() => {
-    let list: Array<{
+    let list: {
       id: string;
       title: string;
       icon: any;
       requiresAudio?: boolean;
-    }> = [];
+    }[] = [];
     if (!selectedClip) {
       list = ROOT_TOOLS;
     } else if (

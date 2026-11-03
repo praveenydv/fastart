@@ -1024,7 +1024,7 @@ export default function AutoCaptionModal({
               />
               <Text style={styles.emptyTitle}>No captions yet</Text>
               <Text style={styles.emptySubtitle}>
-                Tap "Auto Transcribe" above to generate subtitles automatically, or import an SRT script.
+                Tap &quot;Auto Transcribe&quot; above to generate subtitles automatically, or import an SRT script.
               </Text>
             </View>
           }

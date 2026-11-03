@@ -24,7 +24,7 @@ export default function SettingsModal({
   return (
     <Modal
       visible={visible}
-      animationType={Platform.OS === "web" ? "fade" : "slide"}
+      animationType={Platform.OS === "web" ? "fade" : "none"}
       onRequestClose={onClose}
     >
       <SettingsScreen

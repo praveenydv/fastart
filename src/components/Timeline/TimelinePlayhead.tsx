@@ -1,11 +1,11 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { View, Text, Platform } from "react-native";
 import { styles } from "./TimelineStyles";
 import { formatPlayheadTime } from "./timelineUtils";
 import { playheadCoordinator } from "../../utils/playheadCoordinator";
+import { getPlaybackTime } from "../../utils/playbackTimeStore";
 
 export interface TimelinePlayheadHeadProps {
-  currentTime: number;
   pxPerSec: number;
   isScrubbingRuler: boolean;
   playheadPanResponder: any;
@@ -14,18 +14,19 @@ export interface TimelinePlayheadHeadProps {
 
 export const TimelinePlayheadHead: React.FC<TimelinePlayheadHeadProps> = React.memo(
   ({
-    currentTime,
     pxPerSec,
     isScrubbingRuler,
     playheadPanResponder,
     handlePlayheadPointerDown,
   }) => {
     const headRef = useRef<any>(null);
+    const [scrubTime, setScrubTime] = useState(getPlaybackTime);
     const pxPerSecRef = useRef(pxPerSec);
     pxPerSecRef.current = pxPerSec;
 
     useEffect(() => {
       return playheadCoordinator.subscribe((time) => {
+        if (isScrubbingRuler) setScrubTime(time);
         const x = time * pxPerSecRef.current;
         if (Platform.OS === "web") {
           const domNode = headRef.current?._inputRef || headRef.current;
@@ -38,7 +39,9 @@ export const TimelinePlayheadHead: React.FC<TimelinePlayheadHeadProps> = React.m
           });
         }
       });
-    }, []);
+    }, [isScrubbingRuler]);
+
+    const currentTime = isScrubbingRuler ? scrubTime : getPlaybackTime();
 
     return (
       <View
@@ -85,16 +88,17 @@ export const TimelinePlayheadHead: React.FC<TimelinePlayheadHeadProps> = React.m
     );
   },
 );
+TimelinePlayheadHead.displayName = "TimelinePlayheadHead";
 
 export interface TimelinePlayheadNeedleProps {
-  currentTime: number;
   pxPerSec: number;
   isScrubbingRuler: boolean;
 }
 
 export const TimelinePlayheadNeedle: React.FC<TimelinePlayheadNeedleProps> = React.memo(
-  ({ currentTime, pxPerSec, isScrubbingRuler }) => {
+  ({ pxPerSec, isScrubbingRuler }) => {
     const needleRef = useRef<any>(null);
+    const currentTime = getPlaybackTime();
     const pxPerSecRef = useRef(pxPerSec);
     pxPerSecRef.current = pxPerSec;
 
@@ -143,13 +147,13 @@ export const TimelinePlayheadNeedle: React.FC<TimelinePlayheadNeedleProps> = Rea
     );
   },
 );
+TimelinePlayheadNeedle.displayName = "TimelinePlayheadNeedle";
 
 export interface TimelinePlayheadProps extends TimelinePlayheadHeadProps {
   showNeedle?: boolean;
 }
 
 export const TimelinePlayhead: React.FC<TimelinePlayheadProps> = ({
-  currentTime,
   pxPerSec,
   isScrubbingRuler,
   playheadPanResponder,
@@ -159,7 +163,6 @@ export const TimelinePlayhead: React.FC<TimelinePlayheadProps> = ({
   return (
     <>
       <TimelinePlayheadHead
-        currentTime={currentTime}
         pxPerSec={pxPerSec}
         isScrubbingRuler={isScrubbingRuler}
         playheadPanResponder={playheadPanResponder}
@@ -167,7 +170,6 @@ export const TimelinePlayhead: React.FC<TimelinePlayheadProps> = ({
       />
       {showNeedle && (
         <TimelinePlayheadNeedle
-          currentTime={currentTime}
           pxPerSec={pxPerSec}
           isScrubbingRuler={isScrubbingRuler}
         />

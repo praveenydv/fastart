@@ -57,6 +57,7 @@ const TimelineNativeRuler: React.FC<{
     </>
   );
 });
+TimelineNativeRuler.displayName = "TimelineNativeRuler";
 
 export const TimelineRuler: React.FC<TimelineRulerProps> = ({
   ticks,

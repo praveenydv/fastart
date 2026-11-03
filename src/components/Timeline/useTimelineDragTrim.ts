@@ -10,7 +10,6 @@ interface UseTimelineDragTrimParams {
   pxPerSec: number;
   isSnappingEnabled: boolean;
   isHapticEnabled: boolean;
-  currentTime?: number;
   onSeek?: (time: number) => void;
   onSelectClip: (
     id: string,
@@ -44,7 +43,6 @@ export function useTimelineDragTrim({
   pxPerSec,
   isSnappingEnabled,
   isHapticEnabled,
-  currentTime,
   onSeek,
   onSelectClip,
   onOpenEditModal,
@@ -75,7 +73,6 @@ export function useTimelineDragTrim({
     isSnappingEnabled,
     isHapticEnabled,
     isTrimmingActiveRef,
-    currentTime,
     onSeek,
     onSelectClip,
     onOpenEditModal,
@@ -96,7 +93,6 @@ export function useTimelineDragTrim({
     isHapticEnabled,
     isTrimmingActiveRef,
     isSnappingEnabled,
-    currentTime,
     onTrimClip,
   });
 

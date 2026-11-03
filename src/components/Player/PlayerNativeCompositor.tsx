@@ -1120,7 +1120,16 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
   getItemBaseDimensions,
   getInterpolatedTransform,
 }) => {
-  const pinnedTracksMap = new Map<string, any>();
+  const pinnedTracksMap = React.useMemo(() => {
+    const tracks = new Map<string, any>();
+    for (let i = 0; i < activeVideos.length; i++) {
+      const video = activeVideos[i];
+      if (video.motionTrack?.enabled && video.motionTrack.pinnedClipId) {
+        tracks.set(video.motionTrack.pinnedClipId, video.motionTrack);
+      }
+    }
+    return tracks;
+  }, [activeVideos]);
   const [, setMaskVersion] = React.useState(0);
   React.useEffect(() => {
     const onMaskUpdate = () => setMaskVersion((v) => v + 1);
@@ -1129,12 +1138,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
       unsub();
     };
   }, []);
-  for (let i = 0; i < activeVideos.length; i++) {
-    const v = activeVideos[i];
-    if (v.motionTrack?.enabled && v.motionTrack.pinnedClipId) {
-      pinnedTracksMap.set(v.motionTrack.pinnedClipId, v.motionTrack);
-    }
-  }
   const rawBg = canvasBackground || "#000000";
   const isBlur = rawBg.startsWith("blur:");
   const isImage = rawBg.startsWith("image:");

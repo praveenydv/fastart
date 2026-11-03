@@ -29,17 +29,51 @@ import { computeTotalDuration, FastArtProject } from "./src/types/project";
 import { saveLastSession, LastEditSession, saveProject } from "./src/utils/storage";
 import { mediaHasAudioTrack } from "./src/utils/mediaAudioDetector";
 import { deleteMedia } from "./src/utils/largeMediaStorage";
+import { getPlaybackTime, setPlaybackTime, usePlaybackTime } from "./src/utils/playbackTimeStore";
 
 // Keep native splash screen visible while app hydrates
 ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
+
+const PlaybackSessionSaver = React.memo(function PlaybackSessionSaver({
+  projectId,
+  routeScreen,
+  zoom,
+  selectedClipId,
+  isPlaying,
+}: {
+  projectId?: string;
+  routeScreen: string;
+  zoom: number;
+  selectedClipId: string | null;
+  isPlaying: boolean;
+}) {
+  const currentTime = usePlaybackTime(!isPlaying && routeScreen === "editor" && !!projectId);
+  useEffect(() => {
+    if (!projectId || routeScreen !== "editor" || isPlaying) return;
+    const timer = setTimeout(() => {
+      const session: LastEditSession = {
+        projectId,
+        currentTime,
+        zoom,
+        selectedClipId,
+        updatedAt: Date.now(),
+      };
+      saveLastSession(session);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [projectId, routeScreen, currentTime, zoom, selectedClipId, isPlaying]);
+  return null;
+});
 
 export default function App() {
   const { route, navigate } = useAppRouter();
 
   // Playback state
-  const [currentTime, setCurrentTime] = useState(0);
+  const currentTime = getPlaybackTime();
   const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
+  const setCurrentTime = useCallback<React.Dispatch<React.SetStateAction<number>>>((update) => {
+    currentTimeRef.current = setPlaybackTime(update);
+  }, []);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -340,6 +374,7 @@ export default function App() {
     selectedClipId,
     selectedClipType,
     currentTime,
+    currentTimeRef,
     transitionTargetClipId,
     updateProjectWithHistory: updateProjectDispatcher,
     setActiveModal,
@@ -468,7 +503,10 @@ export default function App() {
     openModal,
   });
 
-  const totalDuration = project ? computeTotalDuration(project.tracks) : 10.0;
+  const totalDuration = useMemo(
+    () => project ? computeTotalDuration(project.tracks) : 10.0,
+    [project?.tracks],
+  );
 
   // Keyboard shortcuts hook
   useKeyboardShortcuts({
@@ -612,24 +650,6 @@ export default function App() {
     }
   }, [commitPreview]);
 
-  // Persist last active editing session (debounced by 200ms for smooth 60fps scrubbing with near-instant persistence)
-  useEffect(() => {
-    if (!project || route.screen !== "editor" || isPlaying) return;
-
-    const timer = setTimeout(() => {
-      const session: LastEditSession = {
-        projectId: project.id,
-        currentTime,
-        zoom,
-        selectedClipId,
-        updatedAt: Date.now(),
-      };
-      saveLastSession(session);
-    }, 200);
-
-    return () => clearTimeout(timer);
-  }, [project?.id, currentTime, zoom, selectedClipId, route.screen, isPlaying]);
-
   // Lifecycle listeners to guarantee persistence across close, refresh, background and reopen
   useEffect(() => {
     const appStateSub = AppState.addEventListener("change", (nextState) => {
@@ -767,6 +787,13 @@ export default function App() {
     <View style={styles.rootWrapper}>
       <StatusBar barStyle="light-content" />
       <View style={styles.rootContainer}>
+        <PlaybackSessionSaver
+          projectId={project?.id}
+          routeScreen={route.screen}
+          zoom={zoom}
+          selectedClipId={selectedClipId}
+          isPlaying={isPlaying}
+        />
         {/* 1. HOME DASHBOARD SCREEN */}
         {route.screen === "home" && (
           <HomeDashboard

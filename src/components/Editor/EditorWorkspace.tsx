@@ -34,6 +34,7 @@ import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 import { reconnectLinkedMedia } from "../../utils/largeMediaStorage";
 import { pauseActiveVideoRenderer } from "../../utils/videoRenderer";
 import { pauseAllAudio } from "../Player/usePlayerAudioSync";
+import { getPlaybackTime } from "../../utils/playbackTimeStore";
 import { ErrorBoundary } from "../Common/ErrorBoundary";
 import KeyboardShortcutsModal from "../Panels/KeyboardShortcutsModal";
 import UndoHistoryModal from "../Panels/UndoHistoryModal";
@@ -265,7 +266,6 @@ interface EditorWorkspaceProps {
 
 const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   project,
-  currentTime,
   setCurrentTime,
   isPlaying,
   setIsPlaying,
@@ -507,7 +507,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     (type: "video" | "audio" = "video") => {
       if (selectedClipId) return selectedClipId;
       if (!project) return null;
-      const cur = currentTime || 0;
+      const cur = getPlaybackTime();
       if (type === "audio") {
         const audio =
           project.tracks?.audio?.find(
@@ -521,7 +521,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         ) || project.tracks?.video?.[0];
       return video ? video.id : null;
     },
-    [project, selectedClipId, currentTime],
+    [project, selectedClipId],
   );
 
   const handleApplyFilter = React.useCallback(
@@ -596,7 +596,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       // 3. GLOBAL: Create timeline filter clip!
       if (filter === "none" || filter === "normal") return;
 
-      const desiredStart = currentTime || 0;
+      const desiredStart = getPlaybackTime();
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         project,
         desiredStart,
@@ -630,7 +630,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       project,
       selectedClipId,
       selectedClipType,
-      currentTime,
       updateProjectWithHistory,
       setSelectedClipId,
       setSelectedClipType,
@@ -691,7 +690,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       const newText = {
         id: `text_${Date.now()}`,
         text: text || "Sample Text",
-        startTime: currentTime,
+        startTime: getPlaybackTime(),
         duration: 3,
         trackIndex: 2,
         color: color || "#FFFFFF",
@@ -704,7 +703,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         },
       });
     },
-    [currentTime, project, updateProjectWithHistory],
+    [project, updateProjectWithHistory],
   );
 
   const handleAddSticker = React.useCallback(
@@ -713,7 +712,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       const newSticker = {
         id: `stk_${Date.now()}`,
         char: char || "🔥",
-        startTime: currentTime,
+        startTime: getPlaybackTime(),
         duration: 3,
         trackIndex: 3,
       };
@@ -725,7 +724,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         },
       });
     },
-    [currentTime, project, updateProjectWithHistory],
+    [project, updateProjectWithHistory],
   );
 
   const handleAddEffect = React.useCallback(
@@ -808,7 +807,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       // 3. GLOBAL: Create timeline effect clip!
       if (isNone) return;
 
-      const desiredStart = currentTime || 0;
+      const desiredStart = getPlaybackTime();
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         project,
         desiredStart,
@@ -840,7 +839,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       if (setSelectedClipType) setSelectedClipType("effects");
     },
     [
-      currentTime,
       project,
       selectedClipId,
       selectedClipType,
@@ -1231,7 +1229,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   // Memoized main clip selector for toolbar
   const handleSelectMainClip = useCallback(() => {
     if (project?.tracks?.video && project.tracks.video.length > 0) {
-      const cur = currentTime || 0;
+      const cur = getPlaybackTime();
       const target =
         project.tracks.video.find(
           (c) => cur >= c.startTime && cur <= c.startTime + c.duration,
@@ -1241,7 +1239,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         setSelectedClipType("video");
       }
     }
-  }, [project?.tracks?.video, currentTime, setSelectedClipId, setSelectedClipType]);
+  }, [project?.tracks?.video, setSelectedClipId, setSelectedClipType]);
 
   // Unified Toolbar renderer (horizontal at bottom for mobile, vertical on whole left for laptop)
   const renderToolbar = (
@@ -1381,7 +1379,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       resizeHandleProps={timelineResizeProps}
       handleResetResizeHeight={handleResetResizeHeight}
       project={project}
-      currentTime={currentTime}
+      currentTime={getPlaybackTime()}
+      suspendHeavyContent={isMobileInlineActive}
       totalDuration={totalDuration}
       isPlaying={isPlaying}
       onSeek={setCurrentTime}
@@ -1520,7 +1519,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     <ErrorBoundary fallbackTitle="Player Preview">
       <Player
         project={project}
-        currentTime={currentTime}
+        currentTime={getPlaybackTime()}
         isPlaying={isPlaying}
         totalDuration={totalDuration}
         fullscreen={isFullscreen}
@@ -1559,8 +1558,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
               });
             }
             if (
-              currentTime >= totalDuration - 0.05 ||
-              currentTime >= totalDuration
+              getPlaybackTime() >= totalDuration - 0.05 ||
+              getPlaybackTime() >= totalDuration
             ) {
               setCurrentTime(0);
             }
@@ -1598,7 +1597,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         }}
         onUpdateClipMask={(clipId, mask, isFinal) =>
           handleUpdateClipMask &&
-          handleUpdateClipMask(clipId, mask, isFinal, currentTime)
+          handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
         }
         activeModal={activeModal}
         onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
@@ -1763,7 +1762,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       project={project}
                       selectedClip={selectedClip}
                       selectedClipType={selectedClipType}
-                      currentTime={currentTime}
+                      currentTime={getPlaybackTime()}
                       onUpdateProject={(updates) =>
                         updateProjectWithHistory(updates)
                       }
@@ -1780,7 +1779,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       }
                       onUpdateClipMask={(clipId, mask, isFinal) =>
                         handleUpdateClipMask &&
-                        handleUpdateClipMask(clipId, mask, isFinal, currentTime)
+                        handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
@@ -1869,7 +1868,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                   onAddTransition={(trId) =>
                     handleOpenTransitionsModal(selectedClipId || "")
                   }
-                  currentTime={currentTime}
+                  currentTime={getPlaybackTime()}
                   onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
                   width={mediaPanelWidth}
                   position="right"
@@ -1895,7 +1894,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                   onAddTransition={(trId) =>
                     handleOpenTransitionsModal(selectedClipId || "")
                   }
-                  currentTime={currentTime}
+                  currentTime={getPlaybackTime()}
                   onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
                   width={mediaPanelWidth}
                   position="left"
@@ -2043,7 +2042,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       project={project}
                       selectedClip={selectedClip}
                       selectedClipType={selectedClipType}
-                      currentTime={currentTime}
+                      currentTime={getPlaybackTime()}
                       onUpdateProject={(updates) =>
                         updateProjectWithHistory(updates)
                       }
@@ -2060,7 +2059,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       }
                       onUpdateClipMask={(clipId, mask, isFinal) =>
                         handleUpdateClipMask &&
-                        handleUpdateClipMask(clipId, mask, isFinal, currentTime)
+                        handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })

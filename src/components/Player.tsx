@@ -31,12 +31,65 @@ import { getExportResolutionDimensions } from "./Panels/Export/exportTypes";
 import { THEME_COLORS } from "../constants/designConstants";
 import { relinkMediaFile, reconnectLinkedMedia } from "../utils/largeMediaStorage";
 import { MaskConfig } from "../types/project";
+import { usePlaybackTime } from "../utils/playbackTimeStore";
 
 const EMPTY_ARRAY: any[] = Object.freeze([]) as any[];
 
+type TimedItem = { startTime: number; duration: number };
+type TimedIntervalIndex<T extends TimedItem> = {
+  items: { item: T; order: number }[];
+  tree: number[];
+  leafCount: number;
+};
+
+function buildTimedIntervalIndex<T extends TimedItem>(items: T[] | null | undefined): TimedIntervalIndex<T> {
+  const ordered = (items || [])
+    .map((item, order) => ({ item, order }))
+    .sort((a, b) => a.item.startTime - b.item.startTime || a.order - b.order);
+  let leafCount = 1;
+  while (leafCount < ordered.length) leafCount *= 2;
+  const tree = new Array<number>(leafCount * 2).fill(Number.NEGATIVE_INFINITY);
+  for (let i = 0; i < ordered.length; i++) {
+    tree[leafCount + i] = ordered[i].item.startTime + ordered[i].item.duration;
+  }
+  for (let i = leafCount - 1; i > 0; i--) {
+    tree[i] = Math.max(tree[i * 2], tree[i * 2 + 1]);
+  }
+  return { items: ordered, tree, leafCount };
+}
+
+function queryTimedIntervalIndex<T extends TimedItem>(
+  index: TimedIntervalIndex<T>,
+  fromTime: number,
+  toTime: number,
+): T[] {
+  const { items, tree, leafCount } = index;
+  let low = 0;
+  let high = items.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (items[mid].item.startTime <= toTime) low = mid + 1;
+    else high = mid;
+  }
+  const endExclusive = low;
+  const matches: { item: T; order: number }[] = [];
+  const visit = (node: number, left: number, right: number) => {
+    if (left >= endExclusive || tree[node] < fromTime) return;
+    if (right - left === 1) {
+      if (left < items.length) matches.push(items[left]);
+      return;
+    }
+    const middle = (left + right) >>> 1;
+    visit(node * 2, left, middle);
+    visit(node * 2 + 1, middle, right);
+  };
+  if (endExclusive > 0) visit(1, 0, leafCount);
+  matches.sort((a, b) => a.order - b.order);
+  return matches.map(({ item }) => item);
+}
+
 function Player({
   project,
-  currentTime,
   isPlaying,
   totalDuration,
   onTogglePlay,
@@ -71,6 +124,7 @@ function Player({
   onUpdateClipMotionTrack,
   onRelinkClip,
 }: PlayerProps) {
+  const currentTime = usePlaybackTime();
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const [internalMaskingMode, setInternalMaskingMode] = useState(false);
   const isMaskingMode =
@@ -287,35 +341,60 @@ function Player({
     };
   }, [fullscreen]);
 
+  const captionIndex = useMemo(
+    () => buildTimedIntervalIndex(project.tracks.captions),
+    [project.tracks.captions],
+  );
+  const textIndex = useMemo(
+    () => buildTimedIntervalIndex(project.tracks.text),
+    [project.tracks.text],
+  );
+  const stickerIndex = useMemo(
+    () => buildTimedIntervalIndex(project.tracks.stickers),
+    [project.tracks.stickers],
+  );
+  const videoIndex = useMemo(
+    () => buildTimedIntervalIndex(project.tracks.video),
+    [project.tracks.video],
+  );
+  const audioIndex = useMemo(
+    () => buildTimedIntervalIndex(project.tracks.audio),
+    [project.tracks.audio],
+  );
+  const effectIndex = useMemo(
+    () => buildTimedIntervalIndex(project.tracks.effects),
+    [project.tracks.effects],
+  );
+
   const activeCaptions = useMemo(() => {
     const list = project.tracks.captions;
     if (!list || list.length === 0) return EMPTY_ARRAY;
-    const filtered = list.filter(
+    const filtered = queryTimedIntervalIndex(captionIndex, currentTime, currentTime).filter(
       (c) =>
         currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
     );
     return filtered.length > 0 ? filtered : EMPTY_ARRAY;
-  }, [project.tracks.captions, currentTime]);
+  }, [project.tracks.captions, captionIndex, currentTime]);
 
   const activeTexts = useMemo(() => {
     const list = project.tracks.text;
     if (!list || list.length === 0) return EMPTY_ARRAY;
-    const filtered = list.filter(
+    const filtered = queryTimedIntervalIndex(textIndex, currentTime, currentTime).filter(
       (t) =>
         currentTime >= t.startTime && currentTime <= t.startTime + t.duration,
     );
     return filtered.length > 0 ? filtered : EMPTY_ARRAY;
-  }, [project.tracks.text, currentTime]);
+  }, [project.tracks.text, textIndex, currentTime]);
 
   const activeStickers = useMemo(() => {
     const list = project.tracks.stickers;
     if (!list || list.length === 0) return EMPTY_ARRAY;
-    const filtered = list.filter(
+    const filtered = queryTimedIntervalIndex(stickerIndex, currentTime, currentTime).filter(
       (s) =>
         currentTime >= s.startTime && currentTime <= s.startTime + s.duration,
     );
     return filtered.length > 0 ? filtered : EMPTY_ARRAY;
-  }, [project.tracks.stickers, currentTime]);
+  }, [project.tracks.stickers, stickerIndex, currentTime]);
 
   // Precomputed set of video clip IDs that have adjacent next clips on the same track.
   // Calculated once per track topology change instead of running O(N^2) loops 60 times a second.
@@ -323,15 +402,28 @@ function Player({
     const vids = project.tracks.video || [];
     const set = new Set<string>();
     if (vids.length <= 1) return set;
-    for (let i = 0; i < vids.length; i++) {
-      const v = vids[i];
-      const end = v.startTime + v.duration;
-      const track = v.trackIndex || 0;
-      for (let j = 0; j < vids.length; j++) {
-        if (i !== j) {
-          const other = vids[j];
-          if ((other.trackIndex || 0) === track && Math.abs(other.startTime - end) < 0.01) {
-            set.add(v.id);
+    const tracks = new Map<number, typeof vids>();
+    for (const clip of vids) {
+      const track = clip.trackIndex || 0;
+      const row = tracks.get(track);
+      if (row) row.push(clip);
+      else tracks.set(track, [clip]);
+    }
+
+    for (const row of tracks.values()) {
+      const sorted = [...row].sort((a, b) => a.startTime - b.startTime);
+      for (const clip of row) {
+        const end = clip.startTime + clip.duration;
+        let low = 0;
+        let high = sorted.length;
+        while (low < high) {
+          const mid = (low + high) >>> 1;
+          if (sorted[mid].startTime < end - 0.01) low = mid + 1;
+          else high = mid;
+        }
+        for (let i = low; i < sorted.length && sorted[i].startTime <= end + 0.01; i++) {
+          if (sorted[i].id !== clip.id && Math.abs(sorted[i].startTime - end) < 0.01) {
+            set.add(clip.id);
             break;
           }
         }
@@ -344,7 +436,7 @@ function Player({
   const activeVideos = useMemo(() => {
     const vids = project.tracks.video;
     if (!vids || vids.length === 0) return EMPTY_ARRAY;
-    const filtered = vids.filter((v) => {
+    const filtered = queryTimedIntervalIndex(videoIndex, currentTime, currentTime).filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
@@ -354,13 +446,14 @@ function Player({
       return currentTime >= start && currentTime <= end;
     });
     return filtered.length > 0 ? filtered : EMPTY_ARRAY;
-  }, [project.tracks.video, currentTime, adjacentNextClipIds]);
+  }, [project.tracks.video, videoIndex, currentTime, adjacentNextClipIds]);
 
-  // Buffered native videos: includes 1.0s lookahead pre-warming with Hardware Decoder Safety Cap
+  // Buffered native media: keep decoder memory bounded. 4K sources can consume
+  // hundreds of MB across decoder surfaces, so only keep one 4K decoder alive.
   const bufferedNativeVideos = useMemo(() => {
     const list = project.tracks.video || [];
     if (list.length === 0) return EMPTY_ARRAY;
-    const filtered = list.filter((v) => {
+    const filtered = queryTimedIntervalIndex(videoIndex, currentTime - 0.2, currentTime + 1.0).filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
@@ -375,9 +468,9 @@ function Player({
 
     if (filtered.length === 0) return EMPTY_ARRAY;
 
-    // Mobile Hardware Decoder Protection:
-    // Strictly cap to at most 3-4 concurrent native video decoders (MediaCodec / AVPlayer)
-    // Prioritize strictly active visible clips first, then immediately upcoming clips
+    // Prioritize visible media first, then the closest upcoming clip. Keep the
+    // decoder budget conservative because Android allocates source-sized codec
+    // buffers even when the preview is rendered into a small view.
     filtered.sort((a, b) => {
       const aActive = currentTime >= a.startTime && currentTime <= a.startTime + a.duration;
       const bActive = currentTime >= b.startTime && currentTime <= b.startTime + b.duration;
@@ -386,11 +479,31 @@ function Player({
       return (a.trackIndex || 0) - (b.trackIndex || 0);
     });
 
-    return filtered.slice(0, 4);
-  }, [project.tracks.video, currentTime, adjacentNextClipIds]);
+    const activeHas4KSource = filtered.some((clip) => {
+      const active = currentTime >= clip.startTime && currentTime <= clip.startTime + clip.duration;
+      const pixels = (clip.width || clip.naturalWidth || 0) * (clip.height || clip.naturalHeight || 0);
+      return active && clip.type !== "photo" && (pixels === 0 || pixels >= 3840 * 2160);
+    });
+    const decoderBudget = activeHas4KSource ? 1 : 2;
+    const bufferedVideoDecoders = filtered
+      .filter((clip) => clip.type !== "photo")
+      .slice(0, decoderBudget);
+    const activePhotos = filtered.filter((clip) =>
+      clip.type === "photo" && currentTime >= clip.startTime && currentTime <= clip.startTime + clip.duration,
+    );
+    const upcomingPhotosByTrack = new Map<number, (typeof filtered)[number]>();
+    for (const clip of filtered) {
+      if (clip.type !== "photo" || clip.startTime <= currentTime) continue;
+      const trackIndex = clip.trackIndex || 0;
+      const existing = upcomingPhotosByTrack.get(trackIndex);
+      if (!existing || clip.startTime < existing.startTime) upcomingPhotosByTrack.set(trackIndex, clip);
+    }
+    const bufferedPhotos = [...activePhotos, ...upcomingPhotosByTrack.values()];
+    return [...bufferedPhotos, ...bufferedVideoDecoders];
+  }, [project.tracks.video, videoIndex, currentTime, adjacentNextClipIds]);
 
   const activeEffects = useMemo(() => {
-    const trackEffs = (project.tracks.effects || []).filter(
+    const trackEffs = queryTimedIntervalIndex(effectIndex, currentTime - 0.005, currentTime + 0.005).filter(
       (e) =>
         currentTime >= (e.startTime - 0.005) &&
         currentTime <= (e.startTime + e.duration + 0.005),
@@ -406,31 +519,45 @@ function Player({
       }));
     const combined = [...trackEffs, ...clipEffs];
     return combined.length > 0 ? combined : EMPTY_ARRAY;
-  }, [project.tracks.effects, activeVideos, currentTime]);
+  }, [project.tracks.effects, effectIndex, activeVideos, currentTime]);
 
   const activeAudios = useMemo(() => {
     const list = project.tracks.audio;
     if (!list || list.length === 0) return EMPTY_ARRAY;
-    const filtered = list.filter(
+    const filtered = queryTimedIntervalIndex(audioIndex, currentTime, currentTime).filter(
       (a) =>
         currentTime >= a.startTime && currentTime <= a.startTime + a.duration,
     );
     return filtered.length > 0 ? filtered : EMPTY_ARRAY;
-  }, [project.tracks.audio, currentTime]);
+  }, [project.tracks.audio, audioIndex, currentTime]);
 
   // Buffered native audio tracks: includes 1.5s lookahead pre-warming
   const bufferedNativeAudios = useMemo(() => {
     const list = project.tracks.audio;
     if (!list || list.length === 0) return EMPTY_ARRAY;
-    const filtered = list.filter((a) => {
+    const filtered = queryTimedIntervalIndex(audioIndex, currentTime, currentTime + 1.5).filter((a) => {
       const start = a.startTime;
       const end = a.startTime + a.duration;
       if (currentTime >= start && currentTime <= end) return true;
       if (currentTime < start && start - currentTime <= 1.5) return true;
       return false;
     });
-    return filtered.length > 0 ? filtered : EMPTY_ARRAY;
-  }, [project.tracks.audio, currentTime]);
+    if (filtered.length === 0) return EMPTY_ARRAY;
+    const active = filtered.filter((audio) =>
+      currentTime >= audio.startTime && currentTime <= audio.startTime + audio.duration,
+    );
+    const upcomingByTrack = new Map<number, (typeof filtered)[number][]>();
+    for (const audio of filtered) {
+      if (audio.startTime <= currentTime) continue;
+      const trackIndex = audio.trackIndex || 0;
+      const upcoming = upcomingByTrack.get(trackIndex) || [];
+      upcoming.push(audio);
+      upcoming.sort((a, b) => a.startTime - b.startTime);
+      if (upcoming.length > 2) upcoming.pop();
+      upcomingByTrack.set(trackIndex, upcoming);
+    }
+    return [...active, ...Array.from(upcomingByTrack.values()).flat()];
+  }, [project.tracks.audio, audioIndex, currentTime]);
 
   // Crop Gestures Hook
   const {
@@ -594,6 +721,9 @@ function Player({
 
   const hasPrevKeyframe = !!prevKeyframe;
   const hasNextKeyframe = !!nextKeyframe;
+  const hasKeyframeAtLivePlayhead = clipKeyframes.some(
+    (keyframe: any) => Math.abs(keyframe.time - localClipTime) <= 0.12,
+  );
 
   const handleJumpPrevKeyframe = useCallback(() => {
     if (!prevKeyframe || !activeClip) return;
@@ -1227,7 +1357,7 @@ function Player({
           stepFrame={stepFrame}
           showSafeZone={showSafeZone}
           setShowSafeZone={setShowSafeZone}
-          hasKeyframeAtCurrentTime={hasKeyframeAtCurrentTime}
+          hasKeyframeAtCurrentTime={hasKeyframeAtLivePlayhead}
           handleKeyframePress={handleKeyframePress}
           onOpenKeyframeModal={onOpenKeyframeModal}
           hasPrevKeyframe={hasPrevKeyframe}

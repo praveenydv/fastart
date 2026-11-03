@@ -23,9 +23,15 @@ export function formatTime(secs: number): string {
 }
 
 export const mediaDimensionsCache = new Map<string, { width: number; height: number }>();
+const MAX_MEDIA_DIMENSION_ENTRIES = 512;
 
 export function registerMediaDimensions(key: string | undefined, width: number, height: number): void {
   if (!key || !width || !height || width <= 0 || height <= 0) return;
+  if (mediaDimensionsCache.has(key)) mediaDimensionsCache.delete(key);
+  else if (mediaDimensionsCache.size >= MAX_MEDIA_DIMENSION_ENTRIES) {
+    const oldestKey = mediaDimensionsCache.keys().next().value;
+    if (oldestKey !== undefined) mediaDimensionsCache.delete(oldestKey);
+  }
   mediaDimensionsCache.set(key, { width, height });
 }
 

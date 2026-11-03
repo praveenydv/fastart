@@ -14,10 +14,12 @@ export function buildMaskSvg(
 
   const feather = Math.max(0, Math.min(80, mask.feather ?? 0));
   const targetBlur = feather * (Math.min(width, height) / 100) * 0.5;
-  // Android's react-native-svg Gaussian blur clamps its RenderScript radius to
-  // 25 px. Render the mask geometry in a reduced coordinate plane, then scale
-  // it back up so large softness values retain their intended spread.
-  const nativeScale = native && targetBlur > 25 ? Math.ceil(targetBlur / 25) : 1;
+  // Android's SVG blur implementation clamps large radii. Render the mask in
+  // a proportionally smaller coordinate plane and scale it back up so the
+  // filter stays below that limit while preserving its full on-screen radius.
+  // A single Gaussian filter gives a continuous opacity falloff; approximating
+  // it with a stack of strokes produces visible bands at high softness values.
+  const nativeScale = native && targetBlur > 20 ? Math.ceil(targetBlur / 20) : 1;
   const geometryWidth = width / nativeScale;
   const geometryHeight = height / nativeScale;
   const effW = mask.width ?? mask.size ?? 60;
@@ -64,23 +66,20 @@ export function buildMaskSvg(
     return null;
   }
 
-  // Feather is 0..80 in the UI. Keep the full range and expand both filter and
-  // mask regions; the native coordinate scale below works around Android's
-  // 25 px Gaussian blur cap without changing the visible geometry.
-  const blur = native ? targetBlur / nativeScale / 2 : targetBlur;
-  // SVG's default filter and mask regions are only slightly larger than the
-  // target bounds (often 10%). That clips most of a large feather on native
-  // SVG, making the edge look almost hard even though the blur is configured.
-  // Use explicit user-space regions with a full-canvas pad so SvgXml and the
-  // browser rasterize the same feather width.
+  const blur = targetBlur / nativeScale;
+  // Retain three Gaussian sigmas around the canvas (over 99% of the visible
+  // falloff) without allocating a fixed 3x-by-3x filter surface for small
+  // feather values. Coordinates are local to the scaled shape group.
+  const filterPad = blur * 3;
   const filter = blur > 0
-    ? `<filter id="f" filterUnits="userSpaceOnUse" x="${-width}" y="${-height}" width="${width * 3}" height="${height * 3}"><feGaussianBlur stdDeviation="${blur}"/></filter>`
+    ? `<filter id="f" filterUnits="userSpaceOnUse" x="${-filterPad}" y="${-filterPad}" width="${geometryWidth + filterPad * 2}" height="${geometryHeight + filterPad * 2}"><feGaussianBlur stdDeviation="${blur}"/></filter>`
     : "";
   const shapeFill = mask.inverted ? "black" : "white";
   const backgroundFill = mask.inverted ? "white" : "black";
   const filterAttr = filter ? ` filter="url(#f)"` : "";
-  const nativeGroupTransform = nativeScale > 1 ? ` transform="scale(${nativeScale})"` : "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${filter}<mask id="m" maskUnits="userSpaceOnUse" x="${-width}" y="${-height}" width="${width * 3}" height="${height * 3}"><rect width="${width}" height="${height}" fill="${backgroundFill}"/><g fill="${shapeFill}"${nativeGroupTransform}${filterAttr}>${body}</g></mask></defs><rect width="${width}" height="${height}" fill="white" mask="url(#m)"/></svg>`;
+  const scaleAttr = nativeScale > 1 ? ` transform="scale(${nativeScale})"` : "";
+  const shapeLayer = `<g fill="${shapeFill}"${scaleAttr}${filterAttr}>${body}</g>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${filter}<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="${backgroundFill}"/>${shapeLayer}</mask></defs><rect width="${width}" height="${height}" fill="white" mask="url(#m)"/></svg>`;
   if (svgCache.size > 256) svgCache.clear();
   svgCache.set(key, svg);
   return svg;

@@ -44,7 +44,7 @@ export const AudioLibraryTab: React.FC<AudioLibraryTabProps> = ({
           <Ionicons name="search-outline" size={36} color="#374151" />
           <Text style={styles.emptyTitle}>No Matching Audio Found</Text>
           <Text style={styles.emptySubtext}>
-            Try searching with different keywords like "whoosh", "impact", "piano", or "glitch"
+            Try searching with different keywords like &quot;whoosh&quot;, &quot;impact&quot;, &quot;piano&quot;, or &quot;glitch&quot;
           </Text>
         </View>
       ) : (

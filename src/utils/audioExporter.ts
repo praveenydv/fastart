@@ -23,6 +23,43 @@ export interface DecodedAudio {
 }
 
 const decodedAudioCache = new Map<string, DecodedAudio>();
+const MAX_DECODED_AUDIO_CACHE_BYTES = 64 * 1024 * 1024;
+let decodedAudioCacheBytes = 0;
+
+function getCachedDecodedAudio(key: string): DecodedAudio | null {
+  const cached = decodedAudioCache.get(key);
+  if (!cached) return null;
+  decodedAudioCache.delete(key);
+  decodedAudioCache.set(key, cached);
+  return cached;
+}
+
+function cacheDecodedAudio(key: string, audio: DecodedAudio): void {
+  const byteLength = audio.left.byteLength + (audio.right === audio.left ? 0 : audio.right.byteLength);
+  if (byteLength > MAX_DECODED_AUDIO_CACHE_BYTES) return;
+
+  const old = decodedAudioCache.get(key);
+  if (old) {
+    decodedAudioCacheBytes -= old.left.byteLength + (old.right === old.left ? 0 : old.right.byteLength);
+    decodedAudioCache.delete(key);
+  }
+
+  while (
+    decodedAudioCache.size > 0 &&
+    decodedAudioCacheBytes + byteLength > MAX_DECODED_AUDIO_CACHE_BYTES
+  ) {
+    const oldestKey = decodedAudioCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    const oldest = decodedAudioCache.get(oldestKey);
+    decodedAudioCache.delete(oldestKey);
+    if (oldest) {
+      decodedAudioCacheBytes -= oldest.left.byteLength + (oldest.right === oldest.left ? 0 : oldest.right.byteLength);
+    }
+  }
+
+  decodedAudioCache.set(key, audio);
+  decodedAudioCacheBytes += byteLength;
+}
 
 /**
  * Pure-JS 16-bit, 24-bit, 32-bit float, and 8-bit PCM WAV decoder
@@ -123,9 +160,8 @@ export function decodeWavPcm(buf: ArrayBuffer): DecodedAudio | null {
 export async function decodeMediaAudio(url: string, clipId?: string): Promise<DecodedAudio | null> {
   if (!url) return null;
   const cacheKey = `${url}_${clipId || ''}`;
-  if (decodedAudioCache.has(cacheKey)) {
-    return decodedAudioCache.get(cacheKey)!;
-  }
+  const cachedAudio = getCachedDecodedAudio(cacheKey);
+  if (cachedAudio) return cachedAudio;
 
   // On mobile without Web Audio API, only uncompressed WAV files can be decoded via pure JS
   const hasAudioContext =
@@ -169,7 +205,7 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
               left,
               right,
             };
-            decodedAudioCache.set(cacheKey, result);
+            cacheDecodedAudio(cacheKey, result);
             try {
               ctx.close();
             } catch {}
@@ -185,7 +221,7 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
     // 2. Pure-JS WAV PCM decoder (works in all JS engines without browser AudioContext)
     const wav = decodeWavPcm(arrayBuf);
     if (wav) {
-      decodedAudioCache.set(cacheKey, wav);
+      cacheDecodedAudio(cacheKey, wav);
       return wav;
     }
   } catch (err) {
@@ -266,7 +302,7 @@ export async function exportProjectAudioToWavBytes(
   );
 
   // Pre-load and decode real audio from all active clips concurrently
-  const loadedAudioTracks: Array<{
+  const loadedAudioTracks: {
     clip: AudioClip | VideoClip;
     decoded: DecodedAudio;
     volume: number;
@@ -275,7 +311,7 @@ export async function exportProjectAudioToWavBytes(
     fadeIn: number;
     fadeOut: number;
     denoise: boolean;
-  }> = [];
+  }[] = [];
 
   const allClips = [...audioClips, ...videoAudioClips];
   await Promise.all(

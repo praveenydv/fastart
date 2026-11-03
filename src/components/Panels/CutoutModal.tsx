@@ -20,7 +20,6 @@ import {
   hasFrameMask,
   getClipProcessedCount,
   clearClipMasks,
-  clearNativeMaskUris,
   getClipBakedFps,
   updateActiveFrameMatteParams,
   initSelfieSegmentation,
@@ -92,6 +91,7 @@ export default function CutoutModal({
   const [processingError, setProcessingError] = useState<string | null>(null);
   const abortCtrlRef = useRef<AbortController | null>(null);
   const previewInFlightRef = useRef(false);
+  const resetGenerationRef = useRef(0);
 
   const isAlreadyProcessed = clipId ? hasClipMasks(clipId) : false;
   const currentProcessedCount = clipId ? getClipProcessedCount(clipId) : 0;
@@ -142,8 +142,9 @@ export default function CutoutModal({
     time: number,
     previewConfig: CutoutConfig,
   ) => {
-    if (!clip?.url || previewInFlightRef.current) return false;
+    if (!clip?.url || previewInFlightRef.current || abortCtrlRef.current) return false;
     previewInFlightRef.current = true;
+    const generationAtStart = resetGenerationRef.current;
     setIsProcessingActiveFrame(true);
     setProcessingError(null);
     try {
@@ -158,6 +159,10 @@ export default function CutoutModal({
         previewConfig.keyColor || "#00FF00",
         clip.type === "video" ? "video" : "photo",
       );
+      if (generationAtStart !== resetGenerationRef.current) {
+        clearClipMasks(id);
+        return false;
+      }
       if (!ok) {
         setProcessingError(
           previewConfig.mode === "auto"
@@ -176,24 +181,13 @@ export default function CutoutModal({
     }
   }, []);
 
-  // Process once when the modal opens or cutout is first enabled. Mode changes
-  // and slider updates are handled by the debounced config-change path below.
-  useEffect(() => {
-    if (
-      visible && Platform.OS !== "web" && config.enabled && selectedClip?.url &&
-      !hasClipMasks(clipId)
-    ) {
-      void runPreview(selectedClip, clipId, frameIdx, mediaTime, config);
-    }
-  }, [visible, config.enabled, clipId, selectedClip?.url, runPreview]);
-
   const handleConfigChange = (newConfig: CutoutConfig) => {
     setConfig(newConfig);
     onApplyCutout(newConfig, clipId);
 
     // If auto cutout and threshold/shadow changed, update cached active frame matte instantly via Rust
     if (Platform.OS === "web") {
-      if (newConfig.mode === "auto" && clipId) {
+      if (config.enabled && config.mode === "auto" && newConfig.mode === "auto" && clipId) {
         updateActiveFrameMatteParams(
           clipId,
           frameIdx,
@@ -213,16 +207,41 @@ export default function CutoutModal({
   };
 
   const handleProcessActiveFrame = async () => {
-    await runPreview(selectedClip, clipId, frameIdx, mediaTime, config);
+    if (!selectedClip?.url || previewInFlightRef.current || abortCtrlRef.current) return;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    resetGenerationRef.current += 1;
+    clearClipMasks(clipId);
+    // Reset leaves Auto selected but disabled. Explicitly requesting a frame
+    // preview activates the cutout so the resulting mask is shown in the player.
+    const previewConfig = config.enabled ? config : { ...config, enabled: true };
+    if (!config.enabled) {
+      setConfig(previewConfig);
+      onApplyCutout(previewConfig, clipId);
+    }
+    await runPreview(selectedClip, clipId, frameIdx, mediaTime, previewConfig);
   };
 
   const handleProcessVideo = async () => {
-    if (!selectedClip?.url || isProcessingFrames) return;
+    if (!selectedClip?.url || isProcessingFrames || previewInFlightRef.current) return;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const operationGeneration = ++resetGenerationRef.current;
+    clearClipMasks(clipId);
+    const processingConfig = config.enabled ? config : { ...config, enabled: true };
+    if (!config.enabled) {
+      setConfig(processingConfig);
+      onApplyCutout(processingConfig, clipId);
+    }
     abortCtrlRef.current = new AbortController();
     setIsProcessingFrames(true);
     setFrameProgress(0);
 
-    const isFast = (config.quality || "fast") === "fast";
+    const isFast = (processingConfig.quality || "fast") === "fast";
     const clipDuration = Math.max(0.1, selectedClip.duration || 1.0);
     const targetFps = isFast ? (clipDuration > 60 ? 4 : 8) : (bakedFps || 20);
     const estTotal = Math.max(1, Math.ceil(clipDuration * targetFps));
@@ -237,22 +256,25 @@ export default function CutoutModal({
         selectedClip.trimIn || 0,
         selectedClip.speed || 1.0,
         targetFps,
-        (config.intensity ?? 45) / 100,
-        (config.shadow ?? 25) / 100,
-        config.mode || "auto",
-        config.keyColor || "#00FF00",
+        (processingConfig.intensity ?? 45) / 100,
+        (processingConfig.shadow ?? 25) / 100,
+        processingConfig.mode || "auto",
+        processingConfig.keyColor || "#00FF00",
         (pct, cur, tot) => {
           setFrameProgress(pct);
           setProcessedFrames(cur);
           setTotalFramesToProcess(tot);
         },
         abortCtrlRef.current.signal,
-        config.quality || "fast"
+        processingConfig.quality || "fast"
       );
       if (processed === 0) setProcessingError("No frames were processed. Check clip access and cutout engine readiness, then retry.");
     } catch (e) {
       console.warn("[CutoutModal] handleProcessVideo error:", e);
     } finally {
+      if (operationGeneration !== resetGenerationRef.current) {
+        clearClipMasks(clipId);
+      }
       setIsProcessingFrames(false);
       abortCtrlRef.current = null;
     }
@@ -261,24 +283,25 @@ export default function CutoutModal({
   const handleCancelProcessing = () => {
     if (abortCtrlRef.current) {
       abortCtrlRef.current.abort();
-      abortCtrlRef.current = null;
     }
-    setIsProcessingFrames(false);
   };
 
   const handleReset = () => {
+    resetGenerationRef.current += 1;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     if (abortCtrlRef.current) {
       abortCtrlRef.current.abort();
-      abortCtrlRef.current = null;
     }
     if (clipId) {
       clearClipMasks(clipId);
-      clearNativeMaskUris(clipId);
     }
     setProcessingError(null);
     const resetCfg: CutoutConfig = {
       enabled: false,
-      mode: "chroma",
+      mode: "auto",
       keyColor: "#00FF00",
       intensity: 45,
       shadow: 25,

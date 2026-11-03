@@ -46,14 +46,14 @@ export function registerWhisperBridgeListener(listener: Listener) {
 }
 
 export function generateWhisperBridgeHtml(
-  clips: Array<{
+  clips: {
     url: string;
     startTime: number;
     duration: number;
     trimIn: number;
     speed: number;
     volume: number;
-  }>,
+  }[],
   totalDuration: number,
   language: string = "en",
 ): string {
@@ -442,14 +442,14 @@ export async function requestWhisperTranscription(
   // 2. Prepare file URLs: convert any content:// to local cached file:// URLs so WebView can read them
   if (onProgress) onProgress(15, "Preparing media audio for AI transcription...");
 
-  const preparedClips: Array<{
+  const preparedClips: {
     url: string;
     startTime: number;
     duration: number;
     trimIn: number;
     speed: number;
     volume: number;
-  }> = [];
+  }[] = [];
 
   const tempFilesToClean: string[] = [];
 

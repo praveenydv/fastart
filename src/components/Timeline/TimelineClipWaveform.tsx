@@ -105,6 +105,7 @@ const WebWaveformCanvasTile: React.FC<{
     );
   },
 );
+WebWaveformCanvasTile.displayName = "WebWaveformCanvasTile";
 
 const WebWaveformCanvasComponent: React.FC<WebWaveformCanvasProps> = ({
   peaks,
@@ -182,6 +183,7 @@ const WebWaveformCanvasComponent: React.FC<WebWaveformCanvasProps> = ({
 };
 
 const WebWaveformCanvas = React.memo(WebWaveformCanvasComponent);
+WebWaveformCanvas.displayName = "WebWaveformCanvas";
 
 const TimelineClipWaveformComponent: React.FC<TimelineClipWaveformProps> = ({
   clip,

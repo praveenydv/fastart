@@ -25,8 +25,8 @@ export default function ProjectNotFoundScreen({
 
         <Text style={styles.title}>Project Not Found</Text>
         <Text style={styles.subtitle}>
-          We couldn't find a project with key:{' '}
-          <Text style={styles.keyText}>"{projectKey}"</Text>
+          We couldn&apos;t find a project with key:{' '}
+          <Text style={styles.keyText}>&quot;{projectKey}&quot;</Text>
         </Text>
 
         <View style={styles.actionsRow}>

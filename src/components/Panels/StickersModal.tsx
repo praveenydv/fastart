@@ -90,6 +90,8 @@ export default function StickersModal({
       return;
     }
 
+    // This handler runs only after a user selects a sticker.
+     
     const stickerClip: StickerClip = {
       id: 'clip-s-' + Date.now(),
       char: item.char,

@@ -1,3 +1,5 @@
+import { FONT_CATALOG, FontDefinition } from "../../../utils/fontCatalog";
+
 export const COLOR_SWATCHES = [
   "#FFFFFF",
   "#FFE600",
@@ -48,8 +50,6 @@ export const STROKE_WIDTH_OPTIONS = [
   { label: "5px", value: 5 },
   { label: "8px", value: 8 },
 ];
-
-import { FONT_CATALOG, FontDefinition } from "../../../utils/fontCatalog";
 
 export const FONT_OPTIONS = FONT_CATALOG;
 

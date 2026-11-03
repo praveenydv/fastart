@@ -36,6 +36,13 @@ interface ActiveLayerItem {
 }
 
 export default function LayerModal({
+  ...props
+}: LayerModalProps) {
+  if (!props.visible || !props.project) return null;
+  return <LayerModalContent {...props} project={props.project} />;
+}
+
+function LayerModalContent({
   visible,
   onClose,
   isInline = false,
@@ -44,8 +51,7 @@ export default function LayerModal({
   currentTime = 0,
   onSelectClip,
   onUpdateProject,
-}: LayerModalProps) {
-  if (!visible || !project) return null;
+}: LayerModalProps & { project: FastArtProject }) {
 
   const curTime = typeof currentTime === "number" ? currentTime : 0;
 

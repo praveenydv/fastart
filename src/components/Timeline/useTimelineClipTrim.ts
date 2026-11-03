@@ -4,6 +4,7 @@ import { triggerHaptic } from "../../utils/haptics";
 import { getMediaDuration, isImageClip, isExtendableClip } from "../../utils/mediaDuration";
 import { UnifiedClipItem } from "./timelineTypes";
 import { getPointerCoords } from "./timelineUtils";
+import { getPlaybackTime } from "../../utils/playbackTimeStore";
 import {
   computeLeftTrimUpdates,
   computeRightTrimUpdates,
@@ -16,7 +17,6 @@ interface UseTimelineClipTrimParams {
   isHapticEnabled: boolean;
   isTrimmingActiveRef: React.MutableRefObject<boolean>;
   isSnappingEnabled?: boolean;
-  currentTime?: number;
   onTrimClip?: (
     clipId: string,
     updates: {
@@ -37,7 +37,6 @@ export function useTimelineClipTrim({
   isHapticEnabled,
   isTrimmingActiveRef,
   isSnappingEnabled = false,
-  currentTime = -1,
   onTrimClip,
 }: UseTimelineClipTrimParams) {
   const [activeTrimming, setActiveTrimming] = useState<{
@@ -62,8 +61,6 @@ export function useTimelineClipTrim({
   isHapticEnabledRef.current = isHapticEnabled;
   const isSnappingEnabledRef = useRef(isSnappingEnabled);
   isSnappingEnabledRef.current = isSnappingEnabled;
-  const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
   const onTrimClipRef = useRef(onTrimClip);
   onTrimClipRef.current = onTrimClip;
 
@@ -117,7 +114,7 @@ export function useTimelineClipTrim({
           allClipsRef.current,
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
-          currentTimeRef.current,
+          getPlaybackTime(),
         );
 
         latestPanTrimUpdatesRef.current = updates;
@@ -235,7 +232,7 @@ export function useTimelineClipTrim({
           allClipsRef.current,
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
-          currentTimeRef.current,
+          getPlaybackTime(),
         );
 
         latestPanTrimUpdatesRef.current = updates;
@@ -374,7 +371,7 @@ export function useTimelineClipTrim({
           allClipsRef.current,
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
-          currentTimeRef.current,
+          getPlaybackTime(),
         );
 
         latestUpdates = updates;
@@ -472,7 +469,7 @@ export function useTimelineClipTrim({
           allClipsRef.current,
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
-          currentTimeRef.current,
+          getPlaybackTime(),
         );
 
         latestUpdates = updates;

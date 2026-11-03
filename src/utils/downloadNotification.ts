@@ -40,7 +40,7 @@ export async function triggerDownloadNotification({
   if (Platform.OS === "android" || Platform.OS === "ios") {
     try {
       // Safely check for expo-notifications without crashing if not linked
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const Notifications = require("expo-notifications");
       if (Notifications && typeof Notifications.scheduleNotificationAsync === "function") {
         await Notifications.scheduleNotificationAsync({

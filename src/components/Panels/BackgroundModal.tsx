@@ -102,6 +102,13 @@ function normalizeHex(input: string): string | null {
 }
 
 export default function BackgroundModal({
+  ...props
+}: BackgroundModalProps) {
+  if (!props.project) return null;
+  return <BackgroundModalContent {...props} project={props.project} />;
+}
+
+function BackgroundModalContent({
   visible,
   onClose,
   onApply,
@@ -110,8 +117,7 @@ export default function BackgroundModal({
   isInline = false,
   currentTime,
   selectedClip,
-}: BackgroundModalProps) {
-  if (!project) return null;
+}: BackgroundModalProps & { project: FastArtProject }) {
 
   const rawBg = project.canvasBackground || '#000000';
   const isBlur = rawBg.startsWith('blur:');

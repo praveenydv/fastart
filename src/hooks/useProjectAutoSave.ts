@@ -27,7 +27,6 @@ export function useProjectAutoSave({
   debounceMs = 1800,
   intervalMs = 4000,
 }: UseProjectAutoSaveProps) {
-  const lastSavedJsonRef = useRef<string>("");
   const lastSavedObjRef = useRef<FastArtProject | null>(null);
   const debounceTimerRef = useRef<any>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
@@ -36,9 +35,6 @@ export function useProjectAutoSave({
   useEffect(() => {
     if (project && !lastSavedObjRef.current) {
       lastSavedObjRef.current = project;
-      try {
-        lastSavedJsonRef.current = JSON.stringify(project);
-      } catch {}
     }
   }, [project?.id]);
 
@@ -51,17 +47,11 @@ export function useProjectAutoSave({
           return;
         }
 
-        const curJson = JSON.stringify(targetProject);
-        if (curJson === lastSavedJsonRef.current) {
-          lastSavedObjRef.current = targetProject;
-          setSaveStatus("saved");
-          return;
-        }
-
         setSaveStatus("saving");
-        const saved = saveProject(targetProject);
-        lastSavedObjRef.current = saved;
-        lastSavedJsonRef.current = JSON.stringify(saved);
+        saveProject(targetProject);
+        // Project updates are immutable; remember the exact state object that
+        // was committed so the periodic safety check can skip it by identity.
+        lastSavedObjRef.current = targetProject;
         setSaveStatus("saved");
       } catch (err) {
         console.warn("[AutoSave] Error persisting project:", err);

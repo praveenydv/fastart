@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Platform } from "react-native";
 import { getActiveVideoRenderer, pauseActiveVideoRenderer } from "../utils/videoRenderer";
 import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
 import { playheadCoordinator } from "../utils/playheadCoordinator";
@@ -88,18 +89,20 @@ export function usePlaybackLoop({
 
       currentPosRef.current = nextTime;
       currentTimeRef.current = nextTime;
-
-      // 1. Direct 60-120 FPS Sub-pixel Playhead Tracker Update (zero React re-render overhead)
       playheadCoordinator.notify(nextTime);
 
+      // 1. Direct 60-120 FPS Sub-pixel Playhead Tracker Update (zero React re-render overhead)
       // 2. Direct 60 FPS Hardware Canvas Render (bypasses React virtual DOM overhead)
       const renderer = getActiveVideoRenderer();
       if (renderer && renderer.onFrameNeeded) {
         renderer.onFrameNeeded();
       }
 
-      // 3. Fluid 60 FPS React state update for UI timecodes (~16ms)
-      if (currentTimeStamp - lastReactUpdateRef.current >= 16) {
+      // Keep the native preview and timeline responsive without invalidating
+      // the full editor tree on every display frame. The playhead coordinator
+      // above continues to receive every animation frame.
+      const reactUpdateInterval = Platform.OS === "web" ? 16 : 1000 / 30;
+      if (currentTimeStamp - lastReactUpdateRef.current >= reactUpdateInterval) {
         lastReactUpdateRef.current = currentTimeStamp;
         setCurrentTimeRef.current(nextTime);
       }

@@ -231,10 +231,10 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
   const curveSegments = useMemo(() => {
     if (customPoints.length === 0) return [];
     const coords = customPoints.map(pointToCoord);
-    const segments: Array<{ midX: number; midY: number; len: number; angle: number }> = [];
+    const segments: { midX: number; midY: number; len: number; angle: number }[] = [];
 
     const STEPS_PER_SPAN = 10;
-    const sampledPoints: Array<{ x: number; y: number }> = [];
+    const sampledPoints: { x: number; y: number }[] = [];
 
     for (let i = 0; i < coords.length - 1; i++) {
       const p0 = coords[Math.max(0, i - 1)];

@@ -32,6 +32,7 @@ interface UseProjectFilterEffectsParams {
   selectedClipId: string | null;
   selectedClipType: string;
   currentTime?: number;
+  currentTimeRef?: React.MutableRefObject<number>;
   transitionTargetClipId: string | null;
   updateProjectWithHistory: (proj: any) => void;
   setActiveModal: (modal: string | null) => void;
@@ -46,6 +47,7 @@ export function useProjectFilterEffects({
   selectedClipId,
   selectedClipType,
   currentTime = 0,
+  currentTimeRef,
   transitionTargetClipId,
   updateProjectWithHistory,
   setActiveModal,
@@ -63,7 +65,7 @@ export function useProjectFilterEffects({
       if (!current) return null;
       if (selectedClipId) return selectedClipId;
 
-      const curTime = typeof currentTime === "number" ? currentTime : 0;
+      const curTime = currentTimeRef?.current ?? currentTime;
       if (preferredType === "audio") {
         const audioAtTime = current.tracks.audio?.find(
           (c) => curTime >= c.startTime && curTime <= c.startTime + c.duration,
@@ -87,7 +89,7 @@ export function useProjectFilterEffects({
 
       return null;
     },
-    [project, projectRef, selectedClipId, currentTime, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, selectedClipId, currentTimeRef, currentTime, setSelectedClipId, setSelectedClipType],
   );
 
   const startProcessing = useCallback((msg: string, durationMs: number = 650) => {
@@ -208,7 +210,7 @@ export function useProjectFilterEffects({
       // 3. GLOBAL: Create timeline filter clip!
       if (isNone) return;
 
-      const desiredStart = currentTime || 0;
+      const desiredStart = currentTimeRef?.current ?? currentTime;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         current,
         desiredStart,
@@ -236,7 +238,7 @@ export function useProjectFilterEffects({
       if (setSelectedClipId) setSelectedClipId(newFilterClip.id);
       if (setSelectedClipType) setSelectedClipType("effects");
     },
-    [project, projectRef, selectedClipId, selectedClipType, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, selectedClipId, selectedClipType, currentTimeRef, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
   );
 
   // Apply Cutout — only writes to clip.cutout, never overwrites clip.transform
@@ -276,11 +278,11 @@ export function useProjectFilterEffects({
       if (!targetId) {
         if (selectedClipType === "text") {
           targetId = (current.tracks.text || []).find(
-            (t) => currentTime >= t.startTime && currentTime <= t.startTime + t.duration
+            (t) => (currentTimeRef?.current ?? currentTime) >= t.startTime && (currentTimeRef?.current ?? currentTime) <= t.startTime + t.duration
           )?.id || current.tracks.text?.[0]?.id || null;
         } else if (selectedClipType === "stickers" || selectedClipType === "sticker") {
           targetId = (current.tracks.stickers || []).find(
-            (s) => currentTime >= s.startTime && currentTime <= s.startTime + s.duration
+            (s) => (currentTimeRef?.current ?? currentTime) >= s.startTime && (currentTimeRef?.current ?? currentTime) <= s.startTime + s.duration
           )?.id || current.tracks.stickers?.[0]?.id || null;
         } else {
           targetId = resolveTargetClipId("video");
@@ -323,7 +325,7 @@ export function useProjectFilterEffects({
         }
       }
     },
-    [project, projectRef, selectedClipId, selectedClipType, currentTime, resolveTargetClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipId, selectedClipType, currentTimeRef, currentTime, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply transition

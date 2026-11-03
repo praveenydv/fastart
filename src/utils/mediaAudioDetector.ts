@@ -11,7 +11,30 @@ const mediaAudioPresenceCache = new LruCache<string, boolean>(150);
 const mediaPeaksCache = new LruCache<string, number[]>(100);
 const mediaAudioDurationCache = new LruCache<string, number>(150);
 const inFlightDecodes = new Map<string, Promise<number[] | null>>();
+const MAX_CONCURRENT_AUDIO_DECODES = 2;
+let activeAudioDecodes = 0;
+const audioDecodeWaiters: (() => void)[] = [];
 const listeners = new Set<(changedKey?: string) => void>();
+
+async function acquireAudioDecodeSlot(): Promise<() => void> {
+  const makeRelease = () => {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = audioDecodeWaiters.shift();
+      if (next) next();
+      else activeAudioDecodes = Math.max(0, activeAudioDecodes - 1);
+    };
+  };
+  if (activeAudioDecodes < MAX_CONCURRENT_AUDIO_DECODES) {
+    activeAudioDecodes += 1;
+    return makeRelease();
+  }
+  return await new Promise<() => void>((resolve) => {
+    audioDecodeWaiters.push(() => resolve(makeRelease()));
+  });
+}
 
 export function subscribeMediaAudioChange(fn: (changedKey?: string) => void): () => void {
   listeners.add(fn);
@@ -172,13 +195,8 @@ export function mediaHasAudioTrack(clip: any): boolean {
     if (byUrl !== null) return byUrl;
   }
 
-  // 6. For video clips (type === "video"):
-  // Trigger background binary audio extraction immediately if not already decoded
-  if (clipUrl) {
-    extractRealMediaAudioPeaks(clipUrl, clipId);
-  }
-
-  // Standard video files (MP4, WebM, MOV, camera clips) contain audio tracks by default
+  // This query stays side-effect free. TimelineClipWaveform schedules decoding
+  // in an effect, where work can be deduplicated and concurrency limited.
   return Boolean(clipUrl);
 }
 
@@ -242,7 +260,9 @@ export async function extractRealMediaAudioPeaks(
   }
 
   const decodePromise = (async () => {
+    let releaseDecodeSlot: (() => void) | null = null;
     try {
+      releaseDecodeSlot = await acquireAudioDecodeSlot();
       // 1. Fetch binary data using multi-strategy loader (handles blob URLs, mobile FileSystem, XHR, and IndexedDB)
       const arrayBuf = await getMediaBinaryBuffer(url, clipId);
       if (!arrayBuf || arrayBuf.byteLength === 0) {
@@ -280,6 +300,7 @@ export async function extractRealMediaAudioPeaks(
       notifyAudioChange(url);
       return [];
     } finally {
+      releaseDecodeSlot?.();
       inFlightDecodes.delete(url);
       notifyAudioChange(url);
     }

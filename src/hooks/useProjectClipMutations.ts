@@ -359,7 +359,7 @@ export function useProjectClipMutations({
       let foundTrackKey: keyof typeof project.tracks | null = null;
       let clip: any = null;
 
-      const trackKeys: Array<keyof typeof project.tracks> = [
+      const trackKeys: (keyof typeof project.tracks)[] = [
         "video",
         "audio",
         "captions",
@@ -429,7 +429,7 @@ export function useProjectClipMutations({
     if (!project || !clipToDelete) return;
     const { id: clipId, type: clipType } = clipToDelete;
 
-    const trackKeys: Array<keyof typeof project.tracks> = [
+    const trackKeys: (keyof typeof project.tracks)[] = [
       "video",
       "audio",
       "captions",

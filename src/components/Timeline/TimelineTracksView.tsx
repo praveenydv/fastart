@@ -21,6 +21,9 @@ interface TimelineTracksViewProps {
   trackRows: UnifiedClipItem[][];
   activeTrackCount: number;
   timelineContentWidth: number;
+  visibleStartX: number;
+  windowWidth: number;
+  suspendHeavyContent?: boolean;
   selectedClipId: string | null;
   pxPerSec: number;
   activeTrimming: any;
@@ -109,6 +112,9 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
   trackRows,
   activeTrackCount,
   timelineContentWidth,
+  visibleStartX,
+  windowWidth,
+  suspendHeavyContent = false,
   selectedClipId,
   pxPerSec,
   activeTrimming,
@@ -227,6 +233,19 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
       {/* Track Lanes */}
       {reversedTrackIndices.map((trackIdx) => {
         const rowClips = trackRows[trackIdx] || [];
+        const visibleMinX = Math.max(0, visibleStartX - windowWidth);
+        const visibleMaxX = visibleStartX + windowWidth * 3;
+        const visibleRowClips = suspendHeavyContent
+          ? []
+          : rowClips.filter((clip) => {
+              if (dragState?.clipId === clip.id) return true;
+              const trim = activeTrimDelta?.clipId === clip.id ? activeTrimDelta : null;
+              const drag = dragState?.clipId === clip.id ? dragState : null;
+              const start = (trim?.startTime ?? drag?.currentStart ?? clip.startTime) * pxPerSec;
+              const duration = trim?.duration ?? clip.duration;
+              const end = start + Math.max(24, duration * pxPerSec);
+              return end >= visibleMinX && start <= visibleMaxX;
+            });
         const isEmptyTrack = rowClips.length === 0;
         const isSourceOfDrag =
           dragState && rowClips.some((c) => c.id === dragState.clipId);
@@ -445,7 +464,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
               )}
 
               {/* Render all clips in this track */}
-              {rowClips.map((clip, clipIndexInRow) => {
+              {visibleRowClips.map((clip, clipIndexInRow) => {
                 const isThisTrimmed =
                   activeTrimDelta && activeTrimDelta.clipId === clip.id;
                 const isBeingDragged =

@@ -22,6 +22,7 @@ interface UseProjectMediaAddersParams {
   selectedClipId: string | null;
   selectedClipType: string;
   currentTime: number;
+  currentTimeRef: React.MutableRefObject<number>;
   transitionTargetClipId: string | null;
   updateProjectWithHistory: (proj: any) => void;
   setActiveModal: (modal: string | null) => void;
@@ -36,6 +37,7 @@ export function useProjectMediaAdders({
   selectedClipId,
   selectedClipType,
   currentTime,
+  currentTimeRef,
   transitionTargetClipId,
   updateProjectWithHistory,
   setActiveModal,
@@ -68,6 +70,7 @@ export function useProjectMediaAdders({
     selectedClipId,
     selectedClipType,
     currentTime,
+    currentTimeRef,
     transitionTargetClipId,
     updateProjectWithHistory,
     setActiveModal,
@@ -233,7 +236,8 @@ export function useProjectMediaAdders({
       const endingClip =
         endingIdx >= 0 ? videoClips.splice(endingIdx, 1)[0] : null;
 
-      let targetStart = currentTime > 0 ? currentTime : 0;
+      const now = currentTimeRef.current;
+      let targetStart = now > 0 ? now : 0;
       if (typeof newClip.startTime === "number" && newClip.startTime > 0) {
         targetStart = newClip.startTime;
       }
@@ -318,7 +322,7 @@ export function useProjectMediaAdders({
         requestMediaThumbnail(newClip);
       }
     },
-    [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, currentTimeRef, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
   // Add text overlay on a new track
@@ -327,7 +331,7 @@ export function useProjectMediaAdders({
       const current = projectRef.current || project;
       if (!current) return;
       startProcessing("Adding Text Overlay...", 350);
-      const desiredStart = currentTime;
+      const desiredStart = currentTimeRef.current;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         current,
         desiredStart,
@@ -355,7 +359,7 @@ export function useProjectMediaAdders({
         setSelectedClipType("text");
       }
     },
-    [project, projectRef, currentTime, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType, startProcessing],
+    [project, projectRef, currentTimeRef, updateProjectWithHistory, addNotification, setSelectedClipId, setSelectedClipType, startProcessing],
   );
 
   // Add multiple synchronized auto-captions on a new dedicated track
@@ -411,7 +415,7 @@ export function useProjectMediaAdders({
         `Adding Audio "${newAudioClip.title || "Sound Track"}"...`,
         450,
       );
-      const desiredStart = currentTime;
+      const desiredStart = currentTimeRef.current;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         current,
         desiredStart,
@@ -458,7 +462,7 @@ export function useProjectMediaAdders({
         extractRealMediaAudioPeaks(newAudioClip.url, newAudioClip.id);
       }
     },
-    [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, currentTimeRef, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
   // Add sticker overlay on a new track
@@ -467,7 +471,7 @@ export function useProjectMediaAdders({
       const current = projectRef.current || project;
       if (!current) return;
       startProcessing("Adding Sticker Overlay...", 350);
-      const desiredStart = currentTime;
+      const desiredStart = currentTimeRef.current;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         current,
         desiredStart,
@@ -496,7 +500,7 @@ export function useProjectMediaAdders({
         setSelectedClipType("sticker");
       }
     },
-    [project, projectRef, currentTime, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
+    [project, projectRef, currentTimeRef, updateProjectWithHistory, startProcessing, addNotification, setSelectedClipId, setSelectedClipType],
   );
 
   // Add effect (attached to video clip if selected, or create timeline effect clip if global)
@@ -580,7 +584,7 @@ export function useProjectMediaAdders({
       if (isNone) return;
 
       const dur = preset.duration || 3.0;
-      const desiredStart = currentTime || 0;
+      const desiredStart = currentTimeRef.current || 0;
       const { trackIndex: newTrackIndex } = allocateNewTrackForClip(
         current,
         desiredStart,
@@ -615,7 +619,7 @@ export function useProjectMediaAdders({
         icon: "sparkles",
       });
     },
-    [project, projectRef, currentTime, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType, addNotification],
+    [project, projectRef, currentTimeRef, selectedClipId, selectedClipType, updateProjectWithHistory, setSelectedClipId, setSelectedClipType, addNotification],
   );
 
   return {

@@ -19,6 +19,7 @@ import {
   MAX_TRACKS,
   TRACK_ROW_HEIGHT,
   MIN_CLIP_DURATION,
+  UnifiedClipItem,
 } from "./Timeline/timelineTypes";
 import { formatPlayheadTime, getPointerCoords } from "./Timeline/timelineUtils";
 import { styles } from "./Timeline/TimelineStyles";
@@ -34,6 +35,7 @@ import TimelinePlayhead, {
   TimelinePlayheadNeedle,
 } from "./Timeline/TimelinePlayhead";
 import { THEME_COLORS } from "../constants/designConstants";
+import { getPlaybackTime } from "../utils/playbackTimeStore";
 
 // Re-export constants and helpers for backwards-compatibility
 export {
@@ -44,9 +46,11 @@ export {
   getPointerCoords,
 };
 
+const EMPTY_TRACK_ROWS: UnifiedClipItem[][] = [];
+
 export const Timeline: React.FC<TimelineProps> = ({
   project,
-  currentTime,
+  suspendHeavyContent = false,
   totalDuration,
   isPlaying,
   onSeek,
@@ -149,7 +153,6 @@ export const Timeline: React.FC<TimelineProps> = ({
     handlePlayheadPointerDown,
     handleRulerPointerDown,
   } = useTimelineScrubbing({
-    currentTime,
     totalDuration,
     pxPerSec,
     allClips: allClipsWithTracks,
@@ -184,7 +187,6 @@ export const Timeline: React.FC<TimelineProps> = ({
     pxPerSec,
     isSnappingEnabled,
     isHapticEnabled,
-    currentTime,
     onSeek,
     onSelectClip,
     onOpenEditModal,
@@ -195,11 +197,24 @@ export const Timeline: React.FC<TimelineProps> = ({
   const rulerScrollRef = useRef<any>(null);
   const currentScrollXRef = useRef(0);
   const isSyncingScrollRef = useRef(false);
+  const [visibleWindowStartX, setVisibleWindowStartX] = useState(0);
+  const visibleWindowStartRef = useRef(0);
+  const visibleWindowStep = Math.max(240, screenWidth * 0.75);
+  const updateVisibleWindow = useCallback((scrollX: number) => {
+    const nextStart = Math.max(
+      0,
+      Math.floor(Math.max(0, scrollX) / visibleWindowStep) * visibleWindowStep,
+    );
+    if (nextStart === visibleWindowStartRef.current) return;
+    visibleWindowStartRef.current = nextStart;
+    setVisibleWindowStartX(nextStart);
+  }, [visibleWindowStep]);
 
   // Synchronize tracks horizontal scroll with ruler
   const handleTracksScroll = useCallback((e: any) => {
     const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
     currentScrollXRef.current = scrollX;
+    updateVisibleWindow(scrollX);
     if (isSyncingScrollRef.current) return;
     isSyncingScrollRef.current = true;
     if (Platform.OS === "web") {
@@ -214,7 +229,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     requestAnimationFrame(() => {
       isSyncingScrollRef.current = false;
     });
-  }, []);
+  }, [updateVisibleWindow]);
 
   // Synchronize ruler horizontal scroll with tracks
   const handleRulerScroll = useCallback((e: any) => {
@@ -222,6 +237,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (isSyncingScrollRef.current) return;
     isSyncingScrollRef.current = true;
     currentScrollXRef.current = scrollX;
+    updateVisibleWindow(scrollX);
     if (Platform.OS === "web") {
       const el = scrollRef.current;
       const dom = (el as any)?._inputRef || el;
@@ -234,7 +250,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     requestAnimationFrame(() => {
       isSyncingScrollRef.current = false;
     });
-  }, []);
+  }, [updateVisibleWindow]);
 
   // Direct DOM scroll listener on Web for zero-latency 60fps horizontal synchronization
   useEffect(() => {
@@ -278,33 +294,36 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Auto-scroll when playing (only scroll when playhead approaches screen edge to avoid 60fps stutter)
   useEffect(() => {
     if (!isPlaying && !project?.isPlaying) return;
-    const playheadX = currentTime * pxPerSec;
     const el = scrollRef.current;
     const elRuler = rulerScrollRef.current;
-    if (Platform.OS === "web") {
-      const domNode = (el as any)?._inputRef || (el as any);
-      const domRuler = (elRuler as any)?._inputRef || (elRuler as any);
-      if (domNode && domNode.scrollLeft !== undefined) {
-        const viewW = domNode.clientWidth || screenWidth;
-        const sLeft = domNode.scrollLeft;
-        if (playheadX > sLeft + viewW - 120 || playheadX < sLeft) {
+    const timer = setInterval(() => {
+      const playheadX = getPlaybackTime() * pxPerSec;
+      if (Platform.OS === "web") {
+        const domNode = (el as any)?._inputRef || (el as any);
+        const domRuler = (elRuler as any)?._inputRef || (elRuler as any);
+        if (domNode && domNode.scrollLeft !== undefined) {
+          const viewW = domNode.clientWidth || screenWidth;
+          const sLeft = domNode.scrollLeft;
+          if (playheadX > sLeft + viewW - 120 || playheadX < sLeft) {
+            const target = Math.max(0, playheadX - 60);
+            domNode.scrollLeft = target;
+            if (domRuler) domRuler.scrollLeft = target;
+          }
+        }
+      } else if (el && typeof el.scrollTo === "function") {
+        const sLeft = currentScrollXRef.current;
+        const viewW = screenWidth - (isMobile ? 55 : 80);
+        if (playheadX > sLeft + viewW - 100 || playheadX < sLeft) {
           const target = Math.max(0, playheadX - 60);
-          domNode.scrollLeft = target;
-          if (domRuler) domRuler.scrollLeft = target;
+          el.scrollTo({ x: target, animated: false });
+          if (elRuler?.scrollTo) {
+            elRuler.scrollTo({ x: target, animated: false });
+          }
         }
       }
-    } else if (el && typeof el.scrollTo === "function") {
-      const sLeft = currentScrollXRef.current;
-      const viewW = screenWidth - (isMobile ? 55 : 80);
-      if (playheadX > sLeft + viewW - 100 || playheadX < sLeft) {
-        const target = Math.max(0, playheadX - 60);
-        el.scrollTo({ x: target, animated: false });
-        if (elRuler?.scrollTo) {
-          elRuler.scrollTo({ x: target, animated: false });
-        }
-      }
-    }
-  }, [isPlaying, project?.isPlaying, currentTime, pxPerSec, screenWidth, isMobile]);
+    }, 100);
+    return () => clearInterval(timer);
+  }, [isPlaying, project?.isPlaying, pxPerSec, screenWidth, isMobile]);
 
   // Touch pinch-to-zoom
   const [isPinching, setIsPinching] = useState(false);
@@ -321,11 +340,11 @@ export const Timeline: React.FC<TimelineProps> = ({
       const oldZoom = pxPerSec;
       lastZoomRef.current = clampedZoom;
       const oldScrollX = currentScrollXRef.current;
-      const playheadOldX = currentTime * oldZoom;
+      const playheadOldX = getPlaybackTime() * oldZoom;
       const playheadScreenX = playheadOldX - oldScrollX;
       const visibleWidth = Math.max(100, screenWidth - (isMobile ? 55 : 80));
 
-      const playheadNewX = currentTime * clampedZoom;
+      const playheadNewX = getPlaybackTime() * clampedZoom;
       let newScrollX: number;
 
       // If tracker line was within visible window, keep it at the EXACT same screen position!
@@ -337,6 +356,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       }
 
       currentScrollXRef.current = newScrollX;
+      updateVisibleWindow(newScrollX);
 
       const syncScroll = (targetX: number) => {
         if (Platform.OS === "web") {
@@ -366,7 +386,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
       onZoomChange(clampedZoom);
     },
-    [pxPerSec, currentTime, screenWidth, isMobile, onZoomChange],
+    [pxPerSec, screenWidth, isMobile, onZoomChange, updateVisibleWindow],
   );
 
   // Synchronize scroll on external zoom changes (e.g. keyboard shortcuts or prop updates)
@@ -375,10 +395,10 @@ export const Timeline: React.FC<TimelineProps> = ({
       const oldZoom = lastZoomRef.current;
       lastZoomRef.current = pxPerSec;
       const oldScrollX = currentScrollXRef.current;
-      const playheadOldX = currentTime * oldZoom;
+      const playheadOldX = getPlaybackTime() * oldZoom;
       const playheadScreenX = playheadOldX - oldScrollX;
       const visibleWidth = Math.max(100, screenWidth - (isMobile ? 55 : 80));
-      const playheadNewX = currentTime * pxPerSec;
+      const playheadNewX = getPlaybackTime() * pxPerSec;
 
       let newScrollX: number;
       if (playheadScreenX >= 0 && playheadScreenX <= visibleWidth) {
@@ -388,6 +408,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       }
 
       currentScrollXRef.current = newScrollX;
+      updateVisibleWindow(newScrollX);
 
       const syncScroll = () => {
         if (Platform.OS === "web") {
@@ -410,7 +431,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       syncScroll();
       requestAnimationFrame(syncScroll);
     }
-  }, [pxPerSec, currentTime, screenWidth, isMobile]);
+  }, [pxPerSec, screenWidth, isMobile, updateVisibleWindow]);
 
   const handleTouchStart = (e: any) => {
     const touches = e.nativeEvent?.touches;
@@ -477,7 +498,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Generate ruler tick marks with adaptive density to prevent mobile DOM slowdown
   const ticks = useMemo(() => {
-    const list: Array<{ time: number; label: string; isMajor: boolean }> = [];
+    const list: { time: number; label: string; isMajor: boolean }[] = [];
     const maxDur = Math.max(10, totalDuration) + 3;
     const targetPxSpacing = 65;
     const minTimeStep = targetPxSpacing / pxPerSec;
@@ -524,6 +545,26 @@ export const Timeline: React.FC<TimelineProps> = ({
     }
     return list;
   }, [totalDuration, pxPerSec]);
+  const visibleXMin = Math.max(0, visibleWindowStartX - screenWidth);
+  const visibleXMax = visibleWindowStartX + screenWidth * 3;
+  const visibleTicks = useMemo(
+    () => suspendHeavyContent
+      ? []
+      : ticks.filter((tick) => {
+          const x = tick.time * pxPerSec;
+          return x >= visibleXMin && x <= visibleXMax;
+        }),
+    [ticks, pxPerSec, suspendHeavyContent, visibleXMin, visibleXMax],
+  );
+  const visibleBeatMarkers = useMemo(
+    () => suspendHeavyContent
+      ? []
+      : project?.beatMarkers?.filter((time) => {
+          const x = time * pxPerSec;
+          return x >= visibleXMin && x <= visibleXMax;
+        }),
+    [project?.beatMarkers, pxPerSec, suspendHeavyContent, visibleXMin, visibleXMax],
+  );
 
   // Left track header cells (aligned in exact reversed order matching TimelineTracksView)
   const renderedTrackHeaders = useMemo(() => {
@@ -693,9 +734,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, [
     trackRows,
     isMobile,
-    dragState?.isInsertingNewTrack,
-    dragState?.insertTrackIndex,
-    !!dragState,
+    dragState,
     activeTrackCount,
     handleRemoveTrack,
   ]);
@@ -778,13 +817,12 @@ export const Timeline: React.FC<TimelineProps> = ({
           >
             <TimelineRuler
               width={timelineContentWidth}
-              ticks={ticks}
+              ticks={visibleTicks}
               pxPerSec={pxPerSec}
-              beatMarkers={project?.beatMarkers}
+              beatMarkers={visibleBeatMarkers}
             />
 
             <TimelinePlayheadHead
-              currentTime={currentTime}
               pxPerSec={pxPerSec}
               isScrubbingRuler={isScrubbingRuler}
               playheadPanResponder={playheadPanResponder}
@@ -896,9 +934,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                 : {})}
             >
               <TimelineTracksView
-                trackRows={trackRows}
+                trackRows={suspendHeavyContent ? EMPTY_TRACK_ROWS : trackRows}
                 activeTrackCount={activeTrackCount}
                 timelineContentWidth={timelineContentWidth}
+                visibleStartX={visibleWindowStartX}
+                windowWidth={screenWidth}
+                suspendHeavyContent={suspendHeavyContent}
                 selectedClipId={selectedClipId}
                 pxPerSec={pxPerSec}
                 activeTrimming={activeTrimming}
@@ -923,7 +964,6 @@ export const Timeline: React.FC<TimelineProps> = ({
               />
 
               <TimelinePlayheadNeedle
-                currentTime={currentTime}
                 pxPerSec={pxPerSec}
                 isScrubbingRuler={isScrubbingRuler}
               />

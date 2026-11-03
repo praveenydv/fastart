@@ -22,15 +22,13 @@ function NativeVideoClipPlayerComponent({
   opacity,
 }: NativeVideoClipPlayerProps) {
   const mediaUri = clip.url || clip.thumbnail || '';
-  const isVideo =
-    clip.type === 'video' ||
-    (mediaUri &&
-      (mediaUri.includes('.mp4') ||
-        mediaUri.includes('.mov') ||
-        mediaUri.includes('.webm') ||
-        mediaUri.startsWith('file:') ||
-        mediaUri.startsWith('content:') ||
-        mediaUri.startsWith('http')));
+  // Trust the explicit media type. A `file://` URI can point to either a photo
+  // or a video; treating every local file as video creates a decoder for large
+  // photos and can exhaust native memory.
+  const uriPath = mediaUri.split(/[?#]/, 1)[0].toLowerCase();
+  const isVideo = clip.type === 'video' || (
+    !clip.type && /\.(mp4|mov|webm|m4v|3gp|mkv|ts)$/.test(uriPath)
+  );
 
   const clipDuration = Math.max(0.05, clip.duration || 10);
   const effSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));

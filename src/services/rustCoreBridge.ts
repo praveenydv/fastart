@@ -2385,7 +2385,7 @@ class RustCoreBridgeService {
    */
   public evaluateKeyframes(
     base: { x: number; y: number; scale: number; rotation: number; opacity: number },
-    keyframes: Array<{ time: number; transform?: { x?: number; y?: number; scale?: number; rotation?: number }; opacity?: number }>,
+    keyframes: { time: number; transform?: { x?: number; y?: number; scale?: number; rotation?: number }; opacity?: number }[],
     queryTime: number
   ): { x: number; y: number; scale: number; rotation: number; opacity: number } | null {
     const inst = this.wasmInstance;
@@ -2542,11 +2542,17 @@ class RustCoreBridgeService {
       if (!FastArtRust || typeof FastArtRust.segmentFrameRgba !== "function") {
         throw new Error("Rust segmentation is not exposed by the native module");
       }
-      const result = await FastArtRust.segmentFrameRgba(Array.from(rgba), w, h, threshold, feather);
-      if (!result || result.length !== pixels) {
+      const encoded = await FastArtRust.segmentFrameRgba(
+        encodeNativeBytes(rgba), w, h, threshold, feather,
+      );
+      if (typeof encoded !== "string") {
         throw new Error("Rust segmentation returned an invalid alpha mask");
       }
-      return Uint8Array.from(result);
+      const result = Uint8Array.from(Buffer.from(encoded, "base64"));
+      if (result.length !== pixels) {
+        throw new Error("Rust segmentation returned an invalid alpha mask");
+      }
+      return result;
     }
 
     const inst = this.wasmInstance;

@@ -724,11 +724,49 @@ export async function getLiveMediaBlob(id: string): Promise<Blob | File | null> 
 // Robust multi-strategy ArrayBuffer loader for media (handles in-memory blob cache, blob URLs, XHR, and IndexedDB)
 export async function getMediaBinaryBuffer(url: string, lookupId?: string): Promise<ArrayBuffer | null> {
   if (!url && !lookupId) return null;
+  const maxBytes = 16 * 1024 * 1024;
+
+  // Never route native local media through fetch/XHR: React Native may buffer
+  // the entire file before later size checks. Video preview uses native
+  // streaming decoders, and waveform analysis is not worth loading a full
+  // multi-GB source into the JS heap.
+  if (
+    Platform.OS !== 'web' &&
+    url &&
+    (url.startsWith('file:') || url.startsWith('content:') || url.startsWith('/'))
+  ) {
+    const cleanLower = url.split(/[?#]/, 1)[0].toLowerCase();
+    if (/\.(mp4|mov|webm|m4v|3gp|mkv|ts)$/.test(cleanLower)) return null;
+    try {
+      const FileSystemLegacy = await import('expo-file-system/legacy');
+      const fileInfo = await FileSystemLegacy.getInfoAsync(url);
+      if (!fileInfo.exists || typeof fileInfo.size !== 'number' || fileInfo.size > maxBytes) {
+        return null;
+      }
+
+      try {
+        const { File } = await import('expo-file-system');
+        const file = new File(url);
+        const buffer = await file.arrayBuffer();
+        if (buffer.byteLength > 0 && buffer.byteLength <= maxBytes) return buffer;
+      } catch (_) {}
+
+      const base64Data = await FileSystemLegacy.readAsStringAsync(url, {
+        encoding: FileSystemLegacy.EncodingType.Base64,
+      });
+      if (!base64Data || base64Data.length > Math.ceil(maxBytes * 4 / 3) + 8) return null;
+      const buffer = base64ToArrayBuffer(base64Data);
+      return buffer.byteLength > 0 && buffer.byteLength <= maxBytes ? buffer : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   // 0. Direct in-memory Blob/File cache (0ms, 100% reliable, zero network/CORS failure)
   if (url && blobByUrlCache.has(url)) {
     try {
       const b = blobByUrlCache.get(url)!;
+      if (b.size > maxBytes) return null;
       const buf = await b.arrayBuffer();
       if (buf && buf.byteLength > 0) return buf;
     } catch (_) {}
@@ -738,10 +776,10 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
   if (url && url.startsWith('data:')) {
     try {
       const commaIdx = url.indexOf(',');
-      if (commaIdx >= 0) {
+      if (commaIdx >= 0 && url.length - commaIdx - 1 <= Math.ceil(maxBytes * 4 / 3) + 8) {
         const base64 = url.slice(commaIdx + 1);
         const buf = base64ToArrayBuffer(base64);
-        if (buf && buf.byteLength > 0) return buf;
+        if (buf && buf.byteLength > 0 && buf.byteLength <= maxBytes) return buf;
       }
     } catch (_) {}
   }
@@ -751,8 +789,36 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
     try {
       const resp = await fetch(url);
       if (resp.ok) {
-        const buf = await resp.arrayBuffer();
-        if (buf && buf.byteLength > 0) return buf;
+        const contentLength = Number(resp.headers.get('content-length'));
+        if (Number.isFinite(contentLength) && contentLength > maxBytes) return null;
+        const reader = resp.body?.getReader();
+        if (reader) {
+          const chunks: Uint8Array[] = [];
+          let totalBytes = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+            totalBytes += value.byteLength;
+            if (totalBytes > maxBytes) {
+              await reader.cancel();
+              return null;
+            }
+            chunks.push(value);
+          }
+          if (totalBytes > 0) {
+            const merged = new Uint8Array(totalBytes);
+            let offset = 0;
+            for (const chunk of chunks) {
+              merged.set(chunk, offset);
+              offset += chunk.byteLength;
+            }
+            return merged.buffer;
+          }
+        } else if (Number.isFinite(contentLength) && contentLength > 0 && contentLength <= maxBytes) {
+          const buf = await resp.arrayBuffer();
+          if (buf.byteLength > 0 && buf.byteLength <= maxBytes) return buf;
+        }
       }
     } catch (_) {}
 
@@ -763,54 +829,22 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
           const xhr = new XMLHttpRequest();
           xhr.open('GET', url, true);
           xhr.responseType = 'arraybuffer';
+          xhr.onprogress = (event) => {
+            if (event.loaded > maxBytes) xhr.abort();
+          };
           xhr.onload = () => {
-            if (xhr.status === 200 || xhr.status === 0) {
+            if ((xhr.status === 200 || xhr.status === 0) && xhr.response?.byteLength <= maxBytes) {
               resolve(xhr.response);
             } else {
               resolve(null);
             }
           };
           xhr.onerror = () => resolve(null);
+          xhr.onabort = () => resolve(null);
           xhr.send();
         });
-        if (buf && buf.byteLength > 0) return buf.slice(0);
+        if (buf && buf.byteLength > 0 && buf.byteLength <= maxBytes) return buf;
       } catch (_) {}
-    }
-  }
-
-  // 3. Mobile FileSystem read for file://, content://, or local paths (React Native Android & iOS)
-  if (Platform.OS !== 'web' && url && (url.startsWith('file:') || url.startsWith('content:') || url.startsWith('/'))) {
-    const cleanLower = url.split('?')[0].toLowerCase();
-    const isVideo = /\.(mp4|mov|webm|m4v|3gp|mkv|ts)$/i.test(cleanLower);
-    // Never attempt full binary in-memory decode for video files on mobile — videos are streamed directly by native player
-    if (isVideo) {
-      return null;
-    }
-
-    try {
-      const FileSystemLegacy = await import('expo-file-system/legacy');
-      const fileInfo = await FileSystemLegacy.getInfoAsync(url);
-      // Hard memory safeguard: never attempt Base64/in-memory buffering for large media files (> 15MB) or unknown size on mobile
-      if (!fileInfo.exists || typeof fileInfo.size !== 'number' || fileInfo.size > 15 * 1024 * 1024) {
-        return null;
-      }
-
-      try {
-        const { File } = await import('expo-file-system');
-        const file = new File(url);
-        const ab = await file.arrayBuffer();
-        if (ab && ab.byteLength > 0) return ab;
-      } catch (_) {}
-
-      const base64Data = await FileSystemLegacy.readAsStringAsync(url, {
-        encoding: FileSystemLegacy.EncodingType.Base64,
-      });
-      if (base64Data && base64Data.length > 0) {
-        const buf = base64ToArrayBuffer(base64Data);
-        if (buf && buf.byteLength > 0) return buf;
-      }
-    } catch (_) {
-      return null;
     }
   }
 
@@ -819,6 +853,7 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
     try {
       const blob = await getLiveMediaBlob(lookupId);
       if (blob) {
+        if (blob.size > maxBytes) return null;
         const buf = await blob.arrayBuffer();
         if (buf && buf.byteLength > 0) return buf.slice(0);
       }
@@ -831,11 +866,13 @@ export async function getMediaBinaryBuffer(url: string, lookupId?: string): Prom
       const records = await getAllStoredMedia();
       for (const rec of records) {
         if (rec.id === lookupId || (lookupId && rec.id.includes(lookupId))) {
+          if (!rec.blob || rec.blob.size > maxBytes) return null;
           const buf = await rec.blob.arrayBuffer();
           if (buf && buf.byteLength > 0) return buf.slice(0);
         }
       }
       if (records.length > 0 && records[0].blob) {
+        if (records[0].blob.size > maxBytes) return null;
         const buf = await records[0].blob.arrayBuffer();
         if (buf && buf.byteLength > 0) return buf.slice(0);
       }
@@ -1473,6 +1510,24 @@ export async function loadMasksRLE(
     });
   } catch {
     return null;
+  }
+}
+
+/** Removes a clip's persisted cutout masks after reset or clip deletion. */
+export async function removeMasksRLE(clipId: string): Promise<void> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    const db = await getIndexedDB();
+    if (!db.objectStoreNames.contains(STORE_MASKS)) return;
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(STORE_MASKS, 'readwrite');
+      tx.objectStore(STORE_MASKS).delete(clipId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    });
+  } catch {
+    // Cache cleanup must not prevent the clip from resetting.
   }
 }
 

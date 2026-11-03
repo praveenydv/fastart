@@ -46,6 +46,7 @@ const TimecodePill = React.memo<{
     </View>
   );
 });
+TimecodePill.displayName = "TimecodePill";
 
 /**
  * Compact Stereo VU Meter giving live broadcast visual audio feedback
@@ -105,6 +106,7 @@ const StereoVuMeter = React.memo<{ isPlaying: boolean; isNarrow: boolean }>(
     );
   }
 );
+StereoVuMeter.displayName = "StereoVuMeter";
 
 const meterStyles = {
   container: {

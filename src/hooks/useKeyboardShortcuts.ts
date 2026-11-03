@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Platform } from "react-native";
 import { pauseActiveVideoRenderer } from "../utils/videoRenderer";
 import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
+import { getPlaybackTime } from "../utils/playbackTimeStore";
 
 interface UseKeyboardShortcutsParams {
   selectedClipId: string | null;
@@ -79,8 +80,8 @@ export function useKeyboardShortcuts({
           setIsPlaying(false);
         } else {
           if (
-            currentTime >= totalDuration - 0.05 ||
-            currentTime >= totalDuration
+            getPlaybackTime() >= totalDuration - 0.05 ||
+            getPlaybackTime() >= totalDuration
           ) {
             setCurrentTime(0);
           }

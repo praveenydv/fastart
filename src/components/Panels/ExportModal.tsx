@@ -63,7 +63,7 @@ export default function ExportModal({
   );
 
   return (
-    <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} transparent>
+    <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "none"} transparent>
       <View style={[styles.modalOverlay, isDesktop && styles.modalOverlayDesktop]}>
         {/* Clickable Backdrop Dismiss for Desktop & Mobile */}
         <TouchableOpacity

@@ -26,15 +26,12 @@ const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
   const isVisual =
     clip.type === "video" || isImageClip(clip);
 
-  if (!isVisual) {
-    return null;
-  }
-
   const [thumbUri, setThumbUri] = useState<string | null>(() =>
     getMediaThumbnail(clip)
   );
 
   useEffect(() => {
+    if (!isVisual) return;
     // Check if thumbnail is already available or changed
     const current = getMediaThumbnail(clip);
     if (current && current !== thumbUri) {
@@ -52,6 +49,7 @@ const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
 
     return unsubscribe;
   }, [
+    isVisual,
     clip.id,
     clip.rawClip?.thumbnail,
     clip.rawClip?.url,
@@ -74,6 +72,8 @@ const TimelineClipPreviewComponent: React.FC<TimelineClipPreviewProps> = ({
     const count = Math.max(1, Math.ceil(width / FRAME_WIDTH));
     return isWeb ? count : Math.min(count, 32);
   }, [width]);
+
+  if (!isVisual) return null;
 
   if (!thumbUri || frameCount <= 0) {
     return null;

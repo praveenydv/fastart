@@ -8,6 +8,7 @@ import {
   TimelineDragState,
 } from "./timelineTypes";
 import { clampNonOverlapping, getPointerCoords } from "./timelineUtils";
+import { getPlaybackTime } from "../../utils/playbackTimeStore";
 
 interface UseTimelineClipDragParams {
   allClips: UnifiedClipItem[];
@@ -17,7 +18,6 @@ interface UseTimelineClipDragParams {
   isSnappingEnabled: boolean;
   isHapticEnabled: boolean;
   isTrimmingActiveRef: React.MutableRefObject<boolean>;
-  currentTime?: number;
   onSeek?: (time: number) => void;
   onSelectClip: (
     id: string,
@@ -245,7 +245,6 @@ export function useTimelineClipDrag({
   isSnappingEnabled,
   isHapticEnabled,
   isTrimmingActiveRef,
-  currentTime = 0,
   onSeek,
   onSelectClip,
   onOpenEditModal,
@@ -263,8 +262,6 @@ export function useTimelineClipDrag({
   allClipsRef.current = allClips;
   const selectedClipIdRef = useRef(selectedClipId);
   selectedClipIdRef.current = selectedClipId;
-  const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
   const onSeekRef = useRef(onSeek);
   onSeekRef.current = onSeek;
   const pxPerSecRef = useRef(pxPerSec);
@@ -310,7 +307,7 @@ export function useTimelineClipDrag({
     ) => {
       const clip = allClipsRef.current.find((c) => c.id === clipId);
       if (clip && onSeekRef.current) {
-        const cur = currentTimeRef.current;
+        const cur = getPlaybackTime();
         if (cur < clip.startTime || cur > clip.startTime + clip.duration) {
           onSeekRef.current(clip.startTime);
         }
@@ -475,7 +472,7 @@ export function useTimelineClipDrag({
           isHapticEnabledRef.current,
           previousIsInsertingRef.current,
           previousInsertTrackRef.current,
-          currentTimeRef.current,
+          getPlaybackTime(),
           cachedDraggingClipRef.current,
           cachedOtherClipsRef.current,
         );
@@ -558,14 +555,14 @@ export function useTimelineClipDrag({
               isInsert,
             );
             if (onSeekRef.current) {
-              const prevOffset = currentTimeRef.current - state.initialStart;
+              const prevOffset = getPlaybackTime() - state.initialStart;
               if (prevOffset >= 0 && prevOffset <= state.duration) {
                 onSeekRef.current(
                   Math.max(0, finalStart + prevOffset),
                 );
               } else if (
-                currentTimeRef.current < finalStart ||
-                currentTimeRef.current > finalStart + state.duration
+                getPlaybackTime() < finalStart ||
+                getPlaybackTime() > finalStart + state.duration
               ) {
                 onSeekRef.current(finalStart);
               }
@@ -705,7 +702,7 @@ export function useTimelineClipDrag({
             isHapticEnabledRef.current,
             previousIsInsertingRef.current,
             previousInsertTrackRef.current,
-            currentTimeRef.current,
+            getPlaybackTime(),
             cachedDraggingClipRef.current,
             cachedOtherClipsRef.current,
           );
@@ -837,7 +834,7 @@ export function useTimelineClipDrag({
             isHapticEnabledRef.current,
             previousIsInsertingRef.current,
             previousInsertTrackRef.current,
-            currentTimeRef.current,
+            getPlaybackTime(),
             cachedDraggingClipRef.current,
             cachedOtherClipsRef.current,
           );
@@ -910,14 +907,14 @@ export function useTimelineClipDrag({
               isInsert,
             );
             if (onSeekRef.current) {
-              const prevOffset = currentTimeRef.current - info.initialStart;
+              const prevOffset = getPlaybackTime() - info.initialStart;
               if (prevOffset >= 0 && prevOffset <= info.duration) {
                 onSeekRef.current(
                   Math.max(0, finalStart + prevOffset),
                 );
               } else if (
-                currentTimeRef.current < finalStart ||
-                currentTimeRef.current > finalStart + info.duration
+                getPlaybackTime() < finalStart ||
+                getPlaybackTime() > finalStart + info.duration
               ) {
                 onSeekRef.current(finalStart);
               }

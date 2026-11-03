@@ -114,11 +114,17 @@ class FastArtRustModule : Module() {
             )
         }
 
-        AsyncFunction("segmentFrameRgba") Coroutine { rgba: List<Int>, width: Int, height: Int, threshold: Double, feather: Double ->
+        AsyncFunction("segmentFrameRgba") Coroutine { rgbaBase64: String, width: Int, height: Int, threshold: Double, feather: Double ->
             if (!isLoaded) throw Exception("Rust native library not loaded")
-            val bytes = ByteArray(rgba.size) { rgba[it].toByte() }
-            nativeSegmentFrameRgba(bytes, width, height, threshold.toFloat(), feather.toFloat())
-                .map { it.toInt() and 0xFF }
+            if (width <= 0 || height <= 0) throw Exception("Invalid RGBA frame dimensions")
+            val rgba = Base64.decode(rgbaBase64, Base64.DEFAULT)
+            if (rgba.size.toLong() != width.toLong() * height.toLong() * 4L) {
+                throw Exception("Invalid RGBA frame size")
+            }
+            Base64.encodeToString(
+                nativeSegmentFrameRgba(rgba, width, height, threshold.toFloat(), feather.toFloat()),
+                Base64.NO_WRAP,
+            )
         }
 
         AsyncFunction("processChromaCutout") Coroutine { rgbaBase64: String, width: Int, height: Int, rgb: Int, threshold: Double, feather: Double, despill: Boolean ->

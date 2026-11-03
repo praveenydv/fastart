@@ -70,6 +70,7 @@ export interface TimelineDragState {
 export interface TimelineProps {
   project: FastArtProject;
   currentTime: number;
+  suspendHeavyContent?: boolean;
   totalDuration: number;
   isPlaying?: boolean;
   onSeek: (time: number) => void;

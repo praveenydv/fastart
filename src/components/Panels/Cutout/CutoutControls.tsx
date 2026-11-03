@@ -91,7 +91,13 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
   onReset,
 }) => {
   const enabled = config?.enabled ?? false;
-  const cutoutMode: CutoutMode = !enabled ? "none" : (config?.mode ?? "chroma");
+  // Reset can clear the generated matte while preserving Auto as the selected
+  // mode. A disabled chroma config still represents the explicit None choice.
+  const cutoutMode: CutoutMode = enabled
+    ? (config?.mode ?? "chroma")
+    : config?.mode === "auto"
+      ? "auto"
+      : "none";
   const keyColor = config?.keyColor ?? "#00FF00";
   const intensity = config?.intensity ?? 45;
   const shadow = config?.shadow ?? 25;
@@ -511,7 +517,12 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
                     )}
 
                     {isVideoClip && onProcessVideo && (
-                      <TouchableOpacity onPress={onProcessVideo} style={sc.heroBtn} activeOpacity={0.8}>
+                      <TouchableOpacity
+                        onPress={onProcessVideo}
+                        style={sc.heroBtn}
+                        activeOpacity={0.8}
+                        disabled={isProcessingActiveFrame}
+                      >
                         <Ionicons name={isAlreadyProcessed ? "refresh" : "sparkles"} size={14} color="#08090E" />
                         <Text style={sc.heroBtnText}>
                           {isAlreadyProcessed ? "Reprocess Video" : "Remove Background (Full Video)"}
@@ -525,7 +536,7 @@ export const CutoutControls: React.FC<CutoutControlsProps> = ({
                           onPress={onPreviewFrame}
                           style={[sc.secondaryActionBtn, { flex: 1.2 }]}
                           activeOpacity={0.8}
-                          disabled={isProcessingActiveFrame}
+                          disabled={isProcessingActiveFrame || isProcessingFrames}
                         >
                           {isProcessingActiveFrame ? (
                             <ActivityIndicator size="small" color="#00F2FE" />

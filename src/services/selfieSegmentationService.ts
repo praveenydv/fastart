@@ -16,7 +16,7 @@
 import { Buffer } from "buffer";
 import { Platform } from "react-native";
 import { rustCoreBridge, registerMaskProvider } from "./rustCoreBridge";
-import { persistMasksRLE, loadMasksRLE } from "../utils/largeMediaStorage";
+import { persistMasksRLE, loadMasksRLE, removeMasksRLE } from "../utils/largeMediaStorage";
 import { cutoutWorkerBridge } from "./cutoutWorkerBridge";
 
 let _cachedThumbnails: any = null;
@@ -444,6 +444,11 @@ export function getClipProcessedCount(clipId: string): number {
 }
 
 export function clearClipMasks(clipId?: string): void {
+  const staleMaskUris = clipId
+    ? Array.from(nativeMaskUriCache.entries())
+        .filter(([key]) => key.startsWith(`${clipId}_`))
+        .map(([, uri]) => uri)
+    : Array.from(nativeMaskUriCache.values());
   clearNativeMaskUris(clipId);
   if (clipId) {
     for (const key of Array.from(clipMaskRLECache.keys())) {
@@ -460,6 +465,38 @@ export function clearClipMasks(clipId?: string): void {
     clipMaskFpsMap.clear();
     clipFrameIndicesMap.clear();
   }
+
+  if (!clipId || lastSegmentedClipId === clipId) {
+    lastSegmentedMask = null;
+    lastSegmentedClipId = "";
+    lastProcessedTime = 0;
+    lastProcessedMediaTime = -1;
+    lastProcessedSrc = "";
+    hasValidHumanSubject = false;
+  }
+  if (!clipId || lastModnetRawAlphaClipId === clipId) {
+    lastModnetRawAlpha = null;
+    lastModnetRawAlphaClipId = "";
+    lastModnetRawAlphaFrameIdx = -1;
+    lastModnetRawAlphaMediaTime = -1;
+  }
+  notifyMaskUpdated();
+
+  for (const uri of new Set(staleMaskUris)) {
+    if (uri.startsWith("blob:") && typeof URL !== "undefined") {
+      URL.revokeObjectURL(uri);
+    } else if (uri.startsWith("file://")) {
+      const fileUri = uri.split("?")[0];
+      void import("expo-file-system")
+        .then(({ File }) => {
+          const file = new File(fileUri);
+          if (file.exists) file.delete();
+        })
+        .catch(() => {});
+    }
+  }
+
+  if (clipId) void removeMasksRLE(clipId);
 }
 
 /**

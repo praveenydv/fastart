@@ -1,10 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Animated,
-  Easing,
   Platform,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
@@ -37,6 +35,7 @@ import HSLAdjustModal from "../Panels/HSLAdjustModal";
 import VoiceEffectsModal from "../Panels/VoiceEffectsModal";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
+import { usePlaybackTime } from "../../utils/playbackTimeStore";
 import {
   FastArtProject,
   VideoClip,
@@ -224,7 +223,6 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   handleUpdateCaption,
   route,
   totalDuration,
-  currentTime,
   isPlaying,
   setCurrentTime,
   selectedClipId,
@@ -291,22 +289,16 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   handleDeleteClip,
   handleDeleteProjectAsset,
 }) => {
+  const needsLiveTime = Boolean(
+    activeModal &&
+      (isInline
+        ? INLINE_MODAL_KEYS.has(activeModal)
+        : !INLINE_MODAL_KEYS.has(activeModal)) &&
+      ["keyframe", "background", "cutout", "tracking", "captions"].includes(activeModal),
+  );
+  const currentTime = usePlaybackTime(needsLiveTime);
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
-
-  const [fadeAnim] = useState(() => new Animated.Value(1));
-
-  useEffect(() => {
-    if (activeModal && isInline && Platform.OS !== "web") {
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 160,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [activeModal, isInline, fadeAnim]);
 
   // When isInline is true, only render if activeModal is an inline modal tool
   if (isInline && (!activeModal || !INLINE_MODAL_KEYS.has(activeModal))) {
@@ -969,7 +961,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
 
   if (isInline) {
     return (
-      <Animated.View
+      <View
         key={activeModal || "inline-empty"}
         style={[
           {
@@ -978,7 +970,6 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             height: "100%",
             minHeight: 0,
             overflow: "hidden",
-            opacity: fadeAnim,
           },
           Platform.OS === "web" &&
             ({
@@ -988,7 +979,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         ]}
       >
         {renderedContent}
-      </Animated.View>
+      </View>
     );
   }
 

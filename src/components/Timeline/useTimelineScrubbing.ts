@@ -3,9 +3,9 @@ import { PanResponder, Platform } from "react-native";
 import { triggerHaptic } from "../../utils/haptics";
 import { UnifiedClipItem } from "./timelineTypes";
 import { getPointerCoords } from "./timelineUtils";
+import { getPlaybackTime } from "../../utils/playbackTimeStore";
 
 interface UseTimelineScrubbingParams {
-  currentTime: number;
   totalDuration: number;
   pxPerSec: number;
   allClips: UnifiedClipItem[];
@@ -16,7 +16,6 @@ interface UseTimelineScrubbingParams {
 }
 
 export function useTimelineScrubbing({
-  currentTime,
   totalDuration,
   pxPerSec,
   allClips,
@@ -35,8 +34,6 @@ export function useTimelineScrubbing({
   pxPerSecRef.current = pxPerSec;
   const totalDurationRef = useRef(totalDuration);
   totalDurationRef.current = totalDuration;
-  const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
   const allClipsRef = useRef(allClips);
   allClipsRef.current = allClips;
   const isSnappingEnabledRef = useRef(isSnappingEnabled);
@@ -137,7 +134,7 @@ export function useTimelineScrubbing({
         isDraggingPlayhead.current = true;
         setIsScrubbingRuler(true);
         triggerHaptic("selection", isHapticEnabledRef.current);
-        dragStartTimeRef.current = currentTimeRef.current;
+        dragStartTimeRef.current = getPlaybackTime();
       },
       onPanResponderMove: (_, gestureState) => {
         if (totalDurationRef.current <= 0) {
@@ -210,7 +207,7 @@ export function useTimelineScrubbing({
         } else {
           clickX =
             evt.nativeEvent?.locationX ??
-            currentTimeRef.current * pxPerSecRef.current + gestureState.dx;
+            getPlaybackTime() * pxPerSecRef.current + gestureState.dx;
         }
 
         if (panRafRef.current !== null) {
