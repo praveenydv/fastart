@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { Platform, Dimensions, PanResponder } from "react-native";
-import { TRACK_ROW_HEIGHT } from "./timelineTypes";
+import { TRACK_ROW_HEIGHT, TRACK_ROW_HEIGHT_MOBILE } from "./timelineTypes";
 
 interface UseTimelineResizeProps {
   activeTrackCount?: number;
@@ -21,12 +21,12 @@ export function useTimelineResize({
 
   // Min and max limits
   // On mobile: comfortable range guaranteeing ample player preview room
-  const minTimelineHeight = isMobile ? 180 : 74;
+  const minTimelineHeight = isMobile ? 160 : 74;
   const maxTimelineHeight = isMobile
-    ? Math.min(Math.round(screenHeight * 0.60), Math.max(minTimelineHeight, screenHeight - 250))
+    ? Math.min(Math.round(screenHeight * 0.70), Math.max(minTimelineHeight, screenHeight - 220))
     : Math.min(550, Math.max(280, Math.round(screenHeight * 0.55)));
 
-  const defaultHeight = isMobile ? 200 : 220;
+  const defaultHeight = isMobile ? 180 : 220;
 
   const [userTimelineHeight, setUserTimelineHeight] = useState<number | null>(
     () => {
@@ -58,8 +58,9 @@ export function useTimelineResize({
     if (isMobile) {
       return defaultHeight;
     }
+    const trackH = isMobile ? TRACK_ROW_HEIGHT_MOBILE : TRACK_ROW_HEIGHT;
     const contentH =
-      10 + 30 + 26 + Math.max(1, activeTrackCount) * TRACK_ROW_HEIGHT + 2;
+      10 + 30 + 26 + Math.max(1, activeTrackCount) * trackH + 2;
     const maxH = Math.max(280, Math.min(450, Math.round(screenHeight * 0.45)));
     return Math.max(200, Math.min(maxH, contentH));
   }, [activeTrackCount, isMobile, screenHeight, defaultHeight]);

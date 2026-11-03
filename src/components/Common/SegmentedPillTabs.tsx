@@ -63,7 +63,7 @@ export function SegmentedPillTabs<T extends string = string>({
         {tab.icon && (
           <Ionicons
             name={tab.icon}
-            size={15}
+            size={13}
             color={isActive ? "#08090E" : "#94A3B8"}
             style={styles.pillIcon}
           />
@@ -103,48 +103,49 @@ const styles = StyleSheet.create({
   fixedContainer: {
     flexDirection: "row",
     backgroundColor: "#131826",
-    borderRadius: 14,
-    padding: 3,
+    borderRadius: 8,
+    padding: 2,
     borderWidth: 1,
     borderColor: "#1F2637",
-    marginHorizontal: 12,
-    marginVertical: 8,
+    marginHorizontal: 8,
+    marginVertical: 4,
+    height: 28,
   },
   scrollContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 5,
   },
   pill: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 11,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
   },
   scrollablePill: {
     flex: undefined,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 18,
+    paddingVertical: 3.5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
   },
   activePill: {
     backgroundColor: "#00F2FE",
     borderColor: "#00F2FE",
   },
   pillIcon: {
-    marginRight: 6,
+    marginRight: 4,
   },
   pillText: {
     color: "#94A3B8",
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "600",
   },
   activePillText: {
@@ -152,10 +153,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   badge: {
-    marginLeft: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
+    marginLeft: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 0.5,
+    borderRadius: 6,
     backgroundColor: "#1E293B",
   },
   activeBadge: {
@@ -163,7 +164,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: "#94A3B8",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
   },
   activeBadgeText: {

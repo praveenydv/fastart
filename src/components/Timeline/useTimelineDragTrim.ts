@@ -7,6 +7,7 @@ interface UseTimelineDragTrimParams {
   allClips: UnifiedClipItem[];
   selectedClipId: string | null;
   activeTrackCount: number;
+  trackRowHeight?: number;
   pxPerSec: number;
   isSnappingEnabled: boolean;
   isHapticEnabled: boolean;
@@ -40,6 +41,7 @@ export function useTimelineDragTrim({
   allClips,
   selectedClipId,
   activeTrackCount,
+  trackRowHeight,
   pxPerSec,
   isSnappingEnabled,
   isHapticEnabled,
@@ -69,6 +71,7 @@ export function useTimelineDragTrim({
     allClips,
     selectedClipId,
     activeTrackCount,
+    trackRowHeight,
     pxPerSec,
     isSnappingEnabled,
     isHapticEnabled,

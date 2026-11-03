@@ -2,6 +2,9 @@ import { FastArtProject } from "../../types/project";
 
 export const MAX_TRACKS = 25;
 export const TRACK_ROW_HEIGHT = 48;
+export const TRACK_ROW_HEIGHT_MOBILE = 34; // Reduced track height on mobile for better space
+export const getTrackRowHeight = (isMobile?: boolean): number =>
+  isMobile ? TRACK_ROW_HEIGHT_MOBILE : TRACK_ROW_HEIGHT;
 export const MIN_CLIP_DURATION = 0.05; // 50 milliseconds precision
 
 export interface UnifiedClipItem {

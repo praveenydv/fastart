@@ -517,6 +517,7 @@ function ToolbarComponent({
 
         <ScrollView
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           style={
             Platform.OS === "web"
               ? ({ scrollbarWidth: "none", msOverflowStyle: "none" } as any)
@@ -585,6 +586,7 @@ function ToolbarComponent({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         style={
           Platform.OS === "web"
             ? ({ scrollbarWidth: "none", msOverflowStyle: "none" } as any)

@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    paddingBottom: 8,
+    paddingBottom: 44,
   },
   presetCard: {
     width: '23.8%',

@@ -218,7 +218,8 @@ function FiltersModalComponent({
                   onPress={() => handleSelectFilter(item.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.colorPreview}>
+                  <View style={styles.phoneFrame}>
+                    <View style={styles.phoneNotch} />
                     {isItemNormal ? (
                       <ExpoImage
                         source={{ uri: previewThumb }}
@@ -229,7 +230,7 @@ function FiltersModalComponent({
                       />
                     ) : (
                       <View style={styles.splitFilterBox}>
-                        {/* Left Half: Before (Original) */}
+                        {/* Left Half: Before (Actual Original) */}
                         <View style={styles.splitLeftHalf}>
                           <ExpoImage
                             source={{ uri: previewThumb }}
@@ -239,7 +240,7 @@ function FiltersModalComponent({
                             transition={120}
                           />
                           <View style={styles.splitBadgeLeft}>
-                            <Text style={styles.splitBadgeText}>ORIG</Text>
+                            <Text style={styles.splitBadgeText}>ACTUAL</Text>
                           </View>
                         </View>
 
@@ -262,13 +263,13 @@ function FiltersModalComponent({
                               StyleSheet.absoluteFill,
                               {
                                 backgroundColor: sampleColor,
-                                opacity: 0.18,
+                                opacity: 0.22,
                                 mixBlendMode: 'color' as any,
                               },
                             ]}
                           />
                           <View style={styles.splitBadgeRight}>
-                            <Text style={styles.splitBadgeText}>FX</Text>
+                            <Text style={styles.splitBadgeText}>FILTER</Text>
                           </View>
                         </View>
 
@@ -457,7 +458,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridContainer: {
-    paddingBottom: 8,
+    paddingBottom: 44,
   },
   sectionBlock: {
     marginBottom: 8,
@@ -485,23 +486,38 @@ const styles = StyleSheet.create({
   card: {
     width: '23.8%',
     backgroundColor: '#131826',
-    borderRadius: 5,
+    borderRadius: 7,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#1F2637',
+    padding: 2,
+    alignItems: 'center',
   },
   cardActive: {
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
-  colorPreview: {
-    height: 36,
+  phoneFrame: {
+    height: 46,
     width: '100%',
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#242C3D',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: '#08090E',
+  },
+  phoneNotch: {
+    position: 'absolute',
+    top: 1.5,
+    width: 12,
+    height: 2.5,
+    borderRadius: 1.5,
+    backgroundColor: '#0F131D',
+    zIndex: 10,
+    alignSelf: 'center',
   },
   previewImage: {
     width: '100%',

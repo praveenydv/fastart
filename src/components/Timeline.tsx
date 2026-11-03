@@ -18,6 +18,8 @@ import {
   TimelineProps,
   MAX_TRACKS,
   TRACK_ROW_HEIGHT,
+  TRACK_ROW_HEIGHT_MOBILE,
+  getTrackRowHeight,
   MIN_CLIP_DURATION,
   UnifiedClipItem,
 } from "./Timeline/timelineTypes";
@@ -83,6 +85,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
+  const trackRowHeight = isMobile ? TRACK_ROW_HEIGHT_MOBILE : TRACK_ROW_HEIGHT;
   const pxPerSec = Math.max(1, Math.min(1000, zoom));
 
   const scrollRef = useRef<any>(null);
@@ -184,6 +187,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     allClips: allClipsWithTracks,
     selectedClipId,
     activeTrackCount,
+    trackRowHeight,
     pxPerSec,
     isSnappingEnabled,
     isHapticEnabled,
@@ -551,22 +555,20 @@ const TimelineComponent: React.FC<TimelineProps> = ({
   const visibleXMin = Math.max(0, visibleWindowStartX - screenWidth * 1.5);
   const visibleXMax = visibleWindowStartX + screenWidth * 3.5;
   const visibleTicks = useMemo(
-    () => suspendHeavyContent
-      ? []
-      : ticks.filter((tick) => {
-          const x = tick.time * pxPerSec;
-          return x >= visibleXMin && x <= visibleXMax;
-        }),
-    [ticks, pxPerSec, suspendHeavyContent, visibleXMin, visibleXMax],
+    () =>
+      ticks.filter((tick) => {
+        const x = tick.time * pxPerSec;
+        return x >= visibleXMin && x <= visibleXMax;
+      }),
+    [ticks, pxPerSec, visibleXMin, visibleXMax],
   );
   const visibleBeatMarkers = useMemo(
-    () => suspendHeavyContent
-      ? []
-      : project?.beatMarkers?.filter((time) => {
-          const x = time * pxPerSec;
-          return x >= visibleXMin && x <= visibleXMax;
-        }),
-    [project?.beatMarkers, pxPerSec, suspendHeavyContent, visibleXMin, visibleXMax],
+    () =>
+      project?.beatMarkers?.filter((time) => {
+        const x = time * pxPerSec;
+        return x >= visibleXMin && x <= visibleXMax;
+      }) || [],
+    [project?.beatMarkers, pxPerSec, visibleXMin, visibleXMax],
   );
 
   // Left track header cells (aligned in exact reversed order matching TimelineTracksView)
@@ -859,7 +861,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
         contentContainerStyle={{
           paddingBottom: isMobile ? 40 : 24,
         }}
-        showsVerticalScrollIndicator={true}
+        showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
         keyboardShouldPersistTaps="handled"
         scrollEnabled={!isInteractingWithTimeline}
@@ -963,7 +965,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
                 : {})}
             >
               <TimelineTracksView
-                trackRows={suspendHeavyContent ? EMPTY_TRACK_ROWS : trackRows}
+                trackRows={trackRows}
                 activeTrackCount={activeTrackCount}
                 timelineContentWidth={timelineContentWidth}
                 visibleStartX={visibleWindowStartX}
@@ -974,6 +976,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
                 activeTrimming={activeTrimming}
                 activeTrimDelta={activeTrimDelta}
                 dragState={dragState}
+                isMobile={isMobile}
+                trackRowHeight={trackRowHeight}
                 onSelectClip={onSelectClip}
                 onOpenTransitions={onOpenTransitions}
                 handleRemoveTrack={handleRemoveTrack}

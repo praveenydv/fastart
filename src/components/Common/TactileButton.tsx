@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   Pressable,
   PressableProps,
@@ -7,12 +7,14 @@ import {
   StyleSheet,
   Platform,
   GestureResponderEvent,
-} from 'react-native';
-import { triggerHaptic, HapticType } from '../../utils/haptics';
+} from "react-native";
+import { triggerHaptic, HapticType } from "../../utils/haptics";
 
-export interface TactileButtonProps extends Omit<PressableProps, 'style'> {
+export interface TactileButtonProps extends Omit<PressableProps, "style"> {
   /** Style for the button (object, array, or function based on pressed state) */
-  style?: StyleProp<ViewStyle> | ((state: { pressed: boolean }) => StyleProp<ViewStyle>);
+  style?:
+    | StyleProp<ViewStyle>
+    | ((state: { pressed: boolean }) => StyleProp<ViewStyle>);
   /** Active opacity on press (default: 0.8) */
   activeOpacity?: number;
   /** Active scale multiplier on press (default: 0.95 for snappy micro-press feel; set 1.0 to disable scale) */
@@ -24,13 +26,16 @@ export interface TactileButtonProps extends Omit<PressableProps, 'style'> {
   /** Haptic feedback type on press (default: 'selection'; false to disable) */
   haptic?: HapticType | boolean;
   /** Hit slop padding for easier mobile tapping (default: 8px on all sides if not specified) */
-  hitSlop?: PressableProps['hitSlop'];
+  hitSlop?: PressableProps["hitSlop"];
   /** Children (ReactNode or function based on pressed state) */
-  children?: React.ReactNode | ((state: { pressed: boolean }) => React.ReactNode);
+  children?:
+    | React.ReactNode
+    | ((state: { pressed: boolean }) => React.ReactNode);
 }
 
-const DEFAULT_RIPPLE_COLOR = 'rgba(0, 242, 254, 0.22)';
+const DEFAULT_RIPPLE_COLOR = "rgba(0, 242, 254, 0.22)";
 const DEFAULT_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+const DEFAULT_PRESS_RETENTION = { top: 20, bottom: 20, left: 20, right: 20 };
 
 /**
  * TactileButton: High-performance, tactile pressable with native Android ripple,
@@ -44,7 +49,7 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
       activeScale = 0.95,
       rippleColor = DEFAULT_RIPPLE_COLOR,
       rippleBorderless = false,
-      haptic = 'selection',
+      haptic = "selection",
       hitSlop = DEFAULT_HIT_SLOP,
       disabled,
       onPress,
@@ -53,7 +58,7 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
       children,
       ...restProps
     },
-    ref
+    ref,
   ) => {
     const handlePressIn = (e: GestureResponderEvent) => {
       onPressIn?.(e);
@@ -62,7 +67,7 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
     const handlePress = (e: GestureResponderEvent) => {
       if (!disabled) {
         if (haptic !== false) {
-          const hapticType = typeof haptic === 'string' ? haptic : 'selection';
+          const hapticType = typeof haptic === "string" ? haptic : "selection";
           triggerHaptic(hapticType);
         }
       }
@@ -74,6 +79,7 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
         ref={ref}
         disabled={disabled}
         hitSlop={hitSlop}
+        pressRetentionOffset={DEFAULT_PRESS_RETENTION}
         unstable_pressDelay={0}
         android_ripple={
           disabled
@@ -81,7 +87,7 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
             : {
                 color: rippleColor,
                 borderless: rippleBorderless,
-                foreground: Platform.OS === 'android',
+                foreground: Platform.OS === "android",
               }
         }
         onPressIn={handlePressIn}
@@ -90,18 +96,23 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
         style={
           ((state: { pressed: boolean }) => {
             const resolvedStyle =
-              typeof style === 'function' ? style(state) : style;
-            const flatStyle = { ...((StyleSheet.flatten(resolvedStyle) || {}) as ViewStyle) };
+              typeof style === "function" ? style(state) : style;
+            const flatStyle = {
+              ...((StyleSheet.flatten(resolvedStyle) || {}) as ViewStyle),
+            };
 
-            if (Platform.OS === 'web') {
-              (flatStyle as any).cursor = disabled ? 'default' : 'pointer';
-              (flatStyle as any).touchAction = 'manipulation';
-              (flatStyle as any).userSelect = 'none';
-              (flatStyle as any).WebkitTapHighlightColor = 'transparent';
+            if (Platform.OS === "web") {
+              (flatStyle as any).cursor = disabled ? "default" : "pointer";
+              (flatStyle as any).touchAction = "manipulation";
+              (flatStyle as any).userSelect = "none";
+              (flatStyle as any).WebkitTapHighlightColor = "transparent";
             }
 
             // Critical defensive safeguard: remove null/undefined transform to prevent React Native processTransform crash
-            if (flatStyle.transform === null || flatStyle.transform === undefined) {
+            if (
+              flatStyle.transform === null ||
+              flatStyle.transform === undefined
+            ) {
               delete flatStyle.transform;
             } else if (Array.isArray(flatStyle.transform)) {
               flatStyle.transform = flatStyle.transform.filter(Boolean);
@@ -115,7 +126,9 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
             }
 
             if (state.pressed) {
-              const existingTransforms = Array.isArray(flatStyle.transform) ? flatStyle.transform : [];
+              const existingTransforms = Array.isArray(flatStyle.transform)
+                ? flatStyle.transform
+                : [];
               const hasScale = activeScale !== 1;
               const combinedTransforms = hasScale
                 ? [...existingTransforms, { scale: activeScale }]
@@ -137,14 +150,12 @@ export const TactileButton = React.forwardRef<any, TactileButtonProps>(
         }
         {...restProps}
       >
-        {typeof children === 'function'
-          ? (state) => children(state)
-          : children}
+        {typeof children === "function" ? (state) => children(state) : children}
       </Pressable>
     );
-  }
+  },
 );
 
-TactileButton.displayName = 'TactileButton';
+TactileButton.displayName = "TactileButton";
 
 export default TactileButton;

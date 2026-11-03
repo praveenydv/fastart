@@ -14,6 +14,7 @@ interface UseTimelineClipDragParams {
   allClips: UnifiedClipItem[];
   selectedClipId: string | null;
   activeTrackCount: number;
+  trackRowHeight?: number;
   pxPerSec: number;
   isSnappingEnabled: boolean;
   isHapticEnabled: boolean;
@@ -51,8 +52,9 @@ function computeTargetPosition(
   currentTime?: number,
   cachedDraggingClip?: UnifiedClipItem,
   cachedOtherClips?: UnifiedClipItem[],
+  rowHeight: number = TRACK_ROW_HEIGHT,
 ) {
-  const rawTrackPos = initialTrack - deltaYPixels / TRACK_ROW_HEIGHT;
+  const rawTrackPos = initialTrack - deltaYPixels / rowHeight;
 
   // Other clips excluding the one being dragged (uses precomputed cache during active drag)
   const otherClips = cachedOtherClips || allClips.filter((c) => c.id !== clipId);
@@ -241,6 +243,7 @@ export function useTimelineClipDrag({
   allClips,
   selectedClipId,
   activeTrackCount,
+  trackRowHeight,
   pxPerSec,
   isSnappingEnabled,
   isHapticEnabled,
@@ -250,6 +253,9 @@ export function useTimelineClipDrag({
   onOpenEditModal,
   onMoveClip,
 }: UseTimelineClipDragParams) {
+  const rowHeight = trackRowHeight || TRACK_ROW_HEIGHT;
+  const rowHeightRef = useRef(rowHeight);
+  rowHeightRef.current = rowHeight;
   const [dragState, setDragState] = useState<TimelineDragState | null>(null);
 
   const [isDraggingClip, setIsDraggingClip] = useState(false);
@@ -453,8 +459,8 @@ export function useTimelineClipDrag({
       }
 
       const deltaX = deltaXPixels / pxPerSecRef.current;
-      const minY = (state.initialTrack - activeTrackCount - 1) * TRACK_ROW_HEIGHT;
-      const maxY = (state.initialTrack + 1) * TRACK_ROW_HEIGHT;
+      const minY = (state.initialTrack - activeTrackCount - 1) * rowHeightRef.current;
+      const maxY = (state.initialTrack + 1) * rowHeightRef.current;
       const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
       const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
@@ -475,6 +481,7 @@ export function useTimelineClipDrag({
           getPlaybackTime(),
           cachedDraggingClipRef.current,
           cachedOtherClipsRef.current,
+          rowHeightRef.current,
         );
 
       const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
@@ -683,8 +690,8 @@ export function useTimelineClipDrag({
         }
 
         const deltaX = deltaXPixels / pxPerSecRef.current;
-        const minY = (initialTrackIndex - activeTrackCount - 1) * TRACK_ROW_HEIGHT;
-        const maxY = (initialTrackIndex + 1) * TRACK_ROW_HEIGHT;
+        const minY = (initialTrackIndex - activeTrackCount - 1) * rowHeightRef.current;
+        const maxY = (initialTrackIndex + 1) * rowHeightRef.current;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
         const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
@@ -705,6 +712,7 @@ export function useTimelineClipDrag({
             getPlaybackTime(),
             cachedDraggingClipRef.current,
             cachedOtherClipsRef.current,
+            rowHeightRef.current,
           );
 
         const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
@@ -815,8 +823,8 @@ export function useTimelineClipDrag({
 
         const deltaX = gestureState.dx / pxPerSecRef.current;
         const deltaYPixels = gestureState.dy;
-        const minY = (info.initialTrack - activeTrackCount - 1) * TRACK_ROW_HEIGHT;
-        const maxY = (info.initialTrack + 1) * TRACK_ROW_HEIGHT;
+        const minY = (info.initialTrack - activeTrackCount - 1) * rowHeightRef.current;
+        const maxY = (info.initialTrack + 1) * rowHeightRef.current;
         const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
 
         const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
@@ -837,6 +845,7 @@ export function useTimelineClipDrag({
             getPlaybackTime(),
             cachedDraggingClipRef.current,
             cachedOtherClipsRef.current,
+            rowHeightRef.current,
           );
 
         const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;

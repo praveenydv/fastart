@@ -45,8 +45,7 @@ function HeaderComponent({
   isSaving = false,
 }: HeaderProps) {
   const { width } = useWindowDimensions();
-  const isSmallScreen = width < 420;
-  const isVerySmallScreen = width < 360;
+  const isSmallScreen = width < 640;
 
   const currentRatio =
     ASPECT_RATIOS.find((r) => r.id === project.aspectRatio) || ASPECT_RATIOS[0];
@@ -97,8 +96,8 @@ function HeaderComponent({
           <Ionicons name="chevron-down" size={12} color="#94A3B8" style={{ marginLeft: 3 }} />
         </TouchableOpacity>
 
-        {/* Project Title (Clean, tap to rename) */}
-        {!isVerySmallScreen && (
+        {/* Project Title (Clean, tap to rename on desktop/tablet; hidden on small screens for better space) */}
+        {!isSmallScreen && (
           <TouchableOpacity
             style={styles.titlePill}
             onPress={() => {

@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
-import { UnifiedClipItem, TRACK_ROW_HEIGHT, MAX_TRACKS } from "./timelineTypes";
+import { UnifiedClipItem, TRACK_ROW_HEIGHT, TRACK_ROW_HEIGHT_MOBILE, MAX_TRACKS } from "./timelineTypes";
 import { styles } from "./TimelineStyles";
 import { TimelineClipWaveform } from "./TimelineClipWaveform";
 import { TimelineClipPreview } from "./TimelineClipPreview";
@@ -106,6 +106,8 @@ interface TimelineTracksViewProps {
     track: number,
   ) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
+  isMobile?: boolean;
+  trackRowHeight?: number;
 }
 
 const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
@@ -120,6 +122,8 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
   activeTrimming,
   activeTrimDelta,
   dragState,
+  isMobile,
+  trackRowHeight,
   onSelectClip,
   onOpenTransitions,
   handleRemoveTrack,
@@ -137,6 +141,8 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
   handleRightTrimStart,
   onOpenEditModal,
 }) => {
+  const effectiveRowHeight = trackRowHeight || (isMobile ? TRACK_ROW_HEIGHT_MOBILE : TRACK_ROW_HEIGHT);
+
   const draggedClip = useMemo(() => {
     if (!dragState) return null;
     for (const row of trackRows) {
@@ -174,6 +180,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
             style={[
               styles.universalTrackLane,
               {
+                height: effectiveRowHeight,
                 borderStyle: "dashed",
                 borderColor: "#00F2FE",
                 borderWidth: 1.5,
@@ -235,17 +242,15 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
         const rowClips = trackRows[trackIdx] || [];
         const visibleMinX = Math.max(0, visibleStartX - windowWidth * 1.5);
         const visibleMaxX = visibleStartX + windowWidth * 3.5;
-        const visibleRowClips = suspendHeavyContent
-          ? []
-          : rowClips.filter((clip) => {
-              if (dragState?.clipId === clip.id) return true;
-              const trim = activeTrimDelta?.clipId === clip.id ? activeTrimDelta : null;
-              const drag = dragState?.clipId === clip.id ? dragState : null;
-              const start = (trim?.startTime ?? drag?.currentStart ?? clip.startTime) * pxPerSec;
-              const duration = trim?.duration ?? clip.duration;
-              const end = start + Math.max(24, duration * pxPerSec);
-              return end >= visibleMinX && start <= visibleMaxX;
-            });
+        const visibleRowClips = rowClips.filter((clip) => {
+          if (dragState?.clipId === clip.id) return true;
+          const trim = activeTrimDelta?.clipId === clip.id ? activeTrimDelta : null;
+          const drag = dragState?.clipId === clip.id ? dragState : null;
+          const start = (trim?.startTime ?? drag?.currentStart ?? clip.startTime) * pxPerSec;
+          const duration = trim?.duration ?? clip.duration;
+          const end = start + Math.max(24, duration * pxPerSec);
+          return end >= visibleMinX && start <= visibleMaxX;
+        });
         const isEmptyTrack = rowClips.length === 0;
         const isSourceOfDrag =
           dragState && rowClips.some((c) => c.id === dragState.clipId);
@@ -258,6 +263,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
               style={[
                 styles.universalTrackLane,
                 {
+                  height: effectiveRowHeight,
                   zIndex: isSourceOfDrag ? 10000 : isTargetOfDrag ? 5000 : 1,
                   overflow: "visible",
                 },
@@ -483,7 +489,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
 
                 const visualOffsetY = isBeingDragged
                   ? (dragState.dragOffsetY ??
-                    (trackIdx - dragState.currentTrack) * TRACK_ROW_HEIGHT)
+                    (trackIdx - dragState.currentTrack) * effectiveRowHeight)
                   : 0;
 
                 return (
@@ -925,6 +931,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
             style={[
               styles.universalTrackLane,
               {
+                height: effectiveRowHeight,
                 borderStyle: "dashed",
                 borderColor: isBottomInsert
                   ? "#00F2FE"

@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   StyleProp,
   ViewStyle,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { TactileTouchable } from "./TactileTouchable";
@@ -26,6 +27,24 @@ export interface SliderControlRowProps {
   style?: StyleProp<ViewStyle>;
 }
 
+// Precision-safe step snapper that eliminates IEEE 754 floating point drift
+const snapToStep = (
+  val: number,
+  minVal: number,
+  maxVal: number,
+  stepVal?: number,
+): number => {
+  const clamped = Math.max(minVal, Math.min(maxVal, val));
+  if (!stepVal || stepVal <= 0) {
+    return parseFloat(clamped.toFixed(2));
+  }
+  const steps = Math.round((clamped - minVal) / stepVal);
+  const rawSnapped = minVal + steps * stepVal;
+  const bounded = Math.max(minVal, Math.min(maxVal, rawSnapped));
+  const precision = stepVal < 1 ? Math.max(1, (stepVal.toString().split(".")[1] || "").length) : 0;
+  return parseFloat(bounded.toFixed(precision));
+};
+
 export function SliderControlRow({
   label,
   value,
@@ -41,12 +60,57 @@ export function SliderControlRow({
   defaultValue,
   style,
 }: SliderControlRowProps) {
+  const [localVal, setLocalVal] = useState<number>(() =>
+    snapToStep(value, min, max, step),
+  );
+  const isDraggingRef = useRef<boolean>(false);
+  const lastEmittedValueRef = useRef<number>(value);
+
+  // Sync internal slider value only when user is NOT dragging
+  useEffect(() => {
+    if (!isDraggingRef.current) {
+      const snapped = snapToStep(value, min, max, step);
+      setLocalVal(snapped);
+      lastEmittedValueRef.current = snapped;
+    }
+  }, [value, min, max, step]);
+
+  const handleChange = useCallback(
+    (raw: number) => {
+      const snapped = snapToStep(raw, min, max, step);
+      lastEmittedValueRef.current = snapped;
+      setLocalVal(snapped);
+      onValueChange(snapped);
+    },
+    [min, max, step, onValueChange],
+  );
+
+  const handleComplete = useCallback(
+    (raw?: number) => {
+      isDraggingRef.current = false;
+      const finalVal =
+        typeof raw === "number" && !isNaN(raw)
+          ? snapToStep(raw, min, max, step)
+          : lastEmittedValueRef.current;
+      lastEmittedValueRef.current = finalVal;
+      setLocalVal(finalVal);
+      onValueChange(finalVal);
+      onValueChangeComplete?.(finalVal);
+    },
+    [min, max, step, onValueChange, onValueChangeComplete],
+  );
+
   const displayVal = formatValue
-    ? formatValue(value)
-    : `${Math.round(value)}${unit}`;
+    ? formatValue(localVal)
+    : `${Math.round(localVal)}${unit}`;
   const canReset =
     onReset ||
-    (defaultValue !== undefined && Math.abs(value - defaultValue) > 0.001);
+    (defaultValue !== undefined && Math.abs(localVal - defaultValue) > 0.001);
+
+  const rangePercent =
+    max > min
+      ? Math.max(0, Math.min(100, ((localVal - min) / (max - min)) * 100))
+      : 0;
 
   return (
     <View style={[styles.container, style]}>
@@ -71,8 +135,10 @@ export function SliderControlRow({
             <TactileTouchable
               onPress={() => {
                 if (onReset) onReset();
-                else if (defaultValue !== undefined)
-                  onValueChange(defaultValue);
+                else if (defaultValue !== undefined) {
+                  handleChange(defaultValue);
+                  handleComplete(defaultValue);
+                }
               }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.resetBtn}
@@ -86,18 +152,64 @@ export function SliderControlRow({
       </View>
 
       <View style={styles.sliderWrapper}>
-        <Slider
-          value={value}
-          minimumValue={min}
-          maximumValue={max}
-          step={step}
-          minimumTrackTintColor="#00F2FE"
-          maximumTrackTintColor="#1F2637"
-          thumbTintColor="#00F2FE"
-          onValueChange={onValueChange}
-          onSlidingComplete={onValueChangeComplete}
-          style={styles.slider}
-        />
+        {Platform.OS === "web" ? (
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step || 1}
+            value={localVal}
+            onMouseDown={() => {
+              isDraggingRef.current = true;
+            }}
+            onTouchStart={() => {
+              isDraggingRef.current = true;
+            }}
+            onChange={(e: any) => {
+              const raw = parseFloat(e.target.value);
+              if (!isNaN(raw)) {
+                handleChange(raw);
+              }
+            }}
+            onMouseUp={(e: any) => {
+              const raw = parseFloat(e.target.value);
+              handleComplete(!isNaN(raw) ? raw : undefined);
+            }}
+            onTouchEnd={(e: any) => {
+              const raw = parseFloat(e.target.value);
+              handleComplete(!isNaN(raw) ? raw : undefined);
+            }}
+            style={
+              {
+                width: "100%",
+                height: 20,
+                cursor: "pointer",
+                accentColor: "#00F2FE",
+                background: `linear-gradient(to right, #00F2FE 0%, #00F2FE ${rangePercent}%, #1F2637 ${rangePercent}%, #1F2637 100%)`,
+                borderRadius: 3,
+                outline: "none",
+                margin: 0,
+                padding: 0,
+              } as any
+            }
+          />
+        ) : (
+          <Slider
+            value={localVal}
+            minimumValue={min}
+            maximumValue={max}
+            step={step}
+            minimumTrackTintColor="#00F2FE"
+            maximumTrackTintColor="#1F2637"
+            thumbTintColor="#00F2FE"
+            onSlidingStart={() => {
+              isDraggingRef.current = true;
+            }}
+            onValueChange={handleChange}
+            onSlidingComplete={handleComplete}
+            style={styles.slider}
+          />
+        )}
       </View>
     </View>
   );

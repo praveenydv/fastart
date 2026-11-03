@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
-  Platform,
+  ScrollView,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,50 +14,26 @@ import { CustomColorPickerButton } from "../../Common/CustomColorPickerButton";
 import { SegmentedPillTabs } from "../../Common/SegmentedPillTabs";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
 import { getActiveMediaElement } from "../../../utils/videoRenderer";
+import { CutoutColorDropperModal } from "./CutoutColorDropperModal";
+import {
+  CHROMA_QUICK_PRESETS,
+  BG_COLOR_PRESETS,
+  STROKE_PRESETS,
+  QUICK_BG_COLORS,
+  QUICK_STROKE_COLORS,
+  CutoutMode,
+  CUTOUT_TABS,
+} from "./CutoutConstants";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-export const CHROMA_QUICK_PRESETS = [
-  { label: "Green", color: "#00FF00" },
-  { label: "Blue", color: "#0047FF" },
-  { label: "Black", color: "#000000" },
-  { label: "White", color: "#FFFFFF" },
-  { label: "Magenta", color: "#FF00FF" },
-];
-
-export const BG_COLOR_PRESETS = [
-  { label: "Transparent", color: "none" },
-  { label: "Black", color: "#000000" },
-  { label: "White", color: "#FFFFFF" },
-  { label: "Neon Cyan", color: "#00F2FE" },
-  { label: "Purple", color: "#8B5CF6" },
-  { label: "Red", color: "#FF0050" },
-  { label: "Amber", color: "#FFE600" },
-  { label: "Emerald", color: "#10B981" },
-  { label: "Royal Blue", color: "#2563EB" },
-  { label: "Deep Slate", color: "#1E293B" },
-];
-
-export const STROKE_PRESETS = [
-  { label: "None", color: "none" },
-  { label: "White", color: "#FFFFFF" },
-  { label: "Neon Cyan", color: "#00F2FE" },
-  { label: "Amber Gold", color: "#FFE600" },
-  { label: "Hot Pink", color: "#FF0050" },
-  { label: "Emerald", color: "#10B981" },
-  { label: "Purple Glow", color: "#A855F7" },
-];
-
-export const QUICK_BG_COLORS = BG_COLOR_PRESETS.slice(0, 5);
-export const QUICK_STROKE_COLORS = STROKE_PRESETS.slice(0, 5);
-
-export type CutoutMode = "none" | "chroma" | "auto";
-
-export const CUTOUT_TABS: { id: CutoutMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: "none", label: "None", icon: "close-circle-outline" },
-  { id: "auto", label: "Auto Cutout", icon: "sparkles" },
-  { id: "chroma", label: "Chroma Key", icon: "color-filter" },
-];
+export {
+  CHROMA_QUICK_PRESETS,
+  BG_COLOR_PRESETS,
+  STROKE_PRESETS,
+  QUICK_BG_COLORS,
+  QUICK_STROKE_COLORS,
+  CUTOUT_TABS,
+};
+export type { CutoutMode };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +61,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   config,
   onChange,
   selectedClip,
+  currentTime = 0,
   isProcessingFrames = false,
   isProcessingActiveFrame = false,
   frameProgress = 0,
@@ -113,35 +90,8 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   const strokeColor = config?.strokeColor ?? "none";
   const strokeWidth = config?.strokeWidth ?? 3;
 
-  const [localQuality, setLocalQuality] = useState<"fast" | "studio">(
-    config?.quality ?? "fast"
-  );
-
-  useEffect(() => {
-    if (config?.quality) {
-      setLocalQuality(config.quality);
-    }
-  }, [config?.quality]);
-
-  const quality = config?.quality ?? localQuality;
-
   const [finishTab, setFinishTab] = useState<"bg" | "outline">("bg");
-
-  const handleSelectQuality = (q: "fast" | "studio") => {
-    setLocalQuality(q);
-    // Preserve ALL existing config fields — only update quality, never clobber mode or other settings
-    onChange({
-      enabled: config?.enabled ?? true,
-      mode: config?.mode ?? "auto",
-      keyColor: config?.keyColor ?? "#00FF00",
-      intensity: config?.intensity ?? 45,
-      shadow: config?.shadow ?? 25,
-      strokeColor: config?.strokeColor ?? "none",
-      strokeWidth: config?.strokeWidth ?? 3,
-      bgColor: config?.bgColor ?? "none",
-      quality: q,
-    });
-  };
+  const [isDropperModalOpen, setIsDropperModalOpen] = useState(false);
 
   const isVideoClip =
     selectedClip?.type === "video" ||
@@ -169,41 +119,68 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
     }
   };
 
-  const handleOpenEyeDropper = async () => {
-    if (typeof window !== "undefined" && (window as any).EyeDropper) {
+  const handleOpenEyeDropper = () => {
+    // If running in browser with fine pointer (desktop mouse), use native browser EyeDropper API
+    if (
+      typeof window !== "undefined" &&
+      (window as any).EyeDropper &&
+      window.matchMedia?.("(pointer: fine)").matches
+    ) {
       try {
         const eyeDropper = new (window as any).EyeDropper();
-        const result = await eyeDropper.open();
-        if (result && result.sRGBHex) {
-          onChange({
-            ...config,
-            enabled: true,
-            mode: "chroma",
-            keyColor: result.sRGBHex,
+        eyeDropper
+          .open()
+          .then((result: any) => {
+            if (result && result.sRGBHex) {
+              onChange({
+                ...config,
+                enabled: true,
+                mode: "chroma",
+                keyColor: result.sRGBHex,
+              });
+            }
+          })
+          .catch(() => {
+            setIsDropperModalOpen(true);
           });
-        }
+        return;
       } catch {}
     }
+
+    // On mobile touch screens, open the interactive mobile screen dropper with magnified loupe
+    setIsDropperModalOpen(true);
   };
 
-  const handleAutoDetectBackdrop = () => {
+  const handleAutoDetectBackdrop = async () => {
+    try {
+      const clipUrl = selectedClip?.url || selectedClip?.thumbnail || "";
+      const detected = await rustCoreBridge.detectBackdropColor(clipUrl, selectedClip?.startTime ?? 0);
+      if (detected) {
+        onChange({
+          ...config,
+          enabled: true,
+          mode: "chroma",
+          keyColor: detected,
+        });
+        return;
+      }
+    } catch {}
+
+    // Fallback to active media element on web if available
     try {
       const activeMedia = getActiveMediaElement(selectedClip?.id || selectedClip?.url || "");
       if (activeMedia) {
         let canvas: HTMLCanvasElement | null = null;
         let ctx: CanvasRenderingContext2D | null = null;
-
         if (typeof document !== "undefined") {
           canvas = document.createElement("canvas");
           canvas.width = 64;
           canvas.height = 64;
           ctx = canvas.getContext("2d");
         }
-
         if (ctx && canvas) {
           ctx.drawImage(activeMedia as any, 0, 0, 64, 64);
           const imgData = ctx.getImageData(0, 0, 64, 64);
-          // Backend Rust calculation for backdrop detection
           const detected = rustCoreBridge.detectUniformBackdrop(imgData.data, 64, 64);
           if (detected?.hex) {
             onChange({
@@ -294,6 +271,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                     size={18}
                     shape="square"
                     accessibilityLabel="Pick custom screen color"
+                    onPickFromScreen={() => setIsDropperModalOpen(true)}
                   />
                 </View>
               </View>
@@ -309,7 +287,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   <Text style={sc.compactHex}>{keyColor.toUpperCase()}</Text>
                   <View style={sc.dropperIconBadge}>
                     <Ionicons name="eyedrop" size={12} color="#00F2FE" />
-                    <Text style={sc.dropperBadgeText}>Sample</Text>
+                    <Text style={sc.dropperBadgeText}>Sample Screen</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -360,33 +338,6 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
             </>
           ) : (
             <View style={sc.autoCutoutPanel}>
-              {/* Header Status Bar */}
-              <View style={sc.compactAiHeader}>
-                <View style={sc.compactAiBadge}>
-                  <Ionicons name="sparkles" size={12} color="#00F2FE" />
-                  <Text style={sc.compactAiBadgeText}>Auto Cutout</Text>
-                </View>
-
-                {isProcessingFrames ? (
-                  <View style={sc.statusPillProcessing}>
-                    <ActivityIndicator size="small" color="#00F2FE" style={{ transform: [{ scale: 0.65 }] }} />
-                    <Text style={sc.statusPillTextProcessing}>{frameProgress}%</Text>
-                  </View>
-                ) : isAlreadyProcessed ? (
-                  <View style={sc.statusPillSuccess}>
-                    <Ionicons name="checkmark-circle" size={10} color="#10B981" />
-                    <Text style={sc.statusPillTextSuccess}>{processedCount} frames removed</Text>
-                  </View>
-                ) : enabled ? (
-                  <View style={sc.statusPillSuccess}>
-                    <Ionicons name="checkmark-circle" size={10} color="#10B981" />
-                    <Text style={sc.statusPillTextSuccess}>Cutout Active</Text>
-                  </View>
-                ) : (
-                  <Text style={sc.statusPillMuted}>Ready to preview</Text>
-                )}
-              </View>
-
               {/* Active Processing Banner */}
               {isProcessingFrames && (
                 <View style={sc.compactProcessingBanner}>
@@ -413,79 +364,6 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
               {!isProcessingFrames && (
                 <View style={sc.actionsContainer}>
                   <View style={{ gap: 8 }}>
-                    {isVideoClip && Platform.OS === "web" && (
-                      <Text style={sc.qualitySelectorSubtitle}>
-                        Full-frame cutout • WebGPU or optimized WASM, Rust fallback
-                      </Text>
-                    )}
-
-                    {isVideoClip && Platform.OS !== "web" && (
-                      <View style={sc.qualitySelectorContainer}>
-                        <View style={sc.qualitySelectorHeader}>
-                          <Text style={sc.qualitySelectorTitle}>SPEED & QUALITY</Text>
-                          <Text style={sc.qualitySelectorSubtitle}>
-                            {quality === "fast" ? "⚡ Fast • up to 6 mask samples/sec" : "💎 Studio • every source frame"}
-                          </Text>
-                        </View>
-                        <View style={sc.qualityButtonGroup}>
-                          <TouchableOpacity
-                            style={[
-                              sc.qualityBtn,
-                              quality === "fast" && sc.qualityBtnActive,
-                            ]}
-                            onPress={() => handleSelectQuality("fast")}
-                            activeOpacity={0.7}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: quality === "fast" }}
-                          >
-                            <Ionicons
-                              name="flash"
-                              size={11}
-                              color={quality === "fast" ? "#00F2FE" : "#64748B"}
-                            />
-                            <Text
-                              style={[
-                                sc.qualityBtnText,
-                                quality === "fast" && sc.qualityBtnTextActive,
-                              ]}
-                            >
-                              Fast
-                            </Text>
-                            <View style={[sc.speedBadge, quality === "fast" && sc.speedBadgeActive]}>
-                              <Text style={[sc.speedBadgeText, quality === "fast" && sc.speedBadgeTextActive]}>
-                                {quality === "fast" ? "6 FPS" : "FULL"}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={[
-                              sc.qualityBtn,
-                              quality === "studio" && sc.qualityBtnActiveStudio,
-                            ]}
-                            onPress={() => handleSelectQuality("studio")}
-                            activeOpacity={0.7}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: quality === "studio" }}
-                          >
-                            <Ionicons
-                              name="diamond"
-                              size={11}
-                              color={quality === "studio" ? "#A78BFA" : "#64748B"}
-                            />
-                            <Text
-                              style={[
-                                sc.qualityBtnText,
-                                quality === "studio" && sc.qualityBtnTextActiveStudio,
-                              ]}
-                            >
-                              Studio Ultra
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
-
                     {isVideoClip && onProcessVideo && (
                       <TouchableOpacity
                         onPress={onProcessVideo}
@@ -495,7 +373,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                       >
                         <Ionicons name={isAlreadyProcessed ? "refresh" : "sparkles"} size={14} color="#08090E" />
                         <Text style={sc.heroBtnText}>
-                          {isAlreadyProcessed ? "Reprocess Video" : "Remove Background (Full Video)"}
+                          {isAlreadyProcessed ? "Reprocess Video" : "Remove Background"}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -527,7 +405,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                         >
                           <Ionicons name="reload-outline" size={13} color="#94A3B8" />
                           <Text style={[sc.secondaryActionText, { color: "#94A3B8" }]} numberOfLines={1}>
-                            Reset Cutout
+                            Reset
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -537,7 +415,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   {/* Sliders */}
                   <View style={{ marginTop: 6 }}>
                     <View style={sc.sliderRow}>
-                      <Text style={sc.sliderLabel}>Cutout Threshold</Text>
+                      <Text style={sc.sliderLabel}>Threshold</Text>
                       <View style={sc.sliderWrapper}>
                         <CompactSliderInput
                           label=""
@@ -552,7 +430,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                     </View>
 
                     <View style={sc.sliderRow}>
-                      <Text style={sc.sliderLabel}>Edge Softness</Text>
+                      <Text style={sc.sliderLabel}>Softness</Text>
                       <View style={sc.sliderWrapper}>
                         <CompactSliderInput
                           label=""
@@ -573,31 +451,42 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
         </View>
       )}
 
-      {/* Finish Segment: Background & Outline */}
+      {/* Background & Outline Styling */}
       {cutoutMode !== "none" && (
-        <View style={sc.sectionBox}>
-          <View style={sc.finishSegmentRow}>
-            <View style={sc.finishTabGroup}>
+        <View style={sc.stylingBox}>
+          {/* Header Switcher */}
+          <View style={sc.stylingHeaderRow}>
+            <View style={sc.stylingTabGroup}>
               <TouchableOpacity
-                style={[sc.finishTabBtn, finishTab === "bg" && sc.finishTabBtnActive]}
+                style={[sc.stylingTabBtn, finishTab === "bg" && sc.stylingTabBtnActive]}
                 onPress={() => setFinishTab("bg")}
                 activeOpacity={0.8}
               >
-                <Text style={[sc.finishTabText, finishTab === "bg" && sc.finishTabTextActive]}>
+                <Ionicons
+                  name="color-palette-outline"
+                  size={12}
+                  color={finishTab === "bg" ? "#00F2FE" : "#94A3B8"}
+                />
+                <Text style={[sc.stylingTabText, finishTab === "bg" && sc.stylingTabTextActive]}>
                   Background
                 </Text>
-                {bgColor !== "none" && <View style={sc.activeDot} />}
+                {bgColor !== "none" && <View style={[sc.activeDot, { backgroundColor: bgColor === "#FFFFFF" ? "#FFFFFF" : "#00F2FE" }]} />}
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[sc.finishTabBtn, finishTab === "outline" && sc.finishTabBtnActive]}
+                style={[sc.stylingTabBtn, finishTab === "outline" && sc.stylingTabBtnActive]}
                 onPress={() => setFinishTab("outline")}
                 activeOpacity={0.8}
               >
-                <Text style={[sc.finishTabText, finishTab === "outline" && sc.finishTabTextActive]}>
+                <Ionicons
+                  name="brush-outline"
+                  size={12}
+                  color={finishTab === "outline" ? "#00F2FE" : "#94A3B8"}
+                />
+                <Text style={[sc.stylingTabText, finishTab === "outline" && sc.stylingTabTextActive]}>
                   Outline
                 </Text>
-                {strokeColor !== "none" && <View style={sc.activeDot} />}
+                {strokeColor !== "none" && <View style={[sc.activeDot, { backgroundColor: strokeColor === "#FFFFFF" ? "#FFFFFF" : "#00F2FE" }]} />}
               </TouchableOpacity>
             </View>
 
@@ -607,97 +496,216 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   if (finishTab === "bg") onChange({ ...config, bgColor: "none" });
                   else onChange({ ...config, strokeColor: "none" });
                 }}
-                style={sc.clearBtnTouch}
+                style={sc.resetStylingBtn}
+                activeOpacity={0.7}
               >
-                <Text style={sc.clearBtn}>Reset</Text>
+                <Ionicons name="close-circle" size={12} color="#94A3B8" />
+                <Text style={sc.resetStylingText}>Reset</Text>
               </TouchableOpacity>
             )}
           </View>
 
+          {/* Tab Content: Background */}
           {finishTab === "bg" ? (
-            <View style={sc.compactSwatchRow}>
-              {QUICK_BG_COLORS.map((preset) => {
-                const isSelected = bgColor.toUpperCase() === preset.color.toUpperCase();
-                return (
-                  <TouchableOpacity
-                    key={preset.color}
-                    style={[
-                      sc.colorSwatch,
-                      { backgroundColor: preset.color === "none" ? "#202832" : preset.color },
-                      preset.color === "none" && sc.transparentSwatch,
-                      isSelected && sc.colorSwatchSelected,
-                    ]}
-                    onPress={() => onChange({ ...config, bgColor: preset.color })}
-                    activeOpacity={0.8}
-                    accessibilityLabel={preset.label}
-                  >
-                    {preset.color === "none" && <Ionicons name="close" size={13} color="#00F2FE" />}
-                  </TouchableOpacity>
-                );
-              })}
-              <CustomColorPickerButton
-                value={bgColor}
-                presets={QUICK_BG_COLORS}
-                onColorChange={(c) => onChange({ ...config, bgColor: c })}
-                size={24}
-                shape="square"
-                accessibilityLabel="Pick custom background color"
-              />
+            <View style={sc.paletteContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={sc.swatchScrollContent}
+              >
+                {/* Transparent Option */}
+                <TouchableOpacity
+                  style={[
+                    sc.paletteSwatch,
+                    sc.transparentSwatch,
+                    bgColor === "none" && sc.paletteSwatchSelected,
+                  ]}
+                  onPress={() => onChange({ ...config, bgColor: "none" })}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Transparent background"
+                >
+                  <Ionicons
+                    name="ban-outline"
+                    size={14}
+                    color={bgColor === "none" ? "#00F2FE" : "#64748B"}
+                  />
+                </TouchableOpacity>
+
+                {/* Color Presets */}
+                {BG_COLOR_PRESETS.filter((p) => p.color !== "none").map((preset) => {
+                  const isSelected = bgColor.toUpperCase() === preset.color.toUpperCase();
+                  const isLight = preset.color === "#FFFFFF" || preset.color === "#FFE600" || preset.color === "#00F2FE";
+                  return (
+                    <TouchableOpacity
+                      key={preset.color}
+                      style={[
+                        sc.paletteSwatch,
+                        { backgroundColor: preset.color },
+                        isSelected && sc.paletteSwatchSelected,
+                      ]}
+                      onPress={() => onChange({ ...config, bgColor: preset.color })}
+                      activeOpacity={0.8}
+                      accessibilityLabel={preset.label}
+                    >
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={13}
+                          color={isLight ? "#000000" : "#FFFFFF"}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* Custom Color Picker Button */}
+                <CustomColorPickerButton
+                  value={bgColor}
+                  presets={BG_COLOR_PRESETS}
+                  onColorChange={(c) => onChange({ ...config, bgColor: c })}
+                  size={32}
+                  shape="square"
+                  accessibilityLabel="Pick custom background color"
+                />
+              </ScrollView>
             </View>
           ) : (
-            <>
-              <View style={sc.compactSwatchRow}>
-                {QUICK_STROKE_COLORS.map((sp) => {
-                  const isSelected = strokeColor === sp.color;
+            /* Tab Content: Outline */
+            <View style={sc.paletteContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={sc.swatchScrollContent}
+              >
+                {/* None Option */}
+                <TouchableOpacity
+                  style={[
+                    sc.paletteSwatch,
+                    sc.transparentSwatch,
+                    strokeColor === "none" && sc.paletteSwatchSelected,
+                  ]}
+                  onPress={() => onChange({ ...config, strokeColor: "none" })}
+                  activeOpacity={0.8}
+                  accessibilityLabel="No outline stroke"
+                >
+                  <Ionicons
+                    name="ban-outline"
+                    size={14}
+                    color={strokeColor === "none" ? "#00F2FE" : "#64748B"}
+                  />
+                </TouchableOpacity>
+
+                {/* Stroke Color Presets */}
+                {STROKE_PRESETS.filter((p) => p.color !== "none").map((sp) => {
+                  const isSelected = strokeColor.toUpperCase() === sp.color.toUpperCase();
+                  const isLight = sp.color === "#FFFFFF" || sp.color === "#FFE600" || sp.color === "#00F2FE";
                   return (
                     <TouchableOpacity
                       key={sp.color}
                       style={[
-                        sc.colorSwatch,
-                        { backgroundColor: sp.color === "none" ? "#202832" : sp.color },
-                        sp.color === "none" && sc.transparentSwatch,
-                        isSelected && sc.colorSwatchSelected,
+                        sc.paletteSwatch,
+                        { backgroundColor: sp.color },
+                        isSelected && sc.paletteSwatchSelected,
                       ]}
-                      onPress={() => {
-                        onChange({ ...config, strokeColor: sp.color });
-                      }}
+                      onPress={() => onChange({ ...config, strokeColor: sp.color })}
                       activeOpacity={0.8}
                       accessibilityLabel={sp.label}
                     >
-                      {sp.color === "none" && <Ionicons name="close" size={13} color="#00F2FE" />}
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={13}
+                          color={isLight ? "#000000" : "#FFFFFF"}
+                        />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
+
+                {/* Custom Color Picker Button */}
                 <CustomColorPickerButton
                   value={strokeColor}
-                  presets={QUICK_STROKE_COLORS}
+                  presets={STROKE_PRESETS}
                   onColorChange={(c) => onChange({ ...config, strokeColor: c })}
-                  size={24}
+                  size={32}
                   shape="square"
                   accessibilityLabel="Pick custom outline color"
                 />
-              </View>
+              </ScrollView>
 
+              {/* Stroke Width Controls (Only if outline active) */}
               {strokeColor !== "none" && (
-                <View style={sc.sliderRow}>
-                  <Text style={sc.sliderLabel}>Outline Width</Text>
-                  <View style={sc.sliderWrapper}>
-                    <CompactSliderInput
-                      label=""
-                      value={strokeWidth}
-                      unit="px"
-                      min={1}
-                      max={20}
-                      step={1}
-                      onChange={(w) => onChange({ ...config, strokeWidth: w })}
-                    />
+                <View style={sc.outlineControlsSection}>
+                  {/* Quick Preset Thickness Pills */}
+                  <View style={sc.thicknessPillRow}>
+                    {[
+                      { label: "Thin", width: 2 },
+                      { label: "Medium", width: 5 },
+                      { label: "Bold", width: 10 },
+                      { label: "Ultra", width: 16 },
+                    ].map((item) => {
+                      const isSelected = strokeWidth === item.width;
+                      return (
+                        <TouchableOpacity
+                          key={item.label}
+                          style={[
+                            sc.thicknessPill,
+                            isSelected && sc.thicknessPillActive,
+                          ]}
+                          onPress={() => onChange({ ...config, strokeWidth: item.width })}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              sc.thicknessPillText,
+                              isSelected && sc.thicknessPillTextActive,
+                            ]}
+                          >
+                            {item.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Width Slider */}
+                  <View style={[sc.sliderRow, { marginTop: 6 }]}>
+                    <Text style={sc.sliderLabel}>Width ({strokeWidth}px)</Text>
+                    <View style={sc.sliderWrapper}>
+                      <CompactSliderInput
+                        label=""
+                        value={strokeWidth}
+                        unit="px"
+                        min={1}
+                        max={24}
+                        step={1}
+                        onChange={(w) => onChange({ ...config, strokeWidth: w })}
+                      />
+                    </View>
                   </View>
                 </View>
               )}
-            </>
+            </View>
           )}
         </View>
       )}
+
+      {/* Interactive Mobile Screen Color Dropper Modal with Loupe */}
+      <CutoutColorDropperModal
+        visible={isDropperModalOpen}
+        onClose={() => setIsDropperModalOpen(false)}
+        initialColor={keyColor}
+        selectedClip={selectedClip}
+        currentTime={currentTime}
+        onSelectColor={(hex) => {
+          onChange({
+            ...config,
+            enabled: true,
+            mode: "chroma",
+            keyColor: hex,
+          });
+        }}
+      />
     </View>
   );
 };
@@ -854,57 +862,6 @@ const sc = StyleSheet.create({
   autoCutoutPanel: {
     gap: 6,
   },
-  compactAiHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  compactAiBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  compactAiBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#00F2FE",
-  },
-  statusPillProcessing: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
-  },
-  statusPillTextProcessing: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#00F2FE",
-  },
-  statusPillSuccess: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
-  },
-  statusPillTextSuccess: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: "#10B981",
-  },
-  statusPillMuted: {
-    fontSize: 9,
-    color: "#64748B",
-  },
   compactProcessingBanner: {
     backgroundColor: "#0A0D15",
     padding: 6,
@@ -948,97 +905,17 @@ const sc = StyleSheet.create({
   actionsContainer: {
     gap: 6,
   },
-  qualitySelectorContainer: {
-    backgroundColor: "#0D111A",
-    borderRadius: 6,
-    padding: 6,
-    gap: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
-  },
-  qualitySelectorHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 2,
-  },
-  qualitySelectorTitle: {
-    fontSize: 8.5,
-    fontWeight: "700",
-    color: "#94A3B8",
-    letterSpacing: 0.5,
-  },
-  qualitySelectorSubtitle: {
-    fontSize: 8,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-  qualityButtonGroup: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  qualityBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    backgroundColor: "#161D2E",
-    paddingVertical: 5,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-  },
-  qualityBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
-  },
-  qualityBtnActiveStudio: {
-    backgroundColor: "rgba(167, 139, 250, 0.12)",
-    borderColor: "#A78BFA",
-  },
-  qualityBtnText: {
-    fontSize: 9.5,
-    fontWeight: "600",
-    color: "#94A3B8",
-  },
-  qualityBtnTextActive: {
-    color: "#00F2FE",
-    fontWeight: "700",
-  },
-  qualityBtnTextActiveStudio: {
-    color: "#A78BFA",
-    fontWeight: "700",
-  },
-  speedBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  speedBadgeActive: {
-    backgroundColor: "#00F2FE",
-  },
-  speedBadgeText: {
-    fontSize: 7.5,
-    fontWeight: "800",
-    color: "#64748B",
-  },
-  speedBadgeTextActive: {
-    color: "#08090E",
-  },
   heroBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#00F2FE",
-    paddingVertical: 6,
-    borderRadius: 5,
+    paddingVertical: 7,
+    borderRadius: 6,
   },
   heroBtnText: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: "700",
     color: "#08090E",
   },
@@ -1048,85 +925,139 @@ const sc = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     backgroundColor: "#131826",
-    paddingVertical: 5,
+    paddingVertical: 6,
     paddingHorizontal: 8,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: "rgba(0, 242, 254, 0.3)",
   },
   secondaryActionText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: "600",
   },
-  finishSegmentRow: {
+  stylingBox: {
+    backgroundColor: "#0F1420",
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#1E2638",
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  stylingHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 10,
   },
-  finishTabGroup: {
+  stylingTabGroup: {
     flexDirection: "row",
-    backgroundColor: "#0A0D15",
-    borderRadius: 4,
-    padding: 1.5,
-    gap: 2,
+    backgroundColor: "#080B12",
+    borderRadius: 6,
+    padding: 2,
+    gap: 3,
   },
-  finishTabBtn: {
+  stylingTabBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 3,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
   },
-  finishTabBtnActive: {
+  stylingTabBtnActive: {
     backgroundColor: "#161D2E",
   },
-  finishTabText: {
-    fontSize: 9,
+  stylingTabText: {
+    fontSize: 10,
     fontWeight: "500",
     color: "#94A3B8",
   },
-  finishTabTextActive: {
+  stylingTabTextActive: {
     color: "#00F2FE",
     fontWeight: "700",
   },
   activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: "#00F2FE",
   },
-  clearBtnTouch: {
-    paddingHorizontal: 4,
-  },
-  clearBtn: {
-    fontSize: 9,
-    color: "#94A3B8",
-  },
-  compactSwatchRow: {
+  resetStylingBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  resetStylingText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#94A3B8",
+  },
+  paletteContainer: {
+    gap: 8,
+  },
+  swatchScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingVertical: 2,
   },
-  colorSwatch: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 1,
+  paletteSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1.5,
     borderColor: "rgba(255, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
-  colorSwatchSelected: {
+  paletteSwatchSelected: {
     borderColor: "#00F2FE",
-    borderWidth: 1.5,
-    transform: [{ scale: 1.08 }],
+    borderWidth: 2,
+    transform: [{ scale: 1.06 }],
   },
   transparentSwatch: {
+    backgroundColor: "#131826",
     borderStyle: "dashed",
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  outlineControlsSection: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.06)",
+    gap: 6,
+  },
+  thicknessPillRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  thicknessPill: {
+    flex: 1,
+    paddingVertical: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#161D2E",
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  thicknessPillActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "#00F2FE",
+  },
+  thicknessPillText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  thicknessPillTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
   },
 });
 

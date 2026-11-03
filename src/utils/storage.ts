@@ -193,8 +193,11 @@ export const saveLastSession = (session: LastEditSession): void => {
 // Sanitize project to guarantee all tracks and properties are defined
 const sanitizeProject = (proj: any): FastArtProject => {
   const tracks = proj.tracks || {};
+  const computedDur = computeTotalDuration(tracks);
+  const duration = computedDur > 0 ? computedDur : (typeof proj.duration === 'number' ? proj.duration : 0);
   return {
     ...proj,
+    duration,
     id: proj.id || 'proj-' + Date.now(),
     title: proj.title || 'Untitled Project',
     aspectRatio: proj.aspectRatio || '9:16',

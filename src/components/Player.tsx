@@ -35,13 +35,11 @@ import { usePlaybackTime } from "../utils/playbackTimeStore";
 
 const EMPTY_ARRAY: any[] = Object.freeze([]) as any[];
 
-function stabilizeArrayRef<T extends { id?: string }>(prev: T[], next: T[]): T[] {
+function stabilizeArrayRef<T>(prev: T[], next: T[]): T[] {
   if (prev === next) return prev;
   if (prev.length !== next.length) return next;
   for (let i = 0; i < prev.length; i++) {
-    const a = prev[i];
-    const b = next[i];
-    if (a !== b && (!a?.id || a.id !== b?.id)) return next;
+    if (prev[i] !== next[i]) return next;
   }
   return prev;
 }
@@ -206,29 +204,13 @@ function Player({
     containerHeight,
   });
 
-  // Freeze canvas buffer resolution during drag/resize to prevent context wiping and glitching
-  const stableResolutionRef = useRef<{ width: number; height: number }>({
-    width: canvasWidth,
-    height: canvasHeight,
-  });
-
-  if (!isResizing && canvasWidth > 0 && canvasHeight > 0) {
-    stableResolutionRef.current = {
-      width: canvasWidth,
-      height: canvasHeight,
-    };
-  }
-
-  const effectiveBufferW = stableResolutionRef.current.width || canvasWidth;
-  const effectiveBufferH = stableResolutionRef.current.height || canvasHeight;
-
   const dpr =
     typeof window !== "undefined"
       ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2.0)
       : 1;
 
-  const canvasBufferWidth = Math.round(effectiveBufferW * dpr);
-  const canvasBufferHeight = Math.round(effectiveBufferH * dpr);
+  const canvasBufferWidth = Math.round(canvasWidth * dpr);
+  const canvasBufferHeight = Math.round(canvasHeight * dpr);
 
   const targetRatio = useMemo(() => {
     const ratioMap: Record<string, number> = {

@@ -280,6 +280,87 @@ RCT_EXPORT_METHOD(getVideoFrameInfo:(NSString *)videoUri resolver:(RCTPromiseRes
   });
 }
 
+RCT_EXPORT_METHOD(sampleVideoPixel:(NSString *)videoUri timeSeconds:(double)timeSeconds normX:(double)normX normY:(double)normY resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+    [gVideoDecodeLock lock];
+    NSError *error = nil;
+    if (![gVideoDecodeUri isEqualToString:videoUri] || !gVideoImageGenerator) {
+      NSURL *url = [NSURL URLWithString:videoUri];
+      if (!url.isFileURL && !url.scheme) url = [NSURL fileURLWithPath:videoUri];
+      AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
+      gVideoImageGenerator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+      gVideoImageGenerator.appliesPreferredTrackTransform = YES;
+      gVideoImageGenerator.maximumSize = CGSizeMake(256, 256);
+      gVideoDecodeUri = [videoUri copy];
+    }
+    CGImageRef image = [gVideoImageGenerator copyCGImageAtTime:CMTimeMakeWithSeconds(MAX(0, timeSeconds), 600) actualTime:nil error:&error];
+    [gVideoDecodeLock unlock];
+    if (!image) { resolve(@"#00FF00"); return; }
+
+    const size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+    const size_t px = (size_t)MIN(MAX(0, normX * (width - 1)), width - 1);
+    const size_t py = (size_t)MIN(MAX(0, normY * (height - 1)), height - 1);
+
+    uint8_t rgba[4] = {0, 0, 0, 0};
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(rgba, 1, 1, 8, 4, colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    if (context) {
+      CGContextDrawImage(context, CGRectMake(-(CGFloat)px, -(CGFloat)py, width, height), image);
+      CGContextRelease(context);
+    }
+    CGImageRelease(image);
+
+    NSString *hex = [NSString stringWithFormat:@"#%02X%02X%02X", rgba[0], rgba[1], rgba[2]];
+    resolve(hex);
+  });
+}
+
+RCT_EXPORT_METHOD(detectBackdropColor:(NSString *)videoUri timeSeconds:(double)timeSeconds resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+    [gVideoDecodeLock lock];
+    NSError *error = nil;
+    if (![gVideoDecodeUri isEqualToString:videoUri] || !gVideoImageGenerator) {
+      NSURL *url = [NSURL URLWithString:videoUri];
+      if (!url.isFileURL && !url.scheme) url = [NSURL fileURLWithPath:videoUri];
+      AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
+      gVideoImageGenerator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+      gVideoImageGenerator.appliesPreferredTrackTransform = YES;
+      gVideoImageGenerator.maximumSize = CGSizeMake(64, 64);
+      gVideoDecodeUri = [videoUri copy];
+    }
+    CGImageRef image = [gVideoImageGenerator copyCGImageAtTime:CMTimeMakeWithSeconds(MAX(0, timeSeconds), 600) actualTime:nil error:&error];
+    [gVideoDecodeLock unlock];
+    if (!image) { resolve(@"#00FF00"); return; }
+
+    const size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+    NSMutableData *rgba = [NSMutableData dataWithLength:width * height * 4];
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(rgba.mutableBytes, width, height, 8, width * 4, colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    if (context) {
+      CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+      CGContextRelease(context);
+    }
+    CGImageRelease(image);
+
+    uint8_t *bytes = (uint8_t *)rgba.mutableBytes;
+    if (!bytes || width < 4 || height < 4) { resolve(@"#00FF00"); return; }
+    size_t offsets[] = {
+      0, (width - 1) * 4,
+      (height - 1) * width * 4, ((height - 1) * width + (width - 1)) * 4,
+      (width / 2) * 4
+    };
+    int r = 0, g = 0, b = 0;
+    for (int i = 0; i < 5; i++) {
+      size_t off = offsets[i];
+      r += bytes[off]; g += bytes[off+1]; b += bytes[off+2];
+    }
+    NSString *hex = [NSString stringWithFormat:@"#%02X%02X%02X", r / 5, g / 5, b / 5];
+    resolve(hex);
+  });
+}
+
 RCT_EXPORT_METHOD(releaseVideoCutoutDecoder:(NSString *)videoUri resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
   [gVideoDecodeLock lock];
   if ([gVideoDecodeUri isEqualToString:videoUri]) {

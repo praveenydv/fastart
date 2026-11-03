@@ -39,6 +39,24 @@ export interface CompactSliderInputProps {
   onReset?: () => void;
 }
 
+// Precision-safe step snapper that eliminates IEEE 754 floating point drift
+const snapToStep = (
+  val: number,
+  minVal: number,
+  maxVal: number,
+  stepVal?: number,
+  prec: number = 0,
+): number => {
+  const clamped = Math.max(minVal, Math.min(maxVal, val));
+  if (!stepVal || stepVal <= 0) {
+    return parseFloat(clamped.toFixed(prec));
+  }
+  const steps = Math.round((clamped - minVal) / stepVal);
+  const rawSnapped = minVal + steps * stepVal;
+  const bounded = Math.max(minVal, Math.min(maxVal, rawSnapped));
+  return parseFloat(bounded.toFixed(prec));
+};
+
 export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   label,
   value,
@@ -72,60 +90,88 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
       ? Math.max(1, (step.toString().split('.')[1] || '').length)
       : 0;
 
-  const formatNumber = (num: number): string => {
-    if (isNaN(num)) return '0';
-    return precision > 0 ? num.toFixed(precision) : Math.round(num).toString();
-  };
+  const formatNumber = useCallback(
+    (num: number): string => {
+      if (isNaN(num)) return '0';
+      return precision > 0 ? num.toFixed(precision) : Math.round(num).toString();
+    },
+    [precision],
+  );
 
+  const [localVal, setLocalVal] = useState<number>(() =>
+    snapToStep(value, min, max, step, precision),
+  );
   const [textVal, setTextVal] = useState<string>(() => formatNumber(value));
   const [isFocused, setIsFocused] = useState<boolean>(false);
-  const [_isDragging, setIsDragging] = useState<boolean>(false);
   const isDraggingRef = useRef<boolean>(false);
-  const currentValueRef = useRef<number>(value);
-  currentValueRef.current = value;
+  const lastEmittedValueRef = useRef<number>(value);
 
   const inputRef = useRef<any>(null);
 
-  // Sync internal text when external value changes and not focused
+  // Sync internal text & slider when external value changes and not actively dragging/focused
   useEffect(() => {
-    if (!isFocused) {
-      setTextVal(formatNumber(value));
+    if (!isFocused && !isDraggingRef.current) {
+      const snapped = snapToStep(value, min, max, step, precision);
+      setLocalVal(snapped);
+      lastEmittedValueRef.current = snapped;
+      setTextVal(formatNumber(snapped));
     }
-  }, [value, isFocused, precision]);
+  }, [value, isFocused, precision, min, max, step, formatNumber]);
 
   const commitValue = (raw: string) => {
     let parsed = parseFloat(raw);
     if (isNaN(parsed)) {
       parsed = defaultValue !== undefined ? defaultValue : value;
     }
-    const clamped = Math.max(min, Math.min(max, parsed));
-    const rounded = parseFloat(clamped.toFixed(precision));
-    setTextVal(formatNumber(rounded));
-    onChange(rounded);
-    onChangeEnd?.(rounded);
+    const snapped = snapToStep(parsed, min, max, step, precision);
+    lastEmittedValueRef.current = snapped;
+    setLocalVal(snapped);
+    setTextVal(formatNumber(snapped));
+    onChange(snapped);
+    onChangeEnd?.(snapped);
   };
 
   const handleSliderChange = useCallback(
     (raw: number) => {
       if (disabled) return;
-      const clamped = Math.max(min, Math.min(max, raw));
-      const rounded = parseFloat(clamped.toFixed(precision));
-      currentValueRef.current = rounded;
-      setTextVal(formatNumber(rounded));
-      onChange(rounded);
+      const snapped = snapToStep(raw, min, max, step, precision);
+      lastEmittedValueRef.current = snapped;
+      setLocalVal(snapped);
+      setTextVal(formatNumber(snapped));
+      onChange(snapped);
     },
-    [disabled, min, max, precision, onChange]
+    [disabled, min, max, step, precision, formatNumber, onChange],
+  );
+
+  const handleSliderComplete = useCallback(
+    (raw?: number) => {
+      isDraggingRef.current = false;
+      onDragEnd?.();
+      const finalVal =
+        typeof raw === "number" && !isNaN(raw)
+          ? snapToStep(raw, min, max, step, precision)
+          : lastEmittedValueRef.current;
+      lastEmittedValueRef.current = finalVal;
+      setLocalVal(finalVal);
+      setTextVal(formatNumber(finalVal));
+      onChange(finalVal);
+      onChangeEnd?.(finalVal);
+    },
+    [min, max, step, precision, formatNumber, onChange, onChangeEnd, onDragEnd],
   );
 
   const handleStepDelta = useCallback(
     (delta: number) => {
       if (disabled) return;
-      const next = Math.max(min, Math.min(max, currentValueRef.current + delta));
-      const rounded = parseFloat(next.toFixed(precision));
-      handleSliderChange(rounded);
-      onChangeEnd?.(rounded);
+      const next = lastEmittedValueRef.current + delta;
+      const snapped = snapToStep(next, min, max, step, precision);
+      lastEmittedValueRef.current = snapped;
+      setLocalVal(snapped);
+      setTextVal(formatNumber(snapped));
+      onChange(snapped);
+      onChangeEnd?.(snapped);
     },
-    [disabled, min, max, precision, handleSliderChange, onChangeEnd]
+    [disabled, min, max, step, precision, formatNumber, onChange, onChangeEnd],
   );
 
   const handleReset = () => {
@@ -133,8 +179,12 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     if (onReset) {
       onReset();
     } else if (defaultValue !== undefined) {
-      handleSliderChange(defaultValue);
-      onChangeEnd?.(defaultValue);
+      const snapped = snapToStep(defaultValue, min, max, step, precision);
+      lastEmittedValueRef.current = snapped;
+      setLocalVal(snapped);
+      setTextVal(formatNumber(snapped));
+      onChange(snapped);
+      onChangeEnd?.(snapped);
     }
   };
 
@@ -170,7 +220,10 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
           if (txt !== '-' && txt !== '.' && txt !== '-.' && !txt.endsWith('.')) {
             const parsed = parseFloat(txt);
             if (!isNaN(parsed) && parsed >= min && parsed <= max) {
-              onChange(parseFloat(parsed.toFixed(precision)));
+              const snapped = snapToStep(parsed, min, max, step, precision);
+              lastEmittedValueRef.current = snapped;
+              setLocalVal(snapped);
+              onChange(snapped);
             }
           }
         }}
@@ -198,12 +251,69 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     </View>
   );
 
-  // Native Expo Slider component
-  const renderSliderTrack = () => (
+  const renderWebSlider = () => {
+    const rangePercent =
+      max > min
+        ? Math.max(0, Math.min(100, ((localVal - min) / (max - min)) * 100))
+        : 0;
+    const effectiveStep =
+      step && step > 0 ? step : precision > 0 ? Math.pow(10, -precision) : 1;
+
+    return (
+      <View style={styles.sliderTrackContainer}>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={effectiveStep}
+          value={localVal}
+          disabled={disabled}
+          onMouseDown={() => {
+            isDraggingRef.current = true;
+            onDragStart?.();
+          }}
+          onTouchStart={() => {
+            isDraggingRef.current = true;
+            onDragStart?.();
+          }}
+          onChange={(e: any) => {
+            const raw = parseFloat(e.target.value);
+            if (!isNaN(raw)) {
+              handleSliderChange(raw);
+            }
+          }}
+          onMouseUp={(e: any) => {
+            const raw = parseFloat(e.target.value);
+            handleSliderComplete(!isNaN(raw) ? raw : undefined);
+          }}
+          onTouchEnd={(e: any) => {
+            const raw = parseFloat(e.target.value);
+            handleSliderComplete(!isNaN(raw) ? raw : undefined);
+          }}
+          style={
+            {
+              width: "100%",
+              height: 20,
+              cursor: disabled ? "not-allowed" : "pointer",
+              accentColor: accentColor,
+              background: `linear-gradient(to right, ${accentColor} 0%, ${accentColor} ${rangePercent}%, #27272A ${rangePercent}%, #27272A 100%)`,
+              borderRadius: 3,
+              outline: "none",
+              margin: 0,
+              padding: 0,
+              opacity: disabled ? 0.4 : 1,
+            } as any
+          }
+        />
+      </View>
+    );
+  };
+
+  const renderNativeSlider = () => (
     <View style={styles.sliderTrackContainer}>
       <Slider
         style={styles.nativeSlider}
-        value={value}
+        value={localVal}
         minimumValue={min}
         maximumValue={max}
         step={step}
@@ -214,23 +324,20 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
         tapToSeek={true}
         onSlidingStart={() => {
           isDraggingRef.current = true;
-          setIsDragging(true);
           onDragStart?.();
         }}
         onValueChange={(val) => {
           handleSliderChange(val);
         }}
         onSlidingComplete={(val) => {
-          isDraggingRef.current = false;
-          setIsDragging(false);
-          onDragEnd?.();
-          const clamped = Math.max(min, Math.min(max, val));
-          const rounded = parseFloat(clamped.toFixed(precision));
-          onChangeEnd?.(rounded);
+          handleSliderComplete(val);
         }}
       />
     </View>
   );
+
+  const renderSliderTrack = () =>
+    Platform.OS === "web" ? renderWebSlider() : renderNativeSlider();
 
   const renderTrackWithSteppers = () => {
     if (!showSteppers) return renderSliderTrack();

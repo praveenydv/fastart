@@ -31,6 +31,13 @@ const EXTENDED_PALETTE = [
   "#FFFFFF", "#CBD5E1", "#64748B", "#000000",
 ];
 
+const SPECTRUM_HUES = [
+  "#FF0000", "#FF4500", "#FF8C00", "#FFD700",
+  "#FFE600", "#ADFF2F", "#00FF00", "#00FF7F",
+  "#00F2FE", "#00BFFF", "#0047FF", "#4B0082",
+  "#8B5CF6", "#FF00FF", "#FF1493", "#FFFFFF", "#000000"
+];
+
 export interface CustomColorPickerButtonProps {
   value: string;
   presets?: (string | { color?: string; value?: string; id?: string })[];
@@ -40,6 +47,7 @@ export interface CustomColorPickerButtonProps {
   iconSize?: number;
   accessibilityLabel?: string;
   style?: any;
+  onPickFromScreen?: () => void;
 }
 
 export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = ({
@@ -51,6 +59,7 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
   iconSize,
   accessibilityLabel = "Pick custom color",
   style,
+  onPickFromScreen,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [hexInput, setHexInput] = useState(value || "#00F2FE");
@@ -200,13 +209,28 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
                 <Ionicons name="color-palette" size={16} color="#00F2FE" />
                 <Text style={s.modalTitle}>Custom Color</Text>
               </View>
-              <TouchableOpacity
-                onPress={() => setModalVisible(false)}
-                style={s.closeBtn}
-                accessibilityLabel="Close color picker"
-              >
-                <Ionicons name="close" size={16} color="#94A3B8" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                {onPickFromScreen && (
+                  <TouchableOpacity
+                    style={s.pickFromScreenBtn}
+                    onPress={() => {
+                      setModalVisible(false);
+                      onPickFromScreen();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="eyedrop" size={12} color="#00F2FE" />
+                    <Text style={s.pickFromScreenBtnText}>Sample Screen</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={() => setModalVisible(false)}
+                  style={s.closeBtn}
+                  accessibilityLabel="Close color picker"
+                >
+                  <Ionicons name="close" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Live Preview & Hex Input Row */}
@@ -225,6 +249,28 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
                   autoCorrect={false}
                 />
               </View>
+            </View>
+
+            {/* Rainbow Spectrum Hues Bar for Smooth Finger Selection */}
+            <View style={s.spectrumContainer}>
+              <Text style={s.paletteLabel}>SPECTRUM HUES</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.spectrumScroll}>
+                {SPECTRUM_HUES.map((col) => {
+                  const isSelected = tempColor.toUpperCase() === col.toUpperCase();
+                  return (
+                    <TouchableOpacity
+                      key={col}
+                      style={[
+                        s.spectrumSwatch,
+                        { backgroundColor: col },
+                        isSelected && s.spectrumSwatchSelected,
+                      ]}
+                      onPress={() => handleSelectColor(col)}
+                      activeOpacity={0.8}
+                    />
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Palette Swatches Grid */}
@@ -342,6 +388,43 @@ const s = StyleSheet.create({
   },
   closeBtn: {
     padding: 4,
+  },
+  pickFromScreenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.3)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  pickFromScreenBtnText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#00F2FE",
+  },
+  spectrumContainer: {
+    marginBottom: 12,
+  },
+  spectrumScroll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 2,
+  },
+  spectrumSwatch: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  spectrumSwatchSelected: {
+    borderColor: "#00F2FE",
+    borderWidth: 2,
+    transform: [{ scale: 1.15 }],
   },
   previewRow: {
     flexDirection: "row",

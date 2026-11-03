@@ -19,6 +19,7 @@ import { ProjectCardItem } from "./HomeDashboard/ProjectCardItem";
 import { ProjectOptionsMenu } from "./HomeDashboard/ProjectOptionsMenu";
 import { RenameProjectModal } from "./HomeDashboard/RenameProjectModal";
 import { formatPlayheadTime } from "./Timeline/timelineUtils";
+import { computeTotalDuration } from "../types/project";
 import { theme } from "../constants/theme";
 
 interface HomeDashboardProps {
@@ -32,6 +33,11 @@ interface HomeDashboardProps {
   onOpenNotifications: () => void;
   unreadNotificationsCount?: number;
   lastSession?: any;
+}
+
+function getProjectDuration(p: any): number {
+  if (typeof p?.duration === "number" && p.duration > 0) return p.duration;
+  return computeTotalDuration(p?.tracks);
 }
 
 function formatDuration(sec = 0) {
@@ -95,7 +101,7 @@ function HomeDashboard({
     if (sortBy === "title") {
       list.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
     } else if (sortBy === "duration") {
-      list.sort((a, b) => (b.duration || 0) - (a.duration || 0));
+      list.sort((a, b) => getProjectDuration(b) - getProjectDuration(a));
     } else {
       // Newest updated first
       list.sort((a, b) => {
@@ -420,7 +426,7 @@ function HomeDashboard({
         itemType="Project"
         itemDetails={
           projectToDelete
-            ? `${projectToDelete.aspectRatio || "9:16"} • ${projectToDelete.resolution || "1080p"} • ${formatDuration(projectToDelete.duration || 0)}`
+            ? `${projectToDelete.aspectRatio || "9:16"} • ${projectToDelete.resolution || "1080p"} • ${formatDuration(getProjectDuration(projectToDelete))}`
             : undefined
         }
         confirmText="Delete"

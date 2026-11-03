@@ -588,6 +588,86 @@ class RustCoreBridgeService {
     }
   }
 
+  public async sampleVideoPixel(
+    videoUri: string,
+    timeSeconds: number = 0,
+    normX: number = 0.5,
+    normY: number = 0.5,
+    mediaElement?: any
+  ): Promise<string> {
+    await this.init();
+    if (Platform.OS !== "web" && typeof FastArtRust?.sampleVideoPixel === "function") {
+      try {
+        const hex = await FastArtRust.sampleVideoPixel(videoUri, timeSeconds, normX, normY);
+        if (hex && typeof hex === "string" && hex.startsWith("#")) return hex;
+      } catch (err) {
+        console.warn("[RustCoreBridge] Native sampleVideoPixel error:", err);
+      }
+    }
+
+    // Web or fallback pixel extraction via HTML5 Video / Canvas
+    if (typeof document !== "undefined") {
+      try {
+        const media = mediaElement || (typeof window !== "undefined" && (window as any).getActiveMediaElement?.(videoUri));
+        if (media && (media.videoWidth || media.naturalWidth || media.width)) {
+          const w = media.videoWidth || media.naturalWidth || media.width || 64;
+          const h = media.videoHeight || media.naturalHeight || media.height || 64;
+          const canvas = document.createElement("canvas");
+          canvas.width = 1;
+          canvas.height = 1;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const sx = Math.max(0, Math.min(w - 1, Math.floor(normX * w)));
+            const sy = Math.max(0, Math.min(h - 1, Math.floor(normY * h)));
+            ctx.drawImage(media, sx, sy, 1, 1, 0, 0, 1, 1);
+            const data = ctx.getImageData(0, 0, 1, 1).data;
+            const hex = `#${((1 << 24) + (data[0] << 16) + (data[1] << 8) + data[2]).toString(16).slice(1).toUpperCase()}`;
+            return hex;
+          }
+        }
+      } catch {}
+    }
+
+    return "#00FF00";
+  }
+
+  public async detectBackdropColor(
+    videoUri: string,
+    timeSeconds: number = 0,
+    mediaElement?: any
+  ): Promise<string> {
+    await this.init();
+    if (Platform.OS !== "web" && typeof FastArtRust?.detectBackdropColor === "function") {
+      try {
+        const hex = await FastArtRust.detectBackdropColor(videoUri, timeSeconds);
+        if (hex && typeof hex === "string" && hex.startsWith("#")) return hex;
+      } catch (err) {
+        console.warn("[RustCoreBridge] Native detectBackdropColor error:", err);
+      }
+    }
+
+    // Web fallback via detectUniformBackdrop
+    if (typeof document !== "undefined") {
+      try {
+        const media = mediaElement || (typeof window !== "undefined" && (window as any).getActiveMediaElement?.(videoUri));
+        if (media) {
+          const canvas = document.createElement("canvas");
+          canvas.width = 64;
+          canvas.height = 64;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(media, 0, 0, 64, 64);
+            const imgData = ctx.getImageData(0, 0, 64, 64);
+            const detected = this.detectUniformBackdrop(imgData.data, 64, 64);
+            if (detected?.hex) return detected.hex;
+          }
+        }
+      } catch {}
+    }
+
+    return "#00FF00";
+  }
+
   /**
    * High-Performance Spectral Energy Flux Beat Detection
    * Executes in native Rust (Android JNI or WebAssembly)

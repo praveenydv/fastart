@@ -322,10 +322,7 @@ function NativeAnimationModal(props: AnimationModalProps) {
 }
 
 export default function UnifiedAnimationModal(props: AnimationModalProps) {
-  if (Platform.OS === "web") {
-    return <AnimationModal {...props} />;
-  }
-  return <NativeAnimationModal key={props.selectedClip?.id || "no-clip"} {...props} />;
+  return <AnimationModal {...props} isInline={props.isInline ?? true} />;
 }
 
 const styles = StyleSheet.create({

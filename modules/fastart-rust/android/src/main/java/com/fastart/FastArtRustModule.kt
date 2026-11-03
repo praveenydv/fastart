@@ -144,6 +144,14 @@ class FastArtRustModule : Module() {
             getVideoFrameInfo(uri)
         }
 
+        AsyncFunction("sampleVideoPixel") Coroutine { uri: String, timeSeconds: Double, normX: Double, normY: Double ->
+            sampleVideoPixelNative(uri, timeSeconds, normX.toFloat(), normY.toFloat())
+        }
+
+        AsyncFunction("detectBackdropColor") Coroutine { uri: String, timeSeconds: Double ->
+            detectBackdropColorNative(uri, timeSeconds)
+        }
+
         AsyncFunction("releaseVideoCutoutDecoder") { uri: String ->
             synchronized(videoDecoderLock) {
                 if (videoDecoderUri == uri) {
@@ -270,6 +278,26 @@ class FastArtRustModule : Module() {
         }
     }
 
+    @Volatile
+    private var cutoutDirCreated = false
+
+    private fun getCutoutDirectory(context: Context): File {
+        val directory = File(context.cacheDir, "cutout")
+        if (!cutoutDirCreated) {
+            if (!directory.exists()) directory.mkdirs()
+            cutoutDirCreated = true
+        }
+        return directory
+    }
+
+    private fun unwrapOnnxValue(value: Any?): OnnxValue? {
+        if (value == null) return null
+        if (value is java.util.Optional<*>) {
+            return if (value.isPresent) value.get() as? OnnxValue else null
+        }
+        return value as? OnnxValue
+    }
+
     /** Creates one long-lived ORT session, preferring NNAPI and then XNNPACK/CPU. */
     private fun initializeAcceleratedModnet(modelPath: String): String = synchronized(modnetInferenceLock) {
         if (modnetSession != null) return "ok"
@@ -352,8 +380,44 @@ class FastArtRustModule : Module() {
         val input = OnnxTensor.createTensor(environment, inputBuffer, longArrayOf(1, 3, 512, 512))
         try {
             session.run(mapOf(inputName to input)).use { result ->
-                val alphaTensor = result[outputName] as? OnnxTensor
-                    ?: throw IllegalStateException("MODNet output is not a tensor")
+                var alphaTensor: OnnxTensor? = null
+
+                // 1. Direct iterator extraction (safest in ONNX Runtime Java, bypasses any Optional wrapping)
+                for (entry in result) {
+                    val value = entry.value
+                    if (value is OnnxTensor) {
+                        alphaTensor = value
+                        break
+                    }
+                }
+
+                // 2. Direct index access
+                if (alphaTensor == null && result.size() > 0) {
+                    try {
+                        val first = result.get(0)
+                        if (first is OnnxTensor) {
+                            alphaTensor = first
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 3. Fallback: Lookup by output name unwrapping Optional
+                if (alphaTensor == null) {
+                    try {
+                        val opt = result.get(outputName)
+                        val unwrapped = unwrapOnnxValue(opt)
+                        if (unwrapped is OnnxTensor) {
+                            alphaTensor = unwrapped
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 4. If no tensor could be extracted, fall back directly to Rust native segmentation
+                if (alphaTensor == null) {
+                    Log.w(TAG, "No tensor found in MODNet result; falling back to Rust native segmentation")
+                    return nativeSegmentFrameRgba(rgba, width, height, threshold, feather)
+                }
+
                 val outputFloats = alphaTensor.floatBuffer
                 require(outputFloats.remaining() >= planeSize) { "MODNet returned an invalid matte" }
                 val rawAlpha = if (outputFloats.isDirect) {
@@ -427,16 +491,14 @@ class FastArtRustModule : Module() {
             val targetHeight = maxOf(1, (decodedBitmap.height * scale).toInt())
             val processingBitmap = if (decodedBitmap.width == targetWidth && decodedBitmap.height == targetHeight) decodedBitmap else Bitmap.createScaledBitmap(decodedBitmap, targetWidth, targetHeight, true)
             scaledBitmap = processingBitmap
-            val colors = IntArray(targetWidth * targetHeight)
-            processingBitmap.getPixels(colors, 0, targetWidth, 0, 0, targetWidth, targetHeight)
-            val rgba = ByteArray(colors.size * 4)
-            for (i in colors.indices) {
-                val color = colors[i]
-                val offset = i * 4
-                rgba[offset] = (color shr 16).toByte()
-                rgba[offset + 1] = (color shr 8).toByte()
-                rgba[offset + 2] = color.toByte()
-                rgba[offset + 3] = 0xff.toByte()
+            val rgba = ByteArray(targetWidth * targetHeight * 4)
+            val rgbaBuffer = ByteBuffer.wrap(rgba)
+            if (processingBitmap.config == Bitmap.Config.ARGB_8888) {
+                processingBitmap.copyPixelsToBuffer(rgbaBuffer)
+            } else {
+                val argbCopy = processingBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                argbCopy.copyPixelsToBuffer(rgbaBuffer)
+                argbCopy.recycle()
             }
             val alpha = if (mode == "chroma") {
                 val color = keyColor.removePrefix("#").toLong(16).toInt()
@@ -447,12 +509,16 @@ class FastArtRustModule : Module() {
                 )
                 ByteArray(targetWidth * targetHeight) { index -> processed[index * 4 + 3] }
             } else {
-                inferAlphaRgba(rgba, targetWidth, targetHeight, threshold, feather)
+                try {
+                    inferAlphaRgba(rgba, targetWidth, targetHeight, threshold, feather)
+                } catch (e: Exception) {
+                    Log.w(TAG, "MODNet inference error; falling back to ultra-fast native Rust segmentation: ${e.message}")
+                    nativeSegmentFrameRgba(rgba, targetWidth, targetHeight, threshold, feather)
+                }
             }
             val mask = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ALPHA_8)
             mask.copyPixelsFromBuffer(ByteBuffer.wrap(alpha))
-            val directory = File(context.cacheDir, "cutout")
-            if (!directory.exists()) directory.mkdirs()
+            val directory = getCutoutDirectory(context)
             val safeClipId = clipId.replace(Regex("[^A-Za-z0-9_-]"), "_")
             val output = File(directory, "${safeClipId}_${frameIdx}.png")
             FileOutputStream(output).use { stream ->
@@ -497,5 +563,108 @@ class FastArtRustModule : Module() {
             "frameCount" to resolvedCount,
             "duration" to durationMs / 1000.0,
         )
+    }
+
+    private var lastSampledUri: String? = null
+    private var lastSampledTimeUs: Long = -1L
+    private var lastSampledBitmap: Bitmap? = null
+
+    private fun sampleVideoPixelNative(
+        uri: String,
+        timeSeconds: Double,
+        normX: Float,
+        normY: Float
+    ): String = synchronized(videoDecoderLock) {
+        val context = appContext.reactContext ?: return "#00FF00"
+        try {
+            if (videoDecoderUri != uri || videoDecoder == null) {
+                videoDecoder?.release()
+                val next = MediaMetadataRetriever()
+                val parsed = Uri.parse(uri)
+                if (parsed.scheme == "content" || parsed.scheme == "android.resource") next.setDataSource(context, parsed)
+                else next.setDataSource(parsed.path ?: uri)
+                videoDecoder = next
+                videoDecoderUri = uri
+            }
+            val retriever = videoDecoder ?: return "#00FF00"
+            val timeUs = (timeSeconds.coerceAtLeast(0.0) * 1_000_000.0).toLong()
+
+            var bmp = lastSampledBitmap
+            if (lastSampledUri != uri || kotlin.math.abs(lastSampledTimeUs - timeUs) > 100_000L || bmp == null || bmp.isRecycled) {
+                bmp?.recycle()
+                val fetched = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST, 256, 256)
+                } else {
+                    retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                }
+                bmp = fetched ?: return "#00FF00"
+                lastSampledBitmap = bmp
+                lastSampledUri = uri
+                lastSampledTimeUs = timeUs
+            }
+
+            val px = (normX.coerceIn(0f, 1f) * (bmp.width - 1)).toInt()
+            val py = (normY.coerceIn(0f, 1f) * (bmp.height - 1)).toInt()
+            val color = bmp.getPixel(px, py)
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+            return String.format("#%02X%02X%02X", r, g, b)
+        } catch (e: Exception) {
+            Log.w(TAG, "sampleVideoPixelNative error", e)
+            return "#00FF00"
+        }
+    }
+
+    private fun detectBackdropColorNative(
+        uri: String,
+        timeSeconds: Double
+    ): String = synchronized(videoDecoderLock) {
+        val context = appContext.reactContext ?: return "#00FF00"
+        try {
+            if (videoDecoderUri != uri || videoDecoder == null) {
+                videoDecoder?.release()
+                val next = MediaMetadataRetriever()
+                val parsed = Uri.parse(uri)
+                if (parsed.scheme == "content" || parsed.scheme == "android.resource") next.setDataSource(context, parsed)
+                else next.setDataSource(parsed.path ?: uri)
+                videoDecoder = next
+                videoDecoderUri = uri
+            }
+            val retriever = videoDecoder ?: return "#00FF00"
+            val timeUs = (timeSeconds.coerceAtLeast(0.0) * 1_000_000.0).toLong()
+            val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST, 64, 64)
+            } else {
+                retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+            } ?: return "#00FF00"
+
+            val w = bmp.width
+            val h = bmp.height
+            val samples = intArrayOf(
+                bmp.getPixel(2, 2),
+                bmp.getPixel(w - 3, 2),
+                bmp.getPixel(2, h - 3),
+                bmp.getPixel(w - 3, h - 3),
+                bmp.getPixel(w / 2, 2),
+                bmp.getPixel(2, h / 2),
+                bmp.getPixel(w - 3, h / 2)
+            )
+            var totalR = 0
+            var totalG = 0
+            var totalB = 0
+            for (c in samples) {
+                totalR += (c shr 16) and 0xFF
+                totalG += (c shr 8) and 0xFF
+                totalB += c and 0xFF
+            }
+            val avgR = totalR / samples.size
+            val avgG = totalG / samples.size
+            val avgB = totalB / samples.size
+            return String.format("#%02X%02X%02X", avgR, avgG, avgB)
+        } catch (e: Exception) {
+            Log.w(TAG, "detectBackdropColorNative error", e)
+            return "#00FF00"
+        }
     }
 }

@@ -951,37 +951,22 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     windowHeight,
   });
 
-  // Unified Root Draggable Bottom Container (Hosts either Tool Modal OR Timeline)
-  const defaultMobileToolHeight = React.useMemo(() => {
+  // Unified Root Draggable Bottom Container (Hosts either Tool Modal OR Timeline in the exact same space)
+  const minBottomHeight = 160;
+
+  const maxBottomHeight = React.useMemo(() => {
+    // Guarantees at least 220px vertical clearance for Header + Player at all times
     return Math.min(
-      Math.round(windowHeight * 0.50),
-      Math.max(300, Math.round(windowHeight * 0.44)),
+      Math.round(windowHeight * 0.70),
+      Math.max(minBottomHeight, windowHeight - 220),
     );
-  }, [windowHeight]);
+  }, [windowHeight, minBottomHeight]);
 
-  const minMobileToolHeight = 220;
-
-  const maxMobileToolHeight = React.useMemo(() => {
-    // Guarantees at least 250px vertical clearance for Header + Player at all times
-    return Math.min(
-      Math.round(windowHeight * 0.60),
-      Math.max(minMobileToolHeight, windowHeight - 250),
-    );
-  }, [windowHeight, minMobileToolHeight]);
-
-  const [mobileModalHeight, setMobileModalHeight] = React.useState<number | null>(null);
-
-  // Active height of the root draggable bottom container
+  // Active height of the root draggable bottom container - Timeline & Modal share the exact same height and parent!
   const activeBottomHeight = React.useMemo(() => {
     if (isDesktop) return currentTimelineHeight;
-    if (isMobileInlineActive) {
-      if (mobileModalHeight !== null) {
-        return Math.max(minMobileToolHeight, Math.min(maxMobileToolHeight, mobileModalHeight));
-      }
-      return defaultMobileToolHeight;
-    }
-    return Math.max(180, Math.min(maxMobileToolHeight, currentTimelineHeight));
-  }, [isDesktop, isMobileInlineActive, mobileModalHeight, defaultMobileToolHeight, minMobileToolHeight, maxMobileToolHeight, currentTimelineHeight]);
+    return Math.max(minBottomHeight, Math.min(maxBottomHeight, currentTimelineHeight));
+  }, [isDesktop, minBottomHeight, maxBottomHeight, currentTimelineHeight]);
 
   const activeBottomHeightRef = React.useRef(activeBottomHeight);
   activeBottomHeightRef.current = activeBottomHeight;
@@ -991,12 +976,11 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const [isDraggingBottom, setIsDraggingBottom] = React.useState(false);
   const isDraggingBottomRef = React.useRef(false);
 
-  // Reset modal state whenever activeModal changes
+  // Reset transient translation state whenever activeModal changes without altering user's dragged height
   React.useEffect(() => {
     bottomTranslateY.setValue(0);
     setIsDraggingBottom(false);
     isDraggingBottomRef.current = false;
-    setMobileModalHeight(null);
   }, [activeModal, bottomTranslateY]);
 
   // Robust pointer/touch Y-coordinate extractor across all mobile browsers and environments
@@ -1025,7 +1009,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     return 0;
   };
 
-  // Unified Web pointer & touch drag handler
+  // Unified Web pointer & touch drag handler - adjusts bottom container for both timeline and modals
   const handleBottomDragStart = React.useCallback(
     (e: any) => {
       if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -1047,23 +1031,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         if (rafHandle === null) {
           rafHandle = requestAnimationFrame(() => {
             rafHandle = null;
-            const currentDy = lastDy;
-            if (isMobileInlineActive) {
-              // Strictly clamp height; never translate downwards to dismiss
-              const targetH = Math.max(
-                minMobileToolHeight,
-                Math.min(maxMobileToolHeight, startHeight - currentDy),
-              );
-              setMobileModalHeight(targetH);
-              bottomTranslateY.setValue(0);
-            } else {
-              bottomTranslateY.setValue(0);
-              const nextH = Math.max(
-                180,
-                Math.min(maxMobileToolHeight, startHeight - currentDy),
-              );
-              setCurrentTimelineHeight(nextH);
-            }
+            bottomTranslateY.setValue(0);
+            const nextH = Math.max(
+              minBottomHeight,
+              Math.min(maxBottomHeight, startHeight - lastDy),
+            );
+            setCurrentTimelineHeight(nextH);
           });
         }
       };
@@ -1083,23 +1056,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         window.removeEventListener("touchend", onPointerUp);
         window.removeEventListener("touchcancel", onPointerUp);
 
-        if (isMobileInlineActive) {
-          // Never dismiss modal on drag-down; only snap between height bounds.
-          // Modals close ONLY with the explicit close button or check/done button.
-          bottomTranslateY.setValue(0);
-          if (lastDy < -35) {
-            setMobileModalHeight(maxMobileToolHeight);
-          } else if (lastDy > 35) {
-            setMobileModalHeight(defaultMobileToolHeight);
-          }
-        } else {
-          bottomTranslateY.setValue(0);
-          const finalH = Math.max(
-            180,
-            Math.min(maxMobileToolHeight, startHeight - lastDy),
-          );
-          setCurrentTimelineHeight(finalH);
-        }
+        bottomTranslateY.setValue(0);
+        const finalH = Math.max(
+          minBottomHeight,
+          Math.min(maxBottomHeight, startHeight - lastDy),
+        );
+        setCurrentTimelineHeight(finalH);
       };
 
       window.addEventListener("pointermove", onPointerMove, { passive: false });
@@ -1111,16 +1073,14 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       window.addEventListener("touchcancel", onPointerUp);
     },
     [
-      isMobileInlineActive,
-      maxMobileToolHeight,
-      minMobileToolHeight,
-      defaultMobileToolHeight,
+      maxBottomHeight,
+      minBottomHeight,
       setCurrentTimelineHeight,
       bottomTranslateY,
     ],
   );
 
-  // Unified Native PanResponder for iOS / Android
+  // Unified Native PanResponder for iOS / Android - adjusts bottom container for both timeline and modals
   const bottomDragPanResponder = React.useMemo(() => {
     let startHeight = activeBottomHeightRef.current;
     let accumulatedDy = 0;
@@ -1142,23 +1102,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         if (rafHandle === null) {
           rafHandle = requestAnimationFrame(() => {
             rafHandle = null;
-            const currentDy = accumulatedDy;
-            if (isMobileInlineActive) {
-              // Strictly clamp height; never translate downwards to dismiss
-              const targetH = Math.max(
-                minMobileToolHeight,
-                Math.min(maxMobileToolHeight, startHeight - currentDy),
-              );
-              setMobileModalHeight(targetH);
-              bottomTranslateY.setValue(0);
-            } else {
-              bottomTranslateY.setValue(0);
-              const nextH = Math.max(
-                180,
-                Math.min(maxMobileToolHeight, startHeight - currentDy),
-              );
-              setCurrentTimelineHeight(nextH);
-            }
+            bottomTranslateY.setValue(0);
+            const nextH = Math.max(
+              minBottomHeight,
+              Math.min(maxBottomHeight, startHeight - accumulatedDy),
+            );
+            setCurrentTimelineHeight(nextH);
           });
         }
       },
@@ -1171,23 +1120,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         setIsDraggingBottom(false);
 
         const currentDy = gs.dy !== undefined ? gs.dy : accumulatedDy;
-        if (isMobileInlineActive) {
-          // Never dismiss modal on drag-down; only snap between height bounds.
-          // Modals close ONLY with the explicit close button or check/done button.
-          bottomTranslateY.setValue(0);
-          if (currentDy < -35) {
-            setMobileModalHeight(maxMobileToolHeight);
-          } else if (currentDy > 35) {
-            setMobileModalHeight(defaultMobileToolHeight);
-          }
-        } else {
-          bottomTranslateY.setValue(0);
-          const finalH = Math.max(
-            180,
-            Math.min(maxMobileToolHeight, startHeight - currentDy),
-          );
-          setCurrentTimelineHeight(finalH);
-        }
+        bottomTranslateY.setValue(0);
+        const finalH = Math.max(
+          minBottomHeight,
+          Math.min(maxBottomHeight, startHeight - currentDy),
+        );
+        setCurrentTimelineHeight(finalH);
       },
       onPanResponderTerminate: () => {
         if (rafHandle !== null) {
@@ -1200,10 +1138,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       },
     });
   }, [
-    isMobileInlineActive,
-    maxMobileToolHeight,
-    minMobileToolHeight,
-    defaultMobileToolHeight,
+    maxBottomHeight,
+    minBottomHeight,
     setCurrentTimelineHeight,
     bottomTranslateY,
   ]);

@@ -351,6 +351,7 @@ function CutoutModalComponent({
             config={config}
             onChange={handleConfigChange}
             selectedClip={selectedClip}
+            currentTime={currentTime}
             isPlaying={isPlaying}
             isProcessingFrames={isProcessingFrames}
             isProcessingActiveFrame={isProcessingActiveFrame}
@@ -436,7 +437,9 @@ const s = StyleSheet.create({
   },
   sheetBody: {
     flex: 1,
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 28,
   },
 });
 

@@ -881,7 +881,7 @@ function AutoCaptionModalComponent({
         <FlatList
           style={styles.bodyScroll}
           contentContainerStyle={{ paddingBottom: 28 }}
-          showsVerticalScrollIndicator={true}
+          showsVerticalScrollIndicator={false}
           data={existingCaptions}
           keyExtractor={(item) => item.id}
           initialNumToRender={10}
@@ -1040,7 +1040,7 @@ function AutoCaptionModalComponent({
           <ScrollView
             style={styles.bodyScroll}
             contentContainerStyle={styles.styleScrollContent}
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
           >
             {/* 1. Live Karaoke Animation Preview Banner */}
             <View style={styles.previewBanner}>

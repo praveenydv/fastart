@@ -163,7 +163,7 @@ export function useTimelineClips({
     return Math.max(1, initialMax + 1);
   });
 
-  // Expand track count when a clip is on a higher track, but NEVER auto-remove tracks when clips leave!
+  // Expand track count when a clip is on a higher track, but allow manual deletion
   useEffect(() => {
     if (allClipsWithTracks.length > 0) {
       let currentMax = 0;
@@ -172,7 +172,10 @@ export function useTimelineClips({
           currentMax = allClipsWithTracks[i].effectiveTrackIndex;
         }
       }
-      setPersistentTrackCount((prev) => Math.max(prev, currentMax + 1));
+      setPersistentTrackCount((prev) => {
+        if (currentMax + 1 > prev) return currentMax + 1;
+        return prev;
+      });
     }
   }, [allClipsWithTracks]);
 
@@ -187,31 +190,51 @@ export function useTimelineClips({
   }, []);
 
   const handleRemoveTrack = useCallback((trackIdx: number) => {
-
     // Shift all clips located on tracks after trackIdx down by 1 track
     const shiftClip = <T extends { trackIndex?: number }>(
       clip: T,
       defaultTrack: number,
-    ): T => {
+    ): T | null => {
       const curTrack =
         typeof clip.trackIndex === "number" ? clip.trackIndex : defaultTrack;
+      if (curTrack === trackIdx) {
+        return null;
+      }
       if (curTrack > trackIdx) {
         return {
           ...clip,
           trackIndex: Math.max(0, curTrack - 1),
         };
       }
-      return clip;
+      return {
+        ...clip,
+        trackIndex: curTrack,
+      };
     };
 
-    if (onUpdateProject) {
-      const updatedVideo = videoClips.map((c) => shiftClip(c, 0));
-      const updatedAudio = audioClips.map((c) => shiftClip(c, 1));
-      const updatedCaptions = captionClips.map((c) => shiftClip(c, 2));
-      const updatedText = textClips.map((c) => shiftClip(c, 2));
-      const updatedStickers = stickerClips.map((c) => shiftClip(c, 3));
-      const updatedEffects = effectClips.map((c) => shiftClip(c, 4));
+    const updatedVideo = videoClips.map((c) => shiftClip(c, 0)).filter(Boolean) as typeof videoClips;
+    const updatedAudio = audioClips.map((c) => shiftClip(c, 1)).filter(Boolean) as typeof audioClips;
+    const updatedCaptions = captionClips.map((c) => shiftClip(c, 2)).filter(Boolean) as typeof captionClips;
+    const updatedText = textClips.map((c) => shiftClip(c, 2)).filter(Boolean) as typeof textClips;
+    const updatedStickers = stickerClips.map((c) => shiftClip(c, 3)).filter(Boolean) as typeof stickerClips;
+    const updatedEffects = effectClips.map((c) => shiftClip(c, 4)).filter(Boolean) as typeof effectClips;
 
+    let newMaxTrack = 0;
+    const allRemaining = [
+      ...updatedVideo,
+      ...updatedAudio,
+      ...updatedCaptions,
+      ...updatedText,
+      ...updatedStickers,
+      ...updatedEffects,
+    ];
+    for (const c of allRemaining) {
+      if (typeof c.trackIndex === "number" && c.trackIndex > newMaxTrack) {
+        newMaxTrack = c.trackIndex;
+      }
+    }
+
+    if (onUpdateProject) {
       onUpdateProject({
         tracks: {
           ...project.tracks,
@@ -225,8 +248,8 @@ export function useTimelineClips({
       });
     }
 
-    setPersistentTrackCount((prev) => Math.max(1, prev - 1));
-    setExtraTracks((prev) => Math.max(0, prev - 1));
+    setPersistentTrackCount(Math.max(1, newMaxTrack + 1));
+    setExtraTracks(0);
   }, [
     onUpdateProject,
     videoClips,

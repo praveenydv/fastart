@@ -182,6 +182,29 @@ export default function App() {
     }
   }, [route.screen, navigate]);
 
+  // Global scrollbar elimination for pure CapCut UI aesthetic
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      const styleId = "fastart-hide-all-scrollbars";
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement("style");
+        style.id = styleId;
+        style.textContent = `
+          *::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+          }
+          * {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+  }, []);
+
   // App initialization, hydration, and routing sync hook
   const {
     projects,
@@ -273,17 +296,14 @@ export default function App() {
     [updateProjectPreview, updateProjectWithHistory],
   );
 
-  // Intelligent Apply: Commits preview changes into undo stack, updates baseline snapshot, and KEEPS modal open!
+  // Apply: Commits preview changes into undo stack and closes modal
   const handleApplyModal = useCallback(() => {
     if (modalInitialSnapshotRef.current) {
       commitPreview(modalInitialSnapshotRef.current);
-      // Advance snapshot to current state so further tweaks can also be previewed / committed
-      if (projectRef.current) {
-        modalInitialSnapshotRef.current = cloneProjectSnapshot(projectRef.current);
-      }
+      modalInitialSnapshotRef.current = null;
     }
-    // Modal stays open so user can keep editing or viewing results
-  }, [commitPreview]);
+    closeModal();
+  }, [closeModal, commitPreview]);
 
   // Close modal intelligently keeping live adjustments
   const handleCancelModal = useCallback(() => {

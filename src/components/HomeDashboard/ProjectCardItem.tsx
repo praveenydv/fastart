@@ -5,6 +5,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { formatPlayheadTime } from '../Timeline/timelineUtils';
+import { computeTotalDuration } from '../../types/project';
 
 interface ProjectCardItemProps {
   project: any;
@@ -43,7 +44,11 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
     videoClips[0]?.thumbnail ||
     videoClips[0]?.url;
 
-  const durationStr = formatPlayheadTime(project.duration || 0);
+  const totalSec =
+    typeof project.duration === 'number' && project.duration > 0
+      ? project.duration
+      : computeTotalDuration(project.tracks);
+  const durationStr = formatPlayheadTime(totalSec);
   const updatedStr = formatRelativeTime(project.updatedAt || project.createdAt);
 
   if (variant === 'grid') {

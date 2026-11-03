@@ -18,7 +18,7 @@ export function usePlayerViewport({
   containerHeight,
 }: UsePlayerViewportProps) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const isMobile = winW < 640;
+  const isMobile = winW < 768;
 
   const viewportWrapperRef = useRef<any>(null);
   const [viewportDims, setViewportDims] = useState<{

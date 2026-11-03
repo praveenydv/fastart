@@ -29,7 +29,7 @@ export interface MaskKeyframePoint {
 export interface CutoutConfig {
   enabled: boolean;
   mode: 'chroma' | 'auto';
-  quality?: 'fast' | 'studio'; // Web processes every source frame; native fast samples up to 6 masks/sec and studio processes every frame.
+  quality?: 'fast' | 'studio' | 'best'; // High-performance unified single-quality neural matting
   keyColor: string; // e.g. '#00FF00', '#0000FF'
   intensity: number; // 0..100 (similarity tolerance)
   shadow: number; // 0..100 (edge smoothness/feather)

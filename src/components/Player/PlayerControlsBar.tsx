@@ -48,104 +48,6 @@ const TimecodePill = React.memo<{
 });
 TimecodePill.displayName = "TimecodePill";
 
-/**
- * Compact Stereo VU Meter giving live broadcast visual audio feedback
- */
-const StereoVuMeter = React.memo<{ isPlaying: boolean; isNarrow: boolean }>(
-  ({ isPlaying, isNarrow }) => {
-    if (isNarrow) return null;
-    return (
-      <View style={meterStyles.container} accessibilityLabel="Audio Level Meter">
-        <View style={meterStyles.channelCol}>
-          <View
-            style={[
-              meterStyles.barSegment,
-              meterStyles.peakRed,
-              isPlaying && { opacity: 0.2 },
-            ]}
-          />
-          <View
-            style={[
-              meterStyles.barSegment,
-              meterStyles.midAmber,
-              isPlaying && { opacity: 0.8 },
-            ]}
-          />
-          <View
-            style={[
-              meterStyles.barSegment,
-              meterStyles.greenLevel,
-              isPlaying && { opacity: 1 },
-            ]}
-          />
-        </View>
-        <View style={meterStyles.channelCol}>
-          <View
-            style={[
-              meterStyles.barSegment,
-              meterStyles.peakRed,
-              isPlaying && { opacity: 0.15 },
-            ]}
-          />
-          <View
-            style={[
-              meterStyles.barSegment,
-              meterStyles.midAmber,
-              isPlaying && { opacity: 0.75 },
-            ]}
-          />
-          <View
-            style={[
-              meterStyles.barSegment,
-              meterStyles.greenLevel,
-              isPlaying && { opacity: 0.95 },
-            ]}
-          />
-        </View>
-      </View>
-    );
-  }
-);
-StereoVuMeter.displayName = "StereoVuMeter";
-
-const meterStyles = {
-  container: {
-    flexDirection: "row" as const,
-    gap: 2,
-    height: 16,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: "#16171B",
-    borderWidth: 1,
-    borderColor: "#25262D",
-    alignItems: "flex-end" as const,
-    justifyContent: "center" as const,
-  },
-  channelCol: {
-    width: 3,
-    height: "100%" as const,
-    flexDirection: "column-reverse" as const,
-    gap: 1.5,
-    justifyContent: "flex-start" as const,
-  },
-  barSegment: {
-    width: 3,
-    height: 3,
-    borderRadius: 0.5,
-    opacity: 0.25,
-  },
-  greenLevel: {
-    backgroundColor: "#10B981",
-  },
-  midAmber: {
-    backgroundColor: "#F59E0B",
-  },
-  peakRed: {
-    backgroundColor: "#EF4444",
-  },
-};
-
 const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
   currentTime,
   totalDuration,
@@ -295,14 +197,13 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           fullscreen ? styles.fullscreenButtonsRow : styles.normalControlsRow
         }
       >
-        {/* Left: Timecode & Stereo VU Meter */}
+        {/* Left: Timecode */}
         <View style={styles.controlGroupLeft}>
           <TimecodePill
             currentTime={isDragging ? dragValue : currentTime}
             totalDuration={totalDuration}
             isNarrow={isNarrow}
           />
-          <StereoVuMeter isPlaying={isPlaying} isNarrow={isNarrow} />
         </View>
 
         {/* Center: Frame Step & Play / Pause Button */}
