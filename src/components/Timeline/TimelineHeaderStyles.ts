@@ -163,6 +163,12 @@ export const headerStyles = {
   },
   timelineVerticalScroll: {
     flex: 1,
+    ...(Platform.OS === "web"
+      ? ({
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorY: "contain",
+        } as any)
+      : {}),
   },
   timelineBody: {
     flexDirection: "row" as const,
@@ -289,6 +295,12 @@ export const headerStyles = {
   },
   timelineScroll: {
     flex: 1,
+    ...(Platform.OS === "web"
+      ? ({
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorX: "contain",
+        } as any)
+      : {}),
   },
   timelineContent: {
     position: "relative" as const,

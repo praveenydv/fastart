@@ -87,6 +87,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
+  scrollContent: {
+    paddingBottom: 56,
+  },
   section: {
     backgroundColor: '#131826',
     borderRadius: 6,

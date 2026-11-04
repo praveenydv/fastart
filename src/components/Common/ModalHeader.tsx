@@ -41,7 +41,7 @@ export function ModalHeader({
   iconName,
   iconColor = "#00F2FE",
   onClose,
-  closeAriaLabel = "Close",
+  closeAriaLabel = "Cancel",
   closeIconName = "close",
   onDone,
   doneAriaLabel = "Apply",
@@ -58,9 +58,13 @@ export function ModalHeader({
   titleStyle,
   hideBorder = false,
 }: ModalHeaderProps) {
+  // Clear visual hierarchy: When onDone is present, default to showing "Apply" text pill unless explicitly empty
+  const showApplyText = doneText !== "";
+  const displayDoneText = doneText ?? "Apply";
+
   return (
     <View style={[styles.headerBar, hideBorder && styles.noBorder, style]}>
-      {/* Left section: Close button or custom node */}
+      {/* Left section: Cancel / Dismiss action */}
       <View style={styles.leftSection}>
         {leftNode ? (
           leftNode
@@ -68,39 +72,40 @@ export function ModalHeader({
           <TactileTouchable
             onPress={onClose}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={styles.iconButton}
+            style={styles.cancelButton}
             accessibilityLabel={closeAriaLabel}
             accessibilityRole="button"
           >
-            <Ionicons name={closeIconName} size={18} color="#94A3B8" />
+            <Ionicons name={closeIconName} size={15} color="#94A3B8" />
           </TactileTouchable>
         ) : (
-          <View style={styles.iconButtonSpacer} />
+          <View style={styles.leftSpacer} />
         )}
 
         {onReset && (
           <TactileTouchable
             onPress={onReset}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.resetButton}
+            style={styles.resetChip}
             accessibilityLabel={resetText}
             accessibilityRole="button"
           >
-            <Text style={styles.resetButtonText}>{resetText}</Text>
+            <Ionicons name="refresh-outline" size={10.5} color="#00F2FE" style={{ marginRight: 3 }} />
+            <Text style={styles.resetChipText}>{resetText}</Text>
           </TactileTouchable>
         )}
       </View>
 
-      {/* Center section: Title and subtitle or custom center node */}
+      {/* Center section: Clean, space-optimized Title */}
       <View style={styles.centerSection}>
         {centerNode ? (
           centerNode
         ) : (
-          <View style={styles.titleWrapper}>
+          <View style={styles.titleRow}>
             {iconName && (
               <Ionicons
                 name={iconName}
-                size={16}
+                size={14}
                 color={iconColor}
                 style={styles.headerIcon}
               />
@@ -121,7 +126,7 @@ export function ModalHeader({
         )}
       </View>
 
-      {/* Right section: Done / Confirm button or custom right node */}
+      {/* Right section: High-prominence affirmative Apply Action Pill */}
       <View style={styles.rightSection}>
         {rightNode ? (
           rightNode
@@ -130,7 +135,7 @@ export function ModalHeader({
             onPress={doneDisabled || doneLoading ? undefined : onDone}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={[
-              doneText ? styles.doneTextButton : styles.doneIconButton,
+              showApplyText ? styles.applyPillButton : styles.applyIconButton,
               doneDisabled && styles.disabledButton,
             ]}
             disabled={doneDisabled || doneLoading}
@@ -140,16 +145,19 @@ export function ModalHeader({
             {doneLoading ? (
               <ActivityIndicator
                 size="small"
-                color={doneText ? "#FFFFFF" : "#08090E"}
+                color="#08090E"
               />
-            ) : doneText ? (
-              <Text style={styles.doneButtonText}>{doneText}</Text>
             ) : (
-              <Ionicons name={doneIconName} size={19} color="#08090E" />
+              <>
+                <Ionicons name={doneIconName} size={14} color="#08090E" style={{ fontWeight: "800" }} />
+                {showApplyText && (
+                  <Text style={styles.applyButtonText}>{displayDoneText}</Text>
+                )}
+              </>
             )}
           </TactileTouchable>
         ) : (
-          <View style={styles.iconButtonSpacer} />
+          <View style={styles.rightSpacer} />
         )}
       </View>
     </View>
@@ -158,14 +166,14 @@ export function ModalHeader({
 
 const styles = StyleSheet.create({
   headerBar: {
-    height: 48,
+    height: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    backgroundColor: "#08090E",
+    paddingHorizontal: 10,
+    backgroundColor: "#0B0E17",
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
+    borderBottomColor: "#1C2436",
     zIndex: 10,
   },
   noBorder: {
@@ -174,59 +182,79 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    minWidth: 44,
+    minWidth: 40,
+    gap: 6,
   },
   centerSection: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    minWidth: 44,
+    minWidth: 40,
   },
-  titleWrapper: {
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     maxWidth: "100%",
   },
   headerIcon: {
-    marginRight: 6,
+    marginRight: 5,
   },
   titleText: {
-    color: "#FFFFFF",
-    fontSize: 14,
+    color: "#F1F5F9",
+    fontSize: 13,
     fontWeight: "700",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   subtitleText: {
     color: "#64748B",
-    fontSize: 11,
-    marginLeft: 6,
+    fontSize: 10.5,
+    marginLeft: 5,
     fontWeight: "500",
   },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#131826",
+  cancelButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(255, 255, 255, 0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
-  iconButtonSpacer: {
-    width: 36,
-    height: 36,
+  leftSpacer: {
+    width: 28,
+    height: 28,
   },
-  doneIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  rightSpacer: {
+    width: 28,
+    height: 28,
+  },
+  applyPillButton: {
+    height: 28,
+    paddingHorizontal: 11,
+    borderRadius: 14,
+    backgroundColor: "#00F2FE",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  applyIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
@@ -236,35 +264,28 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  doneTextButton: {
-    paddingHorizontal: 14,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#00F2FE",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  doneButtonText: {
+  applyButtonText: {
     color: "#08090E",
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "700",
+    letterSpacing: 0.1,
   },
-  resetButton: {
-    marginLeft: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  resetChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    height: 24,
     borderRadius: 12,
-    backgroundColor: "#131826",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.20)",
   },
-  resetButtonText: {
-    color: "#94A3B8",
-    fontSize: 11,
+  resetChipText: {
+    color: "#00F2FE",
+    fontSize: 10.5,
     fontWeight: "600",
   },
   disabledButton: {
     opacity: 0.45,
   },
 });
-

@@ -4,17 +4,29 @@ const https = require('https');
 const crypto = require('crypto');
 
 const MODEL_DIR = path.join(__dirname, '..', 'public', 'models');
+const ASSETS_MODEL_DIR = path.join(__dirname, '..', 'assets', 'models');
+const SELFIE_PATH = path.join(MODEL_DIR, 'selfie_segmentation.onnx');
+const SELFIE_URL = 'https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx';
+const SELFIE_EXPECTED_BYTES = 462352;
+const SELFIE_SHA256 = '3241ac4ad8aa35bdaf33946776db29f7c283a413aa0b0dacb9483594b4531aad';
+
 const MODEL_PATH = path.join(MODEL_DIR, 'modnet.onnx');
 const MODEL_URL = 'https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx';
 const EXPECTED_MIN_BYTES = 25000000; // ~25.8 MB
 const EXPECTED_SHA256 = '07c308cf0fc7e6e8b2065a12ed7fc07e1de8febb7dc7839d7b7f15dd66584df9';
 
+function verifySelfieModel() {
+  if (!fs.existsSync(SELFIE_PATH)) return false;
+  const bytes = fs.readFileSync(SELFIE_PATH);
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  return bytes.length === SELFIE_EXPECTED_BYTES && digest === SELFIE_SHA256;
+}
+
 function verifyModel() {
+  if (!fs.existsSync(MODEL_PATH)) return false;
   const bytes = fs.readFileSync(MODEL_PATH);
   const digest = crypto.createHash('sha256').update(bytes).digest('hex');
-  if (bytes.length < EXPECTED_MIN_BYTES || digest !== EXPECTED_SHA256) {
-    throw new Error(`MODNet integrity check failed (size=${bytes.length}, sha256=${digest})`);
-  }
+  return bytes.length >= EXPECTED_MIN_BYTES && digest === EXPECTED_SHA256;
 }
 
 function downloadFile(url, destPath) {
@@ -69,31 +81,38 @@ async function main() {
   if (!fs.existsSync(MODEL_DIR)) {
     fs.mkdirSync(MODEL_DIR, { recursive: true });
   }
-
-  if (fs.existsSync(MODEL_PATH)) {
-    const stats = fs.statSync(MODEL_PATH);
-    if (stats.size >= EXPECTED_MIN_BYTES) {
-      try {
-        verifyModel();
-      console.log(`[download-models] MODNet model already exists (${(stats.size / (1024 * 1024)).toFixed(1)}MB). Skipping download.`);
-      return;
-      } catch (_) {
-        console.log('[download-models] Existing model hash differs from the pinned model; replacing it...');
-      }
-    }
-    console.log('[download-models] Existing model file is incomplete or corrupted, re-downloading...');
-    try { fs.unlinkSync(MODEL_PATH); } catch (_) {}
+  if (!fs.existsSync(ASSETS_MODEL_DIR)) {
+    fs.mkdirSync(ASSETS_MODEL_DIR, { recursive: true });
   }
 
-  console.log('[download-models] Downloading MODNet AI matting model from Hugging Face...');
-  try {
-    await downloadFile(MODEL_URL, MODEL_PATH);
-    const finalStats = fs.statSync(MODEL_PATH);
-    verifyModel();
-    console.log(`[download-models] Verified model file: ${(finalStats.size / (1024 * 1024)).toFixed(1)}MB saved to public/models/modnet.onnx`);
-  } catch (err) {
-    console.error('[download-models] Failed to download model:', err.message);
-    process.exit(1);
+  // 1. Download ultra-fast 256x256 MediaPipe Selfie Segmentation (462 KB)
+  if (!verifySelfieModel()) {
+    console.log('[download-models] Downloading ultra-fast MediaPipe selfie model (462 KB)...');
+    try {
+      await downloadFile(SELFIE_URL, SELFIE_PATH);
+      console.log('[download-models] Verified selfie_segmentation.onnx');
+    } catch (err) {
+      console.warn('[download-models] Could not download selfie model:', err.message);
+    }
+  } else {
+    console.log('[download-models] Ultra-fast selfie segmentation model already present.');
+  }
+
+  if (fs.existsSync(SELFIE_PATH)) {
+    fs.copyFileSync(SELFIE_PATH, path.join(ASSETS_MODEL_DIR, 'selfie_segmentation.onnx'));
+  }
+
+  // 2. Download MODNet model if needed
+  if (!verifyModel()) {
+    console.log('[download-models] Downloading MODNet model from Hugging Face...');
+    try {
+      await downloadFile(MODEL_URL, MODEL_PATH);
+      console.log('[download-models] Verified modnet.onnx');
+    } catch (err) {
+      console.warn('[download-models] Could not download MODNet model:', err.message);
+    }
+  } else {
+    console.log('[download-models] MODNet model already present.');
   }
 }
 

@@ -156,7 +156,11 @@ function SpeedModalComponent({
         </View>
       )}
 
-          <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.sheetBody}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {isAudio ? (
               /* DEDICATED STREAMLINED AUDIO SPEED VIEW */
               <SpeedAudioView

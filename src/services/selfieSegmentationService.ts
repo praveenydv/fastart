@@ -15,12 +15,15 @@
 
 import { Buffer } from "buffer";
 import { Platform } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { rustCoreBridge, registerMaskProvider } from "./rustCoreBridge";
 import { persistMasksRLE, loadMasksRLE, removeMasksRLE } from "../utils/largeMediaStorage";
 import { cutoutWorkerBridge } from "./cutoutWorkerBridge";
 import { LruCache } from "../utils/lruCache";
 
 let _cachedFS: any = null;
+let _cachedThumbnails: any = null;
+let _cachedJpeg: any = null;
 
 let isModnetReady = false;
 let modnetInitPromise: Promise<boolean> | null = null;
@@ -46,6 +49,10 @@ let modnetFloatData: Float32Array | null = null;
 let modnetMaskCanvas: HTMLCanvasElement | null = null;
 let modnetMaskCtx: CanvasRenderingContext2D | null = null;
 let modnetMaskImgData: ImageData | null = null;
+let cutoutFrameCanvas: HTMLCanvasElement | null = null;
+let cutoutFrameCtx: CanvasRenderingContext2D | null = null;
+let cutoutStrokeCanvas: HTMLCanvasElement | null = null;
+let cutoutStrokeCtx: CanvasRenderingContext2D | null = null;
 
 // Cached active frame raw neural tensor for instant (0.1ms) threshold & softness slider tweaking
 let lastModnetRawAlpha: Float32Array | null = null;
@@ -1354,6 +1361,132 @@ export async function processVideoFrameByFrame(
       notifyMaskUpdated();
     };
 
+    const submitSampleInference = (outputFrameIdx: number, sampleTime: number) => {
+      let inferenceSubmitted = false;
+      try {
+        if (!modnetInputCanvas) {
+          modnetInputCanvas = document.createElement("canvas");
+          modnetInputCanvas.width = 512;
+          modnetInputCanvas.height = 512;
+          modnetInputCtx = modnetInputCanvas.getContext("2d", { willReadFrequently: true });
+        }
+        if (modnetInputCanvas.width !== 512 || modnetInputCanvas.height !== 512) {
+          modnetInputCanvas.width = 512;
+          modnetInputCanvas.height = 512;
+        }
+        if (modnetInputCtx) {
+          modnetInputCtx.drawImage(video, 0, 0, 512, 512);
+          const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
+          if (cutoutWorkerBridge.isSupported()) {
+            inferenceSubmitted = true;
+            let task: Promise<void>;
+            task = cutoutWorkerBridge.runFrame(
+              imgData.data,
+              threshold,
+              feather,
+              outputFrameIdx === 0,
+            )
+              .then((result) => {
+                if (result?.rle) {
+                  const rawAlpha = result.rawAlpha;
+                  if (outputFrameIdx === 0) {
+                    if (rawAlpha && (!lastModnetRawAlpha || lastModnetRawAlpha.length !== rawAlpha.length)) {
+                      lastModnetRawAlpha = new Float32Array(rawAlpha.length);
+                    }
+                    if (rawAlpha && lastModnetRawAlpha) {
+                      lastModnetRawAlpha.set(rawAlpha);
+                      lastModnetRawAlphaClipId = clipId;
+                      lastModnetRawAlphaFrameIdx = 0;
+                    }
+                  }
+
+                  const rle = result.rle;
+                  clipMaskRLECache.set(`${clipId}_${outputFrameIdx}`, rle);
+                  registerClipFrameIndex(clipId, outputFrameIdx);
+                  if (outputFrameIdx === 0) {
+                    clipMaskRLECache.set(`${clipId}_0`, rle);
+                    registerClipFrameIndex(clipId, 0);
+                  }
+                  lastProcessedMediaTime = sampleTime;
+                  lastSegmentedClipId = clipId;
+                  hasValidHumanSubject = true;
+                  markSampleComplete(true);
+                } else {
+                  markSampleComplete(false);
+                }
+              })
+              .catch((error) => {
+                console.warn("[StudioCutout] Worker inference error in video loop:", error);
+                markSampleComplete(false);
+              })
+              .finally(() => {
+                inFlight.delete(task);
+                // Resume streaming playback if it was paused for backpressure
+                if (video.paused && !finished && currentFrame < totalFrames && !signal?.aborted) {
+                  video.play().then(() => scheduleRvfc()).catch(() => {});
+                }
+              });
+            inFlight.add(task);
+          } else {
+            markSampleComplete(false);
+          }
+        }
+      } catch (e) {
+        console.warn("[StudioCutout] Frame processing error:", e);
+        if (!inferenceSubmitted) markSampleComplete(false);
+      }
+    };
+
+    // Hardware accelerated streaming decoding via requestVideoFrameCallback (Chrome, Safari 15.4+, Edge)
+    const canUseRvfc = !reverse && typeof (video as any).requestVideoFrameCallback === "function";
+
+    const scheduleRvfc = () => {
+      if (finished || signal?.aborted || video.paused) return;
+      (video as any).requestVideoFrameCallback(onRvfcFrame);
+    };
+
+    const onRvfcFrame = (_now: number, metadata: any) => {
+      if (finished) return;
+      if (signal?.aborted) {
+        void finish();
+        return;
+      }
+      const mediaTime = metadata?.mediaTime ?? video.currentTime;
+      const expectedTime = Math.max(
+        0,
+        trimIn +
+          getCutoutSampleFrameIndex(currentFrame, totalFrames, sourceFrameCount, frameStep) /
+            effectiveFps,
+      );
+
+      // Submit frame when decoder has reached or passed the expected sample timestamp
+      if (mediaTime >= expectedTime - 0.5 / effectiveFps) {
+        const outputFrameIdx = getCutoutSampleFrameIndex(
+          currentFrame,
+          totalFrames,
+          sourceFrameCount,
+          frameStep,
+        );
+        submitSampleInference(outputFrameIdx, mediaTime);
+        currentFrame++;
+      }
+
+      if (currentFrame >= totalFrames || mediaTime >= trimIn + duration) {
+        video.pause();
+        void finish();
+        return;
+      }
+
+      // Backpressure: pause decoder when all worker slots are saturated
+      if (inFlight.size >= maxInFlight) {
+        video.pause();
+        return;
+      }
+
+      scheduleRvfc();
+    };
+
+    // Fallback seek-based loop (for reverse playback or legacy browsers)
     const processNextFrame = async () => {
       if (finished) return;
       if (isProcessing) return;
@@ -1364,9 +1497,6 @@ export async function processVideoFrameByFrame(
         return;
       }
 
-      // Decode ahead only while an inference slot is available. This overlaps
-      // video seeking/preprocessing with bounded worker inference without
-      // buffering the whole clip in memory.
       if (inFlight.size >= maxInFlight) {
         await Promise.race(inFlight);
         if (signal?.aborted) {
@@ -1395,81 +1525,10 @@ export async function processVideoFrameByFrame(
           return;
         }
 
-        let inferenceSubmitted = false;
-        try {
-            // Always use 512×512 for MODNet (model is trained at this resolution).
-            if (!modnetInputCanvas) {
-              modnetInputCanvas = document.createElement("canvas");
-              modnetInputCanvas.width = 512;
-              modnetInputCanvas.height = 512;
-              modnetInputCtx = modnetInputCanvas.getContext("2d", {
-                willReadFrequently: true,
-              });
-            }
-            if (modnetInputCanvas.width !== 512 || modnetInputCanvas.height !== 512) {
-              modnetInputCanvas.width = 512;
-              modnetInputCanvas.height = 512;
-            }
-            if (modnetInputCtx) {
-              modnetInputCtx.drawImage(video, 0, 0, 512, 512);
-              const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
-              if (cutoutWorkerBridge.isSupported()) {
-                inferenceSubmitted = true;
-                let task: Promise<void>;
-                task = cutoutWorkerBridge.runFrame(
-                  imgData.data,
-                  threshold,
-                  feather,
-                  outputFrameIdx === 0,
-                )
-                  .then((result) => {
-                    if (result?.rle) {
-                      const rawAlpha = result.rawAlpha;
-                      if (outputFrameIdx === 0) {
-                        if (rawAlpha && (!lastModnetRawAlpha || lastModnetRawAlpha.length !== rawAlpha.length)) {
-                          lastModnetRawAlpha = new Float32Array(rawAlpha.length);
-                        }
-                        if (rawAlpha && lastModnetRawAlpha) {
-                          lastModnetRawAlpha.set(rawAlpha);
-                          lastModnetRawAlphaClipId = clipId;
-                          lastModnetRawAlphaFrameIdx = 0;
-                        }
-                      }
-
-                      const rle = result.rle;
-                      clipMaskRLECache.set(`${clipId}_${outputFrameIdx}`, rle);
-                      registerClipFrameIndex(clipId, outputFrameIdx);
-                      if (outputFrameIdx === 0) {
-                        clipMaskRLECache.set(`${clipId}_0`, rle);
-                        registerClipFrameIndex(clipId, 0);
-                      }
-                      lastProcessedMediaTime = targetTime;
-                      lastSegmentedClipId = clipId;
-                      hasValidHumanSubject = true;
-                      markSampleComplete(true);
-                    } else {
-                      markSampleComplete(false);
-                    }
-                  })
-                  .catch((error) => {
-                    console.warn("[StudioCutout] Worker inference error in video loop:", error);
-                    markSampleComplete(false);
-                  })
-                  .finally(() => inFlight.delete(task));
-                inFlight.add(task);
-              } else {
-                markSampleComplete(false);
-              }
-            }
-        } catch (e) {
-          console.warn("[StudioCutout] Frame processing error:", e);
-          if (!inferenceSubmitted) markSampleComplete(false);
-        }
-
+        submitSampleInference(outputFrameIdx, targetTime);
         currentFrame += 1;
         isProcessing = false;
         if (currentFrame < totalFrames && !signal?.aborted) {
-          // Microtask yield allows UI and progress updates to dispatch without artificial vsync waiting
           setTimeout(processNextFrame, 0);
         } else {
           void finish();
@@ -1513,7 +1572,28 @@ export async function processVideoFrameByFrame(
     const startOnce = () => {
       if (hasStarted || signal?.aborted) return;
       hasStarted = true;
-      processNextFrame();
+      if (canUseRvfc) {
+        // Initial seek to trimIn, then continuous hardware streaming playback
+        const onInitialSeeked = () => {
+          video.removeEventListener("seeked", onInitialSeeked);
+          video.playbackRate = 1.0;
+          video
+            .play()
+            .then(() => scheduleRvfc())
+            .catch(() => {
+              // Autoplay block fallback
+              processNextFrame();
+            });
+        };
+        if (Math.abs(video.currentTime - trimIn) < 0.05) {
+          onInitialSeeked();
+        } else {
+          video.addEventListener("seeked", onInitialSeeked, { once: true });
+          video.currentTime = trimIn;
+        }
+      } else {
+        processNextFrame();
+      }
     };
 
     if (video.readyState >= 2) {
@@ -1697,32 +1777,74 @@ export async function renderCutoutToVideoBlob(
             return;
           }
 
+          // 1. Prepare cutout subject on a dedicated buffer to prevent outline or backdrop bleed
+          if (!cutoutFrameCanvas && typeof document !== "undefined") {
+            cutoutFrameCanvas = document.createElement("canvas");
+            cutoutFrameCtx = cutoutFrameCanvas.getContext("2d");
+          }
+          if (cutoutFrameCanvas && cutoutFrameCtx) {
+            if (cutoutFrameCanvas.width !== vw || cutoutFrameCanvas.height !== vh) {
+              cutoutFrameCanvas.width = vw;
+              cutoutFrameCanvas.height = vh;
+            }
+            cutoutFrameCtx.clearRect(0, 0, vw, vh);
+            cutoutFrameCtx.drawImage(video, 0, 0, vw, vh);
+
+            const maskCanvas = getFrameMask(clipId, localTime, 15);
+            if (maskCanvas) {
+              cutoutFrameCtx.save();
+              cutoutFrameCtx.imageSmoothingEnabled = true;
+              cutoutFrameCtx.imageSmoothingQuality = "high";
+              cutoutFrameCtx.globalCompositeOperation = "destination-in";
+              cutoutFrameCtx.drawImage(maskCanvas, 0, 0, vw, vh);
+              cutoutFrameCtx.restore();
+            }
+          }
+
           outCtx.clearRect(0, 0, vw, vh);
 
-          // 1. Background color if configured
+          // 2. Background color backdrop if configured
           if (bgColor && bgColor !== "none" && bgColor !== "transparent") {
             outCtx.fillStyle = bgColor;
             outCtx.fillRect(0, 0, vw, vh);
           }
 
-          // 2. Draw raw video
-          outCtx.drawImage(video, 0, 0, vw, vh);
+          // 3. Crisp dilated outline around the perimeter only, never covering the subject
+          if (strokeColor && strokeColor !== "none" && strokeWidth > 0 && cutoutFrameCanvas) {
+            if (!cutoutStrokeCanvas && typeof document !== "undefined") {
+              cutoutStrokeCanvas = document.createElement("canvas");
+              cutoutStrokeCtx = cutoutStrokeCanvas.getContext("2d");
+            }
+            if (cutoutStrokeCanvas && cutoutStrokeCtx) {
+              if (cutoutStrokeCanvas.width !== vw || cutoutStrokeCanvas.height !== vh) {
+                cutoutStrokeCanvas.width = vw;
+                cutoutStrokeCanvas.height = vh;
+              }
+              cutoutStrokeCtx.clearRect(0, 0, vw, vh);
+              cutoutStrokeCtx.drawImage(cutoutFrameCanvas, 0, 0);
+              cutoutStrokeCtx.globalCompositeOperation = "source-in";
+              cutoutStrokeCtx.fillStyle = strokeColor;
+              cutoutStrokeCtx.fillRect(0, 0, vw, vh);
+              cutoutStrokeCtx.globalCompositeOperation = "source-over";
 
-          // 3. Alpha matte
-          const maskCanvas = getFrameMask(clipId, localTime, 15);
-          if (maskCanvas) {
-            outCtx.globalCompositeOperation = "destination-in";
-            outCtx.drawImage(maskCanvas, 0, 0, vw, vh);
-            outCtx.globalCompositeOperation = "source-over";
+              outCtx.save();
+              const sDist = Math.max(1, Math.min(16, strokeWidth));
+              const steps = 12;
+              for (let i = 0; i < steps; i++) {
+                const angle = (i * 2 * Math.PI) / steps;
+                const ox = Math.round(Math.cos(angle) * sDist);
+                const oy = Math.round(Math.sin(angle) * sDist);
+                outCtx.drawImage(cutoutStrokeCanvas, ox, oy);
+              }
+              outCtx.restore();
+            }
           }
 
-          // 4. Glow / Outline
-          if (strokeColor && strokeColor !== "none" && strokeWidth > 0) {
-            outCtx.save();
-            outCtx.shadowColor = strokeColor;
-            outCtx.shadowBlur = strokeWidth * 3;
-            outCtx.drawImage(outCanvas, 0, 0);
-            outCtx.restore();
+          // 4. Draw cut-out subject cleanly on top
+          if (cutoutFrameCanvas) {
+            outCtx.drawImage(cutoutFrameCanvas, 0, 0);
+          } else {
+            outCtx.drawImage(video, 0, 0, vw, vh);
           }
 
           if (currentRenderFrame === 0) {
@@ -1788,16 +1910,10 @@ const nativeMaskFrameIndicesMap = new Map<string, number[]>();
 export function findNearestNativeMaskUri(
   clipId: string,
   frameIdx: number,
-  maxDiffFrames?: number,
+  _maxDiffFrames?: number,
 ): string | null {
   const list = nativeMaskFrameIndicesMap.get(clipId);
-  if (!list || list.length === 0) return null;
-  const fps = clipMaskFpsMap.get(clipId) || 20;
-  // Bounded temporal window (~350ms): prevent stale frame reuse across shots
-  const maxDiff =
-    maxDiffFrames !== undefined
-      ? maxDiffFrames
-      : Math.max(4, Math.round(fps * 0.35));
+  if (!list || list.length === 0) return nativeMaskUriCache.get(`${clipId}_0`) || null;
 
   let low = 0;
   let high = list.length - 1;
@@ -1817,17 +1933,15 @@ export function findNearestNativeMaskUri(
     bestIdx = list[high];
     minDiff = Math.abs(list[high] - frameIdx);
   }
-  if (minDiff > maxDiff) {
-    return null;
-  }
-  return nativeMaskUriCache.get(`${clipId}_${bestIdx}`) || null;
+  return nativeMaskUriCache.get(`${clipId}_${bestIdx}`) || nativeMaskUriCache.get(`${clipId}_0`) || null;
 }
 
-export function getNativeMaskUri(clipId: string, frameIdx = 0, isVideo = true): string | null {
+export function getNativeMaskUri(clipId: string, frameIdx = 0, _isVideo = true): string | null {
   return (
     nativeMaskUriCache.get(`${clipId}_${frameIdx}`) ??
     findNearestNativeMaskUri(clipId, frameIdx) ??
-    (!isVideo || frameIdx <= 6 ? (nativeMaskUriCache.get(`${clipId}_0`) ?? null) : null)
+    nativeMaskUriCache.get(`${clipId}_0`) ??
+    null
   );
 }
 
@@ -1965,8 +2079,8 @@ export async function processFramePixelsUnified(
   keyColor = "#00FF00",
 ): Promise<boolean> {
   try {
-    // Downscale large frames to standard max 480px for 10x-20x faster mobile processing
-    const MAX_DIM = 480;
+    // Downscale large frames to standard max 256px for ultra-fast 20-30 FPS mobile processing
+    const MAX_DIM = 256;
     let procRgba = rgba;
     let procW = w;
     let procH = h;
@@ -2039,11 +2153,28 @@ export async function processFramePixelsUnified(
       alpha = new Uint8Array(procW * procH);
       const rgbaMatte = new Uint8ClampedArray(512 * 512 * 4);
       rustCoreBridge.processModnetOutput(rawAlpha, rgbaMatte, threshold, feather);
+      const scaleY = (512 - 1) / Math.max(1, procH - 1);
+      const scaleX = (512 - 1) / Math.max(1, procW - 1);
       for (let y = 0; y < procH; y++) {
-        const sy = Math.floor((y * 512) / procH);
+        const sy = y * scaleY;
+        const y0 = Math.floor(sy);
+        const y1 = Math.min(511, y0 + 1);
+        const fy = sy - y0;
+        const r0 = y0 * 512 * 4 + 3;
+        const r1 = y1 * 512 * 4 + 3;
+        const dstRow = y * procW;
         for (let x = 0; x < procW; x++) {
-          const sx = Math.floor((x * 512) / procW);
-          alpha[y * procW + x] = rgbaMatte[(sy * 512 + sx) * 4 + 3];
+          const sx = x * scaleX;
+          const x0 = Math.floor(sx);
+          const x1 = Math.min(511, x0 + 1);
+          const fx = sx - x0;
+          const v00 = rgbaMatte[r0 + (x0 << 2)];
+          const v10 = rgbaMatte[r0 + (x1 << 2)];
+          const v01 = rgbaMatte[r1 + (x0 << 2)];
+          const v11 = rgbaMatte[r1 + (x1 << 2)];
+          const top = v00 + fx * (v10 - v00);
+          const btm = v01 + fx * (v11 - v01);
+          alpha[dstRow + x] = Math.round(top + fy * (btm - top));
         }
       }
     }
@@ -2079,6 +2210,59 @@ export async function processFramePixelsUnified(
   }
 }
 
+async function processNativeFrameFallback(
+  videoUri: string,
+  clipId: string,
+  frameIdx: number,
+  frameTime: number,
+  threshold: number,
+  feather: number,
+  mode: "auto" | "chroma",
+  keyColor: string,
+): Promise<boolean> {
+  try {
+    if (!_cachedThumbnails) {
+      _cachedThumbnails = await import("expo-video-thumbnails");
+    }
+    const { getThumbnailAsync } = _cachedThumbnails;
+    const thumb = await getThumbnailAsync(videoUri, {
+      time: Math.max(0, Math.round(frameTime * 1000)),
+      quality: 0.85,
+    });
+    if (!thumb?.uri) return false;
+    if (!_cachedFS) {
+      _cachedFS = await import("expo-file-system/legacy").catch(
+        () => import("expo-file-system"),
+      );
+    }
+    const FS = _cachedFS;
+    const base64 = await FS.readAsStringAsync(thumb.uri, {
+      encoding: FS.EncodingType.Base64,
+    });
+    if (!_cachedJpeg) {
+      _cachedJpeg = await import("jpeg-js");
+    }
+    const jpeg = _cachedJpeg;
+    const rawData = Buffer.from(base64, "base64");
+    const decoded = jpeg.decode(rawData, { useTArray: true });
+    if (!decoded || !decoded.data) return false;
+    return await processFramePixelsUnified(
+      decoded.data,
+      decoded.width,
+      decoded.height,
+      clipId,
+      frameIdx,
+      threshold,
+      feather,
+      mode,
+      keyColor,
+    );
+  } catch (err) {
+    console.warn("[SelfieSegmentation] Native frame fallback failed:", err);
+    return false;
+  }
+}
+
 /**
  * Unified: grab current frame from video/image on ANY platform, run segmentation.
  */
@@ -2110,8 +2294,9 @@ export async function processClipUnified(
 
   // Native accelerated hardware decoding & Rust cutout pipeline (iOS & Android)
   if (Platform.OS === "android" || Platform.OS === "ios") {
+    let maskUri: string | null = null;
     try {
-      const maskUri = await rustCoreBridge.processVideoFrameNative(
+      maskUri = await rustCoreBridge.processVideoFrameNative(
         uri,
         clipId,
         frameIdx,
@@ -2121,16 +2306,27 @@ export async function processClipUnified(
         mode,
         keyColor,
       );
-      if (maskUri) {
-        setNativeMaskUri(clipId, frameIdx, maskUri);
-        registerClipFrameIndex(clipId, frameIdx);
-        notifyMaskUpdated();
-        return true;
-      }
     } catch (e) {
-      console.warn("[SelfieSegmentation] Native Rust frame cutout error:", e);
+      console.warn("[SelfieSegmentation] Native Rust frame cutout error; attempting fallback:", e);
     }
-    return false;
+    if (maskUri) {
+      setNativeMaskUri(clipId, frameIdx, maskUri);
+      registerClipFrameIndex(clipId, frameIdx);
+      ExpoImage.prefetch(maskUri, { cachePolicy: "memory" }).catch(() => {});
+      notifyMaskUpdated();
+      return true;
+    }
+    // High-reliability fallback (works seamlessly on existing APK builds)
+    return await processNativeFrameFallback(
+      uri,
+      clipId,
+      frameIdx,
+      frameTime,
+      threshold,
+      feather,
+      mode,
+      keyColor,
+    );
   }
 
   return false;
@@ -2198,6 +2394,7 @@ export async function processVideoUnified(
     onProgress?.(0, 0, totalFrames);
     let processed = 0;
     let lastNotifyAt = 0;
+    let hasWarnedNativeFallback = false;
     try {
       for (let sampleIndex = 0; sampleIndex < totalFrames; sampleIndex++) {
         if (signal?.aborted) break;
@@ -2209,21 +2406,43 @@ export async function processVideoUnified(
         );
         const sourceFrameIdx = reverse ? sourceFrameCount - frameIdx - 1 : frameIdx;
         const frameTime = trimIn + sourceFrameIdx / effectiveFps;
-        const maskUri = await rustCoreBridge.processVideoFrameNative(
-          videoUri,
-          clipId,
-          frameIdx,
-          frameTime,
-          threshold,
-          feather,
-          mode,
-          keyColor,
-        );
-        if (!maskUri) {
-          throw new Error(`${Platform.OS} native video frame cutout is unavailable`);
+        let maskUri: string | null = null;
+        try {
+          maskUri = await rustCoreBridge.processVideoFrameNative(
+            videoUri,
+            clipId,
+            frameIdx,
+            frameTime,
+            threshold,
+            feather,
+            mode,
+            keyColor,
+          );
+        } catch (e) {
+          if (!hasWarnedNativeFallback) {
+            hasWarnedNativeFallback = true;
+            console.warn("[SelfieSegmentation] Native processVideoFrameNative failed; attempting fallback:", e);
+          }
         }
-        setNativeMaskUri(clipId, frameIdx, maskUri);
-        registerClipFrameIndex(clipId, frameIdx);
+        if (maskUri) {
+          setNativeMaskUri(clipId, frameIdx, maskUri);
+          registerClipFrameIndex(clipId, frameIdx);
+          ExpoImage.prefetch(maskUri, { cachePolicy: "memory" }).catch(() => {});
+        } else {
+          const fallbackOk = await processNativeFrameFallback(
+            videoUri,
+            clipId,
+            frameIdx,
+            frameTime,
+            threshold,
+            feather,
+            mode,
+            keyColor,
+          );
+          if (!fallbackOk) {
+            throw new Error(`${Platform.OS} native video frame cutout is unavailable`);
+          }
+        }
         processed++;
         onProgress?.(
           Math.round(((sampleIndex + 1) / totalFrames) * 100),

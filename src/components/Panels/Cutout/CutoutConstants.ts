@@ -41,7 +41,7 @@ export const CUTOUT_TABS: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 }[] = [
+  { id: "auto", label: "Auto Cutout", icon: "sparkles" },
+  { id: "chroma", label: "Chroma Key", icon: "color-filter" },
   { id: "none", label: "None", icon: "close-circle-outline" },
-  { id: "auto", label: "Auto", icon: "sparkles" },
-  { id: "chroma", label: "Chroma", icon: "color-filter" },
 ];

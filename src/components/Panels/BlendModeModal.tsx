@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 6,
-    paddingBottom: 16,
+    paddingBottom: 56,
   },
   opacityCard: {
     backgroundColor: '#171926',

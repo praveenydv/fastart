@@ -117,6 +117,7 @@ function VolumeModalComponent({
 
       <ScrollView
         style={[styles.contentScroll, isInline && { paddingTop: 10 }]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isSliderDragging}
       >
@@ -443,6 +444,9 @@ const styles = StyleSheet.create({
   contentScroll: {
     paddingHorizontal: 6,
     paddingTop: 4,
+  },
+  scrollContent: {
+    paddingBottom: 56,
   },
   compactSection: {
     backgroundColor: "#131826",

@@ -10,6 +10,8 @@ const runtimeFiles = [
   "ort-wasm-simd-threaded.wasm",
   "ort-wasm-simd-threaded.jsep.mjs",
   "ort-wasm-simd-threaded.jsep.wasm",
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.asyncify.wasm",
 ];
 
 fs.mkdirSync(publicDir, { recursive: true });

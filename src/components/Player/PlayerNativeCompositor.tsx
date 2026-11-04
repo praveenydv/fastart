@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { MaskedView } from "@expo/ui/community/masked-view";
 import { SvgXml } from "react-native-svg";
 import type { MaskConfig } from "../../types/project";
-import { buildMaskSvg, maskSvgDataUri } from "../../utils/maskGeometry";
+import { buildMaskSvg } from "../../utils/maskGeometry";
 import { LinearGradient } from "expo-linear-gradient";
 import { getNativeMaskUri, setOnMaskUpdated, getClipBakedFps } from "../../services/selfieSegmentationService";
 import { styles } from "./PlayerStyles";
@@ -408,7 +408,18 @@ function renderNativeHslOverlay(hslAdjustments?: any) {
 }
 
 /** Keeps native video live and applies the locally generated alpha matte to it. */
-function NativeVideoCutout({
+const CUTOUT_STROKE_OFFSETS = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+  [-0.707, -0.707],
+  [0.707, -0.707],
+  [-0.707, 0.707],
+  [0.707, 0.707],
+];
+
+const NativeVideoCutout = React.memo(function NativeVideoCutout({
   clip,
   currentTime,
   isPlaying,
@@ -423,6 +434,56 @@ function NativeVideoCutout({
   cutout: any;
   maskUri: string | null;
 }) {
+  const isCutoutActive = !!(cutout?.enabled && maskUri);
+  const hasBackground =
+    isCutoutActive &&
+    cutout.bgColor &&
+    cutout.bgColor !== "none" &&
+    cutout.bgColor !== "transparent";
+  const hasStroke =
+    isCutoutActive &&
+    cutout.strokeColor &&
+    cutout.strokeColor !== "none" &&
+    cutout.strokeColor !== "transparent" &&
+    cutout.strokeWidth > 0;
+  const strokeWidth = Math.max(1, Math.min(16, cutout?.strokeWidth || 3));
+  const strokeColor = cutout?.strokeColor || "#00F2FE";
+
+  const maskElement = useMemo(() => {
+    if (!isCutoutActive || !maskUri) return null;
+    return (
+      <ExpoImage
+        source={{ uri: maskUri }}
+        style={StyleSheet.absoluteFill}
+        contentFit="contain"
+        cachePolicy="memory"
+      />
+    );
+  }, [isCutoutActive, maskUri]);
+
+  const strokeElements = useMemo(() => {
+    if (!hasStroke || !maskUri) return null;
+    return (
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {CUTOUT_STROKE_OFFSETS.map(([ox, oy], idx) => (
+          <ExpoImage
+            key={idx}
+            source={{ uri: maskUri }}
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                transform: [{ translateX: ox * strokeWidth }, { translateY: oy * strokeWidth }],
+                tintColor: strokeColor,
+              },
+            ]}
+            contentFit="contain"
+            cachePolicy="memory"
+          />
+        ))}
+      </View>
+    );
+  }, [hasStroke, maskUri, strokeWidth, strokeColor]);
+
   const video = (
     <NativeVideoClipPlayer
       clip={clip}
@@ -431,56 +492,21 @@ function NativeVideoCutout({
       opacity={opacity}
     />
   );
-  if (!cutout?.enabled || !maskUri) return video;
 
-  const hasBackground =
-    cutout.bgColor && cutout.bgColor !== "none" && cutout.bgColor !== "transparent";
-  const hasStroke =
-    cutout.strokeColor &&
-    cutout.strokeColor !== "none" &&
-    cutout.strokeColor !== "transparent" &&
-    cutout.strokeWidth > 0;
-  const strokeWidth = Math.max(1, Math.min(16, cutout.strokeWidth || 3));
-  const strokeColor = cutout.strokeColor || "#00F2FE";
+  if (!isCutoutActive || !maskElement) return video;
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {hasBackground && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: cutout.bgColor }]} />
       )}
-      {hasStroke && (
-        <ExpoImage
-          source={{ uri: maskUri }}
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              tintColor: strokeColor,
-              shadowColor: strokeColor,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.95,
-              shadowRadius: strokeWidth * 2,
-            },
-          ]}
-          contentFit="contain"
-          cachePolicy="memory"
-        />
-      )}
-      <MaskedView
-        style={StyleSheet.absoluteFill}
-        maskElement={
-          <ExpoImage
-            source={{ uri: maskUri }}
-            style={StyleSheet.absoluteFill}
-            contentFit="contain"
-            cachePolicy="memory"
-          />
-        }
-      >
+      {strokeElements}
+      <MaskedView style={StyleSheet.absoluteFill} maskElement={maskElement}>
         {video}
       </MaskedView>
     </View>
   );
-}
+});
 
 function renderEffectContent(
   eff: { id?: string; type?: string; filter?: string; intensity?: number },
@@ -1098,9 +1124,30 @@ function renderMaskedClipContent(
   h: number,
 ) {
   if (!mask || !mask.shape || mask.shape === "none") return mediaNode;
-  const svg = buildMaskSvg(mask, w, h, Platform.OS === "android");
+  const svg = buildMaskSvg(mask, w, h);
   if (!svg) return mediaNode;
-  if (Platform.OS === "web") return mediaNode;
+
+  if (Platform.OS === "web") {
+    const maskUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    return (
+      <View
+        style={{
+          width: w,
+          height: h,
+          maskImage: `url("${maskUri}")`,
+          WebkitMaskImage: `url("${maskUri}")`,
+          maskSize: "100% 100%",
+          WebkitMaskSize: "100% 100%",
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
+          maskPosition: "center",
+          WebkitMaskPosition: "center",
+        } as any}
+      >
+        {mediaNode}
+      </View>
+    );
+  }
 
   return (
     <MaskedView
@@ -1308,24 +1355,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
             crop.y > 0);
 
         const hasMaskShape = Boolean(mask?.shape && mask.shape !== "none");
-        let webMaskStyle: any = undefined;
-        if (hasMaskShape && Platform.OS === "web") {
-          const maskWidth = hasCrop ? Math.round(fullW * Math.max(0.01, crop.width / 100)) : w;
-          const maskHeight = hasCrop ? Math.round(fullH * Math.max(0.01, crop.height / 100)) : h;
-          const maskUri = maskSvgDataUri(mask, maskWidth, maskHeight);
-          if (maskUri) {
-            webMaskStyle = {
-              maskImage: `url("${maskUri}")`,
-              WebkitMaskImage: `url("${maskUri}")`,
-              maskSize: "100% 100%",
-              WebkitMaskSize: "100% 100%",
-              maskRepeat: "no-repeat",
-              WebkitMaskRepeat: "no-repeat",
-              maskPosition: "center",
-              WebkitMaskPosition: "center",
-            };
-          }
-        }
 
         // Pre-warm & transition states for seamless 60fps cuts
         const isInside = currentTime >= vid.startTime && currentTime <= vid.startTime + vid.duration;
@@ -1478,7 +1507,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   elevation: vidElevation,
                   transform: clipTransformArray,
                 },
-                webMaskStyle,
                 webBlendStyle,
                 webBlurStyle,
               ]}
@@ -1572,7 +1600,6 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                 elevation: vidElevation,
                 transform: clipTransformArray,
               },
-              webMaskStyle,
               webBlendStyle,
               webBlurStyle,
             ]}

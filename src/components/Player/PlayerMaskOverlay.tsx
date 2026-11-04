@@ -5,13 +5,11 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { View, Text, StyleSheet, Platform, PanResponder } from "react-native";
-import { Buffer } from "buffer";
-import { Image as ExpoImage } from "expo-image";
+import { View, Text, StyleSheet, PanResponder } from "react-native";
+import Svg, { Path, Polygon } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import { MaskConfig } from "../../types/project";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
-import { getPointerCoords } from "../Timeline";
 import { THEME_COLORS } from "../../constants/designConstants";
 import { computeVideoClipDimensions } from "./playerUtils";
 
@@ -71,7 +69,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
   }, [targetClip, currentTime]);
 
   const [activeDrag, setActiveDrag] = useState<
-    "move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather" | null
+    "move" | "rotate" | "scale" | "scale-w" | "scale-h" | null
   >(null);
   const [localMask, setLocalMask] = useState<MaskConfig>(mask);
   const isDraggingRef = useRef(false);
@@ -102,8 +100,6 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
 
   useEffect(() => {
     return () => {
-      dragCleanupRef.current?.();
-      dragCleanupRef.current = null;
       if (pendingMaskRafRef.current !== null) {
         cancelAnimationFrame(pendingMaskRafRef.current);
         pendingMaskRafRef.current = null;
@@ -194,423 +190,6 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
     maskBoxH = 40;
   }
 
-  // Generate SVG path / outline for shape with dashed bounding box and center crosshair
-  const shapeSvgContent = useMemo(() => {
-    const w = maskBoxW;
-    const h = maskBoxH;
-    const shape = localMask.shape;
-    const isLine = shape === "linear" || shape === "mirror";
-
-    return (
-      <>
-        {/* Outer dashed bounding box and crosshairs only for 2D shapes (circle, rect, heart, star) */}
-        {!isLine && (
-          <>
-            <rect
-              x={1}
-              y={1}
-              width={Math.max(2, w - 2)}
-              height={Math.max(2, h - 2)}
-              fill="none"
-              stroke="rgba(255, 255, 255, 0.45)"
-              strokeWidth="1.2"
-              strokeDasharray="4 4"
-            />
-
-            {/* Center horizontal & vertical dashed crosshair lines */}
-            <line
-              x1={0}
-              y1={h / 2}
-              x2={w}
-              y2={h / 2}
-              stroke="rgba(255, 255, 255, 0.45)"
-              strokeWidth="1.2"
-              strokeDasharray="4 4"
-            />
-            <line
-              x1={w / 2}
-              y1={0}
-              x2={w / 2}
-              y2={h}
-              stroke="rgba(255, 255, 255, 0.45)"
-              strokeWidth="1.2"
-              strokeDasharray="4 4"
-            />
-          </>
-        )}
-
-        {/* Actual mask shape outline matching video canvas mask */}
-        {shape === "circle" && (
-          <ellipse
-            cx={w / 2}
-            cy={h / 2}
-            rx={Math.max(1, w / 2 - 1.5)}
-            ry={Math.max(1, h / 2 - 1.5)}
-            fill="rgba(0, 242, 254, 0.08)"
-            stroke="#00F2FE"
-            strokeWidth="2.5"
-          />
-        )}
-
-        {shape === "rectangle" && (
-          <rect
-            x={1.5}
-            y={1.5}
-            width={Math.max(2, w - 3)}
-            height={Math.max(2, h - 3)}
-            rx={Math.min(localMask.roundness ?? 16, Math.min(w, h) / 2)}
-            fill="rgba(0, 242, 254, 0.08)"
-            stroke="#00F2FE"
-            strokeWidth="2.5"
-          />
-        )}
-
-        {shape === "heart" && (
-          <g
-            transform={`translate(${w / 2}, ${h / 2}) scale(${w / 100}, ${h / 100})`}
-          >
-            <path
-              d="M 0,44 C -28,18 -50,0 -50,-20 A 25,25 0 0,1 0,-20 A 25,25 0 0,1 50,-20 C 50,0 28,18 0,44 Z"
-              fill="rgba(0, 242, 254, 0.08)"
-              stroke="#00F2FE"
-              strokeWidth="2.5"
-              vectorEffect="non-scaling-stroke"
-            />
-          </g>
-        )}
-
-        {shape === "star" &&
-          (() => {
-            const points: string[] = [];
-            for (let i = 0; i < 10; i++) {
-              const radiusFactor = i % 2 === 0 ? 0.5 : 0.21;
-              const a = (i * Math.PI) / 5 - Math.PI / 2;
-              points.push(
-                `${w / 2 + w * radiusFactor * Math.cos(a)},${h / 2 + h * radiusFactor * Math.sin(a)}`,
-              );
-            }
-            return (
-              <polygon
-                points={points.join(" ")}
-                fill="rgba(0, 242, 254, 0.08)"
-                stroke="#00F2FE"
-                strokeWidth="2.5"
-                vectorEffect="non-scaling-stroke"
-              />
-            );
-          })()}
-
-        {shape === "mirror" && (
-          <>
-            <line
-              x1={0}
-              y1={0}
-              x2={w}
-              y2={0}
-              stroke="#00F2FE"
-              strokeWidth="2.5"
-            />
-            <line
-              x1={0}
-              y1={h}
-              x2={w}
-              y2={h}
-              stroke="#00F2FE"
-              strokeWidth="2.5"
-            />
-            <rect
-              x={0}
-              y={0}
-              width={w}
-              height={h}
-              fill="rgba(0, 242, 254, 0.08)"
-            />
-          </>
-        )}
-
-        {shape === "linear" && (
-          <>
-            <line
-              x1={0}
-              y1={h / 2}
-              x2={w}
-              y2={h / 2}
-              stroke="#00F2FE"
-              strokeWidth="3"
-            />
-            <rect
-              x={0}
-              y={h / 2}
-              width={w}
-              height={h * 2}
-              fill="rgba(0, 242, 254, 0.08)"
-            />
-          </>
-        )}
-      </>
-    );
-  }, [maskBoxW, maskBoxH, localMask]);
-
-  const dragCleanupRef = useRef<(() => void) | null>(null);
-
-  // Pointer drag session handling
-  const startDrag = useCallback(
-    (
-      e: any,
-      mode: "move" | "rotate" | "scale" | "scale-w" | "scale-h" | "feather",
-    ) => {
-      if (e.stopPropagation) e.stopPropagation();
-      if (e.cancelable && e.preventDefault) e.preventDefault();
-
-      setActiveDrag(mode);
-      isDraggingRef.current = true;
-
-      const coords = getPointerCoords(e);
-      const startClientX = coords.clientX;
-      const startClientY = coords.clientY;
-
-      const startMaskX = localMask.x || 0;
-      const startMaskY = localMask.y || 0;
-      const startMaskRot = localMask.rotation || 0;
-      const startMaskW = Math.max(5, localMask.width ?? localMask.size ?? 60);
-      const startMaskH = Math.max(5, localMask.height ?? localMask.size ?? 60);
-      const startMaskSize = Math.max(5, localMask.size ?? 60);
-      const startMaskFeather = localMask.feather || 0;
-
-      // Accurately compute canvas screen bounding offset
-      let canvasRectLeft = 0;
-      let canvasRectTop = 0;
-      if (typeof window !== "undefined") {
-        const el =
-          canvasBoxRef?.current ||
-          containerRef.current ||
-          rendererRef?.current?.canvas;
-        if (el && typeof el.getBoundingClientRect === "function") {
-          const r = el.getBoundingClientRect();
-          canvasRectLeft = r.left;
-          canvasRectTop = r.top;
-        } else if (typeof document !== "undefined") {
-          const c = document.querySelector("canvas");
-          if (c) {
-            const r = c.getBoundingClientRect();
-            canvasRectLeft = r.left;
-            canvasRectTop = r.top;
-          }
-        }
-      }
-
-      // True absolute mask center in viewport client space
-      const absMaskCenterX = canvasRectLeft + maskCanvasCenterX;
-      const absMaskCenterY = canvasRectTop + maskCanvasCenterY;
-
-      // Distance and angle in absolute client space
-      const startDist = Math.max(
-        15,
-        Math.hypot(
-          startClientX - absMaskCenterX,
-          startClientY - absMaskCenterY,
-        ),
-      );
-      const startAngle = Math.atan2(
-        startClientY - absMaskCenterY,
-        startClientX - absMaskCenterX,
-      );
-
-      const totalRotRad = (totalMaskRotation * Math.PI) / 180;
-      const cosTR = Math.cos(totalRotRad);
-      const sinTR = Math.sin(totalRotRad);
-
-      // Stable base dimensions for deformation handles (starts at exact 1.0 factor)
-      const startDistX = Math.max(15, maskBoxW / 2);
-      const startDistY = Math.max(15, maskBoxH / 2);
-
-      let currentUpdatedMask = { ...localMask };
-      pendingMaskRef.current = currentUpdatedMask;
-
-      dragCleanupRef.current?.();
-
-      const onPointerMove = (moveEv: any) => {
-        if (moveEv.cancelable && moveEv.preventDefault) moveEv.preventDefault();
-        const moveCoords = getPointerCoords(moveEv);
-        const curClientX = moveCoords.clientX;
-        const curClientY = moveCoords.clientY;
-
-        if (mode === "move") {
-          const dxPx = curClientX - startClientX;
-          const dyPx = curClientY - startClientY;
-
-          // Inverse rotate delta by clip's rotation and scale
-          const unrotDx = (dxPx * cosA + dyPx * sinA) / clipScaleX;
-          const unrotDy = (-dxPx * sinA + dyPx * cosA) / clipScaleY;
-
-          // Sub-pixel floating point precision with 2 decimals - matches clip move exactly
-          const nextX = Number(
-            Math.max(
-              -100,
-              Math.min(100, startMaskX + (unrotDx / dw) * 100),
-            ).toFixed(2),
-          );
-          const nextY = Number(
-            Math.max(
-              -100,
-              Math.min(100, startMaskY + (unrotDy / dh) * 100),
-            ).toFixed(2),
-          );
-
-          currentUpdatedMask = {
-            ...currentUpdatedMask,
-            x: nextX,
-            y: nextY,
-          };
-        } else if (mode === "rotate") {
-          const curAngle = Math.atan2(
-            curClientY - absMaskCenterY,
-            curClientX - absMaskCenterX,
-          );
-          const angleDiffDeg = ((curAngle - startAngle) * 180) / Math.PI;
-          const rawRotation = (startMaskRot + angleDiffDeg) % 360;
-          const normalized = Math.round(((rawRotation % 360) + 360) % 360);
-          let snapped = normalized;
-          [0, 45, 90, 135, 180, 225, 270, 315, 360].forEach((snapAngle) => {
-            if (Math.abs(normalized - snapAngle) < 4) snapped = snapAngle % 360;
-          });
-          if (snapped > 180) snapped -= 360;
-          if (snapped < -180) snapped += 360;
-
-          currentUpdatedMask = {
-            ...currentUpdatedMask,
-            rotation: snapped,
-          };
-        } else if (mode === "scale") {
-          // Proportional diagonal corner resize identical to clip resize
-          const curDist = Math.hypot(
-            curClientX - absMaskCenterX,
-            curClientY - absMaskCenterY,
-          );
-          const scaleRatio = curDist / startDist;
-          const nextW = Number(
-            Math.max(5, Math.min(250, startMaskW * scaleRatio)).toFixed(2),
-          );
-          const nextH = Number(
-            Math.max(5, Math.min(250, startMaskH * scaleRatio)).toFixed(2),
-          );
-          const nextSize = Math.max(nextW, nextH);
-
-          currentUpdatedMask = {
-            ...currentUpdatedMask,
-            size: nextSize,
-            width: nextW,
-            height: nextH,
-          };
-        } else if (mode === "scale-w") {
-          // Width deformation handle (smooth, starts at exact 1.0 factor)
-          const curVecX = curClientX - absMaskCenterX;
-          const curVecY = curClientY - absMaskCenterY;
-          const curLocalDistX = Math.abs(curVecX * cosTR + curVecY * sinTR);
-          const scaleRatioX = curLocalDistX / startDistX;
-          const nextW = Number(
-            Math.max(5, Math.min(250, startMaskW * scaleRatioX)).toFixed(2),
-          );
-
-          currentUpdatedMask = {
-            ...currentUpdatedMask,
-            width: nextW,
-            size: Math.max(nextW, currentUpdatedMask.height ?? startMaskH),
-          };
-        } else if (mode === "scale-h") {
-          // Height deformation handle (smooth, starts at exact 1.0 factor)
-          const curVecX = curClientX - absMaskCenterX;
-          const curVecY = curClientY - absMaskCenterY;
-          const curLocalDistY = Math.abs(-curVecX * sinTR + curVecY * cosTR);
-          const scaleRatioY = curLocalDistY / startDistY;
-          const nextH = Number(
-            Math.max(5, Math.min(250, startMaskH * scaleRatioY)).toFixed(2),
-          );
-
-          currentUpdatedMask = {
-            ...currentUpdatedMask,
-            height: nextH,
-            size: Math.max(currentUpdatedMask.width ?? startMaskW, nextH),
-          };
-        } else if (mode === "feather") {
-          const dy = -(curClientY - startClientY);
-          const nextFeather = Math.round(
-            Math.max(0, Math.min(80, startMaskFeather + dy * 0.5)),
-          );
-
-          currentUpdatedMask = {
-            ...currentUpdatedMask,
-            feather: nextFeather,
-          };
-        }
-
-        pendingMaskRef.current = currentUpdatedMask;
-        scheduleMaskUpdateRef.current(currentUpdatedMask, false);
-      };
-
-      const onPointerUp = () => {
-        setActiveDrag(null);
-
-        const finalMask = pendingMaskRef.current;
-        dragCleanupRef.current?.();
-        dragCleanupRef.current = null;
-
-        scheduleMaskUpdateRef.current(finalMask, true);
-      };
-
-      const cleanup = () => {
-        if (
-          Platform.OS === "web" &&
-          typeof window !== "undefined" &&
-          typeof window.removeEventListener === "function"
-        ) {
-          window.removeEventListener("pointermove", onPointerMove);
-          window.removeEventListener("pointerup", onPointerUp);
-          window.removeEventListener("pointercancel", onPointerUp);
-          window.removeEventListener("touchmove", onPointerMove);
-          window.removeEventListener("touchend", onPointerUp);
-          window.removeEventListener("touchcancel", onPointerUp);
-          window.removeEventListener("mousemove", onPointerMove);
-          window.removeEventListener("mouseup", onPointerUp);
-        }
-      };
-      dragCleanupRef.current = cleanup;
-
-      if (
-        Platform.OS === "web" &&
-        typeof window !== "undefined" &&
-        typeof window.addEventListener === "function"
-      ) {
-        window.addEventListener("pointermove", onPointerMove, {
-          passive: false,
-        });
-        window.addEventListener("pointerup", onPointerUp);
-        window.addEventListener("pointercancel", onPointerUp);
-        window.addEventListener("touchmove", onPointerMove, { passive: false });
-        window.addEventListener("touchend", onPointerUp);
-        window.addEventListener("touchcancel", onPointerUp);
-        window.addEventListener("mousemove", onPointerMove);
-        window.addEventListener("mouseup", onPointerUp);
-      }
-    },
-    [
-      localMask,
-      maskCanvasCenterX,
-      maskCanvasCenterY,
-      clipScaleX,
-      clipScaleY,
-      cosA,
-      sinA,
-      dw,
-      dh,
-      targetClip.id,
-      totalMaskRotation,
-      maskBoxW,
-      maskBoxH,
-      canvasBoxRef,
-      rendererRef,
-    ],
-  );
 
   const localMaskRef = useRef<MaskConfig>(localMask);
   localMaskRef.current = localMask;
@@ -993,27 +572,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
   const nativeScaleHTop = useRef(makeSideHResponder(-1)).current;
   const nativeScaleHBottom = useRef(makeSideHResponder(1)).current;
 
-  let nativeFeatherStart = 0;
-  const nativeFeatherDrag = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
-        setActiveDrag("feather");
-        isDraggingRef.current = true;
-        nativeFeatherStart = localMaskRef.current.feather ?? 0;
-      },
-      onPanResponderMove: (_, gesture) => {
-        const feather = Math.round(Math.max(0, Math.min(80, nativeFeatherStart - gesture.dy * 0.5)));
-        scheduleMaskUpdateRef.current({ ...localMaskRef.current, feather }, false);
-      },
-      onPanResponderRelease: () => {
-        setActiveDrag(null);
-        scheduleMaskUpdateRef.current(localMaskRef.current, true);
-      },
-    }),
-  ).current;
+
 
 
 
@@ -1024,6 +583,8 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
   const isLinear = localMask.shape === "linear";
   const isMirror = localMask.shape === "mirror";
   const isLineShape = isLinear || isMirror;
+  const currentFeather = localMask.feather || 0;
+  const extent = Math.max(boxWidth, canvasHeight) * 2;
 
   return (
     <View
@@ -1070,38 +631,22 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
           ]}
           pointerEvents="none"
         >
-          {/* Mask Visuals: Parallel Linear (Mirror) Lines & Shaded Band */}
+          {/* Mask Visuals: Parallel Linear (Mirror) Lines */}
           {isMirror && (
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <View style={[styles.mirrorLine, { top: 0 }]} />
               <View style={[styles.mirrorLine, { bottom: 0 }]} />
-              <View style={styles.shapeFill} />
             </View>
           )}
 
-          {/* Mask Visuals: Single Linear (Split) Line & Shaded Half */}
+          {/* Mask Visuals: Single Linear (Split) Line */}
           {isLinear && (
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <View style={styles.linearSplitLine} />
-              <View style={styles.linearHalfFill} />
             </View>
           )}
 
-          {/* Outer dashed bounding box - ONLY for non-line shapes (circle, rect, heart, star) */}
-          {!isLineShape && (
-            <View style={styles.boundingDashedBox} pointerEvents="none" />
-          )}
-
-          {/* Center Crosshair Lines - ONLY for non-line shapes */}
-          {!isLineShape && (
-            <>
-              <View style={styles.crosshairH} pointerEvents="none" />
-              <View style={styles.crosshairV} pointerEvents="none" />
-              <View style={styles.crosshairCenterDot} pointerEvents="none" />
-            </>
-          )}
-
-          {/* Mask Shape Outlines for Circle & Rectangle */}
+          {/* Mask Shape Outline for Circle */}
           {localMask.shape === "circle" && (
             <View
               style={[
@@ -1116,6 +661,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
             />
           )}
 
+          {/* Mask Shape Outline for Rectangle */}
           {localMask.shape === "rectangle" && (
             <View
               style={[
@@ -1133,6 +679,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
             />
           )}
 
+          {/* Mask Shape Outlines for Heart & Star */}
           {(localMask.shape === "heart" || localMask.shape === "star") && (
             <View
               style={{
@@ -1146,51 +693,34 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
               }}
               pointerEvents="none"
             >
-              {Platform.OS === "web" ? (
-                <svg
-                  viewBox="0 0 100 100"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    overflow: "visible",
-                  }}
-                >
-                  {localMask.shape === "heart" ? (
-                    <path
-                      d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z"
-                      fill="rgba(0, 242, 254, 0.12)"
-                      stroke="#00F2FE"
-                      strokeWidth="2.5"
-                    />
-                  ) : (
-                    <polygon
-                      points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38"
-                      fill="rgba(0, 242, 254, 0.12)"
-                      stroke="#00F2FE"
-                      strokeWidth="2.5"
-                    />
-                  )}
-                </svg>
-              ) : (
-                <ExpoImage
-                  source={{
-                    uri: `data:image/svg+xml;base64,${Buffer.from(
-                      localMask.shape === "heart"
-                        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><path d="M 50 96 C 22 72 0 56 0 40 A 25 25 0 0 1 50 40 A 25 25 0 0 1 100 40 C 100 56 78 72 50 96 Z" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
-                        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${maskBoxW}" height="${maskBoxH}"><polygon points="50,2 63,38 100,38 69,60 82,98 50,75 18,98 31,60 0,38 37,38" fill="rgba(0, 242, 254, 0.12)" stroke="#00F2FE" stroke-width="2.5"/></svg>`
-                    ).toString("base64")}`,
-                  }}
-                  style={{
-                    width: maskBoxW,
-                    height: maskBoxH,
-                  }}
-                  contentFit="fill"
-                  cachePolicy="memory"
-                />
-              )}
+              <Svg
+                viewBox="-50 -50 100 100"
+                width={maskBoxW}
+                height={maskBoxH}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                }}
+              >
+                {localMask.shape === "heart" ? (
+                  <Path
+                    d="M 0,44 C -28,18 -50,0 -50,-20 A 25,25 0 0,1 0,-20 A 25,25 0 0,1 50,-20 C 50,0 28,18 0,44 Z"
+                    fill="none"
+                    stroke="#00F2FE"
+                    strokeWidth={2.5}
+                  />
+                ) : (
+                  <Polygon
+                    points="0,-50 12.34,-17.0 47.55,-15.45 19.97,6.49 29.39,40.45 0,21 -29.39,40.45 -19.97,6.49 -47.55,-15.45 -12.34,-17.0"
+                    fill="none"
+                    stroke="#00F2FE"
+                    strokeWidth={2.5}
+                  />
+                )}
+              </Svg>
             </View>
           )}
         </View>
@@ -1224,12 +754,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
             ]}
             collapsable={false}
             pointerEvents="auto"
-            {...(Platform.OS === "web"
-              ? ({
-                  onMouseDown: (e: any) => startDrag(e, "move"),
-                  onTouchStart: (e: any) => startDrag(e, "move"),
-                } as any)
-              : nativeMovePanResponder.panHandlers)}
+            {...nativeMovePanResponder.panHandlers}
           />
         )}
         {/* Touch drag strip for Linear Split Line */}
@@ -1237,12 +762,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
           <View
             style={styles.linearTouchStrip}
             collapsable={false}
-            {...(Platform.OS === "web"
-              ? ({
-                  onMouseDown: (e: any) => startDrag(e, "move"),
-                  onTouchStart: (e: any) => startDrag(e, "move"),
-                } as any)
-              : nativeMovePanResponder.panHandlers)}
+            {...nativeMovePanResponder.panHandlers}
           />
         )}
 
@@ -1251,12 +771,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
           <View
             style={styles.mirrorTouchStrip}
             collapsable={false}
-            {...(Platform.OS === "web"
-              ? ({
-                  onMouseDown: (e: any) => startDrag(e, "move"),
-                  onTouchStart: (e: any) => startDrag(e, "move"),
-                } as any)
-              : nativeMovePanResponder.panHandlers)}
+            {...nativeMovePanResponder.panHandlers}
           />
         )}
 
@@ -1266,12 +781,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
             style={styles.lineCenterMoveHandle}
             collapsable={false}
             hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-            {...(Platform.OS === "web"
-              ? ({
-                  onMouseDown: (e: any) => startDrag(e, "move"),
-                  onTouchStart: (e: any) => startDrag(e, "move"),
-                } as any)
-              : nativeMovePanResponder.panHandlers)}
+            {...nativeMovePanResponder.panHandlers}
           >
             <Ionicons name="move" size={13} color="#000000" />
           </View>
@@ -1283,12 +793,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
           style={styles.rotKnobTop}
           collapsable={false}
           hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          {...(Platform.OS === "web"
-            ? ({
-                onMouseDown: (e: any) => startDrag(e, "rotate"),
-                onTouchStart: (e: any) => startDrag(e, "rotate"),
-              } as any)
-            : nativeRotPanResponder.panHandlers)}
+          {...nativeRotPanResponder.panHandlers}
         >
           <Ionicons name="sync-outline" size={14} color="#000000" />
         </View>
@@ -1300,68 +805,38 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
               style={[styles.cornerDot, styles.dotTL]}
               collapsable={false}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale"),
-                    onTouchStart: (e: any) => startDrag(e, "scale"),
-                  } as any)
-                : nativeScaleCornerTL.panHandlers)}
+              {...nativeScaleCornerTL.panHandlers}
             />
             <View
               style={[styles.cornerDot, styles.dotTR]}
               collapsable={false}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale"),
-                    onTouchStart: (e: any) => startDrag(e, "scale"),
-                  } as any)
-                : nativeScaleCornerTR.panHandlers)}
+              {...nativeScaleCornerTR.panHandlers}
             />
             <View
               style={[styles.cornerDot, styles.dotBL]}
               collapsable={false}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale"),
-                    onTouchStart: (e: any) => startDrag(e, "scale"),
-                  } as any)
-                : nativeScaleCornerBL.panHandlers)}
+              {...nativeScaleCornerBL.panHandlers}
             />
             <View
               style={[styles.cornerDot, styles.dotBR]}
               collapsable={false}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale"),
-                    onTouchStart: (e: any) => startDrag(e, "scale"),
-                  } as any)
-                : nativeScaleCornerBR.panHandlers)}
+              {...nativeScaleCornerBR.panHandlers}
             />
 
             <View
               style={[styles.pillHandleV, styles.pillLeft]}
               collapsable={false}
               hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale-w"),
-                    onTouchStart: (e: any) => startDrag(e, "scale-w"),
-                  } as any)
-                : nativeScaleWLeft.panHandlers)}
+              {...nativeScaleWLeft.panHandlers}
             />
             <View
               style={[styles.pillHandleV, styles.pillRight]}
               collapsable={false}
               hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale-w"),
-                    onTouchStart: (e: any) => startDrag(e, "scale-w"),
-                  } as any)
-                : nativeScaleWRight.panHandlers)}
+              {...nativeScaleWRight.panHandlers}
             />
           </>
         )}
@@ -1373,28 +848,16 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
               style={[styles.pillHandleH, styles.pillTop]}
               collapsable={false}
               hitSlop={{ top: 16, bottom: 16, left: 14, right: 14 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale-h"),
-                    onTouchStart: (e: any) => startDrag(e, "scale-h"),
-                  } as any)
-                : nativeScaleHTop.panHandlers)}
+              {...nativeScaleHTop.panHandlers}
             />
             <View
               style={[styles.pillHandleH, styles.pillBottom]}
               collapsable={false}
               hitSlop={{ top: 16, bottom: 16, left: 14, right: 14 }}
-              {...(Platform.OS === "web"
-                ? ({
-                    onMouseDown: (e: any) => startDrag(e, "scale-h"),
-                    onTouchStart: (e: any) => startDrag(e, "scale-h"),
-                  } as any)
-                : nativeScaleHBottom.panHandlers)}
+              {...nativeScaleHBottom.panHandlers}
             />
           </>
         )}
-
-
       </View>
     </View>
   );
@@ -1404,26 +867,6 @@ export const PlayerMaskOverlay = React.memo(PlayerMaskOverlayComponent);
 export default PlayerMaskOverlay;
 
 const styles = StyleSheet.create({
-  featherHandleWrap: {
-    position: "absolute",
-    alignSelf: "center",
-    zIndex: 10003,
-  },
-  featherPill: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#141416",
-    borderWidth: 1.5,
-    borderColor: "#00F2FE",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 5,
-    elevation: 8,
-  },
   topHudContainer: {
     position: "absolute",
     top: 10,
@@ -1485,60 +928,22 @@ const styles = StyleSheet.create({
     transition: "none" as any,
     cursor: "move" as any,
   },
-  boundingDashedBox: {
-    ...StyleSheet.absoluteFill,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.75)",
-    borderStyle: "dashed",
-  },
-  crosshairH: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: "50%",
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.45)",
-    marginTop: -0.5,
-  },
-  crosshairV: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: "50%",
-    width: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.45)",
-    marginLeft: -0.5,
-  },
-  crosshairCenterDot: {
-    position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: THEME_COLORS.accent,
-    top: "50%",
-    left: "50%",
-    marginTop: -3,
-    marginLeft: -3,
-  },
   shapeCircle: {
     position: "absolute",
     borderWidth: 2,
     borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "transparent",
   },
   shapeRectangle: {
     position: "absolute",
     borderWidth: 2,
     borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "transparent",
   },
   canvasClipBounds: {
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
     borderRadius: 8,
-    ...(Platform.OS === "web"
-      ? ({ clipPath: "inset(0 round 8px)" } as any)
-      : {}),
   },
   lineCenterMoveHandle: {
     position: "absolute",
@@ -1591,10 +996,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  shapeFill: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-  },
   linearSplitLine: {
     position: "absolute",
     left: 0,
@@ -1608,14 +1009,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 4,
     elevation: 4,
-  },
-  linearHalfFill: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: "50%",
-    height: 1600,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
   },
   heartStarMobileBadge: {
     ...StyleSheet.absoluteFill,

@@ -14,7 +14,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { FastArtProject, CaptionClip } from "../../types/project";
 import {
   generateAutoCaptions,
-  WHISPER_API_KEY_STORAGE_KEY,
   CAPTION_STYLE_PRESETS,
   CaptionStylePreset,
 } from "../../services/aiCaptionEngine";
@@ -356,12 +355,42 @@ function AutoCaptionModalComponent({
   const [statusText, setStatusText] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Manual Paste SRT / API Key Modal state
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleCancelGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+    setStatusText("Generation canceled");
+  }, []);
+
+  const handleClose = useCallback(() => {
+    handleCancelGeneration();
+    onClose();
+  }, [handleCancelGeneration, onClose]);
+
+  // Abort in-flight AI caption generation if modal is closed or unmounted
+  useEffect(() => {
+    if (!visible) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsGenerating(false);
+    }
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [visible]);
+
+  // Manual Paste SRT Modal state
   const [showPasteSrtBox, setShowPasteSrtBox] = useState(false);
   const [pastedSrtText, setPastedSrtText] = useState("");
-  const [whisperApiKey, setWhisperApiKey] = useState(
-    () => getStorageItem(WHISPER_API_KEY_STORAGE_KEY) || "",
-  );
 
   // Live Highlight demo ticker for the Style tab preview
   const [previewTick, setPreviewTick] = useState(0);
@@ -436,6 +465,8 @@ function AutoCaptionModalComponent({
       .filter((l) => l.length > 0 && !/^\d+$/.test(l));
 
     if (lines.length > 0 && currentProject) {
+      abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
       try {
         setIsGenerating(true);
         setStatusText("Aligning dialogue script to audio cadence...");
@@ -446,7 +477,9 @@ function AutoCaptionModalComponent({
           lines,
           undefined,
           getActiveStyleOverrides(),
+          signal,
         );
+        if (signal.aborted) return;
         if (aligned && aligned.length > 0) {
           onAddCaptions(aligned);
           setPastedSrtText("");
@@ -456,6 +489,9 @@ function AutoCaptionModalComponent({
           return;
         }
       } catch (e: any) {
+        if (signal.aborted || e?.message?.includes("cancelled")) {
+          return;
+        }
         setErrorMessage(e?.message || "Failed to align dialogue.");
       } finally {
         setIsGenerating(false);
@@ -757,6 +793,9 @@ function AutoCaptionModalComponent({
     setProgressPct(10);
     setStatusText("Analyzing master timeline audio...");
 
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     let maxSeenPct = 10;
     try {
       const generated = await generateAutoCaptions(
@@ -765,12 +804,16 @@ function AutoCaptionModalComponent({
         selectedPresetId,
         undefined,
         (pct, status) => {
+          if (signal.aborted) return;
           maxSeenPct = Math.max(maxSeenPct, Math.min(99, Math.round(pct)));
           setProgressPct(maxSeenPct);
           if (status) setStatusText(status);
         },
         getActiveStyleOverrides(),
+        signal,
       );
+
+      if (signal.aborted) return;
 
       if (!generated || generated.length === 0) {
         throw new Error(
@@ -781,6 +824,10 @@ function AutoCaptionModalComponent({
       onAddCaptions(generated);
       setStatusText(`Generated ${generated.length} caption cues!`);
     } catch (err: any) {
+      if (signal.aborted || err?.message?.includes("cancelled")) {
+        setStatusText("Generation canceled");
+        return;
+      }
       console.error("FastArt: AutoCaption error", err);
       const msg = err?.message || "Failed to generate captions.";
       setStatusText(msg);
@@ -797,7 +844,7 @@ function AutoCaptionModalComponent({
         <ModalHeader
           title="Auto Captions"
           iconName="chatbox-ellipses-outline"
-          onClose={onClose}
+          onClose={handleClose}
           onReset={handleResetToDefaults}
           resetText="Reset"
         />
@@ -880,7 +927,7 @@ function AutoCaptionModalComponent({
       {activeTab === "captions" && (
         <FlatList
           style={styles.bodyScroll}
-          contentContainerStyle={{ paddingBottom: 28 }}
+          contentContainerStyle={{ paddingBottom: 56 }}
           showsVerticalScrollIndicator={false}
           data={existingCaptions}
           keyExtractor={(item) => item.id}
@@ -906,6 +953,13 @@ function AutoCaptionModalComponent({
                       </View>
                     </View>
                     <Text style={styles.pctText}>{progressPct}%</Text>
+                    <TouchableOpacity
+                      onPress={handleCancelGeneration}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ padding: 4 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                   </View>
                 ) : (
                   <View style={styles.actionCardContent}>
@@ -1755,24 +1809,6 @@ function AutoCaptionModalComponent({
           <View style={styles.dialogCard}>
             <Text style={styles.dialogTitle}>Import Subtitle / Script</Text>
 
-            {Platform.OS !== "web" && (
-              <View style={styles.cloudKeyCard}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Ionicons name="flash-outline" size={13} color={THEME_COLORS.accent} />
-                  <Text style={styles.cloudKeyTitle}>CLOUD ACCELERATION</Text>
-                </View>
-                <TextInput
-                  style={styles.keyInput}
-                  value={whisperApiKey}
-                  onChangeText={setWhisperApiKey}
-                  placeholder="Paste optional Groq or OpenAI Whisper key..."
-                  placeholderTextColor={THEME_COLORS.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-            )}
-
             <Text style={styles.dialogSubtitle}>
               Paste .SRT, WebVTT, or plain dialogue lines:
             </Text>
@@ -2572,7 +2608,7 @@ const styles = StyleSheet.create({
   styleScrollContent: {
     paddingHorizontal: 10,
     paddingTop: 8,
-    paddingBottom: 20,
+    paddingBottom: 56,
   },
   dockedFooter: {
     flexShrink: 0,
@@ -2637,31 +2673,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     marginBottom: 4,
-  },
-  cloudKeyCard: {
-    backgroundColor: "rgba(0,242,254,0.06)",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(0,242,254,0.18)",
-    padding: 8,
-    marginBottom: 8,
-    gap: 4,
-  },
-  cloudKeyTitle: {
-    color: THEME_COLORS.accent,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  keyInput: {
-    backgroundColor: THEME_COLORS.background,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
-    color: THEME_COLORS.textPrimary,
-    fontSize: 11,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    fontFamily: "monospace",
   },
   dialogSubtitle: {
     color: THEME_COLORS.textSecondary,

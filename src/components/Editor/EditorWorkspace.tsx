@@ -9,6 +9,7 @@ import {
   Animated,
   Easing,
   PanResponder,
+  StatusBar,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
@@ -857,6 +858,18 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 768;
 
+  // Measure actual root workspace height from Yoga layout to accurately exclude status bar & safe area insets
+  const [workspaceRealHeight, setWorkspaceRealHeight] = React.useState<number>(
+    () => windowHeight - (Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 0),
+  );
+
+  const handleWorkspaceLayout = React.useCallback((e: any) => {
+    const layout = e.nativeEvent?.layout;
+    if (layout && layout.height > 0) {
+      setWorkspaceRealHeight(Math.round(layout.height));
+    }
+  }, []);
+
   // Desktop: track which left-panel tab is open
   const [desktopTab, setDesktopTab] =
     React.useState<DesktopResourceTab>("media");
@@ -952,15 +965,16 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   });
 
   // Unified Root Draggable Bottom Container (Hosts either Tool Modal OR Timeline in the exact same space)
-  const minBottomHeight = 160;
+  const minBottomHeight = !isDesktop ? 180 : 100;
 
   const maxBottomHeight = React.useMemo(() => {
     // Guarantees at least 220px vertical clearance for Header + Player at all times
+    const effectiveTotalH = workspaceRealHeight > 0 ? workspaceRealHeight : windowHeight;
     return Math.min(
-      Math.round(windowHeight * 0.70),
-      Math.max(minBottomHeight, windowHeight - 220),
+      Math.round(effectiveTotalH * 0.70),
+      Math.max(minBottomHeight, effectiveTotalH - 220),
     );
-  }, [windowHeight, minBottomHeight]);
+  }, [workspaceRealHeight, windowHeight, minBottomHeight]);
 
   // Active height of the root draggable bottom container - Timeline & Modal share the exact same height and parent!
   const activeBottomHeight = React.useMemo(() => {
@@ -1475,9 +1489,10 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   // Player JSX shared between desktop and mobile
   const renderPlayer = () => {
     const isMobileLayout = !isDesktop;
-    const HEADER_HEIGHT = 54;
+    const HEADER_HEIGHT = isMobileLayout ? 52 : 54;
+    const effectiveTotalH = workspaceRealHeight > 0 ? workspaceRealHeight : windowHeight;
     const expectedContainerHeight = isMobileLayout
-      ? (isFullscreen ? windowHeight : Math.max(100, windowHeight - HEADER_HEIGHT - activeBottomHeight))
+      ? (isFullscreen ? effectiveTotalH : Math.max(100, effectiveTotalH - HEADER_HEIGHT - activeBottomHeight))
       : undefined;
     const expectedContainerWidth = isMobileLayout ? windowWidth : undefined;
 
@@ -2109,7 +2124,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   // 3. Root Bottom: Draggable Container (Modals OR Timeline directly at root!)
   // ─────────────────────────────────────────────
   return (
-    <View style={styles.editorContainer}>
+    <View style={styles.editorContainer} onLayout={handleWorkspaceLayout}>
       {/* 1. Root Top: Header Bar */}
       {!isFullscreen && (
         <Header

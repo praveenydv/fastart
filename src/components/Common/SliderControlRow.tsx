@@ -64,23 +64,63 @@ export function SliderControlRow({
     snapToStep(value, min, max, step),
   );
   const isDraggingRef = useRef<boolean>(false);
-  const lastEmittedValueRef = useRef<number>(value);
+  const latestValueRef = useRef<number>(value);
+  const lastCommittedValueRef = useRef<number>(value);
+  const lastEmitTimeRef = useRef<number>(0);
+  const lastDragEndTimeRef = useRef<number>(0);
+  const throttleTimerRef = useRef<any>(null);
 
-  // Sync internal slider value only when user is NOT dragging
+  // Clean up any pending throttle timer on unmount
   useEffect(() => {
-    if (!isDraggingRef.current) {
-      const snapped = snapToStep(value, min, max, step);
-      setLocalVal(snapped);
-      lastEmittedValueRef.current = snapped;
+    return () => {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Sync internal slider value only when user is NOT dragging & not from stale backlog
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    if (value === lastCommittedValueRef.current) return;
+
+    const timeSinceDragEnd = Date.now() - lastDragEndTimeRef.current;
+    if (timeSinceDragEnd < 600) {
+      return;
     }
+
+    const snapped = snapToStep(value, min, max, step);
+    setLocalVal(snapped);
+    latestValueRef.current = snapped;
+    lastCommittedValueRef.current = snapped;
   }, [value, min, max, step]);
 
   const handleChange = useCallback(
     (raw: number) => {
       const snapped = snapToStep(raw, min, max, step);
-      lastEmittedValueRef.current = snapped;
+      latestValueRef.current = snapped;
       setLocalVal(snapped);
-      onValueChange(snapped);
+
+      const now = Date.now();
+      const elapsed = now - lastEmitTimeRef.current;
+
+      if (elapsed >= 40) {
+        lastEmitTimeRef.current = now;
+        if (throttleTimerRef.current) {
+          clearTimeout(throttleTimerRef.current);
+          throttleTimerRef.current = null;
+        }
+        onValueChange(snapped);
+      } else if (!throttleTimerRef.current) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
+          lastEmitTimeRef.current = Date.now();
+          if (isDraggingRef.current) {
+            onValueChange(latestValueRef.current);
+          }
+        }, 40 - elapsed);
+      }
     },
     [min, max, step, onValueChange],
   );
@@ -88,11 +128,22 @@ export function SliderControlRow({
   const handleComplete = useCallback(
     (raw?: number) => {
       isDraggingRef.current = false;
+      lastDragEndTimeRef.current = Date.now();
+
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+
       const finalVal =
         typeof raw === "number" && !isNaN(raw)
           ? snapToStep(raw, min, max, step)
-          : lastEmittedValueRef.current;
-      lastEmittedValueRef.current = finalVal;
+          : latestValueRef.current;
+
+      latestValueRef.current = finalVal;
+      lastCommittedValueRef.current = finalVal;
+      lastEmitTimeRef.current = Date.now();
+
       setLocalVal(finalVal);
       onValueChange(finalVal);
       onValueChangeComplete?.(finalVal);
@@ -166,6 +217,12 @@ export function SliderControlRow({
               isDraggingRef.current = true;
             }}
             onChange={(e: any) => {
+              const raw = parseFloat(e.target.value);
+              if (!isNaN(raw)) {
+                handleChange(raw);
+              }
+            }}
+            onInput={(e: any) => {
               const raw = parseFloat(e.target.value);
               if (!isNaN(raw)) {
                 handleChange(raw);

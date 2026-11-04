@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -108,6 +108,8 @@ interface TimelineTracksViewProps {
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   isMobile?: boolean;
   trackRowHeight?: number;
+  isTimelineRecentlyScrolled?: () => boolean;
+  lastDragEndTimeRef?: React.MutableRefObject<number>;
 }
 
 const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
@@ -140,8 +142,12 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
   handleLeftTrimStart,
   handleRightTrimStart,
   onOpenEditModal,
+  isTimelineRecentlyScrolled,
+  lastDragEndTimeRef,
 }) => {
   const effectiveRowHeight = trackRowHeight || (isMobile ? TRACK_ROW_HEIGHT_MOBILE : TRACK_ROW_HEIGHT);
+  const clipTouchStartRef = useRef<{ id: string; x: number; y: number; time: number } | null>(null);
+  const clipTouchMovedRef = useRef<boolean>(false);
 
   const draggedClip = useMemo(() => {
     if (!dragState) return null;
@@ -496,16 +502,88 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                   <React.Fragment key={clip.id}>
                     {/* Draggable Clip Card across tracks & time */}
                     <Pressable
+                      {...(isMobile
+                        ? {
+                            delayLongPress: 380,
+                            onLongPress: (e: any) => {
+                              if (e?.stopPropagation) e.stopPropagation();
+                              if (isBeingDragged) return;
+                              if (clipTouchMovedRef.current) return;
+                              if (isTimelineRecentlyScrolled?.()) return;
+                              handleClipLongPress(
+                                clip.id,
+                                clip.type,
+                                clip.startTime,
+                                trackIdx,
+                                clip.duration,
+                              );
+                            },
+                            onTouchStart: (e: any) => {
+                              const touch = e.nativeEvent?.touches?.[0] || e.nativeEvent;
+                              if (touch) {
+                                clipTouchStartRef.current = {
+                                  id: clip.id,
+                                  x: touch.clientX ?? touch.pageX ?? 0,
+                                  y: touch.clientY ?? touch.pageY ?? 0,
+                                  time: Date.now(),
+                                };
+                                clipTouchMovedRef.current = false;
+                              }
+                              if (Platform.OS !== "web") {
+                                handleClipTouchStart(e, clip, trackIdx);
+                              }
+                            },
+                            onTouchMove: (e: any) => {
+                              const touch = e.nativeEvent?.touches?.[0] || e.nativeEvent;
+                              if (touch && clipTouchStartRef.current?.id === clip.id) {
+                                const curX = touch.clientX ?? touch.pageX ?? 0;
+                                const curY = touch.clientY ?? touch.pageY ?? 0;
+                                const dist = Math.hypot(
+                                  curX - clipTouchStartRef.current.x,
+                                  curY - clipTouchStartRef.current.y,
+                                );
+                                if (dist > 8) {
+                                  clipTouchMovedRef.current = true;
+                                }
+                              }
+                              if (Platform.OS !== "web") {
+                                handleClipTouchMove(e);
+                              }
+                            },
+                            onTouchEnd: (e: any) => {
+                              if (Platform.OS !== "web") {
+                                handleClipTouchEnd(e);
+                              }
+                              setTimeout(() => {
+                                if (clipTouchStartRef.current?.id === clip.id) {
+                                  clipTouchStartRef.current = null;
+                                  clipTouchMovedRef.current = false;
+                                }
+                              }, 120);
+                            },
+                            onTouchCancel: () => {
+                              if (Platform.OS !== "web") {
+                                handleClipTouchCancel();
+                              }
+                              clipTouchStartRef.current = null;
+                              clipTouchMovedRef.current = false;
+                            },
+                          }
+                        : {})}
                       onPress={(e: any) => {
                         if (e?.stopPropagation) e.stopPropagation();
                         if (isBeingDragged) return;
+                        if (isMobile && clipTouchMovedRef.current) return;
+                        if (Date.now() - (lastDragEndTimeRef?.current ?? 0) < 350) return;
+                        if (isMobile && isTimelineRecentlyScrolled?.()) return;
                         handleClipPress(clip.id, clip.type);
                       }}
-                      {...(Platform.OS === "web"
+                      {...(Platform.OS === "web" && !isMobile
                         ? {
                             className: "clip-draggable-container",
                             onMouseDown: (e: any) => {
-                              if (e?.stopPropagation) e.stopPropagation();
+                              if (e?.button !== 0) return;
+                              if (e?.nativeEvent?.pointerType === "touch" || e?.pointerType === "touch") return;
                               handleClipMouseDown(
                                 e,
                                 clip.id,
@@ -521,13 +599,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                               onOpenEditModal?.(clip.id, clip.type);
                             },
                           }
-                        : {
-                            onTouchStart: (e: any) =>
-                              handleClipTouchStart(e, clip, trackIdx),
-                            onTouchMove: (e: any) => handleClipTouchMove(e),
-                            onTouchEnd: (e: any) => handleClipTouchEnd(e),
-                            onTouchCancel: () => handleClipTouchCancel(),
-                          })}
+                        : {})}
                       style={[
                         {
                           position: "absolute",
@@ -646,7 +718,10 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                         {isSelected && (
                           <View
                             {...clipMovePanResponder.panHandlers}
-                            style={styles.clipMoveGripBox}
+                            style={[
+                              styles.clipMoveGripBox,
+                              width < 64 && { left: 8, right: 8 },
+                            ]}
                             hitSlop={{
                               top: 12,
                               bottom: 12,

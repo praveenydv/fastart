@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
@@ -28,74 +30,222 @@ interface EffectsModalProps {
   project?: any;
 }
 
-const getEffectFilterStyle = (type: string): any => {
-  if (Platform.OS !== 'web') return null;
-  switch (type) {
-    case 'glitch':
-      return { filter: 'contrast(1.3) hue-rotate(90deg)', animation: 'fastartGlitchSlice 0.8s infinite' };
-    case 'vhs':
-      return { filter: 'sepia(0.35) saturate(1.4) contrast(1.15)' };
-    case 'rgb_split':
-      return { filter: 'contrast(1.4) saturate(1.5)' };
-    case 'film_grain':
-      return { filter: 'sepia(0.4) contrast(1.2) brightness(0.9)' };
-    case 'old_film':
-      return { filter: 'grayscale(1) sepia(0.65) contrast(1.45)' };
-    case 'crt_tv':
-      return { filter: 'contrast(1.25) brightness(1.1)' };
-    case 'zoom_pulse':
-      return { animation: 'fastartZoomPulseAnim 1.4s ease-in-out infinite' };
-    case 'neon_edge':
-    case 'ai_cyberpunk':
-      return { filter: 'saturate(2.2) contrast(1.4)' };
-    case 'blur':
-    case 'blur_cinematic':
-    case 'gaussian_blur':
-      return { filter: 'blur(2.5px)' };
-    case 'motion_blur':
-      return { filter: 'blur(2px) contrast(1.15)' };
-    case 'radial_blur':
-      return { filter: 'blur(1.8px) contrast(1.2)' };
-    case 'mosaic_blur':
-      return { filter: 'contrast(1.35) brightness(0.95)' };
-    case 'flash':
-      return { filter: 'brightness(1.55) contrast(1.25)' };
-    case 'vignette':
-      return { filter: 'contrast(1.3) brightness(0.85)' };
-    case 'mirror':
-      return { transform: [{ scaleX: -1 }] };
-    case 'shake':
-      return { animation: 'fastartShakeAnim 0.7s infinite' };
-    case 'thermal':
-      return { filter: 'invert(1) hue-rotate(180deg) saturate(3)' };
-    case 'ai_matrix':
-      return { filter: 'hue-rotate(90deg) saturate(3.5) contrast(1.5) brightness(0.85)' };
-    case 'ai_manga':
-      return { filter: 'grayscale(0.85) contrast(1.8) brightness(1.1)' };
-    case 'ai_night_vision':
-      return { filter: 'sepia(1) hue-rotate(85deg) saturate(4) brightness(0.9)' };
-    case 'ai_cartoon':
-      return { filter: 'saturate(2.2) contrast(1.55)' };
-    case 'beauty_smooth':
-      return { filter: 'brightness(1.08) contrast(0.95) saturate(1.12)' };
-    case 'ai_aura':
-      return { filter: 'saturate(1.6) brightness(1.1)' };
-    case 'sun_flare':
-      return { filter: 'brightness(1.28) saturate(1.35)' };
-    case 'prism_leak':
-      return { filter: 'saturate(1.7) hue-rotate(45deg)' };
-    case 'cyberpunk_dual':
-      return { filter: 'contrast(1.35) saturate(1.85)' };
-    case 'fisheye':
-      return { transform: [{ scale: 1.15 }] };
-    case 'water_ripple':
-      return { filter: 'hue-rotate(15deg) contrast(1.15)' };
-    case 'kaleidoscope':
-      return { filter: 'contrast(1.3) saturate(1.4)' };
-    default:
-      return null;
+const EffectLivePreview = React.memo(
+  ({
+    item,
+    previewThumb,
+  }: {
+    item: any;
+    previewThumb: string;
+  }) => {
+    const anim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 1200,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    }, [anim]);
+
+    const isBlur =
+      item.type === 'blur' ||
+      item.type === 'blur_cinematic' ||
+      item.type === 'gaussian_blur' ||
+      item.type === 'motion_blur' ||
+      item.type === 'radial_blur' ||
+      item.type === 'tilt_shift';
+
+    // Motion animation style
+    const motionTransform = useMemo((): any => {
+      switch (item.type) {
+        case 'zoom_pulse':
+          return {
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [1.0, 1.18, 1.0],
+                }),
+              },
+            ],
+          };
+        case 'shake':
+          return {
+            transform: [
+              {
+                translateX: anim.interpolate({
+                  inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
+                  outputRange: [0, -2.5, 2.5, -1.5, 1.5, 0],
+                }),
+              },
+              {
+                translateY: anim.interpolate({
+                  inputRange: [0, 0.25, 0.5, 0.75, 1],
+                  outputRange: [0, 1.5, -1.5, 1, 0],
+                }),
+              },
+            ],
+          };
+        case 'glitch':
+        case 'rgb_split':
+          return {
+            transform: [
+              {
+                translateX: anim.interpolate({
+                  inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
+                  outputRange: [0, -2, 2, -1, 1, 0],
+                }),
+              },
+            ],
+          };
+        default:
+          return null;
+      }
+    }, [item.type, anim]);
+
+    // Color tint overlay for cross-platform color grading on mobile
+    const colorOverlayStyle = useMemo(() => {
+      switch (item.type) {
+        case 'vhs':
+        case 'film_grain':
+          return { backgroundColor: 'rgba(215, 140, 40, 0.22)' };
+        case 'old_film':
+          return { backgroundColor: 'rgba(160, 110, 40, 0.38)' };
+        case 'ai_matrix':
+          return { backgroundColor: 'rgba(0, 255, 70, 0.24)' };
+        case 'thermal':
+          return { backgroundColor: 'rgba(255, 50, 0, 0.28)' };
+        case 'ai_night_vision':
+          return { backgroundColor: 'rgba(10, 240, 50, 0.28)' };
+        case 'ai_cyberpunk':
+        case 'cyberpunk_dual':
+          return { backgroundColor: 'rgba(0, 242, 254, 0.22)' };
+        case 'rainbow_flow':
+          return { backgroundColor: 'rgba(236, 72, 153, 0.25)' };
+        case 'beauty_smooth':
+        case 'ai_manga':
+        case 'ai_cartoon':
+          return { backgroundColor: 'rgba(255, 220, 200, 0.18)' };
+        default:
+          return null;
+      }
+    }, [item.type]);
+
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {/* Animated thumbnail container */}
+        <Animated.View style={[StyleSheet.absoluteFill, motionTransform]}>
+          <ExpoImage
+            source={{ uri: previewThumb }}
+            style={styles.previewImg as any}
+            blurRadius={isBlur ? 5 : 0}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={120}
+          />
+        </Animated.View>
+
+        {/* Color grade overlay */}
+        {colorOverlayStyle && (
+          <View style={[StyleSheet.absoluteFill, colorOverlayStyle]} pointerEvents="none" />
+        )}
+
+        {/* Visual overlays */}
+        {item.type === 'vhs' && (
+          <View style={styles.recBadge}>
+            <Animated.View
+              style={[
+                styles.recDot,
+                {
+                  opacity: anim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [1, 0.15, 1],
+                  }),
+                },
+              ]}
+            />
+            <Text style={styles.recText}>REC</Text>
+          </View>
+        )}
+
+        {item.type === 'glitch' && (
+          <>
+            <View style={styles.glitchStripe1} />
+            <View style={styles.glitchStripe2} />
+          </>
+        )}
+
+        {item.type === 'flash' && (
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: '#FFFFFF',
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.7, 0.82, 0.94, 1],
+                  outputRange: [0, 0, 0.85, 0.15, 0],
+                }),
+              },
+            ]}
+            pointerEvents="none"
+          />
+        )}
+
+        {(item.type === 'neon_edge' || item.type === 'ai_cyberpunk') && (
+          <Animated.View
+            style={[
+              styles.neonBorder,
+              {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0.4, 1.0, 0.4],
+                }),
+              },
+            ]}
+          />
+        )}
+
+        {item.type === 'ai_matrix' && (
+          <View style={styles.matrixOverlay}>
+            <Text style={styles.matrixCodeText}>10101</Text>
+          </View>
+        )}
+
+        {item.type === 'crt_tv' && <View style={styles.crtScanlines} />}
+        {item.type === 'mirror' && <View style={styles.mirrorLine} />}
+        {item.type === 'vignette' && <View style={styles.vignetteShadow} />}
+        {item.type === 'kaleidoscope' && (
+          <>
+            <View style={styles.kaleidoscopeCrossH} />
+            <View style={styles.kaleidoscopeCrossV} />
+          </>
+        )}
+        {(item.type === 'prism_leak' || item.type === 'sun_flare') && (
+          <Animated.View
+            style={[
+              styles.lightLeakStripe,
+              {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0.35, 0.85, 0.35],
+                }),
+              },
+            ]}
+          />
+        )}
+      </View>
+    );
   }
-};
+);
+EffectLivePreview.displayName = 'EffectLivePreview';
 
 export default function EffectsModal({
   visible,
@@ -431,50 +581,7 @@ export default function EffectsModal({
                         </View>
                       ) : (
                         <>
-                          <ExpoImage
-                            source={{ uri: previewThumb }}
-                            style={[styles.previewImg, getEffectFilterStyle(item.type)]}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                            transition={120}
-                          />
-                          {/* Visual effect overlays */}
-                          {item.type === 'vhs' && (
-                            <View style={styles.recBadge}>
-                              <View style={[styles.recDot, Platform.OS === 'web' ? ({ animation: 'fastartRecBlink 1s infinite' } as any) : null]} />
-                              <Text style={styles.recText}>REC</Text>
-                            </View>
-                          )}
-                          {item.type === 'glitch' && (
-                            <>
-                              <View style={styles.glitchStripe1} />
-                              <View style={styles.glitchStripe2} />
-                            </>
-                          )}
-                          {item.type === 'ai_matrix' && (
-                            <View style={styles.matrixOverlay}>
-                              <Text style={styles.matrixCodeText}>10101</Text>
-                            </View>
-                          )}
-                          {item.type === 'thermal' && <View style={styles.thermalOverlay} />}
-                          {item.type === 'crt_tv' && <View style={styles.crtScanlines} />}
-                          {item.type === 'mirror' && <View style={styles.mirrorLine} />}
-                          {item.type === 'kaleidoscope' && (
-                            <>
-                              <View style={styles.kaleidoscopeCrossH} />
-                              <View style={styles.kaleidoscopeCrossV} />
-                            </>
-                          )}
-                          {(item.type === 'neon_edge' || item.type === 'ai_cyberpunk') && (
-                            <View style={[styles.neonBorder, Platform.OS === 'web' ? ({ animation: 'fastartNeonEdgePulse 1.4s ease-in-out infinite' } as any) : null]} />
-                          )}
-                          {item.type === 'vignette' && <View style={styles.vignetteShadow} />}
-                          {item.type === 'flash' && (
-                            <View style={[styles.centerGlow, Platform.OS === 'web' ? ({ animation: 'fastartStrobeFlash 1.2s infinite' } as any) : null]} />
-                          )}
-                          {(item.type === 'prism_leak' || item.type === 'sun_flare') && (
-                            <View style={styles.lightLeakStripe} />
-                          )}
+                          <EffectLivePreview item={item} previewThumb={previewThumb} />
                           <View style={styles.badgeTag}>
                             <Text style={styles.badgeTagText}>{item.category || 'FX'}</Text>
                           </View>
@@ -686,7 +793,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridContainer: {
-    paddingBottom: 8,
+    paddingBottom: 56,
   },
   grid: {
     flexDirection: 'row',

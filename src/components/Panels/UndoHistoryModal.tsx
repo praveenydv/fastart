@@ -264,6 +264,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 14,
+    paddingBottom: 56,
     gap: 6,
   },
   historyRow: {

@@ -257,6 +257,13 @@ function ToolbarComponent({
   const isVertical = orientation === "vertical";
   const hasAudio = selectedClip ? mediaHasAudioTrack(selectedClip) : false;
 
+  const horizontalScrollRef = React.useRef<any>(null);
+
+  // When selected clip changes (e.g. user goes back to root tools), reset scroll to start immediately
+  React.useEffect(() => {
+    horizontalScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [selectedClip?.id]);
+
   const clipCategoryLabel = React.useMemo(() => {
     if (!selectedClip) return "";
     switch (selectedClipType) {
@@ -584,6 +591,7 @@ function ToolbarComponent({
       )}
 
       <ScrollView
+        ref={horizontalScrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

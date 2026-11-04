@@ -218,8 +218,7 @@ function FiltersModalComponent({
                   onPress={() => handleSelectFilter(item.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.phoneFrame}>
-                    <View style={styles.phoneNotch} />
+                  <View style={styles.faceFrame}>
                     {isItemNormal ? (
                       <ExpoImage
                         source={{ uri: previewThumb }}
@@ -230,7 +229,7 @@ function FiltersModalComponent({
                       />
                     ) : (
                       <View style={styles.splitFilterBox}>
-                        {/* Left Half: Before (Actual Original) */}
+                        {/* Left Half: Before (Actual Original Face) */}
                         <View style={styles.splitLeftHalf}>
                           <ExpoImage
                             source={{ uri: previewThumb }}
@@ -240,11 +239,11 @@ function FiltersModalComponent({
                             transition={120}
                           />
                           <View style={styles.splitBadgeLeft}>
-                            <Text style={styles.splitBadgeText}>ACTUAL</Text>
+                            <Text style={styles.splitBadgeText}>ORIG</Text>
                           </View>
                         </View>
 
-                        {/* Right Half: After (Filtered) */}
+                        {/* Right Half: After (Filtered Face) */}
                         <View style={styles.splitRightHalf}>
                           <ExpoImage
                             source={{ uri: previewThumb }}
@@ -312,7 +311,7 @@ function FiltersModalComponent({
 export const FiltersModal = React.memo(FiltersModalComponent);
 export default FiltersModal;
 
-const styles = StyleSheet.create({
+const styles: any = StyleSheet.create({
   inlineWrapper: {
     flex: 1,
     width: '100%',
@@ -458,7 +457,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridContainer: {
-    paddingBottom: 44,
+    paddingBottom: 56,
   },
   sectionBlock: {
     marginBottom: 8,
@@ -497,27 +496,17 @@ const styles = StyleSheet.create({
     borderColor: '#00F2FE',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
   },
-  phoneFrame: {
-    height: 46,
+  faceFrame: {
+    height: 48,
     width: '100%',
     borderRadius: 6,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#242C3D',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: '#08090E',
-  },
-  phoneNotch: {
-    position: 'absolute',
-    top: 1.5,
-    width: 12,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: '#0F131D',
-    zIndex: 10,
-    alignSelf: 'center',
   },
   previewImage: {
     width: '100%',
@@ -573,17 +562,17 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   splitImgLeft: {
-    width: 55,
+    width: '200%',
     height: '100%',
     position: 'absolute',
     left: 0,
     top: 0,
   },
   splitImgRight: {
-    width: 55,
+    width: '200%',
     height: '100%',
     position: 'absolute',
-    right: 0,
+    left: '-100%',
     top: 0,
   },
   splitBadgeLeft: {

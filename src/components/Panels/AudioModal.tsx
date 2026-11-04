@@ -201,7 +201,11 @@ export default function AudioModal({
           />
         )}
 
-        <ScrollView style={styles.sheetBody} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.sheetBody}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Full-Width Import Action Button */}
           <TouchableOpacity
             style={styles.fullWidthUploadButton}
@@ -352,6 +356,9 @@ const styles = StyleSheet.create({
   sheetBody: {
     paddingHorizontal: 8,
     paddingVertical: 8,
+  },
+  scrollContent: {
+    paddingBottom: 56,
   },
   fullWidthUploadButton: {
     width: '100%',

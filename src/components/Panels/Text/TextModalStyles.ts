@@ -83,6 +83,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
+  scrollContent: {
+    paddingBottom: 56,
+  },
 
   // Input Box with mic & action buttons
   inputContainer: {

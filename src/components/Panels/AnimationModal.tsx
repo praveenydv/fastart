@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
@@ -68,49 +70,416 @@ export const ANIMATION_LOOP_PRESETS: AnimationPresetItem[] = [
 
 export const ANIMATION_COMBO_PRESETS = ANIMATION_LOOP_PRESETS;
 
-const getAnimPreviewStyle = (id: string, category: string): any => {
-  if (Platform.OS !== 'web') return null;
-  switch (id) {
-    case 'fade_in': return { animation: 'fastartFadeIn 1.5s ease-in-out infinite' };
-    case 'zoom_in': return { animation: 'fastartZoomIn 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite' };
-    case 'zoom_in_2': return { animation: 'fastartPopZoom 1.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite' };
-    case 'slide_right': return category === 'out'
-      ? { animation: 'fastartSlideRightOut 1.5s ease-in-out infinite' }
-      : { animation: 'fastartSlideRight 1.5s ease-in-out infinite' };
-    case 'slide_left': return category === 'out'
-      ? { animation: 'fastartSlideLeftOut 1.5s ease-in-out infinite' }
-      : { animation: 'fastartSlideLeft 1.5s ease-in-out infinite' };
-    case 'slide_up': return category === 'out'
-      ? { animation: 'fastartSlideUpOut 1.5s ease-in-out infinite' }
-      : { animation: 'fastartSlideUp 1.5s ease-in-out infinite' };
-    case 'slide_down': return category === 'out'
-      ? { animation: 'fastartSlideDownOut 1.5s ease-in-out infinite' }
-      : { animation: 'fastartSlideDown 1.5s ease-in-out infinite' };
-    case 'spin_in': return { animation: 'fastartSpinIn 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite' };
-    case 'bounce_in': return { animation: 'fastartBounceIn 1.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite' };
-    case 'wipe_right': return { animation: 'fastartWipeRight 1.5s ease-in-out infinite' };
-    case 'shake_in':
-    case 'shake_out': return { animation: 'fastartShakeIn 1.5s ease-in-out infinite' };
-    case 'blur_in': return { animation: 'fastartBlurIn 1.5s ease-in-out infinite' };
-    case 'fade_out': return { animation: 'fastartFadeOut 1.5s ease-in-out infinite' };
-    case 'zoom_out': return { animation: 'fastartZoomOut 1.5s ease-in-out infinite' };
-    case 'spin_out': return { animation: 'fastartSpinOut 1.6s ease-in-out infinite' };
-    case 'shrink_out': return { animation: 'fastartShrinkOut 1.5s ease-in-out infinite' };
-    case 'wipe_left': return { animation: 'fastartWipeRight 1.5s ease-in-out infinite' };
-    case 'dissolve': return { animation: 'fastartDissolve 1.5s ease-in-out infinite' };
-    case 'pulse': return { animation: 'fastartPulse 1.2s ease-in-out infinite' };
-    case 'bounce': return { animation: 'fastartBounceLoop 1.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite' };
-    case 'float': return { animation: 'fastartFloat 2s ease-in-out infinite' };
-    case 'wave': return { animation: 'fastartWave 1.4s ease-in-out infinite' };
-    case 'wobble': return { animation: 'fastartWobble 1.2s ease-in-out infinite' };
-    case 'pendulum': return { animation: 'fastartPendulum 1.4s ease-in-out infinite' };
-    case 'swing': return { animation: 'fastartSwing 1.4s ease-in-out infinite' };
-    case 'heartbeat': return { animation: 'fastartHeartbeat 1.2s ease-in-out infinite' };
-    case 'zoom_pulse': return { animation: 'fastartZoomPulse 1.4s ease-in-out infinite' };
-    case 'jitter': return { animation: 'fastartJitter 0.5s linear infinite' };
-    default: return null;
+const AnimationLivePreview = React.memo(
+  ({
+    id,
+    category,
+    icon,
+    previewThumb,
+  }: {
+    id: string;
+    category: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    previewThumb: string;
+  }) => {
+    const anim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      const isLoop = category === 'loop';
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: isLoop ? 1200 : 1500,
+            easing: isLoop ? Easing.linear : Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    }, [anim, category]);
+
+    const motionStyle = useMemo((): any => {
+      switch (id) {
+        case 'fade_in':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.5, 0.85, 1],
+              outputRange: [0.15, 1, 1, 0.15],
+            }),
+          };
+        case 'fade_out':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.5, 0.85, 1],
+              outputRange: [1, 0.15, 0.15, 1],
+            }),
+          };
+        case 'zoom_in':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.3, 0.85, 1],
+              outputRange: [0.2, 1, 1, 0.2],
+            }),
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [0.25, 1, 1, 0.25],
+                }),
+              },
+            ],
+          };
+        case 'zoom_in_2': // Pop zoom
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.2, 0.85, 1],
+              outputRange: [0, 1, 1, 0],
+            }),
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.4, 0.55, 0.85, 1],
+                  outputRange: [0.2, 1.25, 1.0, 1.0, 0.2],
+                }),
+              },
+            ],
+          };
+        case 'zoom_out':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.5, 0.85, 1],
+              outputRange: [1, 0.25, 0.25, 1],
+            }),
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.25, 0.25, 1],
+                }),
+              },
+            ],
+          };
+        case 'shrink_out':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.5, 0.85, 1],
+              outputRange: [1, 0.15, 0.15, 1],
+            }),
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.12, 0.12, 1],
+                }),
+              },
+            ],
+          };
+        case 'slide_right':
+          return category === 'out'
+            ? {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.15, 0.15, 1],
+                }),
+                transform: [
+                  {
+                    translateX: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [0, 18, 18, 0],
+                    }),
+                  },
+                ],
+              }
+            : {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.3, 0.85, 1],
+                  outputRange: [0.2, 1, 1, 0.2],
+                }),
+                transform: [
+                  {
+                    translateX: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [-18, 0, 0, -18],
+                    }),
+                  },
+                ],
+              };
+        case 'slide_left':
+          return category === 'out'
+            ? {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.15, 0.15, 1],
+                }),
+                transform: [
+                  {
+                    translateX: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [0, -18, -18, 0],
+                    }),
+                  },
+                ],
+              }
+            : {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.3, 0.85, 1],
+                  outputRange: [0.2, 1, 1, 0.2],
+                }),
+                transform: [
+                  {
+                    translateX: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [18, 0, 0, 18],
+                    }),
+                  },
+                ],
+              };
+        case 'slide_up':
+          return category === 'out'
+            ? {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.15, 0.15, 1],
+                }),
+                transform: [
+                  {
+                    translateY: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [0, -14, -14, 0],
+                    }),
+                  },
+                ],
+              }
+            : {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.3, 0.85, 1],
+                  outputRange: [0.2, 1, 1, 0.2],
+                }),
+                transform: [
+                  {
+                    translateY: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [14, 0, 0, 14],
+                    }),
+                  },
+                ],
+              };
+        case 'slide_down':
+          return category === 'out'
+            ? {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.15, 0.15, 1],
+                }),
+                transform: [
+                  {
+                    translateY: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [0, 14, 14, 0],
+                    }),
+                  },
+                ],
+              }
+            : {
+                opacity: anim.interpolate({
+                  inputRange: [0, 0.3, 0.85, 1],
+                  outputRange: [0.2, 1, 1, 0.2],
+                }),
+                transform: [
+                  {
+                    translateY: anim.interpolate({
+                      inputRange: [0, 0.5, 0.85, 1],
+                      outputRange: [-14, 0, 0, -14],
+                    }),
+                  },
+                ],
+              };
+        case 'spin_in':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.3, 0.85, 1],
+              outputRange: [0.2, 1, 1, 0.2],
+            }),
+            transform: [
+              {
+                rotate: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: ['-180deg', '0deg', '0deg', '-180deg'],
+                }),
+              },
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [0.25, 1, 1, 0.25],
+                }),
+              },
+            ],
+          };
+        case 'spin_out':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.5, 0.85, 1],
+              outputRange: [1, 0.15, 0.15, 1],
+            }),
+            transform: [
+              {
+                rotate: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: ['0deg', '180deg', '180deg', '0deg'],
+                }),
+              },
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 0.85, 1],
+                  outputRange: [1, 0.25, 0.25, 1],
+                }),
+              },
+            ],
+          };
+        case 'bounce_in':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.15, 0.85, 1],
+              outputRange: [0, 1, 1, 0],
+            }),
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.35, 0.55, 0.7, 0.85, 1],
+                  outputRange: [0.25, 1.2, 0.92, 1.0, 1.0, 0.25],
+                }),
+              },
+            ],
+          };
+        case 'bounce':
+          return {
+            transform: [
+              {
+                translateY: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0, -6, 0],
+                }),
+              },
+            ],
+          };
+        case 'float':
+          return {
+            transform: [
+              {
+                translateY: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0, -4, 0],
+                }),
+              },
+            ],
+          };
+        case 'pulse':
+        case 'zoom_pulse':
+          return {
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [1, 1.22, 1],
+                }),
+              },
+            ],
+          };
+        case 'heartbeat':
+          return {
+            transform: [
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 0.14, 0.28, 0.42, 0.7, 1],
+                  outputRange: [1, 1.24, 1, 1.16, 1, 1],
+                }),
+              },
+            ],
+          };
+        case 'wave':
+          return {
+            transform: [
+              {
+                rotate: anim.interpolate({
+                  inputRange: [0, 0.25, 0.75, 1],
+                  outputRange: ['0deg', '-12deg', '12deg', '0deg'],
+                }),
+              },
+            ],
+          };
+        case 'wobble':
+          return {
+            transform: [
+              {
+                translateX: anim.interpolate({
+                  inputRange: [0, 0.25, 0.75, 1],
+                  outputRange: [0, -3, 3, 0],
+                }),
+              },
+              {
+                rotate: anim.interpolate({
+                  inputRange: [0, 0.25, 0.75, 1],
+                  outputRange: ['0deg', '-5deg', '5deg', '0deg'],
+                }),
+              },
+            ],
+          };
+        case 'pendulum':
+        case 'swing':
+          return {
+            transform: [
+              {
+                rotate: anim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: ['-14deg', '14deg', '-14deg'],
+                }),
+              },
+            ],
+          };
+        case 'shake_in':
+        case 'shake_out':
+        case 'jitter':
+          return {
+            transform: [
+              {
+                translateX: anim.interpolate({
+                  inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
+                  outputRange: [0, -3, 3, -2, 2, 0],
+                }),
+              },
+            ],
+          };
+        case 'blur_in':
+        case 'dissolve':
+          return {
+            opacity: anim.interpolate({
+              inputRange: [0, 0.5, 0.85, 1],
+              outputRange: [0.2, 1, 1, 0.2],
+            }),
+          };
+        default:
+          return null;
+      }
+    }, [id, category, anim]);
+
+    return (
+      <Animated.View style={[styles.animSubjectBox, motionStyle]}>
+        <ExpoImage
+          source={{ uri: previewThumb }}
+          style={styles.animSubjectImg as any}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+        />
+        <View style={styles.animSubjectOverlay} />
+        <Ionicons name={icon} size={13} color="#FFFFFF" style={styles.animSubjectIcon} />
+      </Animated.View>
+    );
   }
-};
+);
+AnimationLivePreview.displayName = 'AnimationLivePreview';
 
 export interface AnimationModalProps {
   visible: boolean;
@@ -448,17 +817,12 @@ export default function AnimationModal({
                 ) : (
                   <>
                     {/* Animated Preview Subject executing live motion */}
-                    <View style={[styles.animSubjectBox, getAnimPreviewStyle(item.id, activeCategory)]}>
-                      <ExpoImage
-                        source={{ uri: previewThumb }}
-                        style={styles.animSubjectImg}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={120}
-                      />
-                      <View style={styles.animSubjectOverlay} />
-                      <Ionicons name={item.icon} size={13} color="#FFFFFF" style={styles.animSubjectIcon} />
-                    </View>
+                    <AnimationLivePreview
+                      id={item.id}
+                      category={activeCategory}
+                      icon={item.icon}
+                      previewThumb={previewThumb}
+                    />
 
                     {/* Motion icon badge */}
                     <View style={styles.motionBadge}>
@@ -654,7 +1018,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    paddingBottom: 44,
+    paddingBottom: 56,
   },
   presetCard: {
     width: '23.8%',

@@ -243,7 +243,11 @@ export default function AutoCutModal({
         />
       )}
 
-          <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.contentScroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Step 1: Template Selection */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>1. Choose Reel Style Template</Text>

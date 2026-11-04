@@ -20,4 +20,16 @@ if (Array.isArray(config.resolver.blockList)) {
   config.resolver.blockList = nativeBuildExclusions;
 }
 
+// Enable Cross-Origin Isolation for high-speed multi-threaded WebAssembly & WebGPU
+config.server = {
+  ...config.server,
+  enhanceMiddleware: (middleware) => {
+    return (req, res, next) => {
+      res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+      res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+      return middleware(req, res, next);
+    };
+  },
+};
+
 module.exports = config;

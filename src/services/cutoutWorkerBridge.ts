@@ -96,24 +96,52 @@ class CutoutWorkerBridge {
       async function initializeOnnxRuntime() {
         if (typeof importScripts !== 'function') return false;
         try {
-          const useWebGpu = !!navigator.gpu;
-          importScripts(new URL(useWebGpu ? '/onnxruntime/ort.webgpu.min.js' : '/onnxruntime/ort.wasm.min.js', assetOrigin).toString());
+          let useWebGpu = false;
+          if (typeof navigator !== 'undefined' && navigator.gpu) {
+            try {
+              const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+              if (adapter) useWebGpu = true;
+            } catch {}
+          }
+          const scriptName = useWebGpu ? '/onnxruntime/ort.webgpu.min.js' : '/onnxruntime/ort.wasm.min.js';
+          importScripts(new URL(scriptName, assetOrigin).toString());
           self.ort.env.logLevel = 'error';
           self.ort.env.wasm.wasmPaths = new URL('/onnxruntime/', assetOrigin).toString();
-          // The bridge already creates a bounded worker pool. Keep each CPU
-          // session single-threaded to avoid multiplying the thread count and
-          // oversubscribing mobile/laptop CPUs. WebGPU sessions do not use it.
-          self.ort.env.wasm.numThreads = 1;
-          const modelResponse = await fetch(new URL('/models/modnet.onnx', assetOrigin));
-          if (!modelResponse.ok) throw new Error('MODNet model request failed (' + modelResponse.status + ')');
-          const providers = useWebGpu ? ['webgpu', 'wasm'] : ['wasm'];
-          ortSession = await self.ort.InferenceSession.create(new Uint8Array(await modelResponse.arrayBuffer()), {
+          self.ort.env.wasm.proxy = false;
+          if (self.crossOriginIsolated) {
+            const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
+            self.ort.env.wasm.numThreads = Math.min(4, Math.max(2, Math.floor(cores / 2)));
+          } else {
+            self.ort.env.wasm.numThreads = 1;
+          }
+          let isSelfieModel = false;
+          let modelResponse = await fetch(new URL('/models/selfie_segmentation.onnx', assetOrigin)).catch(() => null);
+          if (!modelResponse || !modelResponse.ok) {
+            modelResponse = await fetch(new URL('/models/modnet.onnx', assetOrigin));
+          } else {
+            isSelfieModel = true;
+          }
+          if (!modelResponse.ok) throw new Error('AI Cutout model request failed (' + modelResponse.status + ')');
+          const modelBytes = new Uint8Array(await modelResponse.arrayBuffer());
+          const providers = useWebGpu ? [
+            {
+              name: 'webgpu',
+              deviceType: 'gpu',
+              powerPreference: 'high-performance'
+            },
+            'wasm'
+          ] : ['wasm'];
+          ortSession = await self.ort.InferenceSession.create(modelBytes, {
             executionProviders: providers,
             graphOptimizationLevel: 'all'
           });
           backend = useWebGpu ? 'webgpu' : 'wasm';
+          if (ortSession.inputNames[0] === 'pixel_values' || modelBytes.length < 1000000) {
+            isSelfieModel = true;
+          }
+          self.isSelfieModel = isSelfieModel;
           ready = true;
-          console.info('[CutoutWorker] ONNX Runtime ready:', backend);
+          console.info('[CutoutWorker] ONNX Runtime ready:', backend, isSelfieModel ? '(256x256 MediaPipe Ultra-Fast)' : '(512x512 MODNet)');
           return true;
         } catch (error) {
           console.warn('[CutoutWorker] ONNX Runtime unavailable; using Rust/WASM:', String(error));
@@ -139,7 +167,7 @@ class CutoutWorkerBridge {
       self.onmessage = async ({data}) => {
         const {id, type, floatData, rgbaData, threshold, feather, includeRawAlpha} = data;
         try {
-          if (type === 'init') { const success = await initialize(); self.postMessage({id, success, rawAlpha: success ? new Float32Array(0) : null}); return; }
+          if (type === 'init') { const success = await initialize(); self.postMessage({id, success, backend, rawAlpha: success ? new Float32Array(0) : null}); return; }
           if (type === 'infer-frame') {
             if (!rgbaData || rgbaData.length !== RGBA_BYTES) throw new Error('Invalid MODNet RGBA frame');
             if (!await initialize() || !cutoutWasm) throw new Error('Rust cutout worker is unavailable');
@@ -153,12 +181,60 @@ class CutoutWorkerBridge {
               let rawAlpha;
               if (backend === 'webgpu' || backend === 'wasm') {
                 try {
-                  const inputData = new Float32Array(cutoutWasm.memory.buffer, tensorPtr, INPUT);
-                  const input = new self.ort.Tensor('float32', inputData, [1, 3, 512, 512]);
-                  const result = await ortSession.run({ [ortSession.inputNames[0]]: input });
-                  const output = result[ortSession.outputNames[0]];
-                  if (!output || output.type !== 'float32' || output.data.length < OUTPUT) throw new Error('Invalid ONNX MODNet alpha output');
-                  new Float32Array(cutoutWasm.memory.buffer, alphaPtr, OUTPUT).set(output.data.subarray(0, OUTPUT));
+                  if (self.isSelfieModel) {
+                    if (!self.selfieTensor) self.selfieTensor = new Float32Array(3 * 256 * 256);
+                    const tensor = self.selfieTensor;
+                    for (let y = 0; y < 256; y++) {
+                      const srcRow = (y * 2) * 512 * 4;
+                      const srcRowNext = srcRow + 512 * 4;
+                      const dstRow = y * 256;
+                      for (let x = 0; x < 256; x++) {
+                        const s00 = srcRow + (x * 2) * 4;
+                        const s10 = s00 + 4;
+                        const s01 = srcRowNext + (x * 2) * 4;
+                        const s11 = s01 + 4;
+                        const dIdx = dstRow + x;
+                        tensor[dIdx] = (rgbaData[s00] + rgbaData[s10] + rgbaData[s01] + rgbaData[s11]) * 0.000980392;
+                        tensor[65536 + dIdx] = (rgbaData[s00 + 1] + rgbaData[s10 + 1] + rgbaData[s01 + 1] + rgbaData[s11 + 1]) * 0.000980392;
+                        tensor[131072 + dIdx] = (rgbaData[s00 + 2] + rgbaData[s10 + 2] + rgbaData[s01 + 2] + rgbaData[s11 + 2]) * 0.000980392;
+                      }
+                    }
+                    const input = new self.ort.Tensor('float32', tensor, [1, 3, 256, 256]);
+                    const result = await ortSession.run({ [ortSession.inputNames[0]]: input });
+                    const output = result[ortSession.outputNames[0]];
+                    const outData = output.data;
+                    const alphaView = new Float32Array(cutoutWasm.memory.buffer, alphaPtr, OUTPUT);
+                    // Smooth bilinear upsampling from 256x256 to 512x512 removes all staircase/pixel blocks
+                    for (let y = 0; y < 512; y++) {
+                      const sy = y * 0.498046875;
+                      const y0 = Math.floor(sy);
+                      const y1 = Math.min(255, y0 + 1);
+                      const fy = sy - y0;
+                      const r0 = y0 * 256;
+                      const r1 = y1 * 256;
+                      const dstRow = y * 512;
+                      for (let x = 0; x < 512; x++) {
+                        const sx = x * 0.498046875;
+                        const x0 = Math.floor(sx);
+                        const x1 = Math.min(255, x0 + 1);
+                        const fx = sx - x0;
+                        const v00 = outData[r0 + x0];
+                        const v10 = outData[r0 + x1];
+                        const v01 = outData[r1 + x0];
+                        const v11 = outData[r1 + x1];
+                        const top = v00 + fx * (v10 - v00);
+                        const btm = v01 + fx * (v11 - v01);
+                        alphaView[dstRow + x] = top + fy * (btm - top);
+                      }
+                    }
+                  } else {
+                    const inputData = new Float32Array(cutoutWasm.memory.buffer, tensorPtr, INPUT);
+                    const input = new self.ort.Tensor('float32', inputData, [1, 3, 512, 512]);
+                    const result = await ortSession.run({ [ortSession.inputNames[0]]: input });
+                    const output = result[ortSession.outputNames[0]];
+                    if (!output || output.type !== 'float32' || output.data.length < OUTPUT) throw new Error('Invalid ONNX MODNet alpha output');
+                    new Float32Array(cutoutWasm.memory.buffer, alphaPtr, OUTPUT).set(output.data.subarray(0, OUTPUT));
+                  }
                 } catch (error) {
                   console.warn('[CutoutWorker] ONNX Runtime inference failed; falling back to Rust/WASM:', String(error));
                   try { await ortSession.release(); } catch {}
@@ -231,6 +307,9 @@ class CutoutWorkerBridge {
     URL.revokeObjectURL(url);
     const slot: CutoutWorkerSlot = { worker, active: 0 };
     worker.onmessage = ({data}) => {
+      if (data.backend) {
+        console.log(`[CutoutWorkerBridge] Worker ready with ${data.backend.toUpperCase()} acceleration`);
+      }
       const pending = this.pending.get(data.id);
       if (!pending) return;
       clearTimeout(pending.timer);

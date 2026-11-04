@@ -79,7 +79,7 @@ export const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 8,
     paddingVertical: 6,
-    paddingBottom: 12,
+    paddingBottom: 56,
   },
   // Active Studio
   activeStudio: {

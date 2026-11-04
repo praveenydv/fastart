@@ -76,13 +76,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   onReset,
 }) => {
   const enabled = config?.enabled ?? false;
-  // Reset can clear the generated matte while preserving Auto as the selected
-  // mode. A disabled chroma config still represents the explicit None choice.
-  const cutoutMode: CutoutMode = enabled
-    ? (config?.mode ?? "chroma")
-    : config?.mode === "auto"
-      ? "auto"
-      : "none";
+  const cutoutMode: CutoutMode = enabled ? (config?.mode ?? "auto") : "none";
   const keyColor = config?.keyColor ?? "#00FF00";
   const intensity = config?.intensity ?? 45;
   const shadow = config?.shadow ?? 25;
@@ -108,7 +102,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
       onChange({
         ...config,
         enabled: false,
-        mode: "chroma",
+        mode: config?.mode || "auto",
       });
     } else {
       onChange({
@@ -363,23 +357,67 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
               {/* Main Action Controls */}
               {!isProcessingFrames && (
                 <View style={sc.actionsContainer}>
-                  <View style={{ gap: 8 }}>
-                    {isVideoClip && onProcessVideo && (
+                  {/* Status Banner when already processed */}
+                  {isAlreadyProcessed && (
+                    <View style={sc.processedSuccessCard}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                        <Ionicons name="checkmark-circle" size={15} color="#10B981" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={sc.processedSuccessTitle}>
+                            {isVideoClip ? "Background Removed (100%)" : "AI Background Removed"}
+                          </Text>
+                          {isVideoClip && processedCount > 0 && (
+                            <Text style={sc.processedSuccessSubtext}>
+                              {processedCount} frames baked • Locked 60 FPS
+                            </Text>
+                          )}
+                        </View>
+                      </View>
                       <TouchableOpacity
-                        onPress={onProcessVideo}
-                        style={sc.heroBtn}
+                        onPress={isVideoClip ? onProcessVideo : (onProcessVideo || onPreviewFrame)}
+                        style={sc.reprocessChipBtn}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="refresh" size={11} color="#00F2FE" />
+                        <Text style={sc.reprocessChipText}>Reprocess</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <View style={{ gap: 8 }}>
+                    {(!isAlreadyProcessed || isVideoClip) && (
+                      <TouchableOpacity
+                        onPress={isVideoClip ? onProcessVideo : (onProcessVideo || onPreviewFrame)}
+                        style={[
+                          sc.heroBtn,
+                          isAlreadyProcessed && sc.heroBtnSecondary,
+                        ]}
                         activeOpacity={0.8}
                         disabled={isProcessingActiveFrame}
                       >
-                        <Ionicons name={isAlreadyProcessed ? "refresh" : "sparkles"} size={14} color="#08090E" />
-                        <Text style={sc.heroBtnText}>
-                          {isAlreadyProcessed ? "Reprocess Video" : "Remove Background"}
+                        {isProcessingActiveFrame ? (
+                          <ActivityIndicator size="small" color={isAlreadyProcessed ? "#00F2FE" : "#08090E"} />
+                        ) : (
+                          <Ionicons
+                            name={isAlreadyProcessed ? "refresh" : "sparkles"}
+                            size={14}
+                            color={isAlreadyProcessed ? "#00F2FE" : "#08090E"}
+                          />
+                        )}
+                        <Text style={[sc.heroBtnText, isAlreadyProcessed && sc.heroBtnSecondaryText]}>
+                          {isProcessingActiveFrame
+                            ? "Processing Frame..."
+                            : isAlreadyProcessed
+                            ? "Reprocess Video"
+                            : isVideoClip
+                            ? "Remove Background"
+                            : "Remove Photo Background"}
                         </Text>
                       </TouchableOpacity>
                     )}
 
                     <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                      {onPreviewFrame && (
+                      {isVideoClip && onPreviewFrame && (
                         <TouchableOpacity
                           onPress={onPreviewFrame}
                           style={[sc.secondaryActionBtn, { flex: 1.2 }]}
@@ -905,6 +943,44 @@ const sc = StyleSheet.create({
   actionsContainer: {
     gap: 6,
   },
+  processedSuccessCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.3)",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  processedSuccessTitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#10B981",
+  },
+  processedSuccessSubtext: {
+    fontSize: 8.5,
+    color: "#6EE7B7",
+    marginTop: 1,
+  },
+  reprocessChipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.25)",
+  },
+  reprocessChipText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#00F2FE",
+  },
   heroBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -918,6 +994,14 @@ const sc = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#08090E",
+  },
+  heroBtnSecondary: {
+    backgroundColor: "#131826",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.35)",
+  },
+  heroBtnSecondaryText: {
+    color: "#00F2FE",
   },
   secondaryActionBtn: {
     flexDirection: "row",

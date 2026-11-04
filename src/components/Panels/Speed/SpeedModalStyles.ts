@@ -117,6 +117,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
   },
+  scrollContent: {
+    paddingBottom: 56,
+  },
   speedDisplay: {
     color: '#FFFFFF',
     fontSize: 16,

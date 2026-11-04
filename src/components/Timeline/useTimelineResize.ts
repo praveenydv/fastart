@@ -21,12 +21,15 @@ export function useTimelineResize({
 
   // Min and max limits
   // On mobile: comfortable range guaranteeing ample player preview room
-  const minTimelineHeight = isMobile ? 160 : 74;
+  const minTimelineHeight = isMobile ? 180 : 100;
   const maxTimelineHeight = isMobile
     ? Math.min(Math.round(screenHeight * 0.70), Math.max(minTimelineHeight, screenHeight - 220))
-    : Math.min(550, Math.max(280, Math.round(screenHeight * 0.55)));
+    : Math.min(600, Math.max(320, Math.round(screenHeight * 0.60)));
 
-  const defaultHeight = isMobile ? 180 : 220;
+  // Generous, modern CapCut-style default height: ~45% of screen on mobile (~320-420px), spacious on desktop
+  const defaultHeight = isMobile
+    ? Math.max(320, Math.min(Math.round(screenHeight * 0.45), screenHeight - 240))
+    : Math.max(260, Math.min(Math.round(screenHeight * 0.35), 450));
 
   const [userTimelineHeight, setUserTimelineHeight] = useState<number | null>(
     () => {
@@ -39,9 +42,10 @@ export function useTimelineResize({
           const saved = window.localStorage.getItem(storageKey);
           if (saved) {
             const parsed = parseFloat(saved);
+            // Ignore legacy cramped default (<= 220px on mobile) so user automatically gets the spacious default layout
             if (
               !isNaN(parsed) &&
-              parsed >= minTimelineHeight &&
+              parsed >= (isMobile ? 240 : minTimelineHeight) &&
               parsed <= maxTimelineHeight
             ) {
               return parsed;
@@ -61,8 +65,8 @@ export function useTimelineResize({
     const trackH = isMobile ? TRACK_ROW_HEIGHT_MOBILE : TRACK_ROW_HEIGHT;
     const contentH =
       10 + 30 + 26 + Math.max(1, activeTrackCount) * trackH + 2;
-    const maxH = Math.max(280, Math.min(450, Math.round(screenHeight * 0.45)));
-    return Math.max(200, Math.min(maxH, contentH));
+    const maxH = Math.max(280, Math.min(500, Math.round(screenHeight * 0.50)));
+    return Math.max(defaultHeight, Math.min(maxH, contentH));
   }, [activeTrackCount, isMobile, screenHeight, defaultHeight]);
 
   const timelineHeight = useMemo(() => {

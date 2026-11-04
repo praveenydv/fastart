@@ -73,6 +73,8 @@ function rustProjectHasAudioMedia(project: FastArtProject): boolean {
 
 let internalMaskCanvas: HTMLCanvasElement | null = null;
 let internalMaskCtx: CanvasRenderingContext2D | null = null;
+let internalStrokeCanvas: HTMLCanvasElement | null = null;
+let internalStrokeCtx: CanvasRenderingContext2D | null = null;
 
 interface WasmExports {
   memory: WebAssembly.Memory;
@@ -497,26 +499,46 @@ class RustCoreBridgeService {
     if ((this.backendType !== "ios_native" && this.backendType !== "android_native") || !FastArtRust?.initializeModnet) return false;
     try {
       const fileSystem = await import("expo-file-system/legacy");
-      const modelUrl = "https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx";
-      // The hash in the filename invalidates same-sized stale downloads when
-      // the pinned model artifact changes between app versions.
-      const modelPath = `${fileSystem.cacheDirectory}fastart-modnet-07c308cf.onnx`;
-      const existing = await fileSystem.getInfoAsync(modelPath);
-      if (!existing.exists || (existing.size ?? 0) < 25_000_000) {
-        await fileSystem.downloadAsync(modelUrl, modelPath);
+      // Prioritize ultra-fast 256x256 MediaPipe Selfie Segmentation (462 KB, ~5ms/frame on mobile CPU)
+      const selfieUrl = "https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx";
+      const selfiePath = `${fileSystem.cacheDirectory}fastart-selfie-seg-3241ac4a.onnx`;
+      const existingSelfie = await fileSystem.getInfoAsync(selfiePath);
+      if (!existingSelfie.exists || (existingSelfie.size ?? 0) < 400_000) {
+        try {
+          await fileSystem.downloadAsync(selfieUrl, selfiePath);
+        } catch (downloadErr) {
+          console.warn("[RustCoreBridge] Could not download ultra-fast selfie model:", downloadErr);
+        }
       }
-      let result: unknown = await FastArtRust.initializeModnet(modelPath);
+
+      let result: unknown = null;
+      if ((await fileSystem.getInfoAsync(selfiePath)).exists) {
+        result = await FastArtRust.initializeModnet(selfiePath);
+      } else {
+        // Immediately initialize using the bundled asset model inside the native module
+        result = await FastArtRust.initializeModnet("");
+      }
+
       let initialized = result === true || result === "ok";
-      if (!initialized && typeof result === "string" && result.includes("checksum")) {
-        console.warn("[RustCoreBridge] Cached MODNet checksum is stale; downloading the pinned model again");
-        await fileSystem.deleteAsync(modelPath, { idempotent: true });
-        await fileSystem.downloadAsync(modelUrl, modelPath);
-        result = await FastArtRust.initializeModnet(modelPath);
-        initialized = result === true || result === "ok";
+      if (!initialized) {
+        // Fallback to full MODNet if needed
+        const modnetUrl = "https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx";
+        const modnetPath = `${fileSystem.cacheDirectory}fastart-modnet-07c308cf.onnx`;
+        const existingModnet = await fileSystem.getInfoAsync(modnetPath);
+        if (!existingModnet.exists || (existingModnet.size ?? 0) < 25_000_000) {
+          try {
+            await fileSystem.downloadAsync(modnetUrl, modnetPath);
+          } catch {}
+        }
+        if ((await fileSystem.getInfoAsync(modnetPath)).exists) {
+          result = await FastArtRust.initializeModnet(modnetPath);
+          initialized = result === true || result === "ok";
+        }
       }
+
       if (!initialized) {
         const reason = typeof result === "string" ? `: ${result}` : "";
-        console.warn(`[RustCoreBridge] Rust MODNet initialization failed${reason}; automatic cutout is unavailable`);
+        console.warn(`[RustCoreBridge] AI Cutout model initialization failed${reason}`);
       }
       return initialized;
     } catch (error) {
@@ -2040,15 +2062,38 @@ class RustCoreBridgeService {
         ctx.restore();
       }
 
-      // Glow outline if configured
+      // Crisp perimeter outline (stroke) dilated behind the subject, never tinting the subject itself
       if (options.strokeColor && options.strokeColor !== "none" && options.strokeWidth && options.strokeWidth > 0) {
-        ctx.save();
-        ctx.shadowColor = options.strokeColor;
-        ctx.shadowBlur = Math.max(2, options.strokeWidth * 3);
-        ctx.drawImage(offCanvas, 0, 0, procW, procH, dx, dy, dw, dh);
-        ctx.restore();
+        if (!internalStrokeCanvas && typeof document !== "undefined") {
+          internalStrokeCanvas = document.createElement("canvas");
+          internalStrokeCtx = internalStrokeCanvas.getContext("2d");
+        }
+        if (internalStrokeCanvas && internalStrokeCtx) {
+          if (internalStrokeCanvas.width !== procW || internalStrokeCanvas.height !== procH) {
+            internalStrokeCanvas.width = procW;
+            internalStrokeCanvas.height = procH;
+          }
+          internalStrokeCtx.clearRect(0, 0, procW, procH);
+          internalStrokeCtx.drawImage(offCanvas, 0, 0);
+          internalStrokeCtx.globalCompositeOperation = "source-in";
+          internalStrokeCtx.fillStyle = options.strokeColor;
+          internalStrokeCtx.fillRect(0, 0, procW, procH);
+          internalStrokeCtx.globalCompositeOperation = "source-over";
+
+          ctx.save();
+          const strokeW = Math.max(1, Math.min(16, options.strokeWidth));
+          const steps = 12;
+          for (let i = 0; i < steps; i++) {
+            const angle = (i * 2 * Math.PI) / steps;
+            const ox = Math.round(Math.cos(angle) * strokeW);
+            const oy = Math.round(Math.sin(angle) * strokeW);
+            ctx.drawImage(internalStrokeCanvas, 0, 0, procW, procH, dx + ox, dy + oy, dw, dh);
+          }
+          ctx.restore();
+        }
       }
 
+      // Draw the actual cut-out subject ON TOP of the dilated outline
       ctx.drawImage(offCanvas, 0, 0, procW, procH, dx, dy, dw, dh);
       return true;
     } catch {

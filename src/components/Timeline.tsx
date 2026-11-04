@@ -19,7 +19,6 @@ import {
   MAX_TRACKS,
   TRACK_ROW_HEIGHT,
   TRACK_ROW_HEIGHT_MOBILE,
-  getTrackRowHeight,
   MIN_CLIP_DURATION,
   UnifiedClipItem,
 } from "./Timeline/timelineTypes";
@@ -183,6 +182,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     handleClipTouchCancel,
     handleLeftTrimStart,
     handleRightTrimStart,
+    lastDragEndTimeRef,
   } = useTimelineDragTrim({
     allClips: allClipsWithTracks,
     selectedClipId,
@@ -205,6 +205,12 @@ const TimelineComponent: React.FC<TimelineProps> = ({
   const [visibleWindowStartX, setVisibleWindowStartX] = useState(0);
   const visibleWindowStartRef = useRef(0);
   const visibleWindowStep = Math.max(800, screenWidth * 2);
+
+  const lastTimelineScrollTimeRef = useRef(0);
+  const isTimelineRecentlyScrolled = useCallback(() => {
+    return Date.now() - lastTimelineScrollTimeRef.current < 250;
+  }, []);
+
   const updateVisibleWindow = useCallback((scrollX: number) => {
     const nextStart = Math.max(
       0,
@@ -217,6 +223,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
 
   // Synchronize tracks horizontal scroll with ruler (with loop prevention)
   const handleTracksScroll = useCallback((e: any) => {
+    lastTimelineScrollTimeRef.current = Date.now();
     const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
     currentScrollXRef.current = scrollX;
     updateVisibleWindow(scrollX);
@@ -239,6 +246,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
 
   // Synchronize ruler horizontal scroll with tracks (with loop prevention)
   const handleRulerScroll = useCallback((e: any) => {
+    lastTimelineScrollTimeRef.current = Date.now();
     const scrollX = e.nativeEvent?.contentOffset?.x ?? 0;
     currentScrollXRef.current = scrollX;
     updateVisibleWindow(scrollX);
@@ -270,6 +278,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     let isSyncing = false;
 
     const onTrackDomScroll = () => {
+      lastTimelineScrollTimeRef.current = Date.now();
       if (isSyncing) return;
       isSyncing = true;
       currentScrollXRef.current = trackDom.scrollLeft;
@@ -280,6 +289,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     };
 
     const onRulerDomScroll = () => {
+      lastTimelineScrollTimeRef.current = Date.now();
       if (isSyncing) return;
       isSyncing = true;
       currentScrollXRef.current = rulerDom.scrollLeft;
@@ -490,8 +500,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
   }, [allClipsWithTracks, selectedClipId]);
 
   const isInteractingWithTimeline =
-    isDraggingClip ||
-    !!dragState ||
+    (isDraggingClip && !!dragState) ||
     !!activeTrimming ||
     isScrubbingRuler ||
     isPinching ||
@@ -994,6 +1003,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
                 handleLeftTrimStart={handleLeftTrimStart}
                 handleRightTrimStart={handleRightTrimStart}
                 onOpenEditModal={onOpenEditModal}
+                isTimelineRecentlyScrolled={isTimelineRecentlyScrolled}
+                lastDragEndTimeRef={lastDragEndTimeRef}
               />
 
               <TimelinePlayheadNeedle

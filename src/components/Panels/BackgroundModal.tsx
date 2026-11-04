@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   scrollBody: {
-    paddingBottom: 50,
+    paddingBottom: 56,
   },
   tabBodySection: {
     flex: 1,

@@ -332,6 +332,7 @@ export default function TextModal({
 
           <ScrollView
             style={[styles.sheetBody, isInline && { paddingTop: 10 }]}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
             {/* Input Box + Inline Add Button */}

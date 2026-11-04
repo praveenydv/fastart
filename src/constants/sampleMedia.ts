@@ -53,9 +53,10 @@ export const ASPECT_RATIOS: AspectRatioOption[] = [
   { id: '2.35:1', label: '2.35:1', desc: 'Cinemascope', width: 235, height: 100, icon: 'film-outline' },
 ];
 
-/** Standardized ultra-low-resolution local prefix reference image for instant 0ms list previews (filters, effects, animations) */
-export const PRESET_PREVIEW_IMAGE =
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%2300F2FE"/><stop offset="50%" stop-color="%236366F1"/><stop offset="100%" stop-color="%23F43F5E"/></linearGradient></defs><rect width="64" height="64" fill="%230F131D"/><circle cx="32" cy="22" r="11" fill="url(%23g)"/><path d="M16 52 C16 40 23 34 32 34 C41 34 48 40 48 52 Z" fill="url(%23g)" opacity="0.9"/></svg>';
+import { PRESET_FACE_PREVIEW_BASE64 } from './presetFacePreview';
+
+/** Standardized ultra-low-resolution local face portrait for instant 0ms previews (filters, effects, animations) */
+export const PRESET_PREVIEW_IMAGE = PRESET_FACE_PREVIEW_BASE64;
 
 export const FILTER_PRESETS = [
   { id: 'normal', name: 'Original', desc: 'No color grading', css: 'none', category: 'Basic' },

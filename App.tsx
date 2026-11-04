@@ -30,6 +30,8 @@ import { saveLastSession, LastEditSession, saveProject } from "./src/utils/stora
 import { mediaHasAudioTrack } from "./src/utils/mediaAudioDetector";
 import { deleteMedia } from "./src/utils/largeMediaStorage";
 import { getPlaybackTime, setPlaybackTime, usePlaybackTime } from "./src/utils/playbackTimeStore";
+import { pauseActiveVideoRenderer } from "./src/utils/videoRenderer";
+import { pauseAllAudio } from "./src/components/Player/usePlayerAudioSync";
 
 // Keep native splash screen visible while app hydrates
 ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
@@ -572,8 +574,11 @@ export default function App() {
   // Stable memoized callbacks for EditorWorkspace to preserve React.memo and prevent render thrashing
   const handleOpenExport = useCallback(() => openModal("export"), [openModal]);
   const handleBackToHome = useCallback(() => {
+    setIsPlaying(false);
+    pauseActiveVideoRenderer();
+    pauseAllAudio();
     setShowExitConfirmModal(true);
-  }, []);
+  }, [setIsPlaying]);
   const handleOpenKeyframeModal = useCallback(() => {
     if (!selectedClipIdRef.current && projectRef.current) {
       const curTime = currentTimeRef.current || 0;
@@ -674,16 +679,25 @@ export default function App() {
   useEffect(() => {
     const appStateSub = AppState.addEventListener("change", (nextState) => {
       if (nextState === "background" || nextState === "inactive") {
+        setIsPlaying(false);
+        pauseActiveVideoRenderer();
+        pauseAllAudio();
         flushSessionAndProject();
       }
     });
 
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const handleBeforeUnload = () => {
+        setIsPlaying(false);
+        pauseActiveVideoRenderer();
+        pauseAllAudio();
         flushSessionAndProject();
       };
       const handleVisibilityChange = () => {
         if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+          setIsPlaying(false);
+          pauseActiveVideoRenderer();
+          pauseAllAudio();
           flushSessionAndProject();
         }
       };
@@ -714,13 +728,27 @@ export default function App() {
     openModal("transitions");
   }, [openModal]);
 
-  // Confirm project exit handler
+  // Confirm project exit handler: stops all playback, audio, renderers, cancels active modals, and routes to Home
   const handleConfirmExitProject = useCallback(() => {
-    flushSessionAndProject();
-    setShowExitConfirmModal(false);
     setIsPlaying(false);
+    pauseActiveVideoRenderer();
+    pauseAllAudio();
+    closeModal();
+    setShowExitConfirmModal(false);
+    setSelectedClipId(null);
+    flushSessionAndProject();
     navigate("/");
-  }, [flushSessionAndProject, navigate]);
+  }, [closeModal, flushSessionAndProject, navigate, setIsPlaying, setSelectedClipId]);
+
+  // Clean up all background processing and playback when navigating away from the project/editor
+  useEffect(() => {
+    if (route.screen !== "editor" && route.screen !== "export") {
+      setIsPlaying(false);
+      pauseActiveVideoRenderer();
+      pauseAllAudio();
+      closeModal();
+    }
+  }, [route.screen, closeModal, setIsPlaying]);
 
   // Synchronized state refs for Hardware Back Handler
   const activeModalRef = useRef(activeModal);

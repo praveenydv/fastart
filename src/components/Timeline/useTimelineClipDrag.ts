@@ -289,6 +289,7 @@ export function useTimelineClipDrag({
   const cachedDraggingClipRef = useRef<UnifiedClipItem | undefined>(undefined);
   const cachedOtherClipsRef = useRef<UnifiedClipItem[] | undefined>(undefined);
   const lastTapRef = useRef({ time: 0, clipId: "" });
+  const lastDragEndTimeRef = useRef(0);
 
   // Touch tracking state for mobile gesture handling
   const touchStateRef = useRef<{
@@ -311,6 +312,18 @@ export function useTimelineClipDrag({
       clipId: string,
       trackType: "video" | "photo" | "audio" | "text" | "sticker" | "effects" | "caption",
     ) => {
+      // Ignore click only if an actual drag just completed within 350ms
+      if (Date.now() - lastDragEndTimeRef.current < 350) return;
+      if (isDraggingClip) return;
+
+      const now = Date.now();
+      const elapsed = now - lastTapRef.current.time;
+
+      // Ignore redundant immediate duplicate event for the exact same click
+      if (elapsed < 60 && lastTapRef.current.clipId === clipId) {
+        return;
+      }
+
       const clip = allClipsRef.current.find((c) => c.id === clipId);
       if (clip && onSeekRef.current) {
         const cur = getPlaybackTime();
@@ -319,9 +332,8 @@ export function useTimelineClipDrag({
         }
       }
 
-      const now = Date.now();
       if (
-        now - lastTapRef.current.time < 350 &&
+        elapsed < 350 &&
         lastTapRef.current.clipId === clipId
       ) {
         lastTapRef.current = { time: 0, clipId: "" };
@@ -334,11 +346,12 @@ export function useTimelineClipDrag({
         onSelectClip(clipId, trackType);
       }
     },
-    [onSelectClip, onOpenEditModal],
+    [onSelectClip, onOpenEditModal, isDraggingClip],
   );
 
   // Explicit safety cleanup function
   const cancelClipDrag = useCallback(() => {
+    lastDragEndTimeRef.current = Date.now();
     if (touchStateRef.current?.timer) {
       clearTimeout(touchStateRef.current.timer);
     }
@@ -354,7 +367,7 @@ export function useTimelineClipDrag({
     setDragState(null);
   }, []);
 
-  // Mobile Touch Gestures (TouchStart with 200ms hold-to-lift)
+  // Mobile Touch Gestures: passive tracking without premature drag lock
   const handleClipTouchStart = useCallback(
     (
       e: any,
@@ -382,37 +395,6 @@ export function useTimelineClipDrag({
         clearTimeout(touchStateRef.current.timer);
       }
 
-      // 200ms hold timer to lift clip and start drag mode
-      const timer = setTimeout(() => {
-        triggerHaptic("medium", isHapticEnabledRef.current);
-        onSelectClip(clip.id, clip.type);
-        setIsDraggingClip(true);
-
-        if (touchStateRef.current) {
-          touchStateRef.current.isDragging = true;
-        }
-
-        cachedDraggingClipRef.current = clip;
-        cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clip.id);
-
-        clipDragStartInfoRef.current = {
-          clipId: clip.id,
-          trackType: clip.type,
-          initialStart: clip.startTime,
-          initialTrack: trackIdx,
-          duration: clip.duration,
-        };
-
-        previousTargetTrackRef.current = trackIdx;
-        setDragState({
-          clipId: clip.id,
-          currentStart: clip.startTime,
-          targetStart: clip.startTime,
-          currentTrack: trackIdx,
-          dragOffsetY: 0,
-        });
-      }, 200);
-
       touchStateRef.current = {
         clipId: clip.id,
         trackType: clip.type,
@@ -424,10 +406,10 @@ export function useTimelineClipDrag({
         startTime: Date.now(),
         isDragging: false,
         hasMoved: false,
-        timer,
+        timer: null,
       };
     },
-    [isTrimmingActiveRef, onSelectClip],
+    [isTrimmingActiveRef],
   );
 
   // Mobile Touch Move
@@ -442,12 +424,8 @@ export function useTimelineClipDrag({
       const dist = Math.hypot(deltaXPixels, deltaYPixels);
 
       if (!state.isDragging) {
-        // If moved > 8px before timer fired, user is scrolling the timeline
+        // If moved > 8px, user is scrolling the timeline: mark moved
         if (dist > 8) {
-          if (state.timer) {
-            clearTimeout(state.timer);
-            state.timer = null;
-          }
           state.hasMoved = true;
         }
         return;
@@ -532,6 +510,7 @@ export function useTimelineClipDrag({
       }
 
       if (state?.isDragging || isDraggingClip) {
+        lastDragEndTimeRef.current = Date.now();
         const currentDrag = latestTouchDragStateRef.current || dragStateRef.current;
         setIsDraggingClip(false);
         setDragState(null);
@@ -594,7 +573,7 @@ export function useTimelineClipDrag({
     cancelClipDrag();
   }, [cancelClipDrag]);
 
-  // Mobile Long-Press handler with auto-exit on release
+  // Mobile Long-Press handler with full touch tracking on Web and Native
   const handleClipLongPress = useCallback(
     (
       clipId: string,
@@ -606,6 +585,11 @@ export function useTimelineClipDrag({
       triggerHaptic("medium", isHapticEnabledRef.current);
       onSelectClip(clipId, trackType);
       setIsDraggingClip(true);
+
+      const clip = allClipsRef.current.find((c) => c.id === clipId);
+      cachedDraggingClipRef.current = clip;
+      cachedOtherClipsRef.current = allClipsRef.current.filter((c) => c.id !== clipId);
+
       clipDragStartInfoRef.current = {
         clipId,
         trackType,
@@ -613,6 +597,10 @@ export function useTimelineClipDrag({
         initialTrack: initialTrackIndex,
         duration,
       };
+      previousTargetTrackRef.current = initialTrackIndex;
+      previousIsInsertingRef.current = false;
+      previousInsertTrackRef.current = null;
+
       setDragState({
         clipId,
         currentStart: initialStartTime,
@@ -621,23 +609,128 @@ export function useTimelineClipDrag({
         dragOffsetY: 0,
       });
 
+      if (touchStateRef.current) {
+        touchStateRef.current.isDragging = true;
+      }
+
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        const cleanup = () => {
-          window.removeEventListener("mouseup", cleanup);
-          window.removeEventListener("touchend", cleanup);
+        let latestStart = initialStartTime;
+        let latestTrack = initialTrackIndex;
+        let isInsert = false;
+        let insertIndex: number | null = null;
+        let startClientX: number | null = null;
+        let startClientY: number | null = null;
+        let pendingRaf: number | null = null;
+
+        const onTouchMove = (moveEvt: TouchEvent) => {
+          if (!moveEvt.touches || moveEvt.touches.length === 0) return;
+          const touch = moveEvt.touches[0];
+          if (startClientX === null || startClientY === null) {
+            startClientX = touch.clientX;
+            startClientY = touch.clientY;
+            return;
+          }
+          if (moveEvt.cancelable) moveEvt.preventDefault();
+
+          const deltaXPixels = touch.clientX - startClientX;
+          const deltaYPixels = touch.clientY - startClientY;
+          const deltaX = deltaXPixels / pxPerSecRef.current;
+          const minY = (initialTrackIndex - activeTrackCount - 1) * rowHeightRef.current;
+          const maxY = (initialTrackIndex + 1) * rowHeightRef.current;
+          const dragOffsetY = Math.max(minY - 12, Math.min(maxY + 12, deltaYPixels));
+
+          const { targetTrack, rawStart, clampedStart, isInsertingNewTrack, insertTrackIndex, hasOverlap } =
+            computeTargetPosition(
+              deltaX,
+              deltaYPixels,
+              initialStartTime,
+              initialTrackIndex,
+              duration,
+              clipId,
+              activeTrackCount,
+              pxPerSecRef.current,
+              allClipsRef.current,
+              isSnappingEnabledRef.current,
+              isHapticEnabledRef.current,
+              previousIsInsertingRef.current,
+              previousInsertTrackRef.current,
+              getPlaybackTime(),
+              cachedDraggingClipRef.current,
+              cachedOtherClipsRef.current,
+              rowHeightRef.current,
+            );
+
+          const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
+          if (hasTrackChanged && previousTargetTrackRef.current !== null) {
+            triggerHaptic("selection", isHapticEnabledRef.current);
+          }
+          previousTargetTrackRef.current = targetTrack;
+          previousIsInsertingRef.current = isInsertingNewTrack;
+          previousInsertTrackRef.current = insertTrackIndex;
+
+          latestStart = clampedStart;
+          latestTrack = targetTrack;
+          isInsert = isInsertingNewTrack;
+          insertIndex = insertTrackIndex;
+
+          if (pendingRaf === null) {
+            pendingRaf = requestAnimationFrame(() => {
+              pendingRaf = null;
+              setDragState({
+                clipId,
+                currentStart: rawStart,
+                targetStart: clampedStart,
+                currentTrack: targetTrack,
+                dragOffsetY,
+                isInsertingNewTrack,
+                insertTrackIndex,
+                hasOverlap,
+              });
+            });
+          }
+        };
+
+        const onTouchEnd = () => {
+          if (pendingRaf !== null) {
+            cancelAnimationFrame(pendingRaf);
+            pendingRaf = null;
+          }
+          window.removeEventListener("touchmove", onTouchMove);
+          window.removeEventListener("touchend", onTouchEnd);
+          window.removeEventListener("touchcancel", onTouchEnd);
+          window.removeEventListener("mouseup", onTouchEnd);
+
+          lastDragEndTimeRef.current = Date.now();
           setIsDraggingClip(false);
           setDragState(null);
           clipDragStartInfoRef.current = null;
           previousIsInsertingRef.current = false;
           previousInsertTrackRef.current = null;
+          cachedDraggingClipRef.current = undefined;
+          cachedOtherClipsRef.current = undefined;
+
+          const hasPositionChanged =
+            isInsert ||
+            Math.abs(latestStart - initialStartTime) > 0.01 ||
+            latestTrack !== initialTrackIndex;
+
+          if (hasPositionChanged && onMoveClipRef.current) {
+            triggerHaptic("light", isHapticEnabledRef.current);
+            const finalTrack = isInsert && insertIndex !== null ? insertIndex : latestTrack;
+            onMoveClipRef.current(clipId, trackType, latestStart, finalTrack, isInsert);
+            if (onSeekRef.current) {
+              onSeekRef.current(latestStart);
+            }
+          }
         };
-        if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
-          window.addEventListener("mouseup", cleanup, { once: true });
-          window.addEventListener("touchend", cleanup, { once: true });
-        }
+
+        window.addEventListener("touchmove", onTouchMove, { passive: false });
+        window.addEventListener("touchend", onTouchEnd, { once: true });
+        window.addEventListener("touchcancel", onTouchEnd, { once: true });
+        window.addEventListener("mouseup", onTouchEnd, { once: true });
       }
     },
-    [onSelectClip],
+    [activeTrackCount, onSelectClip],
   );
 
   // Desktop Mouse Drag handler
@@ -651,6 +744,8 @@ export function useTimelineClipDrag({
       duration: number,
     ) => {
       if (Platform.OS !== "web" || typeof window === "undefined") return;
+      // Do not allow touch pointer events to trigger mouse drag!
+      if (e?.nativeEvent?.pointerType === "touch" || e?.pointerType === "touch") return;
       if (e.button !== 0) return;
       if (isTrimmingActiveRef.current) return;
       if (
@@ -753,6 +848,7 @@ export function useTimelineClipDrag({
         cachedOtherClipsRef.current = undefined;
 
         if (hasStartedDragging) {
+          lastDragEndTimeRef.current = Date.now();
           const currentDrag = dragStateRef.current;
           setDragState(null);
           previousIsInsertingRef.current = false;
@@ -772,6 +868,9 @@ export function useTimelineClipDrag({
               isInsert,
             );
           }
+        } else {
+          // Stationary click on desktop web: select clip!
+          handleClipPress(clipId, trackType);
         }
       };
 
@@ -879,6 +978,7 @@ export function useTimelineClipDrag({
         }
       },
       onPanResponderRelease: () => {
+        lastDragEndTimeRef.current = Date.now();
         if (panDragRafRef.current !== null) {
           cancelAnimationFrame(panDragRafRef.current);
           panDragRafRef.current = null;
@@ -932,6 +1032,7 @@ export function useTimelineClipDrag({
         }
       },
       onPanResponderTerminate: () => {
+        lastDragEndTimeRef.current = Date.now();
         if (panDragRafRef.current !== null) {
           cancelAnimationFrame(panDragRafRef.current);
           panDragRafRef.current = null;
@@ -963,6 +1064,7 @@ export function useTimelineClipDrag({
       handleClipTouchEnd,
       handleClipTouchCancel,
       cancelClipDrag,
+      lastDragEndTimeRef,
     }),
     [
       dragState,

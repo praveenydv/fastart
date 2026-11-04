@@ -123,12 +123,12 @@ export const styles = StyleSheet.create({
   sheetBody: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 56,
   },
   sheetBodyDesktop: {
     paddingHorizontal: 24,
     paddingTop: 18,
-    paddingBottom: 22,
+    paddingBottom: 56,
   },
 
   // Desktop 2-Column Split

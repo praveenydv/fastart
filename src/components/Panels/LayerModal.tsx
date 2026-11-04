@@ -400,7 +400,7 @@ const s = StyleSheet.create({
   },
   content: {
     padding: 8,
-    paddingBottom: 24,
+    paddingBottom: 56,
   },
   infoBanner: {
     flexDirection: "row",

@@ -104,41 +104,98 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   const [textVal, setTextVal] = useState<string>(() => formatNumber(value));
   const [isFocused, setIsFocused] = useState<boolean>(false);
   const isDraggingRef = useRef<boolean>(false);
-  const lastEmittedValueRef = useRef<number>(value);
+  const latestValueRef = useRef<number>(value);
+  const lastCommittedValueRef = useRef<number>(value);
+  const lastEmitTimeRef = useRef<number>(0);
+  const lastDragEndTimeRef = useRef<number>(0);
+  const throttleTimerRef = useRef<any>(null);
 
   const inputRef = useRef<any>(null);
 
+  // Clean up any pending throttle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Sync internal text & slider when external value changes and not actively dragging/focused
   useEffect(() => {
-    if (!isFocused && !isDraggingRef.current) {
-      const snapped = snapToStep(value, min, max, step, precision);
-      setLocalVal(snapped);
-      lastEmittedValueRef.current = snapped;
-      setTextVal(formatNumber(snapped));
+    // If user is focused on numeric input, do NOT overwrite
+    if (isFocused) return;
+    // If user is actively dragging, do NOT overwrite with lagging parent render
+    if (isDraggingRef.current) return;
+
+    // If incoming value matches our last committed value, we are already in sync
+    if (value === lastCommittedValueRef.current) return;
+
+    // Guard against delayed backlog renders from parent.
+    // If drag ended less than 600ms ago, the parent is still flushing old queued state updates
+    // that were initiated BEFORE drag ended. Do NOT let those past values overwrite the user's final value!
+    const timeSinceDragEnd = Date.now() - lastDragEndTimeRef.current;
+    if (timeSinceDragEnd < 600) {
+      return;
     }
+
+    const snapped = snapToStep(value, min, max, step, precision);
+    setLocalVal(snapped);
+    latestValueRef.current = snapped;
+    lastCommittedValueRef.current = snapped;
+    setTextVal(formatNumber(snapped));
   }, [value, isFocused, precision, min, max, step, formatNumber]);
 
-  const commitValue = (raw: string) => {
-    let parsed = parseFloat(raw);
-    if (isNaN(parsed)) {
-      parsed = defaultValue !== undefined ? defaultValue : value;
-    }
-    const snapped = snapToStep(parsed, min, max, step, precision);
-    lastEmittedValueRef.current = snapped;
-    setLocalVal(snapped);
-    setTextVal(formatNumber(snapped));
-    onChange(snapped);
-    onChangeEnd?.(snapped);
-  };
+  const commitValue = useCallback(
+    (raw: string) => {
+      let parsed = parseFloat(raw);
+      if (isNaN(parsed)) {
+        parsed = defaultValue !== undefined ? defaultValue : value;
+      }
+      const snapped = snapToStep(parsed, min, max, step, precision);
+      latestValueRef.current = snapped;
+      lastCommittedValueRef.current = snapped;
+      lastDragEndTimeRef.current = Date.now();
+      setLocalVal(snapped);
+      setTextVal(formatNumber(snapped));
+      onChange(snapped);
+      onChangeEnd?.(snapped);
+    },
+    [defaultValue, value, min, max, step, precision, formatNumber, onChange, onChangeEnd],
+  );
 
   const handleSliderChange = useCallback(
     (raw: number) => {
       if (disabled) return;
       const snapped = snapToStep(raw, min, max, step, precision);
-      lastEmittedValueRef.current = snapped;
+      latestValueRef.current = snapped;
+
+      // 1. Immediately update local UI so the thumb & numeric text respond with 0ms latency
       setLocalVal(snapped);
       setTextVal(formatNumber(snapped));
-      onChange(snapped);
+
+      // 2. Throttle parent onChange updates (40ms interval = ~25fps)
+      // This completely prevents congesting the JS thread with 120 heavy project/canvas renders per second
+      const now = Date.now();
+      const elapsed = now - lastEmitTimeRef.current;
+
+      if (elapsed >= 40) {
+        lastEmitTimeRef.current = now;
+        if (throttleTimerRef.current) {
+          clearTimeout(throttleTimerRef.current);
+          throttleTimerRef.current = null;
+        }
+        onChange(snapped);
+      } else if (!throttleTimerRef.current) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
+          lastEmitTimeRef.current = Date.now();
+          if (isDraggingRef.current) {
+            onChange(latestValueRef.current);
+          }
+        }, 40 - elapsed);
+      }
     },
     [disabled, min, max, step, precision, formatNumber, onChange],
   );
@@ -146,14 +203,28 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   const handleSliderComplete = useCallback(
     (raw?: number) => {
       isDraggingRef.current = false;
+      lastDragEndTimeRef.current = Date.now();
       onDragEnd?.();
+
+      // Cancel any pending throttled timer
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+
       const finalVal =
         typeof raw === "number" && !isNaN(raw)
           ? snapToStep(raw, min, max, step, precision)
-          : lastEmittedValueRef.current;
-      lastEmittedValueRef.current = finalVal;
+          : latestValueRef.current;
+
+      latestValueRef.current = finalVal;
+      lastCommittedValueRef.current = finalVal;
+      lastEmitTimeRef.current = Date.now();
+
       setLocalVal(finalVal);
       setTextVal(formatNumber(finalVal));
+
+      // Emit final value immediately without any throttle
       onChange(finalVal);
       onChangeEnd?.(finalVal);
     },
@@ -163,9 +234,11 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   const handleStepDelta = useCallback(
     (delta: number) => {
       if (disabled) return;
-      const next = lastEmittedValueRef.current + delta;
+      const next = latestValueRef.current + delta;
       const snapped = snapToStep(next, min, max, step, precision);
-      lastEmittedValueRef.current = snapped;
+      latestValueRef.current = snapped;
+      lastCommittedValueRef.current = snapped;
+      lastDragEndTimeRef.current = Date.now();
       setLocalVal(snapped);
       setTextVal(formatNumber(snapped));
       onChange(snapped);
@@ -180,7 +253,9 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
       onReset();
     } else if (defaultValue !== undefined) {
       const snapped = snapToStep(defaultValue, min, max, step, precision);
-      lastEmittedValueRef.current = snapped;
+      latestValueRef.current = snapped;
+      lastCommittedValueRef.current = snapped;
+      lastDragEndTimeRef.current = Date.now();
       setLocalVal(snapped);
       setTextVal(formatNumber(snapped));
       onChange(snapped);
@@ -221,7 +296,9 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
             const parsed = parseFloat(txt);
             if (!isNaN(parsed) && parsed >= min && parsed <= max) {
               const snapped = snapToStep(parsed, min, max, step, precision);
-              lastEmittedValueRef.current = snapped;
+              latestValueRef.current = snapped;
+              lastCommittedValueRef.current = snapped;
+              lastDragEndTimeRef.current = Date.now();
               setLocalVal(snapped);
               onChange(snapped);
             }
@@ -277,6 +354,12 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
             onDragStart?.();
           }}
           onChange={(e: any) => {
+            const raw = parseFloat(e.target.value);
+            if (!isNaN(raw)) {
+              handleSliderChange(raw);
+            }
+          }}
+          onInput={(e: any) => {
             const raw = parseFloat(e.target.value);
             if (!isNaN(raw)) {
               handleSliderChange(raw);

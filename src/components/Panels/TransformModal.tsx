@@ -621,6 +621,7 @@ function TransformModalComponent({
 
       <ScrollView
         style={styles.contentScroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isSliderDragging}
         nestedScrollEnabled={true}
@@ -1667,6 +1668,9 @@ const styles = StyleSheet.create({
   contentScroll: {
     paddingHorizontal: 6,
     paddingTop: 3,
+  },
+  scrollContent: {
+    paddingBottom: 56,
   },
   sectionContainer: {
     gap: 5,

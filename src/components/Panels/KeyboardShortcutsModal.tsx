@@ -336,7 +336,8 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 56,
   },
   shortcutRow: {
     flexDirection: "row",

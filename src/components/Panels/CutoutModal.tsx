@@ -1,24 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
-  Text,
   ScrollView,
   Platform,
   StyleSheet,
 } from "react-native";
-import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { ModalHeader } from "../Common";
-import { Ionicons } from "@expo/vector-icons";
 import { CutoutConfig } from "../../types/project";
-import {
-  CutoutControls,
-  CutoutMode,
-} from "./Cutout/CutoutControls";
+import { CutoutControls } from "./Cutout/CutoutControls";
 import {
   processVideoUnified,
   processClipUnified,
   hasClipMasks,
-  hasFrameMask,
   getClipProcessedCount,
   clearClipMasks,
   getClipBakedFps,
@@ -73,7 +66,7 @@ function CutoutModalComponent({
 
   const [config, setConfig] = useState<CutoutConfig>(() => ({
     enabled: currentCutout?.enabled ?? false,
-    mode: currentCutout?.mode ?? initialMode ?? "chroma",
+    mode: currentCutout?.mode ?? initialMode ?? "auto",
     keyColor: currentCutout?.keyColor ?? "#00FF00",
     intensity: currentCutout?.intensity ?? 45,
     shadow: currentCutout?.shadow ?? 25,
@@ -114,7 +107,7 @@ function CutoutModalComponent({
     if (currentCutout) {
       setConfig((prev) => ({
         enabled: currentCutout.enabled ?? false,
-        mode: currentCutout.mode ?? "chroma",
+        mode: currentCutout.mode ?? prev.mode ?? "auto",
         keyColor: currentCutout.keyColor ?? "#00FF00",
         intensity: currentCutout.intensity ?? 45,
         shadow: currentCutout.shadow ?? 25,
@@ -133,6 +126,39 @@ function CutoutModalComponent({
       initSelfieSegmentation().catch(() => {});
     }
   }, [visible]);
+
+  // Stop all active processing when modal closes, becomes hidden, or unmounts
+  useEffect(() => {
+    if (!visible) {
+      if (abortCtrlRef.current) {
+        abortCtrlRef.current.abort();
+        abortCtrlRef.current = null;
+      }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      previewInFlightRef.current = false;
+      setIsProcessingFrames(false);
+      setIsProcessingActiveFrame(false);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    return () => {
+      if (abortCtrlRef.current) {
+        abortCtrlRef.current.abort();
+        abortCtrlRef.current = null;
+      }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      previewInFlightRef.current = false;
+      setIsProcessingFrames(false);
+      setIsProcessingActiveFrame(false);
+    };
+  }, []);
 
   const debounceTimerRef = useRef<any>(null);
 
@@ -182,6 +208,33 @@ function CutoutModalComponent({
     }
   }, []);
 
+  // Auto-process photo clips when modal is opened with auto cutout enabled
+  useEffect(() => {
+    if (
+      visible &&
+      !isVideoClip &&
+      config.enabled &&
+      config.mode === "auto" &&
+      clipId &&
+      !isAlreadyProcessed &&
+      !isProcessingActiveFrame &&
+      !previewInFlightRef.current
+    ) {
+      void runPreview(selectedClip, clipId, 0, 0, config);
+    }
+  }, [
+    visible,
+    isVideoClip,
+    config.enabled,
+    config.mode,
+    clipId,
+    isAlreadyProcessed,
+    isProcessingActiveFrame,
+    runPreview,
+    selectedClip,
+    config,
+  ]);
+
   const handleConfigChange = (newConfig: CutoutConfig) => {
     setConfig(newConfig);
     onApplyCutout(newConfig, clipId);
@@ -222,11 +275,17 @@ function CutoutModalComponent({
       setConfig(previewConfig);
       onApplyCutout(previewConfig, clipId);
     }
-    await runPreview(selectedClip, clipId, frameIdx, mediaTime, previewConfig);
+    const targetIdx = isVideoClip ? frameIdx : 0;
+    const targetTime = isVideoClip ? mediaTime : 0;
+    await runPreview(selectedClip, clipId, targetIdx, targetTime, previewConfig);
   };
 
   const handleProcessVideo = async () => {
     if (!selectedClip?.url || isProcessingFrames || previewInFlightRef.current) return;
+    if (!isVideoClip) {
+      await handleProcessActiveFrame();
+      return;
+    }
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
@@ -326,6 +385,11 @@ function CutoutModalComponent({
     onApplyCutout(resetCfg, clipId);
   };
 
+  const handleClose = useCallback(() => {
+    handleCancelProcessing();
+    onClose();
+  }, [handleCancelProcessing, onClose]);
+
   if (!visible) return null;
 
   return (
@@ -335,7 +399,7 @@ function CutoutModalComponent({
           <ModalHeader
             title="Cutout"
             iconName="person-remove-outline"
-            onClose={onClose}
+            onClose={handleClose}
             onReset={handleReset}
             resetText="Reset"
           />
@@ -343,6 +407,7 @@ function CutoutModalComponent({
 
         <ScrollView
           style={s.sheetBody}
+          contentContainerStyle={s.scrollContent}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled={true}
           keyboardShouldPersistTaps="handled"
@@ -439,7 +504,9 @@ const s = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: 28,
+  },
+  scrollContent: {
+    paddingBottom: 56,
   },
 });
 

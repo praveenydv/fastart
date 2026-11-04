@@ -173,6 +173,7 @@ export default function AIEnhanceModal({
           {/* Controls Body */}
           <ScrollView
             style={styles.contentScroll}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             scrollEnabled={!isSliderDragging}
           >
@@ -440,6 +441,9 @@ const styles = StyleSheet.create({
   contentScroll: {
     paddingHorizontal: 8,
     paddingTop: 4,
+  },
+  scrollContent: {
+    paddingBottom: 56,
   },
   controlsGroup: {
     gap: 4,

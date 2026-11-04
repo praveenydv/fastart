@@ -67,6 +67,7 @@ export function useTimelineDragTrim({
     handleClipTouchEnd,
     handleClipTouchCancel,
     cancelClipDrag,
+    lastDragEndTimeRef,
   } = useTimelineClipDrag({
     allClips,
     selectedClipId,
@@ -120,6 +121,7 @@ export function useTimelineDragTrim({
       cancelClipDrag,
       handleLeftTrimStart,
       handleRightTrimStart,
+      lastDragEndTimeRef,
     }),
     [
       activeTrimming,
@@ -141,6 +143,7 @@ export function useTimelineDragTrim({
       cancelClipDrag,
       handleLeftTrimStart,
       handleRightTrimStart,
+      lastDragEndTimeRef,
     ],
   );
 }

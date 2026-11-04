@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable';
 import { Image as ExpoImage } from 'expo-image';
@@ -42,26 +44,246 @@ const getTransitionIcon = (id: string): keyof typeof Ionicons.glyphMap => {
   }
 };
 
-const getTransitionAnimStyle = (id: string): any => {
-  if (Platform.OS !== 'web') return null;
-  switch (id) {
-    case 'dissolve': return { animation: 'transDissolve 2.2s ease-in-out infinite' };
-    case 'slide_left': return { animation: 'transSlideLeft 2.2s ease-in-out infinite' };
-    case 'slide_right': return { animation: 'transSlideRight 2.2s ease-in-out infinite' };
-    case 'push_up': return { animation: 'transPushUp 2.2s ease-in-out infinite' };
-    case 'push_down': return { animation: 'transPushDown 2.2s ease-in-out infinite' };
-    case 'zoom_in': return { animation: 'transZoomIn 2.2s ease-in-out infinite' };
-    case 'zoom_out': return { animation: 'transZoomOut 2.2s ease-in-out infinite' };
-    case 'flash_white': return { animation: 'transFlashWhite 2.2s ease-in-out infinite' };
-    case 'fade_black': return { animation: 'transFadeBlack 2.2s ease-in-out infinite' };
-    case 'glitch_transition': return { animation: 'transGlitch 2.2s ease-in-out infinite' };
-    case 'spin_cw': return { animation: 'transSpinCw 2.2s ease-in-out infinite' };
-    case 'spin_ccw': return { animation: 'transSpinCcw 2.2s ease-in-out infinite' };
-    case 'light_leak': return { animation: 'transLightLeak 2.2s ease-in-out infinite' };
-    case 'cut': return { animation: 'transCut 2.2s steps(1) infinite' };
-    default: return null;
-  }
-};
+const TransitionLivePreview = React.memo(({ id, isActive }: { id: string; isActive: boolean }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(400),
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.delay(900),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 350,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  const layerBStyle = useMemo((): any => {
+    switch (id) {
+      case 'dissolve':
+        return { opacity: anim };
+      case 'slide_left':
+        return {
+          transform: [
+            {
+              translateX: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              }),
+            },
+          ],
+        };
+      case 'slide_right':
+        return {
+          transform: [
+            {
+              translateX: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-50, 0],
+              }),
+            },
+          ],
+        };
+      case 'push_up':
+        return {
+          transform: [
+            {
+              translateY: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              }),
+            },
+          ],
+        };
+      case 'push_down':
+        return {
+          transform: [
+            {
+              translateY: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-50, 0],
+              }),
+            },
+          ],
+        };
+      case 'zoom_in':
+        return {
+          opacity: anim,
+          transform: [
+            {
+              scale: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.2, 1],
+              }),
+            },
+          ],
+        };
+      case 'zoom_out':
+        return {
+          opacity: anim,
+          transform: [
+            {
+              scale: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1.8, 1],
+              }),
+            },
+          ],
+        };
+      case 'spin_cw':
+        return {
+          opacity: anim,
+          transform: [
+            {
+              rotate: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['-180deg', '0deg'],
+              }),
+            },
+            {
+              scale: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.25, 1],
+              }),
+            },
+          ],
+        };
+      case 'spin_ccw':
+        return {
+          opacity: anim,
+          transform: [
+            {
+              rotate: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['180deg', '0deg'],
+              }),
+            },
+            {
+              scale: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.25, 1],
+              }),
+            },
+          ],
+        };
+      case 'glitch_transition':
+        return {
+          opacity: anim,
+          transform: [
+            {
+              translateX: anim.interpolate({
+                inputRange: [0, 0.3, 0.6, 0.8, 1],
+                outputRange: [16, -4, 4, -2, 0],
+              }),
+            },
+          ],
+        };
+      case 'cut':
+        return {
+          opacity: anim.interpolate({
+            inputRange: [0, 0.49, 0.5, 1],
+            outputRange: [0, 0, 1, 1],
+          }),
+        };
+      default:
+        return { opacity: anim };
+    }
+  }, [id, anim]);
+
+  const flashOverlayStyle = useMemo((): any => {
+    if (id === 'flash_white') {
+      return {
+        opacity: anim.interpolate({
+          inputRange: [0, 0.4, 0.7, 1],
+          outputRange: [0, 0.95, 0.2, 0],
+        }),
+        backgroundColor: '#FFFFFF',
+      };
+    }
+    if (id === 'fade_black') {
+      return {
+        opacity: anim.interpolate({
+          inputRange: [0, 0.4, 0.7, 1],
+          outputRange: [0, 0.95, 0.2, 0],
+        }),
+        backgroundColor: '#000000',
+      };
+    }
+    if (id === 'light_leak') {
+      return {
+        opacity: anim.interpolate({
+          inputRange: [0, 0.4, 0.7, 1],
+          outputRange: [0, 0.7, 0.2, 0],
+        }),
+        backgroundColor: '#F59E0B',
+      };
+    }
+    return null;
+  }, [id, anim]);
+
+  return (
+    <View style={styles.transStageInner}>
+      {/* Base Clip A */}
+      <View style={styles.clipLayerA}>
+        <ExpoImage
+          source={{ uri: PRESET_PREVIEW_IMAGE }}
+          style={styles.clipImg as any}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+        />
+        <View style={styles.clipLayerAOverlay} />
+        <View style={styles.clipTagA}>
+          <Text style={styles.clipTagText}>A</Text>
+        </View>
+      </View>
+
+      {/* Incoming Clip B executing live transition */}
+      <Animated.View style={[styles.clipLayerB, layerBStyle]}>
+        <ExpoImage
+          source={{ uri: PRESET_PREVIEW_IMAGE }}
+          style={styles.clipImg as any}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+        />
+        <View style={styles.clipLayerBOverlay} />
+        <View style={styles.clipTagB}>
+          <Text style={styles.clipTagText}>B</Text>
+        </View>
+      </Animated.View>
+
+      {flashOverlayStyle && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, flashOverlayStyle, { zIndex: 10 }]}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* Center transition icon indicator */}
+      <View style={[styles.transPillCenter, isActive && styles.transPillCenterActive]}>
+        <Ionicons
+          name={getTransitionIcon(id)}
+          size={12}
+          color={isActive ? '#00F2FE' : '#FFFFFF'}
+        />
+      </View>
+    </View>
+  );
+});
+TransitionLivePreview.displayName = 'TransitionLivePreview';
 
 export default function TransitionsModal({
   visible,
@@ -272,56 +494,12 @@ export default function TransitionsModal({
                           <Text style={styles.noneStageText}>None</Text>
                         </View>
                       ) : (
-                        <View style={styles.transStageInner}>
-                          {/* Base Clip A */}
-                          <View style={styles.clipLayerA}>
-                            <ExpoImage
-                              source={{ uri: PRESET_PREVIEW_IMAGE }}
-                              style={[
-                                styles.clipImg,
-                                Platform.OS === 'web' ? ({ filter: 'sepia(0.35) contrast(1.1) brightness(0.85)' } as any) : null,
-                              ]}
-                              contentFit="cover"
-                              cachePolicy="memory-disk"
-                              transition={120}
-                            />
-                            <View style={styles.clipTagA}>
-                              <Text style={styles.clipTagText}>A</Text>
-                            </View>
-                          </View>
-
-                          {/* Incoming Clip B executing live transition */}
-                          <View style={[styles.clipLayerB, getTransitionAnimStyle(item.id)]}>
-                            <ExpoImage
-                              source={{ uri: PRESET_PREVIEW_IMAGE }}
-                              style={[
-                                styles.clipImg,
-                                Platform.OS === 'web' ? ({ filter: 'contrast(1.25) saturate(1.4)' } as any) : null,
-                              ]}
-                              contentFit="cover"
-                              cachePolicy="memory-disk"
-                              transition={120}
-                            />
-                            <View style={styles.clipTagB}>
-                              <Text style={styles.clipTagText}>B</Text>
-                            </View>
-                          </View>
-
-                          {/* Center transition icon indicator */}
-                          <View style={[styles.transPillCenter, isActive && styles.transPillCenterActive]}>
-                            <Ionicons
-                              name={getTransitionIcon(item.id)}
-                              size={12}
-                              color={isActive ? '#00F2FE' : '#FFFFFF'}
-                            />
-                          </View>
-
-                          {/* Active badge */}
-                          {isActive && (
-                            <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={10} color="#000000" />
-                            </View>
-                          )}
+                        <TransitionLivePreview id={item.id} isActive={isActive} />
+                      )}
+                      {/* Active badge */}
+                      {isActive && (
+                        <View style={styles.activeCheckBadge}>
+                          <Ionicons name="checkmark" size={10} color="#000000" />
                         </View>
                       )}
                     </View>
@@ -479,7 +657,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridContainer: {
-    paddingBottom: 8,
+    paddingBottom: 56,
   },
   grid: {
     flexDirection: 'row',
@@ -530,9 +708,17 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 1,
   },
+  clipLayerAOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(217, 119, 6, 0.22)',
+  },
   clipLayerB: {
     ...StyleSheet.absoluteFill,
     zIndex: 2,
+  },
+  clipLayerBOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 242, 254, 0.22)',
   },
   clipImg: {
     width: '100%',

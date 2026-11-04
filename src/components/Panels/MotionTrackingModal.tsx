@@ -365,11 +365,34 @@ export default function MotionTrackingModal({
   const handleCancelTracking = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     setIsScanning(false);
     triggerHaptic("warning");
     syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
   }, [trajectory.length, syncTracking]);
+
+  const handleClose = useCallback(() => {
+    handleCancelTracking();
+    onClose();
+  }, [handleCancelTracking, onClose]);
+
+  // Clean up and abort active tracking if modal becomes hidden or unmounts
+  useEffect(() => {
+    if (!visible) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsScanning(false);
+    }
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [visible]);
 
   const handleBakeKeyframes = useCallback(() => {
     if (!trajectory || trajectory.length === 0 || !project || !updateProjectWithHistory) {
@@ -498,7 +521,7 @@ export default function MotionTrackingModal({
           title="Motion Tracking"
           subtitle={hasTrajectory ? `${trajectory.length} pts` : undefined}
           iconName="scan-outline"
-          onClose={onClose}
+          onClose={handleClose}
           onReset={hasTrajectory ? handleReset : undefined}
           resetText="Clear"
         />
@@ -1305,7 +1328,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetBodyContent: {
-    paddingBottom: 10,
+    paddingBottom: 56,
   },
   scanningCard: {
     backgroundColor: "rgba(0, 229, 201, 0.06)",

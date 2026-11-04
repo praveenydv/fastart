@@ -148,7 +148,7 @@ export default function StickersModal({
 
           </View>
 
-          <ScrollView style={styles.sheetBody}>
+          <ScrollView style={styles.sheetBody} contentContainerStyle={styles.scrollContent}>
             <View style={styles.grid}>
               {filteredStickers.map((item) => {
                 const isBadge = item.char.length > 2;
@@ -300,6 +300,9 @@ const styles = StyleSheet.create({
   },
   sheetBody: {
     padding: 6,
+  },
+  scrollContent: {
+    paddingBottom: 56,
   },
   grid: {
     flexDirection: 'row',

@@ -415,7 +415,11 @@ export async function requestWhisperTranscription(
   totalDuration: number,
   language: string = "en",
   onProgress?: (pct: number, status: string) => void,
+  signal?: AbortSignal,
 ): Promise<CaptionSegment[]> {
+  if (signal?.aborted) {
+    throw new Error("Caption generation cancelled.");
+  }
   // 1. Gather all clips containing audio
   const videoClips = (project.tracks.video || []).filter(
     (v) =>
@@ -506,11 +510,19 @@ export async function requestWhisperTranscription(
 
   // 4. Delegate to mounted MobileWhisperTranscriberView via listener
   return new Promise<CaptionSegment[]>((resolve, reject) => {
+    let settled = false;
+
     const task: WhisperBridgeTask = {
       id: "whisper_" + Date.now(),
       htmlUri,
-      onProgress,
+      onProgress: (pct, status) => {
+        if (!settled && !signal?.aborted && onProgress) {
+          onProgress(pct, status);
+        }
+      },
       resolve: (segments) => {
+        if (settled) return;
+        settled = true;
         currentTask = null;
         if (activeListener) activeListener(null);
         // Clean up temporary files
@@ -520,6 +532,8 @@ export async function requestWhisperTranscription(
         resolve(segments);
       },
       reject: (err) => {
+        if (settled) return;
+        settled = true;
         currentTask = null;
         if (activeListener) activeListener(null);
         tempFilesToClean.forEach((f) => {
@@ -529,13 +543,27 @@ export async function requestWhisperTranscription(
       },
     };
 
+    if (signal) {
+      if (signal.aborted) {
+        task.reject(new Error("Caption generation cancelled."));
+        return;
+      }
+      signal.addEventListener(
+        "abort",
+        () => {
+          task.reject(new Error("Caption generation cancelled."));
+        },
+        { once: true },
+      );
+    }
+
     currentTask = task;
 
     if (activeListener) {
       activeListener(task);
     } else {
       setTimeout(() => {
-        if (currentTask === task) {
+        if (currentTask === task && !settled) {
           task.reject(
             new Error("Speech recognition bridge view is not mounted. Please ensure AutoCaptionModal is open.")
           );

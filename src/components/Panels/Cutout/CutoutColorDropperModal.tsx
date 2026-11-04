@@ -438,7 +438,7 @@ const s = StyleSheet.create({
     backgroundColor: "#0A0D15",
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 34,
+    paddingBottom: 48,
     borderTopWidth: 1,
     borderTopColor: "#1E273A",
     gap: 12,

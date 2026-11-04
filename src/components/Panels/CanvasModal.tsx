@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   scrollBody: {
-    paddingBottom: 12,
+    paddingBottom: 56,
   },
   ratioGrid: {
     flexDirection: "row",

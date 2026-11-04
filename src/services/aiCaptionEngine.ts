@@ -18,24 +18,6 @@ import { decodeWavPcm } from "../utils/audioExporter";
 import { splitCaptionIntoPunchySections } from "../utils/srtParser";
 import { getStorageItem, setStorageItem } from "../utils/storage";
 
-export const WHISPER_API_KEY_STORAGE_KEY = "@fastart_whisper_api_key";
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let base64 = "";
-  const len = bytes.length;
-  for (let i = 0; i < len; i += 3) {
-    const b0 = bytes[i];
-    const b1 = i + 1 < len ? bytes[i + 1] : 0;
-    const b2 = i + 2 < len ? bytes[i + 2] : 0;
-    base64 += chars[b0 >> 2];
-    base64 += chars[((b0 & 3) << 4) | (b1 >> 4)];
-    base64 += i + 1 < len ? chars[((b1 & 15) << 2) | (b2 >> 6)] : "=";
-    base64 += i + 2 < len ? chars[b2 & 63] : "=";
-  }
-  return base64;
-}
-
 export interface CaptionStylePreset {
   id: string;
   name: string;
@@ -749,144 +731,6 @@ async function transcribeWithWhisper(
 }
 
 /**
- * Cloud Whisper speech-to-text via Groq (whisper-large-v3) or OpenAI (whisper-1).
- * Accepts a WAV Uint8Array produced by exportProjectAudioToWavBytes, sends it to the
- * transcription API, and returns timestamped CaptionSegments.
- * API key is read from storage key WHISPER_API_KEY_STORAGE_KEY.
- * Supports both "groq:<key>" and "openai:<key>" prefixes, or bare key (defaults to Groq).
- */
-export async function transcribeWithCloudWhisper(
-  wavBytes: Uint8Array,
-  onProgress?: (pct: number, status: string) => void,
-): Promise<CaptionSegment[] | null> {
-  const rawKey = getStorageItem(WHISPER_API_KEY_STORAGE_KEY);
-  if (!rawKey || !rawKey.trim()) return null;
-
-  let provider: "groq" | "openai" = "groq";
-  let apiKey = rawKey.trim();
-  if (apiKey.startsWith("groq:")) {
-    provider = "groq";
-    apiKey = apiKey.slice(5).trim();
-  } else if (apiKey.startsWith("openai:")) {
-    provider = "openai";
-    apiKey = apiKey.slice(7).trim();
-  }
-
-  if (!apiKey) return null;
-
-  if (onProgress) onProgress(35, `Uploading audio to ${provider === "groq" ? "Groq" : "OpenAI"} Whisper...`);
-
-  let tempAudioFile: string | null = null;
-  const form = new FormData();
-
-  if (Platform.OS !== "web") {
-    try {
-      const base64 = uint8ArrayToBase64(wavBytes);
-      tempAudioFile = `${FileSystemLegacy.cacheDirectory}whisper_${Date.now()}.wav`;
-      await FileSystemLegacy.writeAsStringAsync(tempAudioFile, base64, {
-        encoding: FileSystemLegacy.EncodingType.Base64,
-      });
-      form.append("file", {
-        uri: tempAudioFile,
-        name: "audio.wav",
-        type: "audio/wav",
-      } as any);
-    } catch (fsErr) {
-      console.warn("FastArt: Writing temp audio file failed, falling back to Blob:", fsErr);
-      const blob = new Blob([wavBytes.buffer as ArrayBuffer], { type: "audio/wav" });
-      form.append("file", blob, "audio.wav");
-    }
-  } else {
-    const blob = new Blob([wavBytes.buffer as ArrayBuffer], { type: "audio/wav" });
-    form.append("file", blob, "audio.wav");
-  }
-
-  if (provider === "groq") {
-    form.append("model", "whisper-large-v3");
-    form.append("response_format", "verbose_json");
-    form.append("timestamp_granularities[]", "segment");
-    form.append("language", "en");
-  } else {
-    form.append("model", "whisper-1");
-    form.append("response_format", "verbose_json");
-    form.append("timestamp_granularities[]", "segment");
-    form.append("language", "en");
-  }
-
-  const endpoint =
-    provider === "groq"
-      ? "https://api.groq.com/openai/v1/audio/transcriptions"
-      : "https://api.openai.com/v1/audio/transcriptions";
-
-  if (onProgress) onProgress(50, `Transcribing with AI (${provider === "groq" ? "Groq" : "OpenAI"})...`);
-
-  let resp: Response;
-  try {
-    resp = await Promise.race([
-      fetch(endpoint, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Cloud Whisper request timed out (60s)")), 60000),
-      ),
-    ]);
-  } catch (err: any) {
-    throw new Error(
-      `Cloud Whisper connection failed: ${err?.message || String(err)}. Check your internet connection.`,
-    );
-  } finally {
-    if (tempAudioFile) {
-      try {
-        await FileSystemLegacy.deleteAsync(tempAudioFile, { idempotent: true });
-      } catch (_) {}
-    }
-  }
-
-  if (!resp.ok) {
-    let detail = "";
-    try {
-      const body = await resp.json();
-      detail = body?.error?.message || JSON.stringify(body);
-    } catch (_) {}
-    if (resp.status === 401) {
-      throw new Error(
-        `Invalid API key for ${provider === "groq" ? "Groq" : "OpenAI"}. Please update your key in the caption settings.`,
-      );
-    }
-    throw new Error(
-      `Cloud Whisper API error (${resp.status}): ${detail || resp.statusText}`,
-    );
-  }
-
-  const json = await resp.json();
-  if (onProgress) onProgress(75, "Processing transcription result...");
-
-  // Parse verbose_json segments which contain start/end timestamps
-  if (Array.isArray(json?.segments) && json.segments.length > 0) {
-    const segs: CaptionSegment[] = json.segments
-      .map((s: any) => {
-        const text = (s.text || "").trim();
-        if (!text) return null;
-        const start = Number((s.start ?? 0).toFixed(2));
-        const duration = Number(Math.max(0.5, (s.end ?? s.start + 2) - s.start).toFixed(2));
-        return { text, startTime: start, duration };
-      })
-      .filter(Boolean) as CaptionSegment[];
-    if (segs.length > 0) return segs;
-  }
-
-  // Fallback: plain text with no timestamps
-  const fullText = (json?.text || "").trim();
-  if (fullText.length > 0) {
-    return [{ text: fullText, startTime: 0, duration: 3.0 }];
-  }
-
-  return null;
-}
-
-/**
  * Analyzes audio energy peaks and generates voice activity intervals.
  * Guaranteed to break continuous speech into natural, social-ready subtitle phrases (1.5s - 2.8s).
  */
@@ -1160,7 +1004,11 @@ export async function generateAutoCaptions(
   customPhrases?: string[],
   onProgress?: (pct: number, status: string) => void,
   styleOverrides?: Partial<CaptionClip>,
+  signal?: AbortSignal,
 ): Promise<CaptionClip[]> {
+  if (signal?.aborted) {
+    throw new Error("Caption generation cancelled.");
+  }
   const computedDur = computeTotalDuration(project.tracks);
   const totalDuration = computedDur > 0 ? computedDur : 5.0;
 
@@ -1199,6 +1047,10 @@ export async function generateAutoCaptions(
 
   const hasCustom = customPhrases && customPhrases.length > 0;
   let finalSegments: { text: string; start: number; duration: number }[] = [];
+
+  if (signal?.aborted) {
+    throw new Error("Caption generation cancelled.");
+  }
 
   // 2. If custom dialogue phrases are provided, align them to genuine vocal cadence intervals detected from audio
   if (hasCustom) {
@@ -1246,6 +1098,9 @@ export async function generateAutoCaptions(
       }
     }
   } else {
+    if (signal?.aborted) {
+      throw new Error("Caption generation cancelled.");
+    }
     // 3. Automated Speech-to-Text Transcription
     if (Platform.OS === "web" && typeof document !== "undefined") {
       // --- Web: In-browser Transformers.js Whisper (WebAssembly) ---
@@ -1268,15 +1123,16 @@ export async function generateAutoCaptions(
         throw err;
       }
     } else {
-      // --- Mobile: Zero-API-Key Native (Google/Apple) & On-Device Whisper AI ---
+      // --- Mobile: Neural Whisper AI (On-Device Transformers.js & Cloud Whisper AI) ---
       try {
-        if (onProgress) onProgress(30, "Initializing on-device speech recognition...");
+        if (onProgress) onProgress(30, "Initializing on-device Whisper AI engine...");
         const { transcribeMobileSpeech } = await import("./mobileWhisperEngine");
         const mobileSegments = await transcribeMobileSpeech(
           project,
           totalDuration,
           language,
           onProgress,
+          signal,
         );
         if (mobileSegments && mobileSegments.length > 0) {
           finalSegments = mobileSegments.map((ms) => ({
@@ -1286,7 +1142,10 @@ export async function generateAutoCaptions(
           }));
         }
       } catch (err: any) {
-        console.warn("FastArt: Mobile speech recognition failed:", err);
+        if (signal?.aborted || err?.message?.includes("cancelled")) {
+          throw new Error("Caption generation cancelled.");
+        }
+        console.warn("FastArt: Mobile Whisper AI transcription failed:", err);
         throw err;
       }
     }

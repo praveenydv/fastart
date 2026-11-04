@@ -1,5 +1,6 @@
 package com.fastart
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
 import android.os.Build
@@ -7,6 +8,7 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OnnxValue
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import expo.modules.kotlin.functions.Coroutine
@@ -17,6 +19,7 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.io.File
 import java.io.FileOutputStream
+import java.io.BufferedOutputStream
 
 /**
  * FastArt Native Rust Bridge for Android.
@@ -31,12 +34,16 @@ class FastArtRustModule : Module() {
     @Volatile private var modnetSessionOptions: OrtSession.SessionOptions? = null
     @Volatile private var modnetInputName: String? = null
     @Volatile private var modnetOutputName: String? = null
+    @Volatile private var modnetModelWidth: Int = 256
+    @Volatile private var modnetModelHeight: Int = 256
     private val modnetInferenceLock = Any()
     private var modnetInputBuffer: FloatBuffer? = null
     private var modnetInputByteBuffer: ByteBuffer? = null
     private val videoDecoderLock = Any()
     private var videoDecoderUri: String? = null
     private var videoDecoder: MediaMetadataRetriever? = null
+    private var videoDecoderWidth: Int = 512
+    private var videoDecoderHeight: Int = 512
 
     companion object {
         private const val TAG = "FastArtRust"
@@ -278,14 +285,10 @@ class FastArtRustModule : Module() {
         }
     }
 
-    @Volatile
-    private var cutoutDirCreated = false
-
     private fun getCutoutDirectory(context: Context): File {
         val directory = File(context.cacheDir, "cutout")
-        if (!cutoutDirCreated) {
-            if (!directory.exists()) directory.mkdirs()
-            cutoutDirCreated = true
+        if (!directory.exists()) {
+            directory.mkdirs()
         }
         return directory
     }
@@ -305,8 +308,31 @@ class FastArtRustModule : Module() {
         // Keep one logical core available to playback, React, and the OS; small
         // devices must not be forced to run inference on every core.
         val cpuThreads = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 6)
-        val modelUri = Uri.parse(modelPath)
-        val localModelPath = if (modelUri.scheme == "file") modelUri.path ?: modelPath else modelPath
+        val context = appContext.reactContext
+        val cleanModelPath = if (modelPath.startsWith("file://")) modelPath.removePrefix("file://") else modelPath
+        val resolvedPath = if (cleanModelPath.isNotBlank() && File(cleanModelPath).exists()) {
+            cleanModelPath
+        } else {
+            // Check bundled asset: models/selfie_segmentation.onnx (462 KB ultra-fast offline AI model)
+            val cachedAsset = File(context?.cacheDir, "fastart-selfie-bundled.onnx")
+            if (context != null && (!cachedAsset.exists() || cachedAsset.length() < 400_000)) {
+                try {
+                    context.assets.open("models/selfie_segmentation.onnx").use { input ->
+                        FileOutputStream(cachedAsset).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                } catch (assetErr: Exception) {
+                    Log.w(TAG, "Bundled asset model not accessible: ${assetErr.message}")
+                }
+            }
+            if (cachedAsset.exists() && cachedAsset.length() >= 400_000) {
+                cachedAsset.absolutePath
+            } else {
+                cleanModelPath
+            }
+        }
+        val localModelPath = resolvedPath
 
         fun createSession(useNnapi: Boolean): Pair<OrtSession, OrtSession.SessionOptions> {
             val options = OrtSession.SessionOptions()
@@ -337,10 +363,22 @@ class FastArtRustModule : Module() {
         val session = created.first
         modnetSessionOptions = created.second
         modnetEnvironment = environment
-        modnetInputName = session.inputNames.firstOrNull()
-            ?: throw IllegalStateException("MODNet model has no input")
-        modnetOutputName = session.outputNames.firstOrNull()
-            ?: throw IllegalStateException("MODNet model has no output")
+        val inputName = session.inputNames.firstOrNull()
+            ?: throw IllegalStateException("Model has no input")
+        val outputName = session.outputNames.firstOrNull()
+            ?: throw IllegalStateException("Model has no output")
+        modnetInputName = inputName
+        modnetOutputName = outputName
+
+        try {
+            val inputInfo = session.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo
+            val shape = inputInfo?.shape
+            if (shape != null && shape.size >= 4) {
+                if (shape[3] > 0) modnetModelWidth = shape[3].toInt()
+                if (shape[2] > 0) modnetModelHeight = shape[2].toInt()
+            }
+        } catch (_: Exception) {}
+        Log.i(TAG, "Initialized AI cutout session: input=$inputName [1, 3, $modnetModelHeight, $modnetModelWidth], output=$outputName")
         modnetSession = session
         "ok"
     }
@@ -363,21 +401,54 @@ class FastArtRustModule : Module() {
     private fun inferAlphaRgba(rgba: ByteArray, width: Int, height: Int, threshold: Float, feather: Float): ByteArray = synchronized(modnetInferenceLock) {
         val pixels = Math.multiplyExact(width, height)
         require(rgba.size == Math.multiplyExact(pixels, 4)) { "Invalid RGBA frame size" }
-        val session = modnetSession ?: throw IllegalStateException("Accelerated MODNet is not initialized")
-        val environment = modnetEnvironment ?: throw IllegalStateException("ONNX Runtime is unavailable")
-        val inputName = modnetInputName ?: throw IllegalStateException("MODNet input is unavailable")
-        val outputName = modnetOutputName ?: throw IllegalStateException("MODNet output is unavailable")
-
-        val planeSize = 512 * 512
-        val inputBytes = modnetInputByteBuffer ?: ByteBuffer.allocateDirect(planeSize * 3 * 4)
-            .order(ByteOrder.nativeOrder()).also { modnetInputByteBuffer = it }
-        if (!nativePrepareModnetInput(rgba, width, height, inputBytes)) {
-            throw IllegalStateException("Rust MODNet input preparation failed")
+        if (modnetSession == null) {
+            initializeAcceleratedModnet("")
         }
-        val inputBuffer = modnetInputBuffer ?: inputBytes.asFloatBuffer().also { modnetInputBuffer = it }
+        val session = modnetSession ?: throw IllegalStateException("Accelerated AI cutout is not initialized")
+        val environment = modnetEnvironment ?: throw IllegalStateException("ONNX Runtime is unavailable")
+        val inputName = modnetInputName ?: throw IllegalStateException("AI cutout input is unavailable")
+        val outputName = modnetOutputName ?: throw IllegalStateException("AI cutout output is unavailable")
+
+        val mWidth = modnetModelWidth
+        val mHeight = modnetModelHeight
+        val planeSize = mWidth * mHeight
+        val inputBytes = modnetInputByteBuffer?.takeIf { it.capacity() >= planeSize * 3 * 4 }
+            ?: ByteBuffer.allocateDirect(planeSize * 3 * 4)
+                .order(ByteOrder.nativeOrder()).also { modnetInputByteBuffer = it }
+        inputBytes.position(0)
+        val inputBuffer = inputBytes.asFloatBuffer()
+
+        if (mWidth == 512 && mHeight == 512 && width == 512 && height == 512) {
+            if (!nativePrepareModnetInput(rgba, width, height, inputBytes)) {
+                throw IllegalStateException("Rust MODNet input preparation failed")
+            }
+        } else {
+            // Ultra-fast contiguous FloatArray sampling: R / 255f, G / 255f, B / 255f with single bulk native transfer
+            val inputFloats = FloatArray(planeSize * 3)
+            val inv255 = 1.0f / 255.0f
+            val scaleX = width.toFloat() / mWidth.toFloat()
+            val scaleY = height.toFloat() / mHeight.toFloat()
+            val gOffset = planeSize
+            val bOffset = planeSize * 2
+            var dIdx = 0
+            for (y in 0 until mHeight) {
+                val sy = (y * scaleY).toInt().coerceIn(0, height - 1)
+                val srcRow = sy * width * 4
+                for (x in 0 until mWidth) {
+                    val sx = (x * scaleX).toInt().coerceIn(0, width - 1)
+                    val sIdx = srcRow + (sx shl 2)
+                    inputFloats[dIdx] = (rgba[sIdx].toInt() and 0xFF) * inv255
+                    inputFloats[gOffset + dIdx] = (rgba[sIdx + 1].toInt() and 0xFF) * inv255
+                    inputFloats[bOffset + dIdx] = (rgba[sIdx + 2].toInt() and 0xFF) * inv255
+                    dIdx++
+                }
+            }
+            inputBuffer.position(0)
+            inputBuffer.put(inputFloats)
+        }
         inputBuffer.position(0)
         inputBuffer.limit(planeSize * 3)
-        val input = OnnxTensor.createTensor(environment, inputBuffer, longArrayOf(1, 3, 512, 512))
+        val input = OnnxTensor.createTensor(environment, inputBuffer, longArrayOf(1, 3, mHeight.toLong(), mWidth.toLong()))
         try {
             session.run(mapOf(inputName to input)).use { result ->
                 var alphaTensor: OnnxTensor? = null
@@ -412,28 +483,62 @@ class FastArtRustModule : Module() {
                     } catch (_: Exception) {}
                 }
 
-                // 4. If no tensor could be extracted, fall back directly to Rust native segmentation
+                // 4. If no tensor could be extracted, throw error - NEVER fall back to chroma!
                 if (alphaTensor == null) {
-                    Log.w(TAG, "No tensor found in MODNet result; falling back to Rust native segmentation")
-                    return nativeSegmentFrameRgba(rgba, width, height, threshold, feather)
+                    throw IllegalStateException("AI cutout neural model did not produce an output tensor")
                 }
 
                 val outputFloats = alphaTensor.floatBuffer
-                require(outputFloats.remaining() >= planeSize) { "MODNet returned an invalid matte" }
-                val rawAlpha = if (outputFloats.isDirect) {
-                    outputFloats
-                } else {
-                    // ORT may materialize output into a heap FloatBuffer on some
-                    // providers. Give JNI a direct view without per-value access.
-                    ByteBuffer.allocateDirect(planeSize * Float.SIZE_BYTES)
-                        .order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-                            put(outputFloats.duplicate().apply { position(0); limit(planeSize) })
-                            position(0)
-                        }
+                outputFloats.position(0)
+                require(outputFloats.remaining() >= planeSize) { "Model returned an invalid matte" }
+
+                val thresh = threshold.coerceIn(0f, 1f)
+                val soft = feather.coerceIn(0f, 1f).coerceAtLeast(0.01f)
+                val invSoft = 1.0f / soft
+
+                if (mWidth == 512 && mHeight == 512 && width == 512 && height == 512) {
+                    val rawAlpha = if (outputFloats.isDirect) {
+                        outputFloats
+                    } else {
+                        ByteBuffer.allocateDirect(planeSize * Float.SIZE_BYTES)
+                            .order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+                                put(outputFloats.duplicate().apply { position(0); limit(planeSize) })
+                                position(0)
+                            }
+                    }
+                    val matte = nativeProcessModnetAlpha(rawAlpha, width, height, threshold, feather)
+                    if (matte.size == pixels) return matte
                 }
-                val matte = nativeProcessModnetAlpha(rawAlpha, width, height, threshold, feather)
-                require(matte.size == pixels) { "Rust MODNet alpha post-processing failed" }
-                matte
+
+                val rawFloats = FloatArray(planeSize)
+                outputFloats.get(rawFloats)
+                val alpha = ByteArray(width * height)
+                if (width == mWidth && height == mHeight) {
+                    for (i in 0 until planeSize) {
+                        val v = rawFloats[i]
+                        val a = if (v <= thresh) 0f
+                                else if (v >= thresh + soft) 1f
+                                else (v - thresh) * invSoft
+                        alpha[i] = (a.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                    }
+                } else {
+                    val scaleX = mWidth.toFloat() / width.toFloat()
+                    val scaleY = mHeight.toFloat() / height.toFloat()
+                    for (y in 0 until height) {
+                        val my = (y * scaleY).toInt().coerceIn(0, mHeight - 1)
+                        val srcRow = my * mWidth
+                        val dstRow = y * width
+                        for (x in 0 until width) {
+                            val mx = (x * scaleX).toInt().coerceIn(0, mWidth - 1)
+                            val v = rawFloats[srcRow + mx]
+                            val a = if (v <= thresh) 0f
+                                    else if (v >= thresh + soft) 1f
+                                    else (v - thresh) * invSoft
+                            alpha[dstRow + x] = (a.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                        }
+                    }
+                }
+                alpha
             }
         } finally {
             input.close()
@@ -452,6 +557,12 @@ class FastArtRustModule : Module() {
         keyColor: String,
     ): String {
         val context = appContext.reactContext ?: throw IllegalStateException("React context is unavailable")
+        val directory = getCutoutDirectory(context)
+        val safeClipId = clipId.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        val output = File(directory, "${safeClipId}_${frameIdx}.png")
+        if (output.exists() && output.length() > 0) {
+            return Uri.fromFile(output).toString()
+        }
         val retriever: MediaMetadataRetriever
         var sourceBitmap: Bitmap? = null
         var scaledBitmap: Bitmap? = null
@@ -466,6 +577,8 @@ class FastArtRustModule : Module() {
                     } else {
                         next.setDataSource(parsed.path ?: uri)
                     }
+                    videoDecoderWidth = next.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 512
+                    videoDecoderHeight = next.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 512
                     videoDecoder = next
                     videoDecoderUri = uri
                 }
@@ -474,10 +587,12 @@ class FastArtRustModule : Module() {
             synchronized(videoDecoderLock) {
                 val timeUs = (timeSeconds.coerceAtLeast(0.0) * 1_000_000.0).toLong()
                 val decodedBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    val sourceWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 512
-                    val sourceHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 512
-                    val scale = minOf(1f, 512f / maxOf(sourceWidth, sourceHeight).toFloat())
-                    retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST, maxOf(1, (sourceWidth * scale).toInt()), maxOf(1, (sourceHeight * scale).toInt()))
+                    val maxDim = maxOf(modnetModelWidth, modnetModelHeight)
+                    val scale = minOf(1f, maxDim.toFloat() / maxOf(videoDecoderWidth, videoDecoderHeight).toFloat())
+                    val targetScaledW = maxOf(1, (videoDecoderWidth * scale).toInt())
+                    val targetScaledH = maxOf(1, (videoDecoderHeight * scale).toInt())
+                    retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST, targetScaledW, targetScaledH)
+                        ?: retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                 } else {
                     retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                 } ?: throw IllegalStateException("Could not decode video frame at ${timeSeconds}s")
@@ -486,7 +601,8 @@ class FastArtRustModule : Module() {
 
             val decodedBitmap = sourceBitmap ?: throw IllegalStateException("Decoded frame is unavailable")
             val maxDimension = maxOf(decodedBitmap.width, decodedBitmap.height)
-            val scale = minOf(1f, 512f / maxDimension.toFloat())
+            val maxModelDim = maxOf(modnetModelWidth, modnetModelHeight)
+            val scale = minOf(1f, maxModelDim.toFloat() / maxDimension.toFloat())
             val targetWidth = maxOf(1, (decodedBitmap.width * scale).toInt())
             val targetHeight = maxOf(1, (decodedBitmap.height * scale).toInt())
             val processingBitmap = if (decodedBitmap.width == targetWidth && decodedBitmap.height == targetHeight) decodedBitmap else Bitmap.createScaledBitmap(decodedBitmap, targetWidth, targetHeight, true)
@@ -509,20 +625,46 @@ class FastArtRustModule : Module() {
                 )
                 ByteArray(targetWidth * targetHeight) { index -> processed[index * 4 + 3] }
             } else {
-                try {
-                    inferAlphaRgba(rgba, targetWidth, targetHeight, threshold, feather)
-                } catch (e: Exception) {
-                    Log.w(TAG, "MODNet inference error; falling back to ultra-fast native Rust segmentation: ${e.message}")
-                    nativeSegmentFrameRgba(rgba, targetWidth, targetHeight, threshold, feather)
-                }
+                // Auto mode strictly uses AI neural segmentation - never mix with or fall back to chroma!
+                inferAlphaRgba(rgba, targetWidth, targetHeight, threshold, feather)
             }
-            val mask = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ALPHA_8)
-            mask.copyPixelsFromBuffer(ByteBuffer.wrap(alpha))
-            val directory = getCutoutDirectory(context)
-            val safeClipId = clipId.replace(Regex("[^A-Za-z0-9_-]"), "_")
-            val output = File(directory, "${safeClipId}_${frameIdx}.png")
-            FileOutputStream(output).use { stream ->
-                if (!mask.compress(Bitmap.CompressFormat.PNG, 85, stream)) throw IllegalStateException("Could not encode native cutout mask")
+            // Smooth bilinear upsampling eliminates blocky staircase edges on high-DPI mobile screens
+            val upsampleFactor = if (maxOf(targetWidth, targetHeight) <= 256) 2 else 1
+            val finalWidth = targetWidth * upsampleFactor
+            val finalHeight = targetHeight * upsampleFactor
+            val smoothAlpha = if (upsampleFactor > 1) {
+                smoothAndUpsampleAlpha(alpha, targetWidth, targetHeight, finalWidth, finalHeight)
+            } else {
+                alpha
+            }
+            val maskPixels = IntArray(finalWidth * finalHeight)
+            for (i in maskPixels.indices) {
+                val a = smoothAlpha[i].toInt() and 0xFF
+                maskPixels[i] = (a shl 24) or 0x00FFFFFF
+            }
+            val mask = Bitmap.createBitmap(maskPixels, finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+            var compressed = false
+            BufferedOutputStream(FileOutputStream(output)).use { stream ->
+                compressed = mask.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                stream.flush()
+            }
+            if (!compressed) {
+                // Secondary format fallback: WEBP
+                val webpOutput = File(directory, "${safeClipId}_${frameIdx}.webp")
+                BufferedOutputStream(FileOutputStream(webpOutput)).use { stream ->
+                    val webpFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Bitmap.CompressFormat.WEBP_LOSSY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        Bitmap.CompressFormat.WEBP
+                    }
+                    if (mask.compress(webpFormat, 90, stream)) {
+                        stream.flush()
+                        mask.recycle()
+                        return Uri.fromFile(webpOutput).toString()
+                    }
+                }
+                throw IllegalStateException("Could not encode native cutout mask (format=ARGB_8888, size=${finalWidth}x${finalHeight})")
             }
             mask.recycle()
             return Uri.fromFile(output).toString()
@@ -530,6 +672,46 @@ class FastArtRustModule : Module() {
             if (scaledBitmap !== sourceBitmap) scaledBitmap?.recycle()
             sourceBitmap?.recycle()
         }
+    }
+
+    private fun smoothAndUpsampleAlpha(
+        src: ByteArray,
+        srcW: Int,
+        srcH: Int,
+        dstW: Int,
+        dstH: Int
+    ): ByteArray {
+        val dst = ByteArray(dstW * dstH)
+        val scaleX = (srcW - 1).toFloat() / maxOf(1, dstW - 1).toFloat()
+        val scaleY = (srcH - 1).toFloat() / maxOf(1, dstH - 1).toFloat()
+
+        for (y in 0 until dstH) {
+            val sy = y * scaleY
+            val y0 = sy.toInt().coerceIn(0, srcH - 1)
+            val y1 = (y0 + 1).coerceIn(0, srcH - 1)
+            val fy = sy - y0
+            val row0 = y0 * srcW
+            val row1 = y1 * srcW
+            val dstRow = y * dstW
+
+            for (x in 0 until dstW) {
+                val sx = x * scaleX
+                val x0 = sx.toInt().coerceIn(0, srcW - 1)
+                val x1 = (x0 + 1).coerceIn(0, srcW - 1)
+                val fx = sx - x0
+
+                val v00 = src[row0 + x0].toInt() and 0xFF
+                val v10 = src[row0 + x1].toInt() and 0xFF
+                val v01 = src[row1 + x0].toInt() and 0xFF
+                val v11 = src[row1 + x1].toInt() and 0xFF
+
+                val top = v00 + fx * (v10 - v00)
+                val btm = v01 + fx * (v11 - v01)
+                val v = (top + fy * (btm - top)).toInt().coerceIn(0, 255)
+                dst[dstRow + x] = v.toByte()
+            }
+        }
+        return dst
     }
 
     private fun getVideoFrameInfo(uri: String): Map<String, Any> {
