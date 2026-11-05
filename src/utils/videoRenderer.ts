@@ -113,6 +113,7 @@ export class VideoRenderer {
   public previewCropClipId: string | null = null;
   public isPlaying: boolean = false;
   public isScrubbing: boolean = false;
+  public isExporting: boolean = false;
   private maskFramePending: boolean = false;
   private blurCanvas: HTMLCanvasElement | null = null;
   private blurCtx: CanvasRenderingContext2D | null = null;
@@ -146,7 +147,8 @@ export class VideoRenderer {
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? (canvas.getContext("2d") as CanvasRenderingContext2D | null)
+      ? ((canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+         (canvas.getContext("2d") as CanvasRenderingContext2D | null))
       : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
@@ -175,7 +177,8 @@ export class VideoRenderer {
   setCanvas(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? (canvas.getContext("2d") as CanvasRenderingContext2D | null)
+      ? ((canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+         (canvas.getContext("2d") as CanvasRenderingContext2D | null))
       : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
@@ -436,7 +439,7 @@ export class VideoRenderer {
     ctx.save();
     try {
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = isPlaying ? "medium" : "high";
+      ctx.imageSmoothingQuality = (this.isExporting || !isPlaying) ? "high" : "medium";
       ctx.scale(canvasW / w, canvasH / h);
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
@@ -996,6 +999,7 @@ export class VideoRenderer {
         preloadClip: (c) => this.preloadClip(c),
         ensureOffscreen: (cw, ch) => this.ensureOffscreen(cw, ch),
         isScrubbing: this.isScrubbing,
+        isPlaying: this.isPlaying,
       },
       transitionState,
     );

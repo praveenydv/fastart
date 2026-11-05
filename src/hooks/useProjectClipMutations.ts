@@ -181,6 +181,13 @@ export function useProjectClipMutations({
       }
     }
 
+    if (clip.cutout?.enabled) {
+      cloneClipMasks(clip.id, secondClip.id);
+      if (baseSourceId && baseSourceId !== clip.id) {
+        cloneClipMasks(baseSourceId, secondClip.id);
+      }
+    }
+
     list.splice(idx, 1, firstClip, secondClip);
 
     const updated = {

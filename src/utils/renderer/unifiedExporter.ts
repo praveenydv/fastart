@@ -12,9 +12,7 @@ import {
   getLogicalBaseDimensions,
 } from "../../components/Panels/Export/exportTypes";
 import { exportBrowserVideo } from "./browserVideoExporter";
-import { FastArtGifEncoder } from "./gifEncoder";
-
-export type ExportFormat = "mp4" | "webm" | "gif" | "png" | "wav";
+export type ExportFormat = "mp4" | "webm" | "png" | "wav";
 
 export interface ExportOptions {
   fps?: number;
@@ -182,58 +180,14 @@ export async function exportFastArtProject(
   const targetDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || "";
 
   // -------------------------------------------------------------------------
-  // 1. Snapshot PNG Export (Hardware Rust Accelerated + Canvas Fallback)
+  // 1. Snapshot PNG Export
   // -------------------------------------------------------------------------
   if (format === "png") {
-    onProgress?.(30, currentTime, duration);
+    onProgress?.(0, currentTime, duration);
     const snapW = targetW;
     const snapH = targetH;
 
-    try {
-      const isRustReady = await rustCoreBridge.isAvailable();
-      if (isRustReady) {
-        onProgress?.(60, currentTime, duration);
-        const rustDataUri = await rustCoreBridge.renderSnapshot(project, currentTime, snapW, snapH);
-        if (rustDataUri && rustDataUri.startsWith("data:image/png;base64,")) {
-          onProgress?.(100, currentTime, duration);
-
-          if (Platform.OS === "web") {
-            let blob: Blob = new Blob([]);
-            try {
-              const res = await fetch(rustDataUri);
-              blob = await res.blob();
-            } catch {}
-            return {
-              blob,
-              videoUrl: rustDataUri,
-              mimeType: "image/png",
-              format: "png",
-              extension: "png",
-              fileSize: blob.size,
-            };
-          }
-
-          const b64 = rustDataUri.substring("data:image/png;base64,".length);
-          const bytes = base64ToUint8(b64);
-          const filename = `${cleanTitle}_snapshot_${Date.now()}.png`;
-          const targetFileUri = `${targetDir}${filename}`;
-          const writtenSize = await writeBinaryFileSafely(targetFileUri, bytes);
-
-          return {
-            blob: new Blob([]),
-            videoUrl: targetFileUri,
-            mimeType: "image/png",
-            format: "png",
-            extension: "png",
-            fileSize: writtenSize,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn("[unifiedExporter] Rust snapshot fallback:", err);
-    }
-
-    // Web Canvas fallback for snapshot
+    // Web Canvas snapshot
     if (Platform.OS === "web" && typeof document !== "undefined") {
       try {
         let renderer = existingRenderer;
@@ -249,8 +203,9 @@ export async function exportFastArtProject(
             } catch (e) {}
           }
         }
-        // Correct signature: project, time, isPlaying, logicalWidth, logicalHeight
+        onProgress?.(40, currentTime, duration);
         renderer.renderFrame(project, currentTime, false, baseW, baseH);
+        onProgress?.(80, currentTime, duration);
         const dataUrl = renderer.canvas.toDataURL("image/png");
         let blob: Blob = new Blob([]);
         try {
@@ -271,206 +226,57 @@ export async function exportFastArtProject(
       }
     }
 
-    // On native mobile, signal to engage headless canvas bridge
+    // On native mobile, engage headless Skia/Canvas WebView bridge with full clip/text/sticker rendering
     if (Platform.OS !== "web") {
       throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
     }
   }
 
   // -------------------------------------------------------------------------
-  // 2. Studio Audio Mixdown (WAV) in Rust + Pure-JS PCM Fallback
+  // 2. Studio Audio Mixdown (WAV) - Full 16-bit Stereo PCM with Denoise & Limiter
   // -------------------------------------------------------------------------
   if (format === "wav") {
-    onProgress?.(30, 0, duration);
+    onProgress?.(0, 0, duration);
     const filename = `${cleanTitle}_audio_${Date.now()}.wav`;
     const targetFileUri = `${targetDir}${filename}`;
-    const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
 
-    let wavResult: Uint8Array | string | null = null;
+    onProgress?.(35, 0, duration);
+    const { exportProjectAudioToWavBytes } = require("../audioExporter");
+    const wavBytes: Uint8Array = await exportProjectAudioToWavBytes(project, duration, 44100);
 
-    try {
-      const isRustReady = await rustCoreBridge.isAvailable();
-      if (isRustReady) {
-        onProgress?.(60, 0, duration);
-        wavResult = await rustCoreBridge.exportProjectWav(project, 44100, duration, cleanFilePath);
-      }
-    } catch (err) {
-      console.warn("[unifiedExporter] Rust WAV export error, falling back to pure-JS mixer:", err);
-    }
+    onProgress?.(85, duration, duration);
 
-    if (!wavResult || (wavResult instanceof Uint8Array && wavResult.length <= 44)) {
-      onProgress?.(75, 0, duration);
-      const { exportProjectAudioToWavBytes } = require("../audioExporter");
-      wavResult = await exportProjectAudioToWavBytes(project, duration, 44100);
-    }
-
-    if (wavResult) {
+    if (Platform.OS === "web" && typeof URL !== "undefined") {
+      const blob = new Blob([wavBytes as any], { type: "audio/wav" });
+      const videoUrl = URL.createObjectURL(blob);
       onProgress?.(100, duration, duration);
-
-      if (Platform.OS === "web" && wavResult instanceof Uint8Array && typeof URL !== "undefined") {
-        const blob = new Blob([wavResult as any], { type: "audio/wav" });
-        const videoUrl = URL.createObjectURL(blob);
-        return {
-          blob,
-          videoUrl,
-          mimeType: "audio/wav",
-          format: "wav",
-          extension: "wav",
-          fileSize: wavResult.length,
-        };
-      }
-
-      const finalUrl = typeof wavResult === "string"
-        ? (wavResult.startsWith("file://") ? wavResult : `file://${wavResult}`)
-        : targetFileUri;
-
-      let writtenSize = 0;
-      if (wavResult instanceof Uint8Array) {
-        writtenSize = await writeBinaryFileSafely(targetFileUri, wavResult);
-      } else {
-        const info = await FileSystem.getInfoAsync(finalUrl);
-        writtenSize = (info.exists && (info as any).size) ? (info as any).size : 0;
-      }
-
       return {
-        blob: new Blob([]),
-        videoUrl: finalUrl,
+        blob,
+        videoUrl,
         mimeType: "audio/wav",
         format: "wav",
         extension: "wav",
-        fileSize: writtenSize,
+        fileSize: wavBytes.length,
       };
     }
+
+    const writtenSize = await writeBinaryFileSafely(targetFileUri, wavBytes);
+    onProgress?.(100, duration, duration);
+    return {
+      blob: new Blob([]),
+      videoUrl: targetFileUri,
+      mimeType: "audio/wav",
+      format: "wav",
+      extension: "wav",
+      fileSize: writtenSize,
+    };
   }
 
   // -------------------------------------------------------------------------
-  // 3. Animated GIF Export in Rust + Pure Canvas Fallback
-  // -------------------------------------------------------------------------
-  if (format === "gif") {
-    const gifFps = Math.min(fps, 15);
-    const gifW = Math.min(targetW, 480);
-    const gifH = Math.round((targetH / targetW) * gifW);
-
-    onProgress?.(25, 0, duration);
-    const filename = `${cleanTitle}_anim_${Date.now()}.gif`;
-    const targetFileUri = `${targetDir}${filename}`;
-    const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
-
-    try {
-      const isRustReady = await rustCoreBridge.isAvailable();
-      if (isRustReady) {
-        onProgress?.(65, 0, duration);
-        const rustGif = await rustCoreBridge.exportProjectGif(
-          project,
-          gifFps,
-          gifW,
-          gifH,
-          duration,
-          cleanFilePath
-        );
-        if (rustGif) {
-          onProgress?.(100, duration, duration);
-
-          if (Platform.OS === "web" && rustGif.startsWith("data:image/gif;base64,")) {
-            return {
-              blob: new Blob([]),
-              videoUrl: rustGif,
-              mimeType: "image/gif",
-              format: "gif",
-              extension: "gif",
-            };
-          }
-
-          const finalUrl = rustGif.startsWith("data:")
-            ? targetFileUri
-            : (rustGif.startsWith("file://") ? rustGif : `file://${rustGif}`);
-
-          let writtenSize = 0;
-          if (rustGif.startsWith("data:image/gif;base64,")) {
-            const b64 = rustGif.substring("data:image/gif;base64,".length);
-            const bytes = base64ToUint8(b64);
-            writtenSize = await writeBinaryFileSafely(targetFileUri, bytes);
-          } else {
-            const info = await FileSystem.getInfoAsync(finalUrl);
-            writtenSize = (info.exists && (info as any).size) ? (info as any).size : 0;
-          }
-
-          return {
-            blob: new Blob([]),
-            videoUrl: finalUrl,
-            mimeType: "image/gif",
-            format: "gif",
-            extension: "gif",
-            fileSize: writtenSize,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn("[unifiedExporter] Rust GIF fallback:", err);
-    }
-
-    // Web Canvas fallback for GIF
-    if (Platform.OS === "web" && typeof document !== "undefined") {
-      try {
-        const offscreenCanvas = document.createElement("canvas");
-        offscreenCanvas.width = gifW;
-        offscreenCanvas.height = gifH;
-        const ctx = offscreenCanvas.getContext("2d", { willReadFrequently: true });
-        const { VideoRenderer } = require("../videoRenderer");
-        const renderer = new VideoRenderer(offscreenCanvas);
-        for (const clip of project.tracks?.video || []) {
-          try {
-            await renderer.preloadClip(clip);
-          } catch (e) {}
-        }
-
-        const encoder = new FastArtGifEncoder(gifW, gifH);
-        const totalFrames = Math.max(1, Math.ceil(duration * gifFps));
-        const frameInterval = 1 / gifFps;
-        const delayMs = Math.round(1000 / gifFps);
-
-        for (let f = 0; f < totalFrames; f++) {
-          if (isCancelled?.()) throw new Error("Export cancelled");
-          const frameTime = f * frameInterval;
-          renderer.renderFrame(project, frameTime, false, baseW, baseH);
-          if (ctx) {
-            const imgData = ctx.getImageData(0, 0, gifW, gifH);
-            encoder.addFrame(imgData.data, { delayMs });
-          }
-          const pct = Math.round((f / totalFrames) * 90);
-          onProgress?.(pct, frameTime, duration);
-        }
-
-        const gifBytes = encoder.finish();
-        const blob = new Blob([gifBytes as any], { type: "image/gif" });
-        const videoUrl = URL.createObjectURL(blob);
-        onProgress?.(100, duration, duration);
-
-        return {
-          blob,
-          videoUrl,
-          mimeType: "image/gif",
-          format: "gif",
-          extension: "gif",
-          fileSize: gifBytes.length,
-        };
-      } catch (gifErr) {
-        console.warn("[unifiedExporter] Web Canvas GIF export error:", gifErr);
-      }
-    }
-
-    // On native mobile, signal to engage headless canvas bridge
-    if (Platform.OS !== "web") {
-      throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // 4. Video Export (MP4 & WebM)
+  // 3. Video Export (MP4 & WebM)
   // -------------------------------------------------------------------------
   if (format === "mp4" || format === "webm") {
-    // A. Web Browser: Non-blocking Hardware Canvas + MediaRecorder
-    // Never run heavy synchronous loops on the main JavaScript UI thread in Web browsers
+    // A. Web Browser: Hardware Canvas + MediaRecorder with Web Audio mixdown
     if (Platform.OS === "web" && typeof document !== "undefined") {
       let renderer = existingRenderer;
       if (!renderer || !renderer.canvas) {
@@ -479,11 +285,6 @@ export async function exportFastArtProject(
         offscreenCanvas.height = targetH;
         const { VideoRenderer } = require("../videoRenderer");
         renderer = new VideoRenderer(offscreenCanvas);
-        for (const clip of project.tracks?.video || []) {
-          try {
-            await renderer.preloadClip(clip);
-          } catch (e) {}
-        }
       }
 
       return await exportBrowserVideo(
@@ -503,57 +304,12 @@ export async function exportFastArtProject(
       );
     }
 
-    // B. Native Mobile (Android & iOS): High-Performance Native Rust Core Engine
-    // Executes in background native thread/coroutine without blocking the UI
-    onProgress?.(15, 0, duration);
-    try {
-      const isRustReady = await rustCoreBridge.isAvailable();
-      if (isRustReady) {
-        onProgress?.(40, 0, duration);
-        const filename = `${cleanTitle}_video_${Date.now()}.mp4`;
-        const targetFileUri = `${targetDir}${filename}`;
-        const cleanFilePath = targetFileUri.replace(/^file:\/\//, "");
-
-        const result = await rustCoreBridge.exportProjectMp4(
-          project,
-          fps,
-          targetW,
-          targetH,
-          duration,
-          cleanFilePath
-        );
-
-        if (result) {
-          onProgress?.(100, duration, duration);
-
-          const finalUrl = typeof result === "string"
-            ? (result.startsWith("file://") ? result : `file://${result}`)
-            : targetFileUri;
-
-          let writtenSize = 0;
-          if (result instanceof Uint8Array) {
-            writtenSize = await writeBinaryFileSafely(targetFileUri, result);
-          } else {
-            const info = await FileSystem.getInfoAsync(finalUrl);
-            writtenSize = (info.exists && (info as any).size) ? (info as any).size : 0;
-          }
-
-          return {
-            blob: new Blob([]),
-            videoUrl: finalUrl,
-            mimeType: "video/mp4",
-            format: "mp4",
-            extension: "mp4",
-            fileSize: writtenSize,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn("[unifiedExporter] Native Rust MP4 export:", err);
+    // B. Native Mobile (Android & iOS): Engage Headless WebView Canvas Bridge
+    // Delivers hardware-accelerated Skia GPU compositing, multi-track transitions,
+    // filters, auto-captions, stickers, and synchronized soundtrack encoding.
+    if (Platform.OS !== "web") {
+      throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
     }
-
-    // When native Rust engine is unavailable on mobile, signal to engage headless mobile canvas bridge
-    throw new Error("NATIVE_BRIDGE_FALLBACK_REQUIRED");
   }
 
   throw new Error(`Export format ${format} could not be rendered.`);

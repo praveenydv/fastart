@@ -19,7 +19,17 @@ async function resolveUrlForWebView(url: string | undefined, id: string, default
   if (!url || !url.startsWith("content://")) return url;
   try {
     const ext = url.split("?")[0].split(".").pop() || defaultExt;
-    const localPath = `${dir}wv_media_${id}_${Date.now()}.${ext}`;
+    const cleanId = id.replace(/[^A-Za-z0-9_-]/g, "_");
+    const localPath = `${dir}wv_media_${cleanId}.${ext}`;
+    
+    // Check if valid cached copy already exists in cache to skip re-copying large media
+    try {
+      const info = await FileSystem.getInfoAsync(localPath);
+      if (info.exists && typeof (info as any).size === "number" && (info as any).size > 0) {
+        return localPath.startsWith("file://") ? localPath : `file://${localPath}`;
+      }
+    } catch (_) {}
+
     await FileSystem.copyAsync({ from: url, to: localPath });
     return localPath.startsWith("file://") ? localPath : `file://${localPath}`;
   } catch (e) {
@@ -31,14 +41,21 @@ async function resolveUrlForWebView(url: string | undefined, id: string, default
 async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<FastArtProject> {
   const cloned: FastArtProject = JSON.parse(JSON.stringify(proj));
   const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory || "";
+  const tasks: Promise<any>[] = [];
 
   if (cloned.tracks?.video) {
     for (const clip of cloned.tracks.video) {
       if (clip.url) {
-        clip.url = (await resolveUrlForWebView(clip.url, clip.id, clip.type === "video" ? "mp4" : "jpg", dir)) || clip.url;
+        tasks.push(
+          resolveUrlForWebView(clip.url, clip.id, clip.type === "video" ? "mp4" : "jpg", dir)
+            .then((res) => { if (res) clip.url = res; })
+        );
       }
       if (clip.thumbnail) {
-        clip.thumbnail = await resolveUrlForWebView(clip.thumbnail, `${clip.id}_thumb`, "jpg", dir);
+        tasks.push(
+          resolveUrlForWebView(clip.thumbnail, `${clip.id}_thumb`, "jpg", dir)
+            .then((res) => { if (res) clip.thumbnail = res; })
+        );
       }
     }
   }
@@ -46,7 +63,10 @@ async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<Fast
   if (cloned.tracks?.audio) {
     for (const clip of cloned.tracks.audio) {
       if (clip.url) {
-        clip.url = (await resolveUrlForWebView(clip.url, clip.id, "wav", dir)) || clip.url;
+        tasks.push(
+          resolveUrlForWebView(clip.url, clip.id, "wav", dir)
+            .then((res) => { if (res) clip.url = res; })
+        );
       }
     }
   }
@@ -55,19 +75,23 @@ async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<Fast
     for (const clip of cloned.tracks.stickers) {
       const stickerUrl = (clip as any).url;
       if (stickerUrl) {
-        (clip as any).url = (await resolveUrlForWebView(stickerUrl, clip.id, "png", dir)) || stickerUrl;
+        tasks.push(
+          resolveUrlForWebView(stickerUrl, clip.id, "png", dir)
+            .then((res) => { if (res) (clip as any).url = res; })
+        );
       }
     }
   }
 
   if (cloned.canvasBackground && typeof cloned.canvasBackground === "string" && cloned.canvasBackground.startsWith("image:")) {
     const rawBg = cloned.canvasBackground.replace("image:", "");
-    const resolvedBg = await resolveUrlForWebView(rawBg, "bg_image", "jpg", dir);
-    if (resolvedBg) {
-      cloned.canvasBackground = `image:${resolvedBg}`;
-    }
+    tasks.push(
+      resolveUrlForWebView(rawBg, "bg_image", "jpg", dir)
+        .then((res) => { if (res) cloned.canvasBackground = `image:${res}`; })
+    );
   }
 
+  await Promise.all(tasks);
   return cloned;
 }
 
@@ -160,7 +184,7 @@ export default function MobileCanvasExportView({
       } else if (data.type === "CHUNK_START") {
         let rawTitle = (project.title || (project as any).name || "").trim();
         if (!rawTitle || /^proj[_-]\d+/i.test(rawTitle) || rawTitle === project.id) {
-          rawTitle = options.format === "png" ? "FastArt_Cover" : options.format === "gif" ? "FastArt_Anim" : "FastArt_Video";
+          rawTitle = options.format === "png" ? "FastArt_Cover" : "FastArt_Video";
         }
         const cleanTitle =
           rawTitle.replace(/[/\\?%*:|"<>]/g, "").replace(/\s+/g, "_") || "FastArt_Video";
@@ -215,6 +239,7 @@ export default function MobileCanvasExportView({
           fileSize: fileStat.exists ? (fileStat as any).size : info.fileSize,
         };
         currentChunkedFileRef.current = null;
+        onProgress?.(100);
         onComplete(result);
       } else if (data.type === "COMPLETE" && !isDoneRef.current) {
         isDoneRef.current = true;
@@ -222,7 +247,7 @@ export default function MobileCanvasExportView({
 
         let rawTitle = (project.title || (project as any).name || "").trim();
         if (!rawTitle || /^proj[_-]\d+/i.test(rawTitle) || rawTitle === project.id) {
-          rawTitle = options.format === "png" ? "FastArt_Cover" : options.format === "gif" ? "FastArt_Anim" : "FastArt_Video";
+          rawTitle = options.format === "png" ? "FastArt_Cover" : "FastArt_Video";
         }
         const cleanTitle =
           rawTitle.replace(/[/\\?%*:|"<>]/g, "").replace(/\s+/g, "_") || "FastArt_Video";
@@ -243,6 +268,7 @@ export default function MobileCanvasExportView({
           fileSize: fileSize || Math.round(cleanB64.length * 0.75),
         };
 
+        onProgress?.(100);
         onComplete(result);
       } else if (data.type === "ERROR") {
         onError(new Error(data.message || "Canvas export error in WebView"));

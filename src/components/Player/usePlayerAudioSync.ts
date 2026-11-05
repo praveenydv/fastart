@@ -346,7 +346,9 @@ export function usePlayerAudioSync({
           el.playbackRate = Math.max(0.25, Math.min(4.0, effSpeed));
         }
 
-        el.play().catch(() => {});
+        if (el.paused) {
+          el.play().catch(() => {});
+        }
       } else {
         el.pause();
         // If we just paused from active playback, hold the exact audio playhead: DO NOT rewind to lagging state!

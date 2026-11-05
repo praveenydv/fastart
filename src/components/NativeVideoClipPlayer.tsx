@@ -299,12 +299,18 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     const interval = setInterval(() => {
       try {
         const curTarget = targetMediaTimeRef.current;
-        if (Math.abs(player.currentTime - curTarget) > 0.5) {
+        const now = Date.now();
+        // Only hard-seek during active playback if drift is severe (> 1.5s) and not in seek cooldown
+        if (
+          Math.abs(player.currentTime - curTarget) > 1.5 &&
+          now - lastSeekTimestampRef.current > 1500
+        ) {
+          lastSeekTimestampRef.current = now;
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
       } catch {}
-    }, 600);
+    }, 1200);
     return () => clearInterval(interval);
   }, [player, isPlaying, isInside, hasError]);
 

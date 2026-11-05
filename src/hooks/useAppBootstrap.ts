@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia, setupAutoReconnectListener } from "../utils/largeMediaStorage";
-import { restoreClipMasksFromStorage } from "../services/selfieSegmentationService";
+import { restoreClipMasksFromStorage, restoreProjectCutoutMasks } from "../services/selfieSegmentationService";
 import {
   FastArtProject,
   createDefaultProject,
@@ -104,21 +104,12 @@ export function useAppBootstrap({
               matched.title = "Project 1";
             }
             setProject(matched);
+            restoreProjectCutoutMasks(matched).catch(() => {});
             rehydrateProjectMedia(matched).then((hydrated: any) => {
               if (isMounted && hydrated) {
                 setProject(hydrated);
                 saveProject(hydrated);
-                // Preload all persistent cutout masks into RAM cache
-                if (hydrated.tracks?.video) {
-                  for (const c of hydrated.tracks.video) {
-                    if (c.cutout?.enabled) {
-                      restoreClipMasksFromStorage(c.id).catch(() => {});
-                      if (c.sourceMediaId) {
-                        restoreClipMasksFromStorage(c.sourceMediaId).catch(() => {});
-                      }
-                    }
-                  }
-                }
+                restoreProjectCutoutMasks(hydrated).catch(() => {});
               }
             });
             const resumeTime =
@@ -216,20 +207,12 @@ export function useAppBootstrap({
     const target = projects.find((p) => p.id === id);
     if (target) {
       setProject(target);
+      restoreProjectCutoutMasks(target).catch(() => {});
       rehydrateProjectMedia(target).then((hydrated: any) => {
         if (hydrated) {
           setProject(hydrated);
           saveProject(hydrated);
-          if (hydrated.tracks?.video) {
-            for (const c of hydrated.tracks.video) {
-              if (c.cutout?.enabled) {
-                restoreClipMasksFromStorage(c.id).catch(() => {});
-                if (c.sourceMediaId) {
-                  restoreClipMasksFromStorage(c.sourceMediaId).catch(() => {});
-                }
-              }
-            }
-          }
+          restoreProjectCutoutMasks(hydrated).catch(() => {});
         }
       });
       const session = loadLastSession();
@@ -450,20 +433,12 @@ export function useAppBootstrap({
       if (matched) {
         if (!project || project.id !== matched.id) {
           setProject(matched);
+          restoreProjectCutoutMasks(matched).catch(() => {});
           rehydrateProjectMedia(matched).then((hydrated: any) => {
             if (hydrated) {
               setProject(hydrated);
               saveProject(hydrated);
-              if (hydrated.tracks?.video) {
-                for (const c of hydrated.tracks.video) {
-                  if (c.cutout?.enabled) {
-                    restoreClipMasksFromStorage(c.id).catch(() => {});
-                    if (c.sourceMediaId) {
-                      restoreClipMasksFromStorage(c.sourceMediaId).catch(() => {});
-                    }
-                  }
-                }
-              }
+              restoreProjectCutoutMasks(hydrated).catch(() => {});
             }
           });
           const session = loadLastSession();

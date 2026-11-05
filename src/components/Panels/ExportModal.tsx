@@ -149,6 +149,7 @@ function ExportModalComponent({
                 fps={fps}
                 isSaved={isSaved}
                 isSaving={isSaving}
+                fileSize={exportedResult?.fileSize || (exportedResult?.blob as any)?.size}
                 errorMessage={errorMessage}
                 downloadDestination={downloadDestination}
                 exportFilename={exportFilename}

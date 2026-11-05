@@ -82,8 +82,6 @@ export default function ExportIdleSettings({
         return "H.264 / AAC";
       case "webm":
         return "VP9 / Opus";
-      case "gif":
-        return "Animated GIF";
       case "png":
         return "Lossless PNG";
       case "wav":
@@ -244,9 +242,7 @@ export default function ExportIdleSettings({
         <View style={styles.specSection}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>FRAME RATE</Text>
-            <Text style={styles.sectionHint}>
-              {mediaType === "gif" ? "Max 12fps for GIF" : "Smooth Playback"}
-            </Text>
+            <Text style={styles.sectionHint}>Smooth Playback</Text>
           </View>
           <View style={styles.compactRow}>
             {FRAME_RATES.map((f) => {

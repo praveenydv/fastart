@@ -640,6 +640,16 @@ function Player({
     return activeVideos[0] || (project.tracks.video || [])[0] || null;
   }, [selectedClipId, project.tracks.video, activeVideos]);
 
+  // Clear transient mask whenever clip's mask configuration changes in project (e.g. from MaskModal)
+  useEffect(() => {
+    setActiveTransient(null);
+  }, [
+    targetMaskClip?.mask?.shape,
+    targetMaskClip?.mask?.feather,
+    targetMaskClip?.mask?.inverted,
+    targetMaskClip?.mask?.roundness,
+  ]);
+
   const targetTrackingClip = useMemo(() => {
     if (selectedClipId) {
       const match =
@@ -920,6 +930,7 @@ function Player({
                 onCloseMaskPreview={() => {
                   if (onToggleMaskPreview) onToggleMaskPreview(false);
                   setInternalMaskingMode(false);
+                  setActiveTransient(null);
                 }}
                 getInterpolatedTransform={getInterpolatedTransform}
                 rendererRef={rendererRef}

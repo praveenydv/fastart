@@ -83,6 +83,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   const bgColor = config?.bgColor ?? "none";
   const strokeColor = config?.strokeColor ?? "none";
   const strokeWidth = config?.strokeWidth ?? 3;
+  const quality = config?.quality ?? "fast";
 
   const [finishTab, setFinishTab] = useState<"bg" | "outline">("bg");
   const [isDropperModalOpen, setIsDropperModalOpen] = useState(false);
@@ -385,6 +386,46 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   )}
 
                   <View style={{ gap: 8 }}>
+                    {isVideoClip && (
+                      <View style={{ marginTop: 2, marginBottom: 4 }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <Text style={sc.sectionHeader}>PROCESSING QUALITY</Text>
+                          <Text style={{ fontSize: 10, color: "#00F2FE", fontWeight: "600" }}>
+                            {quality === "best" ? "Every Frame (60 FPS)" : quality === "studio" ? "Smooth (~30 FPS)" : "Draft (~10 FPS)"}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          {[
+                            { id: "fast" as const, label: "Draft", sublabel: "~10 FPS" },
+                            { id: "studio" as const, label: "Smooth", sublabel: "~30 FPS" },
+                            { id: "best" as const, label: "Best", sublabel: "Every Frame" },
+                          ].map((opt) => {
+                            const isSel = quality === opt.id;
+                            return (
+                              <TouchableOpacity
+                                key={opt.id}
+                                style={[
+                                  sc.qualityTabBtn,
+                                  isSel && sc.qualityTabBtnSelected,
+                                ]}
+                                onPress={() => {
+                                  onChange({ ...config, enabled: true, mode: "auto", quality: opt.id });
+                                }}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={[sc.qualityTabLabel, isSel && sc.qualityTabLabelSelected]}>
+                                  {opt.label}
+                                </Text>
+                                <Text style={[sc.qualityTabSublabel, isSel && sc.qualityTabSublabelSelected]}>
+                                  {opt.sublabel}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+
                     {(!isAlreadyProcessed || isVideoClip) && (
                       <TouchableOpacity
                         onPress={isVideoClip ? onProcessVideo : (onProcessVideo || onPreviewFrame)}
@@ -942,6 +983,37 @@ const sc = StyleSheet.create({
   },
   actionsContainer: {
     gap: 6,
+  },
+  qualityTabBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "#161D2E",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qualityTabBtnSelected: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "#00F2FE",
+  },
+  qualityTabLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  qualityTabLabelSelected: {
+    color: "#00F2FE",
+  },
+  qualityTabSublabel: {
+    fontSize: 9,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  qualityTabSublabelSelected: {
+    color: "rgba(0, 242, 254, 0.75)",
   },
   processedSuccessCard: {
     flexDirection: "row",

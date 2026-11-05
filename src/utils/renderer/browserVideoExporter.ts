@@ -3,14 +3,17 @@
 // with native browser GPU video decoders for synchronized audio-video export.
 
 import { FastArtProject } from "../../types/project";
-import { exportProjectAudioToWav } from "../audioExporter";
-import { rustCoreBridge } from "../../services/rustCoreBridge";
+import { exportProjectAudioToWavBytes } from "../audioExporter";
 import {
   getExportResolutionDimensions,
   getLogicalBaseDimensions,
 } from "../../components/Panels/Export/exportTypes";
 import type { VideoRenderer } from "../videoRenderer";
 import type { ExportFormat, ExportOptions, ExportResult } from "./unifiedExporter";
+import {
+  exportWebCodecsVideo,
+  isWebCodecsSupported,
+} from "./webCodecsExporter";
 
 export async function exportBrowserVideo(
   renderer: VideoRenderer,
@@ -53,19 +56,27 @@ export async function exportBrowserVideo(
     ? createRenderer(exportCanvas)
     : new (renderer.constructor as any)(exportCanvas);
 
+  // Set export mode for highest quality bicubic filtering
+  exportRenderer.isExporting = true;
+
   // Inherit preloaded media cache from the live player renderer so clips render immediately
   if (renderer.videoElements) {
     exportRenderer.videoElements = new Map(renderer.videoElements);
   }
+  if ((renderer as any).thumbnailElements) {
+    exportRenderer.thumbnailElements = new Map((renderer as any).thumbnailElements);
+  }
+
+  onProgress?.(0, 0, duration);
 
   // Guarantee all project clips are preloaded before recording begins
   const videoClips = project.tracks?.video || [];
   const preloadPromises = videoClips.map(async (clip) => {
-    if (!exportRenderer.videoElements.has(clip.url)) {
+    if (!exportRenderer.videoElements.has(clip.url) && !exportRenderer.videoElements.has(clip.id)) {
       try {
         await Promise.race([
           exportRenderer.preloadClip(clip),
-          new Promise((r) => setTimeout(r, 4000)), // 4s timeout prevents slow assets from blocking export
+          new Promise((r) => setTimeout(r, 1000)), // Fast 1.0s timeout prevents slow assets from blocking export
         ]);
       } catch (e) {
         console.warn("[browserVideoExporter] Preload clip error:", e);
@@ -73,11 +84,56 @@ export async function exportBrowserVideo(
     }
   });
   await Promise.all(preloadPromises);
+  onProgress?.(0, 0, duration);
 
   const exportLogicalW =
     logicalWidth && logicalWidth > 0 ? logicalWidth : baseW;
   const exportLogicalH =
     logicalHeight && logicalHeight > 0 ? logicalHeight : baseH;
+
+  const isMobileDevice =
+    typeof navigator !== "undefined" &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  let defaultBitrate = 18000000;
+  if (targetW >= 3840 || targetH >= 3840 || targetW >= 2160 || targetH >= 2160) {
+    defaultBitrate = isMobileDevice ? 32000000 : 50000000; // 4K: 32-50 Mbps
+  } else if (targetW >= 1920 || targetH >= 1920 || targetW >= 1080 || targetH >= 1080) {
+    defaultBitrate = isMobileDevice ? 16000000 : 22000000; // 1080p: 16-22 Mbps
+  } else {
+    defaultBitrate = isMobileDevice ? 8000000 : 12000000;  // 720p: 8-12 Mbps
+  }
+  if (fps >= 60) {
+    defaultBitrate = Math.round(defaultBitrate * 1.35); // Boost for 60fps
+  }
+  const finalVideoBitsPerSecond = customBitsPerSecond || defaultBitrate;
+
+  // Ultra-Fast Offline WebCodecs Turbo Engine (3x - 10x faster than real-time)
+  // Accelerates rendering for all timelines using hardware GPU and video encoder ASIC
+  if (format === "mp4" && isWebCodecsSupported()) {
+    try {
+      const turboResult = await exportWebCodecsVideo(
+        exportRenderer,
+        project,
+        exportCanvas,
+        {
+          ...options,
+          fps,
+          duration,
+          videoBitsPerSecond: finalVideoBitsPerSecond,
+          logicalWidth: exportLogicalW,
+          logicalHeight: exportLogicalH,
+        },
+        onProgress,
+      );
+      return turboResult;
+    } catch (turboErr) {
+      console.warn(
+        "[browserVideoExporter] WebCodecs Turbo Export fallback engaged:",
+        turboErr,
+      );
+    }
+  }
 
   // Initial raster render so canvas has valid pixels before stream capture
   exportRenderer.renderFrame(project, 0, false, exportLogicalW, exportLogicalH);
@@ -116,6 +172,9 @@ export async function exportBrowserVideo(
     if (isSupported("video/mp4;codecs=avc1.42E01E,mp4a.40.2")) {
       mimeType = "video/mp4;codecs=avc1.42E01E,mp4a.40.2";
       targetExtension = "mp4";
+    } else if (isSupported("video/mp4;codecs=avc1.4D401E")) {
+      mimeType = "video/mp4;codecs=avc1.4D401E";
+      targetExtension = "mp4";
     } else if (isSupported("video/mp4;codecs=avc1")) {
       mimeType = "video/mp4;codecs=avc1";
       targetExtension = "mp4";
@@ -125,9 +184,6 @@ export async function exportBrowserVideo(
     } else if (isSupported("video/mp4")) {
       mimeType = "video/mp4";
       targetExtension = "mp4";
-    } else if (isSupported("video/webm;codecs=h264")) {
-      mimeType = "video/webm;codecs=h264";
-      targetExtension = "webm";
     } else if (isSupported("video/webm;codecs=vp9,opus")) {
       mimeType = "video/webm;codecs=vp9,opus";
       targetExtension = "webm";
@@ -157,29 +213,12 @@ export async function exportBrowserVideo(
     }
   }
 
-  const isMobileDevice =
-    typeof navigator !== "undefined" &&
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  let defaultBitrate = 18000000;
-  if (targetW >= 3840 || targetH >= 3840 || targetW >= 2160 || targetH >= 2160) {
-    defaultBitrate = isMobileDevice ? 30000000 : 45000000; // 4K: 30-45 Mbps
-  } else if (targetW >= 1920 || targetH >= 1920 || targetW >= 1080 || targetH >= 1080) {
-    defaultBitrate = isMobileDevice ? 14000000 : 20000000; // 1080p: 14-20 Mbps
-  } else {
-    defaultBitrate = isMobileDevice ? 7000000 : 10000000;  // 720p: 7-10 Mbps
-  }
-  const finalVideoBitsPerSecond = customBitsPerSecond || defaultBitrate;
-
-  // Mix project audio tracks into the video stream for complete synchronized sound
+  // Mix project audio tracks into the video stream with zero-latency Web Audio graph
   let audioCtx: any = null;
-  let audioSourceNode: any = null;
+  const activeAudioTrackElements: { el: HTMLAudioElement; clip: any }[] = [];
   try {
     const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-    const hasAudio =
-      (project.tracks.audio && project.tracks.audio.length > 0) ||
-      (project.tracks.video && project.tracks.video.some((c) => !c.muted));
-    if (AudioCtxClass && hasAudio) {
+    if (AudioCtxClass) {
       audioCtx = new AudioCtxClass();
       if (audioCtx.state === "suspended") {
         try {
@@ -187,47 +226,62 @@ export async function exportBrowserVideo(
         } catch (e) {}
       }
       const audioDest = audioCtx.createMediaStreamDestination();
-      let audioBuffer: AudioBuffer | null = null;
-      const sampleRate = audioCtx.sampleRate || 44100;
 
-      // 1. Ultra-fast Rust WASM SIMD mixdown (20x faster than JS)
-      try {
-        const isRustReady = await rustCoreBridge.isAvailable();
-        if (isRustReady) {
-          const wavBytes = await rustCoreBridge.exportProjectWav(project, sampleRate, duration);
-          if (wavBytes && wavBytes instanceof Uint8Array && wavBytes.length > 44) {
-            audioBuffer = await audioCtx.decodeAudioData(wavBytes.buffer.slice(0));
+      // 1. Connect unmuted video elements directly (hardware-decoded, zero network re-fetch)
+      for (const clip of videoClips) {
+        if (clip.type === "video" && !clip.muted) {
+          const el = exportRenderer.videoElements.get(clip.url) || exportRenderer.videoElements.get(clip.id);
+          if (el && el instanceof HTMLVideoElement) {
+            try {
+              el.muted = false;
+              const source = audioCtx.createMediaElementSource(el);
+              const gain = audioCtx.createGain();
+              gain.gain.value = clip.volume !== undefined ? clip.volume : 1.0;
+              source.connect(gain).connect(audioDest);
+            } catch (e) {}
           }
         }
-      } catch (rustMixErr) {
-        console.warn("[browserVideoExporter] Rust fast WAV mixdown fallback:", rustMixErr);
       }
 
-      // 2. Pure JavaScript mixdown fallback
-      if (!audioBuffer) {
-        const audioBlob = await exportProjectAudioToWav(
-          project,
-          duration,
-          sampleRate
-        );
-        if (audioBlob && audioBlob.size > 44) {
-          const arrayBuffer = await audioBlob.arrayBuffer();
-          audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      // 2. Connect project audio clips directly
+      const audioTrackClips = project.tracks?.audio || [];
+      for (const clip of audioTrackClips) {
+        if (clip && clip.url) {
+          try {
+            const a = new Audio();
+            if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+              a.crossOrigin = "anonymous";
+            }
+            a.src = clip.url;
+            a.currentTime = Math.max(0, clip.trimIn || 0);
+            a.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+            const source = audioCtx.createMediaElementSource(a);
+            const gain = audioCtx.createGain();
+            gain.gain.value = clip.volume !== undefined ? clip.volume : 1.0;
+            source.connect(gain).connect(audioDest);
+            activeAudioTrackElements.push({ el: a, clip });
+          } catch (e) {}
         }
       }
 
-      if (audioBuffer) {
-        audioSourceNode = audioCtx.createBufferSource();
-        audioSourceNode.buffer = audioBuffer;
-        audioSourceNode.connect(audioDest);
-        const audioTracks = audioDest.stream.getAudioTracks();
-        if (audioTracks && audioTracks.length > 0) {
-          stream.addTrack(audioTracks[0]);
-        }
+      // 3. Fallback: silent carrier oscillator ensures social platform compliance
+      const audioTracks = audioDest.stream.getAudioTracks();
+      if (audioTracks && audioTracks.length > 0) {
+        stream.addTrack(audioTracks[0]);
+      } else {
+        try {
+          const osc = audioCtx.createConstantSource ? audioCtx.createConstantSource() : audioCtx.createOscillator();
+          const silence = audioCtx.createGain();
+          silence.gain.value = 0;
+          osc.connect(silence).connect(audioDest);
+          osc.start(0);
+          const tracks = audioDest.stream.getAudioTracks();
+          if (tracks && tracks.length > 0) stream.addTrack(tracks[0]);
+        } catch (e) {}
       }
     }
   } catch (audioErr) {
-    console.warn("[browserVideoExporter] Audio mixing in video export:", audioErr);
+    console.warn("[browserVideoExporter] Fast audio graph setup:", audioErr);
   }
 
   const recordedChunks: Blob[] = [];
@@ -237,7 +291,7 @@ export async function exportBrowserVideo(
     mediaRecorder = new (window as any).MediaRecorder(stream, {
       mimeType,
       videoBitsPerSecond: finalVideoBitsPerSecond,
-      audioBitsPerSecond: 192000,
+      audioBitsPerSecond: 256000,
     });
   } catch (recInitErr) {
     console.warn("[browserVideoExporter] Primary MediaRecorder init failed, falling back to default options:", recInitErr);
@@ -259,19 +313,20 @@ export async function exportBrowserVideo(
   return new Promise(async (resolve, reject) => {
     let isAborted = false;
 
-    mediaRecorder.onstop = () => {
-      if (isAborted) return;
+    const cleanup = () => {
+      exportRenderer.isExporting = false;
       if (stream) {
         try {
           stream.getTracks().forEach((track: any) => track.stop());
         } catch (e) {}
       }
-      if (audioSourceNode) {
+      activeAudioTrackElements.forEach(({ el }) => {
         try {
-          audioSourceNode.stop();
-          audioSourceNode.disconnect();
+          el.pause();
+          el.src = "";
         } catch (e) {}
-      }
+      });
+      activeAudioTrackElements.length = 0;
       if (audioCtx) {
         try {
           audioCtx.close();
@@ -280,12 +335,18 @@ export async function exportBrowserVideo(
       if (typeof exportRenderer.cleanup === "function") {
         exportRenderer.cleanup();
       }
+    };
+
+    mediaRecorder.onstop = () => {
+      if (isAborted) return;
+      cleanup();
       const finalBlob =
         recordedChunks.length > 0
           ? new Blob(recordedChunks, { type: mimeType })
           : new Blob([], { type: mimeType });
       recordedChunks.length = 0;
       const videoUrl = URL.createObjectURL(finalBlob);
+      if (onProgress) onProgress(100, duration, duration);
       resolve({
         blob: finalBlob,
         videoUrl,
@@ -298,47 +359,32 @@ export async function exportBrowserVideo(
 
     mediaRecorder.onerror = (err: any) => {
       if (isAborted) return;
-      if (stream) {
-        try {
-          stream.getTracks().forEach((track: any) => track.stop());
-        } catch (e) {}
-      }
-      if (audioSourceNode) {
-        try {
-          audioSourceNode.stop();
-          audioSourceNode.disconnect();
-        } catch (e) {}
-      }
-      if (audioCtx) {
-        try {
-          audioCtx.close();
-        } catch (e) {}
-      }
-      if (typeof exportRenderer.cleanup === "function") {
-        exportRenderer.cleanup();
-      }
+      cleanup();
       recordedChunks.length = 0;
       reject(err);
     };
 
-    // Cue all video elements
+    // Cue all video elements to exact trimIn and initial speed
     (project.tracks.video || []).forEach((c) => {
-      const el = exportRenderer.videoElements.get(c.url);
+      const el = exportRenderer.videoElements.get(c.url) || exportRenderer.videoElements.get(c.id);
       if (el && el instanceof HTMLVideoElement) {
-        el.muted = true;
         el.currentTime = Math.max(0, c.trimIn || 0);
+        el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
+        if (c.startTime > 0) {
+          try { el.pause(); } catch(e) {}
+        }
       }
     });
 
     // Start recording with 100ms timeslice to ensure continuous chunk buffer delivery
     mediaRecorder.start(100);
 
-    // Audio node begins strictly at frame 0 synchronized with recorder start
-    if (audioSourceNode) {
-      try {
-        audioSourceNode.start(0);
-      } catch (e) {}
-    }
+    // Synchronize initial audio playback
+    activeAudioTrackElements.forEach(({ el, clip }) => {
+      if ((clip.startTime || 0) <= 0.05) {
+        try { el.play(); } catch (e) {}
+      }
+    });
 
     const recStartTime = performance.now();
     let completed = false;
@@ -348,30 +394,12 @@ export async function exportBrowserVideo(
       if (options.isCancelled?.()) {
         isAborted = true;
         completed = true;
-        if (stream) {
-          try {
-            stream.getTracks().forEach((track: any) => track.stop());
-          } catch (e) {}
-        }
+        cleanup();
         try {
           if (typeof mediaRecorder.stop === "function" && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
           }
         } catch {}
-        if (audioSourceNode) {
-          try {
-            audioSourceNode.stop();
-            audioSourceNode.disconnect();
-          } catch {}
-        }
-        if (audioCtx) {
-          try {
-            audioCtx.close();
-          } catch {}
-        }
-        if (typeof exportRenderer.cleanup === "function") {
-          exportRenderer.cleanup();
-        }
         recordedChunks.length = 0;
         reject(new Error("Export cancelled"));
         return;
@@ -384,8 +412,21 @@ export async function exportBrowserVideo(
       // Render live frame with isPlaying = true so all video elements play continuously without seek stalls
       exportRenderer.renderFrame(project, curTime, true, exportLogicalW, exportLogicalH);
 
+      // Dynamically trigger audio tracks matching timeline bounds
+      activeAudioTrackElements.forEach(({ el, clip }) => {
+        const start = clip.startTime || 0;
+        const end = start + (clip.duration || 10);
+        if (curTime >= start && curTime < end) {
+          if (el.paused) {
+            try { el.play(); } catch (e) {}
+          }
+        } else if (!el.paused) {
+          try { el.pause(); } catch (e) {}
+        }
+      });
+
       if (onProgress) {
-        const percent = Math.min(99, Math.round((curTime / duration) * 100));
+        const percent = Math.min(99, Math.floor((curTime / duration) * 100));
         onProgress(percent, curTime, duration);
       }
 
@@ -393,11 +434,15 @@ export async function exportBrowserVideo(
         requestAnimationFrame(renderTick);
       } else {
         completed = true;
-        if (onProgress) onProgress(100, duration, duration);
+        if (onProgress) onProgress(99, duration, duration);
+
+        activeAudioTrackElements.forEach(({ el }) => {
+          try { el.pause(); } catch {}
+        });
 
         // Pause all video elements
         (project.tracks.video || []).forEach((c) => {
-          const el = exportRenderer.videoElements.get(c.url);
+          const el = exportRenderer.videoElements.get(c.url) || exportRenderer.videoElements.get(c.id);
           if (el && el instanceof HTMLVideoElement) {
             try {
               el.pause();

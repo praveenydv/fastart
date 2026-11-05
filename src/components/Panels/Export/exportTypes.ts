@@ -53,16 +53,6 @@ export const MEDIA_FORMATS: MediaFormatOption[] = [
     desc: "High-efficiency VP9 video format for web playback",
   },
   {
-    id: "gif",
-    label: "Animated GIF",
-    shortLabel: "GIF",
-    ext: ".gif",
-    icon: "film-outline",
-    badge: "Loop",
-    isRecommended: false,
-    desc: "Looped animation clip for messaging & stickers",
-  },
-  {
     id: "png",
     label: "PNG Cover",
     shortLabel: "PNG",
@@ -93,21 +83,21 @@ export const RESOLUTION_DIMENSIONS: Record<string, Record<string, [number, numbe
     "16:9": [1280, 720],
     "1:1": [720, 720],
     "4:5": [720, 900],
-    "2.35:1": [1280, 545],
+    "2.35:1": [1280, 544],
   },
   "1080p": {
     "9:16": [1080, 1920],
     "16:9": [1920, 1080],
     "1:1": [1080, 1080],
     "4:5": [1080, 1350],
-    "2.35:1": [1920, 817],
+    "2.35:1": [1920, 816],
   },
   "2K/4K": {
     "9:16": [2160, 3840],
     "16:9": [3840, 2160],
     "1:1": [2160, 2160],
     "4:5": [2160, 2700],
-    "2.35:1": [3840, 1634],
+    "2.35:1": [3840, 1632],
   },
 };
 
@@ -124,7 +114,11 @@ export function getExportResolutionDimensions(
   aspectRatio: string = "9:16"
 ): [number, number] {
   const resMap = RESOLUTION_DIMENSIONS[resolution] || RESOLUTION_DIMENSIONS["1080p"];
-  return resMap[aspectRatio] || [1080, 1920];
+  const [w, h] = resMap[aspectRatio] || [1080, 1920];
+  // Hardware video encoders require even dimensions (divisible by 2)
+  const safeW = w - (w % 2);
+  const safeH = h - (h % 2);
+  return [safeW, safeH];
 }
 
 export function getLogicalBaseDimensions(aspectRatio: string = "9:16"): [number, number] {

@@ -697,6 +697,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
                 viewBox="-50 -50 100 100"
                 width={maskBoxW}
                 height={maskBoxH}
+                preserveAspectRatio="none"
                 style={{
                   position: "absolute",
                   top: 0,

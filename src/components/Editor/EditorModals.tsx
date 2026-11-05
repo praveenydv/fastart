@@ -677,12 +677,12 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
               onClose={handleCancel}
               onApply={handleApply}
               currentMask={currentInterpMask}
-              onApplyMask={(newMask) => {
+              onApplyMask={(newMask, isFinal = true) => {
                 if (handleUpdateClipMask && targetVideoClip?.id) {
                   handleUpdateClipMask(
                     targetVideoClip.id,
                     newMask,
-                    true,
+                    isFinal,
                     currentTime,
                   );
                 }

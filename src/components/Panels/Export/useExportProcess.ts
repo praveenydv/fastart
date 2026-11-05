@@ -100,7 +100,6 @@ export function useExportProcess(
     const dur = Math.max(totalDuration || 5, 1);
     if (mediaType === "png") return "~1.8 MB";
     if (mediaType === "wav") return `~${(dur * 0.17).toFixed(1)} MB`;
-    if (mediaType === "gif") return `~${(dur * 0.55).toFixed(1)} MB`;
     const resMultiplier =
       resolution === "2K/4K" ? 2.5 : resolution === "1080p" ? 1.4 : 0.8;
     const formatMultiplier = mediaType === "webm" ? 0.75 : 1.0;
@@ -139,7 +138,6 @@ export function useExportProcess(
 
     try {
       const renderDuration = Math.max(totalDuration || 2.0, 1.0);
-      updateProgressMonotonic(5);
 
       let result: ExportResult | null = null;
       try {
@@ -165,7 +163,7 @@ export function useExportProcess(
         // On Native Mobile (iOS/Android): If native Rust is unlinked or falls back, engage headless DomWebView canvas bridge
         if (
           Platform.OS !== "web" &&
-          (mediaType === "mp4" || mediaType === "webm" || mediaType === "png" || mediaType === "gif") &&
+          (mediaType === "mp4" || mediaType === "webm" || mediaType === "png") &&
           (nativeErr?.message === "NATIVE_BRIDGE_FALLBACK_REQUIRED" ||
             nativeErr?.message?.includes("could not be rendered"))
         ) {
@@ -223,25 +221,27 @@ export function useExportProcess(
   };
 
   const handleMobileCanvasProgress = (pct: number) => {
-    // Map WebView progress across the 15%..99% interval so progress advances visibly without ever stalling
-    const mapped = Math.max(15, Math.min(99, Math.round(15 + (pct / 100) * 84)));
-    updateProgressMonotonic(mapped);
+    updateProgressMonotonic(pct);
   };
 
   const getProgressStatusMessage = () => {
+    if (progress === 0) {
+      return "Preparing project media & hardware encoder...";
+    }
+    if (progress >= 99) {
+      return "Finalizing container and optimizing stream...";
+    }
     switch (mediaType) {
       case "mp4":
-        return "Encoding hardware-accelerated MP4 with text & stickers...";
+        return `Encoding hardware MP4 (${progress}%)...`;
       case "webm":
-        return "Rendering WebM video frames with VP9 codec...";
-      case "gif":
-        return "Compositing multi-track animated GIF frames...";
+        return `Rendering WebM video frames (${progress}%)...`;
       case "png":
-        return "Compositing crisp lossless PNG snapshot with all text & stickers...";
+        return `Compositing lossless PNG snapshot (${progress}%)...`;
       case "wav":
-        return "Synthesizing 16-bit stereo PCM audio track...";
+        return `Synthesizing 16-bit stereo PCM audio (${progress}%)...`;
       default:
-        return "Rendering frames...";
+        return `Rendering frames (${progress}%)...`;
     }
   };
 

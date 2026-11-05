@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { VideoRenderer } from "../../utils/videoRenderer";
 import { getLiveMediaUrl } from "../../utils/largeMediaStorage";
 import { FastArtProject } from "../../types/project";
+import { playheadCoordinator } from "../../utils/playheadCoordinator";
 
 const useIsomorphicLayoutEffect =
   Platform.OS === "web" && typeof window !== "undefined"
@@ -49,9 +50,12 @@ export function usePlayerWebRenderer({
       rendererRef.current = new VideoRenderer(canvasRef.current);
       rendererRef.current.onFrameNeeded = () => {
         if (rendererRef.current && canvasRef.current) {
+          const activeTime = isPlayingRef.current
+            ? playheadCoordinator.getTime()
+            : currentTimeRef.current;
           rendererRef.current.renderFrame(
             projectRef.current,
-            currentTimeRef.current,
+            activeTime,
             isPlayingRef.current,
             boxWidthRef.current,
             canvasHeightRef.current,

@@ -16,8 +16,9 @@ import {
   clearClipMasks,
   getClipBakedFps,
   updateActiveFrameMatteParams,
-  initSelfieSegmentation,
   initStudioNeuralEngine,
+  notifyMaskUpdated,
+  restoreClipMasksFromStorage,
 } from "../../services/selfieSegmentationService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -83,12 +84,17 @@ function CutoutModalComponent({
   const [processedFrames, setProcessedFrames] = useState<number>(0);
   const [totalFramesToProcess, setTotalFramesToProcess] = useState<number>(0);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const [hasAttemptedRestore, setHasAttemptedRestore] = useState<boolean>(false);
   const abortCtrlRef = useRef<AbortController | null>(null);
   const previewInFlightRef = useRef(false);
   const resetGenerationRef = useRef(0);
 
-  const isAlreadyProcessed = clipId ? hasClipMasks(clipId) : false;
   const currentProcessedCount = clipId ? getClipProcessedCount(clipId) : 0;
+  const isAlreadyProcessed = clipId
+    ? isVideoClip
+      ? currentProcessedCount > 1
+      : hasClipMasks(clipId)
+    : false;
 
   // Frame calculation for preview
   const clipStart = selectedClip?.startTime || 0;
@@ -97,9 +103,10 @@ function CutoutModalComponent({
   const elapsedClipTime = localTime * effectiveSpeed;
   const trimIn = selectedClip?.trimIn || 0;
   const mediaTime = selectedClip?.reverse
-    ? Math.max(0, (selectedClip?.duration || 0) - elapsedClipTime - trimIn)
+    ? trimIn + Math.max(0, (selectedClip?.duration || 0) - elapsedClipTime)
     : trimIn + elapsedClipTime;
-  const bakedFps = getClipBakedFps(clipId);
+  const clipSourceFps = selectedClip?.sourceFrameRate ?? selectedClip?.frameRate ?? 30;
+  const bakedFps = getClipBakedFps(clipId) || (selectedClip?.sourceMediaId ? getClipBakedFps(selectedClip.sourceMediaId) : 0) || clipSourceFps;
   const frameIdx = Math.max(0, Math.floor(elapsedClipTime * bakedFps));
 
   // Sync state when currentCutout prop changes
@@ -119,13 +126,23 @@ function CutoutModalComponent({
     }
   }, [currentCutout]);
 
-  // Prewarm neural engines on Web
+  // Prewarm neural engine and restore persistent masks on both Web and Mobile
   useEffect(() => {
-    if (visible && Platform.OS === "web") {
+    if (visible && clipId) {
       initStudioNeuralEngine().catch(() => {});
-      initSelfieSegmentation().catch(() => {});
+      setHasAttemptedRestore(false);
+      const fps = selectedClip?.sourceFrameRate ?? selectedClip?.frameRate ?? 30;
+      const tasks = [restoreClipMasksFromStorage(clipId, fps)];
+      if (selectedClip?.sourceMediaId) {
+        tasks.push(restoreClipMasksFromStorage(selectedClip.sourceMediaId, fps));
+      }
+      Promise.all(tasks).finally(() => {
+        setHasAttemptedRestore(true);
+      });
+    } else if (!visible) {
+      setHasAttemptedRestore(false);
     }
-  }, [visible]);
+  }, [visible, clipId, selectedClip?.sourceMediaId, selectedClip?.sourceFrameRate, selectedClip?.frameRate]);
 
   // Stop all active processing when modal closes, becomes hidden, or unmounts
   useEffect(() => {
@@ -175,13 +192,16 @@ function CutoutModalComponent({
     setIsProcessingActiveFrame(true);
     setProcessingError(null);
     try {
+      const isAuto = (previewConfig.mode || "auto") === "auto";
+      const threshold = isAuto ? 0.0 : (previewConfig.intensity ?? 45) / 100;
+      const feather = isAuto ? 0.0 : (previewConfig.shadow ?? 25) / 100;
       const ok = await processClipUnified(
         clip.url,
         id,
         index,
         time,
-        (previewConfig.intensity ?? 45) / 100,
-        (previewConfig.shadow ?? 25) / 100,
+        threshold,
+        feather,
         previewConfig.mode || "auto",
         previewConfig.keyColor || "#00FF00",
         clip.type === "video" ? "video" : "photo",
@@ -208,11 +228,11 @@ function CutoutModalComponent({
     }
   }, []);
 
-  // Auto-process photo clips when modal is opened with auto cutout enabled
+  // Auto-preview current frame when modal is opened with auto cutout enabled
   useEffect(() => {
     if (
       visible &&
-      !isVideoClip &&
+      hasAttemptedRestore &&
       config.enabled &&
       config.mode === "auto" &&
       clipId &&
@@ -220,10 +240,13 @@ function CutoutModalComponent({
       !isProcessingActiveFrame &&
       !previewInFlightRef.current
     ) {
-      void runPreview(selectedClip, clipId, 0, 0, config);
+      const targetIdx = isVideoClip ? frameIdx : 0;
+      const targetTime = isVideoClip ? mediaTime : 0;
+      void runPreview(selectedClip, clipId, targetIdx, targetTime, config);
     }
   }, [
     visible,
+    hasAttemptedRestore,
     isVideoClip,
     config.enabled,
     config.mode,
@@ -233,6 +256,8 @@ function CutoutModalComponent({
     runPreview,
     selectedClip,
     config,
+    frameIdx,
+    mediaTime,
   ]);
 
   const handleConfigChange = (newConfig: CutoutConfig) => {
@@ -242,11 +267,15 @@ function CutoutModalComponent({
     // If auto cutout and threshold/shadow changed, update cached active frame matte instantly via Rust
     if (Platform.OS === "web") {
       if (config.enabled && config.mode === "auto" && newConfig.mode === "auto" && clipId) {
+        const rawIntensity = newConfig.intensity ?? 45;
+        const rawShadow = newConfig.shadow ?? 25;
+        const thresh = rawIntensity === 45 ? 0.0 : Math.max(0.0, (rawIntensity / 100) * 0.4);
+        const feat = rawShadow === 25 ? 0.0 : Math.max(0.0, (rawShadow / 100) * 0.3);
         updateActiveFrameMatteParams(
           clipId,
           frameIdx,
-          (newConfig.intensity ?? 45) / 100,
-          (newConfig.shadow ?? 25) / 100
+          thresh,
+          feat,
         );
       }
     } else {
@@ -277,7 +306,11 @@ function CutoutModalComponent({
     }
     const targetIdx = isVideoClip ? frameIdx : 0;
     const targetTime = isVideoClip ? mediaTime : 0;
-    await runPreview(selectedClip, clipId, targetIdx, targetTime, previewConfig);
+    const ok = await runPreview(selectedClip, clipId, targetIdx, targetTime, previewConfig);
+    if (ok) {
+      onApplyCutout(previewConfig, clipId);
+      notifyMaskUpdated();
+    }
   };
 
   const handleProcessVideo = async () => {
@@ -316,6 +349,9 @@ function CutoutModalComponent({
 
     try {
       setProcessingError(null);
+      const isAuto = (processingConfig.mode || "auto") === "auto";
+      const threshold = isAuto ? 0.0 : (processingConfig.intensity ?? 45) / 100;
+      const feather = isAuto ? 0.0 : (processingConfig.shadow ?? 25) / 100;
       const processed = await processVideoUnified(
         selectedClip.url,
         clipId,
@@ -323,8 +359,8 @@ function CutoutModalComponent({
         selectedClip.trimIn || 0,
         selectedClip.speed || 1.0,
         targetFps,
-        (processingConfig.intensity ?? 45) / 100,
-        (processingConfig.shadow ?? 25) / 100,
+        threshold,
+        feather,
         processingConfig.mode || "auto",
         processingConfig.keyColor || "#00FF00",
         (pct, cur, tot) => {
@@ -338,10 +374,24 @@ function CutoutModalComponent({
         abortCtrlRef.current.signal,
         processingConfig.quality || "fast",
         !!selectedClip.reverse,
+        selectedClip.sourceMediaId,
       );
-      if (processed === 0) setProcessingError("No frames were processed. Check clip access and cutout engine readiness, then retry.");
+      if (processed === 0) {
+        setProcessingError("No frames were processed. Check clip access and cutout engine readiness, then retry.");
+      } else {
+        setFrameProgress(100);
+        setProcessedFrames(processed);
+        const finalConfig = { ...processingConfig, enabled: true };
+        setConfig(finalConfig);
+        onApplyCutout(finalConfig, clipId);
+        notifyMaskUpdated();
+        setTimeout(() => {
+          notifyMaskUpdated();
+        }, 60);
+      }
     } catch (e) {
       console.warn("[CutoutModal] handleProcessVideo error:", e);
+      setProcessingError(e instanceof Error ? e.message : String(e));
     } finally {
       if (operationGeneration !== resetGenerationRef.current) {
         clearClipMasks(clipId);
@@ -383,7 +433,20 @@ function CutoutModalComponent({
     };
     setConfig(resetCfg);
     onApplyCutout(resetCfg, clipId);
+    notifyMaskUpdated();
   };
+
+  const handleApply = useCallback(() => {
+    handleCancelProcessing();
+    const finalConfig = {
+      ...config,
+      enabled: (config.mode as any) !== "none" ? (config.enabled ?? true) : false,
+    };
+    onApplyCutout(finalConfig, clipId);
+    notifyMaskUpdated();
+    onApply?.();
+    onClose();
+  }, [config, clipId, onApplyCutout, onApply, onClose, handleCancelProcessing]);
 
   const handleClose = useCallback(() => {
     handleCancelProcessing();
@@ -400,6 +463,8 @@ function CutoutModalComponent({
             title="Cutout"
             iconName="person-remove-outline"
             onClose={handleClose}
+            onDone={handleApply}
+            doneText="Apply"
             onReset={handleReset}
             resetText="Reset"
           />

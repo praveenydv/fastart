@@ -16,6 +16,27 @@ export interface MediaSyncContext {
 // Global registry of active player video elements for 0ms frame extraction and split snapshots
 export const globalActiveVideoElements = new Map<string, HTMLVideoElement>();
 
+function getMediaContainer(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  let container = document.getElementById("fastart-media-sync-container");
+  if (!container && document.body) {
+    container = document.createElement("div");
+    container.id = "fastart-media-sync-container";
+    container.style.position = "fixed";
+    container.style.top = "-9999px";
+    container.style.left = "-9999px";
+    container.style.width = "1px";
+    container.style.height = "1px";
+    container.style.opacity = "0.001";
+    container.style.pointerEvents = "none";
+    container.style.overflow = "hidden";
+    container.style.zIndex = "-9999";
+    container.setAttribute("aria-hidden", "true");
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
 export function cleanupMedia(
   ctx: MediaSyncContext,
   offscreenCanvas?: HTMLCanvasElement | null,
@@ -26,6 +47,9 @@ export function cleanupMedia(
         el.pause();
         el.removeAttribute("src");
         el.load();
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
       } catch (e) {}
     }
   });
@@ -58,6 +82,9 @@ export function pruneUnusedMedia(
             el.pause();
             el.removeAttribute("src");
             el.load();
+            if (el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
           } catch (e) {}
         }
       }
@@ -89,6 +116,12 @@ export async function preloadClip(
   const cachedEl = ctx.videoElements.get(elementKey) || ctx.videoElements.get(clip.url);
   if (cachedEl) {
     if (clip.type === "video" && cachedEl instanceof HTMLVideoElement) {
+      if (typeof document !== "undefined" && !cachedEl.parentNode) {
+        const container = getMediaContainer();
+        if (container) container.appendChild(cachedEl);
+      }
+      if (!cachedEl.muted) cachedEl.muted = true;
+      if (!cachedEl.defaultMuted) cachedEl.defaultMuted = true;
       const currentSrc = cachedEl.src || cachedEl.currentSrc || "";
       const isDead = Boolean(cachedEl.error) || (cachedEl.networkState === 3);
       const urlChanged = Boolean(clip.url && currentSrc && !currentSrc.endsWith(clip.url) && currentSrc !== clip.url);
@@ -149,6 +182,9 @@ export async function preloadClip(
             oldEl.pause();
             oldEl.removeAttribute("src");
             oldEl.load();
+            if (oldEl.parentNode) {
+              oldEl.parentNode.removeChild(oldEl);
+            }
           } catch (e) {}
         }
         ctx.videoElements.delete(oldestUrl);
@@ -157,6 +193,10 @@ export async function preloadClip(
     }
 
     const vid = document.createElement("video");
+    const container = getMediaContainer();
+    if (container && !vid.parentNode) {
+      container.appendChild(vid);
+    }
     if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
       vid.crossOrigin = "anonymous";
     }
@@ -252,6 +292,10 @@ export async function preloadClip(
       ctx.videoElements.set(clip.id, vid);
       globalActiveVideoElements.set(clip.id, vid);
     }
+    if (clip.sourceMediaId) {
+      ctx.videoElements.set(clip.sourceMediaId, vid);
+      globalActiveVideoElements.set(clip.sourceMediaId, vid);
+    }
     if (!ctx.videoElements.has(clip.url)) {
       ctx.videoElements.set(clip.url, vid);
     }
@@ -311,8 +355,10 @@ export function pauseAllMedia(ctx: MediaSyncContext) {
   const now = Date.now();
   ctx.videoElements.forEach((el) => {
     if (el instanceof HTMLVideoElement) {
+      (el as any)._playSessionActive = false;
       (el as any)._wasPlayingBeforePause = true;
       (el as any)._pauseTimestamp = now;
+      (el as any)._isPlayPending = false;
       if (!el.paused) {
         try {
           el.pause();
@@ -336,6 +382,7 @@ export function syncPlayback(
     if (c.type === "video") {
       activeKeys.add(c.id || c.url);
       activeKeys.add(c.url);
+      if (c.sourceMediaId) activeKeys.add(c.sourceMediaId);
     }
   });
 
@@ -343,8 +390,12 @@ export function syncPlayback(
   ctx.videoElements.forEach((el, key) => {
     if (el instanceof HTMLVideoElement && !activeKeys.has(key)) {
       if (!el.paused) {
-        el.pause();
+        try {
+          el.pause();
+        } catch {}
       }
+      (el as any)._playSessionActive = false;
+      (el as any)._isPlayPending = false;
     }
   });
 
@@ -352,9 +403,18 @@ export function syncPlayback(
   activeClips.forEach((activeClip) => {
     if (activeClip.type !== "video") return;
 
-    const mediaEl = ctx.videoElements.get(activeClip.id) || ctx.videoElements.get(activeClip.url);
+    const mediaEl =
+      (activeClip.id ? ctx.videoElements.get(activeClip.id) : null) ||
+      (activeClip.sourceMediaId ? ctx.videoElements.get(activeClip.sourceMediaId) : null) ||
+      ctx.videoElements.get(activeClip.url);
     if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
     const vid = mediaEl as HTMLVideoElement;
+
+    // Ensure it remains attached to DOM container so Chromium/WebKit don't throttle decoders
+    if (typeof document !== "undefined" && !vid.parentNode) {
+      const container = getMediaContainer();
+      if (container) container.appendChild(vid);
+    }
 
     // Auto-heal URL mismatch or dead blob on active video element
     const curSrc = vid.src || vid.currentSrc || "";
@@ -399,33 +459,68 @@ export function syncPlayback(
     if (isPlaying) {
       (vid as any)._wasPlayingBeforePause = false;
       (vid as any)._pauseTimestamp = 0;
+
+      // Ensure audio muted on canvas video element so autoplay policy never rejects playback
+      if (!vid.muted) vid.muted = true;
+      if (!vid.defaultMuted) vid.defaultMuted = true;
+
+      // If active seek is in flight, allow decoder to complete its buffer
       if (vid.seeking) {
-        // Active seek is currently in flight: do not interrupt decoder buffer
-        return;
+        const seekDuration = now - ((vid as any)._seekStartTime || 0);
+        if (seekDuration < 400) {
+          return;
+        }
       }
 
-      if (vid.paused) {
-        // Startup sync: snap directly to mediaTime if drift > 0.04s before starting playback
-        if (vid.readyState >= 1 && Math.abs(vid.currentTime - mediaTime) > 0.04 && now - lastHardSeek > 400) {
+      // Startup synchronization: align position ONCE per play session
+      if (!(vid as any)._playSessionActive) {
+        (vid as any)._playSessionActive = true;
+        const startDrift = Math.abs(vid.currentTime - mediaTime);
+        if (vid.readyState >= 1 && startDrift > 0.05) {
           (vid as any)._lastHardSeek = now;
+          (vid as any)._seekStartTime = now;
           try {
             vid.currentTime = Math.max(0, mediaTime);
           } catch (e) {}
         }
-        vid.play().catch(() => {});
+      }
+
+      if (vid.paused) {
+        // Start playback if not already pending
+        if (!(vid as any)._isPlayPending) {
+          (vid as any)._isPlayPending = true;
+          vid.playbackRate = speed;
+          const p = vid.play();
+          if (p && typeof p.then === "function") {
+            p.then(() => {
+              (vid as any)._isPlayPending = false;
+            }).catch(() => {
+              (vid as any)._isPlayPending = false;
+            });
+          } else {
+            (vid as any)._isPlayPending = false;
+          }
+        }
       } else {
+        (vid as any)._isPlayPending = false;
         const drift = vid.currentTime - mediaTime;
-        // Only hard-seek during playback if drift is severe (> 0.65s) and not in cooldown
-        // This eliminates choppy playback and allows hardware decoding to run uninterrupted
-        if (Math.abs(drift) > 0.65 && now - lastHardSeek > 800) {
+
+        // ONLY perform a hard seek during playback if drift is catastrophic (> 2.0s, e.g. timeline jump)
+        // Hard seeking flushes hardware decoders and drops playback frames if called repeatedly!
+        if (Math.abs(drift) > 2.0 && now - lastHardSeek > 2000) {
           (vid as any)._lastHardSeek = now;
-          vid.currentTime = Math.max(0, mediaTime);
-        } else if (Math.abs(drift) > 0.025) {
-          // Dynamic smooth micro-adjustment via playback rate to catch up in < 150ms without stutter
-          const compFactor = Math.max(0.85, Math.min(1.15, 1 - drift * 0.8));
+          (vid as any)._seekStartTime = now;
+          try {
+            vid.currentTime = Math.max(0, mediaTime);
+          } catch (e) {}
+        } else if (Math.abs(drift) > 0.02) {
+          // Dynamic smooth micro-adjustment via playbackRate to eliminate drift smoothly without freezes:
+          // If drift < 0 (video behind), adjust > 0 to speed up (up to 1.30x)
+          // If drift > 0 (video ahead), adjust < 0 to slow down (down to 0.70x)
+          const compFactor = Math.max(0.70, Math.min(1.30, 1 - drift * 0.8));
           const compRate = speed * compFactor;
-          if (Math.abs(vid.playbackRate - compRate) > 0.01) {
-            vid.playbackRate = Math.max(0.1, Math.min(16, compRate));
+          if (Math.abs(vid.playbackRate - compRate) > 0.015) {
+            vid.playbackRate = Math.max(0.2, Math.min(16, compRate));
           }
         } else {
           if (Math.abs(vid.playbackRate - speed) > 0.01) {
@@ -434,26 +529,48 @@ export function syncPlayback(
         }
       }
     } else {
-      const wasPlaying = (vid as any)._wasPlayingBeforePause || false;
-      if (!vid.paused) {
-        vid.pause();
-        (vid as any)._wasPlayingBeforePause = true;
+      // Paused / Scrubbing state
+      if ((vid as any)._playSessionActive || !vid.paused) {
+        (vid as any)._playSessionActive = false;
+        (vid as any)._isPlayPending = false;
         (vid as any)._pauseTimestamp = now;
+        (vid as any)._pauseMediaTime = mediaTime;
+        if (!vid.paused) {
+          try {
+            vid.pause();
+          } catch {}
+        }
+        if (Math.abs(vid.playbackRate - speed) > 0.01) {
+          vid.playbackRate = speed;
+        }
+        return;
       }
-      // If the video was playing and just paused, preserve the rendered frame: DO NOT rewind to lagging state!
-      // Only seek if the user is scrubbing while paused and we are past the pause transition window (250ms).
-      const isWithinPauseGracePeriod = wasPlaying && (now - ((vid as any)._pauseTimestamp || 0) < 250);
-      if (!isWithinPauseGracePeriod) {
-        (vid as any)._wasPlayingBeforePause = false;
-        if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.04 && now - lastHardSeek > 100) {
+
+      // While paused: Only seek if the user explicitly moved / scrubbed the playhead
+      // (This completely prevents the frame from changing or jumping 200ms after pausing!)
+      const lastPauseMediaTime = (vid as any)._pauseMediaTime;
+      const userScrubbed =
+        typeof lastPauseMediaTime === "number"
+          ? Math.abs(mediaTime - lastPauseMediaTime) > 0.025
+          : false;
+
+      if (userScrubbed) {
+        (vid as any)._pauseMediaTime = mediaTime;
+        if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.03 && now - lastHardSeek > 80) {
           (vid as any)._lastHardSeek = now;
-          vid.currentTime = Math.max(0, mediaTime);
+          (vid as any)._seekStartTime = now;
+          try {
+            vid.currentTime = Math.max(0, mediaTime);
+          } catch (e) {}
         }
       }
     }
     ctx.lastUsedTimestamp.set(activeClip.url, Date.now());
     if (activeClip.id) {
       ctx.lastUsedTimestamp.set(activeClip.id, Date.now());
+    }
+    if (activeClip.sourceMediaId) {
+      ctx.lastUsedTimestamp.set(activeClip.sourceMediaId, Date.now());
     }
   });
 }

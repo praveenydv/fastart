@@ -242,6 +242,7 @@ export const headerStyles = {
   trackHeaderLabelBox: {
     flex: 1,
     alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
   trackHeaderLabelUniversal: {
     fontSize: 9.5,

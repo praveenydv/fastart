@@ -1529,10 +1529,20 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                     const isPhoto = vid.type === "photo";
                     const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
                     const effSpeed = Math.max(0.1, vid.speed || 1.0);
-                    const bakedFps = getClipBakedFps(vid.id) || 20;
-                    const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
-                    const cutoutMaskUri = isCutoutActive
-                      ? getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto)
+                    const bakedFps = getClipBakedFps(vid.id) || (vid.sourceMediaId ? getClipBakedFps(vid.sourceMediaId) : null) || 20;
+                    const effectiveElapsed = vid.reverse
+                      ? Math.max(0, (vid.duration || 0) - elapsed * effSpeed)
+                      : elapsed * effSpeed;
+                    const sourceElapsed = vid.reverse
+                      ? Math.max(0, (vid.trimOut || (vid.trimIn || 0) + (vid.duration || 0) * effSpeed) - elapsed * effSpeed)
+                      : (vid.trimIn || 0) + effectiveElapsed;
+                    const sourceFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(sourceElapsed * bakedFps));
+                    const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(effectiveElapsed * bakedFps));
+                    let cutoutMaskUri = isCutoutActive
+                      ? (getNativeMaskUri(vid.id, sourceFrameIdx, !isPhoto) ||
+                         (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, sourceFrameIdx, !isPhoto) : null) ||
+                         getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto) ||
+                         (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, !isPhoto) : null))
                       : null;
                     return (
                       <>
@@ -1619,10 +1629,20 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   const isPhoto = vid.type === "photo";
                   const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
                   const effSpeed = Math.max(0.1, vid.speed || 1.0);
-                  const bakedFps = getClipBakedFps(vid.id) || 20;
-                  const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(elapsed * effSpeed * bakedFps));
-                  const cutoutMaskUri = isCutoutActive
-                    ? getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto)
+                  const bakedFps = getClipBakedFps(vid.id) || (vid.sourceMediaId ? getClipBakedFps(vid.sourceMediaId) : null) || 20;
+                  const effectiveElapsed = vid.reverse
+                    ? Math.max(0, (vid.duration || 0) - elapsed * effSpeed)
+                    : elapsed * effSpeed;
+                  const sourceElapsed = vid.reverse
+                    ? Math.max(0, (vid.trimOut || (vid.trimIn || 0) + (vid.duration || 0) * effSpeed) - elapsed * effSpeed)
+                    : (vid.trimIn || 0) + effectiveElapsed;
+                  const sourceFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(sourceElapsed * bakedFps));
+                  const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.floor(effectiveElapsed * bakedFps));
+                  let cutoutMaskUri = isCutoutActive
+                    ? (getNativeMaskUri(vid.id, sourceFrameIdx, !isPhoto) ||
+                       (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, sourceFrameIdx, !isPhoto) : null) ||
+                       getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto) ||
+                       (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, !isPhoto) : null))
                     : null;
                   return (
                     <>

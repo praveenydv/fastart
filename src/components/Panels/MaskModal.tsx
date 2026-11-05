@@ -11,7 +11,7 @@ interface MaskModalProps {
   onClose: () => void;
   onApply?: () => void;
   currentMask?: MaskConfig;
-  onApplyMask: (newMask: MaskConfig) => void;
+  onApplyMask: (newMask: MaskConfig, isFinal?: boolean) => void;
   isInline?: boolean;
   selectedClip?: any;
   currentTime?: number;
@@ -124,18 +124,21 @@ function MaskModalComponent({
     }
   }, [visible, currentMask]);
 
-  const triggerUpdate = (overrides?: {
-    shape?: MaskShape;
-    size?: number;
-    width?: number;
-    height?: number;
-    feather?: number;
-    roundness?: number;
-    inverted?: boolean;
-    x?: number;
-    y?: number;
-    rotation?: number;
-  }) => {
+  const triggerUpdate = (
+    overrides?: {
+      shape?: MaskShape;
+      size?: number;
+      width?: number;
+      height?: number;
+      feather?: number;
+      roundness?: number;
+      inverted?: boolean;
+      x?: number;
+      y?: number;
+      rotation?: number;
+    },
+    isFinal = true,
+  ) => {
     const nextShape =
       overrides?.shape !== undefined ? overrides.shape : maskShape;
     const nextSize = overrides?.size !== undefined ? overrides.size : maskSize;
@@ -167,7 +170,7 @@ function MaskModalComponent({
       rotation: nextRotation,
     };
 
-    onApplyMask(newMask);
+    onApplyMask(newMask, isFinal);
   };
 
   const handleReset = () => {
@@ -493,7 +496,10 @@ function MaskModalComponent({
                   accentColor="#00F2FE"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
-                  onDragEnd={() => setIsSliderDragging(false)}
+                  onDragEnd={() => {
+                    setIsSliderDragging(false);
+                    triggerUpdate({}, true);
+                  }}
                   onChange={(val) => {
                     setMaskWidth(val);
                     if (isAspectLocked) {
@@ -502,16 +508,22 @@ function MaskModalComponent({
                         Math.max(10, Math.min(150, val * ratio)),
                       );
                       setMaskHeight(newH);
-                      triggerUpdate({
-                        width: val,
-                        height: newH,
-                        size: Math.max(val, newH),
-                      });
+                      triggerUpdate(
+                        {
+                          width: val,
+                          height: newH,
+                          size: Math.max(val, newH),
+                        },
+                        false,
+                      );
                     } else {
-                      triggerUpdate({
-                        width: val,
-                        size: Math.max(val, maskHeight),
-                      });
+                      triggerUpdate(
+                        {
+                          width: val,
+                          size: Math.max(val, maskHeight),
+                        },
+                        false,
+                      );
                     }
                   }}
                 />
@@ -530,7 +542,10 @@ function MaskModalComponent({
                   accentColor="#00F2FE"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
-                  onDragEnd={() => setIsSliderDragging(false)}
+                  onDragEnd={() => {
+                    setIsSliderDragging(false);
+                    triggerUpdate({}, true);
+                  }}
                   onChange={(val) => {
                     setMaskHeight(val);
                     if (isAspectLocked) {
@@ -539,16 +554,22 @@ function MaskModalComponent({
                         Math.max(10, Math.min(150, val * ratio)),
                       );
                       setMaskWidth(newW);
-                      triggerUpdate({
-                        height: val,
-                        width: newW,
-                        size: Math.max(newW, val),
-                      });
+                      triggerUpdate(
+                        {
+                          height: val,
+                          width: newW,
+                          size: Math.max(newW, val),
+                        },
+                        false,
+                      );
                     } else {
-                      triggerUpdate({
-                        height: val,
-                        size: Math.max(maskWidth, val),
-                      });
+                      triggerUpdate(
+                        {
+                          height: val,
+                          size: Math.max(maskWidth, val),
+                        },
+                        false,
+                      );
                     }
                   }}
                 />
@@ -567,10 +588,13 @@ function MaskModalComponent({
                   accentColor="#00F2FE"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
-                  onDragEnd={() => setIsSliderDragging(false)}
+                  onDragEnd={() => {
+                    setIsSliderDragging(false);
+                    triggerUpdate({}, true);
+                  }}
                   onChange={(val) => {
                     setMaskFeather(val);
-                    triggerUpdate({ feather: val });
+                    triggerUpdate({ feather: val }, false);
                   }}
                 />
               </View>
@@ -589,10 +613,13 @@ function MaskModalComponent({
                     accentColor="#00F2FE"
                     showSteppers={true}
                     onDragStart={() => setIsSliderDragging(true)}
-                    onDragEnd={() => setIsSliderDragging(false)}
+                    onDragEnd={() => {
+                      setIsSliderDragging(false);
+                      triggerUpdate({}, true);
+                    }}
                     onChange={(val) => {
                       setMaskRoundness(val);
-                      triggerUpdate({ roundness: val });
+                      triggerUpdate({ roundness: val }, false);
                     }}
                   />
                 </View>
@@ -612,14 +639,17 @@ function MaskModalComponent({
                   showSteppers={true}
                   accentColor="#00F2FE"
                   onDragStart={() => setIsSliderDragging(true)}
-                  onDragEnd={() => setIsSliderDragging(false)}
+                  onDragEnd={() => {
+                    setIsSliderDragging(false);
+                    triggerUpdate({}, true);
+                  }}
                   onChange={(val) => {
                     setMaskRotation(val);
-                    triggerUpdate({ rotation: val });
+                    triggerUpdate({ rotation: val }, false);
                   }}
                   onReset={() => {
                     setMaskRotation(0);
-                    triggerUpdate({ rotation: 0 });
+                    triggerUpdate({ rotation: 0 }, true);
                   }}
                 />
               </View>

@@ -1485,12 +1485,13 @@ async function ensureMobileMaskDir(): Promise<string> {
 }
 
 /**
- * Persists compressed 8-bit RLE cutout masks into IndexedDB (web) or filesystem cache (mobile)
+ * Persists compressed 8-bit RLE cutout masks and frame rate into IndexedDB (web) or filesystem cache (mobile)
  * for instant, persistent recovery.
  */
 export async function persistMasksRLE(
   clipId: string,
   masks: Record<string, Uint8Array>,
+  fps?: number,
 ): Promise<void> {
   if (!clipId || !masks) return;
 
@@ -1503,7 +1504,7 @@ export async function persistMasksRLE(
       for (const [k, v] of Object.entries(masks)) {
         serializable[k] = Buffer.from(v).toString('base64');
       }
-      await FileSystemLegacy.writeAsStringAsync(filePath, JSON.stringify(serializable));
+      await FileSystemLegacy.writeAsStringAsync(filePath, JSON.stringify({ masks: serializable, fps }));
     } catch (e) {
       console.warn('[largeMediaStorage] Failed to persist mobile masks:', e);
     }
@@ -1517,7 +1518,7 @@ export async function persistMasksRLE(
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_MASKS, 'readwrite');
       const store = tx.objectStore(STORE_MASKS);
-      store.put({ id: clipId, masks, updatedAt: Date.now() });
+      store.put({ id: clipId, masks, fps, updatedAt: Date.now() });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -1531,7 +1532,7 @@ export async function persistMasksRLE(
  */
 export async function loadMasksRLE(
   clipId: string,
-): Promise<Record<string, Uint8Array> | null> {
+): Promise<{ masks: Record<string, Uint8Array>; fps?: number } | null> {
   if (!clipId) return null;
 
   if (Platform.OS !== 'web') {
@@ -1543,14 +1544,15 @@ export async function loadMasksRLE(
       if (!info.exists) return null;
       const raw = await FileSystemLegacy.readAsStringAsync(filePath);
       const parsed = JSON.parse(raw);
+      const rawMasks = parsed.masks || parsed;
       const result: Record<string, Uint8Array> = {};
-      for (const [k, v] of Object.entries(parsed)) {
+      for (const [k, v] of Object.entries(rawMasks)) {
         if (typeof v === 'string') {
           const buf = Buffer.from(v, 'base64');
           result[k] = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         }
       }
-      return result;
+      return { masks: result, fps: typeof parsed.fps === 'number' ? parsed.fps : undefined };
     } catch {
       return null;
     }
@@ -1565,7 +1567,13 @@ export async function loadMasksRLE(
       const store = tx.objectStore(STORE_MASKS);
       const req = store.get(clipId);
       req.onsuccess = () => {
-        resolve(req.result ? req.result.masks : null);
+        const item = req.result;
+        if (!item) {
+          resolve(null);
+          return;
+        }
+        const masks = item.masks || item;
+        resolve({ masks, fps: typeof item.fps === 'number' ? item.fps : undefined });
       };
       req.onerror = () => resolve(null);
     });

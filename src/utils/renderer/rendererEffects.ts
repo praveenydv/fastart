@@ -225,12 +225,12 @@ export function drawClipWithMask(
     return;
   }
 
-  const rawFeather = Math.max(0, Math.min(80, mask.feather ?? 0));
+  const rawFeather = Math.max(0, Math.min(100, mask.feather ?? 0));
   const minDim = Math.min(dw, dh);
-  const featherPx = rawFeather > 0 ? Math.max(1, (minDim * (rawFeather / 100)) * 0.38) : 0;
-  const pad = featherPx > 0 ? Math.ceil(featherPx * 2.5 + 8) : 0;
-  const shapeCanvasW = canvasW + pad * 2;
-  const shapeCanvasH = canvasH + pad * 2;
+  const featherPx = rawFeather > 0 ? Math.max(1, (minDim * (rawFeather / 100)) * 0.35) : 0;
+  const pad = featherPx > 0 ? Math.ceil(featherPx * 3.0 + 16) : 0;
+  const shapeCanvasW = dw + pad * 2;
+  const shapeCanvasH = dh + pad * 2;
 
   if (maskShapeCanvas.width !== shapeCanvasW || maskShapeCanvas.height !== shapeCanvasH) {
     maskShapeCanvas.width = shapeCanvasW;

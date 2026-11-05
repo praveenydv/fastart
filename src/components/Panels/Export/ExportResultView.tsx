@@ -24,6 +24,18 @@ interface ExportResultViewProps {
   onClose: () => void;
   onCancelExport?: () => void;
   exportFilename?: string;
+  fileSize?: number;
+}
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export default function ExportResultView({
@@ -44,6 +56,7 @@ export default function ExportResultView({
   onClose,
   onCancelExport,
   exportFilename,
+  fileSize,
 }: ExportResultViewProps) {
   if (status === "rendering") {
     return (
@@ -93,20 +106,31 @@ export default function ExportResultView({
       : "Gallery & Files";
 
     const finalLocation = downloadDestination || defaultLocation;
+    const sizeStr = formatFileSize(fileSize);
+    const sizeSuffix = sizeStr ? ` (${sizeStr})` : "";
 
     const getButtonText = () => {
       if (isSaving) {
-        return isWeb ? "Downloading file..." : "Saving directly to device...";
+        return isWeb
+          ? `Downloading${sizeStr ? ` ${sizeStr}` : " file"}...`
+          : `Saving${sizeStr ? ` ${sizeStr}` : ""} to Device...`;
       }
       if (isSaved) {
-        return isWeb ? "✓ Downloaded (Save Copy)" : "✓ Saved to Device (Save Copy)";
+        return isWeb
+          ? `✓ Downloaded${sizeSuffix} (Save Again)`
+          : `✓ Saved to Device${sizeSuffix} (Save Again)`;
       }
       return isWeb
-        ? `Download ${selectedFormatConfig.shortLabel} File`
-        : `Save ${selectedFormatConfig.shortLabel} to Device`;
+        ? `Download ${selectedFormatConfig.shortLabel} File${sizeSuffix}`
+        : `Save ${selectedFormatConfig.shortLabel} to Device${sizeSuffix}`;
     };
 
     const getHintText = () => {
+      if (isSaving) {
+        return isWeb
+          ? "Please wait while your browser prepares and downloads your file..."
+          : "Please wait while your file is saved to your device gallery...";
+      }
       if (isSaved) {
         if (isWeb) {
           return "✓ File downloaded successfully to your computer's Downloads directory.";
@@ -173,10 +197,24 @@ export default function ExportResultView({
               <View style={styles.summaryDivider} />
             </>
           )}
+          {sizeStr ? (
+            <>
+              <View style={styles.doneMetaItem}>
+                <Text style={styles.doneMetaLabel}>Size</Text>
+                <Text style={styles.doneMetaValue}>{sizeStr}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+            </>
+          ) : null}
           <View style={styles.doneMetaItem}>
             <Text style={styles.doneMetaLabel}>Status</Text>
-            <Text style={[styles.doneMetaValue, { color: "#10B981" }]}>
-              {isSaved ? "Saved" : "Ready"}
+            <Text
+              style={[
+                styles.doneMetaValue,
+                { color: isSaving ? "#FFE600" : isSaved ? "#10B981" : "#00F2FE" },
+              ]}
+            >
+              {isSaving ? "Downloading..." : isSaved ? "Saved" : "Ready"}
             </Text>
           </View>
         </View>
@@ -185,8 +223,8 @@ export default function ExportResultView({
         <TouchableOpacity
           style={[
             styles.downloadBtn,
-            isSaved && { backgroundColor: "#00F2FE" },
-            isSaving && { opacity: 0.8 },
+            isSaved && !isSaving && { backgroundColor: "#00F2FE" },
+            isSaving && { backgroundColor: "#FFE600", opacity: 0.95 },
           ]}
           onPress={onDownload}
           disabled={isSaving}
@@ -203,6 +241,26 @@ export default function ExportResultView({
           )}
           <Text style={styles.downloadBtnText}>{getButtonText()}</Text>
         </TouchableOpacity>
+
+        {/* Active Downloading Progress Banner */}
+        {isSaving && (
+          <View style={styles.downloadingBanner}>
+            <View style={styles.downloadingBannerHeader}>
+              <ActivityIndicator size="small" color="#00F2FE" />
+              <Text style={styles.downloadingBannerTitle}>
+                {isWeb ? "Download in progress..." : "Saving directly to device..."}
+              </Text>
+            </View>
+            <Text style={styles.downloadingBannerText}>
+              {isWeb
+                ? `Writing ${exportFilename ? `${exportFilename}${selectedFormatConfig.ext}` : "video file"}${sizeStr ? ` (${sizeStr})` : ""} to your Downloads directory. Please keep this tab open...`
+                : `Transferring ${exportFilename ? `${exportFilename}${selectedFormatConfig.ext}` : "video file"}${sizeStr ? ` (${sizeStr})` : ""} to your device media library. Please wait...`}
+            </Text>
+            <View style={styles.downloadingTrack}>
+              <View style={styles.downloadingPulse} />
+            </View>
+          </View>
+        )}
 
         {/* 2. Download Location Info Card */}
         <View style={styles.downloadLocationCard}>

@@ -22,6 +22,7 @@ export interface ClipRenderContext {
   preloadClip: (clip: VideoClip) => Promise<HTMLVideoElement | HTMLImageElement | null>;
   ensureOffscreen: (cw: number, ch: number) => HTMLCanvasElement | null;
   isScrubbing?: boolean;
+  isPlaying?: boolean;
 }
 
 export interface TransitionRenderState {
@@ -317,11 +318,18 @@ export function drawClip(
     clip.filterIntensity !== undefined ? clip.filterIntensity : 1.0,
   );
 
-  if (!renderCtx.videoElements.has(clip.id) && !renderCtx.videoElements.has(clip.url)) {
+  if (
+    !renderCtx.videoElements.has(clip.id) &&
+    (!clip.sourceMediaId || !renderCtx.videoElements.has(clip.sourceMediaId)) &&
+    !renderCtx.videoElements.has(clip.url)
+  ) {
     renderCtx.preloadClip(clip);
   }
 
-  const mediaEl = renderCtx.videoElements.get(clip.id) || renderCtx.videoElements.get(clip.url);
+  const mediaEl =
+    (clip.id ? renderCtx.videoElements.get(clip.id) : null) ||
+    (clip.sourceMediaId ? renderCtx.videoElements.get(clip.sourceMediaId) : null) ||
+    renderCtx.videoElements.get(clip.url);
   const isImage = mediaEl instanceof HTMLImageElement || (mediaEl && (mediaEl as any).tagName === "IMG");
   const isVideo = mediaEl instanceof HTMLVideoElement || (mediaEl && (mediaEl as any).tagName === "VIDEO");
 
@@ -336,8 +344,10 @@ export function drawClip(
 
   let activeMedia: any = isReady ? mediaEl : null;
 
-  // Fall back to clip thumbnail whenever video element is not ready, seeking, or buffering
-  if (!activeMedia && clip.thumbnail) {
+  // Fall back to clip thumbnail whenever media element is not ready or has not loaded
+  // BUT during active playback, if video element exists, NEVER replace it with a still thumbnail
+  // because that replaces the active moving video frame with a frozen still image!
+  if (!activeMedia && clip.thumbnail && !renderCtx.isPlaying) {
     let thumbEl = renderCtx.thumbnailElements.get(clip.id);
     if (!thumbEl) {
       thumbEl = new Image();
@@ -350,6 +360,8 @@ export function drawClip(
     if (thumbEl.complete && thumbEl.naturalWidth > 0) {
       activeMedia = thumbEl;
     }
+  } else if (!activeMedia && isVideo && mediaEl && (mediaEl as HTMLVideoElement).videoWidth > 0) {
+    activeMedia = mediaEl;
   }
 
   if (activeMedia) {
@@ -409,17 +421,30 @@ export function drawClip(
         clipLocalTime / Math.max(0.1, clip.duration),
       );
     }
-    const elapsedClipTime = clipLocalTime * effectiveSpeed;
+    const elapsedClipTime = clip.reverse
+      ? Math.max(0, (clip.duration || 0) - clipLocalTime * effectiveSpeed)
+      : clipLocalTime * effectiveSpeed;
 
     const rawCutout = clip.cutout || clip.transform?.cutout;
     const isScrubbing = renderCtx.isScrubbing || false;
+    const clipFps = clip.sourceFrameRate || clip.frameRate || 30;
+    const sourceMediaTime = clip.reverse
+      ? Math.max(
+          0,
+          (clip.trimOut || (clip.trimIn || 0) + (clip.duration || 0) * effectiveSpeed) -
+            clipLocalTime * effectiveSpeed,
+        )
+      : (clip.trimIn || 0) + elapsedClipTime;
+
     const cutout = rawCutout
       ? {
           ...rawCutout,
           clipId: clip.id,
           sourceMediaId: clip.sourceMediaId,
           clipTime: elapsedClipTime,
+          sourceTime: sourceMediaTime,
           isScrubbing,
+          fps: clipFps,
         }
       : rawCutout;
 

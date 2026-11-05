@@ -9,8 +9,19 @@ import { Buffer } from "buffer";
 import { FastArtProject, TrajectoryPoint, CutoutConfig, HSLAdjustments } from "../types/project";
 
 export interface MaskProvider {
-  getFrameMask: (clipId: string, clipTime: number, fps?: number, fallbackClipId?: string) => HTMLCanvasElement | null;
-  getHumanSegmentationMask: (clipId?: string, clipTime?: number, fallbackClipId?: string) => HTMLCanvasElement | null;
+  getFrameMask: (
+    clipId: string,
+    clipTime: number,
+    fps?: number,
+    fallbackClipId?: string,
+    sourceTime?: number,
+  ) => HTMLCanvasElement | null;
+  getHumanSegmentationMask: (
+    clipId?: string,
+    clipTime?: number,
+    fallbackClipId?: string,
+    sourceTime?: number,
+  ) => HTMLCanvasElement | null;
   requestHumanSegmentation: (mediaElement: any, clipId?: string, clipTime?: number) => void;
   hasClipMasks?: (clipId: string) => boolean;
 }
@@ -498,51 +509,11 @@ class RustCoreBridgeService {
     if (this.backendType === "web_wasm") return false;
     if ((this.backendType !== "ios_native" && this.backendType !== "android_native") || !FastArtRust?.initializeModnet) return false;
     try {
-      const fileSystem = await import("expo-file-system/legacy");
-      // Prioritize ultra-fast 256x256 MediaPipe Selfie Segmentation (462 KB, ~5ms/frame on mobile CPU)
-      const selfieUrl = "https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx";
-      const selfiePath = `${fileSystem.cacheDirectory}fastart-selfie-seg-3241ac4a.onnx`;
-      const existingSelfie = await fileSystem.getInfoAsync(selfiePath);
-      if (!existingSelfie.exists || (existingSelfie.size ?? 0) < 400_000) {
-        try {
-          await fileSystem.downloadAsync(selfieUrl, selfiePath);
-        } catch (downloadErr) {
-          console.warn("[RustCoreBridge] Could not download ultra-fast selfie model:", downloadErr);
-        }
-      }
-
-      let result: unknown = null;
-      if ((await fileSystem.getInfoAsync(selfiePath)).exists) {
-        result = await FastArtRust.initializeModnet(selfiePath);
-      } else {
-        // Immediately initialize using the bundled asset model inside the native module
-        result = await FastArtRust.initializeModnet("");
-      }
-
-      let initialized = result === true || result === "ok";
-      if (!initialized) {
-        // Fallback to full MODNet if needed
-        const modnetUrl = "https://huggingface.co/Xenova/modnet/resolve/refs%2Fpr%2F6/onnx/model.onnx";
-        const modnetPath = `${fileSystem.cacheDirectory}fastart-modnet-07c308cf.onnx`;
-        const existingModnet = await fileSystem.getInfoAsync(modnetPath);
-        if (!existingModnet.exists || (existingModnet.size ?? 0) < 25_000_000) {
-          try {
-            await fileSystem.downloadAsync(modnetUrl, modnetPath);
-          } catch {}
-        }
-        if ((await fileSystem.getInfoAsync(modnetPath)).exists) {
-          result = await FastArtRust.initializeModnet(modnetPath);
-          initialized = result === true || result === "ok";
-        }
-      }
-
-      if (!initialized) {
-        const reason = typeof result === "string" ? `: ${result}` : "";
-        console.warn(`[RustCoreBridge] AI Cutout model initialization failed${reason}`);
-      }
-      return initialized;
+      // Immediately initialize using the bundled asset selfie model inside the native module
+      const result = await FastArtRust.initializeModnet("");
+      return result === true || result === "ok";
     } catch (error) {
-      console.warn("[RustCoreBridge] MODNet native initialization failed:", error);
+      console.warn("[RustCoreBridge] AI Cutout native initialization failed:", error);
       return false;
     }
   }
@@ -1995,19 +1966,25 @@ class RustCoreBridgeService {
             : 0;
 
         const fallbackId = (options as any).sourceMediaId;
+        const sourceTime = (options as any).sourceTime;
+        const effectiveSourceTime =
+          media instanceof HTMLVideoElement && !media.seeking && media.currentTime > 0
+            ? media.currentTime
+            : sourceTime;
+        const clipFps = (options as any).fps || (options as any).sourceFrameRate;
         let humanMask =
           options.clipId && activeMaskProvider
-            ? activeMaskProvider.getFrameMask(options.clipId, actualClipTime, undefined, fallbackId)
+            ? activeMaskProvider.getFrameMask(options.clipId, actualClipTime, clipFps, fallbackId, effectiveSourceTime)
             : null;
 
         if (!humanMask && fallbackId && activeMaskProvider) {
-          humanMask = activeMaskProvider.getFrameMask(fallbackId, actualClipTime);
+          humanMask = activeMaskProvider.getFrameMask(fallbackId, actualClipTime, clipFps, undefined, effectiveSourceTime);
         }
 
         if (!humanMask && activeMaskProvider) {
-          humanMask = activeMaskProvider.getHumanSegmentationMask(options.clipId, actualClipTime, fallbackId);
+          humanMask = activeMaskProvider.getHumanSegmentationMask(options.clipId, actualClipTime, fallbackId, sourceTime);
           if (!humanMask && fallbackId) {
-            humanMask = activeMaskProvider.getHumanSegmentationMask(fallbackId, actualClipTime);
+            humanMask = activeMaskProvider.getHumanSegmentationMask(fallbackId, sourceTime !== undefined ? sourceTime : actualClipTime);
           }
           // Do not queue heavy async inferences during rapid scrubbing; nearest cached mask ensures 60fps!
           if (!isScrubbing && activeMaskProvider.requestHumanSegmentation) {

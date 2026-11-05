@@ -596,6 +596,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
           style={[
             styles.trackHeaderCellUniversal,
             {
+              height: trackRowHeight,
               borderColor: THEME_COLORS.accent,
               borderWidth: 1.5,
               borderStyle: "dashed",
@@ -630,7 +631,10 @@ const TimelineComponent: React.FC<TimelineProps> = ({
       headers.push(
         <View
           key={`track-header-${idx}`}
-          style={styles.trackHeaderCellUniversal}
+          style={[
+            styles.trackHeaderCellUniversal,
+            { height: trackRowHeight },
+          ]}
         >
           {/* Inter-Track Boundary Seam Indicator between headers */}
           {isSeamActive && (
@@ -700,6 +704,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
           style={[
             styles.trackHeaderCellUniversal,
             {
+              height: trackRowHeight,
               borderColor: isBottomActive
                 ? THEME_COLORS.accent
                 : THEME_COLORS.cyanBorder,
@@ -751,6 +756,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     dragState,
     activeTrackCount,
     handleRemoveTrack,
+    trackRowHeight,
   ]);
 
   return (
