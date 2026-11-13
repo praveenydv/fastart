@@ -233,7 +233,18 @@ export async function preloadClip(
 
     vid.addEventListener("loadeddata", trigger);
     vid.addEventListener("canplay", trigger);
-    vid.addEventListener("seeked", trigger);
+    const onSeeked = () => {
+      trigger();
+      if (vid.paused && typeof (vid as any)._targetMediaTime === "number") {
+        const target = (vid as any)._targetMediaTime;
+        if (Math.abs(vid.currentTime - target) > 0.02) {
+          try {
+            vid.currentTime = Math.max(0, target);
+          } catch {}
+        }
+      }
+    };
+    vid.addEventListener("seeked", onSeeked);
     vid.addEventListener("loadedmetadata", () => {
       if (vid.videoWidth > 0 && vid.videoHeight > 0) {
         clip.width = vid.videoWidth;
@@ -534,7 +545,6 @@ export function syncPlayback(
         (vid as any)._playSessionActive = false;
         (vid as any)._isPlayPending = false;
         (vid as any)._pauseTimestamp = now;
-        (vid as any)._pauseMediaTime = mediaTime;
         if (!vid.paused) {
           try {
             vid.pause();
@@ -543,25 +553,43 @@ export function syncPlayback(
         if (Math.abs(vid.playbackRate - speed) > 0.01) {
           vid.playbackRate = speed;
         }
-        return;
       }
 
-      // While paused: Only seek if the user explicitly moved / scrubbed the playhead
-      // (This completely prevents the frame from changing or jumping 200ms after pausing!)
-      const lastPauseMediaTime = (vid as any)._pauseMediaTime;
-      const userScrubbed =
-        typeof lastPauseMediaTime === "number"
-          ? Math.abs(mediaTime - lastPauseMediaTime) > 0.025
-          : false;
+      (vid as any)._targetMediaTime = mediaTime;
+      const diff = Math.abs(vid.currentTime - mediaTime);
 
-      if (userScrubbed) {
-        (vid as any)._pauseMediaTime = mediaTime;
-        if (!vid.seeking && Math.abs(vid.currentTime - mediaTime) > 0.03 && now - lastHardSeek > 80) {
-          (vid as any)._lastHardSeek = now;
-          (vid as any)._seekStartTime = now;
+      if (diff > 0.02) {
+        const timeSinceLastSeek = now - lastHardSeek;
+        const MIN_SEEK_INTERVAL_MS = 24; // Smooth ~40 FPS seek cadence while moving playhead
+
+        const performSeek = (target: number) => {
+          (vid as any)._lastHardSeek = Date.now();
+          (vid as any)._seekStartTime = Date.now();
+          if ((vid as any)._pendingSeekTimer) {
+            clearTimeout((vid as any)._pendingSeekTimer);
+            (vid as any)._pendingSeekTimer = null;
+          }
           try {
-            vid.currentTime = Math.max(0, mediaTime);
+            vid.currentTime = Math.max(0, target);
           } catch (e) {}
+        };
+
+        if (!vid.seeking && timeSinceLastSeek >= MIN_SEEK_INTERVAL_MS) {
+          performSeek(mediaTime);
+        } else {
+          // Latest-frame-wins: Always schedule a trailing seek so the exact playhead position
+          // is rendered even if the user stopped scrubbing during an in-flight seek
+          if (!(vid as any)._pendingSeekTimer) {
+            (vid as any)._pendingSeekTimer = setTimeout(() => {
+              (vid as any)._pendingSeekTimer = null;
+              if (vid.paused && typeof (vid as any)._targetMediaTime === "number") {
+                const finalTarget = (vid as any)._targetMediaTime;
+                if (Math.abs(vid.currentTime - finalTarget) > 0.02) {
+                  performSeek(finalTarget);
+                }
+              }
+            }, 35);
+          }
         }
       }
     }

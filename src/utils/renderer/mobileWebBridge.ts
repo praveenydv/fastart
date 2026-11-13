@@ -110,28 +110,283 @@ export function generateCanvasBridgeHtml(
       // -----------------------------------------------------------------------
       // 1. Color Filters & 8-Channel HSL Color Correction
       // -----------------------------------------------------------------------
-      function getCssFilter(filterName) {
-        if (!filterName || filterName === "none" || filterName === "normal") return "none";
-        const f = filterName.toLowerCase();
-        switch (f) {
-          case "cinematic": return "contrast(1.22) saturate(1.15) brightness(0.95)";
-          case "vintage": return "sepia(0.38) contrast(1.12) brightness(0.95) saturate(0.85)";
-          case "cyberpunk": return "contrast(1.3) saturate(1.5) hue-rotate(15deg)";
-          case "film": return "contrast(1.15) saturate(0.9) brightness(1.02)";
-          case "vivid": return "saturate(1.55) contrast(1.15)";
-          case "noir": case "bw": case "blackwhite": return "grayscale(1) contrast(1.4) brightness(0.9)";
-          case "sepia": return "sepia(0.85) contrast(1.08)";
-          case "warm": return "sepia(0.2) saturate(1.25) brightness(1.02)";
-          case "cool": return "hue-rotate(18deg) saturate(1.12)";
-          case "sunset": return "sepia(0.3) saturate(1.4) hue-rotate(-12deg)";
-          case "moody": return "contrast(1.25) brightness(0.88) saturate(0.82)";
-          case "pastel": return "brightness(1.12) contrast(0.92) saturate(1.18)";
-          case "drama": return "contrast(1.45) saturate(1.25) brightness(0.92)";
-          case "retro": return "sepia(0.4) contrast(1.2) saturate(1.25)";
-          case "crisp": return "contrast(1.22) brightness(1.02) saturate(1.12)";
-          case "grayscale": return "grayscale(1)";
-          default: return "none";
+      var FILTER_MAP = {
+        teal_orange: "contrast(1.25) saturate(1.35) hue-rotate(15deg)",
+        vintage: "sepia(0.35) contrast(0.95) brightness(1.08)",
+        cyberpunk: "hue-rotate(290deg) contrast(1.4) saturate(1.85)",
+        noir: "grayscale(1) contrast(1.45) brightness(0.92)",
+        warm_sunset: "sepia(0.22) saturate(1.45) brightness(1.08)",
+        cold_moody: "hue-rotate(185deg) saturate(0.85) contrast(1.2)",
+        emerald: "hue-rotate(95deg) saturate(1.25) contrast(1.12)",
+        vhs_retro: "contrast(1.3) saturate(1.6) brightness(1.05)",
+        pastel_dream: "brightness(1.15) saturate(1.2) contrast(0.9)",
+        cinematic_warm: "sepia(0.3) saturate(1.35) contrast(1.15)",
+        matrix_code: "hue-rotate(80deg) saturate(1.8) contrast(1.3)",
+        sepia_antique: "sepia(0.85) contrast(1.1) brightness(0.95)",
+        high_contrast: "contrast(1.5) saturate(1.3) brightness(1.02)",
+        polaroid_fade: "contrast(0.9) saturate(0.8) brightness(1.12) sepia(0.15)",
+        solar_pop: "saturate(2.0) contrast(1.2)",
+        cinematic: "contrast(1.22) saturate(1.15) brightness(0.95)",
+        film: "contrast(1.15) saturate(0.9) brightness(1.02)",
+        vivid: "saturate(1.55) contrast(1.15)",
+        bw: "grayscale(1) contrast(1.4) brightness(0.9)",
+        blackwhite: "grayscale(1) contrast(1.4) brightness(0.9)",
+        sepia: "sepia(0.85) contrast(1.08)",
+        warm: "sepia(0.2) saturate(1.25) brightness(1.02)",
+        cool: "hue-rotate(18deg) saturate(1.12)",
+        sunset: "sepia(0.3) saturate(1.4) hue-rotate(-12deg)",
+        moody: "contrast(1.25) brightness(0.88) saturate(0.82)",
+        pastel: "brightness(1.12) contrast(0.92) saturate(1.18)",
+        drama: "contrast(1.45) saturate(1.25) brightness(0.92)",
+        retro: "sepia(0.4) contrast(1.2) saturate(1.25)",
+        crisp: "contrast(1.22) brightness(1.02) saturate(1.12)",
+        grayscale: "grayscale(1)"
+      };
+
+      function scaleFilter(raw, intensity) {
+        if (!raw || raw === "none" || intensity === 0) return "none";
+        if (intensity === undefined || intensity === null || intensity >= 0.99) return raw;
+        return raw.replace(/([a-z-]+)\(([^)]+)\)/gi, function(match, fn, val) {
+          var num = parseFloat(val);
+          if (isNaN(num)) return match;
+          var lower = fn.toLowerCase();
+          if (lower === "contrast" || lower === "saturate" || lower === "brightness") {
+            var scaled = 1.0 + (num - 1.0) * intensity;
+            return fn + "(" + scaled.toFixed(3) + ")";
+          } else if (lower === "sepia" || lower === "grayscale") {
+            return fn + "(" + (num * intensity).toFixed(3) + ")";
+          } else if (lower === "hue-rotate") {
+            return fn + "(" + (num * intensity).toFixed(1) + "deg)";
+          }
+          return match;
+        });
+      }
+
+      function getCssFilter(filterName, customLut, intensity) {
+        if (customLut && customLut.cssFilter) {
+          return scaleFilter(customLut.cssFilter, intensity !== undefined ? intensity : 1.0);
         }
+        if (!filterName || filterName === "none" || filterName === "normal") return "none";
+        var f = filterName.toLowerCase();
+        var raw = FILTER_MAP[f] || FILTER_MAP[filterName] || "none";
+        return scaleFilter(raw, intensity !== undefined ? intensity : 1.0);
+      }
+
+      var BLEND_MAP = {
+        normal: "source-over",
+        screen: "screen",
+        multiply: "multiply",
+        overlay: "overlay",
+        lighten: "lighten",
+        darken: "darken",
+        colorDodge: "color-dodge",
+        colorBurn: "color-burn",
+        hardLight: "hard-light",
+        softLight: "soft-light",
+        difference: "difference",
+        exclusion: "exclusion"
+      };
+
+      var chromaOffCanvas = document.createElement("canvas");
+      var cutoutSourceCanvas = document.createElement("canvas");
+      var autoCutoutMaskCanvas = document.createElement("canvas");
+      autoCutoutMaskCanvas.width = 512;
+      autoCutoutMaskCanvas.height = 512;
+      var autoCutoutMaskCtx = autoCutoutMaskCanvas.getContext("2d");
+      var autoCutoutImgData = autoCutoutMaskCtx ? autoCutoutMaskCtx.createImageData(512, 512) : null;
+
+      function unpackRleMaskToCanvas(base64Rle) {
+        if (!base64Rle || !autoCutoutMaskCtx || !autoCutoutImgData) return null;
+        try {
+          var bin = atob(base64Rle);
+          var rle = new Uint8Array(bin.length);
+          for (var j = 0; j < bin.length; j++) rle[j] = bin.charCodeAt(j);
+
+          var data = autoCutoutImgData.data;
+          var maxLen = 512 * 512;
+          var outIdx = 0;
+          var i = 0;
+          while (i + 1 < rle.length && outIdx < maxLen) {
+            var count = rle[i];
+            var val = rle[i + 1];
+            var end = Math.min(maxLen, outIdx + count);
+            for (var p = outIdx; p < end; p++) {
+              var px = p * 4;
+              data[px] = 255;
+              data[px + 1] = 255;
+              data[px + 2] = 255;
+              data[px + 3] = val;
+            }
+            outIdx = end;
+            i += 2;
+          }
+          autoCutoutMaskCtx.putImageData(autoCutoutImgData, 0, 0);
+          return autoCutoutMaskCanvas;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function applyChromaCutout(sourceCanvas, w, h, keyHex, intensity, shadow, despill) {
+        if (chromaOffCanvas.width !== w || chromaOffCanvas.height !== h) {
+          chromaOffCanvas.width = w;
+          chromaOffCanvas.height = h;
+        }
+        var cCtx = chromaOffCanvas.getContext("2d", { willReadFrequently: true });
+        cCtx.clearRect(0, 0, w, h);
+        cCtx.drawImage(sourceCanvas, 0, 0, w, h);
+
+        var imgData = cCtx.getImageData(0, 0, w, h);
+        var data = imgData.data;
+        var hex = (keyHex || "#00FF00").replace("#", "");
+        var kr = parseInt(hex.slice(0, 2), 16) || 0;
+        var kg = parseInt(hex.slice(2, 4), 16) || 0;
+        var kb = parseInt(hex.slice(4, 6), 16) || 0;
+        var th = Math.max(0.02, (intensity !== undefined ? intensity : 45) / 100);
+        var fth = Math.max(0.01, (shadow !== undefined ? shadow : 25) / 100);
+        var thSq = th * th;
+        var fthEnd = th + fth;
+        var fthEndSq = fthEnd * fthEnd;
+        var invFth = 1 / fth;
+        var inv255 = 1 / 255;
+
+        for (var i = 0; i < data.length; i += 4) {
+          var r = data[i], g = data[i + 1], b = data[i + 2];
+          var dr = (r - kr) * inv255, dg = (g - kg) * inv255, db = (b - kb) * inv255;
+          var distSq = dr * dr + dg * dg + db * db;
+
+          if (distSq < thSq) {
+            data[i + 3] = 0;
+          } else if (distSq < fthEndSq) {
+            var dist = Math.sqrt(distSq);
+            var t = (dist - th) * invFth;
+            data[i + 3] = Math.round(data[i + 3] * t * t * (3 - 2 * t));
+          }
+
+          if (despill && data[i + 3] > 0) {
+            if (kg > kr && kg > kb) {
+              var maxRB = r > b ? r : b;
+              if (g > maxRB) data[i + 1] = maxRB;
+            } else if (kb > kr && kb > kg) {
+              var maxRG = r > g ? r : g;
+              if (b > maxRG) data[i + 2] = maxRG;
+            }
+          }
+        }
+        cCtx.putImageData(imgData, 0, 0);
+        return chromaOffCanvas;
+      }
+
+      function evaluateSpeedCurveJs(curveInput, progress) {
+        if (!curveInput) return 1.0;
+        var curve = Array.isArray(curveInput) ? curveInput : (curveInput.points || null);
+        if (!curve || curve.length === 0) return 1.0;
+        var clampedP = Math.max(0, Math.min(1, progress));
+        var pts = typeof curve[0] === "object" && "t" in curve[0]
+          ? curve
+          : curve.map(function(s, i) { return { t: i / Math.max(1, curve.length - 1), s: Number(s) || 1.0 }; });
+        if (clampedP <= pts[0].t) return pts[0].s;
+        if (clampedP >= pts[pts.length - 1].t) return pts[pts.length - 1].s;
+        for (var i = 0; i < pts.length - 1; i++) {
+          var p1 = pts[i];
+          var p2 = pts[i + 1];
+          if (clampedP >= p1.t && clampedP <= p2.t) {
+            var segT = (clampedP - p1.t) / Math.max(0.00001, p2.t - p1.t);
+            var smoothT = segT * segT * (3 - 2 * segT);
+            return p1.s + (p2.s - p1.s) * smoothT;
+          }
+        }
+        return 1.0;
+      }
+
+      function interpolateMaskKeyframes(clip, curTime) {
+        var baseMask = clip.mask || (clip.transform && clip.transform.mask);
+        var rawKfs = clip.maskKeyframes || (clip.mask && clip.mask.keyframes);
+        if (!rawKfs || !Array.isArray(rawKfs) || rawKfs.length === 0) return baseMask;
+        var kfs = rawKfs.slice().sort(function(a, b) { return a.time - b.time; });
+        var localTime = Math.max(0, curTime - (clip.startTime || 0));
+        if (localTime <= kfs[0].time) return kfs[0].mask || baseMask;
+        if (localTime >= kfs[kfs.length - 1].time) return kfs[kfs.length - 1].mask || baseMask;
+        for (var i = 0; i < kfs.length - 1; i++) {
+          var k1 = kfs[i];
+          var k2 = kfs[i + 1];
+          if (localTime >= k1.time && localTime <= k2.time) {
+            var span = Math.max(0.0001, k2.time - k1.time);
+            var t = (localTime - k1.time) / span;
+            var m1 = k1.mask || baseMask || {};
+            var m2 = k2.mask || baseMask || {};
+            var lerp = function(v1, v2, def) {
+              var a = v1 !== undefined ? v1 : def;
+              var b = v2 !== undefined ? v2 : def;
+              return a + (b - a) * t;
+            };
+            return {
+              shape: m1.shape || m2.shape || "circle",
+              inverted: m1.inverted !== undefined ? m1.inverted : m2.inverted,
+              x: lerp(m1.x, m2.x, 0),
+              y: lerp(m1.y, m2.y, 0),
+              size: lerp(m1.size, m2.size, 50),
+              width: lerp(m1.width, m2.width, 50),
+              height: lerp(m1.height, m2.height, 50),
+              rotation: lerp(m1.rotation, m2.rotation, 0),
+              feather: lerp(m1.feather, m2.feather, 0),
+              roundness: lerp(m1.roundness, m2.roundness, 16)
+            };
+          }
+        }
+        return baseMask;
+      }
+
+      function evaluateClipAnimation(clip, curTime) {
+        var anim = clip.animation;
+        if (!anim) return { alpha: 1, scale: 1, x: 0, y: 0, rot: 0 };
+        var inPreset = typeof anim === "string" ? anim : (anim.inPreset || anim.preset || "none");
+        var outPreset = typeof anim === "object" ? (anim.outPreset || "none") : "none";
+        var comboPreset = typeof anim === "object" ? (anim.comboPreset || "none") : "none";
+        var inDur = (typeof anim === "object" && anim.inDuration) || 0.5;
+        var outDur = (typeof anim === "object" && anim.outDuration) || 0.5;
+
+        var local = Math.max(0, curTime - (clip.startTime || 0));
+        var remaining = Math.max(0, (clip.duration || 0) - local);
+        var alpha = 1.0, scale = 1.0, ox = 0, oy = 0, rot = 0;
+
+        // IN Animation
+        if (inPreset && inPreset !== "none" && local < inDur) {
+          var p = Math.max(0, Math.min(1, local / inDur));
+          var ease = p * p;
+          if (inPreset === "fade_in" || inPreset === "fade") alpha *= p;
+          else if (inPreset === "zoom_in" || inPreset === "zoom") { scale *= (0.3 + 0.7 * ease); alpha *= p; }
+          else if (inPreset === "slide_left") ox += (1 - ease) * 120;
+          else if (inPreset === "slide_right") ox -= (1 - ease) * 120;
+          else if (inPreset === "slide_up") oy += (1 - ease) * 120;
+          else if (inPreset === "slide_down") oy -= (1 - ease) * 120;
+          else if (inPreset === "spin_in") { rot += (1 - ease) * 360; scale *= (0.3 + 0.7 * ease); alpha *= p; }
+        }
+
+        // OUT Animation
+        if (outPreset && outPreset !== "none" && remaining < outDur) {
+          var p = Math.max(0, Math.min(1, remaining / outDur));
+          var ease = p * p;
+          if (outPreset === "fade_out") alpha *= p;
+          else if (outPreset === "zoom_out") { scale *= (0.3 + 0.7 * ease); alpha *= p; }
+          else if (outPreset === "slide_left") ox -= (1 - ease) * 120;
+          else if (outPreset === "slide_right") ox += (1 - ease) * 120;
+          else if (outPreset === "spin_out") { rot -= (1 - ease) * 360; scale *= (0.3 + 0.7 * ease); alpha *= p; }
+        }
+
+        // COMBO Animation
+        if (comboPreset && comboPreset !== "none") {
+          if (comboPreset === "pulse" || comboPreset === "zoom_pulse") scale *= (1.0 + 0.05 * Math.sin(local * 5));
+          else if (comboPreset === "wobble") rot += Math.sin(local * 7) * 4;
+          else if (comboPreset === "heartbeat") {
+            var beat = (local * 2) % 1;
+            scale *= (1.0 + (beat < 0.2 ? Math.sin(beat * Math.PI * 5) * 0.08 : 0));
+          } else if (comboPreset === "swing") rot += Math.sin(local * 4) * 6;
+          else if (comboPreset === "float") oy += Math.sin(local * 3) * 12;
+          else if (comboPreset === "wave") { ox += Math.sin(local * 4) * 10; oy += Math.cos(local * 4) * 8; }
+        }
+
+        return { alpha: alpha, scale: scale, x: ox, y: oy, rot: rot };
       }
 
       function getHslFilter(hsl) {
@@ -279,8 +534,71 @@ export function generateCanvasBridgeHtml(
         } else if (type === "colortint" || type === "tint") {
           ctx.fillStyle = "rgba(0, 242, 254, " + (0.18 * intensity) + ")";
           ctx.fillRect(0, 0, w, h);
-        } else if (type === "blur") {
-          ctx.filter = "blur(" + Math.round(intensity * 10) + "px)";
+        } else if (type === "blur" || type === "blurcinematic" || type === "gaussianblur") {
+          ctx.filter = "blur(" + Math.round(intensity * 12) + "px)";
+        } else if (type === "vhs") {
+          ctx.fillStyle = "rgba(0, 0, 0, " + (0.22 * intensity) + ")";
+          for (var y = 0; y < h; y += 4) ctx.fillRect(0, y, w, 2);
+          var barY = (time * 260) % h;
+          ctx.fillStyle = "rgba(255, 255, 255, " + (0.24 * intensity) + ")";
+          ctx.fillRect(0, barY, w, 14);
+          ctx.font = "bold 16px monospace";
+          ctx.fillStyle = "#00FF66";
+          var secs = Math.floor(time).toString().padStart(2, "0");
+          var frames = Math.floor((time % 1) * 30).toString().padStart(2, "0");
+          ctx.fillText("PLAY ▶ SP 00:" + secs + ":" + frames, 24, h - 32);
+        } else if (type === "glitch") {
+          var sliceH = Math.max(12, h * 0.035);
+          for (var gy = 0; gy < h; gy += sliceH * 1.6) {
+            if (Math.sin(time * 22 + gy) > 0.45) {
+              var shift = Math.sin(time * 45 + gy) * (w * 0.08) * intensity;
+              ctx.save();
+              ctx.fillStyle = "rgba(0, 242, 254, " + (0.25 * intensity) + ")";
+              ctx.fillRect(shift, gy, w, sliceH);
+              ctx.restore();
+            }
+          }
+        } else if (type === "mirror") {
+          ctx.save();
+          ctx.translate(w, 0);
+          ctx.scale(-1, 1);
+          ctx.restore();
+        } else if (type === "rgbsplit" || type === "chromatic") {
+          var rShift = Math.sin(time * 15) * 6 * intensity;
+          ctx.fillStyle = "rgba(255, 0, 50, " + (0.15 * intensity) + ")";
+          ctx.fillRect(rShift, 0, w, h);
+          ctx.fillStyle = "rgba(0, 240, 255, " + (0.15 * intensity) + ")";
+          ctx.fillRect(-rShift, 0, w, h);
+        } else if (type === "scanlines") {
+          ctx.fillStyle = "rgba(0, 0, 0, " + (0.28 * intensity) + ")";
+          for (var sy = 0; sy < h; sy += 3) ctx.fillRect(0, sy, w, 1);
+        } else if (type === "filmgrain" || type === "noise") {
+          ctx.fillStyle = "rgba(255, 255, 255, " + (0.07 * intensity) + ")";
+          for (var gi = 0; gi < 120; gi++) {
+            var rx = (Math.sin(time * 100 + gi * 13) * 0.5 + 0.5) * w;
+            var ry = (Math.cos(time * 100 + gi * 17) * 0.5 + 0.5) * h;
+            ctx.fillRect(rx, ry, 2, 2);
+          }
+        } else if (type === "rain") {
+          ctx.strokeStyle = "rgba(200, 220, 255, " + (0.4 * intensity) + ")";
+          ctx.lineWidth = 1.5;
+          for (var ri = 0; ri < 60; ri++) {
+            var px = ((ri * 37 + time * 120) % w);
+            var py = ((ri * 59 + time * 750) % h);
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(px - 4, py + 18);
+            ctx.stroke();
+          }
+        } else if (type === "snow") {
+          ctx.fillStyle = "rgba(255, 255, 255, " + (0.65 * intensity) + ")";
+          for (var si = 0; si < 50; si++) {
+            var sx = ((si * 43 + Math.sin(time + si) * 25) % w);
+            var sy = ((si * 71 + time * 95) % h);
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2 + (si % 3), 0, Math.PI * 2);
+            ctx.fill();
+          }
         } else if (type === "aicyberpunk" || type === "cyberpunkdual") {
           ctx.fillStyle = "rgba(0, 242, 254, " + (0.28 * intensity) + ")";
           ctx.fillRect(0, 0, w / 2, h);
@@ -345,6 +663,15 @@ export function generateCanvasBridgeHtml(
             }
             v.preload = "auto";
             v.src = clip.url;
+            v.style.position = "fixed";
+            v.style.top = "-9999px";
+            v.style.left = "-9999px";
+            v.style.width = "1px";
+            v.style.height = "1px";
+            v.style.opacity = "0.01";
+            v.style.pointerEvents = "none";
+            document.body.appendChild(v);
+            try { v.load(); } catch(e) {}
             promises.push(new Promise((resolve) => {
               if (v.readyState >= 1) {
                 resolve();
@@ -356,10 +683,34 @@ export function generateCanvasBridgeHtml(
               v.onloadeddata = finish;
               v.oncanplay = finish;
               v.onerror = finish;
-              setTimeout(finish, 600);
+              setTimeout(finish, 15000);
             }));
             mediaMap.set(clip.url, v);
             mediaMap.set(clip.id, v);
+
+            // Preload isolated Audio element for video soundtrack so canvas muting never silences the export
+            if (!clip.muted) {
+              const va = new Audio();
+              if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+                va.crossOrigin = "anonymous";
+              }
+              va.preload = "auto";
+              va.src = clip.url;
+              promises.push(new Promise((resolve) => {
+                if (va.readyState >= 2) {
+                  resolve();
+                  return;
+                }
+                let done = false;
+                const finish = () => { if (!done) { done = true; resolve(); } };
+                va.oncanplaythrough = finish;
+                va.onloadeddata = finish;
+                va.onerror = finish;
+                setTimeout(finish, 15000);
+              }));
+              mediaMap.set("video_audio_" + clip.id, va);
+              mediaMap.set("video_audio_" + clip.url, va);
+            }
 
             if (clip.thumbnail) {
               const thumbImg = new Image();
@@ -551,35 +902,107 @@ export function generateCanvasBridgeHtml(
           ctx.fillRect(0, 0, width, height);
         }
 
-        // 2. Video & Photo Clips (Zero-allocation iteration over pre-sorted layer tracks)
-        for (let vi = 0; vi < videoClips.length; vi++) {
-          const vid = videoClips[vi];
-          if (time < vid.startTime || time > vid.startTime + vid.duration) continue;
+        // 2. Video & Photo Clips (With full cross-clip transition support)
+        var activeVideoItems = [];
+        var handledVideoIds = new Set();
+        for (var vi = 0; vi < videoClips.length; vi++) {
+          var c = videoClips[vi];
+          var cEnd = c.startTime + c.duration;
+          var trans = c.transition;
+          var transDur = trans && trans.type && trans.type !== "none" && trans.type !== "cut" ? (trans.duration || 0.5) : 0;
+          if (transDur > 0 && time >= cEnd - transDur && time <= cEnd) {
+            var nextClip = videoClips.find(function(other) {
+              return other.id !== c.id && (other.trackIndex || 0) === (c.trackIndex || 0) && Math.abs(other.startTime - cEnd) < 0.35;
+            });
+            var p = Math.max(0, Math.min(1, (time - (cEnd - transDur)) / transDur));
+            if (nextClip) {
+              activeVideoItems.push({ clip: nextClip, role: "incoming", transType: trans.type, progress: p });
+              handledVideoIds.add(nextClip.id);
+              activeVideoItems.push({ clip: c, role: "outgoing", transType: trans.type, progress: p });
+              handledVideoIds.add(c.id);
+              continue;
+            }
+          }
+          if (!handledVideoIds.has(c.id) && time >= c.startTime && time <= cEnd) {
+            activeVideoItems.push({ clip: c, role: null, transType: null, progress: 0 });
+            handledVideoIds.add(c.id);
+          }
+        }
+
+        const activeFilterClip = effectClips.find(function(e) {
+          return time >= e.startTime && time <= e.startTime + e.duration && (e.filter || (e.type && e.type.startsWith("filter_")));
+        });
+
+        for (let vi = 0; vi < activeVideoItems.length; vi++) {
+          const item = activeVideoItems[vi];
+          const vid = item.clip;
           ctx.save();
           let el = mediaMap.get(vid.url) || mediaMap.get(vid.id);
-          const isVideoReady = el && el instanceof HTMLVideoElement && (el.videoWidth > 0 || el.readyState >= 1);
-          const isImageReady = el && el instanceof HTMLImageElement && el.complete && el.naturalWidth > 0;
+          const isVideo = el && el instanceof HTMLVideoElement;
+          const isImage = el && el instanceof HTMLImageElement;
+          const isVideoReady = isVideo && (el.videoWidth > 0 || el.readyState >= 1 || el.duration > 0);
+          const isImageReady = isImage && el.complete && el.naturalWidth > 0;
           if (!isVideoReady && !isImageReady) {
             const thumb = mediaMap.get("thumb_" + vid.id) || mediaMap.get("thumb_" + vid.url);
-            if (thumb && thumb.complete && thumb.naturalWidth > 0) {
+            if (thumb && thumb.complete && thumb.naturalWidth > 0 && (!el || el.error)) {
               el = thumb;
             }
           }
-          const baseFilter = getCssFilter(vid.filter || vid.effect);
+          const effFilter = vid.filter || vid.effect || activeFilterClip?.filter || (activeFilterClip ? activeFilterClip.type.replace(/^filter_/, "") : undefined) || PROJECT.filter;
+          const effLut = vid.customLut || activeFilterClip?.customLut || PROJECT.customLut;
+          const baseFilter = getCssFilter(effFilter, effLut, vid.filterIntensity);
           const hslFilter = getHslFilter(vid.hslAdjustments);
           const combinedFilter = (baseFilter !== "none" ? baseFilter + " " : "") + hslFilter;
-          if (combinedFilter.trim()) ctx.filter = combinedFilter.trim();
+          ctx.filter = combinedFilter.trim() ? combinedFilter.trim() : "none";
+
+          const rawBlend = vid.blendMode || vid.transform?.blendMode || "normal";
+          ctx.globalCompositeOperation = BLEND_MAP[rawBlend] || "source-over";
 
           const kf = interpolateClipKeyframes(vid, time, 0, 0);
-          const baseScale = (vid.scale || vid.transform?.scale || 1.0) * kf.scale;
-          const posX = (vid.transform?.x || 0) + kf.x;
-          const posY = (vid.transform?.y || 0) + kf.y;
-          const opacity = (vid.opacity !== undefined ? vid.opacity : 1.0) * kf.opacity;
+          const anim = evaluateClipAnimation(vid, time);
+          let baseScale = (vid.scale || vid.transform?.scale || 1.0) * kf.scale * anim.scale;
+          let posX = (vid.transform?.x || 0) + kf.x + anim.x;
+          let posY = (vid.transform?.y || 0) + kf.y + anim.y;
+          let opacity = (vid.opacity !== undefined ? vid.opacity : 1.0) * kf.opacity * anim.alpha;
+          let finalRot = (kf.rotation || 0) + anim.rot;
+
+          if (item.transType && item.transType !== "none" && item.transType !== "cut") {
+            const p = item.progress;
+            if (item.role === "outgoing") {
+              if (item.transType === "dissolve") opacity *= (1 - p);
+              else if (item.transType === "zoom_in") { baseScale *= (1 + p * 0.5); opacity *= (1 - p); }
+              else if (item.transType === "zoom_out") { baseScale *= (1 - p * 0.45); opacity *= (1 - p); }
+              else if (item.transType === "slide_left") posX -= p * width;
+              else if (item.transType === "slide_right") posX += p * width;
+              else if (item.transType === "push_up") posY -= p * height;
+              else if (item.transType === "push_down") posY += p * height;
+              else if (item.transType === "flash_white") { if (p > 0.5) opacity = 0; }
+              else if (item.transType === "fade_black") opacity *= Math.max(0, 1 - p * 2);
+              else if (item.transType === "spin_cw") { finalRot += p * 180; baseScale *= (1 - p * 0.4); opacity *= (1 - p); }
+              else if (item.transType === "spin_ccw") { finalRot -= p * 180; baseScale *= (1 - p * 0.4); opacity *= (1 - p); }
+              else if (item.transType === "light_leak") { opacity *= (1 - p); baseScale *= (1 + p * 0.15); }
+              else if (item.transType === "glitch_transition") { opacity *= (1 - p); }
+            } else {
+              if (item.transType === "dissolve") opacity *= p;
+              else if (item.transType === "zoom_in") { baseScale *= (0.8 + p * 0.2); opacity *= p; }
+              else if (item.transType === "zoom_out") { baseScale *= (1.3 - p * 0.3); opacity *= p; }
+              else if (item.transType === "slide_left") posX += (1 - p) * width;
+              else if (item.transType === "slide_right") posX -= (1 - p) * width;
+              else if (item.transType === "push_up") posY += (1 - p) * height;
+              else if (item.transType === "push_down") posY -= (1 - p) * height;
+              else if (item.transType === "flash_white") { if (p < 0.5) opacity = 0; }
+              else if (item.transType === "fade_black") opacity *= Math.max(0, (p - 0.5) * 2);
+              else if (item.transType === "spin_cw") { finalRot += -(1 - p) * 180; baseScale *= (0.6 + p * 0.4); opacity *= p; }
+              else if (item.transType === "spin_ccw") { finalRot -= -(1 - p) * 180; baseScale *= (0.6 + p * 0.4); opacity *= p; }
+              else if (item.transType === "light_leak") opacity *= p;
+              else if (item.transType === "glitch_transition") opacity *= p;
+            }
+          }
           ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
 
-          if (el && ((el.videoWidth && el.videoWidth > 0) || (el.naturalWidth && el.naturalWidth > 0) || (el.width && el.width > 0))) {
-            const srcW = el.videoWidth || el.naturalWidth || el.width;
-            const srcH = el.videoHeight || el.naturalHeight || el.height;
+          if (el && ((el.videoWidth && el.videoWidth > 0) || (el.naturalWidth && el.naturalWidth > 0) || (el.width && el.width > 0) || isVideo || isImage)) {
+            const srcW = el.videoWidth || el.naturalWidth || el.width || width;
+            const srcH = el.videoHeight || el.naturalHeight || el.height || height;
             const aspect = srcW / srcH;
             let dw = width;
             let dh = width / aspect;
@@ -591,21 +1014,102 @@ export function generateCanvasBridgeHtml(
               if (dh > height) { dh = height; dw = height * aspect; }
             }
 
+            // Crop calculation
+            let sx = 0, sy = 0, sw = srcW, sh = srcH;
+            const crop = vid.crop || vid.transform?.crop;
+            if (crop && crop.width > 0 && crop.height > 0 && (crop.width < 100 || crop.height < 100 || crop.x > 0 || crop.y > 0)) {
+              sx = Math.max(0, (crop.x / 100) * srcW);
+              sy = Math.max(0, (crop.y / 100) * srcH);
+              sw = Math.min(srcW - sx, (crop.width / 100) * srcW);
+              sh = Math.min(srcH - sy, (crop.height / 100) * srcH);
+              dw = dw * (crop.width / 100);
+              dh = dh * (crop.height / 100);
+            }
+
             dw *= baseScale;
             dh *= baseScale;
             const dx = (width - dw) / 2 + posX;
             const dy = (height - dh) / 2 + posY;
 
-            if (kf.rotation) {
+            if (finalRot) {
               ctx.translate(dx + dw / 2, dy + dh / 2);
-              ctx.rotate((kf.rotation * Math.PI) / 180);
+              ctx.rotate((finalRot * Math.PI) / 180);
               ctx.translate(-(dx + dw / 2), -(dy + dh / 2));
             }
 
             const flipX = vid.transform?.flipX || vid.flipHorizontal;
             const flipY = vid.transform?.flipY || vid.flipVertical;
 
-            const mask = vid.mask || vid.transform?.mask;
+            // Cutout & Chroma Key processing
+            let drawSource = el;
+            let drawSx = sx, drawSy = sy, drawSw = sw, drawSh = sh;
+            const cutout = vid.cutout || vid.transform?.cutout;
+            if (cutout && cutout.enabled) {
+              if (cutout.bgColor && cutout.bgColor !== "none" && cutout.bgColor !== "transparent") {
+                ctx.save();
+                ctx.fillStyle = cutout.bgColor;
+                ctx.fillRect(dx, dy, dw, dh);
+                ctx.restore();
+              }
+              const maxDim = 3840;
+              const procW = Math.max(16, Math.min(maxDim, Math.round(dw)));
+              const procH = Math.max(16, Math.min(maxDim, Math.round(dh)));
+              if (cutoutSourceCanvas.width !== procW || cutoutSourceCanvas.height !== procH) {
+                cutoutSourceCanvas.width = procW;
+                cutoutSourceCanvas.height = procH;
+              }
+              const tCtx = cutoutSourceCanvas.getContext("2d");
+              if (tCtx) {
+                tCtx.clearRect(0, 0, procW, procH);
+                tCtx.drawImage(el, sx, sy, sw, sh, 0, 0, procW, procH);
+
+                let isHandled = false;
+                if (cutout.mode === "auto" && vid.cutoutMasks && vid.cutoutMasks.masks) {
+                  const maskFps = vid.cutoutMasks.fps || 30;
+                  const clipLocalTime = Math.max(0, time - (vid.startTime || 0));
+                  const speed = Math.max(0.1, Math.min(16, vid.speed || 1.0));
+                  const sourceTime = (vid.trimIn || 0) + clipLocalTime * speed;
+                  const frameIdx = Math.max(0, Math.round(sourceTime * maskFps));
+                  const rleB64 = vid.cutoutMasks.masks[frameIdx] ||
+                    vid.cutoutMasks.masks[String(frameIdx)] ||
+                    vid.cutoutMasks.masks[vid.id + "_" + frameIdx] ||
+                    (vid.sourceMediaId ? vid.cutoutMasks.masks[vid.sourceMediaId + "_" + frameIdx] : null) ||
+                    vid.cutoutMasks.masks[0] ||
+                    vid.cutoutMasks.masks[Object.keys(vid.cutoutMasks.masks)[0]];
+                  if (rleB64) {
+                    const maskCanvas = unpackRleMaskToCanvas(rleB64);
+                    if (maskCanvas) {
+                      tCtx.globalCompositeOperation = "destination-in";
+                      tCtx.drawImage(maskCanvas, 0, 0, procW, procH);
+                      tCtx.globalCompositeOperation = "source-over";
+                      drawSource = cutoutSourceCanvas;
+                      drawSx = 0; drawSy = 0; drawSw = procW; drawSh = procH;
+                      isHandled = true;
+                    }
+                  }
+                }
+
+                if (!isHandled) {
+                  if (cutout.mode === "chroma" || cutout.mode === "custom") {
+                    drawSource = applyChromaCutout(
+                      cutoutSourceCanvas,
+                      procW,
+                      procH,
+                      cutout.keyColor || "#00FF00",
+                      cutout.intensity,
+                      cutout.shadow,
+                      true
+                    );
+                    drawSx = 0; drawSy = 0; drawSw = procW; drawSh = procH;
+                  } else {
+                    drawSource = cutoutSourceCanvas;
+                    drawSx = 0; drawSy = 0; drawSw = procW; drawSh = procH;
+                  }
+                }
+              }
+            }
+
+            const mask = interpolateMaskKeyframes(vid, time);
             if (mask && mask.shape && mask.shape !== "none") {
               const effW = mask.width !== undefined ? mask.width : (mask.size ?? 60);
               const effH = mask.height !== undefined ? mask.height : (mask.size ?? 60);
@@ -630,6 +1134,12 @@ export function generateCanvasBridgeHtml(
               const offCtx = maskOffCanvas.getContext("2d");
               const sCtx = maskShapeCanvas.getContext("2d");
               if (offCtx && sCtx) {
+                offCtx.imageSmoothingEnabled = true;
+                offCtx.imageSmoothingQuality = "high";
+                sCtx.imageSmoothingEnabled = true;
+                sCtx.imageSmoothingQuality = "high";
+                offCtx.globalCompositeOperation = "source-over";
+                sCtx.globalCompositeOperation = "source-over";
                 offCtx.clearRect(0, 0, maskW, maskH);
                 sCtx.clearRect(0, 0, maskW, maskH);
 
@@ -637,10 +1147,10 @@ export function generateCanvasBridgeHtml(
                   offCtx.save();
                   offCtx.translate(dw / 2, dh / 2);
                   offCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-                  offCtx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+                  offCtx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, -dw / 2, -dh / 2, dw, dh);
                   offCtx.restore();
                 } else {
-                  offCtx.drawImage(el, 0, 0, dw, dh);
+                  offCtx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, 0, 0, dw, dh);
                 }
 
                 sCtx.save();
@@ -648,6 +1158,8 @@ export function generateCanvasBridgeHtml(
                 sCtx.rotate(mRot);
                 if (featherPx > 0) {
                   sCtx.filter = "blur(" + featherPx.toFixed(1) + "px)";
+                } else {
+                  sCtx.filter = "none";
                 }
                 sCtx.fillStyle = "#ffffff";
                 sCtx.beginPath();
@@ -700,18 +1212,20 @@ export function generateCanvasBridgeHtml(
 
                 sCtx.fill(mask.inverted ? "evenodd" : "nonzero");
                 sCtx.restore();
+                sCtx.filter = "none";
 
                 offCtx.globalCompositeOperation = "destination-in";
                 offCtx.drawImage(maskShapeCanvas, 0, 0);
+                offCtx.globalCompositeOperation = "source-over";
                 ctx.drawImage(maskOffCanvas, dx, dy, dw, dh);
               }
             } else {
               if (flipX || flipY) {
                 ctx.translate(dx + dw / 2, dy + dh / 2);
                 ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-                ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh);
+                ctx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, -dw / 2, -dh / 2, dw, dh);
               } else {
-                ctx.drawImage(el, dx, dy, dw, dh);
+                ctx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, dx, dy, dw, dh);
               }
             }
           }
@@ -864,7 +1378,44 @@ export function generateCanvasBridgeHtml(
         ctx.restore();
       }
 
-      function muxMp4Fast(w, h, fps, samples, avcDesc) {
+      function createDefaultAscJs(sampleRate, channels) {
+        var rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+        var sfi = rates.indexOf(sampleRate);
+        if (sfi < 0) sfi = 4;
+        var aot = 2; // AAC-LC
+        var ch = Math.max(1, Math.min(channels || 2, 7));
+        var b0 = (aot << 3) | ((sfi >> 1) & 0x07);
+        var b1 = ((sfi & 0x01) << 7) | (ch << 3);
+        return new Uint8Array([b0, b1]);
+      }
+
+      function createEsdsPayloadJs(asc) {
+        var esds = new Uint8Array(23 + asc.length);
+        var v = new DataView(esds.buffer);
+        esds[4] = 0x03;
+        esds[5] = 17 + asc.length;
+        v.setUint16(6, 1);
+        esds[8] = 0x00;
+        esds[9] = 0x04;
+        esds[10] = 12 + asc.length;
+        esds[11] = 0x40; // Audio AAC
+        esds[12] = 0x15;
+        esds[13] = 0x00;
+        esds[14] = 0x03;
+        esds[15] = 0x00;
+        v.setUint32(16, 256000);
+        v.setUint32(20, 192000);
+        esds[24] = 0x05;
+        esds[25] = asc.length;
+        esds.set(asc, 26);
+        var slOffset = 26 + asc.length;
+        esds[slOffset] = 0x06;
+        esds[slOffset + 1] = 0x01;
+        esds[slOffset + 2] = 0x02;
+        return esds;
+      }
+
+      function muxMp4Fast(w, h, fps, samples, avcDesc, audioSamples, audioSampleRate, audioChannels, audioDesc) {
         function box(t, p) {
           var s = 8 + p.length;
           var b = new Uint8Array(s);
@@ -899,13 +1450,22 @@ export function generateCanvasBridgeHtml(
             var copy = new Uint8Array(d);
             new DataView(copy.buffer).setUint32(0, d.length - 4);
             d = copy;
+          } else if (d.length >= 3 && d[0] === 0 && d[1] === 0 && d[2] === 1) {
+            var copy = new Uint8Array(d.length + 1);
+            new DataView(copy.buffer).setUint32(0, d.length - 3);
+            copy.set(d.subarray(3), 4);
+            d = copy;
           }
           formatted.push(d);
           if (s.isKey) keyIndices.push(i + 1);
         }
 
+        var hasAudio = audioSamples && audioSamples.length > 0;
         var mdatPayloadSize = 0;
         for (var i = 0; i < formatted.length; i++) mdatPayloadSize += formatted[i].length;
+        if (hasAudio) {
+          for (var i = 0; i < audioSamples.length; i++) mdatPayloadSize += audioSamples[i].data.length;
+        }
 
         var mdatHead = new Uint8Array(8);
         new DataView(mdatHead.buffer).setUint32(0, 8 + mdatPayloadSize);
@@ -919,8 +1479,18 @@ export function generateCanvasBridgeHtml(
           curOff += formatted[i].length;
         }
 
+        var audioChunkOffsets = [];
+        if (hasAudio) {
+          for (var i = 0; i < audioSamples.length; i++) {
+            audioChunkOffsets.push(curOff);
+            curOff += audioSamples[i].data.length;
+          }
+        }
+
         var timescale = fps * 1000;
-        var dur = formatted.length * 1000;
+        var sampleDuration = 1000;
+        var totalVideoDuration = formatted.length * sampleDuration;
+        var dur = totalVideoDuration;
 
         var mvhdP = new Uint8Array(100);
         var mv = new DataView(mvhdP.buffer);
@@ -931,7 +1501,7 @@ export function generateCanvasBridgeHtml(
         mv.setUint32(36, 0x00010000);
         mv.setUint32(52, 0x00010000);
         mv.setUint32(84, 0x40000000);
-        mv.setUint32(96, 2);
+        mv.setUint32(96, hasAudio ? 3 : 2);
         var mvhd = box("mvhd", mvhdP);
 
         var tkhdP = new Uint8Array(84);
@@ -949,7 +1519,7 @@ export function generateCanvasBridgeHtml(
         var mdhdP = new Uint8Array(24);
         var mdv = new DataView(mdhdP.buffer);
         mdv.setUint32(12, timescale);
-        mdv.setUint32(16, dur);
+        mdv.setUint32(16, totalVideoDuration);
         mdv.setUint16(20, 0x55c4);
         var mdhd = box("mdhd", mdhdP);
 
@@ -1028,7 +1598,103 @@ export function generateCanvasBridgeHtml(
         var minf = container("minf", [vmhd, dinf, stbl]);
         var mdia = container("mdia", [mdhd, hdlr, minf]);
         var trak = container("trak", [tkhd, mdia]);
-        var moov = container("moov", [mvhd, trak]);
+
+        var moovKids = [mvhd, trak];
+
+        // 5. Audio trak (AAC mp4a)
+        if (hasAudio) {
+          var aRate = audioSampleRate || 44100;
+          var aChan = audioChannels || 2;
+          var aDuration = audioSamples.length * 1024;
+
+          var aTkhdP = new Uint8Array(84);
+          var aTv = new DataView(aTkhdP.buffer);
+          aTkhdP[3] = 3;
+          aTv.setUint32(12, 2); // track_id = 2
+          aTv.setUint32(20, dur);
+          aTv.setUint16(44, 0x0100);
+          aTv.setUint32(36, 0x00010000);
+          aTv.setUint32(52, 0x00010000);
+          aTv.setUint32(68, 0x40000000);
+          var aTkhd = box("tkhd", aTkhdP);
+
+          var aMdhdP = new Uint8Array(24);
+          var aMdv = new DataView(aMdhdP.buffer);
+          aMdv.setUint32(12, aRate);
+          aMdv.setUint32(16, aDuration);
+          aMdv.setUint16(20, 0x55c4);
+          var aMdhd = box("mdhd", aMdhdP);
+
+          var aHdlrP = new Uint8Array(37);
+          aHdlrP.set([0x73, 0x6f, 0x75, 0x6e], 8); // "soun"
+          var aHdlrName = "FastArt Audio";
+          for (var i = 0; i < aHdlrName.length; i++) aHdlrP[24 + i] = aHdlrName.charCodeAt(i);
+          var aHdlr = box("hdlr", aHdlrP);
+
+          var smhd = box("smhd", new Uint8Array(8));
+
+          var esdsP;
+          if (audioDesc && audioDesc.length > 10) {
+            esdsP = audioDesc;
+          } else {
+            var asc = (audioDesc && audioDesc.length > 0) ? audioDesc : createDefaultAscJs(aRate, aChan);
+            esdsP = createEsdsPayloadJs(asc);
+          }
+          var esds = box("esds", esdsP);
+
+          var mp4aP = new Uint8Array(28 + esds.length);
+          var mp4av = new DataView(mp4aP.buffer);
+          mp4av.setUint16(6, 1);
+          mp4av.setUint16(16, aChan);
+          mp4av.setUint16(18, 16);
+          mp4av.setUint32(24, Math.round(aRate * 65536));
+          mp4aP.set(esds, 28);
+          var mp4a = box("mp4a", mp4aP);
+
+          var aStsdP = new Uint8Array(8 + mp4a.length);
+          new DataView(aStsdP.buffer).setUint32(4, 1);
+          aStsdP.set(mp4a, 8);
+          var aStsd = box("stsd", aStsdP);
+
+          var aSttsP = new Uint8Array(16);
+          var aSttsv = new DataView(aSttsP.buffer);
+          aSttsv.setUint32(4, 1);
+          aSttsv.setUint32(8, audioSamples.length);
+          aSttsv.setUint32(12, 1024);
+          var aStts = box("stts", aSttsP);
+
+          var aStscP = new Uint8Array(20);
+          var aStscv = new DataView(aStscP.buffer);
+          aStscv.setUint32(4, 1);
+          aStscv.setUint32(8, 1);
+          aStscv.setUint32(12, 1);
+          aStscv.setUint32(16, 1);
+          var aStsc = box("stsc", aStscP);
+
+          var aStszP = new Uint8Array(12 + audioSamples.length * 4);
+          var aStszv = new DataView(aStszP.buffer);
+          aStszv.setUint32(8, audioSamples.length);
+          for (var i = 0; i < audioSamples.length; i++) {
+            aStszv.setUint32(12 + i * 4, audioSamples[i].data.length);
+          }
+          var aStsz = box("stsz", aStszP);
+
+          var aStcoP = new Uint8Array(8 + audioChunkOffsets.length * 4);
+          var aStcov = new DataView(aStcoP.buffer);
+          aStcov.setUint32(4, audioChunkOffsets.length);
+          for (var i = 0; i < audioChunkOffsets.length; i++) {
+            aStcov.setUint32(8 + i * 4, audioChunkOffsets[i]);
+          }
+          var aStco = box("stco", aStcoP);
+
+          var aStbl = container("stbl", [aStsd, aStts, aStsc, aStsz, aStco]);
+          var aMinf = container("minf", [smhd, dinf, aStbl]);
+          var aMdia = container("mdia", [aMdhd, aHdlr, aMinf]);
+          var aTrak = container("trak", [aTkhd, aMdia]);
+          moovKids.push(aTrak);
+        }
+
+        var moov = container("moov", moovKids);
 
         var finalSize = ftyp.length + 8 + mdatPayloadSize + moov.length;
         var out = new Uint8Array(finalSize);
@@ -1039,14 +1705,628 @@ export function generateCanvasBridgeHtml(
           out.set(formatted[i], off);
           off += formatted[i].length;
         }
+        if (hasAudio) {
+          for (var i = 0; i < audioSamples.length; i++) {
+            out.set(audioSamples[i].data, off);
+            off += audioSamples[i].data.length;
+          }
+        }
         out.set(moov, off);
         return out;
+      }
+
+      function patchMediaContainerDuration(bytes, durationSec) {
+        if (!bytes || bytes.length < 16 || !durationSec || durationSec <= 0) return bytes;
+
+        // 1. MP4 Container duration patch
+        var isMp4 = false;
+        for (var i = 4; i <= Math.min(bytes.length - 4, 64); i++) {
+          if (bytes[i] === 0x66 && bytes[i+1] === 0x74 && bytes[i+2] === 0x79 && bytes[i+3] === 0x70) {
+            isMp4 = true;
+            break;
+          }
+        }
+
+        if (isMp4) {
+          try {
+            var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            var offset = 0;
+            var fileLen = bytes.length;
+            var moovOffset = -1;
+            var moovSize = 0;
+
+            while (offset + 8 <= fileLen) {
+              var boxSize = dv.getUint32(offset);
+              var boxType = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+              if (boxSize === 1 && offset + 16 <= fileLen) {
+                var high = dv.getUint32(offset + 8);
+                var low = dv.getUint32(offset + 12);
+                boxSize = high * 4294967296 + low;
+                if (boxType === "moov") { moovOffset = offset + 16; moovSize = boxSize - 16; break; }
+                offset += boxSize;
+              } else if (boxSize >= 8) {
+                if (boxType === "moov") { moovOffset = offset + 8; moovSize = boxSize - 8; break; }
+                offset += boxSize;
+              } else {
+                break;
+              }
+            }
+
+            if (moovOffset >= 0) {
+              var moovEnd = Math.min(fileLen, moovOffset + moovSize);
+
+              // PASS 1: Find mvhd first to guarantee movieTimescale is known before patching tracks
+              var movieTimescale = 1000;
+              var foundMovieTimescale = false;
+
+              function findMvhd(start, end) {
+                var cur = start;
+                while (cur + 8 <= end) {
+                  var bSize = dv.getUint32(cur);
+                  var bType = String.fromCharCode(bytes[cur + 4], bytes[cur + 5], bytes[cur + 6], bytes[cur + 7]);
+                  var headerLen = 8;
+                  if (bSize === 1 && cur + 16 <= end) {
+                    var h = dv.getUint32(cur + 8);
+                    var l = dv.getUint32(cur + 12);
+                    bSize = h * 4294967296 + l;
+                    headerLen = 16;
+                  } else if (bSize < 8) {
+                    break;
+                  }
+                  var bEnd = Math.min(end, cur + bSize);
+
+                  if (bType === "mvhd") {
+                    var v = bytes[cur + headerLen];
+                    if (v === 0 && cur + headerLen + 16 <= bEnd) {
+                      var ts = dv.getUint32(cur + headerLen + 12);
+                      if (ts > 0) { movieTimescale = ts; foundMovieTimescale = true; }
+                    } else if (v === 1 && cur + headerLen + 24 <= bEnd) {
+                      var ts = dv.getUint32(cur + headerLen + 20);
+                      if (ts > 0) { movieTimescale = ts; foundMovieTimescale = true; }
+                    }
+                    return;
+                  } else if (bType === "trak" || bType === "mdia" || bType === "minf" || bType === "mvex") {
+                    findMvhd(cur + headerLen, bEnd);
+                    if (foundMovieTimescale) return;
+                  }
+                  cur += bSize;
+                }
+              }
+
+              findMvhd(moovOffset, moovEnd);
+
+              // PASS 2: Patch mvhd, tkhd, mdhd, and mehd with correct timescales & 64-bit offsets
+              function scanBoxes(start, end) {
+                var cur = start;
+                while (cur + 8 <= end) {
+                  var bSize = dv.getUint32(cur);
+                  var bType = String.fromCharCode(bytes[cur + 4], bytes[cur + 5], bytes[cur + 6], bytes[cur + 7]);
+                  var headerLen = 8;
+                  if (bSize === 1 && cur + 16 <= end) {
+                    var h = dv.getUint32(cur + 8);
+                    var l = dv.getUint32(cur + 12);
+                    bSize = h * 4294967296 + l;
+                    headerLen = 16;
+                  } else if (bSize < 8) {
+                    break;
+                  }
+                  var bEnd = Math.min(end, cur + bSize);
+
+                  if (bType === "mvhd") {
+                    var v = bytes[cur + headerLen];
+                    var dur = Math.round(durationSec * movieTimescale);
+                    if (v === 0 && cur + headerLen + 20 <= bEnd) {
+                      dv.setUint32(cur + headerLen + 16, dur);
+                    } else if (v === 1 && cur + headerLen + 32 <= bEnd) {
+                      dv.setUint32(cur + headerLen + 24, Math.floor(dur / 4294967296));
+                      dv.setUint32(cur + headerLen + 28, dur >>> 0);
+                    }
+                  } else if (bType === "tkhd") {
+                    var v = bytes[cur + headerLen];
+                    var dur = Math.round(durationSec * movieTimescale);
+                    if (v === 0 && cur + headerLen + 24 <= bEnd) {
+                      dv.setUint32(cur + headerLen + 20, dur);
+                    } else if (v === 1 && cur + headerLen + 36 <= bEnd) {
+                      // In tkhd v1: creation(8) + mod(8) + track_id(4) + reserved(4) = 24 bytes from header
+                      // duration is 64-bit located at offset 28..35
+                      dv.setUint32(cur + headerLen + 28, Math.floor(dur / 4294967296));
+                      dv.setUint32(cur + headerLen + 32, dur >>> 0);
+                    }
+                  } else if (bType === "mdhd") {
+                    var v = bytes[cur + headerLen];
+                    if (v === 0 && cur + headerLen + 20 <= bEnd) {
+                      var mdTimescale = dv.getUint32(cur + headerLen + 12);
+                      if (mdTimescale > 0) {
+                        var mdDur = Math.round(durationSec * mdTimescale);
+                        dv.setUint32(cur + headerLen + 16, mdDur);
+                      }
+                    } else if (v === 1 && cur + headerLen + 32 <= bEnd) {
+                      var mdTimescale = dv.getUint32(cur + headerLen + 20);
+                      if (mdTimescale > 0) {
+                        var mdDur = Math.round(durationSec * mdTimescale);
+                        dv.setUint32(cur + headerLen + 24, Math.floor(mdDur / 4294967296));
+                        dv.setUint32(cur + headerLen + 28, mdDur >>> 0);
+                      }
+                    }
+                  } else if (bType === "mehd") {
+                    var v = bytes[cur + headerLen];
+                    var dur = Math.round(durationSec * movieTimescale);
+                    if (v === 0 && cur + headerLen + 8 <= bEnd) {
+                      dv.setUint32(cur + headerLen + 4, dur);
+                    } else if (v === 1 && cur + headerLen + 12 <= bEnd) {
+                      dv.setUint32(cur + headerLen + 4, Math.floor(dur / 4294967296));
+                      dv.setUint32(cur + headerLen + 8, dur >>> 0);
+                    }
+                  } else if (bType === "trak" || bType === "mdia" || bType === "minf" || bType === "mvex") {
+                    scanBoxes(cur + headerLen, bEnd);
+                  }
+                  cur += bSize;
+                }
+              }
+              scanBoxes(moovOffset, moovEnd);
+            }
+            return bytes;
+          } catch (e) {
+            console.warn("[mobileWebBridge] MP4 duration patch error:", e);
+            return bytes;
+          }
+        }
+
+        // 2. WebM Container duration patch
+        var isWebM = bytes[0] === 0x1A && bytes[1] === 0x45 && bytes[2] === 0xDF && bytes[3] === 0xA3;
+        if (isWebM) {
+          try {
+            var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            var pos = 0;
+            var fileLen = bytes.length;
+
+            function readEbmlId(p) {
+              if (p >= fileLen) return null;
+              var b0 = bytes[p];
+              if (b0 & 0x80) return { id: b0, length: 1 };
+              if (b0 & 0x40 && p + 1 < fileLen) return { id: (b0 << 8) | bytes[p + 1], length: 2 };
+              if (b0 & 0x20 && p + 2 < fileLen) return { id: (b0 << 16) | (bytes[p + 1] << 8) | bytes[p + 2], length: 3 };
+              if (b0 & 0x10 && p + 3 < fileLen) return { id: ((b0 << 24) >>> 0) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3], length: 4 };
+              return null;
+            }
+
+            function readVint(p) {
+              if (p >= fileLen) return null;
+              var b0 = bytes[p];
+              var mask = 0x80;
+              var len = 1;
+              while (len <= 8 && !(b0 & mask)) {
+                mask >>= 1;
+                len++;
+              }
+              if (len > 8 || p + len > fileLen) return null;
+              var val = b0 & (mask - 1);
+              for (var i = 1; i < len; i++) {
+                val = (val * 256) + bytes[p + i];
+              }
+              return { value: val, length: len };
+            }
+
+            var ebmlId = readEbmlId(pos);
+            if (!ebmlId || ebmlId.id !== 0x1A45DFA3) return bytes;
+            pos += ebmlId.length;
+            var ebmlSize = readVint(pos);
+            if (!ebmlSize) return bytes;
+            pos += ebmlSize.length + ebmlSize.value;
+
+            var segId = readEbmlId(pos);
+            if (!segId || segId.id !== 0x18538067) return bytes;
+            pos += segId.length;
+            var segSize = readVint(pos);
+            if (!segSize) return bytes;
+            pos += segSize.length;
+
+            var infoPos = -1;
+            var infoDataPos = -1;
+            var infoDataSize = -1;
+            var infoVintLen = -1;
+
+            while (pos + 4 < fileLen) {
+              var elId = readEbmlId(pos);
+              if (!elId) break;
+              if (elId.id === 0x1549A966) {
+                infoPos = pos;
+                var v = readVint(pos + elId.length);
+                if (v) {
+                  infoVintLen = v.length;
+                  infoDataPos = pos + elId.length + v.length;
+                  infoDataSize = v.value;
+                }
+                break;
+              } else if (elId.id === 0x1F43B675 || elId.id === 0x1654AE6B) {
+                break;
+              } else {
+                var v = readVint(pos + elId.length);
+                if (!v) break;
+                pos += elId.length + v.length + v.value;
+              }
+            }
+
+            if (infoDataPos >= 0) {
+              var infoEnd = Math.min(fileLen, infoDataPos + infoDataSize);
+              var timecodeScale = 1000000;
+              var durOffset = -1;
+              var durSize = 0;
+              var voidOffset = -1;
+              var voidSize = 0;
+
+              var ip = infoDataPos;
+              while (ip < infoEnd) {
+                var subId = readEbmlId(ip);
+                if (!subId) break;
+                var sv = readVint(ip + subId.length);
+                if (!sv) break;
+                var valPos = ip + subId.length + sv.length;
+
+                if (subId.id === 0x2AD7B1) {
+                  var tc = 0;
+                  for (var k = 0; k < sv.value; k++) tc = (tc * 256) + bytes[valPos + k];
+                  if (tc > 0) timecodeScale = tc;
+                } else if (subId.id === 0x4489) {
+                  durOffset = valPos;
+                  durSize = sv.value;
+                } else if (subId.id === 0xEC) {
+                  voidOffset = ip;
+                  voidSize = subId.length + sv.length + sv.value;
+                }
+                ip = valPos + sv.value;
+              }
+
+              var durationInScale = (durationSec * 1000000000) / timecodeScale;
+
+              if (durOffset >= 0) {
+                if (durSize === 4) {
+                  dv.setFloat32(durOffset, durationInScale);
+                  return bytes;
+                } else if (durSize === 8) {
+                  dv.setFloat64(durOffset, durationInScale);
+                  return bytes;
+                }
+              }
+
+              if (voidOffset >= 0 && voidSize >= 7) {
+                bytes[voidOffset] = 0x44;
+                bytes[voidOffset + 1] = 0x89;
+                bytes[voidOffset + 2] = 0x84;
+                dv.setFloat32(voidOffset + 3, durationInScale);
+
+                var rem = voidSize - 7;
+                if (rem >= 2) {
+                  bytes[voidOffset + 7] = 0xEC;
+                  bytes[voidOffset + 8] = 0x80 | (rem - 2);
+                }
+                return bytes;
+              }
+
+              var injectBytes = new Uint8Array(7);
+              injectBytes[0] = 0x44;
+              injectBytes[1] = 0x89;
+              injectBytes[2] = 0x84;
+              new DataView(injectBytes.buffer).setFloat32(3, durationInScale);
+
+              var newBytes = new Uint8Array(bytes.length + 7);
+              newBytes.set(bytes.subarray(0, infoDataPos), 0);
+              newBytes.set(injectBytes, infoDataPos);
+              newBytes.set(bytes.subarray(infoDataPos), infoDataPos + 7);
+
+              var newInfoDataSize = infoDataSize + 7;
+              var infoVintPos = infoPos + 4;
+              if (infoVintLen === 1 && newInfoDataSize <= 127) {
+                newBytes[infoVintPos] = 0x80 | newInfoDataSize;
+              } else if (infoVintLen === 2) {
+                newBytes[infoVintPos] = 0x40 | (newInfoDataSize >> 8);
+                newBytes[infoVintPos + 1] = newInfoDataSize & 0xFF;
+              } else if (infoVintLen === 4) {
+                newBytes[infoVintPos] = 0x10 | (newInfoDataSize >> 24);
+                newBytes[infoVintPos + 1] = (newInfoDataSize >> 16) & 0xFF;
+                newBytes[infoVintPos + 2] = (newInfoDataSize >> 8) & 0xFF;
+                newBytes[infoVintPos + 3] = newInfoDataSize & 0xFF;
+              }
+              return newBytes;
+            }
+            return bytes;
+          } catch (e) {
+            console.warn("[mobileWebBridge] WebM duration patch error:", e);
+            return bytes;
+          }
+        }
+
+        return bytes;
+      }
+
+      function convertMp4ToAudioOnlyBuffer(buffer) {
+        try {
+          var bytes = new Uint8Array(buffer);
+          var view = new DataView(buffer);
+          var len = bytes.length;
+          var offset = 0;
+          var moovFound = false;
+          while (offset + 8 <= len) {
+            var boxSize = view.getUint32(offset);
+            var boxType = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+            if (boxSize === 1 && offset + 16 <= len) {
+              var hi = view.getUint32(offset + 8);
+              var lo = view.getUint32(offset + 12);
+              boxSize = hi * 4294967296 + lo;
+            } else if (boxSize === 0) {
+              boxSize = len - offset;
+            }
+            if (boxSize < 8 || offset + boxSize > len) break;
+            if (boxType === "ftyp" && offset + 12 <= len) {
+              bytes[offset + 8] = 0x4d; bytes[offset + 9] = 0x34; bytes[offset + 10] = 0x41; bytes[offset + 11] = 0x20;
+            }
+            if (boxType === "moov") {
+              moovFound = true;
+              var moovEnd = offset + boxSize;
+              var subOffset = offset + 8;
+              while (subOffset + 8 <= moovEnd) {
+                var subSize = view.getUint32(subOffset);
+                var subType = String.fromCharCode(bytes[subOffset + 4], bytes[subOffset + 5], bytes[subOffset + 6], bytes[subOffset + 7]);
+                if (subSize < 8 || subOffset + subSize > moovEnd) break;
+                if (subType === "trak") {
+                  var trakEnd = subOffset + subSize;
+                  var isVideoTrack = false;
+                  var innerOffset = subOffset + 8;
+                  while (innerOffset + 8 <= trakEnd) {
+                    var inSize = view.getUint32(innerOffset);
+                    var inType = String.fromCharCode(bytes[innerOffset + 4], bytes[innerOffset + 5], bytes[innerOffset + 6], bytes[innerOffset + 7]);
+                    if (inSize < 8 || innerOffset + inSize > trakEnd) break;
+                    if (inType === "mdia") {
+                      var mdiaEnd = innerOffset + inSize;
+                      var mdiaOffset = innerOffset + 8;
+                      while (mdiaOffset + 8 <= mdiaEnd) {
+                        var mSize = view.getUint32(mdiaOffset);
+                        var mType = String.fromCharCode(bytes[mdiaOffset + 4], bytes[mdiaOffset + 5], bytes[mdiaOffset + 6], bytes[mdiaOffset + 7]);
+                        if (mSize < 8 || mdiaOffset + mSize > mdiaEnd) break;
+                        if (mType === "hdlr" && mdiaOffset + 20 <= mdiaEnd) {
+                          var hdlrType = String.fromCharCode(bytes[mdiaOffset + 16], bytes[mdiaOffset + 17], bytes[mdiaOffset + 18], bytes[mdiaOffset + 19]);
+                          if (hdlrType === "vide") { isVideoTrack = true; }
+                          break;
+                        }
+                        mdiaOffset += mSize;
+                      }
+                    }
+                    innerOffset += inSize;
+                  }
+                  if (isVideoTrack) {
+                    bytes[subOffset + 4] = 0x66; bytes[subOffset + 5] = 0x72; bytes[subOffset + 6] = 0x65; bytes[subOffset + 7] = 0x65;
+                  }
+                }
+                subOffset += subSize;
+              }
+            }
+            offset += boxSize;
+          }
+          if (moovFound) return buffer;
+        } catch (e) {}
+        return null;
+      }
+
+      function scheduleAudioBuffer(ctx, buffer, clip) {
+        var src = ctx.createBufferSource();
+        src.buffer = buffer;
+        var gain = ctx.createGain();
+
+        var isMuted = clip.muted || clip.isMuted;
+        var rawVol = clip.volume !== undefined ? clip.volume : 1.0;
+        var baseVol = isMuted ? 0 : (rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol));
+        gain.gain.value = baseVol;
+
+        var startTime = Math.max(0, clip.startTime || 0);
+        var trimIn = Math.max(0, clip.trimIn || 0);
+        var speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+        var duration = clip.duration || (buffer.duration - trimIn) / speed;
+
+        src.playbackRate.value = speed;
+
+        if (clip.fadeInDuration && clip.fadeInDuration > 0) {
+          gain.gain.setValueAtTime(0, startTime);
+          gain.gain.linearRampToValueAtTime(baseVol, Math.min(startTime + duration, startTime + clip.fadeInDuration));
+        }
+
+        if (clip.fadeOutDuration && clip.fadeOutDuration > 0) {
+          var fadeStart = Math.max(startTime, startTime + duration - clip.fadeOutDuration);
+          gain.gain.setValueAtTime(baseVol, fadeStart);
+          gain.gain.linearRampToValueAtTime(0, startTime + duration);
+        }
+
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(startTime, trimIn, duration);
+      }
+
+      async function seekVideoElementSafelyJs(el, targetTime, maxTol) {
+        if (!el || el.error || el.__seekDisabled) return;
+        var tol = maxTol || 0.02;
+        if (Math.abs(el.currentTime - targetTime) <= tol) return;
+        if (el.readyState < 2) {
+          await new Promise(function(resolve) {
+            var done = false;
+            var onR = function() {
+              if (!done) { done = true; el.removeEventListener("loadeddata", onR); el.removeEventListener("canplay", onR); resolve(); }
+            };
+            el.addEventListener("loadeddata", onR);
+            el.addEventListener("canplay", onR);
+            setTimeout(function() {
+              if (!done) {
+                done = true;
+                if (el.readyState < 1) el.__seekDisabled = true;
+                resolve();
+              }
+            }, 400);
+          });
+        }
+        if (el.__seekDisabled) return;
+        if (el.seeking) {
+          await new Promise(function(resolve) {
+            var done = false;
+            var onS = function() {
+              if (!done) { done = true; el.removeEventListener("seeked", onS); resolve(); }
+            };
+            el.addEventListener("seeked", onS);
+            setTimeout(onS, 500);
+          });
+        }
+        if (Math.abs(el.currentTime - targetTime) <= tol) return;
+        await new Promise(function(resolve) {
+          var done = false;
+          var onS = function() {
+            if (!done) { done = true; el.removeEventListener("seeked", onS); resolve(); }
+          };
+          el.addEventListener("seeked", onS);
+          try { el.currentTime = targetTime; } catch(e) { onS(); }
+          setTimeout(onS, 600);
+        });
+      }
+
+      async function mixAndEncodeAudio(durationSec) {
+        var AudioEncoderClass = window.AudioEncoder;
+        var AudioDataClass = window.AudioData;
+        var AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        var OfflineCtxClass = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+
+        var hasAudio = audioClips.length > 0 || videoClips.some(function(v) {
+          return v.type === "video" && !v.muted && !v.isMuted && (v.volume === undefined || v.volume > 0);
+        });
+
+        if (!hasAudio || !AudioEncoderClass || !AudioDataClass || !AudioCtxClass || !OfflineCtxClass) {
+          return { audioSamples: [], audioDescription: null, audioSampleRate: 44100, audioChannels: 2 };
+        }
+
+        try {
+          var aConfig = {
+            codec: "mp4a.40.2",
+            sampleRate: 44100,
+            numberOfChannels: 2,
+            bitrate: 192000
+          };
+          var sup = await AudioEncoderClass.isConfigSupported(aConfig);
+          if (!sup || !sup.supported) {
+            return { audioSamples: [], audioDescription: null, audioSampleRate: 44100, audioChannels: 2 };
+          }
+
+          var audioSamples = [];
+          var audioDescription = null;
+          var aEncoder = new AudioEncoderClass({
+            output: function(chunk, meta) {
+              var buf = new Uint8Array(chunk.byteLength);
+              chunk.copyTo(buf);
+              if (meta && meta.decoderConfig && meta.decoderConfig.description) {
+                audioDescription = new Uint8Array(meta.decoderConfig.description);
+              }
+              audioSamples.push({
+                data: buf,
+                timestampUs: chunk.timestamp,
+                durationUs: chunk.duration
+              });
+            },
+            error: function(e) {
+              console.warn("[mobileWebBridge] AudioEncoder error:", e);
+            }
+          });
+          aEncoder.configure(aConfig);
+
+          var sampleRate = 44100;
+          var totalAudioFrames = Math.max(1, Math.ceil(durationSec * sampleRate));
+          var offlineCtx = new OfflineCtxClass(2, totalAudioFrames, sampleRate);
+          var audioCtx = new AudioCtxClass();
+
+          for (var vi = 0; vi < videoClips.length; vi++) {
+            var c = videoClips[vi];
+            if (c.type === "video" && !c.muted && !c.isMuted && (c.volume === undefined || c.volume > 0)) {
+              try {
+                var resp = await fetch(c.url);
+                if (resp.ok) {
+                  var rawBuf = await resp.arrayBuffer();
+                  var audioBuf = null;
+                  try {
+                    audioBuf = await audioCtx.decodeAudioData(rawBuf.slice(0));
+                  } catch (decErr) {
+                    var m4aBuf = convertMp4ToAudioOnlyBuffer(rawBuf.slice(0));
+                    if (m4aBuf) {
+                      try { audioBuf = await audioCtx.decodeAudioData(m4aBuf); } catch (_) {}
+                    }
+                  }
+                  if (audioBuf) {
+                    scheduleAudioBuffer(offlineCtx, audioBuf, c);
+                  }
+                }
+              } catch (e) {
+                console.warn("[mobileWebBridge] Video audio decode failed for", c.url, e);
+              }
+            }
+          }
+
+          for (var ai = 0; ai < audioClips.length; ai++) {
+            var ac = audioClips[ai];
+            if (ac.url && !ac.muted && !ac.isMuted) {
+              try {
+                var aResp = await fetch(ac.url);
+                if (aResp.ok) {
+                  var aRaw = await aResp.arrayBuffer();
+                  var aDecoded = await audioCtx.decodeAudioData(aRaw);
+                  if (aDecoded) {
+                    scheduleAudioBuffer(offlineCtx, aDecoded, ac);
+                  }
+                }
+              } catch (e) {
+                console.warn("[mobileWebBridge] Audio clip decode failed for", ac.url, e);
+              }
+            }
+          }
+
+          try { audioCtx.close(); } catch (_) {}
+
+          var rendered = await offlineCtx.startRendering();
+          var pcmLeft = rendered.getChannelData(0);
+          var pcmRight = rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : pcmLeft;
+          var sampleCount = rendered.length;
+          var chunkSize = 1024;
+
+          for (var i = 0; i < sampleCount; i += chunkSize) {
+            var avail = Math.min(chunkSize, sampleCount - i);
+            var planar = new Float32Array(chunkSize * 2);
+            for (var s = 0; s < avail; s++) {
+              planar[s] = pcmLeft[i + s];
+              planar[chunkSize + s] = pcmRight[i + s];
+            }
+            var aData = new AudioDataClass({
+              format: "f32-planar",
+              sampleRate: sampleRate,
+              numberOfFrames: chunkSize,
+              numberOfChannels: 2,
+              timestamp: Math.round((i * 1000000) / sampleRate),
+              data: planar
+            });
+            aEncoder.encode(aData);
+            aData.close();
+          }
+
+          await aEncoder.flush();
+          aEncoder.close();
+
+          return {
+            audioSamples: audioSamples,
+            audioDescription: audioDescription,
+            audioSampleRate: sampleRate,
+            audioChannels: 2
+          };
+        } catch (err) {
+          console.warn("[mobileWebBridge] mixAndEncodeAudio fallback:", err);
+          return { audioSamples: [], audioDescription: null, audioSampleRate: 44100, audioChannels: 2 };
+        }
       }
 
       // -----------------------------------------------------------------------
       // 7. Main Export Pipeline
       // -----------------------------------------------------------------------
       async function runExport() {
+        var durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         var is4K = width >= 3840 || height >= 3840 || width >= 2160 || height >= 2160;
         var is1080p = width >= 1920 || height >= 1920 || width >= 1080 || height >= 1080;
         var targetBps = is4K ? 30000000 : is1080p ? 16000000 : 8000000;
@@ -1072,21 +2352,35 @@ export function generateCanvasBridgeHtml(
           return;
         }
 
-        // B. Ultra-Fast WebCodecs Hardware Turbo Export (5x - 10x faster than real-time)
-        // Optimized for graphic, slideshow, text, and animation timelines without active video/audio tracks
+        // B. Frame-Accurate Hardware WebCodecs Offline Export
         var hasVideoClips = false;
         for (var vi = 0; vi < videoClips.length; vi++) {
           if (videoClips[vi].type === "video") { hasVideoClips = true; break; }
         }
-        var hasAudioClips = audioClips.length > 0;
 
         if (
           EXPORT_OPTIONS.format === "mp4" &&
-          !hasAudioClips &&
           typeof window.VideoEncoder === "function" &&
           typeof window.VideoFrame === "function"
         ) {
           try {
+            var hasAudioTimeline = audioClips.length > 0 || videoClips.some(function(v) {
+              return v.type === "video" && !v.muted && !v.isMuted && (v.volume === undefined || v.volume > 0);
+            });
+            if (hasAudioTimeline && window.AudioEncoder) {
+              var aSup = await window.AudioEncoder.isConfigSupported({
+                codec: "mp4a.40.2",
+                sampleRate: 44100,
+                numberOfChannels: 2,
+                bitrate: 192000
+              });
+              if (!aSup || !aSup.supported) {
+                throw new Error("AAC AudioEncoder unsupported on this device. Using MediaRecorder pipeline.");
+              }
+            } else if (hasAudioTimeline && !window.AudioEncoder) {
+              throw new Error("AudioEncoder missing. Using MediaRecorder pipeline.");
+            }
+
             sendToNative({ type: "PROGRESS", progress: 0, status: "Turbo GPU encoder active..." });
 
             var totalFrames = Math.max(1, Math.ceil(durationSec * EXPORT_OPTIONS.fps));
@@ -1115,37 +2409,55 @@ export function generateCanvasBridgeHtml(
               }
             });
 
-            var candidateCodecs = [
-              "avc1.640028", // High Profile Level 4.0 (CABAC 8x8 DCT, pristine master quality)
-              "avc1.4D401F", // Main Profile Level 3.1
-              "avc1.42E01E"  // Baseline Profile Level 3.0
-            ];
-            var chosenCodec = "avc1.42E01E";
+            var isHighFps = EXPORT_OPTIONS.fps >= 50;
+            var candidateCodecs = [];
+            if (is4K) {
+              if (isHighFps) candidateCodecs.push("avc1.640034", "avc1.4D4034");
+              candidateCodecs.push("avc1.640033", "avc1.4D4033", "avc1.640032", "avc1.4D4032");
+            } else if (is1080p) {
+              if (isHighFps) candidateCodecs.push("avc1.64002a", "avc1.4D402a");
+              candidateCodecs.push("avc1.640029", "avc1.4D4029", "avc1.640028", "avc1.4D4028");
+            } else {
+              if (isHighFps) candidateCodecs.push("avc1.640020", "avc1.4D4020");
+              candidateCodecs.push("avc1.64001f", "avc1.4D401f", "avc1.64001e", "avc1.4D401e");
+            }
+            candidateCodecs.push("avc1.640028", "avc1.4D401F", "avc1.42E01E", "avc1.42001E");
+            var chosenConfig = null;
             for (var ci = 0; ci < candidateCodecs.length; ci++) {
-              try {
-                var sup = await VideoEncoder.isConfigSupported({
-                  codec: candidateCodecs[ci],
-                  width: width,
-                  height: height,
-                  bitrate: targetBps,
-                  framerate: EXPORT_OPTIONS.fps,
-                  hardwareAcceleration: "prefer-hardware"
-                });
-                if (sup && sup.supported) {
-                  chosenCodec = candidateCodecs[ci];
-                  break;
-                }
-              } catch(e) {}
+              var c = candidateCodecs[ci];
+              var testConfigs = [
+                { codec: c, width: width, height: height, bitrate: targetBps, framerate: EXPORT_OPTIONS.fps, hardwareAcceleration: "prefer-hardware", latencyMode: "realtime", bitrateMode: "variable" },
+                { codec: c, width: width, height: height, bitrate: targetBps, framerate: EXPORT_OPTIONS.fps, hardwareAcceleration: "prefer-hardware" },
+                { codec: c, width: width, height: height, bitrate: targetBps, framerate: EXPORT_OPTIONS.fps, latencyMode: "realtime" },
+                { codec: c, width: width, height: height, bitrate: targetBps, framerate: EXPORT_OPTIONS.fps }
+              ];
+              for (var tci = 0; tci < testConfigs.length; tci++) {
+                try {
+                  var sup = await VideoEncoder.isConfigSupported(testConfigs[tci]);
+                  if (sup && sup.supported) {
+                    chosenConfig = sup.config || testConfigs[tci];
+                    break;
+                  }
+                } catch(e) {}
+              }
+              if (chosenConfig) break;
             }
 
-            encoder.configure({
-              codec: chosenCodec,
-              width: width,
-              height: height,
-              bitrate: targetBps,
-              framerate: EXPORT_OPTIONS.fps,
-              hardwareAcceleration: "prefer-hardware"
-            });
+            if (!chosenConfig) {
+              chosenConfig = { codec: "avc1.42001E", width: width, height: height, bitrate: targetBps, framerate: EXPORT_OPTIONS.fps };
+            }
+
+            try {
+              encoder.configure(chosenConfig);
+            } catch (confErr) {
+              encoder.configure({
+                codec: chosenConfig.codec || "avc1.42001E",
+                width: width,
+                height: height,
+                bitrate: targetBps,
+                framerate: EXPORT_OPTIONS.fps
+              });
+            }
 
             for (var f = 0; f < totalFrames; f++) {
               if (turboError) throw turboError;
@@ -1160,31 +2472,28 @@ export function generateCanvasBridgeHtml(
                     if (vel && vel instanceof HTMLVideoElement) {
                       var st = c.startTime || 0;
                       var en = st + (c.duration || 0);
-                      if (curTime >= st && curTime < en) {
-                        var sp = c.speed || 1.0;
-                        var tr = c.trimIn || 0;
-                        var tgt = (curTime - st) * sp + tr;
-                        if (Math.abs(vel.currentTime - tgt) > 0.02) {
-                          (function(el, targetTime) {
-                            seekPromises.push(new Promise(function(resolve) {
-                              var done = false;
-                              var onSeek = function() {
-                                if (!done) {
-                                  done = true;
-                                  el.removeEventListener("seeked", onSeek);
-                                  resolve();
-                                }
-                              };
-                              el.addEventListener("seeked", onSeek);
-                              if (typeof el.fastSeek === "function") {
-                                el.fastSeek(targetTime);
-                              } else {
-                                el.currentTime = targetTime;
-                              }
-                              setTimeout(onSeek, 20);
-                            }));
-                          })(vel, tgt);
+                      var trans = c.transition;
+                      var transDur = trans && trans.type && trans.type !== "none" && trans.type !== "cut" ? (trans.duration || 0.5) : 0;
+                      var isInside = curTime >= st && curTime <= en;
+                      var isEntering = transDur > 0 && curTime >= st - transDur && curTime < st;
+                      if (isInside || isEntering) {
+                        var clipLocalTime = Math.max(0, curTime - st);
+                        var sp = Math.max(0.1, Math.min(16, c.speed || 1.0));
+                        if (c.speedCurve) {
+                          sp = evaluateSpeedCurveJs(c.speedCurve, clipLocalTime / Math.max(0.1, c.duration || 1));
                         }
+                        var tr = c.trimIn || 0;
+                        var tgt = clipLocalTime * sp + tr;
+                        if (c.reverse) {
+                          tgt = Math.max(0, (c.trimOut || c.duration) - clipLocalTime * sp);
+                        }
+                        if (vel.duration && vel.duration > 0) {
+                          tgt = Math.min(vel.duration, Math.max(0, tgt));
+                        }
+                        if (!vel.paused) {
+                          try { vel.pause(); } catch(e) {}
+                        }
+                        seekPromises.push(seekVideoElementSafelyJs(vel, tgt, 0.02));
                       }
                     }
                   }
@@ -1196,15 +2505,44 @@ export function generateCanvasBridgeHtml(
 
               renderFrame(curTime);
 
-              var vFrame = new VideoFrame(canvas, {
-                timestamp: f * frameDurationUs,
-                duration: frameDurationUs
-              });
+              var vFrame = null;
+              try {
+                vFrame = new VideoFrame(canvas, {
+                  timestamp: f * frameDurationUs,
+                  duration: frameDurationUs
+                });
+              } catch (vfErr) {
+                var bmp = await createImageBitmap(canvas);
+                vFrame = new VideoFrame(bmp, {
+                  timestamp: f * frameDurationUs,
+                  duration: frameDurationUs
+                });
+                try { bmp.close(); } catch (_) {}
+              }
               encoder.encode(vFrame, { keyFrame: f % (EXPORT_OPTIONS.fps * 2) === 0 });
               vFrame.close();
 
-              if (f % 15 === 0 || f === totalFrames - 1) {
-                var pct = Math.min(99, Math.floor((f / totalFrames) * 100));
+              if (encoder.encodeQueueSize > 12) {
+                var lastQ = encoder.encodeQueueSize;
+                var lastDrain = performance.now();
+                while (encoder.encodeQueueSize > 12) {
+                  if (turboError) throw turboError;
+                  if (encoder.state !== "configured") {
+                    throw new Error("VideoEncoder closed unexpectedly: " + encoder.state);
+                  }
+                  var curQ = encoder.encodeQueueSize;
+                  if (curQ < lastQ) {
+                    lastQ = curQ;
+                    lastDrain = performance.now();
+                  } else if (performance.now() - lastDrain > 5000) {
+                    throw new Error("Turbo VideoEncoder queue stalled; falling back to MediaRecorder");
+                  }
+                  await new Promise(function(r) { setTimeout(r, 6); });
+                }
+              }
+
+              if (f % 2 === 0 || f === totalFrames - 1) {
+                var pct = Math.min(90, Math.floor((f / totalFrames) * 90));
                 sendToNative({ type: "PROGRESS", progress: pct, currentTime: curTime, duration: durationSec });
                 if (typeof window.scheduler !== "undefined" && typeof window.scheduler.yield === "function") {
                   await window.scheduler.yield();
@@ -1214,14 +2552,39 @@ export function generateCanvasBridgeHtml(
               }
             }
 
-            await encoder.flush();
+            var flushTimer = null;
+            var flushPromise = encoder.flush();
+            var flushTimeoutPromise = new Promise(function(_, reject) {
+              flushTimer = setTimeout(function() {
+                reject(new Error("VideoEncoder flush timed out"));
+              }, 15000);
+            });
+            try {
+              await Promise.race([flushPromise, flushTimeoutPromise]);
+            } finally {
+              clearTimeout(flushTimer);
+            }
             encoder.close();
 
             if (turboError) throw turboError;
 
+            sendToNative({ type: "PROGRESS", progress: 92, status: "Mixing & encoding soundtrack..." });
+            var audioRes = await mixAndEncodeAudio(durationSec);
+
             sendToNative({ type: "PROGRESS", progress: 96, status: "Muxing MP4 container..." });
 
-            var mp4Bytes = muxMp4Fast(width, height, EXPORT_OPTIONS.fps, videoSamples, avcDesc);
+            var mp4Bytes = muxMp4Fast(
+              width,
+              height,
+              EXPORT_OPTIONS.fps,
+              videoSamples,
+              avcDesc,
+              audioRes.audioSamples,
+              audioRes.audioSampleRate,
+              audioRes.audioChannels,
+              audioRes.audioDescription
+            );
+
             sendToNative({ type: "CHUNK_START", mimeType: "video/mp4", extension: "mp4" });
             var chunkSize = 65536;
             for (var i = 0; i < mp4Bytes.length; i += chunkSize) {
@@ -1234,6 +2597,7 @@ export function generateCanvasBridgeHtml(
               type: "CHUNK_END",
               mimeType: "video/mp4",
               extension: "mp4",
+              duration: durationSec,
               fileSize: mp4Bytes.length
             });
             return;
@@ -1262,17 +2626,23 @@ export function generateCanvasBridgeHtml(
             }
             audioDest = audioCtx.createMediaStreamDestination();
 
-            // Connect video elements to audio destination
+            var videoGainNodes = new Map();
+            var audioGainNodes = new Map();
+
+            // Connect video clip soundtrack to audio destination (via dedicated Audio element or video element)
             for (const clip of videoClips) {
               if (clip.type === "video") {
-                const el = mediaMap.get(clip.url) || mediaMap.get(clip.id);
-                if (el && el instanceof HTMLVideoElement) {
+                const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
+                const el = va || mediaMap.get(clip.url) || mediaMap.get(clip.id);
+                if (el && (el instanceof HTMLAudioElement || el instanceof HTMLVideoElement)) {
                   try {
                     const source = audioCtx.createMediaElementSource(el);
                     const gain = audioCtx.createGain();
                     const isMuted = clip.muted || clip.isMuted;
-                    gain.gain.value = isMuted ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
+                    const rawVol = clip.volume !== undefined ? clip.volume : 1.0;
+                    gain.gain.value = isMuted ? 0 : (rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol));
                     source.connect(gain).connect(audioDest);
+                    videoGainNodes.set(clip.id, gain);
                   } catch (e) {}
                 }
               }
@@ -1285,8 +2655,10 @@ export function generateCanvasBridgeHtml(
                 try {
                   const source = audioCtx.createMediaElementSource(a);
                   const gain = audioCtx.createGain();
-                  gain.gain.value = clip.volume !== undefined ? clip.volume : 1.0;
+                  const isMuted = clip.muted || clip.isMuted;
+                  gain.gain.value = isMuted ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
                   source.connect(gain).connect(audioDest);
+                  audioGainNodes.set(clip.id, gain);
                 } catch (e) {}
               }
             }
@@ -1377,20 +2749,80 @@ export function generateCanvasBridgeHtml(
         let transferQueue = Promise.resolve();
         let transferredBytes = 0;
         let transferFailed = false;
+        let headerBuffer = [];
+        let headerBufferLen = 0;
+        let headerDispatched = false;
+        const HEADER_THRESHOLD = 65536;
+
+        function streamBytesToNative(rawBytes) {
+          let binary = "";
+          const binaryChunkSize = 8192;
+          for (let i = 0; i < rawBytes.length; i += binaryChunkSize) {
+            binary += String.fromCharCode.apply(null, rawBytes.subarray(i, Math.min(i + binaryChunkSize, rawBytes.length)));
+          }
+          sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
+          transferredBytes += rawBytes.length;
+        }
 
         recorder.ondataavailable = function(e) {
           if (!e.data || e.data.size <= 0 || transferFailed) return;
-          // Convert and forward each recorder segment as it arrives. This avoids
-          // retaining the entire encoded video and a second full-size base64 copy.
           transferQueue = transferQueue.then(async function() {
             const bytes = new Uint8Array(await e.data.arrayBuffer());
-            let binary = "";
-            const binaryChunkSize = 8192; // Stack-safe chunk size for String.fromCharCode.apply
-            for (let i = 0; i < bytes.length; i += binaryChunkSize) {
-              binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + binaryChunkSize, bytes.length)));
+
+            if (!headerDispatched) {
+              headerBuffer.push(bytes);
+              headerBufferLen += bytes.length;
+
+              // Check if accumulated header bytes contain 'moov' (MP4) or EBML Segment Info (WebM)
+              let combined = new Uint8Array(headerBufferLen);
+              let off = 0;
+              for (let hi = 0; hi < headerBuffer.length; hi++) {
+                combined.set(headerBuffer[hi], off);
+                off += headerBuffer[hi].length;
+              }
+
+              let hasMoovFull = false;
+              let isMp4 = false;
+              for (let mi = 4; mi <= Math.min(combined.length - 4, 64); mi++) {
+                if (combined[mi] === 0x66 && combined[mi+1] === 0x74 && combined[mi+2] === 0x79 && combined[mi+3] === 0x70) {
+                  isMp4 = true;
+                  break;
+                }
+              }
+              if (isMp4) {
+                for (let mi = 4; mi <= Math.min(combined.length - 8, 131072); mi++) {
+                  if (combined[mi] === 0x6D && combined[mi+1] === 0x6F && combined[mi+2] === 0x6F && combined[mi+3] === 0x76) {
+                    const dv = new DataView(combined.buffer, combined.byteOffset, combined.byteLength);
+                    const moovOffset = mi - 4;
+                    const moovSize = dv.getUint32(moovOffset);
+                    if (moovSize >= 8 && combined.length >= moovOffset + moovSize) {
+                      hasMoovFull = true;
+                    }
+                    break;
+                  }
+                }
+              }
+
+              let hasWebMHeaderFull = false;
+              const isWebM = combined.length >= 4 && combined[0] === 0x1A && combined[1] === 0x45 && combined[2] === 0xDF && combined[3] === 0xA3;
+              if (isWebM) {
+                for (let ci = 4; ci <= combined.length - 4; ci++) {
+                  if (combined[ci] === 0x1F && combined[ci+1] === 0x43 && combined[ci+2] === 0xB6 && combined[ci+3] === 0x75) {
+                    hasWebMHeaderFull = true;
+                    break;
+                  }
+                }
+              }
+
+              if (hasMoovFull || hasWebMHeaderFull || headerBufferLen >= HEADER_THRESHOLD) {
+                const patched = patchMediaContainerDuration(combined, durationSec);
+                headerDispatched = true;
+                headerBuffer = [];
+                streamBytesToNative(patched);
+              }
+            } else {
+              streamBytesToNative(bytes);
             }
-            sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
-            transferredBytes += bytes.length;
           }).catch(function(err) {
             transferFailed = true;
             sendToNative({ type: "ERROR", message: "Could not stream encoded video: " + (err.message || err) });
@@ -1400,10 +2832,23 @@ export function generateCanvasBridgeHtml(
         recorder.onstop = function() {
           transferQueue.then(function() {
             if (transferFailed) return;
+            if (!headerDispatched && headerBuffer.length > 0) {
+              let combined = new Uint8Array(headerBufferLen);
+              let off = 0;
+              for (let hi = 0; hi < headerBuffer.length; hi++) {
+                combined.set(headerBuffer[hi], off);
+                off += headerBuffer[hi].length;
+              }
+              const patched = patchMediaContainerDuration(combined, durationSec);
+              headerDispatched = true;
+              headerBuffer = [];
+              streamBytesToNative(patched);
+            }
             sendToNative({
               type: "CHUNK_END",
               mimeType: mimeType,
               extension: extension,
+              duration: durationSec,
               fileSize: transferredBytes
             });
           }).catch(function(err) {
@@ -1424,7 +2869,9 @@ export function generateCanvasBridgeHtml(
             el.defaultMuted = true;
             el.currentTime = Math.max(0, clip.trimIn || 0);
             el.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-            if (clip.startTime > 0) {
+            if ((clip.startTime || 0) <= 0.05) {
+              try { el.play().catch(function() {}); } catch(e) {}
+            } else {
               try { el.pause(); } catch(e) {}
             }
           }
@@ -1445,15 +2892,16 @@ export function generateCanvasBridgeHtml(
         sendToNative({ type: "PROGRESS", progress: 0, status: "Encoding video stream..." });
         recorder.start(500);
         const startTime = performance.now();
-        const durationSec = Math.max(1.0, EXPORT_OPTIONS.duration);
+        durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         const targetFrameInterval = 1 / Math.max(1, EXPORT_OPTIONS.fps || 30);
         let lastRenderedTime = 0;
         let lastProgressSentAt = 0;
 
         function tick() {
-          const now = performance.now();
-          const elapsed = (now - startTime) / 1000;
-          const curTime = Math.min(elapsed, durationSec);
+          try {
+            const now = performance.now();
+            const elapsed = (now - startTime) / 1000;
+            const curTime = Math.min(elapsed, durationSec);
 
           // Synchronize active video playback with exact seek and micro-adjustments
           for (const clip of videoClips) {
@@ -1462,9 +2910,31 @@ export function generateCanvasBridgeHtml(
             if (!el || !(el instanceof HTMLVideoElement)) continue;
 
             const isInside = curTime >= clip.startTime && curTime < clip.startTime + clip.duration;
+            const vGain = videoGainNodes.get(clip.id);
+            if (vGain && audioCtx) {
+              const baseVol = (clip.muted || clip.isMuted) ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
+              if (isInside) {
+                const clipLocalTime = Math.max(0, curTime - clip.startTime);
+                let vol = baseVol;
+                if (clip.fadeInDuration && clipLocalTime < clip.fadeInDuration) {
+                  vol *= (clipLocalTime / clip.fadeInDuration);
+                }
+                const timeRemaining = clip.duration - clipLocalTime;
+                if (clip.fadeOutDuration && timeRemaining < clip.fadeOutDuration) {
+                  vol *= Math.max(0, timeRemaining / clip.fadeOutDuration);
+                }
+                try { vGain.gain.setValueAtTime(vol, audioCtx.currentTime); } catch(e) {}
+              } else {
+                try { vGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e) {}
+              }
+            }
+
             if (isInside) {
               const clipLocalTime = Math.max(0, curTime - clip.startTime);
-              const speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+              let speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+              if (clip.speedCurve) {
+                speed = evaluateSpeedCurveJs(clip.speedCurve, clipLocalTime / Math.max(0.1, clip.duration || 1));
+              }
               const trimIn = clip.trimIn || 0;
               const trimOut = clip.trimOut || clip.duration;
               const rawMediaTime = clip.reverse
@@ -1494,9 +2964,33 @@ export function generateCanvasBridgeHtml(
                   try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
                 }
               }
+
+              const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
+              if (va && va instanceof HTMLAudioElement) {
+                if (Math.abs(va.playbackRate - speed) > 0.02) {
+                  try { va.playbackRate = speed; } catch(e) {}
+                }
+                if (va.paused) {
+                  try {
+                    if (Math.abs(va.currentTime - targetTime) > 0.05) {
+                      va.currentTime = targetTime;
+                    }
+                    va.play().catch(function() {});
+                  } catch(e) {}
+                } else {
+                  const drift = va.currentTime - targetTime;
+                  if (Math.abs(drift) > 0.35) {
+                    try { va.currentTime = targetTime; } catch(e) {}
+                  }
+                }
+              }
             } else {
               if (!el.paused) {
                 try { el.pause(); } catch(e) {}
+              }
+              const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
+              if (va && !va.paused) {
+                try { va.pause(); } catch(e) {}
               }
             }
           }
@@ -1507,6 +3001,25 @@ export function generateCanvasBridgeHtml(
             if (!a || !(a instanceof HTMLAudioElement)) continue;
 
             const isInside = curTime >= clip.startTime && curTime < clip.startTime + clip.duration;
+            const aGain = audioGainNodes.get(clip.id);
+            if (aGain && audioCtx) {
+              const baseVol = (clip.muted || clip.isMuted) ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
+              if (isInside) {
+                const clipLocalTime = Math.max(0, curTime - clip.startTime);
+                let vol = baseVol;
+                if (clip.fadeInDuration && clipLocalTime < clip.fadeInDuration) {
+                  vol *= (clipLocalTime / clip.fadeInDuration);
+                }
+                const timeRemaining = clip.duration - clipLocalTime;
+                if (clip.fadeOutDuration && timeRemaining < clip.fadeOutDuration) {
+                  vol *= Math.max(0, timeRemaining / clip.fadeOutDuration);
+                }
+                try { aGain.gain.setValueAtTime(vol, audioCtx.currentTime); } catch(e) {}
+              } else {
+                try { aGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e) {}
+              }
+            }
+
             if (isInside) {
               const clipLocalTime = Math.max(0, curTime - clip.startTime);
               const speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
@@ -1553,7 +3066,15 @@ export function generateCanvasBridgeHtml(
           }
 
           if (elapsed < durationSec) {
-            requestAnimationFrame(tick);
+            var scheduled = false;
+            var timerId = setTimeout(function() {
+              if (!scheduled) { scheduled = true; tick(); }
+            }, Math.max(4, Math.round(targetFrameInterval * 1000)));
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(function() {
+                if (!scheduled) { scheduled = true; clearTimeout(timerId); tick(); }
+              });
+            }
           } else {
             sendToNative({ type: "PROGRESS", progress: 99, status: "Finalizing video file..." });
 
@@ -1562,6 +3083,10 @@ export function generateCanvasBridgeHtml(
               const el = mediaMap.get(clip.url) || mediaMap.get(clip.id);
               if (el && el instanceof HTMLVideoElement && !el.paused) {
                 try { el.pause(); } catch(e) {}
+              }
+              const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
+              if (va && va instanceof HTMLAudioElement && !va.paused) {
+                try { va.pause(); } catch(e) {}
               }
             }
             for (const clip of audioClips) {
@@ -1576,9 +3101,20 @@ export function generateCanvasBridgeHtml(
             }
             recorder.stop();
           }
+        } catch (tickErr) {
+          sendToNative({ type: "ERROR", message: String(tickErr && tickErr.message ? tickErr.message : tickErr) });
         }
+      }
 
-        requestAnimationFrame(tick);
+        var initialScheduled = false;
+        var initialTimer = setTimeout(function() {
+          if (!initialScheduled) { initialScheduled = true; tick(); }
+        }, 16);
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(function() {
+            if (!initialScheduled) { initialScheduled = true; clearTimeout(initialTimer); tick(); }
+          });
+        }
       }
 
       runExport().catch(function(err) {

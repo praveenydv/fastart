@@ -11,7 +11,7 @@ import {
   captureActiveFrameNow,
   globalThumbnailCache,
 } from "../utils/mediaThumbnailGenerator";
-import { cloneClipMasks } from "../services/selfieSegmentationService";
+import { cloneClipMasks, clearClipMasks } from "../services/selfieSegmentationService";
 import { useClipTransformOperations } from "./useClipTransformOperations";
 
 interface UseProjectClipMutationsParams {
@@ -477,6 +477,8 @@ export function useProjectClipMutations({
           t += c.duration;
         }
       });
+      // Purge any cutout masks or caches for deleted clip to keep storage clean
+      clearClipMasks(clipId);
     }
 
     const updated = {

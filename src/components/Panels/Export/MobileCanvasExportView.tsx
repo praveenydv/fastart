@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, StyleSheet, Platform } from "react-native";
+import { Buffer } from "buffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { DomWebView } from "@expo/dom-webview";
 import { FastArtProject } from "../../../types/project";
 import { ExportOptions, ExportResult } from "../../../utils/videoRenderer";
 import { generateCanvasBridgeHtml } from "../../../utils/renderer/mobileWebBridge";
+import { getLiveMediaUrl, loadMasksRLE } from "../../../utils/largeMediaStorage";
 
 interface MobileCanvasExportViewProps {
   isExporting: boolean;
@@ -47,14 +49,50 @@ async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<Fast
     for (const clip of cloned.tracks.video) {
       if (clip.url) {
         tasks.push(
-          resolveUrlForWebView(clip.url, clip.id, clip.type === "video" ? "mp4" : "jpg", dir)
-            .then((res) => { if (res) clip.url = res; })
+          (async () => {
+            const liveUrl = (await getLiveMediaUrl(clip.sourceMediaId || clip.id, clip.title || (clip as any).name)) || clip.url;
+            const res = await resolveUrlForWebView(liveUrl, clip.id, clip.type === "video" ? "mp4" : "jpg", dir);
+            if (res) clip.url = res;
+          })()
         );
       }
       if (clip.thumbnail) {
         tasks.push(
           resolveUrlForWebView(clip.thumbnail, `${clip.id}_thumb`, "jpg", dir)
             .then((res) => { if (res) clip.thumbnail = res; })
+        );
+      }
+      if (clip.cutout?.enabled) {
+        tasks.push(
+          (async () => {
+            try {
+              const idToLoad = clip.id;
+              const fallbackId = clip.sourceMediaId;
+              let rleData = await loadMasksRLE(idToLoad);
+              if (!rleData && fallbackId) {
+                rleData = await loadMasksRLE(fallbackId);
+              }
+              if (rleData?.masks) {
+                const serializableMasks: Record<string, string> = {};
+                for (const [k, v] of Object.entries(rleData.masks)) {
+                  const b64 = Buffer.from(v).toString("base64");
+                  serializableMasks[k] = b64;
+                  // Also extract numeric frame index so `serializableMasks[frameIdx]` always matches
+                  const parts = k.split("_");
+                  const lastPart = parts[parts.length - 1];
+                  if (/^\d+$/.test(lastPart)) {
+                    serializableMasks[lastPart] = b64;
+                  }
+                }
+                (clip as any).cutoutMasks = {
+                  masks: serializableMasks,
+                  fps: rleData.fps || 30,
+                };
+              }
+            } catch (e) {
+              console.warn("[MobileCanvasExportView] Failed to load cutout masks:", e);
+            }
+          })()
         );
       }
     }
@@ -64,8 +102,11 @@ async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<Fast
     for (const clip of cloned.tracks.audio) {
       if (clip.url) {
         tasks.push(
-          resolveUrlForWebView(clip.url, clip.id, "wav", dir)
-            .then((res) => { if (res) clip.url = res; })
+          (async () => {
+            const liveUrl = (await getLiveMediaUrl(clip.sourceMediaId || clip.id, clip.title || (clip as any).name)) || clip.url;
+            const res = await resolveUrlForWebView(liveUrl, clip.id, "wav", dir);
+            if (res) clip.url = res;
+          })()
         );
       }
     }
@@ -306,8 +347,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    opacity: 1, // Visible to Android compositor so GPU pipeline runs at 60 fps
-    zIndex: -1, // Sits safely behind the modal card
+    opacity: 0.01, // Near-invisible to human eye, but at top of view hierarchy so OS compositor never throttles GPU loop
+    zIndex: 9999, // Tops the view hierarchy to bypass occlusion detection
   },
   webView: {
     flex: 1,

@@ -724,9 +724,12 @@ export async function getLiveMediaBlob(id: string): Promise<Blob | File | null> 
 }
 
 // Robust multi-strategy ArrayBuffer loader for media (handles in-memory blob cache, blob URLs, XHR, and IndexedDB)
-export async function getMediaBinaryBuffer(url: string, lookupId?: string): Promise<ArrayBuffer | null> {
+export async function getMediaBinaryBuffer(
+  url: string,
+  lookupId?: string,
+  maxBytes: number = 16 * 1024 * 1024,
+): Promise<ArrayBuffer | null> {
   if (!url && !lookupId) return null;
-  const maxBytes = 16 * 1024 * 1024;
 
   // Never route native local media through fetch/XHR: React Native may buffer
   // the entire file before later size checks. Video preview uses native
@@ -1583,8 +1586,29 @@ export async function loadMasksRLE(
 }
 
 /** Removes a clip's persisted cutout masks after reset or clip deletion. */
-export async function removeMasksRLE(clipId: string): Promise<void> {
-  if (!clipId) return;
+export async function removeMasksRLE(clipId?: string): Promise<void> {
+  if (!clipId) {
+    if (Platform.OS !== 'web') {
+      try {
+        const dir = getMobileMaskDir();
+        await FileSystemLegacy.deleteAsync(dir, { idempotent: true });
+      } catch {}
+      return;
+    }
+    if (typeof window === 'undefined') return;
+    try {
+      const db = await getIndexedDB();
+      if (!db.objectStoreNames.contains(STORE_MASKS)) return;
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(STORE_MASKS, 'readwrite');
+        tx.objectStore(STORE_MASKS).clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      });
+    } catch {}
+    return;
+  }
 
   if (Platform.OS !== 'web') {
     try {

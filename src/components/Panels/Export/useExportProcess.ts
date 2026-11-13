@@ -50,7 +50,12 @@ export function useExportProcess(
     reject: (err: any) => void;
   } | null>(null);
 
-  const updateProgressMonotonic = (pct: number) => {
+  const updateProgressMonotonic = (pct: number, forceReset = false) => {
+    if (forceReset || pct === 0) {
+      lastSeenProgressRef.current = 0;
+      setProgress(0);
+      return;
+    }
     const safe = Math.min(100, Math.max(lastSeenProgressRef.current, Math.round(pct)));
     lastSeenProgressRef.current = safe;
     setProgress(safe);

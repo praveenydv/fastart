@@ -168,17 +168,16 @@ export function usePlayerAudioSync({
           ) {
             setCachedMediaDuration(clip.url, el.duration);
             if (clip.sourceClipId) setCachedMediaDuration(clip.sourceClipId, el.duration);
-            // Only confirm hasAudio for actual audio tracks; videos require container track confirmation
-            if (!clip.isFromVideo) {
-              setMediaHasAudio(clip.url, true);
-              if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, true);
-            }
+            setMediaHasAudio(clip.url, true);
+            if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, true);
           }
         });
-        el.addEventListener("error", () => {
-          if (clip.isFromVideo) {
-            setMediaHasAudio(clip.url, false);
-            if (clip.sourceClipId) setMediaHasAudio(clip.sourceClipId, false);
+        el.addEventListener("error", (e) => {
+          // Never mark clip as having no audio; an element error can happen
+          // due to temporary browser decode delays, format differences, or stale blob URLs
+          // that are being rehydrated upon page refresh.
+          if (__DEV__) {
+            console.debug(`[usePlayerAudioSync] Audio load notice for ${clip.id}:`, e);
           }
         });
         audioElementsRef.current[clip.id] = el;

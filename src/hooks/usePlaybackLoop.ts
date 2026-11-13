@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { getActiveVideoRenderer, pauseActiveVideoRenderer } from "../utils/videoRenderer";
 import { pauseAllAudio } from "../components/Player/usePlayerAudioSync";
 import { playheadCoordinator } from "../utils/playheadCoordinator";
+import { cancelLiveSegmentation } from "../services/selfieSegmentationService";
 
 interface UsePlaybackLoopParams {
   isPlaying: boolean;
@@ -82,6 +83,7 @@ export function usePlaybackLoop({
         }
         pauseActiveVideoRenderer();
         pauseAllAudio();
+        cancelLiveSegmentation();
         setIsPlayingRef.current(false);
         setCurrentTimeRef.current(0);
         return;
@@ -117,6 +119,7 @@ export function usePlaybackLoop({
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
+      cancelLiveSegmentation();
       // On stop, ensure exact final playhead is committed to React state and coordinator
       playheadCoordinator.notify(currentPosRef.current);
       setCurrentTimeRef.current(currentPosRef.current);

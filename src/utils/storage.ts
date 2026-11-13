@@ -76,15 +76,28 @@ export const initNativeStorageAsync = async (): Promise<boolean> => {
   if (Platform.OS === 'web') {
     try {
       const raw = getStorageItem(PROJECTS_STORAGE_KEY);
-      if (!raw || raw === '[]') {
-        const idbData = await loadProjectsFromIndexedDB();
-        if (idbData && idbData !== '[]') {
+      const idbData = await loadProjectsFromIndexedDB();
+      if (idbData && idbData !== '[]') {
+        if (!raw || raw === '[]') {
           setStorageItem(PROJECTS_STORAGE_KEY, idbData);
+        } else {
+          try {
+            const parsedRaw = JSON.parse(raw);
+            const parsedIdb = JSON.parse(idbData);
+            if (Array.isArray(parsedRaw) && Array.isArray(parsedIdb)) {
+              const rawMaxUpdate = Math.max(...parsedRaw.map((p: any) => p.updatedAt || 0), 0);
+              const idbMaxUpdate = Math.max(...parsedIdb.map((p: any) => p.updatedAt || 0), 0);
+              if (idbMaxUpdate > rawMaxUpdate) {
+                setStorageItem(PROJECTS_STORAGE_KEY, idbData);
+              }
+            }
+          } catch {}
         }
       }
     } catch (err) {
       console.warn('FastArt web IndexedDB backup restoration warning:', err);
     } finally {
+      cachedProjectsList = null;
       isStorageInitialized = true;
     }
     return true;
@@ -145,7 +158,31 @@ export const setStorageItem = (key: string, value: string): void => {
       scheduleNativeDiskSync();
     }
   } catch (e) {
-    // Graceful fallback for quota exceeded or storage disabled
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage && key === PROJECTS_STORAGE_KEY) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          const lean = parsed.map((p) => ({
+            ...p,
+            thumbnailUrl: (p.thumbnailUrl && p.thumbnailUrl.length < 500) ? p.thumbnailUrl : undefined,
+            tracks: {
+              ...p.tracks,
+              video: (p.tracks?.video || []).map((v: any) => ({
+                ...v,
+                thumbnail: (v.thumbnail && v.thumbnail.length < 500) ? v.thumbnail : undefined,
+              })),
+            },
+            assets: (p.assets || []).map((a: any) => ({
+              ...a,
+              thumbnail: (a.thumbnail && a.thumbnail.length < 500) ? a.thumbnail : undefined,
+            })),
+          }));
+          window.localStorage.setItem(key, JSON.stringify(lean));
+        }
+      } catch (innerErr) {
+        console.warn('FastArt localStorage quota fallback failed:', innerErr);
+      }
+    }
   }
 };
 
@@ -186,34 +223,123 @@ export const loadLastSession = (): LastEditSession | null => {
 
 export const saveLastSession = (session: LastEditSession): void => {
   try {
-    setStorageItem(LAST_SESSION_STORAGE_KEY, JSON.stringify(session));
+    setStorageItem(LAST_SESSION_STORAGE_KEY, safeJsonStringify(session));
   } catch (e) {}
 };
 
-// Sanitize project to guarantee all tracks and properties are defined
+/**
+ * Safe JSON serializer with circular reference protection and stripping of Window/DOM elements
+ */
+export function safeJsonStringify(obj: any, indent?: number): string {
+  try {
+    const seen = new WeakSet();
+    return JSON.stringify(
+      obj,
+      (key: string, value: any) => {
+        if (typeof value === 'function') return undefined;
+        if (typeof value === 'object' && value !== null) {
+          try {
+            if (
+              (typeof window !== 'undefined' && value === window) ||
+              (typeof document !== 'undefined' && value === document) ||
+              (typeof Node !== 'undefined' && value instanceof Node) ||
+              (typeof Event !== 'undefined' && value instanceof Event) ||
+              value?.constructor?.name === 'Window' ||
+              value?.constructor?.name === 'HTMLVideoElement' ||
+              value?.constructor?.name === 'HTMLCanvasElement' ||
+              value?.constructor?.name === 'HTMLImageElement' ||
+              value?.constructor?.name === 'HTMLAudioElement'
+            ) {
+              return undefined;
+            }
+          } catch {
+            return undefined;
+          }
+          if (seen.has(value)) {
+            return undefined;
+          }
+          seen.add(value);
+        }
+        return value;
+      },
+      indent,
+    );
+  } catch (e) {
+    return Array.isArray(obj) ? '[]' : '{}';
+  }
+}
+
+const sanitizeClip = (clip: any): any => {
+  if (!clip || typeof clip !== 'object') return clip;
+  const clean: any = {};
+  for (const [k, v] of Object.entries(clip)) {
+    if (
+      k === 'window' ||
+      k === 'view' ||
+      k === 'target' ||
+      k === 'currentTarget' ||
+      k === 'nativeEvent' ||
+      typeof v === 'function' ||
+      (typeof window !== 'undefined' && v === window) ||
+      (typeof document !== 'undefined' && v === document) ||
+      (typeof Node !== 'undefined' && v instanceof Node) ||
+      (typeof Event !== 'undefined' && v instanceof Event) ||
+      (v as any)?.constructor?.name === 'Window' ||
+      (v as any)?.constructor?.name === 'HTMLVideoElement' ||
+      (v as any)?.constructor?.name === 'HTMLCanvasElement'
+    ) {
+      continue;
+    }
+    clean[k] = v;
+  }
+  return clean;
+};
+
+// Sanitize project to guarantee all tracks and properties are defined and free from circular references
 const sanitizeProject = (proj: any): FastArtProject => {
-  const tracks = proj.tracks || {};
+  if (!proj || typeof proj !== 'object') return proj;
+  const cleanProj: any = {};
+  for (const [k, v] of Object.entries(proj)) {
+    if (
+      k === 'window' ||
+      k === 'view' ||
+      k === 'target' ||
+      k === 'currentTarget' ||
+      k === 'nativeEvent' ||
+      typeof v === 'function' ||
+      (typeof window !== 'undefined' && v === window) ||
+      (typeof document !== 'undefined' && v === document) ||
+      (typeof Node !== 'undefined' && v instanceof Node) ||
+      (typeof Event !== 'undefined' && v instanceof Event) ||
+      (v as any)?.constructor?.name === 'Window'
+    ) {
+      continue;
+    }
+    cleanProj[k] = v;
+  }
+
+  const tracks = cleanProj.tracks || {};
   const computedDur = computeTotalDuration(tracks);
-  const duration = computedDur > 0 ? computedDur : (typeof proj.duration === 'number' ? proj.duration : 0);
+  const duration = computedDur > 0 ? computedDur : (typeof cleanProj.duration === 'number' ? cleanProj.duration : 0);
   return {
-    ...proj,
+    ...cleanProj,
     duration,
-    id: proj.id || 'proj-' + Date.now(),
-    title: proj.title || 'Untitled Project',
-    aspectRatio: proj.aspectRatio || '9:16',
-    canvasBackground: proj.canvasBackground || '#000000',
-    resolution: proj.resolution || '1080p',
-    fps: proj.fps || 30,
-    currentTime: typeof proj.currentTime === 'number' ? proj.currentTime : 0,
-    zoom: typeof proj.zoom === 'number' ? proj.zoom : 60,
+    id: cleanProj.id || 'proj-' + Date.now(),
+    title: cleanProj.title || 'Untitled Project',
+    aspectRatio: cleanProj.aspectRatio || '9:16',
+    canvasBackground: cleanProj.canvasBackground || '#000000',
+    resolution: cleanProj.resolution || '1080p',
+    fps: cleanProj.fps || 30,
+    currentTime: typeof cleanProj.currentTime === 'number' ? cleanProj.currentTime : 0,
+    zoom: typeof cleanProj.zoom === 'number' ? cleanProj.zoom : 60,
     thumbnailUrl:
-      proj.thumbnailUrl ||
+      cleanProj.thumbnailUrl ||
       tracks.video?.[0]?.thumbnail ||
       tracks.video?.[0]?.url,
-    createdAt: proj.createdAt || Date.now(),
-    updatedAt: proj.updatedAt || Date.now(),
-    assets: Array.isArray(proj.assets)
-      ? proj.assets
+    createdAt: cleanProj.createdAt || Date.now(),
+    updatedAt: cleanProj.updatedAt || Date.now(),
+    assets: Array.isArray(cleanProj.assets)
+      ? cleanProj.assets
       : [
           ...(tracks.video || []).map((v: any) => ({
             id: v.sourceMediaId || v.id,
@@ -223,7 +349,7 @@ const sanitizeProject = (proj: any): FastArtProject => {
             url: v.url,
             thumbnail: v.thumbnail,
             duration: v.duration,
-            importedAt: v.createdAt || proj.createdAt || Date.now(),
+            importedAt: v.createdAt || cleanProj.createdAt || Date.now(),
           })),
           ...(tracks.audio || []).map((a: any) => ({
             id: a.sourceMediaId || a.id,
@@ -232,7 +358,7 @@ const sanitizeProject = (proj: any): FastArtProject => {
             type: 'audio',
             url: a.url,
             duration: a.duration,
-            importedAt: a.createdAt || proj.createdAt || Date.now(),
+            importedAt: a.createdAt || cleanProj.createdAt || Date.now(),
           })),
         ].filter(
           (item, idx, arr) =>
@@ -241,17 +367,17 @@ const sanitizeProject = (proj: any): FastArtProject => {
             ) === idx
         ),
     tracks: {
-      video: Array.isArray(tracks.video) ? tracks.video : [],
-      audio: Array.isArray(tracks.audio) ? tracks.audio : [],
-      text: Array.isArray(tracks.text) ? tracks.text.filter((c: any) => !c.id?.startsWith('cap-')) : [],
+      video: Array.isArray(tracks.video) ? tracks.video.map(sanitizeClip) : [],
+      audio: Array.isArray(tracks.audio) ? tracks.audio.map(sanitizeClip) : [],
+      text: Array.isArray(tracks.text) ? tracks.text.filter((c: any) => !c.id?.startsWith('cap-')).map(sanitizeClip) : [],
       captions: Array.isArray(tracks.captions)
-        ? tracks.captions
+        ? tracks.captions.map(sanitizeClip)
         : Array.isArray(tracks.text)
-          ? tracks.text.filter((c: any) => c.id?.startsWith('cap-'))
+          ? tracks.text.filter((c: any) => c.id?.startsWith('cap-')).map(sanitizeClip)
           : [],
-      stickers: Array.isArray(tracks.stickers) ? tracks.stickers : [],
-      effects: Array.isArray(tracks.effects) ? tracks.effects : [],
-      filters: Array.isArray(tracks.filters) ? tracks.filters : [],
+      stickers: Array.isArray(tracks.stickers) ? tracks.stickers.map(sanitizeClip) : [],
+      effects: Array.isArray(tracks.effects) ? tracks.effects.map(sanitizeClip) : [],
+      filters: Array.isArray(tracks.filters) ? tracks.filters.map(sanitizeClip) : [],
     },
   };
 };
@@ -313,7 +439,7 @@ export const saveAllProjects = (projects: FastArtProject[]): void => {
   try {
     cachedProjectsList = projects;
     const sanitized = projects.map(sanitizeProject);
-    const json = JSON.stringify(sanitized);
+    const json = safeJsonStringify(sanitized);
     setStorageItem(PROJECTS_STORAGE_KEY, json);
     if (Platform.OS === 'web') {
       persistProjectsToIndexedDB(json).catch(() => {});
@@ -400,7 +526,7 @@ export const loadUploadedMedia = (): any[] => {
 
 export const saveUploadedMedia = (items: any[]): void => {
   try {
-    setStorageItem(UPLOADED_MEDIA_KEY, JSON.stringify(items));
+    setStorageItem(UPLOADED_MEDIA_KEY, safeJsonStringify(items));
   } catch (e) {}
 };
 
@@ -423,7 +549,7 @@ export const loadUploadedAudio = (): any[] => {
 
 export const saveUploadedAudio = (items: any[]): void => {
   try {
-    setStorageItem(UPLOADED_AUDIO_KEY, JSON.stringify(items));
+    setStorageItem(UPLOADED_AUDIO_KEY, safeJsonStringify(items));
   } catch (e) {}
 };
 
@@ -480,7 +606,7 @@ export const saveSettings = (settings: Partial<AppSettings>): AppSettings => {
   try {
     const current = loadSettings();
     const updated = { ...current, ...settings };
-    setStorageItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+    setStorageItem(SETTINGS_STORAGE_KEY, safeJsonStringify(updated));
     return updated;
   } catch (e) {
     return defaultSettings;
@@ -554,7 +680,7 @@ export const saveCaptionSettings = (settings: Partial<CaptionSettings>): Caption
   try {
     const current = loadCaptionSettings();
     const updated = { ...current, ...settings };
-    setStorageItem(CAPTION_SETTINGS_KEY, JSON.stringify(updated));
+    setStorageItem(CAPTION_SETTINGS_KEY, safeJsonStringify(updated));
     return updated;
   } catch (e) {
     return defaultCaptionSettings;
@@ -645,7 +771,7 @@ export const loadNotifications = (): AppNotification[] => {
 
 export const saveNotifications = (notifs: AppNotification[]): void => {
   try {
-    setStorageItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifs));
+    setStorageItem(NOTIFICATIONS_STORAGE_KEY, safeJsonStringify(notifs));
   } catch (e) {}
 };
 

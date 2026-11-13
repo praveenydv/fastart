@@ -694,8 +694,8 @@ pub fn process_modnet_alpha_into(
     if output.len() < pixel_count {
         return Err("MODNet alpha output buffer is too small".into());
     }
-    let cut = threshold.clamp(0.0, 1.0);
-    let soft = feather.clamp(0.01, 1.0);
+    let cut = if threshold <= 0.001 && feather <= 0.001 { 0.06f32 } else { threshold.clamp(0.01, 0.50) };
+    let soft = if threshold <= 0.001 && feather <= 0.001 { 0.72f32 } else { feather.clamp(0.10, 0.90) };
     let output = &mut output[..pixel_count];
 
     #[cfg(feature = "parallel")]
@@ -761,24 +761,22 @@ pub fn process_modnet_output_tensor(
         return;
     }
 
-    let use_custom_curve = threshold > 0.0 || feather > 0.0;
-    let thresh = threshold.clamp(0.0, 1.0);
-    let soft = feather.clamp(0.01, 1.0);
+    let (thresh, soft) = if threshold <= 0.001 && feather <= 0.001 {
+        (0.06f32, 0.72f32)
+    } else {
+        (threshold.clamp(0.01, 0.50), feather.clamp(0.10, 0.90))
+    };
     let inv_soft = 1.0 / soft;
 
     for i in 0..total_pixels {
         let val = raw_alpha[i];
-        let alpha = if use_custom_curve {
-            if val >= thresh + soft {
-                1.0f32
-            } else if val <= thresh {
-                0.0f32
-            } else {
-                let u = (val - thresh) * inv_soft;
-                u * u * (3.0 - 2.0 * u)
-            }
+        let alpha = if val >= thresh + soft {
+            1.0f32
+        } else if val <= thresh {
+            0.0f32
         } else {
-            val.clamp(0.0, 1.0)
+            let u = (val - thresh) * inv_soft;
+            u * u * (3.0 - 2.0 * u)
         };
 
         let a_byte = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;

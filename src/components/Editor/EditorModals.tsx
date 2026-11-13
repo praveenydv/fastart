@@ -398,7 +398,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
                 thumbnail: newThumb || videoClips[idx].thumbnail,
                 cutout: {
                   enabled: false,
-                  mode: "auto",
+                  mode: "none",
                   keyColor: "#00FF00",
                   intensity: 45,
                   shadow: 25,

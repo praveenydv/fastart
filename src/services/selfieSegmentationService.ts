@@ -16,7 +16,11 @@
 import { Buffer } from "buffer";
 import { Platform } from "react-native";
 import { Image as ExpoImage } from "expo-image";
-import { rustCoreBridge, registerMaskProvider } from "./rustCoreBridge";
+import {
+  rustCoreBridge,
+  registerMaskProvider,
+  clearCutoutLastKnownMask,
+} from "./rustCoreBridge";
 import {
   persistMasksRLE,
   loadMasksRLE,
@@ -53,6 +57,9 @@ let modnetFloatData: Float32Array | null = null;
 let modnetMaskCanvas: HTMLCanvasElement | null = null;
 let modnetMaskCtx: CanvasRenderingContext2D | null = null;
 let modnetMaskImgData: ImageData | null = null;
+let modnetLiveCanvas: HTMLCanvasElement | null = null;
+let modnetLiveCtx: CanvasRenderingContext2D | null = null;
+let liveInFlightCount = 0;
 let cutoutFrameCanvas: HTMLCanvasElement | null = null;
 let cutoutFrameCtx: CanvasRenderingContext2D | null = null;
 let cutoutStrokeCanvas: HTMLCanvasElement | null = null;
@@ -82,18 +89,20 @@ const clipFrameIndicesMap = new Map<string, number[]>();
 const storageRestoreAttempted = new Set<string>();
 export const UNIFIED_CUTOUT_SAMPLE_FPS = 15;
 
+export function getCutoutQualityFps(quality?: string, sourceFps = 30): number {
+  const norm = (quality || "best").toLowerCase();
+  if (norm === "fast" || norm === "draft" || norm === "10fps") {
+    return 10;
+  }
+  if (norm === "studio" || norm === "smooth" || norm === "30fps") {
+    return Math.min(30, Math.max(24, Math.round(sourceFps)));
+  }
+  // "best" / "full" / "60fps" / "every_frame": Full 60 FPS (or source FPS if >= 60)
+  return Math.max(60, Math.min(120, Math.round(sourceFps)));
+}
+
 function getCutoutFrameStep(sourceFps: number, quality?: string): number {
-  // Adaptive sampling cadence according to quality preference:
-  // "best" / "full": 1:1 frame-accurate (infer every single frame, locked 60 FPS silky smooth)
-  // "studio" / "balanced": ~24-30 FPS (standard video frame rate, smooth motion)
-  // "fast": ~10 FPS (quick draft / talking head / stationary subjects)
-  if (quality === "best" || quality === "high" || quality === "full") {
-    return 1;
-  }
-  if (quality === "studio" || quality === "balanced") {
-    return Math.max(1, Math.round(sourceFps / 24));
-  }
-  return Math.max(1, Math.round(sourceFps / 10));
+  return 1;
 }
 
 function getCutoutSampleFrameIndex(
@@ -110,8 +119,8 @@ function getCutoutSampleFrameIndex(
     : Math.min(sampleIndex * frameStep, sourceFrameCount - 1);
 }
 
-export function getClipBakedFps(clipId: string): number {
-  return clipMaskFpsMap.get(clipId) || 20;
+export function getClipBakedFps(clipId: string): number | null {
+  return clipMaskFpsMap.get(clipId) ?? null;
 }
 
 export function setClipBakedFps(clipId: string, fps: number): void {
@@ -157,17 +166,15 @@ function registerKey(key: string): void {
 function findNearestFrameIndex(
   clipId: string,
   targetIdx: number,
+  maxDistance = 60,
 ): number | null {
   const list = clipFrameIndicesMap.get(clipId);
   if (!list || list.length === 0) return null;
   const len = list.length;
-  // If only 1 frame has been previewed, return it so static media (photos) or single-frame previews don't flicker
+  // If only 1 frame is registered (e.g. single-frame preview), hold that frame
   if (len === 1) {
     return list[0];
   }
-  // For multi-frame baked video, clamp to start/end and binary search closest frame
-  if (targetIdx <= list[0]) return list[0];
-  if (targetIdx >= list[len - 1]) return list[len - 1];
 
   let low = 0;
   let high = len - 1;
@@ -177,30 +184,29 @@ function findNearestFrameIndex(
     if (list[mid] < targetIdx) low = mid + 1;
     else high = mid - 1;
   }
-  const d1 = Math.abs(list[high] - targetIdx);
-  const d2 = Math.abs(list[low] - targetIdx);
-  return d1 <= d2 ? list[high] : list[low];
+  const d1 = high >= 0 ? Math.abs(list[high] - targetIdx) : Infinity;
+  const d2 = low < len ? Math.abs(list[low] - targetIdx) : Infinity;
+  const nearest = d1 <= d2 ? list[high] : list[low];
+  if (Math.abs(nearest - targetIdx) <= maxDistance) {
+    return nearest;
+  }
+  return nearest;
 }
 
 // High-speed LRU canvas buffer: keeps only active frames in uncompressed canvas form
 const lruCanvasCache = new Map<string, HTMLCanvasElement>();
-const MAX_LRU_CANVASES = 64;
+const MAX_LRU_CANVASES = 256;
 const canvasPool: HTMLCanvasElement[] = [];
 
 function getPooledCanvas(w = 512, h = 512): HTMLCanvasElement {
-  let c = canvasPool.pop();
-  if (!c) {
-    c = document.createElement("canvas");
-    c.width = w;
-    c.height = h;
-  }
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
   return c;
 }
 
-function recycleCanvas(c: HTMLCanvasElement): void {
-  if (canvasPool.length < 24) {
-    canvasPool.push(c);
-  }
+function recycleCanvas(_c: HTMLCanvasElement): void {
+  // Fresh canvas instantiation avoids cross-frame mask mutation
 }
 
 function putInLRUCache(key: string, canvas: HTMLCanvasElement): void {
@@ -224,13 +230,18 @@ function putInLRUCache(key: string, canvas: HTMLCanvasElement): void {
   }
 }
 
+let rleDecompressImgData: ImageData | null = null;
+
 function decompressRLEToCanvas(rle: Uint8Array): HTMLCanvasElement | null {
   if (typeof document === "undefined") return null;
   const canvas = getPooledCanvas(512, 512);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
-  const imgData = ctx.createImageData(512, 512);
+  if (!rleDecompressImgData) {
+    rleDecompressImgData = ctx.createImageData(512, 512);
+  }
+  const imgData = rleDecompressImgData;
   // Direct Rust WASM single-pass decompression: zero JS loops, zero intermediate allocations
   try {
     rustCoreBridge.unpackAlphaRLEToRGBA(rle, imgData.data);
@@ -304,6 +315,26 @@ export function setOnMaskUpdated(cb: (() => void) | null): () => void {
   }
 }
 
+let isBackgroundExtractionActive = false;
+
+export function isCutoutProcessingActive(): boolean {
+  return isBackgroundExtractionActive;
+}
+
+export function setCutoutProcessingActive(active: boolean): void {
+  isBackgroundExtractionActive = active;
+}
+
+let liveSessionGeneration = 0;
+
+export function cancelLiveSegmentation(): void {
+  liveSessionGeneration++;
+}
+
+export function getLiveSessionGeneration(): number {
+  return liveSessionGeneration;
+}
+
 export function notifyMaskUpdated(): void {
   maskUpdateListeners.forEach((fn) => {
     try {
@@ -349,7 +380,17 @@ export function cloneClipMasks(
     }
   }
 
-  // 3. Clone FPS and frame indices metadata
+  // 3. Clone native mobile mask URIs (iOS & Android)
+  for (const [key, uri] of Array.from(nativeMaskUriCache.entries())) {
+    if (key.startsWith(`${sourceClipId}_`)) {
+      const suffix = key.substring(sourceClipId.length);
+      const targetKey = `${targetClipId}${suffix}`;
+      nativeMaskUriCache.set(targetKey, uri);
+      copiedCount++;
+    }
+  }
+
+  // 4. Clone FPS and frame indices metadata
   const fps = clipMaskFpsMap.get(sourceClipId);
   if (fps) clipMaskFpsMap.set(targetClipId, fps);
 
@@ -359,6 +400,12 @@ export function cloneClipMasks(
   const srcIndices = clipFrameIndicesMap.get(`${sourceClipId}_src`);
   if (srcIndices)
     clipFrameIndicesMap.set(`${targetClipId}_src`, [...srcIndices]);
+
+  const nativeIndices = nativeMaskFrameIndicesMap.get(sourceClipId);
+  if (nativeIndices) nativeMaskFrameIndicesMap.set(targetClipId, [...nativeIndices]);
+
+  const nativeSrcIndices = nativeMaskFrameIndicesMap.get(`${sourceClipId}_src`);
+  if (nativeSrcIndices) nativeMaskFrameIndicesMap.set(`${targetClipId}_src`, [...nativeSrcIndices]);
 
   return copiedCount > 0;
 }
@@ -381,34 +428,47 @@ function getCanvasForKey(key: string): HTMLCanvasElement | null {
   return null;
 }
 
-function lookupMaskByFrameIdx(
+function lookupSourceMask(
   id: string,
-  frameIdx: number,
+  sourceFrameIdx: number,
 ): HTMLCanvasElement | null {
   if (!id) return null;
   // 1. Exact match with _src_ prefix
-  let canvas = getCanvasForKey(`${id}_src_${frameIdx}`);
+  let canvas = getCanvasForKey(`${id}_src_${sourceFrameIdx}`);
   if (canvas) return canvas;
 
-  // 2. Exact match direct
-  canvas = getCanvasForKey(`${id}_${frameIdx}`);
-  if (canvas) return canvas;
-
-  // 3. Nearest match in _src_ indices
-  const nearestSrcIdx = findNearestFrameIndex(`${id}_src`, frameIdx);
+  // 2. Nearest match in _src_ indices (within +/- 15 frames = 0.5s)
+  const nearestSrcIdx = findNearestFrameIndex(`${id}_src`, sourceFrameIdx, 15);
   if (nearestSrcIdx !== null) {
     canvas = getCanvasForKey(`${id}_src_${nearestSrcIdx}`);
     if (canvas) return canvas;
   }
+  return null;
+}
 
-  // 4. Nearest match in direct indices
-  const nearestIdx = findNearestFrameIndex(id, frameIdx);
+function lookupClipMask(
+  id: string,
+  clipFrameIdx: number,
+): HTMLCanvasElement | null {
+  if (!id) return null;
+  // 1. Exact match direct
+  let canvas = getCanvasForKey(`${id}_${clipFrameIdx}`);
+  if (canvas) return canvas;
+
+  // 2. Nearest match in direct indices (within +/- 15 frames = 0.5s)
+  const nearestIdx = findNearestFrameIndex(id, clipFrameIdx, 15);
   if (nearestIdx !== null) {
     canvas = getCanvasForKey(`${id}_${nearestIdx}`);
     if (canvas) return canvas;
   }
-
   return null;
+}
+
+function lookupMaskByFrameIdx(
+  id: string,
+  frameIdx: number,
+): HTMLCanvasElement | null {
+  return lookupSourceMask(id, frameIdx) || lookupClipMask(id, frameIdx);
 }
 
 function getFrameMaskInternal(
@@ -417,9 +477,9 @@ function getFrameMaskInternal(
   fps?: number,
 ): HTMLCanvasElement | null {
   if (!clipId) return null;
-  const effectiveFps = fps || clipMaskFpsMap.get(clipId) || 20;
+  const effectiveFps = clipMaskFpsMap.get(clipId) || fps || 30;
   const frameIdx = Math.max(0, Math.floor(clipTime * effectiveFps));
-  return lookupMaskByFrameIdx(clipId, frameIdx);
+  return lookupClipMask(clipId, frameIdx);
 }
 
 export function getFrameMask(
@@ -428,12 +488,22 @@ export function getFrameMask(
   fps?: number,
   fallbackClipId?: string,
   sourceTime?: number,
+  isImage?: boolean,
 ): HTMLCanvasElement | null {
   if (!clipId) return null;
+
+  // Static images never change over time: frame 0 mask is valid for entire duration
+  if (isImage) {
+    const imgMask =
+      getCanvasForKey(`${clipId}_0`) ||
+      (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_0`) : null);
+    if (imgMask) return imgMask;
+  }
+
   const effectiveFps =
-    fps ||
     clipMaskFpsMap.get(clipId) ||
     (fallbackClipId ? clipMaskFpsMap.get(fallbackClipId) : null) ||
+    fps ||
     30;
 
   if (fps && fps > 0) {
@@ -449,7 +519,7 @@ export function getFrameMask(
   if (typeof window !== "undefined") {
     if (!storageRestoreAttempted.has(clipId)) {
       storageRestoreAttempted.add(clipId);
-      restoreClipMasksFromStorage(clipId)
+      restoreClipMasksFromStorage(clipId, effectiveFps)
         .then((restored) => {
           if (restored) notifyMaskUpdated();
         })
@@ -461,7 +531,7 @@ export function getFrameMask(
       !storageRestoreAttempted.has(fallbackClipId)
     ) {
       storageRestoreAttempted.add(fallbackClipId);
-      restoreClipMasksFromStorage(fallbackClipId)
+      restoreClipMasksFromStorage(fallbackClipId, effectiveFps)
         .then((restored) => {
           if (restored) notifyMaskUpdated();
         })
@@ -469,28 +539,52 @@ export function getFrameMask(
     }
   }
 
-  // 1. Priority 1: Match by sourceTime (the canonical coordinate of the source video frame)
-  // Ensures perfect synchronization regardless of playhead jumps, split cuts, or trim adjustments
+  // 1. Priority 1: Match by canonical source frame index (absolute video media time)
+  // This guarantees 100% frame-accurate synchronization across trimmed, split, reversed, or speed-adjusted clips!
   if (sourceTime !== undefined && Number.isFinite(sourceTime)) {
     const sourceFrameIdx = Math.max(0, Math.round(sourceTime * effectiveFps));
-    let canvas = lookupMaskByFrameIdx(clipId, sourceFrameIdx);
-    if (canvas) return canvas;
+    let srcCanvas = lookupSourceMask(clipId, sourceFrameIdx);
+    if (srcCanvas) return srcCanvas;
 
     if (fallbackClipId && fallbackClipId !== clipId) {
-      canvas = lookupMaskByFrameIdx(fallbackClipId, sourceFrameIdx);
-      if (canvas) return canvas;
+      srcCanvas = lookupSourceMask(fallbackClipId, sourceFrameIdx);
+      if (srcCanvas) return srcCanvas;
     }
   }
 
-  // 2. Priority 2: Match by clipTime (relative to clip start, for legacy masks or untrimmed clips)
+  // 2. Priority 2: Match by direct timeline frame index on clipId
   const clipFrameIdx = Math.max(0, Math.round(clipTime * effectiveFps));
-  let canvas = lookupMaskByFrameIdx(clipId, clipFrameIdx);
+  let canvas = lookupClipMask(clipId, clipFrameIdx);
   if (canvas) return canvas;
 
   if (fallbackClipId && fallbackClipId !== clipId) {
-    canvas = lookupMaskByFrameIdx(fallbackClipId, clipFrameIdx);
+    canvas = lookupClipMask(fallbackClipId, clipFrameIdx);
     if (canvas) return canvas;
   }
+
+  // 3. Fallback to frame 0 or any registered mask for this clip
+  const zeroMask =
+    getCanvasForKey(`${clipId}_0`) ||
+    (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_0`) : null) ||
+    getCanvasForKey(`${clipId}_src_0`) ||
+    (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_src_0`) : null);
+  if (zeroMask && clipTime <= 0.25) return zeroMask;
+
+  // 4. Continuous temporal coverage: Return closest available frame
+  const anyClipIdx = findNearestFrameIndex(clipId, clipFrameIdx, 60);
+  if (anyClipIdx !== null) {
+    const fallbackCanvas = getCanvasForKey(`${clipId}_${anyClipIdx}`);
+    if (fallbackCanvas) return fallbackCanvas;
+  }
+  if (fallbackClipId && fallbackClipId !== clipId) {
+    const anyParentIdx = findNearestFrameIndex(fallbackClipId, clipFrameIdx, 60);
+    if (anyParentIdx !== null) {
+      const fallbackParent = getCanvasForKey(`${fallbackClipId}_${anyParentIdx}`);
+      if (fallbackParent) return fallbackParent;
+    }
+  }
+
+  if (zeroMask) return zeroMask;
 
   return null;
 }
@@ -507,11 +601,21 @@ export function hasClipMasks(clipId: string): boolean {
   return false;
 }
 
-export function hasFrameMask(clipId: string, frameIdx: number): boolean {
+export function hasFrameMask(clipId: string, frameIdx: number, isSource = false): boolean {
+  if (isSource) {
+    return (
+      clipMaskRLECache.has(`${clipId}_src_${frameIdx}`) ||
+      lruCanvasCache.has(`${clipId}_src_${frameIdx}`) ||
+      nativeMaskUriCache.has(`${clipId}_src_${frameIdx}`)
+    );
+  }
   return (
     nativeMaskUriCache.has(`${clipId}_${frameIdx}`) ||
+    nativeMaskUriCache.has(`${clipId}_src_${frameIdx}`) ||
     clipMaskRLECache.has(`${clipId}_${frameIdx}`) ||
-    lruCanvasCache.has(`${clipId}_${frameIdx}`)
+    clipMaskRLECache.has(`${clipId}_src_${frameIdx}`) ||
+    lruCanvasCache.has(`${clipId}_${frameIdx}`) ||
+    lruCanvasCache.has(`${clipId}_src_${frameIdx}`)
   );
 }
 
@@ -555,7 +659,9 @@ export function updateActiveFrameMatteParams(
     }
     lastSegmentedMask = updated;
     lastSegmentedClipId = clipId;
+    if (!isCutoutProcessingActive()) {
     notifyMaskUpdated();
+  }
     return true;
   }
   return false;
@@ -564,6 +670,9 @@ export function updateActiveFrameMatteParams(
 export function getClipProcessedCount(clipId: string): number {
   const nativeCount = nativeMaskFrameIndicesMap.get(clipId)?.length ?? 0;
   if (nativeCount > 0) return nativeCount;
+  const indicesCount = clipFrameIndicesMap.get(clipId)?.length ?? 0;
+  const srcCount = clipFrameIndicesMap.get(`${clipId}_src`)?.length ?? 0;
+  if (indicesCount > 0 || srcCount > 0) return Math.max(indicesCount, srcCount);
   let count = 0;
   for (const key of clipMaskRLECache.keys()) {
     if (key.startsWith(`${clipId}_`)) count++;
@@ -571,30 +680,45 @@ export function getClipProcessedCount(clipId: string): number {
   return count;
 }
 
-export function clearClipMasks(clipId?: string): void {
-  const staleMaskUris = clipId
+export function clearClipMasks(clipId?: string, fallbackClipId?: string): void {
+  const targetIds = [clipId, fallbackClipId].filter(
+    (id): id is string => Boolean(id && typeof id === "string" && id.trim())
+  );
+
+  const staleMaskUris = targetIds.length > 0
     ? Array.from(nativeMaskUriCache.entries())
-        .filter(([key]) => key.startsWith(`${clipId}_`))
+        .filter(([key]) => targetIds.some((tid) => key.startsWith(`${tid}_`)))
         .map(([, uri]) => uri)
     : Array.from(nativeMaskUriCache.values());
-  clearNativeMaskUris(clipId);
-  if (clipId) {
-    for (const key of Array.from(clipMaskRLECache.keys())) {
-      if (key.startsWith(`${clipId}_`)) clipMaskRLECache.delete(key);
+
+  if (targetIds.length > 0) {
+    for (const tid of targetIds) {
+      clearCutoutLastKnownMask(tid);
+      clearNativeMaskUris(tid);
+      for (const key of Array.from(clipMaskRLECache.keys())) {
+        if (key.startsWith(`${tid}_`)) clipMaskRLECache.delete(key);
+      }
+      for (const key of Array.from(lruCanvasCache.keys())) {
+        if (key.startsWith(`${tid}_`)) lruCanvasCache.delete(key);
+      }
+      clipMaskFpsMap.delete(tid);
+      clipFrameIndicesMap.delete(tid);
+      clipFrameIndicesMap.delete(`${tid}_src`);
+      storageRestoreAttempted.delete(tid);
+      storageRestoredClips.delete(tid);
     }
-    for (const key of Array.from(lruCanvasCache.keys())) {
-      if (key.startsWith(`${clipId}_`)) lruCanvasCache.delete(key);
-    }
-    clipMaskFpsMap.delete(clipId);
-    clipFrameIndicesMap.delete(clipId);
   } else {
+    clearCutoutLastKnownMask();
+    clearNativeMaskUris();
     clipMaskRLECache.clear();
     lruCanvasCache.clear();
     clipMaskFpsMap.clear();
     clipFrameIndicesMap.clear();
+    storageRestoreAttempted.clear();
+    storageRestoredClips.clear();
   }
 
-  if (!clipId || lastSegmentedClipId === clipId) {
+  if (targetIds.length === 0 || targetIds.includes(lastSegmentedClipId)) {
     lastSegmentedMask = null;
     lastSegmentedClipId = "";
     lastProcessedTime = 0;
@@ -602,38 +726,84 @@ export function clearClipMasks(clipId?: string): void {
     lastProcessedSrc = "";
     hasValidHumanSubject = false;
   }
-  if (!clipId || lastModnetRawAlphaClipId === clipId) {
+  if (targetIds.length === 0 || targetIds.includes(lastModnetRawAlphaClipId)) {
     lastModnetRawAlpha = null;
     lastModnetRawAlphaClipId = "";
     lastModnetRawAlphaFrameIdx = -1;
     lastModnetRawAlphaMediaTime = -1;
   }
-  if (!clipId || _lastDecodedFrame?.key.startsWith(`${clipId}_`)) {
+  if (
+    targetIds.length === 0 ||
+    (_lastDecodedFrame && targetIds.some((tid) => _lastDecodedFrame!.key.startsWith(`${tid}_`)))
+  ) {
     _lastDecodedFrame = null;
   }
-  notifyMaskUpdated();
+  if (!isCutoutProcessingActive()) {
+    notifyMaskUpdated();
+  }
 
   for (const uri of new Set(staleMaskUris)) {
     if (uri.startsWith("blob:") && typeof URL !== "undefined") {
-      URL.revokeObjectURL(uri);
+      try {
+        URL.revokeObjectURL(uri);
+      } catch {}
     } else if (uri.startsWith("file://")) {
       const fileUri = uri.split("?")[0];
-      void import("expo-file-system")
-        .then(({ File }) => {
-          const file = new File(fileUri);
-          if (file.exists) file.delete();
-        })
+      void import("expo-file-system/legacy")
+        .then((FS) => FS.deleteAsync(fileUri, { idempotent: true }))
         .catch(() => {});
     }
   }
 
-  if (clipId) {
-    storageRestoreAttempted.delete(clipId);
-    storageRestoredClips.delete(clipId);
-    void removeMasksRLE(clipId);
+  if (targetIds.length > 0) {
+    for (const tid of targetIds) {
+      void removeMasksRLE(tid);
+      void rustCoreBridge.clearCutoutCache(tid);
+    }
   } else {
-    storageRestoreAttempted.clear();
-    storageRestoredClips.clear();
+    void removeMasksRLE();
+    void rustCoreBridge.clearCutoutCache();
+  }
+}
+
+/**
+ * Removes temporary preview frame data so single-frame test cutouts
+ * do not persist indefinitely in RAM or act as static masks across the video.
+ */
+export function clearPreviewFrame(clipId?: string, fallbackClipId?: string): void {
+  const targetIds = [clipId, fallbackClipId].filter(
+    (id): id is string => Boolean(id && typeof id === "string" && id.trim())
+  );
+  if (targetIds.length === 0 || targetIds.includes(lastSegmentedClipId)) {
+    lastSegmentedMask = null;
+    lastSegmentedClipId = "";
+    lastProcessedTime = 0;
+    lastProcessedMediaTime = -1;
+    lastProcessedSrc = "";
+    hasValidHumanSubject = false;
+  }
+  if (targetIds.length === 0 || targetIds.includes(lastModnetRawAlphaClipId)) {
+    lastModnetRawAlpha = null;
+    lastModnetRawAlphaClipId = "";
+    lastModnetRawAlphaFrameIdx = -1;
+    lastModnetRawAlphaMediaTime = -1;
+  }
+  for (const tid of targetIds) {
+    const bakedCount = getClipProcessedCount(tid);
+    if (bakedCount <= 1) {
+      for (const key of Array.from(clipMaskRLECache.keys())) {
+        if (key.startsWith(`${tid}_`)) clipMaskRLECache.delete(key);
+      }
+      for (const key of Array.from(lruCanvasCache.keys())) {
+        if (key.startsWith(`${tid}_`)) lruCanvasCache.delete(key);
+      }
+      clipFrameIndicesMap.delete(tid);
+      clipFrameIndicesMap.delete(`${tid}_src`);
+      clearNativeMaskUris(tid);
+    }
+  }
+  if (!isCutoutProcessingActive()) {
+    notifyMaskUpdated();
   }
 }
 
@@ -660,7 +830,9 @@ export async function restoreClipMasksFromStorage(
       if (fps && fps > 0) {
         clipMaskFpsMap.set(clipId, fps);
       }
-      notifyMaskUpdated();
+      if (!isCutoutProcessingActive()) {
+    notifyMaskUpdated();
+  }
       return true;
     }
   } catch {}
@@ -680,7 +852,7 @@ export async function restoreProjectCutoutMasks(
     if (Array.isArray(track)) {
       for (const c of track) {
         const cutout = c.cutout || c.transform?.cutout;
-        if (cutout && (cutout.enabled || cutout.mode)) {
+        if (cutout && cutout.enabled && cutout.mode && cutout.mode !== "none") {
           const fps = c.sourceFrameRate || c.frameRate || 30;
           clipInfos.push({ id: c.id, sourceMediaId: c.sourceMediaId, fps });
         }
@@ -718,51 +890,40 @@ export function getHumanSegmentationMask(
   clipTime?: number,
   fallbackClipId?: string,
   sourceTime?: number,
+  isImage?: boolean,
 ): HTMLCanvasElement | null {
   if (clipId) {
-    if (clipTime !== undefined) {
-      const timeMask = getFrameMask(
-        clipId,
-        clipTime,
-        undefined,
-        fallbackClipId,
-        sourceTime,
-      );
-      if (timeMask) return timeMask;
-    }
-    if (lruCanvasCache.has(`${clipId}_0`)) {
-      return lruCanvasCache.get(`${clipId}_0`)!;
-    }
-    if (clipMaskRLECache.has(`${clipId}_0`)) {
-      const rle = clipMaskRLECache.get(`${clipId}_0`)!;
-      const canvas = decompressRLEToCanvas(rle);
-      if (canvas) {
-        putInLRUCache(`${clipId}_0`, canvas);
-        return canvas;
-      }
-    }
+    const timeMask = getFrameMask(
+      clipId,
+      clipTime ?? 0,
+      undefined,
+      fallbackClipId,
+      sourceTime,
+      isImage,
+    );
+    if (timeMask) return timeMask;
   }
 
   if (fallbackClipId && fallbackClipId !== clipId) {
-    if (sourceTime !== undefined || clipTime !== undefined) {
-      const queryTime = sourceTime !== undefined ? sourceTime : clipTime!;
-      const timeMask = getFrameMask(fallbackClipId, queryTime);
-      if (timeMask) return timeMask;
-    }
-    if (lruCanvasCache.has(`${fallbackClipId}_0`)) {
-      return lruCanvasCache.get(`${fallbackClipId}_0`)!;
-    }
-    if (clipMaskRLECache.has(`${fallbackClipId}_0`)) {
-      const rle = clipMaskRLECache.get(`${fallbackClipId}_0`)!;
-      const canvas = decompressRLEToCanvas(rle);
-      if (canvas) {
-        putInLRUCache(`${fallbackClipId}_0`, canvas);
-        return canvas;
-      }
-    }
+    const queryTime = sourceTime !== undefined ? sourceTime : (clipTime ?? 0);
+    const timeMask = getFrameMask(
+      fallbackClipId,
+      queryTime,
+      undefined,
+      undefined,
+      undefined,
+      isImage,
+    );
+    if (timeMask) return timeMask;
   }
+
   if (!hasValidHumanSubject || !lastSegmentedMask) return null;
-  if (clipId && lastSegmentedClipId && clipId !== lastSegmentedClipId) {
+  if (
+    clipId &&
+    lastSegmentedClipId &&
+    clipId !== lastSegmentedClipId &&
+    fallbackClipId !== lastSegmentedClipId
+  ) {
     return null;
   }
   return lastSegmentedMask;
@@ -882,8 +1043,8 @@ async function runDirectWebInference(
  */
 export async function segmentWithStudioEngine(
   sourceMedia: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
-  threshold = 0.0,
-  feather = 0.0,
+  threshold = 0.15,
+  feather = 0.08,
   clipId?: string,
   frameIdx?: number,
 ): Promise<HTMLCanvasElement | null> {
@@ -1079,51 +1240,81 @@ export function requestHumanSegmentation(
     const currentMediaTime = isVideo
       ? mediaElement.currentTime
       : effectiveClipTime;
-    const effectiveFps = (clipId && clipMaskFpsMap.get(clipId)) || 20;
+    const effectiveFps = (clipId && clipMaskFpsMap.get(clipId)) || 30;
+
+    const sessionGen = liveSessionGeneration;
 
     // Keep live inference asynchronous and rate-limited so model work never blocks
     // the preview renderer. Native builds use their configured ONNX providers;
-    // web builds run the Rust/WASM model in a worker.
+    // web builds run the Rust/WASM model in parallel workers.
     if (isVideo && !mediaElement.paused) {
       const frameIdx = Math.max(
         0,
-        Math.floor(effectiveClipTime * effectiveFps),
+        Math.round(effectiveClipTime * effectiveFps),
       );
-      if (
-        clipId &&
-        (hasFrameMask(clipId, frameIdx) || getClipProcessedCount(clipId) > 1)
-      ) {
+      if (clipId && hasFrameMask(clipId, frameIdx)) {
+        return;
+      }
+      const maxWorkers = cutoutWorkerBridge.isSupported()
+        ? cutoutWorkerBridge.getConcurrency()
+        : 1;
+      if (liveInFlightCount >= maxWorkers) {
         return;
       }
       const now = performance.now();
-      if (now - lastProcessedTime < 33) return;
+      if (now - lastProcessedTime < 24) return;
 
-      isProcessingFrame = true;
       lastProcessedTime = now;
       lastProcessedMediaTime = currentMediaTime;
       lastSegmentedClipId = clipId || "";
 
       if (cutoutWorkerBridge.isSupported() && cutoutWorkerBridge.isReady()) {
-        segmentWithStudioEngine(mediaElement)
-          .then((matte) => {
-            if (matte && clipId) {
-              setMaskInCache(`${clipId}_${frameIdx}`, matte);
-              putInLRUCache(`${clipId}_${frameIdx}`, matte);
-              registerClipFrameIndex(clipId, frameIdx);
-              if (onMaskUpdatedCallback) {
-                try {
-                  onMaskUpdatedCallback();
-                } catch {}
+        if (!modnetLiveCanvas && typeof document !== "undefined") {
+          modnetLiveCanvas = document.createElement("canvas");
+          modnetLiveCanvas.width = 512;
+          modnetLiveCanvas.height = 512;
+          modnetLiveCtx = modnetLiveCanvas.getContext("2d", { willReadFrequently: true });
+        }
+        if (!modnetLiveCtx) return;
+        try {
+          modnetLiveCtx.drawImage(mediaElement, 0, 0, 512, 512);
+          const imgData = modnetLiveCtx.getImageData(0, 0, 512, 512);
+          liveInFlightCount++;
+          cutoutWorkerBridge
+            .runFrame(imgData.data, 0.06, 0.72, false)
+            .then((result) => {
+              liveInFlightCount = Math.max(0, liveInFlightCount - 1);
+              if (sessionGen !== liveSessionGeneration) {
+                return; // Playback stopped or playhead scrubbed: drop late frame
               }
-            }
-            isProcessingFrame = false;
-          })
-          .catch(() => {
-            isProcessingFrame = false;
-          });
+              if (result?.rle && clipId) {
+                clipMaskRLECache.set(`${clipId}_${frameIdx}`, result.rle);
+                registerClipFrameIndex(clipId, frameIdx);
+                const sourceFrameIdx = Math.max(
+                  0,
+                  Math.round(currentMediaTime * effectiveFps),
+                );
+                clipMaskRLECache.set(`${clipId}_src_${sourceFrameIdx}`, result.rle);
+                registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
+                const canvas = decompressRLEToCanvas(result.rle);
+                if (canvas) {
+                  putInLRUCache(`${clipId}_${frameIdx}`, canvas);
+                  putInLRUCache(`${clipId}_src_${sourceFrameIdx}`, canvas);
+                  lastSegmentedMask = canvas;
+                  lastSegmentedClipId = clipId;
+                  hasValidHumanSubject = true;
+                  if (!isCutoutProcessingActive()) {
+                    notifyMaskUpdated();
+                  }
+                }
+              }
+            })
+            .catch(() => {
+              liveInFlightCount = Math.max(0, liveInFlightCount - 1);
+            });
+        } catch {}
       } else {
         initStudioNeuralEngine().catch(() => {});
-        isProcessingFrame = false;
       }
       return;
     }
@@ -1132,7 +1323,11 @@ export function requestHumanSegmentation(
     const now = performance.now();
     if (now - lastProcessedTime < 150) return;
 
-    if (clipId && getClipProcessedCount(clipId) > 1) {
+    const pausedFrameIdx = Math.max(
+      0,
+      Math.floor(effectiveClipTime * effectiveFps),
+    );
+    if (clipId && hasFrameMask(clipId, pausedFrameIdx)) {
       return;
     }
 
@@ -1182,6 +1377,10 @@ export function requestHumanSegmentation(
     if (isStudioCutoutReady() || cutoutWorkerBridge.isSupported()) {
       segmentWithStudioEngine(sourceToFeed)
         .then((matte) => {
+          if (sessionGen !== liveSessionGeneration) {
+            isProcessingFrame = false;
+            return;
+          }
           if (matte) {
             lastSegmentedMask = matte;
             hasValidHumanSubject = true;
@@ -1193,17 +1392,20 @@ export function requestHumanSegmentation(
               setMaskInCache(`${clipId}_${frameIdx}`, matte);
               putInLRUCache(`${clipId}_${frameIdx}`, matte);
               registerClipFrameIndex(clipId, frameIdx);
+              const sourceFrameIdx = Math.max(
+                0,
+                Math.round(currentMediaTime * effectiveFps),
+              );
+              setMaskInCache(`${clipId}_src_${sourceFrameIdx}`, matte);
+              putInLRUCache(`${clipId}_src_${sourceFrameIdx}`, matte);
+              registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
               if (frameIdx === 0) {
                 setMaskInCache(`${clipId}_0`, matte);
                 putInLRUCache(`${clipId}_0`, matte);
                 registerClipFrameIndex(clipId, 0);
               }
             }
-            if (onMaskUpdatedCallback) {
-              try {
-                onMaskUpdatedCallback();
-              } catch {}
-            }
+            notifyMaskUpdated();
           }
           isProcessingFrame = false;
         })
@@ -1272,8 +1474,8 @@ export async function processClipStudioCutout(
   clipId: string,
   frameIdx = 0,
   frameTime = 0,
-  threshold = 0.0,
-  feather = 0.0,
+  threshold = 0.06,
+  feather = 0.72,
   mediaType?: "video" | "photo",
 ): Promise<boolean> {
   if (typeof document === "undefined") return false;
@@ -1526,9 +1728,9 @@ export async function processClipStudioCutout(
         const fps = clipMaskFpsMap.get(clipId) || 30;
         const sourceFrameIdx = Math.max(0, Math.round(frameTime * fps));
         setMaskInCache(`${clipId}_src_${sourceFrameIdx}`, cached);
-        setMaskInCache(`${clipId}_${sourceFrameIdx}`, cached);
-        if (frameIdx === 0) {
+        if (!hasFrameMask(clipId, 0) || frameIdx === 0) {
           setMaskInCache(`${clipId}_0`, cached);
+          setMaskInCache(`${clipId}_src_0`, cached);
         }
         lastSegmentedMask = cached;
         lastSegmentedClipId = clipId;
@@ -1537,7 +1739,9 @@ export async function processClipStudioCutout(
         // Player subscribers listen through setOnMaskUpdated. Calling only the
         // legacy callback leaves the freshly cached matte invisible until a
         // later render (often the user's second preview click).
-        notifyMaskUpdated();
+        if (!isCutoutProcessingActive()) {
+    notifyMaskUpdated();
+  }
         return true;
       }
     }
@@ -1559,8 +1763,8 @@ export async function processVideoFrameByFrame(
   trimIn = 0,
   speed = 1,
   fps = 30,
-  threshold = 0.0,
-  feather = 0.0,
+  threshold = 0.06,
+  feather = 0.72,
   onProgress?: (pct: number, current: number, total: number) => void,
   signal?: AbortSignal,
   quality?: string,
@@ -1572,23 +1776,20 @@ export async function processVideoFrameByFrame(
     throw new Error("The Rust cutout worker could not be initialized");
   }
 
-  const effectiveFps = Math.min(Math.max(1, fps), 240);
+  const effectiveFps = getCutoutQualityFps(quality, fps);
   clipMaskFpsMap.set(clipId, effectiveFps);
+  if (sourceMediaId) clipMaskFpsMap.set(sourceMediaId, effectiveFps);
+  setCutoutProcessingActive(true);
 
   return new Promise<number>((resolve) => {
-    const sourceFrameCount = Math.max(
+    const totalFrames = Math.max(
       1,
-      Math.ceil(duration * Math.max(0.1, speed) * effectiveFps),
+      Math.ceil(duration * effectiveFps),
     );
-    const frameStep = getCutoutFrameStep(effectiveFps, quality);
-    const totalFrames = Math.ceil(sourceFrameCount / frameStep);
+    onProgress?.(0, 0, totalFrames);
 
-    const outputIndices: number[] = [];
-    for (let i = 0; i < totalFrames; i++) {
-      outputIndices.push(
-        getCutoutSampleFrameIndex(i, totalFrames, sourceFrameCount, frameStep),
-      );
-    }
+    const effectiveSpeed = Math.max(0.05, speed || 1.0);
+    const sourceMediaDuration = duration * effectiveSpeed;
 
     const concurrency = cutoutWorkerBridge.getConcurrency();
     const maxInFlight = concurrency;
@@ -1606,9 +1807,9 @@ export async function processVideoFrameByFrame(
       v.style.position = "fixed";
       v.style.top = "-9999px";
       v.style.left = "-9999px";
-      v.style.width = "4px";
-      v.style.height = "4px";
-      v.style.opacity = "0";
+      v.style.width = "320px";
+      v.style.height = "240px";
+      v.style.opacity = "0.01";
       v.style.pointerEvents = "none";
       if (typeof document !== "undefined" && document.body) {
         document.body.appendChild(v);
@@ -1665,6 +1866,10 @@ export async function processVideoFrameByFrame(
         }
       }
       cleanup();
+      setCutoutProcessingActive(false);
+      if (!isCutoutProcessingActive()) {
+    notifyMaskUpdated();
+  }
       resolve(processedMasks);
     };
 
@@ -1676,7 +1881,6 @@ export async function processVideoFrameByFrame(
         completedSamples,
         totalFrames,
       );
-      notifyMaskUpdated();
     };
 
     const submitSampleInference = (
@@ -1741,8 +1945,15 @@ export async function processVideoFrameByFrame(
                   // 2. Canonical source frame index on clipId
                   clipMaskRLECache.set(`${clipId}_src_${sourceFrameIdx}`, rle);
                   registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
-                  clipMaskRLECache.set(`${clipId}_${sourceFrameIdx}`, rle);
-                  registerClipFrameIndex(clipId, sourceFrameIdx);
+
+                  // Pre-warm active canvas LRU cache for immediate 0ms playback
+                  if (outputFrameIdx < 200) {
+                    const prewarmed = decompressRLEToCanvas(rle);
+                    if (prewarmed) {
+                      putInLRUCache(`${clipId}_src_${sourceFrameIdx}`, prewarmed);
+                      putInLRUCache(`${clipId}_${clipFrameIdx}`, prewarmed);
+                    }
+                  }
 
                   if (clipFrameIdx === 0) {
                     clipMaskRLECache.set(`${clipId}_0`, rle);
@@ -1760,11 +1971,6 @@ export async function processVideoFrameByFrame(
                       `${parentSourceId}_src`,
                       sourceFrameIdx,
                     );
-                    clipMaskRLECache.set(
-                      `${parentSourceId}_${sourceFrameIdx}`,
-                      rle,
-                    );
-                    registerClipFrameIndex(parentSourceId, sourceFrameIdx);
                     if (
                       clipFrameIdx === 0 &&
                       !clipMaskRLECache.has(`${parentSourceId}_0`)
@@ -1806,28 +2012,33 @@ export async function processVideoFrameByFrame(
       v: HTMLVideoElement,
       targetTime: number,
     ): Promise<void> => {
-      if (Math.abs(v.currentTime - targetTime) <= 0.005) {
+      if (Math.abs(v.currentTime - targetTime) <= 0.002) {
         return Promise.resolve();
       }
       return new Promise<void>((seekDone) => {
         let resolved = false;
-        const onSeeked = () => {
+        let timeoutId: any = null;
+
+        const finish = () => {
           if (!resolved) {
             resolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
             v.removeEventListener("seeked", onSeeked);
             seekDone();
           }
         };
+
+        const onSeeked = () => {
+          finish();
+        };
+
         v.addEventListener("seeked", onSeeked, { once: true });
-        setTimeout(onSeeked, 150);
+        timeoutId = setTimeout(finish, 500);
+
         try {
-          if (typeof (v as any).fastSeek === "function") {
-            (v as any).fastSeek(targetTime);
-          } else {
-            v.currentTime = targetTime;
-          }
+          v.currentTime = targetTime;
         } catch {
-          onSeeked();
+          finish();
         }
       });
     };
@@ -1862,13 +2073,13 @@ export async function processVideoFrameByFrame(
         const sampleTimes: number[] = [];
         const sampleOutputIndices: number[] = [];
         for (let s = 0; s < totalFrames; s++) {
-          const rawIdx = outputIndices[s];
-          const outIdx = reverse
-            ? Math.max(0, sourceFrameCount - rawIdx - 1)
-            : rawIdx;
-          const targetTime = Math.max(0, trimIn + rawIdx / effectiveFps);
+          const clipFrameIdx = s;
+          const localClipTime = clipFrameIdx / effectiveFps;
+          const targetTime = reverse
+            ? Math.max(trimIn, (trimIn + sourceMediaDuration) - localClipTime * effectiveSpeed)
+            : trimIn + localClipTime * effectiveSpeed;
           sampleTimes.push(targetTime);
-          sampleOutputIndices.push(outIdx);
+          sampleOutputIndices.push(clipFrameIdx);
         }
 
         const activeSeekPromises: Promise<void>[] = [];
@@ -1943,8 +2154,8 @@ export async function renderCutoutToVideoBlob(
   trimIn = 0,
   speed = 1,
   fps = 30,
-  threshold = 0.0,
-  feather = 0.0,
+  threshold = 0.06,
+  feather = 0.72,
   bgColor = "none",
   strokeColor = "none",
   strokeWidth = 0,
@@ -2228,18 +2439,22 @@ export async function renderCutoutToVideoBlob(
  * Bounded with LRU eviction to prevent runaway memory usage during long editing sessions.
  * Used by PlayerNativeCompositor on native to render the cutout as an Image overlay.
  */
-const nativeMaskUriCache = new LruCache<string, string>(160);
+const nativeMaskUriCache = new LruCache<string, string>(10000);
 
 const nativeMaskFrameIndicesMap = new Map<string, number[]>();
 
 export function findNearestNativeMaskUri(
   clipId: string,
   frameIdx: number,
-  _maxDiffFrames?: number,
+  maxDiffFrames = 60,
 ): string | null {
   const list = nativeMaskFrameIndicesMap.get(clipId);
   if (!list || list.length === 0)
     return nativeMaskUriCache.get(`${clipId}_0`) || null;
+
+  if (list.length === 1) {
+    return nativeMaskUriCache.get(`${clipId}_${list[0]}`) || nativeMaskUriCache.get(`${clipId}_0`) || null;
+  }
 
   let low = 0;
   let high = list.length - 1;
@@ -2260,11 +2475,7 @@ export function findNearestNativeMaskUri(
     bestIdx = list[high];
     minDiff = Math.abs(list[high] - frameIdx);
   }
-  return (
-    nativeMaskUriCache.get(`${clipId}_${bestIdx}`) ||
-    nativeMaskUriCache.get(`${clipId}_0`) ||
-    null
-  );
+  return nativeMaskUriCache.get(`${clipId}_${bestIdx}`) || nativeMaskUriCache.get(`${clipId}_0`) || null;
 }
 
 export function getNativeMaskUri(
@@ -2286,6 +2497,7 @@ export function clearNativeMaskUris(clipId?: string): void {
       if (key.startsWith(`${clipId}_`)) nativeMaskUriCache.delete(key);
     }
     nativeMaskFrameIndicesMap.delete(clipId);
+    nativeMaskFrameIndicesMap.delete(`${clipId}_src`);
   } else {
     nativeMaskUriCache.clear();
     nativeMaskFrameIndicesMap.clear();
@@ -2364,6 +2576,21 @@ async function _cacheMaskAsUri(
     if (typeof document !== "undefined") {
       const blob = new Blob([pngBytes as any], { type: "image/png" });
       uri = URL.createObjectURL(blob);
+      try {
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        if (ctx) {
+          const imgData = ctx.createImageData(w, h);
+          imgData.data.set(out);
+          ctx.putImageData(imgData, 0, 0);
+          putInLRUCache(`${clipId}_${frameIdx}`, c);
+          if (frameIdx === 0 || !lruCanvasCache.has(`${clipId}_0`)) {
+            putInLRUCache(`${clipId}_0`, c);
+          }
+        }
+      } catch {}
     } else {
       if (!_cachedFS) {
         _cachedFS = await import("expo-file-system/legacy").catch(
@@ -2557,7 +2784,9 @@ export async function processFramePixelsUnified(
     lastModnetRawAlphaClipId = clipId;
     lastModnetRawAlphaFrameIdx = frameIdx;
 
+    if (!isCutoutProcessingActive()) {
     notifyMaskUpdated();
+  }
     return true;
   } catch (e) {
     console.warn("[SelfieSegmentation] processFramePixelsUnified error:", e);
@@ -2626,19 +2855,31 @@ export async function processClipUnified(
   clipId: string,
   frameIdx = 0,
   frameTime = 0,
-  threshold = 0.0,
-  feather = 0.0,
+  threshold = 0.06,
+  feather = 0.72,
   mode: "auto" | "chroma" = "auto",
   keyColor = "#00FF00",
   mediaType?: "video" | "photo",
 ): Promise<boolean> {
   const isAuto = mode === "auto";
-  const effThreshold =
-    isAuto && (threshold === 0.45 || threshold <= 0.01) ? 0.0 : threshold;
-  const effFeather =
-    isAuto && (feather === 0.25 || feather <= 0.01) ? 0.0 : feather;
+  const effThreshold = isAuto
+    ? threshold && threshold > 0.01
+      ? threshold
+      : 0.06
+    : threshold;
+  const effFeather = isAuto
+    ? feather && feather > 0.01
+      ? feather
+      : 0.72
+    : feather;
 
   if (typeof document !== "undefined") {
+    if (mode === "chroma") {
+      if (!isCutoutProcessingActive()) {
+        notifyMaskUpdated();
+      }
+      return true;
+    }
     return processClipStudioCutout(
       mediaUriOrElement,
       clipId,
@@ -2676,8 +2917,20 @@ export async function processClipUnified(
     if (maskUri) {
       setNativeMaskUri(clipId, frameIdx, maskUri);
       registerClipFrameIndex(clipId, frameIdx);
+      const fps = clipMaskFpsMap.get(clipId) || 30;
+      const sourceFrameIdx = Math.max(0, Math.round(frameTime * fps));
+      setNativeMaskUri(`${clipId}_src`, sourceFrameIdx, maskUri);
+      registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
+      if (!nativeMaskUriCache.has(`${clipId}_0`) || frameIdx === 0 || sourceFrameIdx === 0) {
+        setNativeMaskUri(clipId, 0, maskUri);
+        setNativeMaskUri(`${clipId}_src`, 0, maskUri);
+        registerClipFrameIndex(clipId, 0);
+        registerClipFrameIndex(`${clipId}_src`, 0);
+      }
       ExpoImage.prefetch(maskUri, { cachePolicy: "memory" }).catch(() => {});
-      notifyMaskUpdated();
+      if (!isCutoutProcessingActive()) {
+        notifyMaskUpdated();
+      }
       return true;
     }
     // High-reliability fallback (works seamlessly on existing APK builds)
@@ -2706,8 +2959,8 @@ export async function processVideoUnified(
   trimIn = 0,
   speed = 1,
   fps = 20,
-  threshold = 0.0,
-  feather = 0.0,
+  threshold = 0.06,
+  feather = 0.72,
   mode: "auto" | "chroma" = "auto",
   keyColor = "#00FF00",
   onProgress?: (pct: number, current: number, total: number) => void,
@@ -2717,11 +2970,17 @@ export async function processVideoUnified(
   sourceMediaId?: string,
 ): Promise<number> {
   const isAuto = mode === "auto";
-  const effThreshold =
-    isAuto && (threshold === 0.45 || threshold <= 0.01) ? 0.0 : threshold;
-  const effFeather =
-    isAuto && (feather === 0.25 || feather <= 0.01) ? 0.0 : feather;
-  let effectiveFps = Math.min(Math.max(1, fps), 240);
+  const effThreshold = isAuto
+    ? threshold && threshold > 0.01
+      ? threshold
+      : 0.06
+    : threshold;
+  const effFeather = isAuto
+    ? feather && feather > 0.01
+      ? feather
+      : 0.72
+    : feather;
+  let effectiveFps = getCutoutQualityFps(quality, fps);
   clipMaskFpsMap.set(clipId, effectiveFps);
 
   if (typeof document !== "undefined") {
@@ -2751,26 +3010,19 @@ export async function processVideoUnified(
       throw new Error(
         "Could not read source video frame timing for native cutout",
       );
-    // Cache one matte per source frame across the clip's source-time span.
-    // This keeps playback selection aligned with decoded video frames at any speed.
-    effectiveFps = frameInfo.frameRate;
+    const nativeSourceFps = frameInfo.frameRate || 30;
+    effectiveFps = getCutoutQualityFps(quality, nativeSourceFps);
     clipMaskFpsMap.set(clipId, effectiveFps);
-    const sourceFramesRemaining = Math.max(
+    if (sourceMediaId) clipMaskFpsMap.set(sourceMediaId, effectiveFps);
+    setCutoutProcessingActive(true);
+    const totalFrames = Math.max(
       1,
-      frameInfo.frameCount - Math.floor(Math.max(0, trimIn) * effectiveFps),
+      Math.ceil(duration * effectiveFps),
     );
-    const sourceFrameCount = Math.max(
-      1,
-      Math.min(
-        sourceFramesRemaining,
-        Math.ceil(duration * Math.max(0.1, speed) * effectiveFps),
-      ),
-    );
-    const frameStep = getCutoutFrameStep(effectiveFps, quality);
-    const totalFrames = Math.ceil(sourceFrameCount / frameStep);
     onProgress?.(0, 0, totalFrames);
+    const effectiveSpeed = Math.max(0.05, speed || 1.0);
+    const sourceMediaDuration = duration * effectiveSpeed;
     let processed = 0;
-    let lastNotifyAt = 0;
     let hasWarnedNativeFallback = false;
     const nativeConcurrency = 3;
     const inFlightNative = new Set<Promise<void>>();
@@ -2782,17 +3034,11 @@ export async function processVideoUnified(
         }
         if (signal?.aborted) break;
 
-        const sIdx = sampleIndex;
-        const frameIdx = getCutoutSampleFrameIndex(
-          sIdx,
-          totalFrames,
-          sourceFrameCount,
-          frameStep,
-        );
-        const sourceFrameIdx = reverse
-          ? sourceFrameCount - frameIdx - 1
-          : frameIdx;
-        const frameTime = trimIn + sourceFrameIdx / effectiveFps;
+        const frameIdx = sampleIndex;
+        const localClipTime = frameIdx / effectiveFps;
+        const frameTime = reverse
+          ? Math.max(trimIn, (trimIn + sourceMediaDuration) - localClipTime * effectiveSpeed)
+          : trimIn + localClipTime * effectiveSpeed;
 
         const task: Promise<void> = (async () => {
           let maskUri: string | null = null;
@@ -2820,12 +3066,14 @@ export async function processVideoUnified(
             setNativeMaskUri(clipId, frameIdx, maskUri);
             registerClipFrameIndex(clipId, frameIdx);
             const srcIdx = Math.max(0, Math.round(frameTime * effectiveFps));
-            setNativeMaskUri(clipId, srcIdx, maskUri);
-            registerClipFrameIndex(clipId, srcIdx);
+            setNativeMaskUri(`${clipId}_src`, srcIdx, maskUri);
+            registerClipFrameIndex(`${clipId}_src`, srcIdx);
             const parentSourceId = sourceMediaId || clipId;
-            if (parentSourceId) {
-              setNativeMaskUri(parentSourceId, srcIdx, maskUri);
-              registerClipFrameIndex(parentSourceId, srcIdx);
+            if (parentSourceId && parentSourceId !== clipId) {
+              setNativeMaskUri(parentSourceId, frameIdx, maskUri);
+              registerClipFrameIndex(parentSourceId, frameIdx);
+              setNativeMaskUri(`${parentSourceId}_src`, srcIdx, maskUri);
+              registerClipFrameIndex(`${parentSourceId}_src`, srcIdx);
             }
             ExpoImage.prefetch(maskUri, { cachePolicy: "memory" }).catch(
               () => {},
@@ -2849,12 +3097,14 @@ export async function processVideoUnified(
             const uri = getNativeMaskUri(clipId, frameIdx);
             if (uri) {
               const srcIdx = Math.max(0, Math.round(frameTime * effectiveFps));
-              setNativeMaskUri(clipId, srcIdx, uri);
-              registerClipFrameIndex(clipId, srcIdx);
+              setNativeMaskUri(`${clipId}_src`, srcIdx, uri);
+              registerClipFrameIndex(`${clipId}_src`, srcIdx);
               const parentSourceId = sourceMediaId || clipId;
-              if (parentSourceId) {
-                setNativeMaskUri(parentSourceId, srcIdx, uri);
-                registerClipFrameIndex(parentSourceId, srcIdx);
+              if (parentSourceId && parentSourceId !== clipId) {
+                setNativeMaskUri(parentSourceId, frameIdx, uri);
+                registerClipFrameIndex(parentSourceId, frameIdx);
+                setNativeMaskUri(`${parentSourceId}_src`, srcIdx, uri);
+                registerClipFrameIndex(`${parentSourceId}_src`, srcIdx);
               }
             }
           }
@@ -2864,11 +3114,7 @@ export async function processVideoUnified(
             processed,
             totalFrames,
           );
-          const now = Date.now();
-          if (now - lastNotifyAt >= 100 || processed === totalFrames) {
-            lastNotifyAt = now;
-            notifyMaskUpdated();
-          }
+          // Progressive updates happen in the background without disturbing the foreground player
         })().finally(() => {
           inFlightNative.delete(task);
         });
@@ -2877,6 +3123,10 @@ export async function processVideoUnified(
       }
       await Promise.all(inFlightNative);
     } finally {
+      setCutoutProcessingActive(false);
+      if (!isCutoutProcessingActive()) {
+    notifyMaskUpdated();
+  }
       await rustCoreBridge.releaseVideoCutoutDecoder(videoUri);
     }
     clipMaskFpsMap.set(clipId, effectiveFps);
@@ -2892,6 +3142,7 @@ registerMaskProvider({
   getHumanSegmentationMask,
   requestHumanSegmentation,
   hasClipMasks,
+  hasFrameMask,
 });
 
 // Auto-initialize when in browser environment

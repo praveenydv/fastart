@@ -75,15 +75,25 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   onCancelProcessing,
   onReset,
 }) => {
-  const enabled = config?.enabled ?? false;
-  const cutoutMode: CutoutMode = enabled ? (config?.mode ?? "auto") : "none";
+  const enabled = Boolean(config?.enabled && config?.mode && config.mode !== "none");
+  const [selectedTab, setSelectedTab] = useState<CutoutMode>(
+    config?.mode ? config.mode : (enabled ? "auto" : "none")
+  );
+
+  React.useEffect(() => {
+    if (config?.mode && config.mode !== selectedTab) {
+      if (isProcessingFrames && config.mode === "none") return;
+      setSelectedTab(config.mode);
+    }
+  }, [config?.mode, isProcessingFrames]);
+
   const keyColor = config?.keyColor ?? "#00FF00";
   const intensity = config?.intensity ?? 45;
   const shadow = config?.shadow ?? 25;
   const bgColor = config?.bgColor ?? "none";
   const strokeColor = config?.strokeColor ?? "none";
   const strokeWidth = config?.strokeWidth ?? 3;
-  const quality = config?.quality ?? "fast";
+  const quality = config?.quality ?? "best";
 
   const [finishTab, setFinishTab] = useState<"bg" | "outline">("bg");
   const [isDropperModalOpen, setIsDropperModalOpen] = useState(false);
@@ -99,17 +109,25 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   // ── Actions ───────────────────────────────────────────────────────────────
 
   const handleModeChange = (mode: CutoutMode) => {
+    setSelectedTab(mode);
     if (mode === "none") {
       onChange({
         ...config,
         enabled: false,
-        mode: config?.mode || "auto",
+        mode: "none",
+      });
+    } else if (mode === "chroma") {
+      onChange({
+        ...config,
+        enabled: true,
+        mode: "chroma",
       });
     } else {
       onChange({
         ...config,
         enabled: true,
-        mode,
+        mode: "auto",
+        quality: config.quality || "best",
       });
     }
   };
@@ -206,7 +224,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
       {/* Sleek Segmented Mode Switcher */}
       <SegmentedPillTabs
         tabs={CUTOUT_TABS}
-        activeTab={cutoutMode}
+        activeTab={selectedTab}
         onTabChange={handleModeChange}
         containerStyle={{ marginBottom: 12 }}
       />
@@ -218,7 +236,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
       ) : null}
 
       {/* Mode Content */}
-      {cutoutMode === "none" ? (
+      {selectedTab === "none" ? (
         <View style={sc.compactNoneBox}>
           <Ionicons name="shield-checkmark-outline" size={14} color="#00F2FE" />
           <Text style={sc.compactNoneText}>
@@ -227,7 +245,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
         </View>
       ) : (
         <View style={sc.sectionBox}>
-          {cutoutMode === "chroma" ? (
+          {selectedTab === "chroma" ? (
             <>
               {/* Screen Color Row */}
               <View style={sc.compactChromaHeaderRow}>
@@ -361,27 +379,19 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   {/* Status Banner when already processed */}
                   {isAlreadyProcessed && (
                     <View style={sc.processedSuccessCard}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
-                        <Ionicons name="checkmark-circle" size={15} color="#10B981" />
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                        <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                         <View style={{ flex: 1 }}>
                           <Text style={sc.processedSuccessTitle}>
                             {isVideoClip ? "Background Removed (100%)" : "AI Background Removed"}
                           </Text>
                           {isVideoClip && processedCount > 0 && (
                             <Text style={sc.processedSuccessSubtext}>
-                              {processedCount} frames baked • Locked 60 FPS
+                              {processedCount} frames baked • {quality === "fast" ? "Draft (~10 FPS)" : quality === "studio" ? "Smooth (~30 FPS)" : "Locked 60 FPS"}
                             </Text>
                           )}
                         </View>
                       </View>
-                      <TouchableOpacity
-                        onPress={isVideoClip ? onProcessVideo : (onProcessVideo || onPreviewFrame)}
-                        style={sc.reprocessChipBtn}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="refresh" size={11} color="#00F2FE" />
-                        <Text style={sc.reprocessChipText}>Reprocess</Text>
-                      </TouchableOpacity>
                     </View>
                   )}
 
@@ -531,7 +541,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
       )}
 
       {/* Background & Outline Styling */}
-      {cutoutMode !== "none" && (
+      {selectedTab !== "none" && enabled && (
         <View style={sc.stylingBox}>
           {/* Header Switcher */}
           <View style={sc.stylingHeaderRow}>

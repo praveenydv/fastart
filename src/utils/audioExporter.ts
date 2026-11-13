@@ -155,6 +155,130 @@ export function decodeWavPcm(buf: ArrayBuffer): DecodedAudio | null {
 }
 
 /**
+ * Modifies an MP4 buffer in-place to convert video 'trak' boxes to 'free' filler boxes
+ * and switches major brand to 'M4A ' so browser AudioContext.decodeAudioData decodes
+ * the AAC audio stream without being rejected due to video tracks.
+ */
+function convertMp4ToAudioOnlyBuffer(buffer: ArrayBuffer): ArrayBuffer | null {
+  try {
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    const len = bytes.length;
+    let offset = 0;
+    let moovFound = false;
+
+    while (offset + 8 <= len) {
+      let boxSize = view.getUint32(offset);
+      const boxType = String.fromCharCode(
+        bytes[offset + 4],
+        bytes[offset + 5],
+        bytes[offset + 6],
+        bytes[offset + 7],
+      );
+
+      if (boxSize === 1 && offset + 16 <= len) {
+        const hi = view.getUint32(offset + 8);
+        const lo = view.getUint32(offset + 12);
+        boxSize = hi * 4294967296 + lo;
+      } else if (boxSize === 0) {
+        boxSize = len - offset;
+      }
+
+      if (boxSize < 8 || offset + boxSize > len) break;
+
+      // In ftyp box: switch major brand to 'M4A '
+      if (boxType === 'ftyp' && offset + 12 <= len) {
+        bytes[offset + 8] = 0x4d;  // 'M'
+        bytes[offset + 9] = 0x34;  // '4'
+        bytes[offset + 10] = 0x41; // 'A'
+        bytes[offset + 11] = 0x20; // ' '
+      }
+
+      if (boxType === 'moov') {
+        moovFound = true;
+        const moovEnd = offset + boxSize;
+        let subOffset = offset + 8;
+
+        while (subOffset + 8 <= moovEnd) {
+          const subSize = view.getUint32(subOffset);
+          const subType = String.fromCharCode(
+            bytes[subOffset + 4],
+            bytes[subOffset + 5],
+            bytes[subOffset + 6],
+            bytes[subOffset + 7],
+          );
+
+          if (subSize < 8 || subOffset + subSize > moovEnd) break;
+
+          if (subType === 'trak') {
+            const trakEnd = subOffset + subSize;
+            let isVideoTrack = false;
+            let innerOffset = subOffset + 8;
+
+            while (innerOffset + 8 <= trakEnd) {
+              const inSize = view.getUint32(innerOffset);
+              const inType = String.fromCharCode(
+                bytes[innerOffset + 4],
+                bytes[innerOffset + 5],
+                bytes[innerOffset + 6],
+                bytes[innerOffset + 7],
+              );
+              if (inSize < 8 || innerOffset + inSize > trakEnd) break;
+
+              if (inType === 'mdia') {
+                const mdiaEnd = innerOffset + inSize;
+                let mdiaOffset = innerOffset + 8;
+                while (mdiaOffset + 8 <= mdiaEnd) {
+                  const mSize = view.getUint32(mdiaOffset);
+                  const mType = String.fromCharCode(
+                    bytes[mdiaOffset + 4],
+                    bytes[mdiaOffset + 5],
+                    bytes[mdiaOffset + 6],
+                    bytes[mdiaOffset + 7],
+                  );
+                  if (mSize < 8 || mdiaOffset + mSize > mdiaEnd) break;
+                  if (mType === 'hdlr' && mdiaOffset + 20 <= mdiaEnd) {
+                    const hdlrType = String.fromCharCode(
+                      bytes[mdiaOffset + 16],
+                      bytes[mdiaOffset + 17],
+                      bytes[mdiaOffset + 18],
+                      bytes[mdiaOffset + 19],
+                    );
+                    if (hdlrType === 'vide') {
+                      isVideoTrack = true;
+                    }
+                    break;
+                  }
+                  mdiaOffset += mSize;
+                }
+              }
+              innerOffset += inSize;
+            }
+
+            if (isVideoTrack) {
+              // Neutralize video trak to a 'free' filler box
+              bytes[subOffset + 4] = 0x66; // 'f'
+              bytes[subOffset + 5] = 0x72; // 'r'
+              bytes[subOffset + 6] = 0x65; // 'e'
+              bytes[subOffset + 7] = 0x65; // 'e'
+            }
+          }
+          subOffset += subSize;
+        }
+      }
+      offset += boxSize;
+    }
+
+    if (moovFound) {
+      return buffer;
+    }
+  } catch (e) {
+    console.warn('[audioExporter] convertMp4ToAudioOnlyBuffer error:', e);
+  }
+  return null;
+}
+
+/**
  * Loads and decodes audio samples from any media file (AudioClip or VideoClip)
  */
 export async function decodeMediaAudio(url: string, clipId?: string): Promise<DecodedAudio | null> {
@@ -178,7 +302,23 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
   }
 
   try {
-    const arrayBuf = await getMediaBinaryBuffer(url, clipId);
+    let arrayBuf: ArrayBuffer | null = null;
+    if (
+      typeof window !== 'undefined' &&
+      url &&
+      (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:'))
+    ) {
+      try {
+        const resp = await fetch(url);
+        if (resp.ok) {
+          arrayBuf = await resp.arrayBuffer();
+        }
+      } catch (_) {}
+    }
+
+    if (!arrayBuf || arrayBuf.byteLength === 0) {
+      arrayBuf = await getMediaBinaryBuffer(url, clipId, 1024 * 1024 * 1024);
+    }
     if (!arrayBuf || arrayBuf.byteLength === 0) return null;
 
     // 1. Web Audio API decoder (browser environment: handles MP3, WAV, AAC, M4A, FLAC, OGG, WebM)
@@ -187,16 +327,39 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
       if (AudioCtxClass) {
         try {
           const ctx = new AudioCtxClass();
-          const decoded: AudioBuffer = await new Promise((resolve, reject) => {
-            const res = ctx.decodeAudioData(
-              arrayBuf.slice(0),
-              (buf: AudioBuffer) => resolve(buf),
-              (err: any) => reject(err)
-            );
-            if (res && typeof (res as any).then === 'function') {
-              (res as any).then(resolve).catch(reject);
+          let decoded: AudioBuffer | null = null;
+
+          try {
+            decoded = await new Promise((resolve, reject) => {
+              const res = ctx.decodeAudioData(
+                arrayBuf!.slice(0),
+                (buf: AudioBuffer) => resolve(buf),
+                (err: any) => reject(err)
+              );
+              if (res && typeof (res as any).then === 'function') {
+                (res as any).then(resolve).catch(reject);
+              }
+            });
+          } catch (_) {
+            // Strategy 2: If standard decodeAudioData rejected an MP4 container with video streams,
+            // neutralize the video track to 'free' and change brand to M4A so AudioContext decodes the audio stream!
+            const audioOnlyBuf = convertMp4ToAudioOnlyBuffer(arrayBuf!.slice(0));
+            if (audioOnlyBuf) {
+              try {
+                decoded = await new Promise((resolve, reject) => {
+                  const res = ctx.decodeAudioData(
+                    audioOnlyBuf,
+                    (buf: AudioBuffer) => resolve(buf),
+                    (err: any) => reject(err)
+                  );
+                  if (res && typeof (res as any).then === 'function') {
+                    (res as any).then(resolve).catch(reject);
+                  }
+                });
+              } catch (_) {}
             }
-          });
+          }
+
           if (decoded && decoded.length > 0) {
             const left = decoded.getChannelData(0);
             const right = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : left;
@@ -296,9 +459,8 @@ export async function exportProjectAudioToWavBytes(
       v.type === 'video' &&
       !v.isEnding &&
       !v.muted &&
-      v.hasAudio !== false &&
       (v.volume === undefined || v.volume > 0) &&
-      (mediaHasAudioTrack(v) || isMediaAudioDetected(v.id || v.url) !== false)
+      mediaHasAudioTrack(v)
   );
 
   // Pre-load and decode real audio from all active clips concurrently

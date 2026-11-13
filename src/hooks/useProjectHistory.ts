@@ -155,6 +155,17 @@ export function useProjectHistory({
   const updateProjectWithHistory = useCallback((updatedProject: any) => {
     const current = projectRef.current;
     if (!current) return;
+    if (
+      !updatedProject ||
+      typeof updatedProject !== "object" ||
+      updatedProject.nativeEvent ||
+      updatedProject.target ||
+      (typeof Event !== "undefined" && updatedProject instanceof Event) ||
+      (typeof window !== "undefined" && updatedProject === window) ||
+      updatedProject.constructor?.name === "Window"
+    ) {
+      return;
+    }
     const fullProject: FastArtProject = {
       ...current,
       ...(updatedProject || {}),
@@ -195,6 +206,17 @@ export function useProjectHistory({
   const updateProjectPreview = useCallback((updatedProject: any) => {
     const current = projectRef.current;
     if (!current) return;
+    if (
+      !updatedProject ||
+      typeof updatedProject !== "object" ||
+      updatedProject.nativeEvent ||
+      updatedProject.target ||
+      (typeof Event !== "undefined" && updatedProject instanceof Event) ||
+      (typeof window !== "undefined" && updatedProject === window) ||
+      updatedProject.constructor?.name === "Window"
+    ) {
+      return;
+    }
     hasPreviewChangesRef.current = true;
     const fullProject: FastArtProject = {
       ...current,
@@ -207,7 +229,7 @@ export function useProjectHistory({
 
   // Commit changes made during a modal preview session:
   // Pushes the pre-modal snapshot to undo stack once, saves the current project, and clears redo stack.
-  const commitPreview = useCallback((snapshot: FastArtProject) => {
+  const commitPreview = useCallback((snapshot: FastArtProject, immediate: boolean = false) => {
     const current = projectRef.current;
     if (!current || current === snapshot || !hasPreviewChangesRef.current) {
       hasPreviewChangesRef.current = false;
@@ -220,16 +242,23 @@ export function useProjectHistory({
     ]);
     setRedoStack([]);
 
-    // Debounce save so modal closing is instantaneous (0ms) without stalling on disk I/O
     if (pendingSaveTimerRef.current) {
       clearTimeout(pendingSaveTimerRef.current);
-    }
-    pendingSaveTimerRef.current = setTimeout(() => {
       pendingSaveTimerRef.current = null;
+    }
+
+    if (immediate) {
       if (projectRef.current) {
         saveProject(projectRef.current);
       }
-    }, 150);
+    } else {
+      pendingSaveTimerRef.current = setTimeout(() => {
+        pendingSaveTimerRef.current = null;
+        if (projectRef.current) {
+          saveProject(projectRef.current);
+        }
+      }, 150);
+    }
   }, [projectRef]);
 
   // Discard preview changes: restores project to pre-modal snapshot without touching history stack
@@ -307,6 +336,7 @@ export function useProjectHistory({
     updateProjectPreview,
     commitPreview,
     discardPreview,
+    flushPendingSave,
     handleUndo,
     handleRedo,
     handleJumpToState,

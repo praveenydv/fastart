@@ -12,18 +12,42 @@ export function evaluateSpeedCurve(curveInput: any, progress: number): number {
   if (!curve || curve.length === 0) return 1.0;
   const clampedP = Math.max(0, Math.min(1, progress));
 
+  let res = 1.0;
   // Array of SpeedCurvePoint objects: [{ t, s }]
   if (typeof curve[0] === "object" && "t" in curve[0]) {
-    return rustCoreBridge.evaluateSpeedCurve(curve, clampedP);
+    res = rustCoreBridge.evaluateSpeedCurve(curve, clampedP);
+  } else {
+    // Array of speed multiplier numbers: [s0, s1, ...] -> evaluate in native Rust
+    const numPoints = curve.length;
+    const points = curve.map((s: number, i: number) => ({
+      t: i / Math.max(1, numPoints - 1),
+      s: Number(s) || 1.0,
+    }));
+    res = rustCoreBridge.evaluateSpeedCurve(points, clampedP);
   }
 
-  // Array of speed multiplier numbers: [s0, s1, ...] -> evaluate in native Rust
-  const numPoints = curve.length;
-  const points = curve.map((s: number, i: number) => ({
-    t: i / Math.max(1, numPoints - 1),
-    s: Number(s) || 1.0,
-  }));
-  return rustCoreBridge.evaluateSpeedCurve(points, clampedP);
+  // High-precision smoothstep fallback if Rust/WASM is unlinked or returns default
+  if (res === 1.0 && curve.length > 1) {
+    const pts = typeof curve[0] === "object" && "t" in curve[0]
+      ? curve
+      : curve.map((s: number, i: number) => ({
+          t: i / Math.max(1, curve.length - 1),
+          s: Number(s) || 1.0,
+        }));
+    if (clampedP <= pts[0].t) return pts[0].s;
+    if (clampedP >= pts[pts.length - 1].t) return pts[pts.length - 1].s;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      if (clampedP >= p1.t && clampedP <= p2.t) {
+        const segT = (clampedP - p1.t) / Math.max(0.00001, p2.t - p1.t);
+        const smoothT = segT * segT * (3 - 2 * segT);
+        return p1.s + (p2.s - p1.s) * smoothT;
+      }
+    }
+  }
+
+  return res;
 }
 
 export function applyMotionTracking(
@@ -61,6 +85,8 @@ let maskClipCanvas: HTMLCanvasElement | null = null;
 let maskClipCtx: CanvasRenderingContext2D | null = null;
 let maskShapeCanvas: HTMLCanvasElement | null = null;
 let maskShapeCtx: CanvasRenderingContext2D | null = null;
+let maskCutoutCanvas: HTMLCanvasElement | null = null;
+let maskCutoutCtx: CanvasRenderingContext2D | null = null;
 
 export function buildMaskPath(
   ctx: CanvasRenderingContext2D,
@@ -158,8 +184,19 @@ export function drawClipWithMask(
     return;
   }
 
-  const canvasW = Math.max(1, Math.ceil(dw));
-  const canvasH = Math.max(1, Math.ceil(dh));
+  let scaleX = 1;
+  let scaleY = 1;
+  try {
+    const xform = ctx.getTransform();
+    scaleX = Math.max(1, Math.hypot(xform.a, xform.b));
+    scaleY = Math.max(1, Math.hypot(xform.c, xform.d));
+  } catch {
+    scaleX = 1;
+    scaleY = 1;
+  }
+
+  const canvasW = Math.max(1, Math.ceil(dw * scaleX));
+  const canvasH = Math.max(1, Math.ceil(dh * scaleY));
 
   if (!maskClipCanvas) {
     maskClipCanvas = document.createElement("canvas");
@@ -175,7 +212,7 @@ export function drawClipWithMask(
     maskClipCanvas.height = canvasH;
   }
 
-  // 1. Draw media onto isolated maskClipCanvas
+  // 1. Draw media onto isolated maskClipCanvas at full physical export resolution
   maskClipCtx.save();
   maskClipCtx.clearRect(0, 0, canvasW, canvasH);
   maskClipCtx.imageSmoothingEnabled = true;
@@ -184,6 +221,10 @@ export function drawClipWithMask(
   maskClipCtx.globalCompositeOperation = "source-over";
 
   if (cutout && cutout.enabled) {
+    if (!maskCutoutCanvas && typeof document !== "undefined") {
+      maskCutoutCanvas = document.createElement("canvas");
+      maskCutoutCtx = maskCutoutCanvas.getContext("2d");
+    }
     drawClipWithCutout(
       maskClipCtx,
       activeMedia,
@@ -193,14 +234,14 @@ export function drawClipWithMask(
       sh,
       0,
       0,
-      dw,
-      dh,
+      canvasW,
+      canvasH,
       cutout,
-      renderCtx.offscreenCanvas,
-      renderCtx.offscreenCtx,
+      maskCutoutCanvas || renderCtx.offscreenCanvas,
+      maskCutoutCtx || renderCtx.offscreenCtx,
     );
   } else {
-    maskClipCtx.drawImage(activeMedia, sx, sy, sw, sh, 0, 0, dw, dh);
+    maskClipCtx.drawImage(activeMedia, sx, sy, sw, sh, 0, 0, canvasW, canvasH);
   }
 
   if (
@@ -210,27 +251,27 @@ export function drawClipWithMask(
   ) {
     maskClipCtx.save();
     maskClipCtx.globalAlpha = clip.smoothSlowMo === "optical_flow" ? 0.35 : 0.22;
-    maskClipCtx.drawImage(activeMedia, sx, sy, sw, sh, 1, 0, dw, dh);
+    maskClipCtx.drawImage(activeMedia, sx, sy, sw, sh, Math.ceil(scaleX), 0, canvasW, canvasH);
     maskClipCtx.restore();
   }
 
-  // 2. Prepare maskShapeCanvas
+  // 2. Prepare maskShapeCanvas at full physical export resolution
   if (!maskShapeCanvas) {
     maskShapeCanvas = document.createElement("canvas");
     maskShapeCtx = maskShapeCanvas.getContext("2d");
   }
   if (!maskShapeCanvas || !maskShapeCtx) {
-    ctx.drawImage(maskClipCanvas, -dw / 2, -dh / 2, dw, dh);
+    ctx.drawImage(maskClipCanvas, 0, 0, canvasW, canvasH, -dw / 2, -dh / 2, dw, dh);
     maskClipCtx.restore();
     return;
   }
 
   const rawFeather = Math.max(0, Math.min(100, mask.feather ?? 0));
-  const minDim = Math.min(dw, dh);
+  const minDim = Math.min(canvasW, canvasH);
   const featherPx = rawFeather > 0 ? Math.max(1, (minDim * (rawFeather / 100)) * 0.35) : 0;
   const pad = featherPx > 0 ? Math.ceil(featherPx * 3.0 + 16) : 0;
-  const shapeCanvasW = dw + pad * 2;
-  const shapeCanvasH = dh + pad * 2;
+  const shapeCanvasW = canvasW + pad * 2;
+  const shapeCanvasH = canvasH + pad * 2;
 
   if (maskShapeCanvas.width !== shapeCanvasW || maskShapeCanvas.height !== shapeCanvasH) {
     maskShapeCanvas.width = shapeCanvasW;
@@ -243,12 +284,12 @@ export function drawClipWithMask(
   maskShapeCtx.imageSmoothingQuality = "high";
   maskShapeCtx.globalCompositeOperation = "source-over";
 
-  const offsetX = (mask.x || 0) * (dw / 100);
-  const offsetY = (mask.y || 0) * (dh / 100);
+  const offsetX = (mask.x || 0) * (canvasW / 100);
+  const offsetY = (mask.y || 0) * (canvasH / 100);
   const rot = ((mask.rotation || 0) * Math.PI) / 180;
   const size = Math.max(1, mask.size ?? 50);
 
-  maskShapeCtx.translate(dw / 2 + pad + offsetX, dh / 2 + pad + offsetY);
+  maskShapeCtx.translate(canvasW / 2 + pad + offsetX, canvasH / 2 + pad + offsetY);
   maskShapeCtx.rotate(rot);
 
   if (featherPx > 0) {
@@ -263,7 +304,7 @@ export function drawClipWithMask(
     maskShapeCtx.rect(-outerExtent, -outerExtent, outerExtent * 2, outerExtent * 2);
   }
 
-  buildMaskPath(maskShapeCtx, mask.shape, size, dw, dh, mask.roundness, mask.width, mask.height);
+  buildMaskPath(maskShapeCtx, mask.shape, size, canvasW, canvasH, mask.roundness, mask.width, mask.height);
 
   maskShapeCtx.fillStyle = "#ffffff";
   maskShapeCtx.fill(mask.inverted ? "evenodd" : "nonzero");
@@ -273,14 +314,14 @@ export function drawClipWithMask(
   // 3. Composite mask onto maskClipCanvas with destination-in
   maskClipCtx.globalCompositeOperation = "destination-in";
   if (pad > 0) {
-    maskClipCtx.drawImage(maskShapeCanvas, pad, pad, dw, dh, 0, 0, dw, dh);
+    maskClipCtx.drawImage(maskShapeCanvas, pad, pad, canvasW, canvasH, 0, 0, canvasW, canvasH);
   } else {
     maskClipCtx.drawImage(maskShapeCanvas, 0, 0);
   }
   maskClipCtx.restore();
 
-  // 4. Draw final masked clip to target context
-  ctx.drawImage(maskClipCanvas, -dw / 2, -dh / 2, dw, dh);
+  // 4. Draw final masked clip to target context (mapping 1:1 physical pixels)
+  ctx.drawImage(maskClipCanvas, 0, 0, canvasW, canvasH, -dw / 2, -dh / 2, dw, dh);
 }
 
 export function applyMaskPath(
@@ -514,7 +555,7 @@ export function drawClipWithCutout(
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "medium";
+  ctx.imageSmoothingQuality = "high";
 
   const success = rustCoreBridge.renderCutout(
     ctx,

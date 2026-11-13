@@ -69,6 +69,8 @@ const PlaybackSessionSaver = React.memo(function PlaybackSessionSaver({
 
 export default function App() {
   const { route, navigate } = useAppRouter();
+  const routeRef = useRef(route);
+  routeRef.current = route;
 
   // Playback state
   const currentTime = getPlaybackTime();
@@ -258,6 +260,7 @@ export default function App() {
     updateProjectPreview,
     commitPreview,
     discardPreview,
+    flushPendingSave,
     handleUndo,
     handleRedo,
     handleJumpToState,
@@ -289,6 +292,19 @@ export default function App() {
   // Outside modals (timeline split/trim/delete/move/add): records normal undo history and saves to storage.
   const updateProjectDispatcher = useCallback(
     (updatedProject: any) => {
+      // Guard against accidental React SyntheticEvent or Window/DOM objects
+      if (
+        !updatedProject ||
+        typeof updatedProject !== "object" ||
+        updatedProject.nativeEvent ||
+        updatedProject.target ||
+        (typeof Event !== "undefined" && updatedProject instanceof Event) ||
+        (typeof window !== "undefined" && updatedProject === window) ||
+        updatedProject.constructor?.name === "Window" ||
+        !updatedProject.id
+      ) {
+        return;
+      }
       if (modalInitialSnapshotRef.current) {
         updateProjectPreview(updatedProject);
       } else {
@@ -646,13 +662,16 @@ export default function App() {
   // Immediate flush of session and project data (for refresh, close, tab hide, app background)
   const flushSessionAndProject = useCallback(() => {
     const proj = projectRef.current;
-    if (proj && routeRef.current?.screen === "editor") {
+    if (proj && proj.id) {
       // 1. If in the middle of a modal preview, commit before exiting/reloading
       if (modalInitialSnapshotRef.current) {
-        commitPreview(modalInitialSnapshotRef.current);
+        commitPreview(modalInitialSnapshotRef.current, true);
         modalInitialSnapshotRef.current = null;
       }
-      // 2. Persist exact playhead, zoom and selection
+      // 2. Flush any pending debounced history save
+      flushPendingSave();
+
+      // 3. Persist exact playhead, zoom and selection
       const curTime = currentTimeRef.current || 0;
       const curZoom = zoomRef.current || 60;
       const curSelectedClipId = selectedClipIdRef.current || null;
@@ -665,7 +684,7 @@ export default function App() {
       };
       saveLastSession(session);
 
-      // 3. Persist project state with updated currentTime & zoom
+      // 4. Persist project state with updated currentTime & zoom synchronously
       const currentProj = projectRef.current || proj;
       saveProject({
         ...currentProj,
@@ -673,7 +692,7 @@ export default function App() {
         zoom: curZoom,
       });
     }
-  }, [commitPreview]);
+  }, [commitPreview, flushPendingSave]);
 
   // Lifecycle listeners to guarantee persistence across close, refresh, background and reopen
   useEffect(() => {
@@ -766,7 +785,6 @@ export default function App() {
   const showExitConfirmModalRef = useRef(showExitConfirmModal);
   showExitConfirmModalRef.current = showExitConfirmModal;
 
-  const routeRef = useRef(route);
   routeRef.current = route;
 
   // Intercept Phone Hardware/Gesture Back Button on Android

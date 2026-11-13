@@ -12,6 +12,88 @@ import {
   AudioChunkSample,
 } from "./mp4Muxer";
 import { exportProjectAudioToWavBytes } from "../audioExporter";
+import { mediaHasAudioTrack } from "../mediaAudioDetector";
+import { evaluateSpeedCurve } from "./rendererEffects";
+
+async function seekVideoElementSafely(
+  el: HTMLVideoElement,
+  targetTime: number,
+  maxTolerance: number = 0.02
+): Promise<void> {
+  if (!el || el.error || (el as any).__seekDisabled) {
+    return;
+  }
+  if (Math.abs(el.currentTime - targetTime) <= maxTolerance) {
+    return;
+  }
+
+  // Ensure element is ready to seek (HAVE_CURRENT_DATA)
+  if (el.readyState < 2) {
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const onReady = () => {
+        if (!done) {
+          done = true;
+          el.removeEventListener("loadeddata", onReady);
+          el.removeEventListener("canplay", onReady);
+          resolve();
+        }
+      };
+      el.addEventListener("loadeddata", onReady, { once: true });
+      el.addEventListener("canplay", onReady, { once: true });
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          if (el.readyState < 1) {
+            (el as any).__seekDisabled = true;
+          }
+          resolve();
+        }
+      }, 400);
+    });
+  }
+
+  if ((el as any).__seekDisabled) return;
+
+  // If already seeking from a prior step, wait for it to land.
+  // Never interrupt an active seek with a new currentTime assignment!
+  if (el.seeking) {
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const onDone = () => {
+        if (!done) {
+          done = true;
+          el.removeEventListener("seeked", onDone);
+          resolve();
+        }
+      };
+      el.addEventListener("seeked", onDone, { once: true });
+      setTimeout(onDone, 500);
+    });
+  }
+
+  if (Math.abs(el.currentTime - targetTime) <= maxTolerance) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const onSeeked = () => {
+      if (!done) {
+        done = true;
+        el.removeEventListener("seeked", onSeeked);
+        resolve();
+      }
+    };
+    el.addEventListener("seeked", onSeeked, { once: true });
+    try {
+      el.currentTime = targetTime;
+    } catch {
+      onSeeked();
+    }
+    setTimeout(onSeeked, 600);
+  });
+}
 
 export function isWebCodecsSupported(): boolean {
   return (
@@ -43,46 +125,153 @@ export async function exportWebCodecsVideo(
   const width = exportCanvas.width;
   const height = exportCanvas.height;
 
-  // 1. Verify VideoEncoder support with High Profile Level 4.0 first (CABAC 8x8 DCT)
+  // Set export mode for highest quality filtering
+  exportRenderer.isExporting = true;
+
   const VideoEncoderClass = (window as any).VideoEncoder;
   const VideoFrameClass = (window as any).VideoFrame;
+  const AudioEncoderClass = (window as any).AudioEncoder;
+  const AudioDataClass = (window as any).AudioData;
 
-  const candidateCodecs = [
-    "avc1.640028", // High Profile Level 4.0 (highest quality, CABAC, 8x8 DCT)
-    "avc1.4D401F", // Main Profile Level 3.1
-    "avc1.42E01E", // Baseline Profile Level 3.0
-  ];
-  let selectedCodec = "avc1.42E01E";
-  for (const c of candidateCodecs) {
+  const videoClips = project.tracks?.video || [];
+  const hasVideoClips = videoClips.some((c) => c.type === "video");
+
+  const hasAudioClips =
+    Boolean(project.tracks?.audio && project.tracks.audio.some((c) => c && c.duration > 0)) ||
+    videoClips.some(
+      (c) =>
+        c &&
+        c.type === "video" &&
+        !c.isEnding &&
+        !c.muted &&
+        (c.volume === undefined || c.volume > 0) &&
+        mediaHasAudioTrack(c)
+    );
+
+  // UPFRONT AudioEncoder capability verification:
+  // If the timeline requires audio, verify that AudioEncoder supports AAC BEFORE
+  // encoding video frames. This prevents wasting minutes rendering frames only to fail at the end.
+  let isAudioEncoderAvailable = false;
+  if (
+    hasAudioClips &&
+    typeof AudioEncoderClass === "function" &&
+    typeof AudioDataClass === "function"
+  ) {
     try {
-      const sup = await VideoEncoderClass.isConfigSupported({
+      const aSupport = await AudioEncoderClass.isConfigSupported({
+        codec: "mp4a.40.2",
+        sampleRate: 44100,
+        numberOfChannels: 2,
+        bitrate: 192000,
+      });
+      isAudioEncoderAvailable = Boolean(aSupport && aSupport.supported);
+    } catch {
+      isAudioEncoderAvailable = false;
+    }
+  }
+
+  if (hasAudioClips && !isAudioEncoderAvailable) {
+    throw new Error(
+      "WebCodecs AAC AudioEncoder unsupported in this browser environment. Engaging MediaRecorder pipeline."
+    );
+  }
+
+  // Ensure all video elements are paused & muted so playback/permissions never block decoder
+  videoClips.forEach((c) => {
+    const el =
+      (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+      (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+      exportRenderer.videoElements.get(c.url);
+    if (el && el instanceof HTMLVideoElement) {
+      el.muted = true;
+      el.defaultMuted = true;
+      try {
+        el.pause();
+      } catch {}
+    }
+  });
+
+  // Dynamically determine candidate H.264 High and Main Profile codec strings based on resolution & framerate
+  // Level 5.2 (0x34) = 4K @ 60fps, Level 5.1 (0x33) = 4K @ 30fps
+  // Level 4.2 (0x2A) = 1080p @ 60fps, Level 4.1/4.0 (0x29/0x28) = 1080p @ 30fps
+  const is4K = width >= 3840 || height >= 3840 || width >= 2160 || height >= 2160;
+  const is1080p = width >= 1920 || height >= 1920 || width >= 1080 || height >= 1080;
+  const isHighFps = fps >= 50;
+
+  const candidateCodecs: string[] = [];
+  if (is4K) {
+    if (isHighFps) candidateCodecs.push("avc1.640034", "avc1.4D4034");
+    candidateCodecs.push("avc1.640033", "avc1.4D4033", "avc1.640032", "avc1.4D4032");
+  } else if (is1080p) {
+    if (isHighFps) candidateCodecs.push("avc1.64002a", "avc1.4D402a");
+    candidateCodecs.push("avc1.640029", "avc1.4D4029", "avc1.640028", "avc1.4D4028");
+  } else {
+    if (isHighFps) candidateCodecs.push("avc1.640020", "avc1.4D4020");
+    candidateCodecs.push("avc1.64001f", "avc1.4D401f", "avc1.64001e", "avc1.4D401e");
+  }
+  candidateCodecs.push("avc1.640028", "avc1.4D401F", "avc1.42E01E", "avc1.42001E");
+
+  let chosenConfig: any = null;
+  for (const c of candidateCodecs) {
+    const testConfigs = [
+      {
         codec: c,
         width,
         height,
         bitrate: videoBitsPerSecond,
         framerate: fps,
         hardwareAcceleration: "prefer-hardware",
-      });
-      if (sup && sup.supported) {
-        selectedCodec = c;
-        break;
-      }
-    } catch {}
+        latencyMode: "realtime",
+        bitrateMode: "variable",
+      },
+      {
+        codec: c,
+        width,
+        height,
+        bitrate: videoBitsPerSecond,
+        framerate: fps,
+        hardwareAcceleration: "prefer-hardware",
+      },
+      {
+        codec: c,
+        width,
+        height,
+        bitrate: videoBitsPerSecond,
+        framerate: fps,
+        latencyMode: "realtime",
+      },
+      {
+        codec: c,
+        width,
+        height,
+        bitrate: videoBitsPerSecond,
+        framerate: fps,
+      },
+    ];
+
+    for (const tc of testConfigs) {
+      try {
+        const sup = await VideoEncoderClass.isConfigSupported(tc);
+        if (sup && sup.supported) {
+          chosenConfig = sup.config || tc;
+          break;
+        }
+      } catch {}
+    }
+    if (chosenConfig) break;
   }
 
-  const config = {
-    codec: selectedCodec,
-    width,
-    height,
-    bitrate: videoBitsPerSecond,
-    framerate: fps,
-    hardwareAcceleration: "prefer-hardware",
-  };
-
-  const support = await VideoEncoderClass.isConfigSupported(config);
-  if (!support.supported) {
-    throw new Error(`WebCodecs configuration unsupported: ${selectedCodec}`);
+  if (!chosenConfig) {
+    chosenConfig = {
+      codec: "avc1.42001E",
+      width,
+      height,
+      bitrate: videoBitsPerSecond,
+      framerate: fps,
+    };
   }
+
+  const config: any = chosenConfig;
 
   const videoSamples: EncodedChunkSample[] = [];
   let avcDescription: Uint8Array | null = null;
@@ -110,8 +299,9 @@ export async function exportWebCodecsVideo(
 
   encoder.configure(config);
 
-  const totalFrames = Math.max(1, Math.ceil(duration * fps));
-  const frameIntervalSec = 1 / fps;
+  try {
+    const totalFrames = Math.max(1, Math.ceil(duration * fps));
+    const frameIntervalSec = 1 / fps;
   const frameDurationUs = Math.round(1000000 / fps);
 
   // Check if project has video clips that need time seeking
@@ -135,42 +325,37 @@ export async function exportWebCodecsVideo(
 
     const curTime = Math.min(duration, f * frameIntervalSec);
 
-    // If video elements are present, seek active clips in parallel using hardware decoders
+    // If video elements are present, seek active clips in parallel using frame-accurate seeking
     if (hasVideoClips) {
       const seekPromises: Promise<void>[] = [];
       for (const clip of videoClips) {
         if (clip.type === "video") {
           const el =
-            exportRenderer.videoElements.get(clip.url) ||
-            exportRenderer.videoElements.get(clip.id);
+            (clip.id ? exportRenderer.videoElements.get(clip.id) : null) ||
+            (clip.sourceMediaId ? exportRenderer.videoElements.get(clip.sourceMediaId) : null) ||
+            exportRenderer.videoElements.get(clip.url);
           if (el && el instanceof HTMLVideoElement) {
-            const start = clip.startTime || 0;
-            const end = start + (clip.duration || 0);
-            if (curTime >= start && curTime < end) {
-              const speed = clip.speed || 1.0;
-              const trimIn = clip.trimIn || 0;
-              const targetTime = (curTime - start) * speed + trimIn;
-              if (Math.abs(el.currentTime - targetTime) > 0.02) {
-                seekPromises.push(
-                  new Promise<void>((resolve) => {
-                    let resolved = false;
-                    const finish = () => {
-                      if (!resolved) {
-                        resolved = true;
-                        el.removeEventListener("seeked", finish);
-                        resolve();
-                      }
-                    };
-                    el.addEventListener("seeked", finish);
-                    if (typeof (el as any).fastSeek === "function") {
-                      (el as any).fastSeek(targetTime);
-                    } else {
-                      el.currentTime = targetTime;
-                    }
-                    setTimeout(finish, 20); // 20ms safety guard prevents frame pipeline stalls
-                  })
-                );
+            const clipStart = clip.startTime || 0;
+            const clipEnd = clipStart + (clip.duration || 0);
+            const trans = clip.transition;
+            const transDur = trans && trans.type && trans.type !== "none" && trans.type !== "cut" ? (trans.duration || 0.5) : 0;
+            const isInside = curTime >= clipStart && curTime <= clipEnd;
+            const isEntering = transDur > 0 && curTime >= clipStart - transDur && curTime < clipStart;
+
+            if (isInside || isEntering) {
+              const clipLocalTime = Math.max(0, curTime - clipStart);
+              let effectiveSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+              if (clip.speedCurve) {
+                effectiveSpeed = evaluateSpeedCurve(clip.speedCurve, clipLocalTime / Math.max(0.1, clip.duration || 1));
               }
+              const rawMediaTime = clip.reverse
+                ? Math.max(0, (clip.trimOut || clip.duration) - clipLocalTime * effectiveSpeed)
+                : (clip.trimIn || 0) + clipLocalTime * effectiveSpeed;
+              const targetTime = el.duration && el.duration > 0
+                ? Math.min(el.duration, Math.max(0, rawMediaTime))
+                : Math.max(0, rawMediaTime);
+
+              seekPromises.push(seekVideoElementSafely(el, targetTime, 0.02));
             }
           }
         }
@@ -209,15 +394,38 @@ export async function exportWebCodecsVideo(
     encoder.encode(frame, { keyFrame: isKeyFrame });
     frame.close();
 
-    // Responsive linear progress calculation (0% -> 90%)
+    // Hardware encoder backpressure: if encoder queue has > 12 frames,
+    // let hardware video encoder finish compressing to prevent memory growth or GPU stalls.
+    // Includes fail-safe timeout, encoder state validation, and cancellation checks to prevent 3% freeze.
+    if (encoder.encodeQueueSize > 12) {
+      let lastQueueSize = encoder.encodeQueueSize;
+      let lastDrainTime = performance.now();
+      while (encoder.encodeQueueSize > 12) {
+        if (encodeError) {
+          throw encodeError;
+        }
+        if (encoder.state !== "configured") {
+          throw new Error(`VideoEncoder closed unexpectedly: ${encoder.state}`);
+        }
+        if (options.isCancelled?.()) {
+          try { encoder.close(); } catch {}
+          throw new Error("Export cancelled");
+        }
+        const curQueue = encoder.encodeQueueSize;
+        if (curQueue < lastQueueSize) {
+          lastQueueSize = curQueue;
+          lastDrainTime = performance.now();
+        } else if (performance.now() - lastDrainTime > 5000) {
+          throw new Error("Hardware VideoEncoder queue stalled; falling back to MediaRecorder");
+        }
+        await new Promise((r) => setTimeout(r, 6));
+      }
+    }
+
+    // Responsive progress calculation & smooth cooperative event-loop yield
     if (f % 2 === 0 || f === totalFrames - 1) {
       const pct = Math.min(90, Math.floor((f / totalFrames) * 90));
       onProgress?.(pct, curTime, duration);
-    }
-
-    // High-performance cooperative scheduling:
-    // Yield every 16 frames to keep UI smooth without incurring 4ms setTimeout timer clamping
-    if (f % 16 === 0 || f === totalFrames - 1) {
       if (typeof (globalThis as any).scheduler?.yield === "function") {
         await (globalThis as any).scheduler.yield();
       } else {
@@ -227,7 +435,19 @@ export async function exportWebCodecsVideo(
   }
 
   onProgress?.(92, duration, duration);
-  await encoder.flush();
+
+  let flushTimer: any = null;
+  const flushPromise = encoder.flush();
+  const flushTimeoutPromise = new Promise((_, reject) => {
+    flushTimer = setTimeout(() => {
+      reject(new Error("VideoEncoder flush timed out"));
+    }, 15000);
+  });
+  try {
+    await Promise.race([flushPromise, flushTimeoutPromise]);
+  } finally {
+    clearTimeout(flushTimer);
+  }
   encoder.close();
 
   if (encodeError) {
@@ -236,12 +456,21 @@ export async function exportWebCodecsVideo(
 
   // 2. Encode Audio Track via AudioEncoder if supported, or mix via WAV
   const audioSamples: AudioChunkSample[] = [];
+  let audioDescription: Uint8Array | null = null;
   const AudioEncoderClass = (window as any).AudioEncoder;
   const AudioDataClass = (window as any).AudioData;
 
   const hasAudioClips =
-    (project.tracks?.audio && project.tracks.audio.length > 0) ||
-    videoClips.some((c) => !c.muted);
+    Boolean(project.tracks?.audio && project.tracks.audio.some((c) => c && c.duration > 0)) ||
+    videoClips.some(
+      (c) =>
+        c &&
+        c.type === "video" &&
+        !c.isEnding &&
+        !c.muted &&
+        (c.volume === undefined || c.volume > 0) &&
+        mediaHasAudioTrack(c)
+    );
 
   if (
     hasAudioClips &&
@@ -258,13 +487,12 @@ export async function exportWebCodecsVideo(
 
       const aSupport = await AudioEncoderClass.isConfigSupported(aConfig);
       if (aSupport.supported) {
-        let aDescription: Uint8Array | null = null;
         const aEncoder = new AudioEncoderClass({
           output: (chunk: any, meta: any) => {
             const buf = new Uint8Array(chunk.byteLength);
             chunk.copyTo(buf);
             if (meta?.decoderConfig?.description) {
-              aDescription = new Uint8Array(meta.decoderConfig.description);
+              audioDescription = new Uint8Array(meta.decoderConfig.description);
             }
             audioSamples.push({
               data: buf,
@@ -286,26 +514,26 @@ export async function exportWebCodecsVideo(
           (wavBytes.length - 44) / 2,
         );
 
-        const sampleCount = pcmData.length / 2;
-        const chunkSize = 1024; // AAC frame size
+        const sampleCount = Math.floor(pcmData.length / 2);
+        const chunkSize = 1024; // AAC-LC requires exact 1024 frame blocks
 
         for (let i = 0; i < sampleCount; i += chunkSize) {
-          const count = Math.min(chunkSize, sampleCount - i);
-          const left = new Float32Array(count);
-          const right = new Float32Array(count);
-          for (let s = 0; s < count; s++) {
+          const available = Math.min(chunkSize, sampleCount - i);
+          const left = new Float32Array(chunkSize);
+          const right = new Float32Array(chunkSize);
+          for (let s = 0; s < available; s++) {
             left[s] = pcmData[(i + s) * 2] / 32768;
             right[s] = pcmData[(i + s) * 2 + 1] / 32768;
           }
 
-          const planarData = new Float32Array(count * 2);
+          const planarData = new Float32Array(chunkSize * 2);
           planarData.set(left, 0);
-          planarData.set(right, count);
+          planarData.set(right, chunkSize);
 
           const audioData = new AudioDataClass({
             format: "f32-planar",
             sampleRate: 44100,
-            numberOfFrames: count,
+            numberOfFrames: chunkSize,
             numberOfChannels: 2,
             timestamp: Math.round((i * 1000000) / 44100),
             data: planarData,
@@ -323,6 +551,15 @@ export async function exportWebCodecsVideo(
     }
   }
 
+  // If the project has audio tracks or unmuted video clips, but WebCodecs audio encoder
+  // could not generate audio chunks, throw an error to engage high-fidelity MediaRecorder fallback
+  // with the Web Audio API audio graph (which has 100% native codec & audio support)
+  if (hasAudioClips && audioSamples.length === 0) {
+    throw new Error(
+      "WebCodecs audio encoder was unable to generate AAC samples for audio timeline. Engaging high-fidelity fallback.",
+    );
+  }
+
   onProgress?.(96, duration, duration);
 
   // 3. Fast In-Memory Zero-Copy MP4 Multiplexing directly into Blob
@@ -337,6 +574,7 @@ export async function exportWebCodecsVideo(
       audioSamples,
       audioSampleRate: 44100,
       audioChannels: 2,
+      audioDescription,
     },
     "video/mp4",
   );
@@ -354,4 +592,7 @@ export async function exportWebCodecsVideo(
     extension: "mp4",
     fileSize,
   };
+} finally {
+  exportRenderer.isExporting = false;
+}
 }

@@ -38,7 +38,7 @@ import {
   MediaSyncContext,
 } from "./renderer/rendererMediaSync";
 import { drawClip as renderClipItem, TransitionRenderState } from "./renderer/rendererClip";
-import { setOnMaskUpdated, registerMediaProvider } from "../services/selfieSegmentationService";
+import { setOnMaskUpdated, registerMediaProvider, isCutoutProcessingActive, cancelLiveSegmentation } from "../services/selfieSegmentationService";
 
 export type { ExportFormat, ExportOptions, ExportResult };
 
@@ -158,6 +158,11 @@ export class VideoRenderer {
     activeVideoRenderer = this;
 
     setOnMaskUpdated(() => {
+      // If background frame extraction is in progress, skip intermediate mask updates
+      // so the player preview stays steady without flashing or hijacking the display!
+      if (isCutoutProcessingActive()) {
+        return;
+      }
       // If video is playing, animation loop already renders at 60fps; do NOT re-trigger!
       // When paused, debounce with requestAnimationFrame to prevent recursion lockup.
       if (this.onFrameNeeded && !this.isPlaying) {
@@ -319,6 +324,7 @@ export class VideoRenderer {
 
   pauseAll() {
     this.isPlaying = false;
+    cancelLiveSegmentation();
     pauseAllMedia(this.getMediaSyncContext());
   }
 

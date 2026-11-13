@@ -193,6 +193,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
 
           const clip: AudioClip = {
             id: audioId,
+            sourceMediaId: saved.id || audioId,
             title,
             url: saved.url,
             duration: saved.duration || 10.0,

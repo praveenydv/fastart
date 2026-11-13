@@ -130,7 +130,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
             const asset = result.assets[0];
             const isVideo = asset.type === 'video';
             const mediaId = 'clip-' + Date.now();
-            const dur = asset.duration ? asset.duration / 1000 : isVideo ? 6.0 : 4.0;
+            let dur = asset.duration ? (asset.duration > 1000 ? asset.duration / 1000 : asset.duration) : isVideo ? 6.0 : 4.0;
 
             // On Mobile: Copy to app's persistent Documents/media directory
             const persistentUri = await persistNativeMediaCopy(
@@ -138,6 +138,16 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
               mediaId,
               asset.fileName
             );
+
+            if (isVideo && (Platform.OS === 'android' || Platform.OS === 'ios')) {
+              try {
+                const { rustCoreBridge } = await import('../../services/rustCoreBridge');
+                const info = await rustCoreBridge.getNativeVideoFrameInfo(persistentUri);
+                if (info && typeof info.duration === 'number' && info.duration > 0) {
+                  dur = info.duration;
+                }
+              } catch (_) {}
+            }
 
             let thumbnailUri: string | undefined = !isVideo ? persistentUri : undefined;
             if (isVideo) {

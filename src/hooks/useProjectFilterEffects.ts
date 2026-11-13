@@ -24,6 +24,7 @@ import {
   getMediaAudioDuration,
 } from "../utils/mediaAudioDetector";
 import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
+import { clearClipMasks } from "../services/selfieSegmentationService";
 
 interface UseProjectFilterEffectsParams {
   project: FastArtProject | null;
@@ -252,10 +253,31 @@ export function useProjectFilterEffects({
       const videoClips = [...(current.tracks.video || [])];
       const idx = videoClips.findIndex((c) => c.id === targetId);
       if (idx >= 0) {
-        videoClips[idx] = {
-          ...videoClips[idx],
-          cutout: cutoutConfig,
-        };
+        const nextClip = { ...videoClips[idx] };
+        if (!cutoutConfig || cutoutConfig.mode === "none") {
+          nextClip.cutout = {
+            enabled: false,
+            mode: "none",
+            keyColor: cutoutConfig?.keyColor || "#00FF00",
+            intensity: cutoutConfig?.intensity ?? 45,
+            shadow: cutoutConfig?.shadow ?? 25,
+            strokeColor: "none",
+            strokeWidth: 3,
+            bgColor: "none",
+            quality: "fast",
+          };
+          if (nextClip.transform?.cutout) {
+            nextClip.transform = { ...nextClip.transform };
+            delete nextClip.transform.cutout;
+          }
+          clearClipMasks(nextClip.id, nextClip.sourceMediaId);
+        } else {
+          nextClip.cutout = {
+            ...cutoutConfig,
+            enabled: true,
+          };
+        }
+        videoClips[idx] = nextClip;
         updateProjectWithHistory({
           ...current,
           tracks: {

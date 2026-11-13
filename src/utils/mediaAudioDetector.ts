@@ -85,6 +85,17 @@ export function setMediaHasAudio(key: string, hasAudio: boolean): void {
 }
 
 /**
+ * Remove cached audio presence for a key (useful upon media rehydration)
+ */
+export function clearMediaAudioPresence(key?: string): void {
+  if (!key) return;
+  if (mediaAudioPresenceCache.has(key)) {
+    mediaAudioPresenceCache.delete(key);
+    notifyAudioChange(key);
+  }
+}
+
+/**
  * Check if audio presence has already been determined for this key (URL or ID)
  */
 export function isMediaAudioDetected(key?: string): boolean | null {
@@ -166,14 +177,20 @@ export function mediaHasAudioTrack(clip: any): boolean {
   if (type === "photo" || raw.type === "photo") return false;
   if (raw.isEnding) return false;
 
-  // 2. Explicit flag set on clip or media
-  if (raw.hasAudio === false || clip.hasAudio === false) return false;
-  if (raw.hasAudio === true || clip.hasAudio === true) return true;
-
-  // 3. Audio track lane clips (type === "audio")
+  // 2. Audio track lane clips (type === "audio")
   if (type === "audio") {
     return Boolean(clipUrl);
   }
+
+  // 3. Check positive cached audio presence before respecting old false flags
+  const sourceMediaId = raw.sourceMediaId || clip.sourceMediaId;
+  if (clipId && isMediaAudioDetected(clipId) === true) return true;
+  if (sourceMediaId && isMediaAudioDetected(sourceMediaId) === true) return true;
+  if (clipUrl && isMediaAudioDetected(clipUrl) === true) return true;
+
+  // 4. Explicit flag set on clip or media
+  if (raw.hasAudio === false || clip.hasAudio === false) return false;
+  if (raw.hasAudio === true || clip.hasAudio === true) return true;
 
   // 4. Check file extension: photo and image formats never have audio
   if (clipUrl) {
@@ -185,10 +202,14 @@ export function mediaHasAudioTrack(clip: any): boolean {
     }
   }
 
-  // 5. Check cached audio presence by clip ID or URL
+  // 5. Check cached audio presence by clip ID, sourceMediaId, or URL
   if (clipId) {
     const byId = isMediaAudioDetected(clipId);
     if (byId !== null) return byId;
+  }
+  if (sourceMediaId && sourceMediaId !== clipId) {
+    const bySource = isMediaAudioDetected(sourceMediaId);
+    if (bySource !== null) return bySource;
   }
   if (clipUrl) {
     const byUrl = isMediaAudioDetected(clipUrl);

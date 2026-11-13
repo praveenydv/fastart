@@ -1,4 +1,5 @@
 import { VideoClip } from "../../types/project";
+import { getClipBakedFps, getCutoutQualityFps } from "../../services/selfieSegmentationService";
 import { getInterpolatedTransform, getInterpolatedMask } from "../keyframeEngine";
 import {
   applyMaskPath,
@@ -428,6 +429,11 @@ export function drawClip(
     const rawCutout = clip.cutout || clip.transform?.cutout;
     const isScrubbing = renderCtx.isScrubbing || false;
     const clipFps = clip.sourceFrameRate || clip.frameRate || 30;
+    const bakedFps =
+      rawCutout?.bakedFps ||
+      getClipBakedFps(clip.id) ||
+      (clip.sourceMediaId ? getClipBakedFps(clip.sourceMediaId) : null) ||
+      getCutoutQualityFps(rawCutout?.quality, clipFps);
     const sourceMediaTime = clip.reverse
       ? Math.max(
           0,
@@ -441,10 +447,12 @@ export function drawClip(
           ...rawCutout,
           clipId: clip.id,
           sourceMediaId: clip.sourceMediaId,
-          clipTime: elapsedClipTime,
+          clipTime: clipLocalTime,
           sourceTime: sourceMediaTime,
           isScrubbing,
-          fps: clipFps,
+          fps: bakedFps,
+          isImage: clip.type === "photo",
+          isPlaying: renderCtx.isPlaying || false,
         }
       : rawCutout;
 

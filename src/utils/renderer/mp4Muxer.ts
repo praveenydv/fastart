@@ -128,6 +128,49 @@ function createDefaultAvcC(width: number, height: number): Uint8Array {
   return avcc;
 }
 
+function createDefaultAsc(sampleRate: number, channels: number): Uint8Array {
+  const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+  let sfi = rates.indexOf(sampleRate);
+  if (sfi < 0) sfi = 4; // default 44.1kHz
+  const aot = 2; // AAC-LC
+  const ch = Math.max(1, Math.min(channels || 2, 7));
+  const b0 = (aot << 3) | ((sfi >> 1) & 0x07);
+  const b1 = ((sfi & 0x01) << 7) | (ch << 3);
+  return new Uint8Array([b0, b1]);
+}
+
+function createEsdsPayload(asc: Uint8Array): Uint8Array {
+  // ISO/IEC 14496-14 ES_Descriptor containing DecoderConfigDescriptor and AudioSpecificConfig
+  const esds = new Uint8Array(23 + asc.length);
+  const v = new DataView(esds.buffer);
+  // version (1 byte = 0) + flags (3 bytes = 0)
+  esds[4] = 0x03; // ES_Descriptor tag
+  esds[5] = 17 + asc.length; // ES_Descriptor length
+  v.setUint16(6, 1); // ES_ID = 1
+  esds[8] = 0x00; // streamPriority = 0
+  // DecoderConfigDescriptor
+  esds[9] = 0x04; // tag = 0x04
+  esds[10] = 12 + asc.length; // length
+  esds[11] = 0x40; // objectTypeIndication = Audio ISO/IEC 14496-3 (AAC)
+  esds[12] = 0x15; // streamType = Audio (5 << 2 | 1)
+  // bufferSizeDB (3 bytes = 0x00, 0x03, 0x00)
+  esds[13] = 0x00;
+  esds[14] = 0x03;
+  esds[15] = 0x00;
+  v.setUint32(16, 256000); // maxBitrate (256 kbps)
+  v.setUint32(20, 192000); // avgBitrate (192 kbps)
+  // DecoderSpecificInfo tag
+  esds[24] = 0x05; // tag = 0x05
+  esds[25] = asc.length;
+  esds.set(asc, 26);
+  // SLConfigDescriptor tag
+  const slOffset = 26 + asc.length;
+  esds[slOffset] = 0x06;
+  esds[slOffset + 1] = 0x01;
+  esds[slOffset + 2] = 0x02; // predefined = 2
+  return esds;
+}
+
 export function buildMp4Writer(options: Mp4MuxOptions): Mp4Writer {
   const {
     width,
@@ -431,19 +474,15 @@ export function buildMp4Writer(options: Mp4MuxOptions): Mp4Writer {
     const smhdBox = w.box("smhd", new Uint8Array(8));
 
     // Audio stsd -> mp4a -> esds
-    const esdsPayload = audioDescription || new Uint8Array([
-      0, 0, 0, 0, // version + flags
-      0x03, 0x19, // ES_Descriptor tag + len
-      0x00, 0x01, 0x00, // ES_ID = 1, priority = 0
-      0x04, 0x11, // DecoderConfigDescriptor tag + len
-      0x40, 0x15, // objectTypeIndication = Audio ISO/IEC 14496-3, streamType = Audio
-      0x00, 0x00, 0x00, // bufferSizeDB (3 bytes)
-      0x00, 0x01, 0xf4, 0x00, // maxBitrate = 128kbps
-      0x00, 0x01, 0xf4, 0x00, // avgBitrate = 128kbps
-      0x05, 0x02, // DecSpecificInfoTag + len
-      0x12, 0x10, // AudioSpecificConfig: AAC-LC, 44.1kHz, 2 channels
-      0x06, 0x01, 0x02, // SLConfigDescriptor
-    ]);
+    let esdsPayload: Uint8Array;
+    if (audioDescription && audioDescription.length > 10) {
+      esdsPayload = audioDescription;
+    } else {
+      const asc = (audioDescription && audioDescription.length > 0)
+        ? audioDescription
+        : createDefaultAsc(audioSampleRate, audioChannels);
+      esdsPayload = createEsdsPayload(asc);
+    }
     const esdsBox = w.box("esds", esdsPayload);
 
     const mp4aPayload = new Uint8Array(28 + esdsBox.length);
@@ -451,7 +490,7 @@ export function buildMp4Writer(options: Mp4MuxOptions): Mp4Writer {
     mp4aView.setUint16(6, 1); // data_reference_index = 1
     mp4aView.setUint16(16, audioChannels);
     mp4aView.setUint16(18, 16); // 16-bit
-    mp4aView.setUint32(24, audioSampleRate << 16);
+    mp4aView.setUint32(24, Math.round(audioSampleRate * 65536));
     mp4aPayload.set(esdsBox, 28);
     const mp4aBox = w.box("mp4a", mp4aPayload);
 

@@ -179,6 +179,11 @@ class FastArtRustModule : Module() {
             }
         }
 
+        AsyncFunction("clearCutoutCache") { clipId: String? ->
+            clearCutoutDirectoryFiles(clipId)
+            true
+        }
+
         AsyncFunction("segmentFrameRgba") Coroutine { rgbaBase64: String, width: Int, height: Int, threshold: Double, feather: Double ->
             if (!isLoaded) throw Exception("Rust native library not loaded")
             if (width <= 0 || height <= 0) throw Exception("Invalid RGBA frame dimensions")
@@ -301,6 +306,21 @@ class FastArtRustModule : Module() {
             directory.mkdirs()
         }
         return directory
+    }
+
+    private fun clearCutoutDirectoryFiles(clipId: String?) {
+        val context = appContext.reactContext ?: return
+        val directory = File(context.cacheDir, "cutout")
+        if (!directory.exists() || !directory.isDirectory) return
+        val safeClipId = clipId?.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        val files = directory.listFiles() ?: return
+        for (file in files) {
+            if (safeClipId.isNullOrBlank() || file.name.startsWith("${safeClipId}_") || file.name.startsWith("${safeClipId}.")) {
+                try {
+                    file.delete()
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun unwrapOnnxValue(value: Any?): OnnxValue? {

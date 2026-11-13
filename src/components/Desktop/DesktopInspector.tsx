@@ -305,7 +305,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
   };
 
   const currentMask = selectedClip.mask || transform.mask || { shape: 'none', size: 60, feather: 0 };
-  const currentCutout: CutoutConfig = selectedClip.cutout || { enabled: false, mode: 'chroma', keyColor: '#00FF00', intensity: 45, shadow: 25 };
+  const currentCutout: CutoutConfig = selectedClip.cutout || { enabled: false, mode: 'none', keyColor: '#00FF00', intensity: 45, shadow: 25 };
 
   return (
     <View style={[styles.container, width !== undefined && { width }, style]}>

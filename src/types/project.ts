@@ -28,8 +28,9 @@ export interface MaskKeyframePoint {
 
 export interface CutoutConfig {
   enabled: boolean;
-  mode: 'chroma' | 'auto';
+  mode: 'chroma' | 'auto' | 'none';
   quality?: 'fast' | 'studio' | 'best'; // High-performance unified single-quality neural matting
+  bakedFps?: number;
   keyColor: string; // e.g. '#00FF00', '#0000FF'
   intensity: number; // 0..100 (similarity tolerance)
   shadow: number; // 0..100 (edge smoothness/feather)
@@ -454,8 +455,50 @@ export const createDefaultProject = (title = 'New Project'): FastArtProject => (
 });
 
 export const computeTotalDuration = (tracks?: ProjectTracks | null): number => {
-  let maxDur = 0;
   if (!tracks) return 0;
+  let videoMax = 0;
+  if (Array.isArray(tracks.video) && tracks.video.length > 0) {
+    tracks.video.forEach((clip: any) => {
+      const dur =
+        typeof clip.duration === 'number' && clip.duration > 0
+          ? clip.duration
+          : typeof clip.mediaDuration === 'number' && clip.mediaDuration > 0
+            ? clip.mediaDuration
+            : 0;
+      const end = (clip.startTime || 0) + dur;
+      if (end > videoMax) videoMax = end;
+    });
+  }
+
+  // Also include text, captions, stickers, and effects so overlays near or at the end are never chopped
+  let visualMax = videoMax;
+  const visualTracks = [tracks.text, tracks.captions, tracks.stickers, tracks.effects];
+  visualTracks.forEach((trackList) => {
+    if (Array.isArray(trackList)) {
+      trackList.forEach((clip: any) => {
+        const end = (clip.startTime || 0) + (clip.duration || 0);
+        if (end > visualMax) visualMax = end;
+      });
+    }
+  });
+
+  if (visualMax > 0) {
+    // If audio tracks end within a slight margin (<= 1.5s ring-out), include it.
+    // Otherwise anchor to visualMax to prevent a long background song from inflating video duration.
+    let audioMax = 0;
+    if (Array.isArray(tracks.audio)) {
+      tracks.audio.forEach((clip: any) => {
+        const end = (clip.startTime || 0) + (clip.duration || 0);
+        if (end > audioMax) audioMax = end;
+      });
+    }
+    if (audioMax > visualMax && audioMax <= visualMax + 1.5) {
+      return audioMax;
+    }
+    return visualMax;
+  }
+
+  let maxDur = 0;
   Object.values(tracks).forEach((trackList) => {
     if (Array.isArray(trackList)) {
       trackList.forEach((clip: any) => {

@@ -99,6 +99,7 @@ export default function AudioModal({
 
             const audioClip: AudioClip = {
               id: 'clip-a-' + Date.now(),
+              sourceMediaId: saved.id || trackId,
               title: fileName,
               artist: 'Device Audio',
               duration: validDuration,
@@ -147,7 +148,7 @@ export default function AudioModal({
           });
           if (!result.canceled && result.assets?.[0]) {
             const asset = result.assets[0];
-            const dur = asset.duration ? asset.duration / 1000 : 15.0;
+            const dur = asset.duration ? (asset.duration > 1000 ? asset.duration / 1000 : asset.duration) : 15.0;
             const fileName = asset.fileName || 'Imported Audio';
             const trackId = 'user-audio-' + Date.now();
 
@@ -254,7 +255,7 @@ export default function AudioModal({
                                 title: asset.title || asset.name || "Audio Clip",
                                 url: asset.url,
                                 startTime: 0,
-                                duration: asset.duration || 5,
+                                duration: asset.duration ? (asset.duration > 1000 ? asset.duration / 1000 : asset.duration) : 5,
                                 volume: 1.0,
                                 fadeIn: 0,
                                 fadeOut: 0,
@@ -287,7 +288,7 @@ export default function AudioModal({
                           title: asset.title || asset.name || "Audio Clip",
                           url: asset.url,
                           startTime: 0,
-                          duration: asset.duration || 5,
+                          duration: asset.duration ? (asset.duration > 1000 ? asset.duration / 1000 : asset.duration) : 5,
                           volume: 1.0,
                           fadeIn: 0,
                           fadeOut: 0,

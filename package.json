@@ -45,6 +45,7 @@
     "android": "npm run build:rust:android && expo run:android",
     "ios": "npm run build:rust:ios && expo run:ios",
     "web": "npm run build:wasm && expo start --web",
+    "export:web": "npm run build:wasm && expo export -p web",
     "build:wasm": "cargo build --manifest-path rust/Cargo.toml --target wasm32-unknown-unknown --release --package fastart_wasm --package fastart_cutout_wasm && mkdir -p assets/wasm public/wasm && cp rust/target/wasm32-unknown-unknown/release/fastart_wasm.wasm assets/wasm/fastart_wasm.wasm && cp rust/target/wasm32-unknown-unknown/release/fastart_wasm.wasm public/wasm/fastart_wasm.wasm && cp rust/target/wasm32-unknown-unknown/release/fastart_cutout_wasm.wasm public/wasm/fastart_cutout_wasm.wasm && node scripts/copy-ort-webgpu.js",
     "build:rust": "cargo build --manifest-path rust/Cargo.toml --release",
     "build:rust:android": "sh scripts/build-rust-android.sh",

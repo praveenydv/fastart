@@ -65,18 +65,20 @@ pub fn prepare_modnet_row(
 }
 
 pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u8> {
-    let use_curve = threshold > 0.0 || feather > 0.0;
-    let threshold = threshold.clamp(0.0, 1.0);
-    let softness = feather.clamp(0.01, 1.0);
-    let inv_softness = 1.0 / softness;
+    let (thresh, soft) = if threshold <= 0.001 && feather <= 0.001 {
+        (0.06f32, 0.72f32)
+    } else {
+        (threshold.clamp(0.01, 0.50), feather.clamp(0.10, 0.90))
+    };
+    let inv_softness = 1.0 / soft;
     let mut encoded = Vec::with_capacity(alpha.len() / 8);
     let Some((&first, rest)) = alpha.split_first() else {
         return encoded;
     };
-    let mut current = alpha_to_byte(first, use_curve, threshold, softness, inv_softness);
+    let mut current = alpha_to_byte(first, true, thresh, soft, inv_softness);
     let mut count = 1usize;
     for &value in rest {
-        let byte = alpha_to_byte(value, use_curve, threshold, softness, inv_softness);
+        let byte = alpha_to_byte(value, true, thresh, soft, inv_softness);
         if byte == current && count < 255 {
             count += 1;
         } else {
@@ -133,7 +135,14 @@ fn alpha_to_byte(
             (u * u * (3.0 - 2.0 * u) * 255.0) as i32
         }
     } else {
-        (value * 255.0) as i32
+        if value <= 0.06 {
+            0
+        } else if value >= 0.78 {
+            255
+        } else {
+            let u = (value - 0.06) / 0.72;
+            (u * u * (3.0 - 2.0 * u) * 255.0) as i32
+        }
     };
     byte.clamp(0, 255) as u8
 }

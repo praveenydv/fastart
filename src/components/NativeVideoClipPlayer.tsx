@@ -242,10 +242,8 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
         wasPlayingRef.current = isPlaying && isInside;
         // Stay paused and hold pre-warmed frame
         player.pause();
-        const isWithinPauseGracePeriod = !isPlaying && now - pauseTimestampRef.current < 250;
-        // If not actively playing and outside the pause settling window, seek to target frame.
-        // During active playback when clip reaches its cut (isRecent), do not re-seek — preserve rendered final frame!
-        if (!isPlaying && !isWithinPauseGracePeriod && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
+        // If not actively playing, seek to target frame
+        if (!isPlaying && Math.abs(lastSeekTargetRef.current - curTarget) > 0.03) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
@@ -257,7 +255,6 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
   useEffect(() => {
     if (!player || hasError || isPlaying) return;
     const now = Date.now();
-    if (now - pauseTimestampRef.current < 250) return;
 
     const diff = Math.abs(lastSeekTargetRef.current - targetMediaTime);
     if (diff <= 0.03) return;

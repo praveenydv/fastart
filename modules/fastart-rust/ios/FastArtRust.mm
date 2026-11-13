@@ -263,6 +263,29 @@ RCT_EXPORT_METHOD(processVideoFrameNative:(NSString *)videoUri clipId:(NSString 
   });
 }
 
+RCT_EXPORT_METHOD(clearCutoutCache:(NSString *)clipId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    NSString *cutoutDir = [NSTemporaryDirectory() stringByAppendingPathComponent:@"fastart-cutout"];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if ([fm fileExistsAtPath:cutoutDir]) {
+      if (!clipId || clipId.length == 0) {
+        [fm removeItemAtPath:cutoutDir error:nil];
+        [fm createDirectoryAtPath:cutoutDir withIntermediateDirectories:YES attributes:nil error:nil];
+      } else {
+        NSString *safeId = [[clipId componentsSeparatedByCharactersInSet:[[NSCharacterSet alphanumericCharacterSet] invertedSet]] componentsJoinedByString:@"_"];
+        NSString *prefix = [NSString stringWithFormat:@"%@_", safeId];
+        NSArray *files = [fm contentsOfDirectoryAtPath:cutoutDir error:nil];
+        for (NSString *file in files) {
+          if ([file hasPrefix:prefix] || [file hasPrefix:safeId]) {
+            [fm removeItemAtPath:[cutoutDir stringByAppendingPathComponent:file] error:nil];
+          }
+        }
+      }
+    }
+    resolve(@(YES));
+  });
+}
+
 RCT_EXPORT_METHOD(getVideoFrameInfo:(NSString *)videoUri resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
     NSURL *url = [NSURL URLWithString:videoUri];

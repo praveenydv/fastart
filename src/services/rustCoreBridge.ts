@@ -15,18 +15,33 @@ export interface MaskProvider {
     fps?: number,
     fallbackClipId?: string,
     sourceTime?: number,
+    isImage?: boolean,
   ) => HTMLCanvasElement | null;
   getHumanSegmentationMask: (
     clipId?: string,
     clipTime?: number,
     fallbackClipId?: string,
     sourceTime?: number,
+    isImage?: boolean,
   ) => HTMLCanvasElement | null;
   requestHumanSegmentation: (mediaElement: any, clipId?: string, clipTime?: number) => void;
   hasClipMasks?: (clipId: string) => boolean;
+  hasFrameMask?: (clipId: string, frameIdx: number, isSource?: boolean) => boolean;
 }
 
 let activeMaskProvider: MaskProvider | null = null;
+const clipLastKnownMaskMap = new Map<string, HTMLCanvasElement>();
+const clipLastKnownMaskTimeMap = new Map<string, number>();
+
+export function clearCutoutLastKnownMask(clipId?: string): void {
+  if (clipId) {
+    clipLastKnownMaskMap.delete(clipId);
+    clipLastKnownMaskTimeMap.delete(clipId);
+  } else {
+    clipLastKnownMaskMap.clear();
+    clipLastKnownMaskTimeMap.clear();
+  }
+}
 
 export function registerMaskProvider(provider: MaskProvider): void {
   activeMaskProvider = provider;
@@ -579,6 +594,18 @@ class RustCoreBridgeService {
     } catch (error) {
       console.warn("[RustCoreBridge] Could not release native video decoder:", error);
     }
+  }
+
+  public async clearCutoutCache(clipId?: string): Promise<boolean> {
+    if (Platform.OS !== "web" && typeof FastArtRust?.clearCutoutCache === "function") {
+      try {
+        await FastArtRust.clearCutoutCache(clipId || "");
+        return true;
+      } catch (error) {
+        console.warn("[RustCoreBridge] Could not clear native cutout cache:", error);
+      }
+    }
+    return false;
   }
 
   public async sampleVideoPixel(
@@ -1501,6 +1528,7 @@ class RustCoreBridgeService {
 
   /**
    * Synchronous WASM chroma keying for browser canvas rendering.
+   * Includes high-precision Rec. 709 Hermite fallback if WASM is initializing.
    */
   public processChromaCutout(
     pixels: Uint8ClampedArray,
@@ -1511,52 +1539,92 @@ class RustCoreBridgeService {
     feather: number,
     despill = true
   ): boolean {
+    const hex = keyHex.startsWith("#") ? keyHex.slice(1) : keyHex;
+    const rKey = parseInt(hex.slice(0, 2), 16) || 0;
+    const gKey = parseInt(hex.slice(2, 4), 16) || 0;
+    const bKey = parseInt(hex.slice(4, 6), 16) || 0;
+
     const inst = this.wasmInstance;
-    if (!inst) {
-      throw new Error("Synchronous chroma cutout requires the Rust WASM backend");
+    if (inst && typeof inst.fastart_process_chroma_c === "function") {
+      try {
+        const totalBytes = width * height * 4;
+        const isScratchpad = typeof inst.fastart_get_scratchpad === "function";
+        const pixelsPtr = isScratchpad
+          ? inst.fastart_get_scratchpad!(totalBytes)
+          : inst.fastart_alloc(totalBytes);
+        if (pixelsPtr) {
+          // Copy input pixels to WebAssembly linear memory
+          new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes).set(pixels);
+
+          // Execute optimized Rust SIMD/parallel chroma pipeline
+          inst.fastart_process_chroma_c(
+            pixelsPtr,
+            width,
+            height,
+            rKey,
+            gKey,
+            bKey,
+            threshold,
+            feather,
+            despill ? 1 : 0
+          );
+
+          // Read back processed pixels with despilled RGB and smooth Hermite alpha
+          pixels.set(new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes));
+
+          if (!isScratchpad) {
+            inst.fastart_dealloc(pixelsPtr, totalBytes);
+          }
+          return true;
+        }
+      } catch (err) {
+        // Fall back to pure JS implementation below
+      }
     }
 
-    try {
-      const hex = keyHex.startsWith("#") ? keyHex.slice(1) : keyHex;
-      const rKey = parseInt(hex.slice(0, 2), 16) || 0;
-      const gKey = parseInt(hex.slice(2, 4), 16) || 0;
-      const bKey = parseInt(hex.slice(4, 6), 16) || 0;
+    // High-performance Rec. 709 perceptual color distance + smooth Hermite S-curve + edge despill
+    const th = Math.max(0.01, threshold);
+    const fth = Math.max(0.001, feather);
+    const thSq = th * th;
+    const fthEnd = th + fth;
+    const fthEndSq = fthEnd * fthEnd;
+    const invFth = 1 / fth;
+    const totalPixels = width * height;
 
-      const totalBytes = width * height * 4;
-      const isScratchpad = typeof inst.fastart_get_scratchpad === "function";
-      const pixelsPtr = isScratchpad
-        ? inst.fastart_get_scratchpad!(totalBytes)
-        : inst.fastart_alloc(totalBytes);
-      if (!pixelsPtr) {
-        throw new Error("Rust WASM could not allocate chroma cutout memory");
+    for (let i = 0; i < totalPixels; i++) {
+      const idx = i * 4;
+      const r = pixels[idx];
+      const g = pixels[idx + 1];
+      const b = pixels[idx + 2];
+
+      // Rec. 709 normalized perceptual color difference
+      const dr = (r - rKey) * 0.2126;
+      const dg = (g - gKey) * 0.7152;
+      const db = (b - bKey) * 0.0722;
+      const distSq = (dr * dr + dg * dg + db * db) / (255 * 255);
+
+      if (distSq <= thSq) {
+        pixels[idx + 3] = 0;
+      } else if (distSq < fthEndSq) {
+        const d = Math.sqrt(distSq);
+        const t = (d - th) * invFth;
+        const alphaFactor = t * t * (3 - 2 * t);
+        pixels[idx + 3] = Math.round(pixels[idx + 3] * Math.max(0, Math.min(1, alphaFactor)));
+        if (despill) {
+          if (gKey > rKey && gKey > bKey) {
+            const maxRb = Math.max(r, b);
+            if (pixels[idx + 1] > maxRb) pixels[idx + 1] = maxRb;
+          } else if (bKey > rKey && bKey > gKey) {
+            const maxRg = Math.max(r, g);
+            if (pixels[idx + 2] > maxRg) pixels[idx + 2] = maxRg;
+          } else if (rKey > gKey && rKey > bKey) {
+            const maxGb = Math.max(g, b);
+            if (pixels[idx] > maxGb) pixels[idx] = maxGb;
+          }
+        }
       }
-
-      // Copy input pixels to WebAssembly linear memory
-      new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes).set(pixels);
-
-      // Execute optimized Rust SIMD/parallel chroma pipeline
-      inst.fastart_process_chroma_c(
-        pixelsPtr,
-        width,
-        height,
-        rKey,
-        gKey,
-        bKey,
-        threshold,
-        feather,
-        despill ? 1 : 0
-      );
-
-      // Read back processed pixels with despilled RGB and smooth Hermite alpha
-      pixels.set(new Uint8Array(inst.memory.buffer, pixelsPtr, totalBytes));
-
-      if (!isScratchpad) {
-        inst.fastart_dealloc(pixelsPtr, totalBytes);
-      }
-      return true;
-    } catch (err) {
-      throw new Error(`Rust WASM chroma cutout failed: ${String(err)}`);
     }
+    return true;
   }
 
   /** Runs a cutout pixel buffer through the active native Rust or WASM backend. */
@@ -1936,15 +2004,25 @@ class RustCoreBridgeService {
 
     try {
       const isScrubbing = (options as any).isScrubbing === true;
-      const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+      let currentScaleX = 1;
+      let currentScaleY = 1;
+      try {
+        const xform = ctx.getTransform();
+        currentScaleX = Math.max(1, Math.hypot(xform.a, xform.b));
+        currentScaleY = Math.max(1, Math.hypot(xform.c, xform.d));
+      } catch {
+        const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+        currentScaleX = dpr;
+        currentScaleY = dpr;
+      }
+
       // During timeline scrubbing, downscale offscreen buffer to preview resolution (max 480x270).
-      // This cuts pixel volume by 4x to 16x (8.3MB down to ~500KB), reducing Rust chroma/mask processing to <0.2ms.
-      // In final use (scrubbing settled/paused, or final export), render at full crisp 1080p/4K resolution.
-      const targetMaxW = isScrubbing ? 480 : 1920;
-      const targetMaxH = isScrubbing ? 270 : 1080;
-      const scaleMultiplier = isScrubbing ? 0.5 : dpr;
-      const procW = Math.min(targetMaxW, Math.max(16, Math.floor(Math.abs(dw * scaleMultiplier))));
-      const procH = Math.min(targetMaxH, Math.max(16, Math.floor(Math.abs(dh * scaleMultiplier))));
+      // In final use (scrubbing settled/paused, or final export), render at full crisp 1080p/4K resolution (up to 3840).
+      const maxDim = isScrubbing ? 480 : 3840;
+      const targetProcW = Math.round(Math.abs(dw) * (isScrubbing ? 0.5 : currentScaleX));
+      const targetProcH = Math.round(Math.abs(dh) * (isScrubbing ? 0.5 : currentScaleY));
+      const procW = Math.max(16, Math.min(maxDim, targetProcW));
+      const procH = Math.max(16, Math.min(maxDim, targetProcH));
 
       if (offCanvas.width !== procW || offCanvas.height !== procH) {
         offCanvas.width = procW;
@@ -1957,39 +2035,108 @@ class RustCoreBridgeService {
       const isAuto = options.mode === "auto";
 
       if (isAuto) {
-        // Derive frame time: prioritize exact local clipTime from timeline, fallback to video element currentTime
+        const isVideoElement =
+          media instanceof HTMLVideoElement &&
+          !media.seeking &&
+          media.readyState >= 2 &&
+          Number.isFinite(media.currentTime) &&
+          media.currentTime >= 0;
+
+        const isPlaying = Boolean((options as any).isPlaying);
+        const fallbackId = (options as any).sourceMediaId;
+        const sourceTime = (options as any).sourceTime;
+
+        // Ground truth: When actively playing and video element is ready, lock to media.currentTime
+        // to eliminate browser clock jitter. When paused, scrubbing, or seeking, lock to sourceTime.
+        const effectiveSourceTime =
+          isVideoElement && isPlaying
+            ? media.currentTime
+            : sourceTime !== undefined && Number.isFinite(sourceTime)
+            ? sourceTime
+            : media instanceof HTMLVideoElement && media.currentTime > 0
+            ? media.currentTime
+            : 0;
+
         const actualClipTime =
           options.clipTime !== undefined
             ? Math.max(0, options.clipTime)
-            : media instanceof HTMLVideoElement && !media.seeking
-            ? Math.max(0, media.currentTime)
-            : 0;
+            : effectiveSourceTime;
 
-        const fallbackId = (options as any).sourceMediaId;
-        const sourceTime = (options as any).sourceTime;
-        const effectiveSourceTime =
-          media instanceof HTMLVideoElement && !media.seeking && media.currentTime > 0
-            ? media.currentTime
-            : sourceTime;
         const clipFps = (options as any).fps || (options as any).sourceFrameRate;
+        const isImage =
+          Boolean((options as any).isImage) ||
+          (typeof HTMLImageElement !== "undefined" && media instanceof HTMLImageElement);
+
         let humanMask =
           options.clipId && activeMaskProvider
-            ? activeMaskProvider.getFrameMask(options.clipId, actualClipTime, clipFps, fallbackId, effectiveSourceTime)
+            ? activeMaskProvider.getFrameMask(options.clipId, actualClipTime, clipFps, fallbackId, effectiveSourceTime, isImage)
             : null;
 
         if (!humanMask && fallbackId && activeMaskProvider) {
-          humanMask = activeMaskProvider.getFrameMask(fallbackId, actualClipTime, clipFps, undefined, effectiveSourceTime);
+          humanMask = activeMaskProvider.getFrameMask(fallbackId, actualClipTime, clipFps, undefined, effectiveSourceTime, isImage);
         }
 
         if (!humanMask && activeMaskProvider) {
-          humanMask = activeMaskProvider.getHumanSegmentationMask(options.clipId, actualClipTime, fallbackId, sourceTime);
+          humanMask = activeMaskProvider.getHumanSegmentationMask(options.clipId, actualClipTime, fallbackId, effectiveSourceTime, isImage);
           if (!humanMask && fallbackId) {
-            humanMask = activeMaskProvider.getHumanSegmentationMask(fallbackId, sourceTime !== undefined ? sourceTime : actualClipTime);
+            humanMask = activeMaskProvider.getHumanSegmentationMask(fallbackId, effectiveSourceTime, undefined, undefined, isImage);
           }
-          // Do not queue heavy async inferences during rapid scrubbing; nearest cached mask ensures 60fps!
-          if (!isScrubbing && activeMaskProvider.requestHumanSegmentation) {
-            activeMaskProvider.requestHumanSegmentation(media as any, options.clipId, actualClipTime);
+        }
+
+        const effectiveFps = clipFps || 30;
+        const currentSrcFrameIdx = Math.max(0, Math.round(effectiveSourceTime * effectiveFps));
+        const effectiveId = options.clipId || fallbackId;
+        const hasExactMask =
+          effectiveId && activeMaskProvider?.hasFrameMask
+            ? activeMaskProvider.hasFrameMask(effectiveId, currentSrcFrameIdx, true)
+            : false;
+        const hasBakedMasks =
+          Boolean(options.clipId && activeMaskProvider?.hasClipMasks?.(options.clipId)) ||
+          Boolean(fallbackId && activeMaskProvider?.hasClipMasks?.(fallbackId));
+
+        if (humanMask) {
+          if (options.clipId) {
+            clipLastKnownMaskMap.set(options.clipId, humanMask);
+            clipLastKnownMaskTimeMap.set(options.clipId, effectiveSourceTime);
           }
+          if (fallbackId) {
+            clipLastKnownMaskMap.set(fallbackId, humanMask);
+            clipLastKnownMaskTimeMap.set(fallbackId, effectiveSourceTime);
+          }
+        } else {
+          // Continuous temporal hold: smoothly bridge frame gaps without flashing raw background
+          const held =
+            (options.clipId ? clipLastKnownMaskMap.get(options.clipId) : null) ||
+            (fallbackId ? clipLastKnownMaskMap.get(fallbackId) : null);
+          if (held) {
+            humanMask = held;
+          }
+        }
+
+        if (!humanMask && activeMaskProvider) {
+          // Anchor start of clip or photo to frame 0 or any available mask for this clip
+          const clipHasMasks =
+            Boolean(options.clipId && activeMaskProvider.hasClipMasks?.(options.clipId)) ||
+            Boolean(fallbackId && activeMaskProvider.hasClipMasks?.(fallbackId));
+          if (clipHasMasks) {
+            humanMask =
+              (options.clipId ? activeMaskProvider.getFrameMask(options.clipId, 0, clipFps, fallbackId, 0, isImage) : null) ||
+              (fallbackId ? activeMaskProvider.getFrameMask(fallbackId, 0, clipFps, undefined, 0, isImage) : null);
+            if (humanMask) {
+              if (options.clipId) clipLastKnownMaskMap.set(options.clipId, humanMask);
+              if (fallbackId) clipLastKnownMaskMap.set(fallbackId, humanMask);
+            }
+          }
+        }
+
+        // Stream inference for unbaked frames during both playback and paused inspection
+        if (
+          !hasBakedMasks &&
+          !hasExactMask &&
+          !isScrubbing &&
+          activeMaskProvider?.requestHumanSegmentation
+        ) {
+          activeMaskProvider.requestHumanSegmentation(media as any, options.clipId, actualClipTime);
         }
 
         if (humanMask) {

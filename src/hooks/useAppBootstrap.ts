@@ -22,6 +22,31 @@ import {
   AppNotification,
   initNativeStorageAsync,
 } from "../utils/storage";
+import { setMediaHasAudio } from "../utils/mediaAudioDetector";
+
+const refreshProjectAudioPresence = (proj: any) => {
+  if (!proj || !proj.tracks) return;
+  (proj.tracks.video || []).forEach((v: any) => {
+    if (v.url && v.type !== "photo" && !v.isEnding) {
+      if (v.hasAudio === false) {
+        delete v.hasAudio;
+      }
+      setMediaHasAudio(v.url, true);
+      if (v.id) setMediaHasAudio(v.id, true);
+      if (v.sourceMediaId) setMediaHasAudio(v.sourceMediaId, true);
+    }
+  });
+  (proj.tracks.audio || []).forEach((a: any) => {
+    if (a.url) {
+      if (a.hasAudio === false) {
+        delete a.hasAudio;
+      }
+      setMediaHasAudio(a.url, true);
+      if (a.id) setMediaHasAudio(a.id, true);
+      if (a.sourceMediaId) setMediaHasAudio(a.sourceMediaId, true);
+    }
+  });
+};
 
 interface UseAppBootstrapParams {
   route: any;
@@ -104,11 +129,15 @@ export function useAppBootstrap({
               matched.title = "Project 1";
             }
             setProject(matched);
+            refreshProjectAudioPresence(matched);
             restoreProjectCutoutMasks(matched).catch(() => {});
             rehydrateProjectMedia(matched).then((hydrated: any) => {
               if (isMounted && hydrated) {
                 setProject(hydrated);
-                saveProject(hydrated);
+                refreshProjectAudioPresence(hydrated);
+                if (hydrated !== matched) {
+                  saveProject(hydrated);
+                }
                 restoreProjectCutoutMasks(hydrated).catch(() => {});
               }
             });
@@ -207,11 +236,15 @@ export function useAppBootstrap({
     const target = projects.find((p) => p.id === id);
     if (target) {
       setProject(target);
+      refreshProjectAudioPresence(target);
       restoreProjectCutoutMasks(target).catch(() => {});
       rehydrateProjectMedia(target).then((hydrated: any) => {
         if (hydrated) {
           setProject(hydrated);
-          saveProject(hydrated);
+          refreshProjectAudioPresence(hydrated);
+          if (hydrated !== target) {
+            saveProject(hydrated);
+          }
           restoreProjectCutoutMasks(hydrated).catch(() => {});
         }
       });
@@ -433,11 +466,15 @@ export function useAppBootstrap({
       if (matched) {
         if (!project || project.id !== matched.id) {
           setProject(matched);
+          refreshProjectAudioPresence(matched);
           restoreProjectCutoutMasks(matched).catch(() => {});
           rehydrateProjectMedia(matched).then((hydrated: any) => {
             if (hydrated) {
               setProject(hydrated);
-              saveProject(hydrated);
+              refreshProjectAudioPresence(hydrated);
+              if (hydrated !== matched) {
+                saveProject(hydrated);
+              }
               restoreProjectCutoutMasks(hydrated).catch(() => {});
             }
           });
