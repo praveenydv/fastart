@@ -29,7 +29,7 @@ function verifySelfieModel() {
 
 function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    https.get(url, { agent: false }, (res) => {
       // Follow HTTP 301 / 302 / 307 redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
@@ -142,5 +142,14 @@ async function main() {
   }
 }
 
-main();
+main()
+  .then(() => {
+    console.log('[download-models] All models ready.');
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('[download-models] Error:', err);
+    process.exit(1);
+  });
+
 

@@ -91,14 +91,15 @@ export const UNIFIED_CUTOUT_SAMPLE_FPS = 15;
 
 export function getCutoutQualityFps(quality?: string, sourceFps = 30): number {
   const norm = (quality || "best").toLowerCase();
+  const baseSourceFps = Number.isFinite(sourceFps) && sourceFps > 0 ? Math.round(sourceFps) : 30;
   if (norm === "fast" || norm === "draft" || norm === "10fps") {
-    return 10;
+    return Math.min(10, baseSourceFps);
   }
   if (norm === "studio" || norm === "smooth" || norm === "30fps") {
-    return Math.min(30, Math.max(24, Math.round(sourceFps)));
+    return Math.min(30, Math.max(15, baseSourceFps));
   }
-  // "best" / "full" / "60fps" / "every_frame": Full 60 FPS (or source FPS if >= 60)
-  return Math.max(60, Math.min(120, Math.round(sourceFps)));
+  // "best" / "full" / "60fps" / "every_frame": Every source frame (full native source frame rate)
+  return Math.max(1, Math.min(120, baseSourceFps));
 }
 
 function getCutoutFrameStep(sourceFps: number, quality?: string): number {
@@ -171,9 +172,9 @@ function findNearestFrameIndex(
   const list = clipFrameIndicesMap.get(clipId);
   if (!list || list.length === 0) return null;
   const len = list.length;
-  // If only 1 frame is registered (e.g. single-frame preview), hold that frame
+  // If only 1 frame is registered (e.g. single-frame preview), only hold if within temporal proximity
   if (len === 1) {
-    return list[0];
+    return Math.abs(list[0] - targetIdx) <= maxDistance ? list[0] : null;
   }
 
   let low = 0;
@@ -190,7 +191,7 @@ function findNearestFrameIndex(
   if (Math.abs(nearest - targetIdx) <= maxDistance) {
     return nearest;
   }
-  return nearest;
+  return null;
 }
 
 // High-speed LRU canvas buffer: keeps only active frames in uncompressed canvas form
@@ -825,14 +826,32 @@ export async function restoreClipMasksFromStorage(
       for (const [key, rle] of Object.entries(saved.masks)) {
         clipMaskRLECache.set(key, rle);
         registerKey(key);
+
+        // Also register in native mask indices map so mobile player immediately finds the frames
+        const lastUnderscore = key.lastIndexOf("_");
+        if (lastUnderscore !== -1) {
+          const cId = key.substring(0, lastUnderscore);
+          const fIdx = parseInt(key.substring(lastUnderscore + 1), 10);
+          if (!isNaN(fIdx)) {
+            let nList = nativeMaskFrameIndicesMap.get(cId);
+            if (!nList) {
+              nList = [];
+              nativeMaskFrameIndicesMap.set(cId, nList);
+            }
+            if (!nList.includes(fIdx)) {
+              nList.push(fIdx);
+              nList.sort((a, b) => a - b);
+            }
+          }
+        }
       }
       const fps = saved.fps || fallbackFps;
       if (fps && fps > 0) {
         clipMaskFpsMap.set(clipId, fps);
       }
       if (!isCutoutProcessingActive()) {
-    notifyMaskUpdated();
-  }
+        notifyMaskUpdated();
+      }
       return true;
     }
   } catch {}
@@ -2446,14 +2465,18 @@ const nativeMaskFrameIndicesMap = new Map<string, number[]>();
 export function findNearestNativeMaskUri(
   clipId: string,
   frameIdx: number,
-  maxDiffFrames = 60,
+  maxDiffFrames = 15,
 ): string | null {
   const list = nativeMaskFrameIndicesMap.get(clipId);
-  if (!list || list.length === 0)
-    return nativeMaskUriCache.get(`${clipId}_0`) || null;
+  if (!list || list.length === 0) {
+    return frameIdx <= maxDiffFrames ? (nativeMaskUriCache.get(`${clipId}_0`) || null) : null;
+  }
 
   if (list.length === 1) {
-    return nativeMaskUriCache.get(`${clipId}_${list[0]}`) || nativeMaskUriCache.get(`${clipId}_0`) || null;
+    if (Math.abs(list[0] - frameIdx) <= maxDiffFrames) {
+      return nativeMaskUriCache.get(`${clipId}_${list[0]}`) || nativeMaskUriCache.get(`${clipId}_0`) || null;
+    }
+    return null;
   }
 
   let low = 0;
@@ -2475,19 +2498,22 @@ export function findNearestNativeMaskUri(
     bestIdx = list[high];
     minDiff = Math.abs(list[high] - frameIdx);
   }
-  return nativeMaskUriCache.get(`${clipId}_${bestIdx}`) || nativeMaskUriCache.get(`${clipId}_0`) || null;
+  if (minDiff <= maxDiffFrames) {
+    return nativeMaskUriCache.get(`${clipId}_${bestIdx}`) || null;
+  }
+  return null;
 }
 
 export function getNativeMaskUri(
   clipId: string,
   frameIdx = 0,
   _isVideo = true,
+  maxDiff = 15,
 ): string | null {
   return (
     nativeMaskUriCache.get(`${clipId}_${frameIdx}`) ??
-    findNearestNativeMaskUri(clipId, frameIdx) ??
-    nativeMaskUriCache.get(`${clipId}_0`) ??
-    null
+    findNearestNativeMaskUri(clipId, frameIdx, maxDiff) ??
+    (frameIdx <= maxDiff ? (nativeMaskUriCache.get(`${clipId}_0`) ?? null) : null)
   );
 }
 
@@ -2610,8 +2636,8 @@ async function _cacheMaskAsUri(
       await FS.writeAsStringAsync(path, b64, {
         encoding: FS.EncodingType.Base64,
       });
-      // Cache-busting timestamp ensures ExpoImage immediately updates the view
-      uri = `${path}?t=${Date.now()}`;
+      // Deterministic file URI allows ExpoImage memory cache to hit reliably without disk latency
+      uri = path;
     }
 
     // Register sampled native frames as well as storing their URI. The player
@@ -3122,6 +3148,23 @@ export async function processVideoUnified(
         inFlightNative.add(task);
       }
       await Promise.all(inFlightNative);
+      // Persist baked masks into storage so they survive app reload on native
+      const rleData: Record<string, Uint8Array> = {};
+      for (const [key, value] of clipMaskRLECache.entries()) {
+        if (key.startsWith(`${clipId}_`)) rleData[key] = value;
+      }
+      if (Object.keys(rleData).length > 0) {
+        persistMasksRLE(clipId, rleData, effectiveFps).catch(() => {});
+      }
+      if (sourceMediaId && sourceMediaId !== clipId) {
+        const srcRleData: Record<string, Uint8Array> = {};
+        for (const [key, value] of clipMaskRLECache.entries()) {
+          if (key.startsWith(`${sourceMediaId}_`)) srcRleData[key] = value;
+        }
+        if (Object.keys(srcRleData).length > 0) {
+          persistMasksRLE(sourceMediaId, srcRleData, effectiveFps).catch(() => {});
+        }
+      }
     } finally {
       setCutoutProcessingActive(false);
       if (!isCutoutProcessingActive()) {

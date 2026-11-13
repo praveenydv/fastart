@@ -82,7 +82,7 @@ function CutoutModalComponent({
       strokeColor: currentCutout?.strokeColor ?? "none",
       strokeWidth: currentCutout?.strokeWidth ?? 3,
       bgColor: currentCutout?.bgColor ?? "none",
-      quality: currentCutout?.quality ?? "fast",
+      quality: currentCutout?.quality ?? "best",
     };
   });
 
@@ -374,11 +374,15 @@ function CutoutModalComponent({
     // Reprocess: Replace existing cutout data, disk files, and RAM caches to prevent storage bloat
     clearClipMasks(clipId, selectedClip?.sourceMediaId);
     clearPreviewFrame(clipId, selectedClip?.sourceMediaId);
-    const baseConfig = overrideConfig || config;
+    const validOverride = (overrideConfig && typeof overrideConfig === "object" && typeof overrideConfig.mode === "string")
+      ? overrideConfig as CutoutConfig
+      : undefined;
+    const baseConfig = validOverride || config;
     const resolvedMode = baseConfig.mode && baseConfig.mode !== "none" ? baseConfig.mode : "auto";
-    const selectedQuality = (overrideConfig && overrideConfig.quality) || baseConfig.quality || "best";
+    const selectedQuality = (validOverride && validOverride.quality) || config.quality || "best";
     const processingConfig: CutoutConfig = {
-      ...baseConfig,
+      ...config,
+      ...validOverride,
       enabled: true,
       mode: resolvedMode,
       quality: selectedQuality,

@@ -434,7 +434,13 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
   cutout: any;
   maskUri: string | null;
 }) {
-  const isCutoutActive = !!(cutout?.enabled && maskUri);
+  // Continuous temporal hold: smoothly bridge frame gaps without flashing raw background
+  const lastValidMaskUriRef = React.useRef<string | null>(maskUri);
+  if (maskUri) {
+    lastValidMaskUriRef.current = maskUri;
+  }
+  const effectiveMaskUri = maskUri || lastValidMaskUriRef.current;
+  const isCutoutActive = !!(cutout?.enabled && effectiveMaskUri);
   const hasBackground =
     isCutoutActive &&
     cutout.bgColor &&
@@ -450,25 +456,25 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
   const strokeColor = cutout?.strokeColor || "#00F2FE";
 
   const maskElement = useMemo(() => {
-    if (!isCutoutActive || !maskUri) return null;
+    if (!isCutoutActive || !effectiveMaskUri) return null;
     return (
       <ExpoImage
-        source={{ uri: maskUri }}
+        source={{ uri: effectiveMaskUri }}
         style={StyleSheet.absoluteFill}
         contentFit="contain"
         cachePolicy="memory"
       />
     );
-  }, [isCutoutActive, maskUri]);
+  }, [isCutoutActive, effectiveMaskUri]);
 
   const strokeElements = useMemo(() => {
-    if (!hasStroke || !maskUri) return null;
+    if (!hasStroke || !effectiveMaskUri) return null;
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         {CUTOUT_STROKE_OFFSETS.map(([ox, oy], idx) => (
           <ExpoImage
             key={idx}
-            source={{ uri: maskUri }}
+            source={{ uri: effectiveMaskUri }}
             style={[
               StyleSheet.absoluteFill,
               {
@@ -482,7 +488,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
         ))}
       </View>
     );
-  }, [hasStroke, maskUri, strokeWidth, strokeColor]);
+  }, [hasStroke, effectiveMaskUri, strokeWidth, strokeColor]);
 
   const video = (
     <NativeVideoClipPlayer
@@ -1529,28 +1535,48 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                     const isPhoto = vid.type === "photo";
                     const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
                     const effSpeed = Math.max(0.1, vid.speed || 1.0);
+                    const clipDur = Math.max(0.05, vid.duration || 10);
+                    const targetMediaTime = vid.reverse
+                      ? Math.max(
+                          0,
+                          (vid.trimOut || (vid.trimIn || 0) + clipDur) - elapsed * effSpeed,
+                        )
+                      : (vid.trimIn || 0) + elapsed * effSpeed;
                     const bakedFps =
                       (vid.cutout as any)?.bakedFps ||
                       getClipBakedFps(vid.id) ||
                       (vid.sourceMediaId ? getClipBakedFps(vid.sourceMediaId) : null) ||
                       getCutoutQualityFps(vid.cutout?.quality, 30);
                     const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.round(elapsed * bakedFps));
-                    const sourceElapsed = vid.reverse
-                      ? Math.max(
-                          0,
-                          (vid.trimOut || (vid.trimIn || 0) + (vid.duration || 0) * effSpeed) -
-                            elapsed * effSpeed,
-                        )
-                      : (vid.trimIn || 0) + elapsed * effSpeed;
-                    const sourceFrameIdx = isPhoto ? 0 : Math.max(0, Math.round(sourceElapsed * bakedFps));
-                    let cutoutMaskUri = isCutoutActive
-                      ? (getNativeMaskUri(`${vid.id}_src`, sourceFrameIdx, !isPhoto) ||
-                         (vid.sourceMediaId ? getNativeMaskUri(`${vid.sourceMediaId}_src`, sourceFrameIdx, !isPhoto) : null) ||
-                         getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto) ||
-                         (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, !isPhoto) : null) ||
-                         getNativeMaskUri(vid.id, 0, !isPhoto) ||
-                         (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, 0, !isPhoto) : null))
-                      : null;
+                    const sourceFrameIdx = isPhoto ? 0 : Math.max(0, Math.round(targetMediaTime * bakedFps));
+
+                    let cutoutMaskUri: string | null = null;
+                    if (isCutoutActive) {
+                      if (isPhoto) {
+                        cutoutMaskUri =
+                          getNativeMaskUri(vid.id, 0, false) ||
+                          (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, 0, false) : null);
+                      } else {
+                        // 1. Precise match on source video time
+                        cutoutMaskUri =
+                          getNativeMaskUri(`${vid.id}_src`, sourceFrameIdx, true, 3) ||
+                          (vid.sourceMediaId ? getNativeMaskUri(`${vid.sourceMediaId}_src`, sourceFrameIdx, true, 3) : null) ||
+                          getNativeMaskUri(vid.id, activeFrameIdx, true, 3) ||
+                          (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, true, 3) : null) ||
+                          // 2. Wider temporal match (within +/- 12 frames ~ 0.4s)
+                          getNativeMaskUri(`${vid.id}_src`, sourceFrameIdx, true, 12) ||
+                          (vid.sourceMediaId ? getNativeMaskUri(`${vid.sourceMediaId}_src`, sourceFrameIdx, true, 12) : null) ||
+                          getNativeMaskUri(vid.id, activeFrameIdx, true, 12) ||
+                          (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, true, 12) : null);
+
+                        // 3. Initial clip anchor when paused near start
+                        if (!cutoutMaskUri && !isPlaying && (elapsed < 0.25 || targetMediaTime < 0.25)) {
+                          cutoutMaskUri =
+                            getNativeMaskUri(vid.id, 0, false) ||
+                            (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, 0, false) : null);
+                        }
+                      }
+                    }
                     return (
                       <>
                         <NativeVideoCutout
@@ -1636,28 +1662,48 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                   const isPhoto = vid.type === "photo";
                   const elapsed = Math.max(0, currentTime - (vid.startTime || 0));
                   const effSpeed = Math.max(0.1, vid.speed || 1.0);
+                  const clipDur = Math.max(0.05, vid.duration || 10);
+                  const targetMediaTime = vid.reverse
+                    ? Math.max(
+                        0,
+                        (vid.trimOut || (vid.trimIn || 0) + clipDur) - elapsed * effSpeed,
+                      )
+                    : (vid.trimIn || 0) + elapsed * effSpeed;
                   const bakedFps =
                     (vid.cutout as any)?.bakedFps ||
                     getClipBakedFps(vid.id) ||
                     (vid.sourceMediaId ? getClipBakedFps(vid.sourceMediaId) : null) ||
                     getCutoutQualityFps(vid.cutout?.quality, 30);
                   const activeFrameIdx = isPhoto ? 0 : Math.max(0, Math.round(elapsed * bakedFps));
-                  const sourceElapsed = vid.reverse
-                    ? Math.max(
-                        0,
-                        (vid.trimOut || (vid.trimIn || 0) + (vid.duration || 0) * effSpeed) -
-                          elapsed * effSpeed,
-                      )
-                    : (vid.trimIn || 0) + elapsed * effSpeed;
-                  const sourceFrameIdx = isPhoto ? 0 : Math.max(0, Math.round(sourceElapsed * bakedFps));
-                  let cutoutMaskUri = isCutoutActive
-                    ? (getNativeMaskUri(`${vid.id}_src`, sourceFrameIdx, !isPhoto) ||
-                       (vid.sourceMediaId ? getNativeMaskUri(`${vid.sourceMediaId}_src`, sourceFrameIdx, !isPhoto) : null) ||
-                       getNativeMaskUri(vid.id, activeFrameIdx, !isPhoto) ||
-                       (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, !isPhoto) : null) ||
-                       getNativeMaskUri(vid.id, 0, !isPhoto) ||
-                       (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, 0, !isPhoto) : null))
-                    : null;
+                  const sourceFrameIdx = isPhoto ? 0 : Math.max(0, Math.round(targetMediaTime * bakedFps));
+
+                  let cutoutMaskUri: string | null = null;
+                  if (isCutoutActive) {
+                    if (isPhoto) {
+                      cutoutMaskUri =
+                        getNativeMaskUri(vid.id, 0, false) ||
+                        (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, 0, false) : null);
+                    } else {
+                      // 1. Precise match on source video time
+                      cutoutMaskUri =
+                        getNativeMaskUri(`${vid.id}_src`, sourceFrameIdx, true, 3) ||
+                        (vid.sourceMediaId ? getNativeMaskUri(`${vid.sourceMediaId}_src`, sourceFrameIdx, true, 3) : null) ||
+                        getNativeMaskUri(vid.id, activeFrameIdx, true, 3) ||
+                        (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, true, 3) : null) ||
+                        // 2. Wider temporal match (within +/- 12 frames ~ 0.4s)
+                        getNativeMaskUri(`${vid.id}_src`, sourceFrameIdx, true, 12) ||
+                        (vid.sourceMediaId ? getNativeMaskUri(`${vid.sourceMediaId}_src`, sourceFrameIdx, true, 12) : null) ||
+                        getNativeMaskUri(vid.id, activeFrameIdx, true, 12) ||
+                        (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, activeFrameIdx, true, 12) : null);
+
+                      // 3. Initial clip anchor when paused near start
+                      if (!cutoutMaskUri && !isPlaying && (elapsed < 0.25 || targetMediaTime < 0.25)) {
+                        cutoutMaskUri =
+                          getNativeMaskUri(vid.id, 0, false) ||
+                          (vid.sourceMediaId ? getNativeMaskUri(vid.sourceMediaId, 0, false) : null);
+                      }
+                    }
+                  }
                   return (
                     <>
                       <NativeVideoCutout

@@ -438,7 +438,15 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
 
                     {(!isAlreadyProcessed || isVideoClip) && (
                       <TouchableOpacity
-                        onPress={isVideoClip ? onProcessVideo : (onProcessVideo || onPreviewFrame)}
+                        onPress={() => {
+                          if (isVideoClip) {
+                            onProcessVideo?.();
+                          } else if (onProcessVideo) {
+                            onProcessVideo();
+                          } else {
+                            onPreviewFrame?.();
+                          }
+                        }}
                         style={[
                           sc.heroBtn,
                           isAlreadyProcessed && sc.heroBtnSecondary,

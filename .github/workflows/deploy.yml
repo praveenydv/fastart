@@ -1,10 +1,6 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
-      - init-app
   workflow_dispatch:
 
 permissions:
@@ -42,7 +38,12 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
+      - name: Download AI Models
+        run: node scripts/download-models.js
+
       - name: Build WebAssembly and copy runtime assets
+        env:
+          CARGO_TERM_COLOR: always
         run: yarn run build:wasm
 
       - name: Setup Pages

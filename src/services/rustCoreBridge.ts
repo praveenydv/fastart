@@ -2108,7 +2108,10 @@ class RustCoreBridgeService {
           const held =
             (options.clipId ? clipLastKnownMaskMap.get(options.clipId) : null) ||
             (fallbackId ? clipLastKnownMaskMap.get(fallbackId) : null);
-          if (held) {
+          const heldTime =
+            (options.clipId ? clipLastKnownMaskTimeMap.get(options.clipId) : undefined) ??
+            (fallbackId ? clipLastKnownMaskTimeMap.get(fallbackId) : undefined);
+          if (held && (heldTime === undefined || Math.abs(effectiveSourceTime - heldTime) <= 0.6)) {
             humanMask = held;
           }
         }
@@ -2118,7 +2121,7 @@ class RustCoreBridgeService {
           const clipHasMasks =
             Boolean(options.clipId && activeMaskProvider.hasClipMasks?.(options.clipId)) ||
             Boolean(fallbackId && activeMaskProvider.hasClipMasks?.(fallbackId));
-          if (clipHasMasks) {
+          if (clipHasMasks && (isImage || (!isPlaying && effectiveSourceTime < 0.25))) {
             humanMask =
               (options.clipId ? activeMaskProvider.getFrameMask(options.clipId, 0, clipFps, fallbackId, 0, isImage) : null) ||
               (fallbackId ? activeMaskProvider.getFrameMask(fallbackId, 0, clipFps, undefined, 0, isImage) : null);
