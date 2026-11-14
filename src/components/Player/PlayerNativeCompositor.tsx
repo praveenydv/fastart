@@ -455,6 +455,39 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
   const strokeWidth = Math.max(1, Math.min(16, cutout?.strokeWidth || 3));
   const strokeColor = cutout?.strokeColor || "#00F2FE";
 
+  const clipDur = Math.max(0.05, clip.duration || 10);
+  const elapsed = Math.max(0, currentTime - (clip.startTime || 0));
+  const effSpeed = Math.max(0.1, Math.min(16, clip.speed ?? 1));
+  const targetMediaTime = clip.reverse
+    ? Math.max(0, (clip.trimOut || (clip.trimIn || 0) + clipDur) - elapsed * effSpeed)
+    : (clip.trimIn || 0) + elapsed * effSpeed;
+  const maskFps =
+    getClipBakedFps(clip.id) ||
+    getClipBakedFps(clip.sourceMediaId || "") ||
+    getCutoutQualityFps(cutout?.quality) ||
+    30;
+  const sourceFrameIdx = Math.max(0, Math.round(targetMediaTime * maskFps));
+
+  // High-performance lookahead mask prefetching into native memory cache
+  React.useEffect(() => {
+    if (!isPlaying || !isCutoutActive) return;
+    const prefetchUris: string[] = [];
+    for (let offset = 1; offset <= 5; offset++) {
+      const nextIdx = clip.reverse ? Math.max(0, sourceFrameIdx - offset) : sourceFrameIdx + offset;
+      const nextUri =
+        getNativeMaskUri(`${clip.id}_src`, nextIdx, true, 2) ||
+        (clip.sourceMediaId ? getNativeMaskUri(`${clip.sourceMediaId}_src`, nextIdx, true, 2) : null) ||
+        getNativeMaskUri(clip.id, nextIdx, true, 2) ||
+        (clip.sourceMediaId ? getNativeMaskUri(clip.sourceMediaId, nextIdx, true, 2) : null);
+      if (nextUri && nextUri !== effectiveMaskUri) {
+        prefetchUris.push(nextUri);
+      }
+    }
+    if (prefetchUris.length > 0) {
+      ExpoImage.prefetch(prefetchUris, "memory").catch(() => {});
+    }
+  }, [isPlaying, isCutoutActive, sourceFrameIdx, clip.id, clip.sourceMediaId, clip.reverse, effectiveMaskUri]);
+
   const maskElement = useMemo(() => {
     if (!isCutoutActive || !effectiveMaskUri) return null;
     return (
@@ -463,6 +496,8 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
         style={StyleSheet.absoluteFill}
         contentFit="contain"
         cachePolicy="memory"
+        priority="high"
+        transition={{ duration: 40, effect: "cross-dissolve" }}
       />
     );
   }, [isCutoutActive, effectiveMaskUri]);
@@ -484,6 +519,8 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
             ]}
             contentFit="contain"
             cachePolicy="memory"
+            priority="high"
+            transition={{ duration: 40, effect: "cross-dissolve" }}
           />
         ))}
       </View>

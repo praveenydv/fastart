@@ -13,6 +13,7 @@ pub unsafe extern "Rust" fn __getrandom_v03_custom(
         return Err(getrandom::Error::UNSUPPORTED);
     }
     // Browser Web Crypto supplies entropy without requiring wasm-bindgen glue.
+    #[link(wasm_import_module = "env")]
     extern "C" {
         fn fastart_fill_random(dest: *mut u8, len: usize) -> i32;
     }

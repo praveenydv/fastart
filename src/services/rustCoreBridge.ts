@@ -2095,12 +2095,18 @@ class RustCoreBridgeService {
           Boolean(fallbackId && activeMaskProvider?.hasClipMasks?.(fallbackId));
 
         if (humanMask) {
+          if (!(humanMask as any)._isTemporalBlend) {
+            if (options.clipId) {
+              clipLastKnownMaskMap.set(options.clipId, humanMask);
+            }
+            if (fallbackId) {
+              clipLastKnownMaskMap.set(fallbackId, humanMask);
+            }
+          }
           if (options.clipId) {
-            clipLastKnownMaskMap.set(options.clipId, humanMask);
             clipLastKnownMaskTimeMap.set(options.clipId, effectiveSourceTime);
           }
           if (fallbackId) {
-            clipLastKnownMaskMap.set(fallbackId, humanMask);
             clipLastKnownMaskTimeMap.set(fallbackId, effectiveSourceTime);
           }
         } else {
