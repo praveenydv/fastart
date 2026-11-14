@@ -3,6 +3,10 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    extra: {
+      ...config.extra,
+      baseUrl: baseUrl || "",
+    },
     experiments: {
       ...config.experiments,
       ...(baseUrl ? { baseUrl } : {}),

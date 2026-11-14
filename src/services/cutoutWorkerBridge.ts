@@ -1,3 +1,5 @@
+import { resolveAssetUrl } from "../utils/router";
+
 /** Runs MODNet off the browser UI thread with hardware and optimized WASM backends. */
 type CutoutWorkerSlot = { worker: Worker; active: number };
 type CutoutWorkerResult = { rawAlpha?: Float32Array | null; rle?: Uint8Array | null };
@@ -32,9 +34,15 @@ class CutoutWorkerBridge {
 
   private createWorker(): CutoutWorkerSlot | null {
     if (!this.isSupported()) return null;
-    const assetOrigin = window.location.origin;
+    const cutoutWasmUrl = resolveAssetUrl('/wasm/fastart_cutout_wasm.wasm');
+    const modnetModelUrl = resolveAssetUrl('/models/modnet.onnx');
+    const ortScriptUrl = resolveAssetUrl('/onnxruntime/ort.all.min.js');
+    const ortWasmPaths = resolveAssetUrl('/onnxruntime/');
     const workerCode = `
-      const assetOrigin = ${JSON.stringify(assetOrigin)};
+      const cutoutWasmUrl = ${JSON.stringify(cutoutWasmUrl)};
+      const modnetModelUrl = ${JSON.stringify(modnetModelUrl)};
+      const ortScriptUrl = ${JSON.stringify(ortScriptUrl)};
+      const ortWasmPaths = ${JSON.stringify(ortWasmPaths)};
       let wasm = null;
       let wasmInstance = null;
       let cutoutWasm = null;
@@ -51,7 +59,7 @@ class CutoutWorkerBridge {
       const RGBA_BYTES = 4 * OUTPUT, RLE_CAPACITY = 2 * OUTPUT;
       async function initializeCutoutCore() {
         if (cutoutWasm) return true;
-        const response = await fetch(new URL('/wasm/fastart_cutout_wasm.wasm', assetOrigin));
+        const response = await fetch(cutoutWasmUrl);
         if (!response.ok) throw new Error('Rust cutout WASM request failed (' + response.status + ')');
         const result = await WebAssembly.instantiate(await response.arrayBuffer(), {
           env: { fastart_fill_random: (ptr, len) => {
@@ -76,18 +84,18 @@ class CutoutWorkerBridge {
       async function initializeOnnxRuntime() {
         if (typeof importScripts !== 'function') return false;
         try {
-          const modelResponse = await fetch(new URL('/models/modnet.onnx', assetOrigin));
+          const modelResponse = await fetch(modnetModelUrl);
           if (!modelResponse.ok) throw new Error('Studio MODNet model request failed (' + modelResponse.status + ')');
           const modelBytes = new Uint8Array(await modelResponse.arrayBuffer());
 
-          importScripts(new URL('/onnxruntime/ort.all.min.js', assetOrigin).toString());
+          importScripts(ortScriptUrl);
           if (typeof ort !== 'undefined' && !self.ort) {
             self.ort = ort;
           }
           if (!self.ort) throw new Error('ONNX Runtime Web bundle failed to export');
 
           self.ort.env.logLevel = 'error';
-          self.ort.env.wasm.wasmPaths = new URL('/onnxruntime/', assetOrigin).toString();
+          self.ort.env.wasm.wasmPaths = ortWasmPaths;
           self.ort.env.wasm.proxy = false;
           self.ort.env.wasm.simd = true;
           if (self.crossOriginIsolated) {

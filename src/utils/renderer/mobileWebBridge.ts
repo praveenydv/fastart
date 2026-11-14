@@ -2329,8 +2329,8 @@ export function generateCanvasBridgeHtml(
         var durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         var is4K = width >= 3840 || height >= 3840 || width >= 2160 || height >= 2160;
         var is1080p = width >= 1920 || height >= 1920 || width >= 1080 || height >= 1080;
-        var targetBps = is4K ? 30000000 : is1080p ? 16000000 : 8000000;
-        if (EXPORT_OPTIONS.fps >= 60) targetBps = Math.round(targetBps * 1.35);
+        var targetBps = is4K ? 22000000 : is1080p ? 8500000 : 4500000;
+        if (EXPORT_OPTIONS.fps >= 60) targetBps = Math.round(targetBps * 1.4);
 
         sendToNative({ type: "PROGRESS", progress: 0, status: "Preloading assets..." });
         await preloadAllMedia();
@@ -2352,7 +2352,10 @@ export function generateCanvasBridgeHtml(
           return;
         }
 
-        // B. Frame-Accurate Hardware WebCodecs Offline Export
+        // B. Frame-Accurate Hardware WebCodecs Offline Export (For graphics/photo/animation timelines)
+        // Note: HTMLVideoElement cannot be sought frame-by-frame offline without flushing hardware decoders,
+        // causing catastrophic 1-2s seek stalls (exporting at 1 frame per 2-3s).
+        // For timelines with real video clips, MediaRecorder with native hardware playback delivers smooth 30/60fps video.
         var hasVideoClips = false;
         for (var vi = 0; vi < videoClips.length; vi++) {
           if (videoClips[vi].type === "video") { hasVideoClips = true; break; }
@@ -2360,6 +2363,7 @@ export function generateCanvasBridgeHtml(
 
         if (
           EXPORT_OPTIONS.format === "mp4" &&
+          !hasVideoClips &&
           typeof window.VideoEncoder === "function" &&
           typeof window.VideoFrame === "function"
         ) {
@@ -2463,46 +2467,7 @@ export function generateCanvasBridgeHtml(
               if (turboError) throw turboError;
               var curTime = Math.min(durationSec, f * frameIntervalSec);
 
-              if (hasVideoClips) {
-                var seekPromises = [];
-                for (var vi = 0; vi < videoClips.length; vi++) {
-                  var c = videoClips[vi];
-                  if (c.type === "video") {
-                    var vel = mediaMap.get(c.url) || mediaMap.get(c.id);
-                    if (vel && vel instanceof HTMLVideoElement) {
-                      var st = c.startTime || 0;
-                      var en = st + (c.duration || 0);
-                      var trans = c.transition;
-                      var transDur = trans && trans.type && trans.type !== "none" && trans.type !== "cut" ? (trans.duration || 0.5) : 0;
-                      var isInside = curTime >= st && curTime <= en;
-                      var isEntering = transDur > 0 && curTime >= st - transDur && curTime < st;
-                      if (isInside || isEntering) {
-                        var clipLocalTime = Math.max(0, curTime - st);
-                        var sp = Math.max(0.1, Math.min(16, c.speed || 1.0));
-                        if (c.speedCurve) {
-                          sp = evaluateSpeedCurveJs(c.speedCurve, clipLocalTime / Math.max(0.1, c.duration || 1));
-                        }
-                        var tr = c.trimIn || 0;
-                        var tgt = clipLocalTime * sp + tr;
-                        if (c.reverse) {
-                          tgt = Math.max(0, (c.trimOut || c.duration) - clipLocalTime * sp);
-                        }
-                        if (vel.duration && vel.duration > 0) {
-                          tgt = Math.min(vel.duration, Math.max(0, tgt));
-                        }
-                        if (!vel.paused) {
-                          try { vel.pause(); } catch(e) {}
-                        }
-                        seekPromises.push(seekVideoElementSafelyJs(vel, tgt, 0.02));
-                      }
-                    }
-                  }
-                }
-                if (seekPromises.length > 0) {
-                  await Promise.all(seekPromises);
-                }
-              }
-
+              // Render composite frame at high quality (photo/graphics/captions/stickers/effects)
               renderFrame(curTime);
 
               var vFrame = null;
@@ -2586,7 +2551,7 @@ export function generateCanvasBridgeHtml(
             );
 
             sendToNative({ type: "CHUNK_START", mimeType: "video/mp4", extension: "mp4" });
-            var chunkSize = 65536;
+            var chunkSize = 65535; // Multiple of 3 (21845 * 3) guarantees zero Base64 '=' padding on chunks
             for (var i = 0; i < mp4Bytes.length; i += chunkSize) {
               var sub = mp4Bytes.subarray(i, Math.min(i + chunkSize, mp4Bytes.length));
               var binary = "";
@@ -2726,124 +2691,182 @@ export function generateCanvasBridgeHtml(
           }
         }
 
-        // Adaptive Bitrate: 4K (30Mbps), 1080p (16Mbps), 720p (8Mbps), scaled for 60fps
+        // Adaptive Bitrate: Sane, industry-standard targets (4K: 22Mbps, 1080p: 8.5Mbps, 720p: 4.5Mbps)
+        // Resilient cascading initialization that NEVER drops videoBitsPerSecond:
+        // An unconstrained MediaRecorder on canvas captureStream encodes uncompressed intra-frames,
+        // which balloons a 1-minute video to 10 GB!
         let recorder = null;
+        var candidateConfigs = [
+          { mimeType: mimeType, videoBitsPerSecond: targetBps, audioBitsPerSecond: 192000 },
+          { mimeType: mimeType, videoBitsPerSecond: targetBps },
+          { mimeType: (EXPORT_OPTIONS.format === "mp4" ? "video/mp4" : "video/webm"), videoBitsPerSecond: targetBps },
+          { videoBitsPerSecond: targetBps },
+          { bitsPerSecond: targetBps },
+        ];
 
-        try {
-          recorder = new MediaRecorder(stream, {
-            mimeType: mimeType,
-            videoBitsPerSecond: targetBps,
-            audioBitsPerSecond: 256000,
-          });
-        } catch (e) {
+        for (var ci = 0; ci < candidateConfigs.length; ci++) {
+          try {
+            recorder = new MediaRecorder(stream, candidateConfigs[ci]);
+            if (candidateConfigs[ci].mimeType) mimeType = candidateConfigs[ci].mimeType;
+            break;
+          } catch (recCandidateErr) {}
+        }
+
+        if (!recorder) {
           try {
             recorder = new MediaRecorder(stream);
             mimeType = recorder.mimeType || "video/webm";
-            extension = mimeType.includes("mp4") ? "mp4" : "webm";
           } catch (e2) {
             sendToNative({ type: "ERROR", message: "MediaRecorder initialization failed: " + e2.message });
             return;
           }
         }
+        extension = mimeType.includes("mp4") ? "mp4" : "webm";
 
-        let transferQueue = Promise.resolve();
+        var chunkQueue = [];
+        var isTransferring = false;
+        var transferDrainCb = null;
         let transferredBytes = 0;
         let transferFailed = false;
         let headerBuffer = [];
         let headerBufferLen = 0;
         let headerDispatched = false;
+        let pendingBytes = new Uint8Array(0);
         const HEADER_THRESHOLD = 65536;
 
-        function streamBytesToNative(rawBytes) {
-          let binary = "";
-          const binaryChunkSize = 8192;
-          for (let i = 0; i < rawBytes.length; i += binaryChunkSize) {
-            binary += String.fromCharCode.apply(null, rawBytes.subarray(i, Math.min(i + binaryChunkSize, rawBytes.length)));
+        function streamBytesToNative(rawBytes, isLast) {
+          if (!rawBytes && !isLast) return;
+          let combined;
+          if (pendingBytes.length > 0) {
+            combined = new Uint8Array(pendingBytes.length + (rawBytes ? rawBytes.length : 0));
+            combined.set(pendingBytes, 0);
+            if (rawBytes) combined.set(rawBytes, pendingBytes.length);
+          } else {
+            combined = rawBytes || new Uint8Array(0);
           }
-          sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
-          transferredBytes += rawBytes.length;
+
+          let emitLen = combined.length;
+          if (!isLast) {
+            // Keep emitLen a strict multiple of 3 so btoa never emits '=' padding in intermediate chunks
+            var rem = emitLen % 3;
+            emitLen -= rem;
+            pendingBytes = rem > 0 ? combined.slice(emitLen) : new Uint8Array(0);
+          } else {
+            pendingBytes = new Uint8Array(0);
+          }
+
+          if (emitLen > 0) {
+            var toSend = combined.subarray(0, emitLen);
+            var binary = "";
+            var binaryChunkSize = 8192;
+            for (var i = 0; i < toSend.length; i += binaryChunkSize) {
+              binary += String.fromCharCode.apply(null, toSend.subarray(i, Math.min(i + binaryChunkSize, toSend.length)));
+            }
+            sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
+            transferredBytes += toSend.length;
+          }
+        }
+
+        async function pumpTransferQueue() {
+          if (isTransferring) return;
+          isTransferring = true;
+          try {
+            while (chunkQueue.length > 0 && !transferFailed) {
+              var blob = chunkQueue.shift();
+              var bytes = new Uint8Array(await blob.arrayBuffer());
+
+              if (!headerDispatched) {
+                headerBuffer.push(bytes);
+                headerBufferLen += bytes.length;
+
+                // Check if accumulated header bytes contain 'moov' (MP4) or EBML Segment Info (WebM)
+                var combined = new Uint8Array(headerBufferLen);
+                var off = 0;
+                for (var hi = 0; hi < headerBuffer.length; hi++) {
+                  combined.set(headerBuffer[hi], off);
+                  off += headerBuffer[hi].length;
+                }
+
+                var hasMoovFull = false;
+                var isMp4 = false;
+                for (var mi = 4; mi <= Math.min(combined.length - 4, 64); mi++) {
+                  if (combined[mi] === 0x66 && combined[mi+1] === 0x74 && combined[mi+2] === 0x79 && combined[mi+3] === 0x70) {
+                    isMp4 = true;
+                    break;
+                  }
+                }
+                if (isMp4) {
+                  for (var mi = 4; mi <= Math.min(combined.length - 8, 131072); mi++) {
+                    if (combined[mi] === 0x6D && combined[mi+1] === 0x6F && combined[mi+2] === 0x6F && combined[mi+3] === 0x76) {
+                      var dv = new DataView(combined.buffer, combined.byteOffset, combined.byteLength);
+                      var moovOffset = mi - 4;
+                      var moovSize = dv.getUint32(moovOffset);
+                      if (moovSize >= 8 && combined.length >= moovOffset + moovSize) {
+                        hasMoovFull = true;
+                      }
+                      break;
+                    }
+                  }
+                }
+
+                var hasWebMHeaderFull = false;
+                var isWebM = combined.length >= 4 && combined[0] === 0x1A && combined[1] === 0x45 && combined[2] === 0xDF && combined[3] === 0xA3;
+                if (isWebM) {
+                  for (var ci = 4; ci <= combined.length - 4; ci++) {
+                    if (combined[ci] === 0x1F && combined[ci+1] === 0x43 && combined[ci+2] === 0xB6 && combined[ci+3] === 0x75) {
+                      hasWebMHeaderFull = true;
+                      break;
+                    }
+                  }
+                }
+
+                if (hasMoovFull || hasWebMHeaderFull || headerBufferLen >= HEADER_THRESHOLD) {
+                  var patched = patchMediaContainerDuration(combined, durationSec);
+                  headerDispatched = true;
+                  headerBuffer = [];
+                  streamBytesToNative(patched, false);
+                }
+              } else {
+                streamBytesToNative(bytes, false);
+              }
+            }
+          } catch (err) {
+            transferFailed = true;
+            chunkQueue.length = 0;
+            sendToNative({ type: "ERROR", message: "Could not stream encoded video: " + (err.message || err) });
+          } finally {
+            isTransferring = false;
+            if (chunkQueue.length === 0 && transferDrainCb) {
+              var cb = transferDrainCb;
+              transferDrainCb = null;
+              cb();
+            }
+          }
         }
 
         recorder.ondataavailable = function(e) {
           if (!e.data || e.data.size <= 0 || transferFailed) return;
-          transferQueue = transferQueue.then(async function() {
-            const bytes = new Uint8Array(await e.data.arrayBuffer());
-
-            if (!headerDispatched) {
-              headerBuffer.push(bytes);
-              headerBufferLen += bytes.length;
-
-              // Check if accumulated header bytes contain 'moov' (MP4) or EBML Segment Info (WebM)
-              let combined = new Uint8Array(headerBufferLen);
-              let off = 0;
-              for (let hi = 0; hi < headerBuffer.length; hi++) {
-                combined.set(headerBuffer[hi], off);
-                off += headerBuffer[hi].length;
-              }
-
-              let hasMoovFull = false;
-              let isMp4 = false;
-              for (let mi = 4; mi <= Math.min(combined.length - 4, 64); mi++) {
-                if (combined[mi] === 0x66 && combined[mi+1] === 0x74 && combined[mi+2] === 0x79 && combined[mi+3] === 0x70) {
-                  isMp4 = true;
-                  break;
-                }
-              }
-              if (isMp4) {
-                for (let mi = 4; mi <= Math.min(combined.length - 8, 131072); mi++) {
-                  if (combined[mi] === 0x6D && combined[mi+1] === 0x6F && combined[mi+2] === 0x6F && combined[mi+3] === 0x76) {
-                    const dv = new DataView(combined.buffer, combined.byteOffset, combined.byteLength);
-                    const moovOffset = mi - 4;
-                    const moovSize = dv.getUint32(moovOffset);
-                    if (moovSize >= 8 && combined.length >= moovOffset + moovSize) {
-                      hasMoovFull = true;
-                    }
-                    break;
-                  }
-                }
-              }
-
-              let hasWebMHeaderFull = false;
-              const isWebM = combined.length >= 4 && combined[0] === 0x1A && combined[1] === 0x45 && combined[2] === 0xDF && combined[3] === 0xA3;
-              if (isWebM) {
-                for (let ci = 4; ci <= combined.length - 4; ci++) {
-                  if (combined[ci] === 0x1F && combined[ci+1] === 0x43 && combined[ci+2] === 0xB6 && combined[ci+3] === 0x75) {
-                    hasWebMHeaderFull = true;
-                    break;
-                  }
-                }
-              }
-
-              if (hasMoovFull || hasWebMHeaderFull || headerBufferLen >= HEADER_THRESHOLD) {
-                const patched = patchMediaContainerDuration(combined, durationSec);
-                headerDispatched = true;
-                headerBuffer = [];
-                streamBytesToNative(patched);
-              }
-            } else {
-              streamBytesToNative(bytes);
-            }
-          }).catch(function(err) {
-            transferFailed = true;
-            sendToNative({ type: "ERROR", message: "Could not stream encoded video: " + (err.message || err) });
-          });
+          chunkQueue.push(e.data);
+          pumpTransferQueue();
         };
 
         recorder.onstop = function() {
-          transferQueue.then(function() {
+          function finishStop() {
             if (transferFailed) return;
             if (!headerDispatched && headerBuffer.length > 0) {
-              let combined = new Uint8Array(headerBufferLen);
-              let off = 0;
-              for (let hi = 0; hi < headerBuffer.length; hi++) {
+              var combined = new Uint8Array(headerBufferLen);
+              var off = 0;
+              for (var hi = 0; hi < headerBuffer.length; hi++) {
                 combined.set(headerBuffer[hi], off);
                 off += headerBuffer[hi].length;
               }
-              const patched = patchMediaContainerDuration(combined, durationSec);
+              var patched = patchMediaContainerDuration(combined, durationSec);
               headerDispatched = true;
               headerBuffer = [];
-              streamBytesToNative(patched);
+              streamBytesToNative(patched, false);
             }
+            // Flush any remaining trailing bytes safely
+            streamBytesToNative(null, true);
             sendToNative({
               type: "CHUNK_END",
               mimeType: mimeType,
@@ -2851,9 +2874,14 @@ export function generateCanvasBridgeHtml(
               duration: durationSec,
               fileSize: transferredBytes
             });
-          }).catch(function(err) {
-            sendToNative({ type: "ERROR", message: "Could not finish video transfer: " + (err.message || err) });
-          });
+          }
+
+          if (isTransferring || chunkQueue.length > 0) {
+            transferDrainCb = finishStop;
+            pumpTransferQueue();
+          } else {
+            finishStop();
+          }
         };
 
         recorder.onerror = function(err) {
@@ -2861,21 +2889,69 @@ export function generateCanvasBridgeHtml(
         };
 
         // Pre-cue all video elements to exact trimIn and initial speed before starting
-        for (const clip of videoClips) {
+        for (var vi = 0; vi < videoClips.length; vi++) {
+          var clip = videoClips[vi];
           if (clip.type !== "video") continue;
-          const el = mediaMap.get(clip.url) || mediaMap.get(clip.id);
+          var el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
           if (el && el instanceof HTMLVideoElement) {
             el.muted = true;
             el.defaultMuted = true;
-            el.currentTime = Math.max(0, clip.trimIn || 0);
+            var targetTrim = Math.max(0, clip.trimIn || 0);
             el.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-            if ((clip.startTime || 0) <= 0.05) {
-              try { el.play().catch(function() {}); } catch(e) {}
-            } else {
+            if (Math.abs(el.currentTime - targetTrim) > 0.05) {
+              await new Promise(function(res) {
+                var done = false;
+                var onSeek = function() { if (!done) { done = true; el.removeEventListener("seeked", onSeek); res(); } };
+                el.addEventListener("seeked", onSeek);
+                try { el.currentTime = targetTrim; } catch(e) { onSeek(); }
+                setTimeout(onSeek, 250);
+              });
+            }
+            if ((clip.startTime || 0) > 0.05) {
               try { el.pause(); } catch(e) {}
             }
           }
         }
+
+        // Wait until initial active video clip is confirmed actively decoding and playing frames
+        var firstClip = null;
+        for (var vi = 0; vi < videoClips.length; vi++) {
+          var c = videoClips[vi];
+          if (c.type === "video" && (c.startTime || 0) <= 0.05) {
+            firstClip = c;
+            break;
+          }
+        }
+        if (firstClip) {
+          var firstEl = mediaMap.get(firstClip.url) || mediaMap.get(firstClip.id) || (firstClip.sourceMediaId ? mediaMap.get(firstClip.sourceMediaId) : null);
+          if (firstEl && firstEl instanceof HTMLVideoElement) {
+            try {
+              firstEl.currentTime = Math.max(0, firstClip.trimIn || 0);
+              firstEl.playbackRate = Math.max(0.1, Math.min(16, firstClip.speed || 1.0));
+              await firstEl.play().catch(function() {});
+              await new Promise(function(resolve) {
+                var timer = null;
+                var onFrame = function() {
+                  if (firstEl.currentTime > (firstClip.trimIn || 0) + 0.005) {
+                    if (timer) clearTimeout(timer);
+                    firstEl.removeEventListener("timeupdate", onFrame);
+                    firstEl.removeEventListener("playing", onFrame);
+                    resolve();
+                  }
+                };
+                firstEl.addEventListener("timeupdate", onFrame);
+                firstEl.addEventListener("playing", onFrame);
+                timer = setTimeout(function() {
+                  firstEl.removeEventListener("timeupdate", onFrame);
+                  firstEl.removeEventListener("playing", onFrame);
+                  resolve();
+                }, 1000);
+                onFrame();
+              });
+            } catch(e) {}
+          }
+        }
+
         for (const clip of audioClips) {
           const a = mediaMap.get("audio_" + clip.id);
           if (a && a instanceof HTMLAudioElement) {
@@ -2890,7 +2966,8 @@ export function generateCanvasBridgeHtml(
         renderFrame(0);
         sendToNative({ type: "CHUNK_START", mimeType: mimeType, extension: extension });
         sendToNative({ type: "PROGRESS", progress: 0, status: "Encoding video stream..." });
-        recorder.start(500);
+        // Start recording with 1-second timeslice for optimal GOP compression and stable streaming
+        recorder.start(1000);
         const startTime = performance.now();
         durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         const targetFrameInterval = 1 / Math.max(1, EXPORT_OPTIONS.fps || 30);
@@ -2906,10 +2983,21 @@ export function generateCanvasBridgeHtml(
           // Synchronize active video playback with exact seek and micro-adjustments
           for (const clip of videoClips) {
             if (clip.type !== "video") continue;
-            const el = mediaMap.get(clip.url) || mediaMap.get(clip.id);
+            const el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
             if (!el || !(el instanceof HTMLVideoElement)) continue;
 
             const isInside = curTime >= clip.startTime && curTime < clip.startTime + clip.duration;
+            const isApproaching = curTime >= clip.startTime - 0.75 && curTime < clip.startTime;
+
+            // Pre-roll / warm up upcoming clip so it starts seamlessly without freeze
+            if (isApproaching && !el._preRolled) {
+              el._preRolled = true;
+              el.muted = true;
+              el.defaultMuted = true;
+              el.currentTime = Math.max(0, clip.trimIn || 0);
+              el.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+            }
+
             const vGain = videoGainNodes.get(clip.id);
             if (vGain && audioCtx) {
               const baseVol = (clip.muted || clip.isMuted) ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
@@ -2944,53 +3032,58 @@ export function generateCanvasBridgeHtml(
                 ? Math.min(el.duration, Math.max(0, rawMediaTime))
                 : Math.max(0, rawMediaTime);
 
-              if (Math.abs(el.playbackRate - speed) > 0.02) {
-                try { el.playbackRate = speed; } catch(e) {}
-              }
-
               if (el.paused) {
-                try {
-                  if (Math.abs(el.currentTime - targetTime) > 0.05) {
-                    el.currentTime = targetTime;
+                if (!el._playStarted) {
+                  el._playStarted = true;
+                  if (Math.abs(el.currentTime - targetTime) > 0.08) {
+                    try { el.currentTime = targetTime; } catch(e) {}
                   }
+                  el.playbackRate = speed;
                   el.play().catch(function() {});
-                } catch(e) {}
+                }
               } else {
+                el._playStarted = false;
                 const drift = el.currentTime - targetTime;
-                if (Math.abs(drift) > 0.35) {
-                  try { el.currentTime = targetTime; } catch(e) {}
-                } else if (Math.abs(drift) > 0.03) {
-                  const comp = Math.max(0.8, Math.min(1.2, 1 - drift * 0.8));
+                // Only adjust playbackRate smoothly without decoder pipeline flushes
+                if (Math.abs(drift) > 0.02) {
+                  const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
                   try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
+                } else if (Math.abs(el.playbackRate - speed) > 0.01) {
+                  try { el.playbackRate = speed; } catch(e) {}
                 }
               }
 
               const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
               if (va && va instanceof HTMLAudioElement) {
-                if (Math.abs(va.playbackRate - speed) > 0.02) {
-                  try { va.playbackRate = speed; } catch(e) {}
-                }
                 if (va.paused) {
-                  try {
-                    if (Math.abs(va.currentTime - targetTime) > 0.05) {
-                      va.currentTime = targetTime;
+                  if (!va._playStarted) {
+                    va._playStarted = true;
+                    if (Math.abs(va.currentTime - targetTime) > 0.08) {
+                      try { va.currentTime = targetTime; } catch(e) {}
                     }
+                    va.playbackRate = speed;
                     va.play().catch(function() {});
-                  } catch(e) {}
+                  }
                 } else {
+                  va._playStarted = false;
                   const drift = va.currentTime - targetTime;
-                  if (Math.abs(drift) > 0.35) {
-                    try { va.currentTime = targetTime; } catch(e) {}
+                  if (Math.abs(drift) > 0.02) {
+                    const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
+                    try { va.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
                   }
                 }
               }
             } else {
+              el._playStarted = false;
               if (!el.paused) {
                 try { el.pause(); } catch(e) {}
               }
               const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-              if (va && !va.paused) {
-                try { va.pause(); } catch(e) {}
+              if (va) {
+                va._playStarted = false;
+                if (!va.paused) {
+                  try { va.pause(); } catch(e) {}
+                }
               }
             }
           }
@@ -3026,24 +3119,25 @@ export function generateCanvasBridgeHtml(
               const trimIn = clip.trimIn || 0;
               const targetTime = trimIn + clipLocalTime * speed;
 
-              if (Math.abs(a.playbackRate - speed) > 0.02) {
-                try { a.playbackRate = speed; } catch(e) {}
-              }
-
               if (a.paused) {
-                try {
-                  if (Math.abs(a.currentTime - targetTime) > 0.05) {
-                    a.currentTime = targetTime;
+                if (!a._playStarted) {
+                  a._playStarted = true;
+                  if (Math.abs(a.currentTime - targetTime) > 0.08) {
+                    try { a.currentTime = targetTime; } catch(e) {}
                   }
+                  a.playbackRate = speed;
                   a.play().catch(function() {});
-                } catch(e) {}
+                }
               } else {
+                a._playStarted = false;
                 const drift = a.currentTime - targetTime;
-                if (Math.abs(drift) > 0.35) {
-                  try { a.currentTime = targetTime; } catch(e) {}
+                if (Math.abs(drift) > 0.02) {
+                  const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
+                  try { a.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
                 }
               }
             } else {
+              a._playStarted = false;
               if (!a.paused) {
                 try { a.pause(); } catch(e) {}
               }
@@ -3080,7 +3174,7 @@ export function generateCanvasBridgeHtml(
 
             // Stop all media
             for (const clip of videoClips) {
-              const el = mediaMap.get(clip.url) || mediaMap.get(clip.id);
+              const el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
               if (el && el instanceof HTMLVideoElement && !el.paused) {
                 try { el.pause(); } catch(e) {}
               }

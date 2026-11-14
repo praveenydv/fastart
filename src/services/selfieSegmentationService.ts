@@ -28,6 +28,7 @@ import {
 } from "../utils/largeMediaStorage";
 import { cutoutWorkerBridge } from "./cutoutWorkerBridge";
 import { LruCache } from "../utils/lruCache";
+import { resolveAssetUrl } from "../utils/router";
 
 let _cachedFS: any = null;
 let _cachedThumbnails: any = null;
@@ -1093,11 +1094,11 @@ async function getOrtWeb(): Promise<any> {
       return;
     }
     const script = document.createElement("script");
-    script.src = "/onnxruntime/ort.all.min.js";
+    script.src = resolveAssetUrl("/onnxruntime/ort.all.min.js");
     script.onload = () => {
       const ort = (window as any).ort;
       if (ort) {
-        ort.env.wasm.wasmPaths = "/onnxruntime/";
+        ort.env.wasm.wasmPaths = resolveAssetUrl("/onnxruntime/");
       }
       resolve(ort);
     };
@@ -1113,10 +1114,7 @@ async function getDirectWebSession(): Promise<any> {
     try {
       const ort = await getOrtWeb();
       if (!ort) return null;
-      const modelUrl = new URL(
-        "/models/modnet.onnx",
-        window.location.origin,
-      ).toString();
+      const modelUrl = resolveAssetUrl("/models/modnet.onnx");
       const res = await fetch(modelUrl);
       if (!res.ok)
         throw new Error(`Model fetch failed with status ${res.status}`);

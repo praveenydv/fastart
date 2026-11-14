@@ -169,9 +169,36 @@ export default function MobileCanvasExportView({
     mimeType: string;
     extension: string;
     fileSize?: number;
-    writeQueue: Promise<void>;
+    queue: string[];
+    isWriting: boolean;
     writeError?: Error;
+    onDrain?: () => void;
   } | null>(null);
+
+  const pumpWriteQueue = async (output: NonNullable<typeof currentChunkedFileRef.current>) => {
+    if (output.isWriting) return;
+    output.isWriting = true;
+    try {
+      while (output.queue.length > 0 && !output.writeError) {
+        // Shift drops the chunk reference immediately so Hermes/JSC can GC it
+        const nextChunk = output.queue.shift();
+        if (nextChunk) {
+          await FileSystem.writeAsStringAsync(output.uri, nextChunk, {
+            encoding: FileSystem.EncodingType.Base64,
+            append: true,
+          });
+        }
+      }
+    } catch (err: any) {
+      output.writeError = err instanceof Error ? err : new Error(String(err));
+      output.queue.length = 0; // Purge pending chunks instantly on error
+    } finally {
+      output.isWriting = false;
+      if (output.queue.length === 0 && output.onDrain) {
+        output.onDrain();
+      }
+    }
+  };
 
   useEffect(() => {
     if (!isExporting) {
@@ -237,33 +264,35 @@ export default function MobileCanvasExportView({
           mimeType: data.mimeType || "video/mp4",
           extension: data.extension || "mp4",
           fileSize: data.fileSize,
-          writeQueue: Promise.resolve(),
+          queue: [],
+          isWriting: true,
         };
         currentChunkedFileRef.current = output;
-        output.writeQueue = FileSystem.writeAsStringAsync(targetFileUri, "", {
+        FileSystem.writeAsStringAsync(targetFileUri, "", {
           encoding: FileSystem.EncodingType.Base64,
-        }).catch((err) => {
-          output.writeError = err instanceof Error ? err : new Error(String(err));
-        });
+        })
+          .catch((err) => {
+            output.writeError = err instanceof Error ? err : new Error(String(err));
+          })
+          .finally(() => {
+            output.isWriting = false;
+            pumpWriteQueue(output);
+          });
       } else if (data.type === "CHUNK_DATA" && currentChunkedFileRef.current) {
         const output = currentChunkedFileRef.current;
         if (data.chunk && !output.writeError) {
-          // Serialize appends because WebView messages can arrive before the
-          // prior native filesystem write has completed. The bridge's chunks
-          // are base64-aligned, so each append decodes independently.
-          output.writeQueue = output.writeQueue
-            .then(() => output.writeError ? undefined : FileSystem.writeAsStringAsync(output.uri, data.chunk, {
-                encoding: FileSystem.EncodingType.Base64,
-                append: true,
-              }))
-            .catch((err) => {
-              output.writeError = err instanceof Error ? err : new Error(String(err));
-            });
+          output.queue.push(data.chunk);
+          pumpWriteQueue(output);
         }
       } else if (data.type === "CHUNK_END" && currentChunkedFileRef.current && !isDoneRef.current) {
         isDoneRef.current = true;
         const info = currentChunkedFileRef.current;
-        await info.writeQueue;
+        if (info.isWriting || info.queue.length > 0) {
+          await new Promise<void>((resolve) => {
+            info.onDrain = resolve;
+            pumpWriteQueue(info);
+          });
+        }
         if (info.writeError) {
           currentChunkedFileRef.current = null;
           onError(info.writeError);

@@ -100,22 +100,28 @@ export async function exportBrowserVideo(
     typeof navigator !== "undefined" &&
     /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  let defaultBitrate = 24000000;
+  let defaultBitrate = 8500000;
   if (targetW >= 3840 || targetH >= 3840 || targetW >= 2160 || targetH >= 2160) {
-    defaultBitrate = isMobileDevice ? 45000000 : 65000000; // 4K Studio Master: 45-65 Mbps
+    defaultBitrate = 22000000; // 4K: 22 Mbps (30fps)
   } else if (targetW >= 1920 || targetH >= 1920 || targetW >= 1080 || targetH >= 1080) {
-    defaultBitrate = isMobileDevice ? 22000000 : 32000000; // 1080p Studio Master: 22-32 Mbps
+    defaultBitrate = 8500000;  // 1080p: 8.5 Mbps (30fps)
   } else {
-    defaultBitrate = isMobileDevice ? 12000000 : 18000000;  // 720p: 12-18 Mbps
+    defaultBitrate = 4500000;  // 720p: 4.5 Mbps (30fps)
   }
   if (fps >= 60) {
-    defaultBitrate = Math.round(defaultBitrate * 1.35); // Boost for 60fps (up to 88 Mbps for 4K 60fps)
+    defaultBitrate = Math.round(defaultBitrate * 1.4); // 1080p 60fps: ~12 Mbps, 4K 60fps: ~30 Mbps
   }
   const finalVideoBitsPerSecond = customBitsPerSecond || defaultBitrate;
 
+  const hasVideoClips = (project.tracks?.video || []).some((c) => c && c.type === "video");
+
   // Ultra-Fast Offline WebCodecs Turbo Engine (3x - 10x faster than real-time)
-  // Accelerates rendering for all timelines using hardware GPU and video encoder ASIC
-  if (format === "mp4" && isWebCodecsSupported()) {
+  // Accelerates rendering for photo, graphics, title, caption, and animation timelines where no HTMLVideoElement seeking is needed.
+  // Note: HTMLVideoElement cannot be sought frame-by-frame offline without flushing the hardware decoder pipeline,
+  // causing catastrophic 1-2s seek stalls (exporting at 1 frame per 2-3s).
+  // For timelines with real video clips, the real-time hardware-playback MediaRecorder pipeline
+  // delivers smooth 30fps/60fps video with zero dropped frames.
+  if (format === "mp4" && !hasVideoClips && isWebCodecsSupported()) {
     try {
       const turboResult = await exportWebCodecsVideo(
         exportRenderer,
@@ -301,22 +307,41 @@ export async function exportBrowserVideo(
   const recordedChunks: Blob[] = [];
   let mediaRecorder: any = null;
 
-  try {
-    mediaRecorder = new (window as any).MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: finalVideoBitsPerSecond,
-      audioBitsPerSecond: 256000,
-    });
-  } catch (recInitErr) {
-    console.warn("[browserVideoExporter] Primary MediaRecorder init failed, falling back to default options:", recInitErr);
+  const MediaRecorderClass = (window as any).MediaRecorder;
+  if (!MediaRecorderClass) {
+    throw new Error("MediaRecorder API is not available in this environment");
+  }
+
+  // Resilient cascading initialization that NEVER drops videoBitsPerSecond:
+  // If an unconstrained MediaRecorder is created for canvas captureStream, Chromium/WebKit
+  // records in lossless intra-frame mode (up to 150-200 MB/s), ballooning 1-min exports to ~10 GB!
+  const candidateConfigs = [
+    { mimeType, videoBitsPerSecond: finalVideoBitsPerSecond, audioBitsPerSecond: 192000 },
+    { mimeType, videoBitsPerSecond: finalVideoBitsPerSecond },
+    { mimeType: format === "mp4" ? "video/mp4" : "video/webm", videoBitsPerSecond: finalVideoBitsPerSecond },
+    { videoBitsPerSecond: finalVideoBitsPerSecond },
+    { bitsPerSecond: finalVideoBitsPerSecond },
+  ];
+
+  for (const config of candidateConfigs) {
     try {
-      mediaRecorder = new (window as any).MediaRecorder(stream);
+      mediaRecorder = new MediaRecorderClass(stream, config);
+      if (config.mimeType) mimeType = config.mimeType;
+      break;
+    } catch (e) {
+      // try next configuration candidate
+    }
+  }
+
+  if (!mediaRecorder) {
+    try {
+      mediaRecorder = new MediaRecorderClass(stream);
       mimeType = (mediaRecorder as any).mimeType || "video/webm";
-      targetExtension = mimeType.includes("mp4") ? "mp4" : "webm";
     } catch (fallbackErr) {
       throw new Error(`MediaRecorder initialization failed: ${String(fallbackErr)}`);
     }
   }
+  targetExtension = mimeType.includes("mp4") ? "mp4" : "webm";
 
   mediaRecorder.ondataavailable = (e: any) => {
     if (e.data && e.data.size > 0) {
@@ -358,12 +383,30 @@ export async function exportBrowserVideo(
       if (recordedChunks.length > 0) {
         try {
           const rawBlob = new Blob(recordedChunks, { type: mimeType });
-          const rawBuffer = await rawBlob.arrayBuffer();
-          const patchedBytes = patchMediaContainerDuration(
-            new Uint8Array(rawBuffer),
-            duration
-          );
-          finalBlob = new Blob([patchedBytes as any], { type: mimeType });
+          // Clear chunk array immediately to free memory
+          recordedChunks.length = 0;
+
+          // Header duration metadata (moov/mvhd/tkhd or EBML Segment Info) resides strictly
+          // within the container header. Slicing only the first 128KB prevents duplicating
+          // the entire video file in RAM as a contiguous ArrayBuffer.
+          const HEADER_SCAN_LIMIT = 131072;
+          if (rawBlob.size <= HEADER_SCAN_LIMIT) {
+            const rawBuffer = await rawBlob.arrayBuffer();
+            const patchedBytes = patchMediaContainerDuration(
+              new Uint8Array(rawBuffer),
+              duration
+            );
+            finalBlob = new Blob([patchedBytes as any], { type: mimeType });
+          } else {
+            const headerBlob = rawBlob.slice(0, HEADER_SCAN_LIMIT);
+            const headerBuffer = await headerBlob.arrayBuffer();
+            const patchedHeader = patchMediaContainerDuration(
+              new Uint8Array(headerBuffer),
+              duration
+            );
+            const remainderBlob = rawBlob.slice(HEADER_SCAN_LIMIT);
+            finalBlob = new Blob([patchedHeader as any, remainderBlob], { type: mimeType });
+          }
         } catch (patchErr) {
           console.warn("[browserVideoExporter] Container duration patch warning:", patchErr);
           finalBlob = new Blob(recordedChunks, { type: mimeType });
@@ -391,24 +434,86 @@ export async function exportBrowserVideo(
       reject(err);
     };
 
-    // Cue all video elements to exact trimIn, muted state, and initial speed
-    (project.tracks.video || []).forEach((c) => {
-      const el = exportRenderer.videoElements.get(c.url) || exportRenderer.videoElements.get(c.id);
+    // Cue all video elements to exact trimIn, muted state, and initial speed before recording begins
+    const cuePromises = (project.tracks.video || []).map(async (c) => {
+      const el =
+        (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+        (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+        exportRenderer.videoElements.get(c.url);
       if (el && el instanceof HTMLVideoElement) {
         el.muted = true;
         el.defaultMuted = true;
-        el.currentTime = Math.max(0, c.trimIn || 0);
+        const targetTrim = Math.max(0, c.trimIn || 0);
         el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
-        if ((c.startTime || 0) <= 0.05) {
-          try { el.play().catch(() => {}); } catch (e) {}
-        } else {
-          try { el.pause(); } catch (e) {}
+        if (Math.abs(el.currentTime - targetTrim) > 0.05) {
+          await new Promise<void>((res) => {
+            let done = false;
+            const onSeek = () => {
+              if (!done) {
+                done = true;
+                el.removeEventListener("seeked", onSeek);
+                res();
+              }
+            };
+            el.addEventListener("seeked", onSeek, { once: true });
+            try {
+              el.currentTime = targetTrim;
+            } catch {
+              onSeek();
+            }
+            setTimeout(onSeek, 250);
+          });
+        }
+        if ((c.startTime || 0) > 0.05) {
+          try {
+            el.pause();
+          } catch (e) {}
         }
       }
     });
+    await Promise.all(cuePromises);
 
-    // Start recording with 100ms timeslice to ensure continuous chunk buffer delivery
-    mediaRecorder.start(100);
+    // Wait until initial active video clip is confirmed actively decoding and outputting frames
+    const firstActiveVideoClip = (project.tracks.video || []).find(
+      (c) => (c.startTime || 0) <= 0.05 && c.type === "video"
+    );
+    if (firstActiveVideoClip) {
+      const el =
+        (firstActiveVideoClip.id ? exportRenderer.videoElements.get(firstActiveVideoClip.id) : null) ||
+        (firstActiveVideoClip.sourceMediaId ? exportRenderer.videoElements.get(firstActiveVideoClip.sourceMediaId) : null) ||
+        exportRenderer.videoElements.get(firstActiveVideoClip.url);
+      if (el && el instanceof HTMLVideoElement) {
+        try {
+          el.muted = true;
+          el.defaultMuted = true;
+          el.currentTime = Math.max(0, firstActiveVideoClip.trimIn || 0);
+          el.playbackRate = Math.max(0.1, Math.min(16, firstActiveVideoClip.speed || 1.0));
+          await el.play().catch(() => {});
+          await new Promise<void>((resolve) => {
+            let timer: any = null;
+            const onFrame = () => {
+              if (el.currentTime > (firstActiveVideoClip.trimIn || 0) + 0.005) {
+                if (timer) clearTimeout(timer);
+                el.removeEventListener("timeupdate", onFrame);
+                el.removeEventListener("playing", onFrame);
+                resolve();
+              }
+            };
+            el.addEventListener("timeupdate", onFrame);
+            el.addEventListener("playing", onFrame);
+            timer = setTimeout(() => {
+              el.removeEventListener("timeupdate", onFrame);
+              el.removeEventListener("playing", onFrame);
+              resolve();
+            }, 1000);
+            onFrame();
+          });
+        } catch (e) {}
+      }
+    }
+
+    // Start recording with 1-second timeslice for optimal GOP compression and smooth streaming
+    mediaRecorder.start(1000);
 
     // Synchronize initial audio playback
     activeAudioTrackElements.forEach(({ el, clip }) => {
@@ -444,14 +549,36 @@ export async function exportBrowserVideo(
         // Trigger video elements playback matching timeline bounds
         (project.tracks.video || []).forEach((c) => {
           if (c.type !== "video") return;
-          const el = exportRenderer.videoElements.get(c.url) || exportRenderer.videoElements.get(c.id);
+          const el =
+            (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+            (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+            exportRenderer.videoElements.get(c.url);
           if (!el || !(el instanceof HTMLVideoElement)) return;
+
           const isInside = curTime >= c.startTime && curTime < c.startTime + c.duration;
+          const isApproaching = curTime >= c.startTime - 0.75 && curTime < c.startTime;
+
+          // Pre-roll upcoming clip so it starts seamlessly without freeze
+          if (isApproaching && !(el as any)._preCued) {
+            (el as any)._preCued = true;
+            el.muted = true;
+            el.defaultMuted = true;
+            el.currentTime = Math.max(0, c.trimIn || 0);
+            el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
+          }
+
           if (isInside) {
             if (el.paused) {
-              try { el.play().catch(() => {}); } catch {}
+              if (!(el as any)._playStarted) {
+                (el as any)._playStarted = true;
+                el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
+                try { el.play().catch(() => {}); } catch {}
+              }
+            } else {
+              (el as any)._playStarted = false;
             }
           } else if (!el.paused) {
+            (el as any)._playStarted = false;
             try { el.pause(); } catch {}
           }
         });
@@ -466,13 +593,26 @@ export async function exportBrowserVideo(
           if (curTime >= start && curTime < end) {
             const speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
             const expectedTime = Math.max(0, (clip.trimIn || 0) + (curTime - start) * speed);
-            if (Math.abs(el.currentTime - expectedTime) > 0.25) {
-              try { el.currentTime = expectedTime; } catch {}
-            }
+            const drift = el.currentTime - expectedTime;
+
             if (el.paused) {
-              try { el.play(); } catch (e) {}
+              if (!(el as any)._playStarted) {
+                (el as any)._playStarted = true;
+                if (Math.abs(drift) > 0.08) {
+                  try { el.currentTime = expectedTime; } catch {}
+                }
+                el.playbackRate = speed;
+                try { el.play(); } catch (e) {}
+              }
+            } else {
+              (el as any)._playStarted = false;
+              if (Math.abs(drift) > 0.02) {
+                const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
+                try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
+              }
             }
           } else if (!el.paused) {
+            (el as any)._playStarted = false;
             try { el.pause(); } catch (e) {}
           }
         });
@@ -510,7 +650,10 @@ export async function exportBrowserVideo(
 
           // Pause all video elements
           (project.tracks.video || []).forEach((c) => {
-            const el = exportRenderer.videoElements.get(c.url) || exportRenderer.videoElements.get(c.id);
+            const el =
+              (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+              (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+              exportRenderer.videoElements.get(c.url);
             if (el && el instanceof HTMLVideoElement) {
               try {
                 el.pause();

@@ -134,7 +134,16 @@ export async function exportWebCodecsVideo(
   const AudioDataClass = (window as any).AudioData;
 
   const videoClips = project.tracks?.video || [];
-  const hasVideoClips = videoClips.some((c) => c.type === "video");
+  const hasVideoClips = videoClips.some((c) => c && c.type === "video");
+
+  // WebCodecs offline frame seeking on HTMLVideoElement is fundamentally incompatible with smooth video export
+  // because browsers flush the hardware decoder pipeline on every seek (taking 200-600ms per frame and dropping textures).
+  // When video clips are present, fall back immediately to the real-time hardware MediaRecorder engine.
+  if (hasVideoClips) {
+    throw new Error(
+      "WebCodecs offline seek cannot decode HTMLVideoElement at high framerates without decoder pipeline stalls. Engaging real-time hardware MediaRecorder engine."
+    );
+  }
 
   const hasAudioClips =
     Boolean(project.tracks?.audio && project.tracks.audio.some((c) => c && c.duration > 0)) ||
@@ -325,47 +334,7 @@ export async function exportWebCodecsVideo(
 
     const curTime = Math.min(duration, f * frameIntervalSec);
 
-    // If video elements are present, seek active clips in parallel using frame-accurate seeking
-    if (hasVideoClips) {
-      const seekPromises: Promise<void>[] = [];
-      for (const clip of videoClips) {
-        if (clip.type === "video") {
-          const el =
-            (clip.id ? exportRenderer.videoElements.get(clip.id) : null) ||
-            (clip.sourceMediaId ? exportRenderer.videoElements.get(clip.sourceMediaId) : null) ||
-            exportRenderer.videoElements.get(clip.url);
-          if (el && el instanceof HTMLVideoElement) {
-            const clipStart = clip.startTime || 0;
-            const clipEnd = clipStart + (clip.duration || 0);
-            const trans = clip.transition;
-            const transDur = trans && trans.type && trans.type !== "none" && trans.type !== "cut" ? (trans.duration || 0.5) : 0;
-            const isInside = curTime >= clipStart && curTime <= clipEnd;
-            const isEntering = transDur > 0 && curTime >= clipStart - transDur && curTime < clipStart;
-
-            if (isInside || isEntering) {
-              const clipLocalTime = Math.max(0, curTime - clipStart);
-              let effectiveSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-              if (clip.speedCurve) {
-                effectiveSpeed = evaluateSpeedCurve(clip.speedCurve, clipLocalTime / Math.max(0.1, clip.duration || 1));
-              }
-              const rawMediaTime = clip.reverse
-                ? Math.max(0, (clip.trimOut || clip.duration) - clipLocalTime * effectiveSpeed)
-                : (clip.trimIn || 0) + clipLocalTime * effectiveSpeed;
-              const targetTime = el.duration && el.duration > 0
-                ? Math.min(el.duration, Math.max(0, rawMediaTime))
-                : Math.max(0, rawMediaTime);
-
-              seekPromises.push(seekVideoElementSafely(el, targetTime, 0.02));
-            }
-          }
-        }
-      }
-      if (seekPromises.length > 0) {
-        await Promise.all(seekPromises);
-      }
-    }
-
-    // Render composite frame at high quality
+    // Render composite frame at high quality (photo/graphics/captions/stickers/effects)
     exportRenderer.renderFrame(
       project,
       curTime,

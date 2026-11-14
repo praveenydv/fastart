@@ -11,14 +11,139 @@ export interface RouteState {
   path: string;
 }
 
+/**
+ * Returns the base path of the application (e.g. '/fastart' on GitHub Pages, or '' locally).
+ */
+export function getBasePath(): string {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return '';
+  }
+
+  // 1. Check build-time inlined EXPO_BASE_URL environment variable
+  const envBase = (process.env.EXPO_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (envBase) {
+    return envBase.startsWith('/') ? envBase : `/${envBase}`;
+  }
+
+  // 2. Base tag in HTML head if present
+  if (typeof document !== 'undefined') {
+    const baseTag = document.querySelector('base[href]');
+    if (baseTag) {
+      const href = baseTag.getAttribute('href') || '';
+      try {
+        const parsed = new URL(href, window.location.origin);
+        const path = parsed.pathname.replace(/\/+$/, '');
+        if (path) return path;
+      } catch (e) {}
+    }
+  }
+
+  // 3. GitHub Pages detection or fallback
+  const pathname = window.location.pathname || '';
+  if (/^\/fastart(?:\/|$)/i.test(pathname)) {
+    return '/fastart';
+  }
+
+  // 4. Any GitHub Pages repository subpath (e.g. username.github.io/repo-name/...)
+  if (
+    typeof window.location.hostname === 'string' &&
+    window.location.hostname.endsWith('github.io')
+  ) {
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length > 0) {
+      return `/${segments[0]}`;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Strips base path prefix (e.g. '/fastart') from a pathname or URL so router works with clean app routes.
+ */
+export function stripBasePath(path: string, basePath?: string): string {
+  if (!path || typeof path !== 'string') return '/';
+  const base = (basePath ?? getBasePath()).replace(/\/+$/, '');
+  if (!base || base === '/') return path;
+
+  let cleaned = path;
+  // If full URL was passed, strip origin first
+  if (cleaned.includes('://')) {
+    cleaned = cleaned.replace(/^[a-zA-Z]+:\/\/[^/]+/, '') || '/';
+  }
+
+  const baseLower = base.toLowerCase();
+  const pathLower = cleaned.toLowerCase();
+
+  // Exact match: /fastart or /fastart/ -> /
+  if (pathLower === baseLower || pathLower === `${baseLower}/`) {
+    return '/';
+  }
+
+  // Subpath match: /fastart/project/123 -> /project/123
+  if (pathLower.startsWith(`${baseLower}/`)) {
+    return cleaned.substring(base.length);
+  }
+
+  // Query or Hash: /fastart?tool=... -> /?tool=...
+  if (pathLower.startsWith(`${baseLower}?`) || pathLower.startsWith(`${baseLower}#`)) {
+    return `/${cleaned.substring(base.length)}`;
+  }
+
+  return cleaned;
+}
+
+/**
+ * Prepends base path (e.g. '/fastart') to an app-relative path for browser history pushState / replaceState.
+ */
+export function withBasePath(path: string, basePath?: string): string {
+  if (!path) return '/';
+  const base = (basePath ?? getBasePath()).replace(/\/+$/, '');
+  if (!base || base === '/') return path;
+
+  const baseLower = base.toLowerCase();
+  const pathLower = path.toLowerCase();
+
+  // If already prefixed with base, return as-is
+  if (
+    pathLower === baseLower ||
+    pathLower.startsWith(`${baseLower}/`) ||
+    pathLower.startsWith(`${baseLower}?`) ||
+    pathLower.startsWith(`${baseLower}#`)
+  ) {
+    return path;
+  }
+
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${cleanPath}`;
+}
+
+/**
+ * Resolves a public static asset URL (like WASM binaries or ONNX models) accounting for base path.
+ */
+export function resolveAssetUrl(relativePath: string): string {
+  const base = getBasePath();
+  const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  const fullPath = `${base}${cleanPath}`;
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+    try {
+      return new URL(fullPath, window.location.origin).toString();
+    } catch (e) {
+      return fullPath;
+    }
+  }
+  return fullPath;
+}
+
 // In-memory navigation state (tracks route on mobile & web)
 function getInitialLocation(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
-    return (
+    const raw =
       (window.location.pathname || '/') +
       (window.location.search || '') +
-      (window.location.hash || '')
-    );
+      (window.location.hash || '');
+    return stripBasePath(raw);
   }
   return '/';
 }
@@ -38,6 +163,9 @@ export function parseRoute(targetPath?: string): RouteState {
   if (raw.includes('://')) {
     raw = raw.replace(/^[a-zA-Z]+:\/\/[^/]+/, '') || '/';
   }
+
+  // Strip base path (e.g. /fastart)
+  raw = stripBasePath(raw);
 
   // Extract hash
   let hash = '';
@@ -64,6 +192,22 @@ export function parseRoute(targetPath?: string): RouteState {
     const [hPath, hQuery] = rawHash.split('?');
     effectivePath = hPath || '/';
     if (hQuery) effectiveSearch = '?' + hQuery;
+  }
+
+  // Support SPA redirect queries (e.g. ?/project/1 or ?p=/project/1)
+  if (effectiveSearch) {
+    if (effectiveSearch.startsWith('?/')) {
+      const queryPath = effectiveSearch.slice(1).split('&')[0];
+      if (queryPath) effectivePath = queryPath;
+    } else {
+      try {
+        if (typeof URLSearchParams !== 'undefined') {
+          const params = new URLSearchParams(effectiveSearch);
+          const pRoute = params.get('p') || params.get('route') || params.get('path');
+          if (pRoute) effectivePath = pRoute;
+        }
+      } catch (_e) {}
+    }
   }
 
   // Parse search params for tool/modal query
@@ -137,7 +281,7 @@ export function parseRoute(targetPath?: string): RouteState {
             path: `/project/${pKey}`,
           };
         }
-      } catch (e) {}
+      } catch (_e) {}
     }
   }
 
@@ -216,6 +360,9 @@ export function parseCurrentRoute(): RouteState {
 
 // Navigate to a new path or route (works on Mobile and Web)
 export function navigateTo(targetPath: string, options?: { replace?: boolean }) {
+  const appPath = stripBasePath(targetPath);
+  const browserPath = withBasePath(appPath);
+
   if (
     Platform.OS === 'web' &&
     typeof window !== 'undefined' &&
@@ -224,9 +371,9 @@ export function navigateTo(targetPath: string, options?: { replace?: boolean }) 
   ) {
     try {
       if (options?.replace && typeof window.history.replaceState === 'function') {
-        window.history.replaceState(null, '', targetPath);
+        window.history.replaceState(null, '', browserPath);
       } else {
-        window.history.pushState(null, '', targetPath);
+        window.history.pushState(null, '', browserPath);
       }
     } catch (e) {
       console.warn('Navigation history error:', e);
@@ -234,18 +381,18 @@ export function navigateTo(targetPath: string, options?: { replace?: boolean }) 
   }
 
   // Update in-memory route state for mobile & web
-  currentPath = targetPath;
+  currentPath = appPath;
   if (options?.replace) {
     if (historyStack.length > 0) {
-      historyStack[historyStack.length - 1] = targetPath;
+      historyStack[historyStack.length - 1] = appPath;
     } else {
-      historyStack.push(targetPath);
+      historyStack.push(appPath);
     }
   } else {
-    historyStack.push(targetPath);
+    historyStack.push(appPath);
   }
 
-  const nextRoute = parseRoute(targetPath);
+  const nextRoute = parseRoute(appPath);
   currentRouteState = nextRoute;
   listeners.forEach((listener) => listener(nextRoute));
 }
@@ -281,11 +428,6 @@ export function useAppRouter() {
   const [route, setRoute] = useState<RouteState>(() => parseRoute(currentPath));
 
   useEffect(() => {
-    // Initial check
-    const initial = parseRoute(currentPath);
-    setRoute(initial);
-    currentRouteState = initial;
-
     const handleChange = (newRoute: RouteState) => {
       setRoute(newRoute);
     };
@@ -299,8 +441,9 @@ export function useAppRouter() {
           (window.location.pathname || '/') +
           (window.location.search || '') +
           (window.location.hash || '');
-        currentPath = url;
-        const updated = parseRoute(url);
+        const appUrl = stripBasePath(url);
+        currentPath = appUrl;
+        const updated = parseRoute(appUrl);
         currentRouteState = updated;
         setRoute(updated);
         listeners.forEach((l) => l(updated));

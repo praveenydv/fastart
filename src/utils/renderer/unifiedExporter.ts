@@ -43,9 +43,9 @@ export class BinaryFileWriter {
   private buffer: Uint8Array;
   private bufferOffset = 0;
   private totalBytesWritten = 0;
-  private chunkSize = 1024 * 1024; // 1MB chunks
+  private chunkSize = 786432; // 768KB chunks (guaranteed divisible by 3 for clean Base64 appends)
 
-  constructor(targetUri: string, chunkSize = 1024 * 1024) {
+  constructor(targetUri: string, chunkSize = 786432) {
     this.targetUri = targetUri;
     this.chunkSize = chunkSize;
     this.buffer = new Uint8Array(this.chunkSize);

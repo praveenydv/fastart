@@ -7,6 +7,7 @@
 import { NativeModules, Platform } from "react-native";
 import { Buffer } from "buffer";
 import { FastArtProject, TrajectoryPoint, CutoutConfig, HSLAdjustments } from "../types/project";
+import { resolveAssetUrl } from "../utils/router";
 
 export interface MaskProvider {
   getFrameMask: (
@@ -456,10 +457,10 @@ class RustCoreBridgeService {
       if (Platform.OS === "web" && typeof window !== "undefined" && window.WebAssembly) {
         try {
           // Attempt loading WASM binary from static public directory
-          // Resolve from the origin root: document.baseURI may point at a client route
-          // such as /project/, which would return the SPA HTML for /project/wasm/.
-          const wasmUrl = new URL("/wasm/fastart_wasm.wasm", window.location.origin).toString();
-          const candidates = [wasmUrl];
+          // Resolve with base path support for GitHub Pages / subpaths
+          const wasmUrl = resolveAssetUrl("/wasm/fastart_wasm.wasm");
+          const fallbackOriginUrl = new URL("/wasm/fastart_wasm.wasm", window.location.origin).toString();
+          const candidates = Array.from(new Set([wasmUrl, fallbackOriginUrl]));
           for (const wasmUrl of candidates) {
             try {
               const res = await fetch(wasmUrl);
