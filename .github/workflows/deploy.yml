@@ -1,6 +1,10 @@
 name: Deploy to GitHub Pages
 
 on:
+  push:
+    branches:
+      - main
+      - init-app
   workflow_dispatch:
 
 permissions:
