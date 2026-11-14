@@ -2,22 +2,11 @@ name: Deploy to GitHub Pages
 
 on:
   workflow_dispatch:
-    inputs:
-      action:
-        description: 'Select job to run'
-        type: choice
-        required: true
-        default: 'Build and Deploy'
-        options:
-          - 'Build and Deploy'
-          - 'Build only'
-          - 'Deploy only'
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  actions: read
 
 concurrency:
   group: 'pages'
@@ -25,7 +14,6 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ github.event.inputs.action != 'Deploy only' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -77,40 +65,12 @@ jobs:
         with:
           path: './dist'
 
-  prepare-deploy-only:
-    if: ${{ github.event.inputs.action == 'Deploy only' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download previous Pages artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          LATEST_RUN=$(gh run list --workflow=deploy.yml --status=success --limit 10 --json databaseId,conclusion -q '.[] | select(.conclusion=="success") | .databaseId' | head -n 1)
-          if [ -z "$LATEST_RUN" ]; then
-            echo "::error::No previous successful build found."
-            exit 1
-          fi
-          echo "Found previous successful run: $LATEST_RUN"
-          mkdir -p previous_dist
-          gh run download "$LATEST_RUN" -n github-pages --dir previous_dist
-          tar -xvf previous_dist/artifact.tar -C previous_dist/
-          rm -f previous_dist/artifact.tar
-
-      - name: Upload Pages artifact for deployment
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: 'previous_dist'
-
   deploy:
-    needs: [build, prepare-deploy-only]
-    if: |
-      always() &&
-      github.event.inputs.action != 'Build only' &&
-      (needs.build.result == 'success' || needs.prepare-deploy-only.result == 'success')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    needs: build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
