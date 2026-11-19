@@ -194,21 +194,25 @@ export function generateCanvasBridgeHtml(
       autoCutoutMaskCanvas.height = 512;
       var autoCutoutMaskCtx = autoCutoutMaskCanvas.getContext("2d");
       var autoCutoutImgData = autoCutoutMaskCtx ? autoCutoutMaskCtx.createImageData(512, 512) : null;
+      var rleScratchBuffer = new Uint8Array(65536);
 
       function unpackRleMaskToCanvas(base64Rle) {
         if (!base64Rle || !autoCutoutMaskCtx || !autoCutoutImgData) return null;
         try {
           var bin = atob(base64Rle);
-          var rle = new Uint8Array(bin.length);
-          for (var j = 0; j < bin.length; j++) rle[j] = bin.charCodeAt(j);
+          var binLen = bin.length;
+          if (rleScratchBuffer.length < binLen) {
+            rleScratchBuffer = new Uint8Array(Math.max(binLen, 65536));
+          }
+          for (var j = 0; j < binLen; j++) rleScratchBuffer[j] = bin.charCodeAt(j);
 
           var data = autoCutoutImgData.data;
           var maxLen = 512 * 512;
           var outIdx = 0;
           var i = 0;
-          while (i + 1 < rle.length && outIdx < maxLen) {
-            var count = rle[i];
-            var val = rle[i + 1];
+          while (i + 1 < binLen && outIdx < maxLen) {
+            var count = rleScratchBuffer[i];
+            var val = rleScratchBuffer[i + 1];
             var end = Math.min(maxLen, outIdx + count);
             for (var p = outIdx; p < end; p++) {
               var px = p * 4;
@@ -2577,7 +2581,23 @@ export function generateCanvasBridgeHtml(
           return;
         }
 
-        const stream = canvas.captureStream(EXPORT_OPTIONS.fps);
+        var stream = null;
+        var videoTrack = null;
+        var useManualFramePush = false;
+        try {
+          stream = canvas.captureStream(0);
+          videoTrack = stream ? stream.getVideoTracks()[0] : null;
+          if (videoTrack && typeof videoTrack.requestFrame === "function") {
+            useManualFramePush = true;
+          } else {
+            try { if (stream) stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
+            stream = canvas.captureStream(EXPORT_OPTIONS.fps);
+            videoTrack = stream ? stream.getVideoTracks()[0] : null;
+          }
+        } catch(e) {
+          stream = canvas.captureStream(EXPORT_OPTIONS.fps);
+          videoTrack = stream ? stream.getVideoTracks()[0] : null;
+        }
 
         // Web Audio API Stereo Track Mixdown
         let audioCtx = null;
@@ -2733,6 +2753,8 @@ export function generateCanvasBridgeHtml(
         let headerDispatched = false;
         let pendingBytes = new Uint8Array(0);
         const HEADER_THRESHOLD = 65536;
+        var hasFinishedStop = false;
+        var stopWatchdogTimer = null;
 
         function streamBytesToNative(rawBytes, isLast) {
           if (!rawBytes && !isLast) return;
@@ -2757,12 +2779,17 @@ export function generateCanvasBridgeHtml(
 
           if (emitLen > 0) {
             var toSend = combined.subarray(0, emitLen);
-            var binary = "";
-            var binaryChunkSize = 8192;
-            for (var i = 0; i < toSend.length; i += binaryChunkSize) {
-              binary += String.fromCharCode.apply(null, toSend.subarray(i, Math.min(i + binaryChunkSize, toSend.length)));
+            var subChunkSize = 196608; // 192KB (strictly divisible by 3 so intermediate sub-slices have zero '=' padding)
+            for (var offset = 0; offset < emitLen; offset += subChunkSize) {
+              var subLen = Math.min(subChunkSize, emitLen - offset);
+              var sub = toSend.subarray(offset, offset + subLen);
+              var binary = "";
+              var binaryChunkSize = 8192;
+              for (var i = 0; i < sub.length; i += binaryChunkSize) {
+                binary += String.fromCharCode.apply(null, sub.subarray(i, Math.min(i + binaryChunkSize, sub.length)));
+              }
+              sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
             }
-            sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
             transferredBytes += toSend.length;
           }
         }
@@ -2829,6 +2856,9 @@ export function generateCanvasBridgeHtml(
               } else {
                 streamBytesToNative(bytes, false);
               }
+
+              // Cooperative yield to avoid holding the JavaScript thread and let garbage collection run
+              await new Promise(function(r) { setTimeout(r, 0); });
             }
           } catch (err) {
             transferFailed = true;
@@ -2851,8 +2881,28 @@ export function generateCanvasBridgeHtml(
         };
 
         recorder.onstop = function() {
-          function finishStop() {
-            if (transferFailed) return;
+          if (stopWatchdogTimer) {
+            clearTimeout(stopWatchdogTimer);
+            stopWatchdogTimer = null;
+          }
+          if (isTransferring || chunkQueue.length > 0) {
+            transferDrainCb = finishStop;
+            pumpTransferQueue();
+          } else {
+            finishStop();
+          }
+        };
+
+        function finishStop() {
+          if (hasFinishedStop) return;
+          hasFinishedStop = true;
+          if (stopWatchdogTimer) {
+            clearTimeout(stopWatchdogTimer);
+            stopWatchdogTimer = null;
+          }
+          if (transferFailed) return;
+
+          try {
             if (!headerDispatched && headerBuffer.length > 0) {
               var combined = new Uint8Array(headerBufferLen);
               var off = 0;
@@ -2874,15 +2924,49 @@ export function generateCanvasBridgeHtml(
               duration: durationSec,
               fileSize: transferredBytes
             });
+          } catch (finErr) {
+            console.warn("[mobileWebBridge] finishStop error:", finErr);
+            sendToNative({
+              type: "CHUNK_END",
+              mimeType: mimeType,
+              extension: extension,
+              duration: durationSec,
+              fileSize: transferredBytes
+            });
           }
 
-          if (isTransferring || chunkQueue.length > 0) {
-            transferDrainCb = finishStop;
-            pumpTransferQueue();
-          } else {
-            finishStop();
+          // Instant GPU & memory deallocation
+          if (stream) {
+            try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
           }
-        };
+          if (audioCtx) {
+            try { audioCtx.close(); } catch(e) {}
+            audioCtx = null;
+          }
+          mediaMap.forEach(function(el) {
+            try {
+              if (el instanceof HTMLMediaElement) {
+                el.pause();
+                el.src = "";
+                el.load();
+                if (el.parentNode) el.parentNode.removeChild(el);
+              }
+            } catch(e) {}
+          });
+          mediaMap.clear();
+          headerBuffer = [];
+          pendingBytes = new Uint8Array(0);
+          chunkQueue.length = 0;
+          try {
+            canvas.width = 1;
+            canvas.height = 1;
+            if (chromaOffCanvas) { chromaOffCanvas.width = 1; chromaOffCanvas.height = 1; }
+            if (cutoutSourceCanvas) { cutoutSourceCanvas.width = 1; cutoutSourceCanvas.height = 1; }
+            if (autoCutoutMaskCanvas) { autoCutoutMaskCanvas.width = 1; autoCutoutMaskCanvas.height = 1; }
+            if (maskOffCanvas) { maskOffCanvas.width = 1; maskOffCanvas.height = 1; }
+            if (maskShapeCanvas) { maskShapeCanvas.width = 1; maskShapeCanvas.height = 1; }
+          } catch(e) {}
+        }
 
         recorder.onerror = function(err) {
           sendToNative({ type: "ERROR", message: "MediaRecorder error: " + (err.message || "Unknown") });
@@ -3148,9 +3232,12 @@ export function generateCanvasBridgeHtml(
           // for a lower rate. Avoid repeating the expensive full composition on
           // display-only frames; the canvas stream is configured to the export
           // frame rate above.
-          if (curTime - lastRenderedTime >= targetFrameInterval - 0.001 || elapsed >= durationSec) {
+          if (curTime - lastRenderedTime >= targetFrameInterval - 0.002 || elapsed >= durationSec) {
             renderFrame(curTime);
             lastRenderedTime = curTime;
+            if (useManualFramePush && videoTrack && typeof videoTrack.requestFrame === "function") {
+              try { videoTrack.requestFrame(); } catch(e) {}
+            }
           }
 
           if (now - lastProgressSentAt >= 100 || elapsed >= durationSec) {
@@ -3160,19 +3247,22 @@ export function generateCanvasBridgeHtml(
           }
 
           if (elapsed < durationSec) {
-            var scheduled = false;
-            var timerId = setTimeout(function() {
-              if (!scheduled) { scheduled = true; tick(); }
-            }, Math.max(4, Math.round(targetFrameInterval * 1000)));
-            if (typeof requestAnimationFrame === "function") {
-              requestAnimationFrame(function() {
-                if (!scheduled) { scheduled = true; clearTimeout(timerId); tick(); }
-              });
-            }
+            var nextFrameDueSec = lastRenderedTime + targetFrameInterval;
+            var delayMs = Math.max(4, Math.min(50, Math.round((nextFrameDueSec - elapsed) * 1000)));
+            setTimeout(tick, delayMs);
           } else {
             sendToNative({ type: "PROGRESS", progress: 99, status: "Finalizing video file..." });
 
-            // Stop all media
+            // 1. Instantly stop all stream tracks to halt video capture pipeline and prevent runaway GPU/RAM allocation!
+            if (stream) {
+              try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
+            }
+            if (audioCtx) {
+              try { audioCtx.close(); } catch(e) {}
+              audioCtx = null;
+            }
+
+            // 2. Stop all media playback
             for (const clip of videoClips) {
               const el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
               if (el && el instanceof HTMLVideoElement && !el.paused) {
@@ -3190,10 +3280,27 @@ export function generateCanvasBridgeHtml(
               }
             }
 
-            if (typeof recorder.requestData === "function" && recorder.state === "recording") {
-              try { recorder.requestData(); } catch(e) {}
+            // 3. Directly stop MediaRecorder WITHOUT requestData() (which causes Blink/WebKit state collisions)
+            if (recorder.state === "recording") {
+              try { recorder.stop(); } catch(e) {
+                console.warn("[mobileWebBridge] Stop recorder error:", e);
+              }
             }
-            recorder.stop();
+
+            // 4. Fallback watchdog timer (3.5s): If recorder.onstop fails to fire, force completion
+            if (!stopWatchdogTimer) {
+              stopWatchdogTimer = setTimeout(function() {
+                if (!hasFinishedStop) {
+                  console.warn("[mobileWebBridge] Recorder onstop watchdog triggered fallback finalization");
+                  if (isTransferring || chunkQueue.length > 0) {
+                    transferDrainCb = finishStop;
+                    pumpTransferQueue();
+                  } else {
+                    finishStop();
+                  }
+                }
+              }, 3500);
+            }
           }
         } catch (tickErr) {
           sendToNative({ type: "ERROR", message: String(tickErr && tickErr.message ? tickErr.message : tickErr) });

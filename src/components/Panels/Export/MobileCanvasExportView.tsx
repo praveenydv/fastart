@@ -73,20 +73,30 @@ async function resolveProjectMediaForWebView(proj: FastArtProject): Promise<Fast
                 rleData = await loadMasksRLE(fallbackId);
               }
               if (rleData?.masks) {
+                const maskFps = rleData.fps || 30;
+                const speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+                const startSec = Math.max(0, (clip.trimIn || 0) - 1.0);
+                const endSec = (clip.trimIn || 0) + (clip.duration || 5.0) * speed + 1.0;
+                const minFrame = Math.max(0, Math.floor(startSec * maskFps));
+                const maxFrame = Math.ceil(endSec * maskFps);
+
                 const serializableMasks: Record<string, string> = {};
                 for (const [k, v] of Object.entries(rleData.masks)) {
-                  const b64 = Buffer.from(v).toString("base64");
-                  serializableMasks[k] = b64;
-                  // Also extract numeric frame index so `serializableMasks[frameIdx]` always matches
                   const parts = k.split("_");
                   const lastPart = parts[parts.length - 1];
-                  if (/^\d+$/.test(lastPart)) {
-                    serializableMasks[lastPart] = b64;
+                  const numIdx = /^\d+$/.test(lastPart) ? parseInt(lastPart, 10) : -1;
+                  if (numIdx >= 0) {
+                    // Only serialize masks within the active trim range of this clip to save massive RAM
+                    if (numIdx >= minFrame && numIdx <= maxFrame) {
+                      serializableMasks[lastPart] = Buffer.from(v).toString("base64");
+                    }
+                  } else if (parts.length === 1) {
+                    serializableMasks[k] = Buffer.from(v).toString("base64");
                   }
                 }
                 (clip as any).cutoutMasks = {
                   masks: serializableMasks,
-                  fps: rleData.fps || 30,
+                  fps: maskFps,
                 };
               }
             } catch (e) {
@@ -288,10 +298,13 @@ export default function MobileCanvasExportView({
         isDoneRef.current = true;
         const info = currentChunkedFileRef.current;
         if (info.isWriting || info.queue.length > 0) {
-          await new Promise<void>((resolve) => {
-            info.onDrain = resolve;
-            pumpWriteQueue(info);
-          });
+          await Promise.race([
+            new Promise<void>((resolve) => {
+              info.onDrain = resolve;
+              pumpWriteQueue(info);
+            }),
+            new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+          ]);
         }
         if (info.writeError) {
           currentChunkedFileRef.current = null;
@@ -309,6 +322,13 @@ export default function MobileCanvasExportView({
           fileSize: fileStat.exists ? (fileStat as any).size : info.fileSize,
         };
         currentChunkedFileRef.current = null;
+        if (htmlUri) {
+          FileSystem.deleteAsync(htmlUri, { idempotent: true }).catch(() => {});
+        }
+        try {
+          const { Image: ExpoImage } = require("expo-image");
+          ExpoImage?.clearMemoryCache?.();
+        } catch {}
         onProgress?.(100);
         onComplete(result);
       } else if (data.type === "COMPLETE" && !isDoneRef.current) {

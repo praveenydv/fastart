@@ -102,8 +102,8 @@ export function usePlaybackLoop({
 
       // Keep the native preview and timeline responsive without invalidating
       // the full editor tree on every display frame. The playhead coordinator
-      // above continues to receive every animation frame.
-      const reactUpdateInterval = Platform.OS === "web" ? 16 : 1000 / 30;
+      // above continues to receive every animation frame (locked 60-120 FPS).
+      const reactUpdateInterval = Platform.OS === "web" ? 1000 / 15 : 1000 / 30;
       if (currentTimeStamp - lastReactUpdateRef.current >= reactUpdateInterval) {
         lastReactUpdateRef.current = currentTimeStamp;
         setCurrentTimeRef.current(nextTime);

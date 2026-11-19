@@ -24,6 +24,7 @@ export interface ClipRenderContext {
   ensureOffscreen: (cw: number, ch: number) => HTMLCanvasElement | null;
   isScrubbing?: boolean;
   isPlaying?: boolean;
+  isExporting?: boolean;
 }
 
 export interface TransitionRenderState {
@@ -487,7 +488,7 @@ export function drawClip(
           -dh / 2,
           dw,
           dh,
-          cutout,
+          { ...cutout, isExporting: Boolean(renderCtx.isExporting) },
           renderCtx.offscreenCanvas,
           renderCtx.offscreenCtx,
         );

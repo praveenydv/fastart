@@ -38,10 +38,11 @@ export function getBasePath(): string {
     }
   }
 
-  // 3. GitHub Pages detection or fallback
+  // 3. GitHub Pages detection or fallback (preserving exact casing for Linux static hosts)
   const pathname = window.location.pathname || '';
-  if (/^\/fastart(?:\/|$)/i.test(pathname)) {
-    return '/fastart';
+  const firstSegment = pathname.split('/').filter(Boolean)[0];
+  if (firstSegment && /^fastart$/i.test(firstSegment)) {
+    return `/${firstSegment}`;
   }
 
   // 4. Any GitHub Pages repository subpath (e.g. username.github.io/repo-name/...)

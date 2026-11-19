@@ -177,6 +177,7 @@ export function drawClipWithMask(
   renderCtx: {
     offscreenCanvas: HTMLCanvasElement | null;
     offscreenCtx: CanvasRenderingContext2D | null;
+    isExporting?: boolean;
   },
 ) {
   if (typeof document === "undefined") {
@@ -236,7 +237,7 @@ export function drawClipWithMask(
       0,
       canvasW,
       canvasH,
-      cutout,
+      { ...cutout, isExporting: Boolean(renderCtx.isExporting) },
       maskCutoutCanvas || renderCtx.offscreenCanvas,
       maskCutoutCtx || renderCtx.offscreenCtx,
     );

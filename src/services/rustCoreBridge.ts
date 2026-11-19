@@ -2139,11 +2139,12 @@ class RustCoreBridgeService {
           }
         }
 
-        // Stream inference for unbaked frames during both playback and paused inspection
+        // Stream inference for unbaked frames during interactive playback (never during export to avoid GPU/RAM overload)
         if (
           !hasBakedMasks &&
           !hasExactMask &&
           !isScrubbing &&
+          !(options as any)?.isExporting &&
           activeMaskProvider?.requestHumanSegmentation
         ) {
           activeMaskProvider.requestHumanSegmentation(media as any, options.clipId, actualClipTime);

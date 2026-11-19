@@ -38,6 +38,19 @@ let isModnetReady = false;
 let modnetInitPromise: Promise<boolean> | null = null;
 
 // Mask cache & state
+let _isExporting = false;
+export function setExportingActive(active: boolean): void {
+  _isExporting = active;
+  if (active) {
+    try {
+      (ExpoImage as any).clearMemoryCache?.();
+    } catch {}
+  }
+}
+export function getExportingActive(): boolean {
+  return _isExporting;
+}
+
 let lastSegmentedMask: HTMLCanvasElement | null = null;
 let isProcessingFrame = false;
 let lastProcessedTime = 0;
@@ -1056,10 +1069,15 @@ export function getHumanSegmentationMask(
   return lastSegmentedMask;
 }
 
+let lastNeuralInitAttempt = 0;
+
 /** Initializes the shared Rust MODNet runtime for the current platform. */
 export function initStudioNeuralEngine(): Promise<boolean> {
   if (isModnetRuntimeReady()) return Promise.resolve(true);
   if (modnetInitPromise) return modnetInitPromise;
+  const now = Date.now();
+  if (now - lastNeuralInitAttempt < 6000) return Promise.resolve(false);
+  lastNeuralInitAttempt = now;
   modnetInitPromise = (async () => {
     try {
       const ok =
@@ -1336,7 +1354,7 @@ export function requestHumanSegmentation(
   clipId?: string,
   clipTime?: number,
 ): void {
-  if (!mediaElement || isProcessingFrame || typeof document === "undefined")
+  if (_isExporting || !mediaElement || isProcessingFrame || typeof document === "undefined")
     return;
 
   try {
@@ -2560,10 +2578,10 @@ export async function renderCutoutToVideoBlob(
 
 /**
  * In-memory URI cache: clipId_frameIdx -> data/file URI of the processed RGBA PNG.
- * Bounded with LRU eviction to prevent runaway memory usage during long editing sessions.
+ * Bounded with LRU eviction (120 frames = ~4s sliding window) to prevent runaway memory usage during long editing sessions.
  * Used by PlayerNativeCompositor on native to render the cutout as an Image overlay.
  */
-const nativeMaskUriCache = new LruCache<string, string>(10000);
+const nativeMaskUriCache = new LruCache<string, string>(120);
 
 const nativeMaskFrameIndicesMap = new Map<string, number[]>();
 
@@ -3058,7 +3076,7 @@ export async function processClipUnified(
         registerClipFrameIndex(clipId, 0);
         registerClipFrameIndex(`${clipId}_src`, 0);
       }
-      ExpoImage.prefetch(maskUri, { cachePolicy: "memory" }).catch(() => {});
+      ExpoImage.prefetch(maskUri, { cachePolicy: "disk" }).catch(() => {});
       if (!isCutoutProcessingActive()) {
         notifyMaskUpdated();
       }
@@ -3206,7 +3224,7 @@ export async function processVideoUnified(
               setNativeMaskUri(`${parentSourceId}_src`, srcIdx, maskUri);
               registerClipFrameIndex(`${parentSourceId}_src`, srcIdx);
             }
-            ExpoImage.prefetch(maskUri, { cachePolicy: "memory" }).catch(
+            ExpoImage.prefetch(maskUri, { cachePolicy: "disk" }).catch(
               () => {},
             );
           } else {

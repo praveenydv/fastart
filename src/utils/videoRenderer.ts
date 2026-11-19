@@ -49,6 +49,10 @@ export function getActiveVideoRenderer(): VideoRenderer | null {
   return activeVideoRenderer;
 }
 
+export function setActiveVideoRenderer(renderer: VideoRenderer | null) {
+  activeVideoRenderer = renderer;
+}
+
 export function pauseActiveVideoRenderer() {
   if (activeVideoRenderer) {
     activeVideoRenderer.pauseAll();
@@ -440,7 +444,10 @@ export class VideoRenderer {
     const w = logicalWidth && logicalWidth > 0 ? logicalWidth : (this.canvas.clientWidth || canvasW);
     const h = logicalHeight && logicalHeight > 0 ? logicalHeight : (this.canvas.clientHeight || canvasH);
 
-    ctx.clearRect(0, 0, canvasW, canvasH);
+    const canvasBg = (project.canvasBackground && project.canvasBackground.trim()) || "#000000";
+    if (canvasBg.toLowerCase() === "transparent") {
+      ctx.clearRect(0, 0, canvasW, canvasH);
+    }
 
     ctx.save();
     try {
@@ -1006,6 +1013,7 @@ export class VideoRenderer {
         ensureOffscreen: (cw, ch) => this.ensureOffscreen(cw, ch),
         isScrubbing: this.isScrubbing,
         isPlaying: this.isPlaying,
+        isExporting: this.isExporting,
       },
       transitionState,
     );

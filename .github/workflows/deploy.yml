@@ -55,9 +55,11 @@ jobs:
           EXPO_BASE_URL: ${{ steps.pages.outputs.base_path }}
         run: yarn expo export -p web
 
-      - name: Configure SPA routing and Jekyll bypass
+      - name: Configure SPA routing, Jekyll bypass, and runtime assets
         run: |
           touch dist/.nojekyll
+          # Ensure all WebAssembly, AI neural models, and ONNX WebGPU runtime assets are copied
+          cp -rn public/* dist/ 2>/dev/null || cp -r public/* dist/
           cp dist/index.html dist/404.html
 
       - name: Upload Pages artifact

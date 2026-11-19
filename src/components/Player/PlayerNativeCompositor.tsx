@@ -484,7 +484,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
       }
     }
     if (prefetchUris.length > 0) {
-      ExpoImage.prefetch(prefetchUris, "memory").catch(() => {});
+      ExpoImage.prefetch(prefetchUris, "disk").catch(() => {});
     }
   }, [isPlaying, isCutoutActive, sourceFrameIdx, clip.id, clip.sourceMediaId, clip.reverse, effectiveMaskUri]);
 
@@ -495,7 +495,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
         source={{ uri: effectiveMaskUri }}
         style={StyleSheet.absoluteFill}
         contentFit="contain"
-        cachePolicy="memory"
+        cachePolicy="disk"
         priority="high"
         transition={{ duration: 40, effect: "cross-dissolve" }}
       />
@@ -518,7 +518,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
               },
             ]}
             contentFit="contain"
-            cachePolicy="memory"
+            cachePolicy="disk"
             priority="high"
             transition={{ duration: 40, effect: "cross-dissolve" }}
           />

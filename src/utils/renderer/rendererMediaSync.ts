@@ -219,7 +219,9 @@ export async function preloadClip(
 
     // Hardware-synchronized video frame delivery (zero duplicate draws, locked vsync)
     const onRvfc = () => {
-      if (ctx.onFrameNeeded) ctx.onFrameNeeded();
+      // During active playback, usePlaybackLoop RAF loop already drives frame rendering at 60fps.
+      // Only request extra frames here if paused / scrubbing to avoid double-draw overhead.
+      if (!ctx.isPlaying && ctx.onFrameNeeded) ctx.onFrameNeeded();
       if (!vid.paused && typeof (vid as any).requestVideoFrameCallback === "function") {
         (vid as any).requestVideoFrameCallback(onRvfc);
       }
@@ -524,13 +526,12 @@ export function syncPlayback(
           try {
             vid.currentTime = Math.max(0, mediaTime);
           } catch (e) {}
-        } else if (Math.abs(drift) > 0.02) {
+        } else if (Math.abs(drift) > 0.08) {
           // Dynamic smooth micro-adjustment via playbackRate to eliminate drift smoothly without freezes:
-          // If drift < 0 (video behind), adjust > 0 to speed up (up to 1.30x)
-          // If drift > 0 (video ahead), adjust < 0 to slow down (down to 0.70x)
-          const compFactor = Math.max(0.70, Math.min(1.30, 1 - drift * 0.8));
+          // Use an 80ms threshold (~2.5 frames) to avoid jittering on normal 24/30fps vsync phase differences.
+          const compFactor = Math.max(0.75, Math.min(1.25, 1 - drift * 0.4));
           const compRate = speed * compFactor;
-          if (Math.abs(vid.playbackRate - compRate) > 0.015) {
+          if (Math.abs(vid.playbackRate - compRate) > 0.025) {
             vid.playbackRate = Math.max(0.2, Math.min(16, compRate));
           }
         } else {

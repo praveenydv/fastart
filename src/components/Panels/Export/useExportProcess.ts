@@ -5,7 +5,9 @@ import {
   VideoRenderer,
   ExportFormat,
   ExportResult,
+  pauseActiveVideoRenderer,
 } from "../../../utils/videoRenderer";
+import { pauseAllAudio } from "../../Player/usePlayerAudioSync";
 import { addNotification } from "../../../utils/storage";
 import {
   MEDIA_FORMATS,
@@ -16,6 +18,7 @@ import {
 import { executeDirectDownload } from "./exportFileStorage";
 import { exportFastArtProject } from "../../../utils/renderer/unifiedExporter";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
+import { setExportingActive, cancelLiveSegmentation } from "../../../services/selfieSegmentationService";
 
 export function useExportProcess(
   project: any,
@@ -79,6 +82,7 @@ export function useExportProcess(
       mobileCanvasResolverRef.current = null;
     }
     setIsMobileCanvasRendering(false);
+    setExportingActive(false);
     setStatus("idle");
     setProgress(0);
     setErrorMessage(null);
@@ -140,6 +144,12 @@ export function useExportProcess(
     setStatus("rendering");
     setErrorMessage(null);
     setProgress(0);
+    setExportingActive(true);
+    try {
+      pauseActiveVideoRenderer();
+      pauseAllAudio();
+      cancelLiveSegmentation();
+    } catch {}
 
     try {
       const renderDuration = Math.max(totalDuration || 2.0, 1.0);
@@ -206,6 +216,7 @@ export function useExportProcess(
       setStatus("error");
       setErrorMessage("Export could not be completed. Please try another format.");
     } finally {
+      setExportingActive(false);
       setIsMobileCanvasRendering(false);
       mobileCanvasResolverRef.current = null;
     }
