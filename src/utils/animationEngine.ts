@@ -189,9 +189,10 @@ export function evaluateClipAnimation(
       } else if (loopPreset === 'wave') {
         offsetX += Math.sin(elapsed * 4) * (10 * previewScale);
         offsetY += Math.cos(elapsed * 4) * (8 * previewScale);
-      } else if (loopPreset === 'jitter') {
-        offsetX += Math.sin(elapsed * 35) * (3 * previewScale);
-        offsetY += Math.cos(elapsed * 45) * (3 * previewScale);
+      } else if (loopPreset === 'glitch' || loopPreset === 'glitch_jitter' || loopPreset === 'jitter') {
+        const tick = Math.floor(elapsed * 24);
+        offsetX += (tick % 5 === 0 ? 4 : tick % 7 === 0 ? -4 : (Math.sin(elapsed * 45) * 2)) * previewScale;
+        offsetY += (tick % 6 === 0 ? -2 : tick % 8 === 0 ? 2 : 0) * previewScale;
       }
     }
 
@@ -291,6 +292,13 @@ export function evaluateClipAnimation(
     } else if (sAnim === 'shake') {
       if (elapsed < 0.8) {
         offsetX = Math.sin(elapsed * 40) * (4 * previewScale);
+      }
+    } else if (sAnim === 'glitch' || sAnim === 'glitchjitter') {
+      const tick = Math.floor(elapsed * 24);
+      offsetX = (tick % 5 === 0 ? 5 : tick % 7 === 0 ? -5 : (Math.sin(elapsed * 45) * 3)) * previewScale;
+      offsetY = (tick % 6 === 0 ? -3 : tick % 8 === 0 ? 3 : 0) * previewScale;
+      if (tick % 9 === 0) {
+        alpha = 0.85;
       }
     } else if (sAnim === 'wave') {
       offsetY = Math.sin(elapsed * 4) * (6 * previewScale);

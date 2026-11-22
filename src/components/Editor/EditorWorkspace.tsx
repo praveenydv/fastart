@@ -643,12 +643,18 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   );
 
   const handleApplySpeed = React.useCallback(
-    (speed: number, curve?: string, pitch?: boolean) => {
+    (speed: number, curve?: any, smoothSlowMo?: any, pitch?: boolean) => {
       const targetId = resolveActiveClipId("video");
       if (!targetId || !project) return;
       const updatedVideos = (project.tracks?.video || []).map((c: any) =>
         c.id === targetId
-          ? { ...c, speed, speedCurve: curve, keepPitch: pitch }
+          ? {
+              ...c,
+              speed,
+              speedCurve: curve,
+              smoothSlowMo: smoothSlowMo || c.smoothSlowMo || "none",
+              keepPitch: pitch !== undefined ? pitch : c.keepPitch,
+            }
           : c,
       );
       updateProjectWithHistory({
@@ -1768,8 +1774,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
                       }
-                      onApplySpeed={(speed, curve) =>
-                        handleApplySpeed(speed, curve)
+                      onApplySpeed={(speed, curve, slowMo) =>
+                        handleApplySpeed(speed, curve, slowMo)
                       }
                       onApplyFilter={handleApplyFilter}
                       onDeleteClip={() => handleDeleteClip()}
@@ -2048,8 +2054,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
                       }
-                      onApplySpeed={(speed, curve) =>
-                        handleApplySpeed(speed, curve)
+                      onApplySpeed={(speed, curve, slowMo) =>
+                        handleApplySpeed(speed, curve, slowMo)
                       }
                       onApplyFilter={handleApplyFilter}
                       onDeleteClip={() => handleDeleteClip()}

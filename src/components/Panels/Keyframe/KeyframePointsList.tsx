@@ -89,10 +89,13 @@ export default function KeyframePointsList({
                   <TouchableOpacity
                     style={styles.kfJumpBtn}
                     onPress={() => onJumpToKeyframe(kf.time)}
+                    accessibilityLabel={isCurrent ? "Active keyframe" : "Jump to keyframe"}
                   >
-                    <Text style={styles.kfJumpBtnText}>
-                      {isCurrent ? "Active" : "Jump"}
-                    </Text>
+                    <Ionicons
+                      name={isCurrent ? "locate" : "arrow-forward"}
+                      size={13}
+                      color={isCurrent ? "#00F2FE" : "#8E95A5"}
+                    />
                   </TouchableOpacity>
 
                   {onDeleteKeyframeAtTime && (
@@ -101,6 +104,7 @@ export default function KeyframePointsList({
                       onPress={() => {
                         onDeleteKeyframeAtTime(kf.time);
                       }}
+                      accessibilityLabel="Delete keyframe"
                     >
                       <Ionicons name="trash-outline" size={13} color="#EF4444" />
                     </TouchableOpacity>
@@ -204,10 +208,13 @@ export default function KeyframePointsList({
                   <TouchableOpacity
                     style={[styles.kfJumpBtn, { backgroundColor: isCurrent ? "rgba(168, 85, 247, 0.25)" : "#182030" }]}
                     onPress={() => onJumpToKeyframe(mkf.time)}
+                    accessibilityLabel={isCurrent ? "Active mask keyframe" : "Jump to mask keyframe"}
                   >
-                    <Text style={[styles.kfJumpBtnText, isCurrent && { color: "#C084FC" }]}>
-                      {isCurrent ? "Active" : "Jump"}
-                    </Text>
+                    <Ionicons
+                      name={isCurrent ? "locate" : "arrow-forward"}
+                      size={13}
+                      color={isCurrent ? "#C084FC" : "#8E95A5"}
+                    />
                   </TouchableOpacity>
 
                   {onDeleteMaskKeyframeAtTime && (
@@ -216,6 +223,7 @@ export default function KeyframePointsList({
                       onPress={() => {
                         onDeleteMaskKeyframeAtTime(mkf.time);
                       }}
+                      accessibilityLabel="Delete mask keyframe"
                     >
                       <Ionicons name="trash-outline" size={13} color="#EF4444" />
                     </TouchableOpacity>

@@ -103,6 +103,10 @@ export default function VoiceEffectsModal({
 }: VoiceEffectsModalProps) {
   const [selectedEffect, setSelectedEffect] = useState<VoiceEffectId>(currentEffect);
 
+  useEffect(() => {
+    setSelectedEffect(currentEffect);
+  }, [currentEffect]);
+
   if (!visible) return null;
 
   const handleSelect = (effectId: VoiceEffectId) => {

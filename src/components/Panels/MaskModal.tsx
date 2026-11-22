@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { MaskConfig, MaskShape } from "../../types/project";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { ModalHeader } from "../Common";
+import { cleanAndSortMaskKeyframes } from "../../utils/keyframeEngine";
 
 interface MaskModalProps {
   visible: boolean;
@@ -16,12 +17,14 @@ interface MaskModalProps {
   selectedClip?: any;
   currentTime?: number;
   onSeek?: (time: number) => void;
-  onAddKeyframe?: () => void;
+  onAddKeyframe?: (mode?: "add" | "remove" | "toggle", maskOverride?: MaskConfig) => void;
   hasKeyframeAtCurrentTime?: boolean;
   hasPrevKeyframe?: boolean;
   hasNextKeyframe?: boolean;
   onJumpPrevKeyframe?: () => void;
   onJumpNextKeyframe?: () => void;
+  onClearAllKeyframes?: () => void;
+  onDeleteKeyframeAtTime?: (time?: number) => void;
 }
 
 const MASK_SHAPES: {
@@ -80,6 +83,8 @@ function MaskModalComponent({
   hasNextKeyframe = false,
   onJumpPrevKeyframe,
   onJumpNextKeyframe,
+  onClearAllKeyframes,
+  onDeleteKeyframeAtTime,
 }: MaskModalProps) {
   const [maskShape, setMaskShape] = useState<MaskShape>(
     currentMask?.shape || "none",
@@ -109,20 +114,33 @@ function MaskModalComponent({
   const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
 
   useEffect(() => {
-    if (visible) {
-      setMaskShape(currentMask?.shape || "none");
-      const s = currentMask?.size || 60;
+    if (visible && !isSliderDragging && currentMask) {
+      setMaskShape(currentMask.shape || "none");
+      const s = currentMask.size || 60;
       setMaskSize(s);
-      setMaskWidth(currentMask?.width !== undefined ? currentMask.width : s);
-      setMaskHeight(currentMask?.height !== undefined ? currentMask.height : s);
-      setMaskFeather(currentMask?.feather || 0);
-      setMaskRoundness(currentMask?.roundness || 16);
-      setMaskInverted(currentMask?.inverted || false);
-      setMaskX(currentMask?.x || 0);
-      setMaskY(currentMask?.y || 0);
-      setMaskRotation(currentMask?.rotation || 0);
+      setMaskWidth(currentMask.width !== undefined ? currentMask.width : s);
+      setMaskHeight(currentMask.height !== undefined ? currentMask.height : s);
+      setMaskFeather(currentMask.feather || 0);
+      setMaskRoundness(currentMask.roundness || 16);
+      setMaskInverted(currentMask.inverted || false);
+      setMaskX(currentMask.x || 0);
+      setMaskY(currentMask.y || 0);
+      setMaskRotation(currentMask.rotation || 0);
     }
-  }, [visible, currentMask]);
+  }, [
+    visible,
+    isSliderDragging,
+    currentMask?.shape,
+    currentMask?.size,
+    currentMask?.width,
+    currentMask?.height,
+    currentMask?.feather,
+    currentMask?.roundness,
+    currentMask?.inverted,
+    currentMask?.x,
+    currentMask?.y,
+    currentMask?.rotation,
+  ]);
 
   const triggerUpdate = (
     overrides?: {
@@ -205,11 +223,55 @@ function MaskModalComponent({
     const sec = s % 60;
     return `${min < 10 ? "0" : ""}${min}:${sec < 10 ? "0" : ""}${sec.toFixed(2)}`;
   };
-  const keyframeCount = (
-    selectedClip?.maskKeyframes ||
-    selectedClip?.mask?.keyframes ||
-    []
-  ).length;
+
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const rawMaskKfs = useMemo(() => {
+    const list =
+      selectedClip?.maskKeyframes ||
+      selectedClip?.mask?.keyframes ||
+      [];
+    return cleanAndSortMaskKeyframes(list);
+  }, [selectedClip?.maskKeyframes, selectedClip?.mask?.keyframes]);
+
+  const clipStart = selectedClip?.startTime || 0;
+  const clipDuration = selectedClip?.duration || 10;
+  const isInsideClip =
+    currentTime >= clipStart - 0.05 &&
+    currentTime <= clipStart + clipDuration + 0.05;
+  const clipLocalTime = Math.max(0, Math.min(clipDuration, currentTime - clipStart));
+
+  // Directly check if playhead is within 150ms of any keyframe on this clip
+  const currentKeyframeIndex = isInsideClip
+    ? rawMaskKfs.findIndex((k) => Math.abs(k.time - clipLocalTime) <= 0.15)
+    : -1;
+  const isKeyframeAtCurrent = currentKeyframeIndex >= 0;
+  const keyframeCount = rawMaskKfs.length;
+
+  const prevKf = isInsideClip
+    ? [...rawMaskKfs].reverse().find((k) => k.time < clipLocalTime - 0.08)
+    : undefined;
+  const nextKf = isInsideClip
+    ? rawMaskKfs.find((k) => k.time > clipLocalTime + 0.08)
+    : undefined;
+  const hasPrev = Boolean(prevKf);
+  const hasNext = Boolean(nextKf);
+
+  const handleJumpPrev = () => {
+    if (prevKf && onSeek && selectedClip) {
+      onSeek(Math.max(0, (selectedClip.startTime || 0) + prevKf.time));
+    } else if (onJumpPrevKeyframe) {
+      onJumpPrevKeyframe();
+    }
+  };
+
+  const handleJumpNext = () => {
+    if (nextKf && onSeek && selectedClip) {
+      onSeek(Math.max(0, (selectedClip.startTime || 0) + nextKf.time));
+    } else if (onJumpNextKeyframe) {
+      onJumpNextKeyframe();
+    }
+  };
 
   const isModified = maskShape !== "none";
 
@@ -291,27 +353,19 @@ function MaskModalComponent({
             <View style={styles.keyframeBar}>
               <View style={styles.kfLeftGroup}>
                 <View style={styles.kfTimePill}>
-                  <Ionicons name="time-outline" size={11} color="#00F2FE" />
-                  <Text style={styles.kfTimeText}>
+                  <Ionicons name="time-outline" size={10} color="#00F2FE" />
+                  <Text style={styles.kfTimeText} numberOfLines={1}>
                     {formatSec(currentTime)}
-                    {selectedClip?.startTime !== undefined && (
-                      <Text style={styles.kfOffsetTime}>
-                        {" "}
-                        +
-                        {Math.max(
-                          0,
-                          currentTime - selectedClip.startTime,
-                        ).toFixed(2)}
-                        s
-                      </Text>
-                    )}
                   </Text>
                 </View>
+
                 {keyframeCount > 0 && (
-                  <View style={styles.kfCountBadge}>
-                    <Ionicons name="diamond" size={9} color="#A855F7" />
-                    <Text style={styles.kfCountText}>
-                      {keyframeCount} mask kf
+                  <View style={[styles.kfCountBadge, isKeyframeAtCurrent && styles.kfCountBadgeActive]}>
+                    <Ionicons name="diamond" size={8} color={isKeyframeAtCurrent ? "#00F2FE" : "#A855F7"} />
+                    <Text style={[styles.kfCountText, isKeyframeAtCurrent && styles.kfCountTextActive]}>
+                      {isKeyframeAtCurrent
+                        ? `${currentKeyframeIndex + 1}/${keyframeCount}`
+                        : `${keyframeCount}`}
                     </Text>
                   </View>
                 )}
@@ -322,84 +376,112 @@ function MaskModalComponent({
                 <TouchableOpacity
                   style={[
                     styles.kfStepBtn,
-                    !hasPrevKeyframe && styles.kfStepBtnDisabled,
+                    !hasPrev && styles.kfStepBtnDisabled,
                   ]}
-                  onPress={() => {
-                    onJumpPrevKeyframe?.();
-                  }}
-                  disabled={!hasPrevKeyframe}
+                  onPress={handleJumpPrev}
+                  disabled={!hasPrev}
                   activeOpacity={0.7}
                   accessibilityLabel="Jump to previous mask keyframe"
                 >
                   <Ionicons
                     name="caret-back"
-                    size={13}
-                    color={hasPrevKeyframe ? "#00F2FE" : "#475569"}
+                    size={12}
+                    color={hasPrev ? "#00F2FE" : "#334155"}
                   />
                 </TouchableOpacity>
 
-                {/* Stamp / Remove Keyframe Button */}
+                {/* Single Dynamic Keyframe Button: Shows [-] when on keyframe to remove, and [+] when not on keyframe to add */}
                 <TouchableOpacity
                   style={[
-                    styles.kfDiamondBtn,
-                    hasKeyframeAtCurrentTime && styles.kfDiamondBtnActive,
+                    styles.kfIconBtn,
+                    isKeyframeAtCurrent ? styles.kfIconBtnRemove : styles.kfIconBtnAdd,
                   ]}
                   onPress={() => {
-                    onAddKeyframe?.();
+                    if (isKeyframeAtCurrent) {
+                      if (onDeleteKeyframeAtTime) {
+                        onDeleteKeyframeAtTime(clipLocalTime);
+                      } else {
+                        onAddKeyframe?.("remove");
+                      }
+                    } else {
+                      const activeMaskConfig: MaskConfig = {
+                        shape: maskShape,
+                        size: maskSize,
+                        width: maskWidth,
+                        height: maskHeight,
+                        feather: maskFeather,
+                        roundness: maskRoundness,
+                        inverted: maskInverted,
+                        x: maskX,
+                        y: maskY,
+                        rotation: maskRotation,
+                      };
+                      (onAddKeyframe as any)?.("add", activeMaskConfig);
+                    }
                   }}
                   activeOpacity={0.7}
-                  accessibilityLabel="Stamp or remove keyframe"
+                  accessibilityLabel={isKeyframeAtCurrent ? "Remove mask keyframe at playhead" : "Add mask keyframe at playhead"}
                 >
                   <Ionicons
-                    name={
-                      hasKeyframeAtCurrentTime ? "diamond" : "diamond-outline"
-                    }
-                    size={13}
-                    color={hasKeyframeAtCurrentTime ? "#00F2FE" : "#94A3B8"}
+                    name={isKeyframeAtCurrent ? "remove" : "add"}
+                    size={16}
+                    color={isKeyframeAtCurrent ? "#EF4444" : "#00F2FE"}
                   />
-                  <Text
-                    style={[
-                      styles.kfDiamondText,
-                      hasKeyframeAtCurrentTime && styles.kfDiamondTextActive,
-                    ]}
-                  >
-                    {hasKeyframeAtCurrentTime ? "Remove" : "Keyframe"}
-                  </Text>
-                  <View
-                    style={[
-                      styles.kfDiamondBadge,
-                      hasKeyframeAtCurrentTime
-                        ? styles.kfDiamondBadgeRemove
-                        : styles.kfDiamondBadgeAdd,
-                    ]}
-                  >
-                    <Ionicons
-                      name={hasKeyframeAtCurrentTime ? "remove" : "add"}
-                      size={7}
-                      color="#FFFFFF"
-                    />
-                  </View>
                 </TouchableOpacity>
 
                 {/* Next Keyframe Button */}
                 <TouchableOpacity
                   style={[
                     styles.kfStepBtn,
-                    !hasNextKeyframe && styles.kfStepBtnDisabled,
+                    !hasNext && styles.kfStepBtnDisabled,
                   ]}
-                  onPress={() => {
-                    onJumpNextKeyframe?.();
-                  }}
-                  disabled={!hasNextKeyframe}
+                  onPress={handleJumpNext}
+                  disabled={!hasNext}
                   activeOpacity={0.7}
                   accessibilityLabel="Jump to next mask keyframe"
                 >
                   <Ionicons
                     name="caret-forward"
-                    size={13}
-                    color={hasNextKeyframe ? "#00F2FE" : "#475569"}
+                    size={12}
+                    color={hasNext ? "#00F2FE" : "#334155"}
                   />
                 </TouchableOpacity>
+
+                {/* Clear All Keyframes Button (if multiple keyframes exist) */}
+                {keyframeCount > 1 && (
+                  showClearConfirm ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                      <TouchableOpacity
+                        style={[styles.kfIconBtn, { backgroundColor: "#EF4444", borderColor: "#EF4444" }]}
+                        onPress={() => {
+                          setShowClearConfirm(false);
+                          onClearAllKeyframes?.();
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Confirm clear all keyframes"
+                      >
+                        <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.kfIconBtn}
+                        onPress={() => setShowClearConfirm(false)}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Cancel clear"
+                      >
+                        <Ionicons name="close" size={13} color="#94A3B8" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.kfIconBtn, { backgroundColor: "rgba(239, 68, 68, 0.1)", borderColor: "rgba(239, 68, 68, 0.35)" }]}
+                      onPress={() => setShowClearConfirm(true)}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Clear all mask keyframes"
+                    >
+                      <Ionicons name="trash-outline" size={13} color="#EF4444" />
+                    </TouchableOpacity>
+                  )
+                )}
               </View>
             </View>
           )}
@@ -423,20 +505,13 @@ function MaskModalComponent({
                     setIsAspectLocked(!isAspectLocked);
                   }}
                   activeOpacity={0.7}
+                  accessibilityLabel={isAspectLocked ? "Linked aspect ratio" : "Free deform"}
                 >
                   <Ionicons
                     name={isAspectLocked ? "lock-closed" : "lock-open-outline"}
-                    size={11}
+                    size={13}
                     color={isAspectLocked ? "#00F2FE" : "#8E95A5"}
                   />
-                  <Text
-                    style={[
-                      styles.lockBtnText,
-                      isAspectLocked && styles.lockBtnTextActive,
-                    ]}
-                  >
-                    {isAspectLocked ? "Linked" : "Free Deform"}
-                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -666,21 +741,19 @@ function MaskModalComponent({
                         triggerUpdate({ x: 0, y: 0 });
                       }}
                       style={{
-                        backgroundColor: "rgba(0, 242, 254, 0.15)",
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
+                        width: 24,
+                        height: 24,
                         borderRadius: 6,
+                        backgroundColor: "rgba(0, 242, 254, 0.12)",
+                        borderWidth: 1,
+                        borderColor: "rgba(0, 242, 254, 0.35)",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Center mask position"
                     >
-                      <Text
-                        style={{
-                          color: "#00F2FE",
-                          fontSize: 10,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Center
-                      </Text>
+                      <Ionicons name="locate-outline" size={13} color="#00F2FE" />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -981,15 +1054,14 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   lockBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
+    width: 26,
+    height: 26,
+    borderRadius: 6,
     backgroundColor: "#161D2B",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
     borderWidth: 1,
     borderColor: "#242F45",
+    alignItems: "center",
+    justifyContent: "center",
   },
   lockBtnActive: {
     backgroundColor: "rgba(0, 242, 254, 0.12)",
@@ -1035,21 +1107,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 6,
+    flexWrap: "nowrap",
     backgroundColor: "#121724",
     borderWidth: 1,
     borderColor: "#1E2638",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    marginTop: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginTop: 6,
     marginBottom: 4,
+    gap: 4,
   },
   kfLeftGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
   },
   kfTimePill: {
     flexDirection: "row",
@@ -1057,44 +1131,47 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 242, 254, 0.08)",
     borderWidth: 1,
     borderColor: "rgba(0, 242, 254, 0.25)",
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3.5,
-    gap: 4,
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    gap: 3,
+    flexShrink: 1,
   },
   kfTimeText: {
     color: "#00F2FE",
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
   },
   kfOffsetTime: {
     color: "#94A3B8",
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
   },
   kfCountBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#1B2234",
-    borderRadius: 5,
-    paddingHorizontal: 5,
-    paddingVertical: 2.5,
-    gap: 3,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    gap: 2.5,
+    flexShrink: 0,
   },
   kfCountText: {
     color: "#CBD5E1",
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "600",
   },
   kfActionGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+    flexShrink: 0,
   },
   kfStepBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 5,
     backgroundColor: "#182030",
     borderWidth: 1,
     borderColor: "#26334A",
@@ -1104,6 +1181,29 @@ const styles = StyleSheet.create({
   kfStepBtnDisabled: {
     opacity: 0.35,
     backgroundColor: "#121724",
+  },
+  kfIconBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 5,
+    backgroundColor: "#182030",
+    borderWidth: 1,
+    borderColor: "#26334A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kfIconBtnAdd: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "rgba(0, 242, 254, 0.5)",
+  },
+  kfIconBtnRemove: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    borderColor: "rgba(239, 68, 68, 0.5)",
+  },
+  kfIconBtnDisabled: {
+    opacity: 0.35,
+    backgroundColor: "#121724",
+    borderColor: "#1E293B",
   },
   kfDiamondBtn: {
     flexDirection: "row",
@@ -1121,6 +1221,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderColor: "#00F2FE",
   },
+  kfDiamondBtnAdd: {
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderColor: "rgba(0, 242, 254, 0.4)",
+  },
+  kfDiamondBtnRemove: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderColor: "rgba(239, 68, 68, 0.4)",
+  },
   kfDiamondText: {
     color: "#94A3B8",
     fontSize: 11,
@@ -1128,6 +1236,12 @@ const styles = StyleSheet.create({
   },
   kfDiamondTextActive: {
     color: "#00F2FE",
+  },
+  kfDiamondTextAdd: {
+    color: "#00F2FE",
+  },
+  kfDiamondTextRemove: {
+    color: "#EF4444",
   },
   kfDiamondBadge: {
     width: 11,
@@ -1142,5 +1256,59 @@ const styles = StyleSheet.create({
   },
   kfDiamondBadgeRemove: {
     backgroundColor: "#EF4444",
+  },
+  kfCountBadgeActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.35)",
+  },
+  kfCountTextActive: {
+    color: "#00F2FE",
+  },
+  kfNoKeyframesBadge: {
+    backgroundColor: "#161B26",
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 2.5,
+  },
+  kfNoKeyframesText: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  kfClearAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4.5,
+  },
+  kfClearAllText: {
+    color: "#EF4444",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  kfConfirmClearBtn: {
+    backgroundColor: "#EF4444",
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 4.5,
+  },
+  kfConfirmClearText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  kfCancelClearBtn: {
+    backgroundColor: "#182030",
+    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 4.5,
+    borderWidth: 1,
+    borderColor: "#26334A",
   },
 });

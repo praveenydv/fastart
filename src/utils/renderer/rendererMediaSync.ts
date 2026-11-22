@@ -11,12 +11,13 @@ export interface MediaSyncContext {
   maxDecoders: number;
   onFrameNeeded?: () => void;
   isPlaying?: boolean;
+  isScrubbing?: boolean;
 }
 
 // Global registry of active player video elements for 0ms frame extraction and split snapshots
 export const globalActiveVideoElements = new Map<string, HTMLVideoElement>();
 
-function getMediaContainer(): HTMLElement | null {
+export function getMediaContainer(): HTMLElement | null {
   if (typeof document === "undefined") return null;
   let container = document.getElementById("fastart-media-sync-container");
   if (!container && document.body) {
@@ -381,27 +382,48 @@ export function pauseAllMedia(ctx: MediaSyncContext) {
   });
 }
 
+const activeElementsScratch = new Set<HTMLVideoElement | HTMLImageElement>();
+const upcomingElementsScratch = new Set<HTMLVideoElement | HTMLImageElement>();
+
 export function syncPlayback(
   ctx: MediaSyncContext,
   activeClips: VideoClip[],
   time: number,
   isPlaying: boolean,
+  upcomingClips: VideoClip[] = [],
 ) {
   if (typeof window === "undefined") return;
   ctx.isPlaying = isPlaying;
 
-  const activeKeys = new Set<string>();
-  activeClips.forEach((c) => {
+  const activeElements = activeElementsScratch;
+  activeElements.clear();
+  for (let i = 0; i < activeClips.length; i++) {
+    const c = activeClips[i];
     if (c.type === "video") {
-      activeKeys.add(c.id || c.url);
-      activeKeys.add(c.url);
-      if (c.sourceMediaId) activeKeys.add(c.sourceMediaId);
+      const el =
+        (c.id ? ctx.videoElements.get(c.id) : null) ||
+        (c.sourceMediaId ? ctx.videoElements.get(c.sourceMediaId) : null) ||
+        ctx.videoElements.get(c.url);
+      if (el) activeElements.add(el);
     }
-  });
+  }
 
-  // 1. Pause any video that is NOT in activeClips
-  ctx.videoElements.forEach((el, key) => {
-    if (el instanceof HTMLVideoElement && !activeKeys.has(key)) {
+  const upcomingElements = upcomingElementsScratch;
+  upcomingElements.clear();
+  for (let i = 0; i < upcomingClips.length; i++) {
+    const c = upcomingClips[i];
+    if (c.type === "video") {
+      const el =
+        (c.id ? ctx.videoElements.get(c.id) : null) ||
+        (c.sourceMediaId ? ctx.videoElements.get(c.sourceMediaId) : null) ||
+        ctx.videoElements.get(c.url);
+      if (el) upcomingElements.add(el);
+    }
+  }
+
+  // 1. Pause any video element that is NOT active and NOT upcoming
+  ctx.videoElements.forEach((el) => {
+    if (el instanceof HTMLVideoElement && !activeElements.has(el) && !upcomingElements.has(el)) {
       if (!el.paused) {
         try {
           el.pause();
@@ -411,6 +433,41 @@ export function syncPlayback(
       (el as any)._isPlayPending = false;
     }
   });
+
+  // 1.5. Pre-warm & pre-seek upcoming video clips to their starting frame so they are ready at the cut!
+  if (isPlaying) {
+    upcomingClips.forEach((upClip) => {
+      if (upClip.type !== "video") return;
+      const mediaEl =
+        (upClip.id ? ctx.videoElements.get(upClip.id) : null) ||
+        (upClip.sourceMediaId ? ctx.videoElements.get(upClip.sourceMediaId) : null) ||
+        ctx.videoElements.get(upClip.url);
+      if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
+      const vid = mediaEl as HTMLVideoElement;
+
+      // Never disturb a video element that is currently actively playing for an active clip (shared source media)
+      if (activeElements.has(vid)) {
+        return;
+      }
+
+      // Pre-seek upcoming video element while paused
+      const targetTime = upClip.reverse
+        ? (upClip.trimOut || (upClip.trimIn || 0) + (upClip.duration || 0))
+        : (upClip.trimIn || 0);
+
+      if (!vid.paused) {
+        try {
+          vid.pause();
+        } catch {}
+      }
+      (vid as any)._playSessionActive = false;
+      if (vid.readyState >= 1 && !vid.seeking && Math.abs(vid.currentTime - targetTime) > 0.04) {
+        try {
+          vid.currentTime = Math.max(0, targetTime);
+        } catch {}
+      }
+    });
+  }
 
   // 2. Synchronize all active videos simultaneously
   activeClips.forEach((activeClip) => {
@@ -456,7 +513,7 @@ export function syncPlayback(
     const rawMediaTime = activeClip.reverse
       ? Math.max(
           0,
-          (activeClip.trimOut || activeClip.duration) -
+          (activeClip.trimOut || (activeClip.trimIn || 0) + activeClip.duration) -
             clipLocalTime * effectiveSpeed,
         )
       : (activeClip.trimIn || 0) + clipLocalTime * effectiveSpeed;
@@ -487,9 +544,15 @@ export function syncPlayback(
 
       // Startup synchronization: align position ONCE per play session
       if (!(vid as any)._playSessionActive) {
-        (vid as any)._playSessionActive = true;
         const startDrift = Math.abs(vid.currentTime - mediaTime);
-        if (vid.readyState >= 1 && startDrift > 0.05) {
+        const wasAlreadyPlaying = !vid.paused;
+        (vid as any)._playSessionActive = true;
+
+        // If the video was already playing and is within continuous range (< 0.35s drift, e.g. seamless cut/split),
+        // DO NOT perform a hard seek! Just let it keep playing without decoder flush!
+        if (wasAlreadyPlaying && startDrift < 0.35) {
+          // Continuous split cut handoff
+        } else if (vid.readyState >= 1 && startDrift > 0.05) {
           (vid as any)._lastHardSeek = now;
           (vid as any)._seekStartTime = now;
           try {
@@ -571,8 +634,17 @@ export function syncPlayback(
             (vid as any)._pendingSeekTimer = null;
           }
           try {
-            vid.currentTime = Math.max(0, target);
-          } catch (e) {}
+            const clampedTarget = Math.max(0, target);
+            if (ctx.isScrubbing && typeof (vid as any).fastSeek === "function") {
+              (vid as any).fastSeek(clampedTarget);
+            } else {
+              vid.currentTime = clampedTarget;
+            }
+          } catch (e) {
+            try {
+              vid.currentTime = Math.max(0, target);
+            } catch {}
+          }
         };
 
         if (!vid.seeking && timeSinceLastSeek >= MIN_SEEK_INTERVAL_MS) {

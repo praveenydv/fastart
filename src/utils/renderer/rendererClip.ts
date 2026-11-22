@@ -33,6 +33,47 @@ export interface TransitionRenderState {
   progress: number;
 }
 
+export function resolveCompositeOperation(blendMode?: string): GlobalCompositeOperation {
+  if (!blendMode) return "source-over";
+  const clean = String(blendMode).toLowerCase().replace(/[\-_]/g, "");
+  switch (clean) {
+    case "normal":
+      return "source-over";
+    case "screen":
+      return "screen";
+    case "multiply":
+      return "multiply";
+    case "overlay":
+      return "overlay";
+    case "darken":
+      return "darken";
+    case "lighten":
+      return "lighten";
+    case "colordodge":
+      return "color-dodge";
+    case "colorburn":
+      return "color-burn";
+    case "softlight":
+      return "soft-light";
+    case "hardlight":
+      return "hard-light";
+    case "difference":
+      return "difference";
+    case "exclusion":
+      return "exclusion";
+    case "hue":
+      return "hue";
+    case "saturation":
+      return "saturation";
+    case "color":
+      return "color";
+    case "luminosity":
+      return "luminosity";
+    default:
+      return "source-over";
+  }
+}
+
 const BLEND_MAP: Record<string, GlobalCompositeOperation> = {
   normal: "source-over",
   screen: "screen",
@@ -41,8 +82,17 @@ const BLEND_MAP: Record<string, GlobalCompositeOperation> = {
   darken: "darken",
   lighten: "lighten",
   "color-dodge": "color-dodge",
+  colordodge: "color-dodge",
+  color_dodge: "color-dodge",
   "color-burn": "color-burn",
+  colorburn: "color-burn",
+  color_burn: "color-burn",
   "soft-light": "soft-light",
+  softlight: "soft-light",
+  soft_light: "soft-light",
+  "hard-light": "hard-light",
+  hardlight: "hard-light",
+  hard_light: "hard-light",
   difference: "difference",
   exclusion: "exclusion",
 };
@@ -57,8 +107,12 @@ export function drawClip(
   transitionState?: TransitionRenderState | null,
 ) {
   ctx.save();
-  const clipLocalTime = Math.max(0, time - clip.startTime);
-  const timeLeft = clip.duration - clipLocalTime;
+  let clipLocalTime = Math.min(clip.duration, Math.max(0, time - clip.startTime));
+  if (transitionState?.role === "incoming" && time < clip.startTime) {
+    const transDur = clip.transition?.duration || 0.5;
+    clipLocalTime = Math.max(0, Math.min(clip.duration, (transitionState.progress ?? 0) * transDur));
+  }
+  const timeLeft = Math.max(0, clip.duration - clipLocalTime);
   const trans = clip.transition;
   let alpha = 1.0;
   let scaleModifier = 1.0;
@@ -159,7 +213,7 @@ export function drawClip(
   }
 
   // ─── CLIP ANIMATION (IN / OUT / COMBO) ───
-  const anim = (clip as any).animation;
+  const anim = (clip as any).animation || (clip as any).transform?.animation;
   if (anim) {
     const inPreset = anim.inPreset || (anim.type === 'in' ? anim.preset : (typeof anim.preset === 'string' && anim.preset.endsWith('_in') ? anim.preset : null));
     const inDur = Math.max(0.05, anim.inDuration || anim.duration || 0.5);
@@ -278,11 +332,20 @@ export function drawClip(
     motionRot += motion.dRot || 0;
   }
 
-  const clipOpacity = t?.opacity !== undefined ? t.opacity : 1.0;
+  const clipOpacity =
+    t?.opacity !== undefined
+      ? t.opacity
+      : clip.opacity !== undefined
+        ? clip.opacity
+        : (clip.transform?.opacity !== undefined ? clip.transform.opacity : 1.0);
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha * clipOpacity));
 
-  const rawBlend = (clip as any).blendMode || (t as any)?.blendMode || "normal";
-  ctx.globalCompositeOperation = BLEND_MAP[rawBlend] || "source-over";
+  const rawBlend =
+    (clip as any).blendMode ||
+    clip.transform?.blendMode ||
+    (t as any)?.blendMode ||
+    "normal";
+  ctx.globalCompositeOperation = resolveCompositeOperation(rawBlend);
 
   ctx.translate(w / 2 + t.x + xOffset, h / 2 + t.y + yOffset);
   ctx.rotate((((t.rotation || 0) + motionRot) * Math.PI) / 180);
@@ -337,19 +400,17 @@ export function drawClip(
 
   const isVideoReady =
     isVideo &&
-    ((mediaEl as HTMLVideoElement).readyState >= 1 || (mediaEl as HTMLVideoElement).videoWidth > 0);
+    ((mediaEl as HTMLVideoElement).videoWidth > 0 || (mediaEl as HTMLVideoElement).readyState >= 1);
   const isImageReady =
     isImage &&
     (mediaEl as HTMLImageElement).complete &&
     (mediaEl as HTMLImageElement).naturalWidth > 0;
-  const isReady = isImageReady || isVideoReady;
 
-  let activeMedia: any = isReady ? mediaEl : null;
+  // Always use the genuine full-resolution video element (1080p/4K) whenever ready.
+  // NEVER downgrade or replace the video element with a low-res thumbnail during player preview or export!
+  let activeMedia: any = (isVideoReady || isImageReady) ? mediaEl : null;
 
-  // Fall back to clip thumbnail whenever media element is not ready or has not loaded
-  // BUT during active playback, if video element exists, NEVER replace it with a still thumbnail
-  // because that replaces the active moving video frame with a frozen still image!
-  if (!activeMedia && clip.thumbnail && !renderCtx.isPlaying) {
+  if (!activeMedia && clip.thumbnail) {
     let thumbEl = renderCtx.thumbnailElements.get(clip.id);
     if (!thumbEl) {
       thumbEl = new Image();
@@ -415,7 +476,6 @@ export function drawClip(
     }
 
     const mask = getInterpolatedMask(clip, time) || clip.mask || clip.transform?.mask;
-    const clipLocalTime = Math.max(0, time - clip.startTime);
     let effectiveSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
     if (clip.speedCurve) {
       effectiveSpeed = evaluateSpeedCurve(
@@ -587,23 +647,27 @@ export function drawClip(
       }
     }
   } else {
-    const hasError = Boolean(mediaEl && (mediaEl as any).error);
-    const aspect = 16 / 9;
-    let dw = w;
-    let dh = w / aspect;
-    const fitMode = clip.fit || "contain";
-    if (fitMode === "cover") {
-      if (dh < h) {
-        dh = h;
-        dw = h * aspect;
+    // If media element is still decoding or buffering during active playback, never draw the loading
+    // placeholder with borders and text which causes a flash on cut. Instead, let the tail-held clip show through.
+    if (!renderCtx.isPlaying) {
+      const hasError = Boolean(mediaEl && (mediaEl as any).error);
+      const aspect = 16 / 9;
+      let dw = w;
+      let dh = w / aspect;
+      const fitMode = clip.fit || "contain";
+      if (fitMode === "cover") {
+        if (dh < h) {
+          dh = h;
+          dw = h * aspect;
+        }
+      } else {
+        if (dh > h) {
+          dh = h;
+          dw = h * aspect;
+        }
       }
-    } else {
-      if (dh > h) {
-        dh = h;
-        dw = h * aspect;
-      }
+      drawLoadingPreview(ctx, clip, clipLocalTime, dw, dh, hasError);
     }
-    drawLoadingPreview(ctx, clip, clipLocalTime, dw, dh, hasError);
   }
 
   ctx.filter = "none";
@@ -650,6 +714,26 @@ export function drawClip(
     ctx.globalCompositeOperation = "screen";
     ctx.fillStyle = leakGrad;
     ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else if (activeTransType === "glitch_transition" || activeTransType === "glitch") {
+    ctx.save();
+    const glitchIntensity = Math.sin(activeProgress * Math.PI);
+    if (glitchIntensity > 0.04) {
+      ctx.globalCompositeOperation = "screen";
+      const gShift = Math.sin(time * 55) * (w * 0.035) * glitchIntensity;
+      ctx.fillStyle = `rgba(0, 242, 254, ${0.45 * glitchIntensity})`;
+      ctx.fillRect(gShift, 0, w, h);
+      ctx.fillStyle = `rgba(255, 0, 80, ${0.45 * glitchIntensity})`;
+      ctx.fillRect(-gShift, 0, w, h);
+
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.65 * glitchIntensity})`;
+      for (let bi = 0; bi < 4; bi++) {
+        const barY = (time * 120 + bi * (h / 4)) % h;
+        const barH = 3 + (bi % 2) * 4;
+        const bShift = (bi % 2 === 0 ? 1 : -1) * 20 * glitchIntensity;
+        ctx.fillRect(bShift, barY, w, barH);
+      }
+    }
     ctx.restore();
   }
 }

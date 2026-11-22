@@ -350,13 +350,13 @@ export default function KeyframePropertyControls({
       </View>
 
       {/* 6. MASK KEYFRAME PROPERTIES */}
-      {activeTransform.mask && activeTransform.mask.shape !== 'none' && (
+      {activeTransform.mask && activeTransform.mask.shape && activeTransform.mask.shape !== 'none' && (
         <View style={styles.propertyRow}>
           <View style={styles.propLabelRow}>
             <View style={styles.propLabelLeft}>
               <Ionicons name="shapes-outline" size={14} color="#00F2FE" />
               <Text style={styles.propName}>
-                Mask Keyframe ({activeTransform.mask.shape.toUpperCase()})
+                Mask Keyframe ({(activeTransform.mask.shape || "").toUpperCase()})
               </Text>
             </View>
           </View>

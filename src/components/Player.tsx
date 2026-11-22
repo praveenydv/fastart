@@ -32,6 +32,7 @@ import { THEME_COLORS } from "../constants/designConstants";
 import { relinkMediaFile, reconnectLinkedMedia } from "../utils/largeMediaStorage";
 import { MaskConfig } from "../types/project";
 import { usePlaybackTime } from "../utils/playbackTimeStore";
+import { cleanAndSortMaskKeyframes, cleanAndSortKeyframes } from "../utils/keyframeEngine";
 
 const EMPTY_ARRAY: any[] = Object.freeze([]) as any[];
 
@@ -482,8 +483,8 @@ function Player({
       if (hasAdjacentNext ? (currentTime >= start && currentTime < end) : (currentTime >= start && currentTime <= end)) return true;
       // 2. Pre-warm upcoming clip within 1.0s before its cut
       if (currentTime < start && start - currentTime <= 1.0) return true;
-      // 3. Tail-hold recently finished clip ONLY if there is no adjacent next clip on this track
-      if (!hasAdjacentNext && currentTime > end && currentTime - end <= 0.2) return true;
+      // 3. Tail-hold recently finished clip for seamless cut transition without unmount flicker
+      if (currentTime > end && currentTime - end <= 0.15) return true;
       return false;
     });
 
@@ -754,8 +755,13 @@ function Player({
   }, [project.tracks, selectedClipId, selectedClipType, currentTime]);
 
   const clipKeyframes = useMemo(() => {
-    return activeClip?.keyframes || [];
-  }, [activeClip?.keyframes]);
+    if (isMaskingMode) {
+      return cleanAndSortMaskKeyframes(
+        activeClip?.maskKeyframes || activeClip?.mask?.keyframes || [],
+      );
+    }
+    return cleanAndSortKeyframes(activeClip?.keyframes || []);
+  }, [activeClip?.keyframes, activeClip?.maskKeyframes, activeClip?.mask?.keyframes, isMaskingMode]);
 
   const hasKeyframesOnClip = clipKeyframes.length > 0;
   const localClipTime = Math.max(0, currentTime - (activeClip?.startTime || 0));

@@ -112,9 +112,9 @@ interface EditorModalsProps {
   handleAutoCutGenerated: (proj: any) => void;
   updateProjectWithHistory: (proj: any) => void;
   handleApplyEnhance: (preset: any) => void;
-  handleApplyBlendMode?: (mode: BlendMode, opacity?: number) => void;
+  handleApplyBlendMode?: (mode: BlendMode, opacity?: number, explicitClipId?: string) => void;
   handleApplyHSL?: (adjustments: HSLAdjustments) => void;
-  handleApplyVoiceEffect?: (effectId: VoiceEffectId) => void;
+  handleApplyVoiceEffect?: (effectId: VoiceEffectId, explicitClipId?: string) => void;
   handleAddKeyframe: () => void;
   isKeyframeAtPlayhead: boolean;
   hasPrevKeyframe?: boolean;
@@ -129,7 +129,7 @@ interface EditorModalsProps {
   ) => void;
   handleDeleteKeyframeAtTime: (time?: number) => void;
   handleClearAllKeyframes: () => void;
-  handleAddMaskKeyframe?: () => void;
+  handleAddMaskKeyframe?: (mode?: "add" | "remove" | "toggle", maskOverride?: any) => void;
   isMaskKeyframeAtPlayhead?: boolean;
   hasPrevMaskKeyframe?: boolean;
   hasNextMaskKeyframe?: boolean;
@@ -223,6 +223,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   handleUpdateCaption,
   route,
   totalDuration,
+  currentTime: propsCurrentTime,
   isPlaying,
   setCurrentTime,
   selectedClipId,
@@ -294,9 +295,10 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
       (isInline
         ? INLINE_MODAL_KEYS.has(activeModal)
         : !INLINE_MODAL_KEYS.has(activeModal)) &&
-      ["keyframe", "background", "cutout", "tracking", "captions"].includes(activeModal),
+      ["keyframe", "background", "cutout", "tracking", "captions", "mask"].includes(activeModal),
   );
-  const currentTime = usePlaybackTime(needsLiveTime);
+  const liveTime = usePlaybackTime(needsLiveTime);
+  const currentTime = needsLiveTime ? liveTime : (propsCurrentTime ?? liveTime);
   const handleCancel = onCancelModal || closeModal;
   const handleApply = onApplyModal || closeModal;
 
@@ -697,6 +699,8 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
               hasNextKeyframe={hasNextMaskKeyframe}
               onJumpPrevKeyframe={handleJumpPrevMaskKeyframe}
               onJumpNextKeyframe={handleJumpNextMaskKeyframe}
+              onClearAllKeyframes={handleClearAllMaskKeyframes}
+              onDeleteKeyframeAtTime={handleDeleteMaskKeyframeAtTime}
             />
           );
         })()}
@@ -892,22 +896,46 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
       )}
 
       {/* Layer Blend Mode Modal */}
-      {activeModal === "blend" && (
-        <BlendModeModal
-          visible={true}
-          onClose={handleCancel}
-          isInline={isInline}
-          currentMode={selectedClip?.transform?.blendMode || "normal"}
-          currentOpacity={
-            selectedClip?.opacity !== undefined ? selectedClip.opacity : 1.0
-          }
-          onApply={(mode, op) => {
-            if (handleApplyBlendMode) {
-              handleApplyBlendMode(mode, op);
-            }
-          }}
-        />
-      )}
+      {activeModal === "blend" &&
+        (() => {
+          const targetBlendClip =
+            selectedClip?.id &&
+            (selectedClipType === "video" ||
+              selectedClipType === "photo" ||
+              !selectedClipType)
+              ? selectedClip
+              : (project?.tracks?.video || []).find(
+                  (v) =>
+                    currentTime >= v.startTime &&
+                    currentTime <= v.startTime + v.duration,
+                ) || (project?.tracks?.video || [])[0];
+
+          const currentMode =
+            targetBlendClip?.blendMode ||
+            targetBlendClip?.transform?.blendMode ||
+            "normal";
+          const currentOpacity =
+            targetBlendClip?.opacity !== undefined
+              ? targetBlendClip.opacity
+              : (targetBlendClip?.transform?.opacity !== undefined
+                  ? targetBlendClip.transform.opacity
+                  : 1.0);
+
+          return (
+            <BlendModeModal
+              visible={true}
+              onClose={handleCancel}
+              isInline={isInline}
+              currentMode={currentMode}
+              currentOpacity={currentOpacity}
+              onApply={(mode, op) => {
+                if (handleApplyBlendMode) {
+                  handleApplyBlendMode(mode, op, targetBlendClip?.id);
+                }
+              }}
+            />
+          );
+        })()}
 
       {/* 8-Channel Selective HSL Color Grading Modal */}
       {activeModal === "hsl" && (
@@ -925,19 +953,42 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
       )}
 
       {/* CapCut Character Voice Changer & Audio FX Modal */}
-      {(activeModal === "audio_effects" || activeModal === "voice_effects") && (
-        <VoiceEffectsModal
-          visible={true}
-          onClose={handleCancel}
-          isInline={isInline}
-          currentEffect={selectedClip?.voiceEffect || "none"}
-          onApply={(effectId) => {
-            if (handleApplyVoiceEffect) {
-              handleApplyVoiceEffect(effectId);
-            }
-          }}
-        />
-      )}
+      {(activeModal === "audio_effects" || activeModal === "voice_effects") &&
+        (() => {
+          const targetClip =
+            selectedClip?.id &&
+            (selectedClipType === "audio" || selectedClipType === "video")
+              ? selectedClip
+              : (selectedClipType === "audio"
+                  ? (project?.tracks?.audio || []).find(
+                      (a) =>
+                        currentTime >= a.startTime &&
+                        currentTime <= a.startTime + a.duration,
+                    ) || (project?.tracks?.audio || [])[0]
+                  : (project?.tracks?.video || []).find(
+                      (v) =>
+                        currentTime >= v.startTime &&
+                        currentTime <= v.startTime + v.duration,
+                    ) ||
+                    (project?.tracks?.audio || [])[0] ||
+                    (project?.tracks?.video || [])[0]);
+
+          const currentEffect = (targetClip?.voiceEffect || "none") as VoiceEffectId;
+
+          return (
+            <VoiceEffectsModal
+              visible={true}
+              onClose={handleCancel}
+              isInline={isInline}
+              currentEffect={currentEffect}
+              onApply={(effectId) => {
+                if (handleApplyVoiceEffect) {
+                  handleApplyVoiceEffect(effectId, targetClip?.id);
+                }
+              }}
+            />
+          );
+        })()}
 
       {/* Clip Deletion Confirmation Modal */}
       <ConfirmDeleteModal
@@ -1132,7 +1183,8 @@ export const EditorModals = React.memo(
         active === "background" ||
         active === "cutout" ||
         active === "tracking" ||
-        active === "captions";
+        active === "captions" ||
+        active === "mask";
       return !needsTime;
     }
 

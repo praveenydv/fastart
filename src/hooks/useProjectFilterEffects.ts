@@ -64,7 +64,17 @@ export function useProjectFilterEffects({
     (preferredType: "video" | "audio" = "video", autoSelect: boolean = false): string | null => {
       const current = projectRef.current || project;
       if (!current) return null;
-      if (selectedClipId) return selectedClipId;
+      if (selectedClipId) {
+        if (preferredType === "video") {
+          const isVideo = current.tracks.video?.some((c) => c.id === selectedClipId);
+          if (isVideo) return selectedClipId;
+        } else if (preferredType === "audio") {
+          const isAudio = current.tracks.audio?.some((c) => c.id === selectedClipId);
+          if (isAudio) return selectedClipId;
+        } else {
+          return selectedClipId;
+        }
+      }
 
       const curTime = currentTimeRef?.current ?? currentTime;
       if (preferredType === "audio") {
@@ -801,21 +811,27 @@ export function useProjectFilterEffects({
 
   // Apply layer blend mode and opacity to active video / photo clip
   const handleApplyBlendMode = useCallback(
-    (mode: BlendMode, opacity?: number) => {
+    (mode: BlendMode, opacity?: number, explicitClipId?: string) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const targetId = resolveTargetClipId("video");
+      const targetId = explicitClipId || resolveTargetClipId("video");
       if (!targetId) return;
 
       const videoClips = (current.tracks.video || []).map((c) => {
         if (c.id === targetId) {
           const prevTransform = c.transform || { scale: 1, rotation: 0, x: 0, y: 0 };
+          const effOpacity =
+            opacity !== undefined
+              ? Math.max(0, Math.min(1, opacity))
+              : (c.opacity ?? prevTransform.opacity ?? 1.0);
           return {
             ...c,
-            opacity: opacity !== undefined ? opacity : (c.opacity ?? 1.0),
+            blendMode: mode,
+            opacity: effOpacity,
             transform: {
               ...prevTransform,
               blendMode: mode,
+              opacity: effOpacity,
             },
           };
         }
@@ -880,13 +896,14 @@ export function useProjectFilterEffects({
 
   // Apply character voice changer profile
   const handleApplyVoiceEffect = useCallback(
-    (voiceEffect: VoiceEffectId) => {
+    (voiceEffect: VoiceEffectId, explicitClipId?: string) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const targetAudioId = resolveTargetClipId("audio");
-      const targetVideoId = resolveTargetClipId("video");
+      const targetAudioId = explicitClipId || resolveTargetClipId("audio");
+      const targetVideoId = explicitClipId || resolveTargetClipId("video");
 
-      if (selectedClipType === "audio" && targetAudioId) {
+      const isAudioClip = (current.tracks.audio || []).some((c) => c.id === targetAudioId);
+      if (isAudioClip || (selectedClipType === "audio" && targetAudioId)) {
         const audioClips = (current.tracks.audio || []).map((c) => {
           if (c.id === targetAudioId) {
             return {

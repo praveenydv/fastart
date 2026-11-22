@@ -242,8 +242,8 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
         wasPlayingRef.current = isPlaying && isInside;
         // Stay paused and hold pre-warmed frame
         player.pause();
-        // If not actively playing, seek to target frame
-        if (!isPlaying && Math.abs(lastSeekTargetRef.current - curTarget) > 0.03) {
+        // If not actively inside playback (upcoming or recent tail-hold), seek to target frame so it is pre-warmed & ready
+        if (Math.abs(lastSeekTargetRef.current - curTarget) > 0.03) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }

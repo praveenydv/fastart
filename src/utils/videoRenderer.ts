@@ -128,6 +128,8 @@ export class VideoRenderer {
   }[] = [];
   private _handledVideoIds = new Set<string>();
   private _clipsByTrack = new Map<number, VideoClip[]>();
+  private _trackListsPool: VideoClip[][] = [];
+  private _upcomingClipsScratch: VideoClip[] = [];
   private _activeVideosScratch: VideoClip[] = [];
   private _activeCaptionsScratch: any[] = [];
   private _activeTextsScratch: any[] = [];
@@ -151,7 +153,7 @@ export class VideoRenderer {
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? ((canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+      ? ((canvas.getContext("2d", { alpha: false }) as CanvasRenderingContext2D | null) ||
          (canvas.getContext("2d") as CanvasRenderingContext2D | null))
       : null;
     if (this.ctx) {
@@ -186,7 +188,7 @@ export class VideoRenderer {
   setCanvas(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
     this.ctx = canvas
-      ? ((canvas.getContext("2d", { alpha: false, desynchronized: true }) as CanvasRenderingContext2D | null) ||
+      ? ((canvas.getContext("2d", { alpha: false }) as CanvasRenderingContext2D | null) ||
          (canvas.getContext("2d") as CanvasRenderingContext2D | null))
       : null;
     if (this.ctx) {
@@ -288,6 +290,7 @@ export class VideoRenderer {
       maxDecoders: this.maxDecoders,
       onFrameNeeded: this.onFrameNeeded,
       isPlaying: this.isPlaying,
+      isScrubbing: this.isScrubbing,
     };
   }
 
@@ -303,6 +306,8 @@ export class VideoRenderer {
     this._activeVideoItems.length = 0;
     this._handledVideoIds.clear();
     this._clipsByTrack.clear();
+    this._trackListsPool.length = 0;
+    this._upcomingClipsScratch.length = 0;
     this._visualItems.length = 0;
     this._visualItemPool.length = 0;
     this._activeVideosScratch.length = 0;
@@ -322,8 +327,8 @@ export class VideoRenderer {
     return preloadClip(this.getMediaSyncContext(), clip);
   }
 
-  syncPlayback(activeClips: VideoClip[], time: number, isPlaying: boolean) {
-    syncPlayback(this.getMediaSyncContext(), activeClips, time, isPlaying);
+  syncPlayback(activeClips: VideoClip[], time: number, isPlaying: boolean, upcomingClips: VideoClip[] = []) {
+    syncPlayback(this.getMediaSyncContext(), activeClips, time, isPlaying, upcomingClips);
   }
 
   pauseAll() {
@@ -452,7 +457,7 @@ export class VideoRenderer {
     ctx.save();
     try {
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = (this.isExporting || !isPlaying) ? "high" : "medium";
+      ctx.imageSmoothingQuality = "high";
       ctx.scale(canvasW / w, canvasH / h);
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
@@ -470,7 +475,7 @@ export class VideoRenderer {
       const handledVideoIds = this._handledVideoIds;
       handledVideoIds.clear();
 
-      // Fast track partitioning for O(1) adjacent clip lookups
+      // Fast track partitioning for O(1) adjacent clip lookups with zero allocation
       const clipsByTrack = this._clipsByTrack;
       clipsByTrack.clear();
       for (let i = 0; i < videoClips.length; i++) {
@@ -478,7 +483,8 @@ export class VideoRenderer {
         const tIdx = c.trackIndex || 0;
         let trackList = clipsByTrack.get(tIdx);
         if (!trackList) {
-          trackList = [];
+          trackList = this._trackListsPool.pop() || [];
+          trackList.length = 0;
           clipsByTrack.set(tIdx, trackList);
         }
         trackList.push(c);
@@ -498,11 +504,14 @@ export class VideoRenderer {
 
         // Is clip c currently in an active transition window leading into next clip?
         if (transDur > 0 && time >= cEnd - transDur && time <= cEnd) {
-          const nextClip = sameTrackClips.find(
-            (other) =>
-              other.id !== c.id &&
-              Math.abs(other.startTime - cEnd) < 0.35,
-          );
+          let nextClip: VideoClip | undefined;
+          for (let j = 0; j < sameTrackClips.length; j++) {
+            const other = sameTrackClips[j];
+            if (other.id !== c.id && Math.abs(other.startTime - cEnd) < 0.35) {
+              nextClip = other;
+              break;
+            }
+          }
           const p = Math.max(0, Math.min(1, (time - (cEnd - transDur)) / transDur));
 
           if (nextClip) {
@@ -526,11 +535,14 @@ export class VideoRenderer {
         }
 
         // Standard active video playback window (exclusive end boundary when adjacent next clip exists to prevent cut bleed)
-        const hasAdjacentNext = sameTrackClips.some(
-          (other) =>
-            other.id !== c.id &&
-            Math.abs(other.startTime - cEnd) < 0.01,
-        );
+        let hasAdjacentNext = false;
+        for (let j = 0; j < sameTrackClips.length; j++) {
+          const other = sameTrackClips[j];
+          if (other.id !== c.id && Math.abs(other.startTime - cEnd) < 0.01) {
+            hasAdjacentNext = true;
+            break;
+          }
+        }
         const isActiveAtTime = hasAdjacentNext
           ? time >= c.startTime && time < cEnd
           : time >= c.startTime && time <= cEnd;
@@ -541,6 +553,28 @@ export class VideoRenderer {
             trackIndex: (c.trackIndex || 0) * 100,
           });
           handledVideoIds.add(c.id);
+        } else if (!handledVideoIds.has(c.id) && hasAdjacentNext && time >= cEnd && time <= cEnd + 0.12) {
+          // Continuous temporal tail-hold: keep outgoing clip rendered directly underneath incoming clip
+          // for up to 120ms so cut transitions are 100% gapless without flashing raw background
+          activeVideoItems.push({
+            clip: c,
+            trackIndex: (c.trackIndex || 0) * 100 - 1,
+            transitionState: null,
+          });
+          handledVideoIds.add(c.id);
+        }
+      }
+
+      // Pre-warm and pre-seek upcoming video clips within 1.2s lookahead window with zero allocation
+      const upcomingVideoClips = this._upcomingClipsScratch;
+      upcomingVideoClips.length = 0;
+      if (isPlaying) {
+        for (let i = 0; i < videoClips.length; i++) {
+          const c = videoClips[i];
+          if (c.type === "video" && c.startTime > time && (c.startTime - time) <= 1.2) {
+            upcomingVideoClips.push(c);
+            this.preloadClip(c);
+          }
         }
       }
 
@@ -721,7 +755,7 @@ export class VideoRenderer {
 
                 ctx.save();
                 ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = "high";
+                ctx.imageSmoothingQuality = (this.isExporting || !isPlaying) ? "high" : "medium";
                 ctx.drawImage(this.blurCanvas, finalX, finalY, finalW, finalH);
                 ctx.restore();
                 return;
@@ -730,7 +764,7 @@ export class VideoRenderer {
 
             ctx.save();
             ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = "high";
+            ctx.imageSmoothingQuality = (this.isExporting || !isPlaying) ? "high" : "medium";
             ctx.filter = `blur(${blurPx}px) brightness(0.72) saturate(1.2)`;
             ctx.drawImage(media as any, finalX, finalY, finalW, finalH);
             ctx.restore();
@@ -756,7 +790,9 @@ export class VideoRenderer {
 
       drawBackground();
 
-      this.syncPlayback(activeVideos, time, isPlaying);
+      if (!this.isExporting) {
+        this.syncPlayback(activeVideos, time, isPlaying, upcomingVideoClips);
+      }
 
       const hasAnyTrackContent = Boolean(
         videoClips.length > 0 ||
@@ -778,7 +814,9 @@ export class VideoRenderer {
       for (let i = 0; i < activeVideoItems.length; i++) {
         const item = activeVideoItems[i];
         let p = this._visualItemPool[poolIdx];
-        const tIdx = (typeof item.clip.trackIndex === "number" ? item.clip.trackIndex : 0) * 100;
+        const tIdx = item.trackIndex !== undefined
+          ? item.trackIndex
+          : (typeof item.clip.trackIndex === "number" ? item.clip.trackIndex : 0) * 100;
         if (!p) {
           p = {
             kind: "video",
@@ -972,6 +1010,12 @@ export class VideoRenderer {
     } catch (err) {
       console.error("[VideoRenderer] renderFrame error:", err);
     } finally {
+      this._clipsByTrack.forEach((list) => {
+        list.length = 0;
+        this._trackListsPool.push(list);
+      });
+      this._clipsByTrack.clear();
+      this._upcomingClipsScratch.length = 0;
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1.0;

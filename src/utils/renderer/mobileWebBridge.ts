@@ -179,12 +179,28 @@ export function generateCanvasBridgeHtml(
         overlay: "overlay",
         lighten: "lighten",
         darken: "darken",
+        "color-dodge": "color-dodge",
         colorDodge: "color-dodge",
+        color_dodge: "color-dodge",
+        colordodge: "color-dodge",
+        "color-burn": "color-burn",
         colorBurn: "color-burn",
+        color_burn: "color-burn",
+        colorburn: "color-burn",
+        "hard-light": "hard-light",
         hardLight: "hard-light",
+        hard_light: "hard-light",
+        hardlight: "hard-light",
+        "soft-light": "soft-light",
         softLight: "soft-light",
+        soft_light: "soft-light",
+        softlight: "soft-light",
         difference: "difference",
-        exclusion: "exclusion"
+        exclusion: "exclusion",
+        hue: "hue",
+        saturation: "saturation",
+        color: "color",
+        luminosity: "luminosity"
       };
 
       var chromaOffCanvas = document.createElement("canvas");
@@ -551,17 +567,25 @@ export function generateCanvasBridgeHtml(
           var secs = Math.floor(time).toString().padStart(2, "0");
           var frames = Math.floor((time % 1) * 30).toString().padStart(2, "0");
           ctx.fillText("PLAY ▶ SP 00:" + secs + ":" + frames, 24, h - 32);
-        } else if (type === "glitch") {
+        } else if (type === "glitch" || type === "glitchshake") {
           var sliceH = Math.max(12, h * 0.035);
           for (var gy = 0; gy < h; gy += sliceH * 1.6) {
             if (Math.sin(time * 22 + gy) > 0.45) {
               var shift = Math.sin(time * 45 + gy) * (w * 0.08) * intensity;
               ctx.save();
-              ctx.fillStyle = "rgba(0, 242, 254, " + (0.25 * intensity) + ")";
+              ctx.fillStyle = "rgba(0, 242, 254, " + (0.35 * intensity) + ")";
               ctx.fillRect(shift, gy, w, sliceH);
               ctx.restore();
             }
           }
+          ctx.save();
+          ctx.globalCompositeOperation = "screen";
+          var gShiftX = Math.sin(time * 45) * (w * 0.02) * intensity;
+          ctx.fillStyle = "rgba(0, 242, 254, " + (0.35 * intensity) + ")";
+          ctx.fillRect(gShiftX, 0, w, h);
+          ctx.fillStyle = "rgba(255, 0, 80, " + (0.35 * intensity) + ")";
+          ctx.fillRect(-gShiftX, 0, w, h);
+          ctx.restore();
         } else if (type === "mirror") {
           ctx.save();
           ctx.translate(w, 0);
@@ -2583,20 +2607,17 @@ export function generateCanvasBridgeHtml(
 
         var stream = null;
         var videoTrack = null;
-        var useManualFramePush = false;
         try {
-          stream = canvas.captureStream(0);
+          stream = canvas.captureStream(EXPORT_OPTIONS.fps || 30);
           videoTrack = stream ? stream.getVideoTracks()[0] : null;
-          if (videoTrack && typeof videoTrack.requestFrame === "function") {
-            useManualFramePush = true;
-          } else {
-            try { if (stream) stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
-            stream = canvas.captureStream(EXPORT_OPTIONS.fps);
-            videoTrack = stream ? stream.getVideoTracks()[0] : null;
-          }
         } catch(e) {
-          stream = canvas.captureStream(EXPORT_OPTIONS.fps);
-          videoTrack = stream ? stream.getVideoTracks()[0] : null;
+          try {
+            stream = canvas.captureStream();
+            videoTrack = stream ? stream.getVideoTracks()[0] : null;
+          } catch(err) {
+            sendToNative({ type: "ERROR", message: "Canvas captureStream failed in this WebView" });
+            return;
+          }
         }
 
         // Web Audio API Stereo Track Mixdown
@@ -3054,15 +3075,15 @@ export function generateCanvasBridgeHtml(
         recorder.start(1000);
         const startTime = performance.now();
         durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
-        const targetFrameInterval = 1 / Math.max(1, EXPORT_OPTIONS.fps || 30);
-        let lastRenderedTime = 0;
-        let lastProgressSentAt = 0;
+        const targetFps = Math.max(1, EXPORT_OPTIONS.fps || 30);
+        const totalFrames = Math.max(1, Math.ceil(durationSec * targetFps));
+        const targetFrameInterval = 1 / targetFps;
+        const targetFrameIntervalMs = 1000 / targetFps;
+        let frameIndex = 0;
 
         function tick() {
           try {
-            const now = performance.now();
-            const elapsed = (now - startTime) / 1000;
-            const curTime = Math.min(elapsed, durationSec);
+            const curTime = Math.min(durationSec, frameIndex * targetFrameInterval);
 
           // Synchronize active video playback with exact seek and micro-adjustments
           for (const clip of videoClips) {
@@ -3228,41 +3249,24 @@ export function generateCanvasBridgeHtml(
             }
           }
 
-          // The WebView may refresh at 60/90/120 Hz while export is configured
-          // for a lower rate. Avoid repeating the expensive full composition on
-          // display-only frames; the canvas stream is configured to the export
-          // frame rate above.
-          if (curTime - lastRenderedTime >= targetFrameInterval - 0.002 || elapsed >= durationSec) {
-            renderFrame(curTime);
-            lastRenderedTime = curTime;
-            if (useManualFramePush && videoTrack && typeof videoTrack.requestFrame === "function") {
-              try { videoTrack.requestFrame(); } catch(e) {}
-            }
+          renderFrame(curTime);
+          if (videoTrack && typeof videoTrack.requestFrame === "function") {
+            try { videoTrack.requestFrame(); } catch(e) {}
           }
 
-          if (now - lastProgressSentAt >= 100 || elapsed >= durationSec) {
-            lastProgressSentAt = now;
-            const progress = Math.min(99, Math.floor((curTime / durationSec) * 100));
-            sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });
-          }
+          frameIndex++;
+          const progress = Math.min(99, Math.floor((frameIndex / totalFrames) * 100));
+          sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });
 
-          if (elapsed < durationSec) {
-            var nextFrameDueSec = lastRenderedTime + targetFrameInterval;
-            var delayMs = Math.max(4, Math.min(50, Math.round((nextFrameDueSec - elapsed) * 1000)));
+          if (frameIndex < totalFrames) {
+            const nextTargetWallMs = frameIndex * targetFrameIntervalMs;
+            const elapsedWallMs = performance.now() - startTime;
+            const delayMs = Math.max(0, Math.round(nextTargetWallMs - elapsedWallMs));
             setTimeout(tick, delayMs);
           } else {
             sendToNative({ type: "PROGRESS", progress: 99, status: "Finalizing video file..." });
 
-            // 1. Instantly stop all stream tracks to halt video capture pipeline and prevent runaway GPU/RAM allocation!
-            if (stream) {
-              try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
-            }
-            if (audioCtx) {
-              try { audioCtx.close(); } catch(e) {}
-              audioCtx = null;
-            }
-
-            // 2. Stop all media playback
+            // 1. Stop all media playback
             for (const clip of videoClips) {
               const el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
               if (el && el instanceof HTMLVideoElement && !el.paused) {
@@ -3280,14 +3284,14 @@ export function generateCanvasBridgeHtml(
               }
             }
 
-            // 3. Directly stop MediaRecorder WITHOUT requestData() (which causes Blink/WebKit state collisions)
+            // 2. Directly stop MediaRecorder WITHOUT requestData() (which causes Blink/WebKit state collisions)
             if (recorder.state === "recording") {
               try { recorder.stop(); } catch(e) {
                 console.warn("[mobileWebBridge] Stop recorder error:", e);
               }
             }
 
-            // 4. Fallback watchdog timer (3.5s): If recorder.onstop fails to fire, force completion
+            // 3. Fallback watchdog timer (3.5s): If recorder.onstop fails to fire, force completion
             if (!stopWatchdogTimer) {
               stopWatchdogTimer = setTimeout(function() {
                 if (!hasFinishedStop) {

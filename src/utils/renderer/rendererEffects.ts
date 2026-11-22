@@ -598,6 +598,8 @@ export function applyEffectOverlay(
   const ch = canvas.height;
   const needsOffscreenSnapshot =
     eff.type === "glitch" ||
+    eff.type === "glitch_shake" ||
+    eff.type === "glitchshake" ||
     eff.type === "mirror" ||
     eff.type === "shake" ||
     eff.type === "blur" ||
@@ -617,16 +619,46 @@ export function applyEffectOverlay(
     ? ensureOffscreen(cw, ch) || canvas
     : canvas;
 
-  if (eff.type === "glitch") {
-    const sliceH = Math.max(12, h * 0.035);
-    for (let y = 0; y < h; y += sliceH * 1.5) {
-      if (Math.random() > 0.35) {
-        const shift = (Math.random() - 0.5) * (w * 0.12) * intensity;
-        const sy = (y / h) * ch;
-        const sh = (sliceH / h) * ch;
-        ctx.drawImage(sourceCanvas, 0, sy, cw, sh, shift, y, w, sliceH);
+  if (eff.type === "glitch" || eff.type === "glitch_shake" || eff.type === "glitchshake") {
+    // 1. Horizontal slice displacement from source snapshot
+    if (sourceCanvas) {
+      const sliceH = Math.max(8, h * 0.03);
+      for (let y = 0; y < h; y += sliceH * 1.4) {
+        if (Math.random() > 0.3) {
+          const shift = (Math.random() - 0.5) * (w * 0.08) * intensity;
+          const sy = (y / h) * ch;
+          const sh = (sliceH / h) * ch;
+          try {
+            ctx.drawImage(sourceCanvas, 0, sy, cw, sh, shift, y, w, sliceH);
+          } catch {}
+        }
       }
     }
+
+    // 2. Dynamic RGB Split (Chromatic Aberration)
+    const shiftX = Math.sin(time * 45) * (w * 0.02) * intensity;
+    const shiftY = Math.cos(time * 38) * (h * 0.008) * intensity;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = `rgba(0, 242, 254, ${0.35 * intensity})`;
+    ctx.fillRect(shiftX, shiftY, w, h);
+    ctx.fillStyle = `rgba(255, 0, 80, ${0.35 * intensity})`;
+    ctx.fillRect(-shiftX, -shiftY, w, h);
+    ctx.restore();
+
+    // 3. Digital Glitch Scanline Noise Bars
+    ctx.save();
+    const barCount = Math.floor(2 + 4 * intensity);
+    for (let i = 0; i < barCount; i++) {
+      const barY = ((time * (80 + i * 45)) + i * (h / barCount)) % h;
+      const barH = 2 + (i % 3) * 3;
+      const barShift = (Math.sin(time * 60 + i * 2) * 24) * intensity;
+      ctx.fillStyle = i % 2 === 0
+        ? `rgba(0, 242, 254, ${0.45 * intensity})`
+        : `rgba(255, 255, 255, ${0.55 * intensity})`;
+      ctx.fillRect(barShift, barY, w, barH);
+    }
+    ctx.restore();
   } else if (eff.type === "vhs") {
     ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
     for (let y = 0; y < h; y += 4) {

@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { FastArtProject, MaskConfig, MaskKeyframePoint } from "../types/project";
+import { saveProject } from "../utils/storage";
 import {
   cleanAndSortKeyframes,
   cleanAndSortMaskKeyframes,
@@ -123,7 +124,7 @@ export function useProjectKeyframes({
   }, [rawMaskKeyframes, activeClip, currentTimeRef, setCurrentTime]);
 
   // Add or Remove Mask Keyframe to active video clip
-  const handleAddMaskKeyframe = useCallback((): { action: "added" | "removed"; time: number } | void => {
+  const handleAddMaskKeyframe = useCallback((mode?: "add" | "remove" | "toggle", maskOverride?: MaskConfig): { action: "added" | "removed"; time: number } | void => {
     let targetClip = selectedClip;
     let targetId = selectedClipId;
 
@@ -153,18 +154,21 @@ export function useProjectKeyframes({
       targetClip.maskKeyframes || targetClip.mask?.keyframes || [],
     );
     const clipLocalTime = Math.max(0, activeTime - (targetClip.startTime || 0));
-    const existing = findMaskKeyframeAtTime(clipMaskKfs, clipLocalTime, 0.12);
+    const existing = findMaskKeyframeAtTime(clipMaskKfs, clipLocalTime, 0.15);
 
     let updatedMaskKfs: MaskKeyframePoint[] = [];
+    let appliedMask: MaskConfig | undefined = undefined;
     let actionType: "added" | "removed" = "added";
-    if (existing) {
+    if (mode === "remove" || (mode !== "add" && existing)) {
       actionType = "removed";
       updatedMaskKfs = clipMaskKfs.filter(
-        (k) => Math.abs(k.time - clipLocalTime) >= 0.12,
+        (k) => Math.abs(k.time - clipLocalTime) >= 0.15,
       );
     } else {
       actionType = "added";
       const curMask =
+        maskOverride ||
+        (targetClip.mask && targetClip.mask.shape && targetClip.mask.shape !== "none" ? targetClip.mask : null) ||
         getInterpolatedMask(targetClip, activeTime) ||
         targetClip.mask ||
         targetClip.transform?.mask || {
@@ -179,15 +183,19 @@ export function useProjectKeyframes({
           y: 0,
           rotation: 0,
         };
+      appliedMask = curMask;
 
-      updatedMaskKfs = [
-        ...clipMaskKfs,
+      const filtered = clipMaskKfs.filter(
+        (k) => Math.abs(k.time - clipLocalTime) >= 0.15,
+      );
+      updatedMaskKfs = cleanAndSortMaskKeyframes([
+        ...filtered,
         {
           time: Number(clipLocalTime.toFixed(3)),
           mask: { ...curMask },
           easing: "easeInOut",
         },
-      ];
+      ]);
     }
 
     updatedMaskKfs = cleanAndSortMaskKeyframes(updatedMaskKfs);
@@ -199,8 +207,10 @@ export function useProjectKeyframes({
         (clip) => {
           const updatedMask = {
             ...(clip.mask || {}),
+            ...(appliedMask || {}),
             keyframes: updatedMaskKfs,
           } as MaskConfig;
+          delete (updatedMask as any)._lastStagedTime;
           return {
             ...clip,
             maskKeyframes: updatedMaskKfs,
@@ -214,6 +224,7 @@ export function useProjectKeyframes({
         "video",
       );
       updateProjectWithHistory(updatedProject);
+      saveProject(updatedProject);
     }
 
     return { action: actionType, time: activeTime };
@@ -245,6 +256,7 @@ export function useProjectKeyframes({
           ...(clip.mask || {}),
           keyframes: updated,
         } as MaskConfig;
+        delete (updatedMask as any)._lastStagedTime;
         return {
           ...clip,
           maskKeyframes: updated,
@@ -258,6 +270,7 @@ export function useProjectKeyframes({
       selectedClipType,
     );
     updateProjectWithHistory(updatedProject);
+    saveProject(updatedProject);
   }, [selectedClip, project, selectedClipId, selectedClipType, updateProjectWithHistory]);
 
   const handleClearAllMaskKeyframes = useCallback(() => {
@@ -270,6 +283,7 @@ export function useProjectKeyframes({
           ...(clip.mask || {}),
           keyframes: [],
         } as MaskConfig;
+        delete (updatedMask as any)._lastStagedTime;
         return {
           ...clip,
           maskKeyframes: [],
@@ -283,6 +297,7 @@ export function useProjectKeyframes({
       selectedClipType,
     );
     updateProjectWithHistory(updatedProject);
+    saveProject(updatedProject);
   }, [selectedClip, project, selectedClipId, selectedClipType, updateProjectWithHistory]);
 
   const handleJumpPrevKeyframe = useCallback(() => {
@@ -392,6 +407,7 @@ export function useProjectKeyframes({
         targetType,
       );
       updateProjectWithHistory(updatedProject);
+      saveProject(updatedProject);
     }
 
     return { action: actionType, time: currentTime };
@@ -521,6 +537,7 @@ export function useProjectKeyframes({
       selectedClipType,
     );
     updateProjectWithHistory(updatedProject);
+    saveProject(updatedProject);
   }, [selectedClip, project, selectedClipType, selectedClipId, updateProjectWithHistory]);
 
   const handleDeleteKeyframeAtTime = useCallback((time: number) => {
@@ -540,6 +557,7 @@ export function useProjectKeyframes({
       selectedClipType,
     );
     updateProjectWithHistory(updatedProject);
+    saveProject(updatedProject);
   }, [selectedClip, project, selectedClipType, selectedClipId, updateProjectWithHistory]);
 
   const handleClearAllKeyframes = useCallback(() => {
@@ -554,6 +572,7 @@ export function useProjectKeyframes({
       selectedClipType,
     );
     updateProjectWithHistory(updatedProject);
+    saveProject(updatedProject);
   }, [selectedClip, project, selectedClipType, selectedClipId, updateProjectWithHistory]);
 
   return {

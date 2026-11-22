@@ -612,9 +612,9 @@ function renderEffectContent(
   }
 
   // 3. Glitch Shake
-  if (type === "glitch") {
-    const shift1 = Math.round(((Math.sin(currentTime * 45) * 6) + 4) * intensity);
-    const shift2 = Math.round(((Math.cos(currentTime * 38) * 6) + 4) * intensity);
+  if (type === "glitch" || type === "glitchshake" || type.includes("glitch")) {
+    const shift1 = Math.round(((Math.sin(currentTime * 45) * 8) + 4) * intensity);
+    const shift2 = Math.round(((Math.cos(currentTime * 38) * 8) + 4) * intensity);
     return (
       <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
         <View
@@ -622,7 +622,7 @@ function renderEffectContent(
             StyleSheet.absoluteFill,
             {
               left: shift1,
-              backgroundColor: "rgba(0, 242, 254, " + (0.22 * intensity) + ")",
+              backgroundColor: "rgba(0, 242, 254, " + (0.35 * intensity) + ")",
             },
           ]}
         />
@@ -631,7 +631,7 @@ function renderEffectContent(
             StyleSheet.absoluteFill,
             {
               left: -shift2,
-              backgroundColor: "rgba(255, 0, 80, " + (0.22 * intensity) + ")",
+              backgroundColor: "rgba(255, 0, 80, " + (0.35 * intensity) + ")",
             },
           ]}
         />
@@ -642,7 +642,7 @@ function renderEffectContent(
             left: shift1 * 1.5,
             right: 0,
             height: 16,
-            backgroundColor: "rgba(0, 242, 254, " + (0.4 * intensity) + ")",
+            backgroundColor: "rgba(0, 242, 254, " + (0.5 * intensity) + ")",
           }}
         />
         <View
@@ -652,7 +652,17 @@ function renderEffectContent(
             left: -shift2 * 1.5,
             right: 0,
             height: 12,
-            backgroundColor: "rgba(255, 0, 80, " + (0.4 * intensity) + ")",
+            backgroundColor: "rgba(255, 0, 80, " + (0.5 * intensity) + ")",
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            top: "45%",
+            left: 0,
+            right: 0,
+            height: 4,
+            backgroundColor: "rgba(255, 255, 255, " + (0.6 * intensity) + ")",
           }}
         />
       </View>
@@ -1352,7 +1362,12 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           ? activeTransient!.rotation
           : (kfT?.rotation ?? vid.transform?.rotation ?? vid.rotation ?? 0);
         const opacity =
-          (kfT?.opacity ?? 1) * (vid.opacity !== undefined ? vid.opacity : 1);
+          (kfT?.opacity ?? 1) *
+          (vid.opacity !== undefined
+            ? vid.opacity
+            : (vid.transform?.opacity !== undefined
+                ? vid.transform.opacity
+                : 1));
 
         let motionX = 0;
         let motionY = 0;
@@ -1408,6 +1423,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let isInteractive = isInside;
         let transX = 0;
         let transY = 0;
+        let transRot = 0;
         let transScaleModifier = 1.0;
 
         // Transition handling for cross-clip transitions
@@ -1427,6 +1443,13 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           else if (trans.type === "push_down") transY += p * h;
           else if (trans.type === "fade_black") effectiveOpacity *= Math.max(0, 1 - p * 2);
           else if (trans.type === "flash_white") { if (p > 0.5) effectiveOpacity = 0; }
+          else if (trans.type === "spin_cw") { transRot += p * 180; transScaleModifier *= (1 - p * 0.4); effectiveOpacity *= (1 - p); }
+          else if (trans.type === "spin_ccw") { transRot -= p * 180; transScaleModifier *= (1 - p * 0.4); effectiveOpacity *= (1 - p); }
+          else if (trans.type === "light_leak") { effectiveOpacity *= (1 - p); transScaleModifier *= (1 + p * 0.15); }
+          else if (trans.type === "glitch_transition" || trans.type === "glitch") {
+            effectiveOpacity *= (1 - p);
+            transX += (Math.sin(currentTime * 50) * 16);
+          }
         } else if (isUpcoming) {
           // Check if this upcoming clip is receiving an incoming transition from adjacent previous clip
           const prevClip = activeVideos.find(
@@ -1450,12 +1473,25 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               else if (prevTrans.type === "push_down") transY -= (1 - p) * h;
               else if (prevTrans.type === "fade_black") effectiveOpacity = opacity * Math.max(0, (p - 0.5) * 2);
               else if (prevTrans.type === "flash_white") { if (p < 0.5) effectiveOpacity = 0; }
+              else if (prevTrans.type === "spin_cw") { transRot += -(1 - p) * 180; transScaleModifier *= (0.6 + p * 0.4); }
+              else if (prevTrans.type === "spin_ccw") { transRot -= -(1 - p) * 180; transScaleModifier *= (0.6 + p * 0.4); }
+              else if (prevTrans.type === "light_leak") { /* effectiveOpacity already scaled */ }
+              else if (prevTrans.type === "glitch_transition" || prevTrans.type === "glitch") {
+                effectiveOpacity = opacity * p;
+                transX += (Math.cos(currentTime * 45) * 12);
+              }
             }
           }
         } else if (isRecent) {
-          // A clip that has finished must not render beyond its duration
-          effectiveOpacity = 0;
-          isInteractive = false;
+          // Tail-hold recently finished clip directly underneath incoming clip for 150ms to eliminate cut flash
+          const isTailHold = currentTime - (vid.startTime + vid.duration) <= 0.15;
+          if (isTailHold) {
+            effectiveOpacity = opacity;
+            isInteractive = false;
+          } else {
+            effectiveOpacity = 0;
+            isInteractive = false;
+          }
         }
 
         let vidAnimAlpha = 1.0;
@@ -1464,11 +1500,12 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         let vidAnimOffsetX = 0;
         let vidAnimOffsetY = 0;
         let vidAnimRot = 0;
-        if (vid.animation && vid.animation !== "none") {
+        const rawVidAnim = vid.animation || vid.transform?.animation;
+        if (rawVidAnim && rawVidAnim !== "none") {
           const vElapsed = Math.max(0, currentTime - (vid.startTime || 0));
           const vDur = Math.max(0.1, vid.duration || 3.0);
           const vEval = evaluateClipAnimation(
-            vid.animation,
+            rawVidAnim,
             vElapsed,
             vDur,
             w,
@@ -1499,7 +1536,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           { perspective: isNaN(persp) ? 800 : persp },
           { rotateX: `${isNaN(rotX) ? 0 : rotX}deg` },
           { rotateY: `${isNaN(rotY) ? 0 : rotY}deg` },
-          { rotate: `${isNaN(effRot + vidAnimRot) ? 0 : effRot + vidAnimRot}deg` },
+          { rotate: `${isNaN(effRot + vidAnimRot + transRot) ? 0 : effRot + vidAnimRot + transRot}deg` },
           ...(skewX && !isNaN(skewX) && skewX !== 0 ? [{ skewX: `${skewX}deg` }] : []),
           { scaleX: isNaN(effScaleX) ? 1.0 : effScaleX },
           { scaleY: isNaN(effScaleY) ? 1.0 : effScaleY },
@@ -1514,9 +1551,10 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           const croppedContainerH = Math.round(fullH * cropH);
 
           const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
+          const cleanBlendMode = String(blendMode).toLowerCase().replace(/_/g, "-");
           const webBlendStyle =
-            Platform.OS === "web" && blendMode !== "normal"
-              ? ({ mixBlendMode: blendMode } as any)
+            Platform.OS === "web" && cleanBlendMode !== "normal"
+              ? ({ mixBlendMode: cleanBlendMode } as any)
               : undefined;
 
           const baseFilterCss = vid.customLut?.cssFilter || (vid.filter && vid.filter !== "none" && vid.filter !== "normal" ? FILTER_CSS_MAP[vid.filter] : "");
@@ -1642,9 +1680,10 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         }
 
         const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
+        const cleanBlendMode = String(blendMode).toLowerCase().replace(/_/g, "-");
         const webBlendStyle =
-          Platform.OS === "web" && blendMode !== "normal"
-            ? ({ mixBlendMode: blendMode } as any)
+          Platform.OS === "web" && cleanBlendMode !== "normal"
+            ? ({ mixBlendMode: cleanBlendMode } as any)
             : undefined;
 
         const baseFilterCss = vid.customLut?.cssFilter || (vid.filter && vid.filter !== "none" && vid.filter !== "normal" ? FILTER_CSS_MAP[vid.filter] : "");
@@ -1767,6 +1806,50 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           </TouchableOpacity>
         );
       })}
+
+      {/* Layer 1b: Transition Flash White / Light Leak Strobe Overlays */}
+      {(() => {
+        for (let i = 0; i < activeVideos.length; i++) {
+          const vid = activeVideos[i];
+          const trans = vid.transition;
+          if (!trans || trans.type === "none" || trans.type === "cut") continue;
+          const transDur = trans.duration || 0.5;
+          const cEnd = vid.startTime + vid.duration;
+          if (currentTime >= cEnd - transDur && currentTime <= cEnd) {
+            const p = (currentTime - (cEnd - transDur)) / transDur;
+            if (trans.type === "flash_white") {
+              const alpha = Math.sin(p * Math.PI) * 0.95;
+              return (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor: `rgba(255, 255, 255, ${alpha.toFixed(3)})`,
+                      zIndex: 85,
+                    },
+                  ]}
+                />
+              );
+            } else if (trans.type === "light_leak") {
+              const alpha = Math.sin(p * Math.PI) * 0.85;
+              return (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor: `rgba(255, 180, 50, ${(alpha * 0.45).toFixed(3)})`,
+                      zIndex: 85,
+                    },
+                  ]}
+                />
+              );
+            }
+          }
+        }
+        return null;
+      })()}
 
       {/* Layer 2: Active Text Overlays */}
       {activeTexts.map((txt) => {

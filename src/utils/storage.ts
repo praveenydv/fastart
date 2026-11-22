@@ -14,6 +14,7 @@ import {
   Resolution,
   FPS,
 } from '../types/project';
+import { cleanAndSortMaskKeyframes } from './keyframeEngine';
 
 // Storage keys
 export const PROJECTS_STORAGE_KEY = '@fastart_projects_v2';
@@ -232,10 +233,10 @@ export const saveLastSession = (session: LastEditSession): void => {
  */
 export function safeJsonStringify(obj: any, indent?: number): string {
   try {
-    const seen = new WeakSet();
+    const ancestors: any[] = [];
     return JSON.stringify(
       obj,
-      (key: string, value: any) => {
+      function (this: any, key: string, value: any) {
         if (typeof value === 'function') return undefined;
         if (typeof value === 'object' && value !== null) {
           try {
@@ -255,10 +256,14 @@ export function safeJsonStringify(obj: any, indent?: number): string {
           } catch {
             return undefined;
           }
-          if (seen.has(value)) {
-            return undefined;
+          // Ancestor stack tracking: pop ancestors that are no longer in the current descent path
+          while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+            ancestors.pop();
           }
-          seen.add(value);
+          if (ancestors.includes(value)) {
+            return undefined; // Genuine circular ancestor reference
+          }
+          ancestors.push(value);
         }
         return value;
       },
@@ -292,6 +297,28 @@ const sanitizeClip = (clip: any): any => {
     }
     clean[k] = v;
   }
+
+  // Ensure mask keyframes are properly preserved, sorted, and mirrored across properties
+  const rawMaskKfs = clean.maskKeyframes || clean.mask?.keyframes;
+  if (Array.isArray(rawMaskKfs) && rawMaskKfs.length > 0) {
+    const sorted = cleanAndSortMaskKeyframes(rawMaskKfs);
+    clean.maskKeyframes = sorted;
+    clean.mask = {
+      ...(clean.mask || {}),
+      keyframes: sorted,
+    };
+    if (clean.transform) {
+      clean.transform = {
+        ...clean.transform,
+        mask: {
+          ...(clean.transform.mask || {}),
+          ...clean.mask,
+          keyframes: sorted,
+        },
+      };
+    }
+  }
+
   return clean;
 };
 

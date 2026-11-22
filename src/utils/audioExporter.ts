@@ -11,7 +11,7 @@
 // - Master Soft-Knee Limiter (prevents digital clipping/distortion)
 // - Zero Audio Hum: Outputs clean digital silence when no sound is present
 
-import { FastArtProject, AudioClip, VideoClip } from '../types/project';
+import { FastArtProject, AudioClip, VideoClip, VoiceEffectId } from '../types/project';
 import { mediaHasAudioTrack, isMediaAudioDetected } from './mediaAudioDetector';
 import { getMediaBinaryBuffer } from './largeMediaStorage';
 import { rustCoreBridge } from '../services/rustCoreBridge';
@@ -473,6 +473,7 @@ export async function exportProjectAudioToWavBytes(
     fadeIn: number;
     fadeOut: number;
     denoise: boolean;
+    voiceEffect: VoiceEffectId;
   }[] = [];
 
   const allClips = [...audioClips, ...videoAudioClips];
@@ -488,6 +489,7 @@ export async function exportProjectAudioToWavBytes(
         const fadeIn = Math.max(0, (c as any).fadeIn || 0);
         const fadeOut = Math.max(0, (c as any).fadeOut || 0);
         const denoise = Boolean(c.denoise || project.aiDenoise);
+        const voiceEffect = ((c as any).voiceEffect || "none") as VoiceEffectId;
 
         loadedAudioTracks.push({
           clip: c,
@@ -498,6 +500,7 @@ export async function exportProjectAudioToWavBytes(
           fadeIn,
           fadeOut,
           denoise,
+          voiceEffect,
         });
       }
     })
@@ -509,7 +512,7 @@ export async function exportProjectAudioToWavBytes(
 
   // Mix every loaded audio track with frame-accurate interpolation & envelope curves
   for (const track of loadedAudioTracks) {
-    const { clip, decoded, volume, speed, trimIn, fadeIn, fadeOut, denoise } = track;
+    const { clip, decoded, volume, speed, trimIn, fadeIn, fadeOut, denoise, voiceEffect } = track;
     if (volume <= 0) continue;
 
     const clipStart = Math.max(0, clip.startTime || 0);
@@ -524,8 +527,14 @@ export async function exportProjectAudioToWavBytes(
     const srcRate = decoded.sampleRate;
     const srcLen = srcLeft.length;
 
-    const step = (speed * srcRate) / sampleRate;
-    let srcFrame = (trimIn + (startSample / sampleRate - clipStart) * speed) * srcRate;
+    let pitchMultiplier = 1.0;
+    if (voiceEffect === "chipmunk") pitchMultiplier = 1.45;
+    else if (voiceEffect === "helium") pitchMultiplier = 1.62;
+    else if (voiceEffect === "deep_bass") pitchMultiplier = 0.82;
+
+    const effectiveSpeed = speed * pitchMultiplier;
+    const step = (effectiveSpeed * srcRate) / sampleRate;
+    let srcFrame = (trimIn + (startSample / sampleRate - clipStart) * effectiveSpeed) * srcRate;
     const invSampleRate = 1.0 / sampleRate;
 
     // Multi-Band Adaptive Spectral Noise Reduction DSP State & Coefficients
@@ -666,6 +675,27 @@ export async function exportProjectAudioToWavBytes(
           // 7. Reconstruction: Sum bands with transparent weighting (when gains=1, output = original signal)
           leftSamp = bandLowL * gainLowL + bandMidL * gainMidL + bandHighL * gainHighL;
           rightSamp = bandLowR * gainLowL + bandMidR * gainMidL + bandHighR * gainHighL;
+        }
+
+        // Apply Character Voice Changer & Audio FX filter processing
+        if (voiceEffect && voiceEffect !== "none") {
+          if (voiceEffect === "robot") {
+            const mod = Math.sin(2.0 * Math.PI * 55.0 * (i * invSampleRate));
+            leftSamp = leftSamp * 0.25 + leftSamp * mod * 0.75;
+            rightSamp = rightSamp * 0.25 + rightSamp * mod * 0.75;
+          } else if (voiceEffect === "megaphone") {
+            leftSamp = Math.tanh(leftSamp * 2.2);
+            rightSamp = Math.tanh(rightSamp * 2.2);
+          } else if (voiceEffect === "deep_bass") {
+            leftSamp = leftSamp * 1.35;
+            rightSamp = rightSamp * 1.35;
+          } else if (voiceEffect === "echo") {
+            const delaySamples = Math.floor(0.22 * sampleRate);
+            if (i - delaySamples >= startSample) {
+              leftSamp += masterLeft[i - delaySamples] * 0.35;
+              rightSamp += masterRight[i - delaySamples] * 0.35;
+            }
+          }
         }
 
         const effVol = volume * env;

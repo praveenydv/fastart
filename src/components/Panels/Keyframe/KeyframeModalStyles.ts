@@ -433,17 +433,14 @@ export const styles = StyleSheet.create({
     gap: 4,
   },
   kfJumpBtn: {
+    width: 22,
+    height: 22,
     backgroundColor: "#131826",
     borderWidth: 1,
     borderColor: "#1F2637",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
     borderRadius: 4,
-  },
-  kfJumpBtnText: {
-    color: "#00F2FE",
-    fontSize: 8.5,
-    fontWeight: "400",
+    alignItems: "center",
+    justifyContent: "center",
   },
   kfDeleteBtn: {
     width: 20,

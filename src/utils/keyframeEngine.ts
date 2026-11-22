@@ -254,22 +254,15 @@ export function getBaseTransform(
   return result;
 }
 
-const sortedKfCache = new WeakMap<KeyframePoint[], KeyframePoint[]>();
-const sortedMaskKfCache = new WeakMap<MaskKeyframePoint[], MaskKeyframePoint[]>();
-
 /**
  * Validates, sorts, and deduplicates mask keyframes by timestamp.
+ * Guarantees keyframes are strictly time-sorted in ascending order regardless of insertion sequence.
  */
 export function cleanAndSortMaskKeyframes(
   keyframes: MaskKeyframePoint[] | undefined | null,
 ): MaskKeyframePoint[] {
   if (!keyframes || !Array.isArray(keyframes) || keyframes.length === 0) {
     return [];
-  }
-
-  const cached = sortedMaskKfCache.get(keyframes);
-  if (cached) {
-    return cached;
   }
 
   const valid = keyframes.filter(
@@ -314,7 +307,6 @@ export function cleanAndSortMaskKeyframes(
     result.push(cleanKf);
   }
 
-  sortedMaskKfCache.set(keyframes, result);
   return result;
 }
 
@@ -342,11 +334,6 @@ export function cleanAndSortKeyframes(
 ): KeyframePoint[] {
   if (!keyframes || !Array.isArray(keyframes) || keyframes.length === 0) {
     return [];
-  }
-
-  const cached = sortedKfCache.get(keyframes);
-  if (cached) {
-    return cached;
   }
 
   // Filter valid entries
@@ -452,7 +439,6 @@ export function cleanAndSortKeyframes(
   );
   (result as any).legacyMaskKfs = result.filter((k) => k.mask || k.transform?.mask);
 
-  sortedKfCache.set(keyframes, result);
   return result;
 }
 
@@ -532,6 +518,15 @@ export function getInterpolatedMask(
     const maskKfs = cleanAndSortMaskKeyframes(rawMaskKfs);
     if (maskKfs.length > 0) {
       const localTime = Math.max(0, curTime - (clip.startTime || 0));
+
+      // If the user just staged an edit at this localTime (before hitting +), honor the staged mask!
+      if (
+        baseMask &&
+        typeof (baseMask as any)._lastStagedTime === "number" &&
+        Math.abs(localTime - (baseMask as any)._lastStagedTime) < 0.08
+      ) {
+        return baseMask;
+      }
 
       if (localTime <= maskKfs[0].time) {
         return maskKfs[0].mask || baseMask;
@@ -679,7 +674,7 @@ export function getInterpolatedTransform(
     }
     return {
       ...baseT,
-      mask: interpolatedMask,
+      mask: interpolatedMask || baseT.mask,
     };
   }
 
@@ -690,7 +685,7 @@ export function getInterpolatedTransform(
     }
     return {
       ...baseT,
-      mask: interpolatedMask,
+      mask: interpolatedMask || baseT.mask,
     };
   }
 
@@ -714,7 +709,7 @@ export function getInterpolatedTransform(
       opacity: kfs[0].opacity !== undefined ? kfs[0].opacity : baseT.opacity,
       flipX: t0.flipX !== undefined ? t0.flipX : baseT.flipX,
       flipY: t0.flipY !== undefined ? t0.flipY : baseT.flipY,
-      mask: interpolatedMask,
+      mask: interpolatedMask || baseT.mask,
     };
   }
 
@@ -737,7 +732,7 @@ export function getInterpolatedTransform(
       opacity: last.opacity !== undefined ? last.opacity : baseT.opacity,
       flipX: tLast.flipX !== undefined ? tLast.flipX : baseT.flipX,
       flipY: tLast.flipY !== undefined ? tLast.flipY : baseT.flipY,
-      mask: interpolatedMask,
+      mask: interpolatedMask || baseT.mask,
     };
   }
 
@@ -767,7 +762,7 @@ export function getInterpolatedTransform(
         opacity: Math.max(0, Math.min(1, rustInterp.opacity)),
         flipX: baseT.flipX,
         flipY: baseT.flipY,
-        mask: interpolatedMask,
+        mask: interpolatedMask || baseT.mask,
       };
     }
   }
@@ -861,13 +856,13 @@ export function getInterpolatedTransform(
       opacity: op1 + (op2 - op1) * ease,
       flipX: t2.flipX !== undefined ? t2.flipX : (t1.flipX ?? baseT.flipX),
       flipY: t2.flipY !== undefined ? t2.flipY : (t1.flipY ?? baseT.flipY),
-      mask: interpolatedMask,
+      mask: interpolatedMask || baseT.mask,
     };
   }
 
   return {
     ...baseT,
-    mask: interpolatedMask,
+    mask: interpolatedMask || baseT.mask,
   };
 }
 
@@ -985,9 +980,9 @@ export function applyMaskUpdateToClip(
       easing: k.easing,
     }));
 
-    let closestIdx = 0;
-    let minDiff = Math.abs(kfs[0].time - localTime);
-    for (let i = 1; i < kfs.length; i++) {
+    let closestIdx = -1;
+    let minDiff = Infinity;
+    for (let i = 0; i < kfs.length; i++) {
       const diff = Math.abs(kfs[i].time - localTime);
       if (diff < minDiff) {
         minDiff = diff;
@@ -995,26 +990,21 @@ export function applyMaskUpdateToClip(
       }
     }
 
-    if (minDiff <= 0.2) {
-      // Update mask keyframe closest to playhead
+    if (closestIdx >= 0 && minDiff <= 0.15) {
+      // User is editing directly on an existing keyframe: update that keyframe!
       kfs[closestIdx] = {
         ...kfs[closestIdx],
         mask: { ...newMask },
       };
-    } else {
-      // Auto-keyframe: user adjusted mask at a new time!
-      kfs.push({
-        time: Number(localTime.toFixed(3)),
-        mask: { ...newMask },
-        easing: "easeInOut",
-      });
     }
+    // DO NOT auto-add keyframe on move! Keyframes must only be stamped explicitly by user pressing [+] button.
 
     const sorted = cleanAndSortMaskKeyframes(kfs);
     const updatedMask = {
       ...(clip.mask || {}),
       ...newMask,
       keyframes: sorted,
+      _lastStagedTime: localTime,
     };
     const updatedTransform: ClipTransform = {
       ...(clip.transform || {}),

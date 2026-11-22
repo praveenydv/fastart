@@ -51,6 +51,7 @@ export function usePlaybackLoop({
     currentPosRef.current = currentTimeRef.current || 0;
     lastTimeRef.current = getNow();
     lastReactUpdateRef.current = getNow();
+    let lastCommittedLoopTime = currentPosRef.current;
 
     const loop = (now: number) => {
       if (!isPlayingRef.current || totalDurationRef.current <= 0) {
@@ -61,9 +62,11 @@ export function usePlaybackLoop({
         return;
       }
 
-      // Check if user jumped or scrubbed during playback
-      if (Math.abs((currentTimeRef.current || 0) - currentPosRef.current) > 0.4) {
-        currentPosRef.current = currentTimeRef.current || 0;
+      // Instantaneous seek response: accept external timeline seek or frame step without 400ms deadband
+      const externalTime = currentTimeRef.current || 0;
+      if (Math.abs(externalTime - lastCommittedLoopTime) > 0.005) {
+        currentPosRef.current = externalTime;
+        lastCommittedLoopTime = externalTime;
       }
 
       const currentTimeStamp = typeof now === "number" ? now : getNow();
@@ -76,6 +79,7 @@ export function usePlaybackLoop({
       if (nextTime >= totalDurationRef.current) {
         currentPosRef.current = 0;
         currentTimeRef.current = 0;
+        lastCommittedLoopTime = 0;
         playheadCoordinator.notify(0);
         if (animFrameRef.current !== null) {
           cancelAnimationFrame(animFrameRef.current);
@@ -91,6 +95,7 @@ export function usePlaybackLoop({
 
       currentPosRef.current = nextTime;
       currentTimeRef.current = nextTime;
+      lastCommittedLoopTime = nextTime;
       playheadCoordinator.notify(nextTime);
 
       // 1. Direct 60-120 FPS Sub-pixel Playhead Tracker Update (zero React re-render overhead)

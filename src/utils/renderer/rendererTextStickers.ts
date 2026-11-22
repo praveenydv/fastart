@@ -3,6 +3,7 @@ import { applyMotionTracking } from "./rendererEffects";
 import { generateWordTimings } from "../srtParser";
 import { evaluateClipAnimation } from "../animationEngine";
 import { getInterpolatedTransform } from "../keyframeEngine";
+import { resolveCompositeOperation } from "./rendererClip";
 
 export function drawSticker(
   ctx: CanvasRenderingContext2D,
@@ -42,6 +43,9 @@ export function drawSticker(
   const alpha = (kf.opacity ?? 1.0) * animEval.alpha;
   const offsetX = animEval.offsetX;
   const offsetY = animEval.offsetY;
+
+  const rawBlend = (stk as any).blendMode || (stk as any).transform?.blendMode || "normal";
+  ctx.globalCompositeOperation = resolveCompositeOperation(rawBlend);
 
   ctx.translate(px + offsetX, py + offsetY);
   ctx.rotate((rot * Math.PI) / 180);
@@ -260,6 +264,9 @@ export function drawTextOverlay(
   if (!isPlaying && (!txt.animation || txt.animation === "none")) {
     alpha = kf.opacity ?? 1.0;
   }
+
+  const rawBlend = (txt as any).blendMode || (txt as any).transform?.blendMode || "normal";
+  ctx.globalCompositeOperation = resolveCompositeOperation(rawBlend);
 
   ctx.translate(px + xOffset, py + yOffset);
   ctx.rotate((rot * Math.PI) / 180);

@@ -16,6 +16,7 @@ import {
   isWebCodecsSupported,
 } from "./webCodecsExporter";
 import { patchMediaContainerDuration } from "./mediaDurationPatcher";
+import { getMediaContainer } from "./rendererMediaSync";
 
 export async function exportBrowserVideo(
   renderer: VideoRenderer,
@@ -53,6 +54,11 @@ export async function exportBrowserVideo(
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = targetW;
   exportCanvas.height = targetH;
+
+  const domContainer = getMediaContainer();
+  if (domContainer) {
+    domContainer.appendChild(exportCanvas);
+  }
 
   const exportRenderer = createRenderer
     ? createRenderer(exportCanvas)
@@ -172,26 +178,18 @@ export async function exportBrowserVideo(
 
   let stream: MediaStream;
   let videoTrack: any = null;
-  let useManualFramePush = false;
 
   try {
-    // Pass 0 to captureStream to disable autonomous frame pulling by the browser compositor.
-    // Frames are manually dispatched via track.requestFrame() strictly at the target framerate cadence.
-    // This completely eliminates Chromium's unbounded VideoCaptureImpl native buffer queue leak (10-12GB)!
-    stream = (exportCanvas as any).captureStream(0);
-    videoTrack = stream ? stream.getVideoTracks()[0] : null;
-    if (videoTrack && typeof videoTrack.requestFrame === "function") {
-      useManualFramePush = true;
-    } else {
-      try {
-        if (stream) stream.getTracks().forEach((t: any) => t.stop());
-      } catch {}
-      stream = (exportCanvas as any).captureStream(fps);
-      videoTrack = stream ? stream.getVideoTracks()[0] : null;
-    }
-  } catch {
+    // Capture stream at target framerate (e.g. 30/60 fps) from DOM-attached canvas
     stream = (exportCanvas as any).captureStream(fps);
     videoTrack = stream ? stream.getVideoTracks()[0] : null;
+  } catch {
+    try {
+      stream = (exportCanvas as any).captureStream();
+      videoTrack = stream ? stream.getVideoTracks()[0] : null;
+    } catch (captureErr) {
+      throw new Error(`Canvas captureStream failed: ${String(captureErr)}`);
+    }
   }
 
   // Pick best MIME type supported by browser
@@ -247,9 +245,11 @@ export async function exportBrowserVideo(
     }
   }
 
-  // Mix project audio tracks into the video stream with zero-latency Web Audio graph
+  // Mix project audio tracks into a continuous, sample-accurate Web Audio stream
   let audioCtx: any = null;
-  const activeAudioTrackElements: { el: HTMLAudioElement; clip: any }[] = [];
+  let audioSourceNode: any = null;
+  let audioDest: any = null;
+
   try {
     const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (AudioCtxClass) {
@@ -259,54 +259,37 @@ export async function exportBrowserVideo(
           await audioCtx.resume();
         } catch (e) {}
       }
-      const audioDest = audioCtx.createMediaStreamDestination();
+      audioDest = audioCtx.createMediaStreamDestination();
 
-      // 1. Connect unmuted video clip audio tracks via dedicated Audio elements (isolated from canvas muting)
-      for (const clip of videoClips) {
-        if (clip.type === "video" && !clip.muted && mediaHasAudioTrack(clip) && clip.url) {
-          try {
-            const a = new Audio();
-            if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
-              a.crossOrigin = "anonymous";
+      const hasAudioClips = (project.tracks?.audio || []).some(
+        (c) => c && c.url && c.volume !== 0
+      );
+      const hasVideoAudio = (project.tracks?.video || []).some(
+        (c) => c && c.type === "video" && !c.muted && mediaHasAudioTrack(c) && c.url
+      );
+
+      if (hasAudioClips || hasVideoAudio) {
+        try {
+          const sampleRate = audioCtx.sampleRate || 44100;
+          const wavBytes = await exportProjectAudioToWavBytes(project, duration, sampleRate);
+          if (wavBytes && wavBytes.length > 44) {
+            const copyBuffer = wavBytes.buffer.slice(
+              wavBytes.byteOffset,
+              wavBytes.byteOffset + wavBytes.byteLength
+            );
+            const decodedBuffer = await audioCtx.decodeAudioData(copyBuffer);
+            if (decodedBuffer) {
+              audioSourceNode = audioCtx.createBufferSource();
+              audioSourceNode.buffer = decodedBuffer;
+              audioSourceNode.connect(audioDest);
             }
-            a.src = clip.url;
-            a.currentTime = Math.max(0, clip.trimIn || 0);
-            a.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-            const source = audioCtx.createMediaElementSource(a);
-            const gain = audioCtx.createGain();
-            const rawVol = clip.volume !== undefined ? clip.volume : 1.0;
-            gain.gain.value = rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol);
-            source.connect(gain).connect(audioDest);
-            activeAudioTrackElements.push({ el: a, clip });
-          } catch (e) {
-            console.warn("[browserVideoExporter] Video audio track setup warning:", e);
           }
+        } catch (audioMixErr) {
+          console.warn("[browserVideoExporter] Multi-track audio mixdown warning:", audioMixErr);
         }
       }
 
-      // 2. Connect project audio clips directly
-      const audioTrackClips = project.tracks?.audio || [];
-      for (const clip of audioTrackClips) {
-        if (clip && clip.url) {
-          try {
-            const a = new Audio();
-            if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
-              a.crossOrigin = "anonymous";
-            }
-            a.src = clip.url;
-            a.currentTime = Math.max(0, clip.trimIn || 0);
-            a.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-            const source = audioCtx.createMediaElementSource(a);
-            const gain = audioCtx.createGain();
-            const rawVol = clip.volume !== undefined ? clip.volume : 1.0;
-            gain.gain.value = rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol);
-            source.connect(gain).connect(audioDest);
-            activeAudioTrackElements.push({ el: a, clip });
-          } catch (e) {}
-        }
-      }
-
-      // 3. Fallback: silent carrier oscillator ensures social platform compliance
+      // Fallback: silent carrier oscillator ensures social platform compliance if no audio track
       const audioTracks = audioDest.stream.getAudioTracks();
       if (audioTracks && audioTracks.length > 0) {
         stream.addTrack(audioTracks[0]);
@@ -323,7 +306,7 @@ export async function exportBrowserVideo(
       }
     }
   } catch (audioErr) {
-    console.warn("[browserVideoExporter] Fast audio graph setup:", audioErr);
+    console.warn("[browserVideoExporter] Fast audio graph setup error:", audioErr);
   }
 
   const recordedChunks: Blob[] = [];
@@ -387,18 +370,17 @@ export async function exportBrowserVideo(
           stream.getTracks().forEach((track: any) => track.stop());
         } catch (e) {}
       }
-      activeAudioTrackElements.forEach(({ el }) => {
+      if (audioSourceNode) {
         try {
-          el.pause();
-          el.src = "";
-          el.load();
+          audioSourceNode.stop();
         } catch (e) {}
-      });
-      activeAudioTrackElements.length = 0;
+        audioSourceNode = null;
+      }
       if (audioCtx) {
         try {
-          audioCtx.close();
+          audioCtx.close().catch(() => {});
         } catch (e) {}
+        audioCtx = null;
       }
       if (typeof exportRenderer.cleanup === "function") {
         try {
@@ -411,6 +393,11 @@ export async function exportBrowserVideo(
           setActiveVideoRenderer(renderer);
         }
       } catch {}
+      if (exportCanvas.parentNode) {
+        try {
+          exportCanvas.parentNode.removeChild(exportCanvas);
+        } catch (e) {}
+      }
       // Instantly collapse canvas to 1x1 to release 8-32 MB GPU framebuffer textures from RAM
       try {
         exportCanvas.width = 1;
@@ -522,16 +509,15 @@ export async function exportBrowserVideo(
             setTimeout(onSeek, 250);
           });
         }
-        if ((c.startTime || 0) > 0.05) {
-          try {
-            el.pause();
-          } catch (e) {}
-        }
+        try {
+          el.pause();
+        } catch (e) {}
+        (el as any)._preRolled = false;
       }
     });
     await Promise.all(cuePromises);
 
-    // Wait until initial active video clip is confirmed actively decoding and outputting frames
+    // Ensure initial active video clip has decoded frames ready
     const firstActiveVideoClip = (project.tracks.video || []).find(
       (c) => (c.startTime || 0) <= 0.05 && c.type === "video"
     );
@@ -541,49 +527,52 @@ export async function exportBrowserVideo(
         (firstActiveVideoClip.sourceMediaId ? exportRenderer.videoElements.get(firstActiveVideoClip.sourceMediaId) : null) ||
         exportRenderer.videoElements.get(firstActiveVideoClip.url);
       if (el && el instanceof HTMLVideoElement) {
-        try {
-          el.muted = true;
-          el.defaultMuted = true;
-          el.currentTime = Math.max(0, firstActiveVideoClip.trimIn || 0);
-          el.playbackRate = Math.max(0.1, Math.min(16, firstActiveVideoClip.speed || 1.0));
-          await el.play().catch(() => {});
-          await new Promise<void>((resolve) => {
-            let timer: any = null;
-            const onFrame = () => {
-              if (el.currentTime > (firstActiveVideoClip.trimIn || 0) + 0.005) {
-                if (timer) clearTimeout(timer);
-                el.removeEventListener("timeupdate", onFrame);
-                el.removeEventListener("playing", onFrame);
-                resolve();
-              }
+        el.muted = true;
+        el.defaultMuted = true;
+        el.currentTime = Math.max(0, firstActiveVideoClip.trimIn || 0);
+        el.playbackRate = Math.max(0.1, Math.min(16, firstActiveVideoClip.speed || 1.0));
+        if (el.readyState < 2) {
+          await new Promise<void>((res) => {
+            const onReady = () => {
+              el.removeEventListener("loadeddata", onReady);
+              el.removeEventListener("canplay", onReady);
+              res();
             };
-            el.addEventListener("timeupdate", onFrame);
-            el.addEventListener("playing", onFrame);
-            timer = setTimeout(() => {
-              el.removeEventListener("timeupdate", onFrame);
-              el.removeEventListener("playing", onFrame);
-              resolve();
-            }, 1000);
-            onFrame();
+            el.addEventListener("loadeddata", onReady, { once: true });
+            el.addEventListener("canplay", onReady, { once: true });
+            setTimeout(res, 300);
           });
-        } catch (e) {}
+        }
       }
     }
 
     // Start recording with 1-second timeslice for optimal GOP compression and smooth streaming
     mediaRecorder.start(1000);
 
-    // Synchronize initial audio playback
-    activeAudioTrackElements.forEach(({ el, clip }) => {
-      if ((clip.startTime || 0) <= 0.05) {
-        try { el.play(); } catch (e) {}
+    // Start studio audio stream synchronously
+    if (audioSourceNode) {
+      try {
+        audioSourceNode.start(0);
+      } catch (e) {}
+    }
+
+    // Start first active video clip playback synchronously with recording
+    if (firstActiveVideoClip) {
+      const el =
+        (firstActiveVideoClip.id ? exportRenderer.videoElements.get(firstActiveVideoClip.id) : null) ||
+        (firstActiveVideoClip.sourceMediaId ? exportRenderer.videoElements.get(firstActiveVideoClip.sourceMediaId) : null) ||
+        exportRenderer.videoElements.get(firstActiveVideoClip.url);
+      if (el && el instanceof HTMLVideoElement) {
+        el.play().catch(() => {});
       }
-    });
+    }
 
     const recStartTime = performance.now();
     let completed = false;
+    const totalFrames = Math.max(1, Math.ceil(duration * fps));
     const targetFrameInterval = 1 / Math.max(1, fps);
-    let lastRenderedTime = -1;
+    const targetFrameIntervalMs = 1000 / Math.max(1, fps);
+    let frameIndex = 0;
 
     const renderTick = () => {
       if (completed || isAborted) return;
@@ -602,132 +591,88 @@ export async function exportBrowserVideo(
           return;
         }
 
-        const now = performance.now();
-        const elapsed = (now - recStartTime) / 1000;
-        const curTime = Math.min(elapsed, duration);
+        const curTime = Math.min(duration, frameIndex * targetFrameInterval);
 
-        // Strict frame rate gate: Only render and push frames at the target cadence (e.g. 30 fps),
-        // preventing Chromium's unbounded VideoCaptureImpl native buffer queue leak (10-12GB)!
-        const shouldRenderFrame =
-          lastRenderedTime < 0 ||
-          curTime - lastRenderedTime >= targetFrameInterval - 0.002 ||
-          elapsed >= duration;
+        // Synchronize and pre-roll video elements with smooth drift compensation
+        (project.tracks.video || []).forEach((c) => {
+          if (c.type !== "video") return;
+          const el =
+            (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+            (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+            exportRenderer.videoElements.get(c.url);
+          if (!el || !(el instanceof HTMLVideoElement)) return;
 
-        if (shouldRenderFrame) {
-          lastRenderedTime = curTime;
+          const isInside = curTime >= c.startTime && curTime < c.startTime + c.duration;
+          // Pre-roll warm playback 350ms before cut (or during incoming transition)
+          const isApproaching = curTime >= c.startTime - 0.35 && curTime < c.startTime;
 
-          // Trigger video elements playback matching timeline bounds
-          (project.tracks.video || []).forEach((c) => {
-            if (c.type !== "video") return;
-            const el =
-              (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
-              (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
-              exportRenderer.videoElements.get(c.url);
-            if (!el || !(el instanceof HTMLVideoElement)) return;
-
-            const isInside = curTime >= c.startTime && curTime < c.startTime + c.duration;
-            const isApproaching = curTime >= c.startTime - 0.75 && curTime < c.startTime;
-
-            // Pre-roll upcoming clip so it starts seamlessly without freeze
-            if (isApproaching && !(el as any)._preCued) {
-              (el as any)._preCued = true;
+          if (isApproaching) {
+            if (!(el as any)._preRolled) {
+              (el as any)._preRolled = true;
               el.muted = true;
               el.defaultMuted = true;
               el.currentTime = Math.max(0, c.trimIn || 0);
               el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
+              el.play().catch(() => {});
             }
-
-            if (isInside) {
-              if (el.paused) {
-                if (!(el as any)._playStarted) {
-                  (el as any)._playStarted = true;
-                  el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
-                  try { el.play().catch(() => {}); } catch {}
-                }
-              } else {
-                (el as any)._playStarted = false;
-              }
-            } else if (!el.paused) {
-              (el as any)._playStarted = false;
-              try { el.pause(); } catch {}
-            }
-          });
-
-          // Render live frame at exact timeline timestamp
-          exportRenderer.renderFrame(project, curTime, true, exportLogicalW, exportLogicalH);
-
-          // If manual frame push is supported (captureStream(0)), manually push the exact rendered frame!
-          if (useManualFramePush && videoTrack && typeof videoTrack.requestFrame === "function") {
-            try {
-              videoTrack.requestFrame();
-            } catch (e) {}
           }
 
-          // Dynamically trigger audio tracks matching timeline bounds
-          activeAudioTrackElements.forEach(({ el, clip }) => {
-            const start = clip.startTime || 0;
-            const end = start + (clip.duration || 10);
-            if (curTime >= start && curTime < end) {
-              const speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-              const expectedTime = Math.max(0, (clip.trimIn || 0) + (curTime - start) * speed);
-              const drift = el.currentTime - expectedTime;
-
-              if (el.paused) {
-                if (!(el as any)._playStarted) {
-                  (el as any)._playStarted = true;
-                  if (Math.abs(drift) > 0.08) {
-                    try { el.currentTime = expectedTime; } catch {}
-                  }
-                  el.playbackRate = speed;
-                  try { el.play(); } catch (e) {}
-                }
-              } else {
-                (el as any)._playStarted = false;
-                if (Math.abs(drift) > 0.02) {
-                  const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
-                  try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
-                }
-              }
-            } else if (!el.paused) {
-              (el as any)._playStarted = false;
-              try { el.pause(); } catch (e) {}
+          if (isInside) {
+            const clipLocalTime = Math.max(0, curTime - c.startTime);
+            let speed = Math.max(0.1, Math.min(16, c.speed || 1.0));
+            if (c.speedCurve) {
+              speed = exportRenderer.evaluateSpeedCurve(c.speedCurve, clipLocalTime / Math.max(0.1, c.duration));
             }
-          });
+            const expectedMediaTime = (c.trimIn || 0) + clipLocalTime * speed;
+            const drift = el.currentTime - expectedMediaTime;
+
+            if (el.paused) {
+              el.playbackRate = speed;
+              el.play().catch(() => {});
+            } else {
+              // Smooth micro-adjustment via playbackRate WITHOUT decoder-flushing hard seeks
+              if (Math.abs(drift) > 1.2) {
+                try { el.currentTime = expectedMediaTime; } catch {}
+              } else if (Math.abs(drift) > 0.04) {
+                const comp = Math.max(0.85, Math.min(1.15, 1 - drift * 0.4));
+                try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
+              } else if (Math.abs(el.playbackRate - speed) > 0.01) {
+                el.playbackRate = speed;
+              }
+            }
+          } else if (!isApproaching && !el.paused) {
+            (el as any)._preRolled = false;
+            try { el.pause(); } catch {}
+          }
+        });
+
+        // Render live frame at exact timeline timestamp
+        exportRenderer.renderFrame(project, curTime, true, exportLogicalW, exportLogicalH);
+
+        // Prompt stream track to deliver updated frame immediately
+        if (videoTrack && typeof videoTrack.requestFrame === "function") {
+          try {
+            videoTrack.requestFrame();
+          } catch (e) {}
         }
 
+        frameIndex++;
         if (onProgress) {
-          const percent = Math.min(99, Math.floor((curTime / duration) * 100));
+          const percent = Math.min(99, Math.floor((frameIndex / totalFrames) * 100));
           onProgress(percent, curTime, duration);
         }
 
-        if (elapsed < duration) {
-          // Precise next-frame pacing: schedule exactly for when the next frame is due
-          const nextFrameDueSec = (lastRenderedTime >= 0 ? lastRenderedTime : 0) + targetFrameInterval;
-          const delayMs = Math.max(4, Math.min(50, Math.round((nextFrameDueSec - elapsed) * 1000)));
+        if (frameIndex < totalFrames) {
+          // Precise next-frame pacing: self-correcting wall-clock timer schedule
+          const nextTargetWallMs = frameIndex * targetFrameIntervalMs;
+          const elapsedWallMs = performance.now() - recStartTime;
+          const delayMs = Math.max(0, Math.round(nextTargetWallMs - elapsedWallMs));
           setTimeout(renderTick, delayMs);
         } else {
           completed = true;
           if (onProgress) onProgress(99, duration, duration);
 
-          // 1. Instantly stop all stream tracks so the browser frame capture queue
-          // immediately halts frame production, preventing runaway GPU/RAM allocation!
-          if (stream) {
-            try {
-              stream.getTracks().forEach((track: any) => track.stop());
-            } catch (e) {}
-          }
-
-          // 2. Pause audio elements and close audio context
-          activeAudioTrackElements.forEach(({ el }) => {
-            try { el.pause(); } catch {}
-          });
-          if (audioCtx) {
-            try {
-              audioCtx.close().catch(() => {});
-            } catch {}
-          }
-
-          // 3. Pause all video elements
+          // 1. Pause video elements
           (project.tracks.video || []).forEach((c) => {
             const el =
               (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
@@ -740,7 +685,14 @@ export async function exportBrowserVideo(
             }
           });
 
-          // 4. Directly stop MediaRecorder WITHOUT requestData() (which causes Blink/WebKit state collisions)
+          // 2. Stop audio source
+          if (audioSourceNode) {
+            try {
+              audioSourceNode.stop();
+            } catch {}
+          }
+
+          // 3. Stop MediaRecorder FIRST so Chromium encodes all pending frames cleanly
           if (mediaRecorder.state === "recording") {
             try {
               mediaRecorder.stop();
@@ -749,7 +701,7 @@ export async function exportBrowserVideo(
             }
           }
 
-          // 5. Fail-safe watchdog (3.5s): If mediaRecorder.onstop fails to fire, force completion
+          // 4. Fail-safe watchdog (3.5s): If mediaRecorder.onstop fails to fire, force completion
           if (!stopWatchdogTimer) {
             stopWatchdogTimer = setTimeout(() => {
               if (!hasFinalized) {

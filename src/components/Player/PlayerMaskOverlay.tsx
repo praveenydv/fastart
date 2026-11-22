@@ -50,22 +50,23 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
 }) => {
   const containerRef = useRef<any>(null);
   const mask: MaskConfig = useMemo(() => {
-    return (
+    const rawMask =
       getInterpolatedMask(targetClip, currentTime) ||
       targetClip?.mask ||
-      targetClip?.transform?.mask || {
-        shape: "none",
-        size: 60,
-        width: 60,
-        height: 60,
-        feather: 0,
-        roundness: 16,
-        inverted: false,
-        x: 0,
-        y: 0,
-        rotation: 0,
-      }
-    );
+      targetClip?.transform?.mask;
+
+    return {
+      shape: (rawMask && rawMask.shape) || "none",
+      size: rawMask?.size ?? 60,
+      width: rawMask?.width ?? rawMask?.size ?? 60,
+      height: rawMask?.height ?? rawMask?.size ?? 60,
+      feather: rawMask?.feather ?? 0,
+      roundness: rawMask?.roundness ?? 16,
+      inverted: rawMask?.inverted ?? false,
+      x: rawMask?.x ?? 0,
+      y: rawMask?.y ?? 0,
+      rotation: rawMask?.rotation ?? 0,
+    };
   }, [targetClip, currentTime]);
 
   const [activeDrag, setActiveDrag] = useState<
@@ -192,7 +193,9 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
 
 
   const localMaskRef = useRef<MaskConfig>(localMask);
-  localMaskRef.current = localMask;
+  if (!isDraggingRef.current) {
+    localMaskRef.current = localMask;
+  }
   const dwRef = useRef(dw);
   dwRef.current = dw;
   const dhRef = useRef(dh);
@@ -576,7 +579,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
 
 
 
-  if (localMask.shape === "none") {
+  if (!localMask || !localMask.shape || localMask.shape === "none") {
     return null;
   }
 
@@ -598,7 +601,7 @@ const PlayerMaskOverlayComponent: React.FC<PlayerMaskOverlayProps> = ({
           <View style={styles.hudBadge}>
             <Ionicons name="scan-outline" size={12} color={THEME_COLORS.accent} />
             <Text style={styles.hudTitle}>
-              {localMask.shape.toUpperCase()}
+              {(localMask?.shape || "none").toUpperCase()}
             </Text>
           </View>
           <Text style={styles.hudText}>

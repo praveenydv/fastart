@@ -165,26 +165,17 @@ export default function KeyframeModal({
                     ]}
                     onPress={onAddKeyframe}
                     activeOpacity={0.8}
+                    accessibilityLabel={hasKeyframeAtCurrentTime ? "Remove keyframe" : "Stamp keyframe"}
                   >
                     <Ionicons
                       name={
                         hasKeyframeAtCurrentTime
-                          ? "remove-circle"
-                          : "add-circle"
+                          ? "remove"
+                          : "add"
                       }
                       size={18}
                       color={hasKeyframeAtCurrentTime ? "#EF4444" : "#00F2FE"}
                     />
-                    <Text
-                      style={[
-                        styles.stampKeyframeText,
-                        hasKeyframeAtCurrentTime && { color: "#EF4444" },
-                      ]}
-                    >
-                      {hasKeyframeAtCurrentTime
-                        ? "Remove"
-                        : "Stamp Keyframe"}
-                    </Text>
                   </TouchableOpacity>
                 </View>
 
@@ -200,20 +191,13 @@ export default function KeyframeModal({
                       prevKeyframe && handleJumpToKeyframe(prevKeyframe.time)
                     }
                     activeOpacity={0.7}
+                    accessibilityLabel="Previous keyframe"
                   >
                     <Ionicons
-                      name="play-skip-back"
-                      size={13}
+                      name="caret-back"
+                      size={14}
                       color={prevKeyframe ? "#00F2FE" : "#64748B"}
                     />
-                    <Text
-                      style={[
-                        styles.navBtnText,
-                        !prevKeyframe && { color: "#64748B" },
-                      ]}
-                    >
-                      Prev
-                    </Text>
                   </TouchableOpacity>
 
                   <View style={styles.navStatusPill}>
@@ -239,18 +223,11 @@ export default function KeyframeModal({
                       nextKeyframe && handleJumpToKeyframe(nextKeyframe.time)
                     }
                     activeOpacity={0.7}
+                    accessibilityLabel="Next keyframe"
                   >
-                    <Text
-                      style={[
-                        styles.navBtnText,
-                        !nextKeyframe && { color: "#64748B" },
-                      ]}
-                    >
-                      Next
-                    </Text>
                     <Ionicons
-                      name="play-skip-forward"
-                      size={13}
+                      name="caret-forward"
+                      size={14}
                       color={nextKeyframe ? "#00F2FE" : "#64748B"}
                     />
                   </TouchableOpacity>
