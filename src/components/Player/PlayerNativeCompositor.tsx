@@ -44,6 +44,7 @@ interface PlayerNativeCompositorProps {
     curTime: number,
     clipType?: string,
   ) => any;
+  adjacentNextClipIds?: Set<string>;
 }
 
 function renderClipEnhanceOverlay(clip: any) {
@@ -426,6 +427,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
   opacity,
   cutout,
   maskUri,
+  isInside,
 }: {
   clip: any;
   currentTime: number;
@@ -433,6 +435,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
   opacity: number;
   cutout: any;
   maskUri: string | null;
+  isInside?: boolean;
 }) {
   // Continuous temporal hold: smoothly bridge frame gaps without flashing raw background
   const lastValidMaskUriRef = React.useRef<string | null>(maskUri);
@@ -533,6 +536,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
       currentTime={currentTime}
       isPlaying={isPlaying}
       opacity={opacity}
+      isInside={isInside}
     />
   );
 
@@ -1228,6 +1232,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
   onSelectClip,
   getItemBaseDimensions,
   getInterpolatedTransform,
+  adjacentNextClipIds,
 }) => {
   const pinnedTracksMap = React.useMemo(() => {
     const tracks = new Map<string, any>();
@@ -1415,11 +1420,16 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const hasMaskShape = Boolean(mask?.shape && mask.shape !== "none");
 
         // Pre-warm & transition states for seamless 60fps cuts
-        const isInside = currentTime >= vid.startTime && currentTime <= vid.startTime + vid.duration;
+        const hasAdjacentNext = adjacentNextClipIds ? adjacentNextClipIds.has(vid.id) : false;
+        const isInside = hasAdjacentNext
+          ? currentTime >= vid.startTime && currentTime < vid.startTime + vid.duration
+          : currentTime >= vid.startTime && currentTime <= vid.startTime + vid.duration;
         const isUpcoming = currentTime < vid.startTime;
-        const isRecent = currentTime > vid.startTime + vid.duration;
+        const isRecent = hasAdjacentNext
+          ? currentTime >= vid.startTime + vid.duration
+          : currentTime > vid.startTime + vid.duration;
 
-        let effectiveOpacity = isUpcoming ? 0 : opacity;
+        let effectiveOpacity = (isUpcoming || isRecent) ? 0 : opacity;
         let isInteractive = isInside;
         let transX = 0;
         let transY = 0;
@@ -1483,15 +1493,9 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
             }
           }
         } else if (isRecent) {
-          // Tail-hold recently finished clip directly underneath incoming clip for 150ms to eliminate cut flash
-          const isTailHold = currentTime - (vid.startTime + vid.duration) <= 0.15;
-          if (isTailHold) {
-            effectiveOpacity = opacity;
-            isInteractive = false;
-          } else {
-            effectiveOpacity = 0;
-            isInteractive = false;
-          }
+          // Outgoing clip stays mounted in background at 0 opacity to keep decoders warm without visual flash
+          effectiveOpacity = 0;
+          isInteractive = false;
         }
 
         let vidAnimAlpha = 1.0;
@@ -1789,6 +1793,7 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
                         opacity={effectiveOpacity}
                         cutout={vid.cutout}
                         maskUri={cutoutMaskUri}
+                        isInside={isInside}
                       />
                       {renderClipEnhanceOverlay(vid)}
                       {renderNativeFilterOverlay(vid.filter, vid.customLut, vid.filterIntensity ?? 1.0)}

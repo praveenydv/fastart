@@ -297,6 +297,14 @@ export default function KeyframePropertyControls({
                 ? "Ease In"
                 : activeEasing === "easeOut"
                 ? "Ease Out"
+                : activeEasing === "whip"
+                ? "Whip / Punch"
+                : activeEasing === "bounce"
+                ? "Bounce"
+                : activeEasing === "jump"
+                ? "Pop / Jump"
+                : activeEasing === "anticipate"
+                ? "Anticipate"
                 : activeEasing === "spring"
                 ? "Spring"
                 : activeEasing === "smooth"
@@ -312,7 +320,11 @@ export default function KeyframePropertyControls({
               { id: "linear", label: "Linear", icon: "remove" },
               { id: "easeIn", label: "Ease In", icon: "trending-down" },
               { id: "easeOut", label: "Ease Out", icon: "trending-up" },
-              { id: "easeInOut", label: "Ease In-Out", icon: "swap-horizontal" },
+              { id: "easeInOut", label: "In-Out", icon: "swap-horizontal" },
+              { id: "whip", label: "Whip", icon: "flash" },
+              { id: "bounce", label: "Bounce", icon: "football" },
+              { id: "jump", label: "Jump", icon: "arrow-up-circle" },
+              { id: "anticipate", label: "Anticipate", icon: "return-down-back" },
               { id: "spring", label: "Spring", icon: "sparkles" },
               { id: "smooth", label: "Smooth", icon: "water" },
             ] as const

@@ -162,6 +162,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     isHapticEnabled,
     onSeek,
     rulerRef,
+    beatMarkers: project?.beatMarkers,
   });
 
   // Dragging and trimming handlers

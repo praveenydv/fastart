@@ -12,6 +12,7 @@ interface NativeVideoClipPlayerProps {
   currentTime: number;
   isPlaying: boolean;
   opacity?: number;
+  isInside?: boolean;
   onSelect?: () => void;
 }
 
@@ -20,6 +21,7 @@ function NativeVideoClipPlayerComponent({
   currentTime,
   isPlaying,
   opacity,
+  isInside: isInsideProp,
 }: NativeVideoClipPlayerProps) {
   const mediaUri = clip.url || clip.thumbnail || '';
   // Trust the explicit media type. A `file://` URI can point to either a photo
@@ -32,9 +34,13 @@ function NativeVideoClipPlayerComponent({
 
   const clipDuration = Math.max(0.05, clip.duration || 10);
   const effSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-  const isInside = currentTime >= clip.startTime && currentTime <= clip.startTime + clipDuration;
+  const isInside = isInsideProp !== undefined
+    ? isInsideProp
+    : currentTime >= clip.startTime && currentTime <= clip.startTime + clipDuration;
   const isUpcoming = currentTime < clip.startTime;
-  const isRecent = currentTime > clip.startTime + clipDuration;
+  const isRecent = isInsideProp !== undefined
+    ? !isInside && currentTime >= clip.startTime + clipDuration
+    : currentTime > clip.startTime + clipDuration;
 
   // Frame-accurate position accounting for trimIn, speed, reverse, and lookahead pre-warming
   const elapsed = isUpcoming

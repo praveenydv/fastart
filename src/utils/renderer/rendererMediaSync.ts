@@ -544,17 +544,19 @@ export function syncPlayback(
         }
       }
 
-      // Startup synchronization: align position ONCE per play session
-      if (!(vid as any)._playSessionActive) {
+      // Startup synchronization: align position ONCE per play session or on clip switch
+      const isNewClip = (vid as any)._activeClipId !== activeClip.id;
+      if (!(vid as any)._playSessionActive || isNewClip) {
         const startDrift = Math.abs(vid.currentTime - mediaTime);
         const wasAlreadyPlaying = !vid.paused;
         (vid as any)._playSessionActive = true;
+        (vid as any)._activeClipId = activeClip.id;
 
-        // If the video was already playing and is within continuous range (< 0.35s drift, e.g. seamless cut/split),
+        // If the video was already playing and is within continuous range (< 0.08s drift, e.g. seamless cut/split),
         // DO NOT perform a hard seek! Just let it keep playing without decoder flush!
-        if (wasAlreadyPlaying && startDrift < 0.35) {
+        if (wasAlreadyPlaying && startDrift < 0.08) {
           // Continuous split cut handoff
-        } else if (vid.readyState >= 1 && startDrift > 0.05) {
+        } else if (vid.readyState >= 1 && startDrift > 0.04) {
           (vid as any)._lastHardSeek = now;
           (vid as any)._seekStartTime = now;
           try {
@@ -621,6 +623,7 @@ export function syncPlayback(
         }
       }
 
+      (vid as any)._activeClipId = activeClip.id;
       (vid as any)._targetMediaTime = mediaTime;
       const diff = Math.abs(vid.currentTime - mediaTime);
 

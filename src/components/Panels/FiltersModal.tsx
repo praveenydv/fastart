@@ -13,6 +13,7 @@ import { FILTER_PRESETS, PRESET_PREVIEW_IMAGE } from '../../constants/sampleMedi
 import { CustomLutConfig } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
 import { ModalHeader } from '../Common';
+import { PRO_3D_LUTS, parseCubeLut } from '../../utils/lutParser';
 
 interface FiltersModalProps {
   visible: boolean;
@@ -28,6 +29,7 @@ interface FiltersModalProps {
 
 const FILTER_CATEGORIES = [
   { id: 'All', label: 'All' },
+  { id: 'LUTs', label: '3D LUTs' },
   { id: 'Cinematic', label: 'Cinematic' },
   { id: 'Retro', label: 'Vintage' },
   { id: 'Vibrant', label: 'Vibrant' },
@@ -65,6 +67,10 @@ function FiltersModalComponent({
 }: FiltersModalProps) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [selectedFilterId, setSelectedFilterId] = useState<string>(activeFilter);
+  const [selectedLutId, setSelectedLutId] = useState<string>(
+    selectedClip?.customLut?.id || ''
+  );
+  const [importedLuts, setImportedLuts] = useState<CustomLutConfig[]>([]);
   const [filterIntensity, setFilterIntensity] = useState<number>(() => {
     return Math.round((selectedClip?.filterIntensity !== undefined ? selectedClip.filterIntensity : 1.0) * 100);
   });
@@ -75,6 +81,11 @@ function FiltersModalComponent({
   useEffect(() => {
     if (selectedClip?.filterIntensity !== undefined) {
       setFilterIntensity(Math.round(selectedClip.filterIntensity * 100));
+    }
+    if (selectedClip?.customLut?.id) {
+      setSelectedLutId(selectedClip.customLut.id);
+    } else {
+      setSelectedLutId('');
     }
   }, [selectedClip]);
 
@@ -88,21 +99,58 @@ function FiltersModalComponent({
   const filterColorMap = FILTER_COLOR_MAP;
 
   const handleSelectFilter = (presetId: string) => {
+    setSelectedLutId('');
     setSelectedFilterId(presetId);
     onSelectFilter(presetId, undefined, isWholeProject, filterIntensity / 100);
   };
 
+  const handleSelectLut = (lut: CustomLutConfig) => {
+    setSelectedLutId(lut.id);
+    setSelectedFilterId('normal');
+    onSelectFilter('normal', lut, isWholeProject, filterIntensity / 100);
+  };
+
+  const handleImportCubeFile = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.cube';
+      input.onchange = async (e: any) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          try {
+            const textContent = await file.text();
+            const parsed = parseCubeLut(textContent, file.name);
+            const newLut: CustomLutConfig = {
+              id: `lut_${Date.now()}`,
+              name: parsed.title,
+              cssFilter: parsed.cssFilter,
+            };
+            setImportedLuts((prev) => [newLut, ...prev]);
+            handleSelectLut(newLut);
+          } catch (err: any) {
+            console.warn('[FiltersModal] Failed to parse .cube LUT:', err);
+          }
+        }
+      };
+      input.click();
+    }
+  };
+
   const handleResetToNormal = () => {
     setSelectedFilterId('normal');
+    setSelectedLutId('');
     onSelectFilter('normal', undefined, isWholeProject, 1.0);
   };
+
+  const isNormal = (!selectedFilterId || selectedFilterId === 'normal') && !selectedLutId;
+
+  const allLuts = [...importedLuts, ...PRO_3D_LUTS];
 
   const filteredPresets = FILTER_PRESETS.filter((item) => {
     if (activeCategory === 'All') return true;
     return item.category === activeCategory;
   });
-
-  const isNormal = !selectedFilterId || selectedFilterId === 'normal';
 
   const sheetContent = (
     <View style={[styles.sheetContainer, styles.inlineSheetContainer]}>
@@ -192,7 +240,12 @@ function FiltersModalComponent({
             showSteppers={true}
             onChange={(val) => {
               setFilterIntensity(val);
-              onSelectFilter(selectedFilterId, undefined, isWholeProject, val / 100);
+              if (selectedLutId) {
+                const activeLut = allLuts.find((l) => l.id === selectedLutId);
+                onSelectFilter('normal', activeLut, isWholeProject, val / 100);
+              } else {
+                onSelectFilter(selectedFilterId, undefined, isWholeProject, val / 100);
+              }
             }}
           />
         </View>
@@ -206,99 +259,197 @@ function FiltersModalComponent({
       >
         <View style={styles.sectionBlock}>
           <View style={styles.grid}>
-            {filteredPresets.map((item) => {
-              const isSelected = selectedFilterId === item.id;
-              const sampleColor = filterColorMap[item.id] || '#475569';
-              const isItemNormal = item.id === 'normal';
-
-              return (
+            {activeCategory === 'LUTs' ? (
+              <>
+                {/* 1. Custom .cube file import button */}
                 <TouchableOpacity
-                  key={item.id}
-                  style={[styles.card, isSelected && styles.cardActive]}
-                  onPress={() => handleSelectFilter(item.id)}
+                  style={[styles.card, { borderColor: '#00F2FE', borderStyle: 'dashed' }]}
+                  onPress={handleImportCubeFile}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.faceFrame}>
-                    {isItemNormal ? (
-                      <ExpoImage
-                        source={{ uri: previewThumb }}
-                        style={styles.previewImage}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={120}
-                      />
-                    ) : (
-                      <View style={styles.splitFilterBox}>
-                        {/* Left Half: Before (Actual Original Face) */}
-                        <View style={styles.splitLeftHalf}>
-                          <ExpoImage
-                            source={{ uri: previewThumb }}
-                            style={styles.splitImgLeft}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                            transition={120}
-                          />
-                          <View style={styles.splitBadgeLeft}>
-                            <Text style={styles.splitBadgeText}>ORIG</Text>
-                          </View>
-                        </View>
-
-                        {/* Right Half: After (Filtered Face) */}
-                        <View style={styles.splitRightHalf}>
-                          <ExpoImage
-                            source={{ uri: previewThumb }}
-                            style={[
-                              styles.splitImgRight,
-                              Platform.OS === 'web' && item.css && item.css !== 'none'
-                                ? ({ filter: item.css } as any)
-                                : null,
-                            ]}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                            transition={120}
-                          />
-                          <View
-                            style={[
-                              StyleSheet.absoluteFill,
-                              {
-                                backgroundColor: sampleColor,
-                                opacity: 0.22,
-                                mixBlendMode: 'color' as any,
-                              },
-                            ]}
-                          />
-                          <View style={styles.splitBadgeRight}>
-                            <Text style={styles.splitBadgeText}>FILTER</Text>
-                          </View>
-                        </View>
-
-                        {/* Center Split Divider Line */}
-                        <View style={styles.splitDividerLine}>
-                          <View style={styles.splitDividerHandle} />
-                        </View>
-                      </View>
-                    )}
-                    {isSelected && (
-                      <View style={styles.activeCheckBadge}>
-                        <Ionicons name="checkmark" size={9} color="#000000" />
-                      </View>
-                    )}
+                  <View
+                    style={[
+                      styles.faceFrame,
+                      {
+                        backgroundColor: 'rgba(0, 242, 254, 0.08)',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="folder-open-outline" size={26} color="#00F2FE" />
                   </View>
                   <View style={styles.metaBox}>
-                    <Text
-                      style={[styles.filterName, isSelected && styles.filterNameActive]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {item.name}
+                    <Text style={[styles.filterName, { color: '#00F2FE' }]} numberOfLines={1}>
+                      + Import .cube
                     </Text>
                     <Text style={styles.filterDescText} numberOfLines={1}>
-                      {(item as any).desc || item.category}
+                      Custom 3D LUT
                     </Text>
                   </View>
                 </TouchableOpacity>
-              );
-            })}
+
+                {/* 2. List of 3D LUTs */}
+                {allLuts.map((lut) => {
+                  const isSelected = selectedLutId === lut.id;
+                  return (
+                    <TouchableOpacity
+                      key={lut.id}
+                      style={[styles.card, isSelected && styles.cardActive]}
+                      onPress={() => handleSelectLut(lut)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.faceFrame}>
+                        <View style={styles.splitFilterBox}>
+                          <View style={styles.splitLeftHalf}>
+                            <ExpoImage
+                              source={{ uri: previewThumb }}
+                              style={styles.splitImgLeft}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
+                            />
+                            <View style={styles.splitBadgeLeft}>
+                              <Text style={styles.splitBadgeText}>ORIG</Text>
+                            </View>
+                          </View>
+                          <View style={styles.splitRightHalf}>
+                            <ExpoImage
+                              source={{ uri: previewThumb }}
+                              style={[
+                                styles.splitImgRight,
+                                Platform.OS === 'web' && lut.cssFilter
+                                  ? ({ filter: lut.cssFilter } as any)
+                                  : null,
+                              ]}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
+                            />
+                            <View style={styles.splitBadgeRight}>
+                              <Text style={styles.splitBadgeText}>3D LUT</Text>
+                            </View>
+                          </View>
+                          <View style={styles.splitDividerLine}>
+                            <View style={styles.splitDividerHandle} />
+                          </View>
+                        </View>
+                        {isSelected && (
+                          <View style={styles.activeCheckBadge}>
+                            <Ionicons name="checkmark" size={9} color="#000000" />
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.metaBox}>
+                        <Text
+                          style={[styles.filterName, isSelected && styles.filterNameActive]}
+                          numberOfLines={1}
+                        >
+                          {lut.name}
+                        </Text>
+                        <Text style={styles.filterDescText} numberOfLines={1}>
+                          Pro 3D LUT
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            ) : (
+              filteredPresets.map((item) => {
+                const isSelected = selectedFilterId === item.id && !selectedLutId;
+                const sampleColor = filterColorMap[item.id] || '#475569';
+                const isItemNormal = item.id === 'normal';
+
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.card, isSelected && styles.cardActive]}
+                    onPress={() => handleSelectFilter(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.faceFrame}>
+                      {isItemNormal ? (
+                        <ExpoImage
+                          source={{ uri: previewThumb }}
+                          style={styles.previewImage}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={120}
+                        />
+                      ) : (
+                        <View style={styles.splitFilterBox}>
+                          {/* Left Half: Before (Actual Original Face) */}
+                          <View style={styles.splitLeftHalf}>
+                            <ExpoImage
+                              source={{ uri: previewThumb }}
+                              style={styles.splitImgLeft}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
+                            />
+                            <View style={styles.splitBadgeLeft}>
+                              <Text style={styles.splitBadgeText}>ORIG</Text>
+                            </View>
+                          </View>
+
+                          {/* Right Half: After (Filtered Face) */}
+                          <View style={styles.splitRightHalf}>
+                            <ExpoImage
+                              source={{ uri: previewThumb }}
+                              style={[
+                                styles.splitImgRight,
+                                Platform.OS === 'web' && item.css && item.css !== 'none'
+                                  ? ({ filter: item.css } as any)
+                                  : null,
+                              ]}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={120}
+                            />
+                            <View
+                              style={[
+                                StyleSheet.absoluteFill,
+                                {
+                                  backgroundColor: sampleColor,
+                                  opacity: 0.22,
+                                  mixBlendMode: 'color' as any,
+                                },
+                              ]}
+                            />
+                            <View style={styles.splitBadgeRight}>
+                              <Text style={styles.splitBadgeText}>FILTER</Text>
+                            </View>
+                          </View>
+
+                          {/* Center Split Divider Line */}
+                          <View style={styles.splitDividerLine}>
+                            <View style={styles.splitDividerHandle} />
+                          </View>
+                        </View>
+                      )}
+                      {isSelected && (
+                        <View style={styles.activeCheckBadge}>
+                          <Ionicons name="checkmark" size={9} color="#000000" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.metaBox}>
+                      <Text
+                        style={[styles.filterName, isSelected && styles.filterNameActive]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {item.name}
+                      </Text>
+                      <Text style={styles.filterDescText} numberOfLines={1}>
+                        {(item as any).desc || item.category}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
         </View>
       </ScrollView>

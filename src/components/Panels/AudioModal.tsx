@@ -18,6 +18,8 @@ import {
   pickWebMedia,
   persistNativeMediaCopy,
 } from '../../utils/largeMediaStorage';
+import { detectBeatsFromPeaks } from '../../services/beatDetectionEngine';
+import { extractRealMediaAudioPeaks } from '../../utils/mediaAudioDetector';
 
 interface AudioModalProps {
   visible: boolean;
@@ -37,6 +39,42 @@ export default function AudioModal({
   isInline = false,
 }: AudioModalProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isDetectingBeats, setIsDetectingBeats] = useState(false);
+
+  const handleAutoBeatDetect = async () => {
+    if (!project) return;
+    const audioTrack = project.tracks?.audio?.[0];
+    if (!audioTrack?.url) {
+      Alert.alert(
+        "No Audio Track",
+        "Please add or import an audio track first to automatically detect rhythm beats."
+      );
+      return;
+    }
+    setIsDetectingBeats(true);
+    try {
+      const peaks = await extractRealMediaAudioPeaks(audioTrack.url, audioTrack.id);
+      if (peaks && peaks.length > 0) {
+        const beats = detectBeatsFromPeaks(peaks, audioTrack.duration || 10);
+        if (onUpdateProject) {
+          onUpdateProject({ beatMarkers: beats });
+        }
+      } else {
+        Alert.alert("Beat Detection", "Could not detect distinct audio beats in this track.");
+      }
+    } catch (err: any) {
+      console.warn("Beat detection failed:", err);
+      Alert.alert("Beat Detection Failed", err?.message || "Could not analyze audio waveform.");
+    } finally {
+      setIsDetectingBeats(false);
+    }
+  };
+
+  const handleClearBeats = () => {
+    if (onUpdateProject) {
+      onUpdateProject({ beatMarkers: [] });
+    }
+  };
 
   const importedAudioAssets = React.useMemo(() => {
     const assets = (project?.assets || []).filter((a) => a.type === 'audio');
@@ -207,22 +245,66 @@ export default function AudioModal({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Full-Width Import Action Button */}
-          <TouchableOpacity
-            style={styles.fullWidthUploadButton}
-            onPress={handleDeviceAudioUpload}
-            disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#00F2FE" />
-            ) : (
-              <Ionicons name="musical-notes-outline" size={16} color="#00F2FE" />
-            )}
-            <Text style={styles.fullWidthUploadButtonText}>
-              {isLoading ? 'Importing Audio...' : '+ Import Audio File'}
-            </Text>
-          </TouchableOpacity>
+          {/* Top Actions: Import Audio + Auto Beat Sync */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            <TouchableOpacity
+              style={[styles.fullWidthUploadButton, { flex: 1, marginVertical: 0 }]}
+              onPress={handleDeviceAudioUpload}
+              disabled={isLoading}
+              activeOpacity={0.8}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#00F2FE" />
+              ) : (
+                <Ionicons name="musical-notes-outline" size={15} color="#00F2FE" />
+              )}
+              <Text style={styles.fullWidthUploadButtonText} numberOfLines={1}>
+                {isLoading ? 'Importing...' : '+ Import Audio'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.fullWidthUploadButton,
+                {
+                  flex: 1,
+                  marginVertical: 0,
+                  backgroundColor: project?.beatMarkers?.length
+                    ? 'rgba(255, 230, 0, 0.12)'
+                    : 'rgba(0, 242, 254, 0.08)',
+                  borderColor: project?.beatMarkers?.length
+                    ? 'rgba(255, 230, 0, 0.6)'
+                    : 'rgba(0, 242, 254, 0.25)',
+                },
+              ]}
+              onPress={project?.beatMarkers?.length ? handleClearBeats : handleAutoBeatDetect}
+              disabled={isDetectingBeats}
+              activeOpacity={0.8}
+            >
+              {isDetectingBeats ? (
+                <ActivityIndicator size="small" color="#FFE600" />
+              ) : (
+                <Ionicons
+                  name={project?.beatMarkers?.length ? 'flash' : 'pulse-outline'}
+                  size={15}
+                  color={project?.beatMarkers?.length ? '#FFE600' : '#00F2FE'}
+                />
+              )}
+              <Text
+                style={[
+                  styles.fullWidthUploadButtonText,
+                  { color: project?.beatMarkers?.length ? '#FFE600' : '#00F2FE' },
+                ]}
+                numberOfLines={1}
+              >
+                {isDetectingBeats
+                  ? 'Analyzing...'
+                  : project?.beatMarkers?.length
+                  ? `${project.beatMarkers.length} Beats (Clear)`
+                  : 'Auto Beat Sync'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Section: Project Imported Audio */}
           <View style={styles.importedSection}>

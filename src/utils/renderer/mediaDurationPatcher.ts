@@ -9,7 +9,8 @@
  * This utility inspects the container header and injects or rewrites the exact duration
  * into:
  *   - MP4: mvhd (Movie Header), tkhd (Track Header), mdhd (Media Header), and mehd (Movie Extends Header)
- *   - WebM: Segment Info -> Duration (0x4489) scaled according to TimecodeScale (0x2AD7B1)
+ *   - WebM: Segment Info -> Duration (0x4489) scaled according to TimecodeScale (0x2AD7B1),
+ *           updating Info VINT length, SeekHead SeekPosition offsets, and Segment size.
  */
 
 export function patchMediaContainerDuration(
@@ -173,8 +174,6 @@ export function patchMediaContainerDuration(
               if (v === 0 && cur + headerLen + 24 <= bEnd) {
                 dv.setUint32(cur + headerLen + 20, dur);
               } else if (v === 1 && cur + headerLen + 36 <= bEnd) {
-                // In tkhd v1: creation(8) + mod(8) + track_id(4) + reserved(4) = 24 bytes from header
-                // duration is 64-bit located at offset 28..35
                 dv.setUint32(cur + headerLen + 28, Math.floor(dur / 4294967296));
                 dv.setUint32(cur + headerLen + 32, dur >>> 0);
               }
@@ -283,26 +282,38 @@ export function patchMediaContainerDuration(
       const segId = readEbmlId(pos);
       if (!segId || segId.id !== 0x18538067) return bytes;
       pos += segId.length;
+      const segSizePos = pos;
       const segSize = readVint(pos);
       if (!segSize) return bytes;
       pos += segSize.length;
+      const segDataStart = pos;
 
-      // Search inside Segment for Info element [0x15, 0x49, 0xA9, 0x66]
+      // Search inside Segment for SeekHead and Info elements
       let infoPos = -1;
       let infoDataPos = -1;
       let infoDataSize = -1;
+      let infoVintPos = -1;
       let infoVintLen = -1;
+      let seekHeadPos = -1;
+      let seekHeadEnd = -1;
 
       while (pos + 4 < fileLen) {
         const elId = readEbmlId(pos);
         if (!elId) break;
-        if (elId.id === 0x1549a966) {
-          // Segment Info
-          infoPos = pos;
+        if (elId.id === 0x114d9b74) {
+          // SeekHead element
+          seekHeadPos = pos;
           const v = readVint(pos + elId.length);
+          if (v) seekHeadEnd = pos + elId.length + v.length + v.value;
+          pos += elId.length + (v ? v.length + v.value : 0);
+        } else if (elId.id === 0x1549a966) {
+          // Segment Info element
+          infoPos = pos;
+          infoVintPos = pos + elId.length;
+          const v = readVint(infoVintPos);
           if (v) {
             infoVintLen = v.length;
-            infoDataPos = pos + elId.length + v.length;
+            infoDataPos = infoVintPos + v.length;
             infoDataSize = v.value;
           }
           break;
@@ -351,6 +362,7 @@ export function patchMediaContainerDuration(
 
         const durationInScale = (durationSec * 1000000000) / timecodeScale;
 
+        // Path 1: Duration element is already present in Info
         if (durOffset >= 0) {
           if (durSize === 4) {
             dv.setFloat32(durOffset, durationInScale);
@@ -361,25 +373,159 @@ export function patchMediaContainerDuration(
           }
         }
 
-        // If Duration is not in Info, check if Void element is available to overwrite in-place
+        // Path 2: Check if Void element in Info is available to overwrite in-place
         if (voidOffset >= 0 && voidSize >= 7) {
-          bytes[voidOffset] = 0x44;
-          bytes[voidOffset + 1] = 0x89;
-          bytes[voidOffset + 2] = 0x84; // 4-byte float size
-          dv.setFloat32(voidOffset + 3, durationInScale);
-
-          const rem = voidSize - 7;
-          if (rem >= 2) {
-            bytes[voidOffset + 7] = 0xec; // Void ID
-            bytes[voidOffset + 8] = 0x80 | (rem - 2);
+          if (voidSize >= 11) {
+            // Overwrite with 8-byte Float64
+            bytes[voidOffset] = 0x44;
+            bytes[voidOffset + 1] = 0x89;
+            bytes[voidOffset + 2] = 0x88;
+            dv.setFloat64(voidOffset + 3, durationInScale);
+            const rem = voidSize - 11;
+            if (rem >= 2) {
+              bytes[voidOffset + 11] = 0xec;
+              bytes[voidOffset + 12] = 0x80 | (rem - 2);
+            }
+            return bytes;
+          } else {
+            // Overwrite with 4-byte Float32
+            bytes[voidOffset] = 0x44;
+            bytes[voidOffset + 1] = 0x89;
+            bytes[voidOffset + 2] = 0x84;
+            dv.setFloat32(voidOffset + 3, durationInScale);
+            const rem = voidSize - 7;
+            if (rem >= 2) {
+              bytes[voidOffset + 7] = 0xec;
+              bytes[voidOffset + 8] = 0x80 | (rem - 2);
+            }
+            return bytes;
           }
-          return bytes;
         }
 
-        // If neither Duration nor Void is in Info, avoid byte injection that would shift all
-        // subsequent Cluster and SeekHead offsets by 7 bytes. The recording stops at exact
-        // duration, so returning the uncorrupted bytes preserves cluster boundary validity!
-        return bytes;
+        // Path 3: Duration is absent (standard Chromium MediaRecorder output with timeslice).
+        // Inject Duration element [0x44, 0x89, 0x88, 8-byte Float64] into Info, update Info VINT,
+        // and adjust SeekHead SeekPositions for subsequent elements (Tracks, Clusters).
+        const durBytes = new Uint8Array(11);
+        durBytes[0] = 0x44;
+        durBytes[1] = 0x89;
+        durBytes[2] = 0x88; // 1-byte VINT indicating 8 bytes payload
+        new DataView(durBytes.buffer).setFloat64(3, durationInScale);
+        const injectLen = durBytes.length; // 11 bytes
+
+        const newInfoDataSize = infoDataSize + injectLen;
+        let newBytes: Uint8Array;
+
+        if (infoVintLen === 1 && newInfoDataSize <= 127) {
+          newBytes = new Uint8Array(bytes.length + injectLen);
+          newBytes.set(bytes.subarray(0, infoEnd), 0);
+          newBytes.set(durBytes, infoEnd);
+          newBytes.set(bytes.subarray(infoEnd), infoEnd + injectLen);
+          newBytes[infoVintPos] = 0x80 | newInfoDataSize;
+        } else {
+          let bCount = 1;
+          let limit = 127;
+          while (bCount <= 8 && newInfoDataSize > limit) {
+            bCount++;
+            limit = (limit << 7) | 0x7f;
+          }
+          const vBuf = new Uint8Array(bCount);
+          let rem = newInfoDataSize;
+          const flag = 1 << (7 - (bCount - 1));
+          vBuf[0] = flag | Math.floor(rem / Math.pow(256, bCount - 1));
+          for (let i = 1; i < bCount; i++) {
+            vBuf[i] = Math.floor(rem / Math.pow(256, bCount - 1 - i)) % 256;
+          }
+          const deltaVint = bCount - infoVintLen;
+          newBytes = new Uint8Array(bytes.length + injectLen + deltaVint);
+          newBytes.set(bytes.subarray(0, infoVintPos), 0);
+          newBytes.set(vBuf, infoVintPos);
+          newBytes.set(bytes.subarray(infoDataPos, infoEnd), infoVintPos + bCount);
+          newBytes.set(durBytes, infoVintPos + bCount + infoDataSize);
+          newBytes.set(bytes.subarray(infoEnd), infoVintPos + bCount + newInfoDataSize);
+        }
+
+        const totalShift = newBytes.length - bytes.length;
+
+        // If SeekHead exists before Info, update SeekPosition for elements that come after Info
+        if (seekHeadPos >= 0 && seekHeadEnd > seekHeadPos) {
+          let sp = seekHeadPos;
+          const shId = readEbmlId(sp);
+          if (shId) {
+            sp += shId.length;
+            const shv = readVint(sp);
+            if (shv) {
+              sp += shv.length;
+              const shLimit = sp + shv.value;
+              while (sp + 4 < shLimit) {
+                const sid = readEbmlId(sp);
+                if (!sid) break;
+                const sv = readVint(sp + sid.length);
+                if (!sv) break;
+                const seekContentStart = sp + sid.length + sv.length;
+                const nextSeek = seekContentStart + sv.value;
+
+                if (sid.id === 0x4dbb) {
+                  // Seek element: contains SeekID (0x53AB) and SeekPosition (0x53AC)
+                  let kp = seekContentStart;
+                  let sPosOffset = -1;
+                  let sPosLen = 0;
+                  while (kp < nextSeek) {
+                    const kid = readEbmlId(kp);
+                    if (!kid) break;
+                    const kv = readVint(kp + kid.length);
+                    if (!kv) break;
+                    const kvalPos = kp + kid.length + kv.length;
+                    if (kid.id === 0x53ac) {
+                      sPosOffset = kvalPos;
+                      sPosLen = kv.value;
+                    }
+                    kp = kvalPos + kv.value;
+                  }
+                  if (sPosOffset >= 0 && sPosLen > 0 && sPosLen <= 8) {
+                    let curPos = 0;
+                    for (let b = 0; b < sPosLen; b++) curPos = curPos * 256 + newBytes[sPosOffset + b];
+                    // If this element was located at or after Info, shift its SeekPosition
+                    if (curPos >= (infoPos - segDataStart)) {
+                      curPos += totalShift;
+                      for (let b = sPosLen - 1; b >= 0; b--) {
+                        newBytes[sPosOffset + b] = curPos % 256;
+                        curPos = Math.floor(curPos / 256);
+                      }
+                    }
+                  }
+                }
+                sp = nextSeek;
+              }
+            }
+          }
+        }
+
+        // If Segment size is definite (not unknown 0x01FFFFFFFFFFFFFF), increment it
+        if (segSize && segSize.length <= 8) {
+          const isUnknown = segSize.length === 8 &&
+            bytes[segSizePos] === 0x01 &&
+            bytes[segSizePos + 1] === 0xff &&
+            bytes[segSizePos + 2] === 0xff &&
+            bytes[segSizePos + 3] === 0xff &&
+            bytes[segSizePos + 4] === 0xff &&
+            bytes[segSizePos + 5] === 0xff &&
+            bytes[segSizePos + 6] === 0xff &&
+            bytes[segSizePos + 7] === 0xff;
+          if (!isUnknown && segSize.value > 0) {
+            let curSegVal = segSize.value + totalShift;
+            const mask = 1 << (7 - (segSize.length - 1));
+            for (let b = segSize.length - 1; b >= 0; b--) {
+              if (b === 0) {
+                newBytes[segSizePos + b] = mask | (curSegVal % mask);
+              } else {
+                newBytes[segSizePos + b] = curSegVal % 256;
+                curSegVal = Math.floor(curSegVal / 256);
+              }
+            }
+          }
+        }
+
+        return newBytes;
       }
       return bytes;
     } catch (e) {
@@ -390,4 +536,3 @@ export function patchMediaContainerDuration(
 
   return bytes;
 }
-

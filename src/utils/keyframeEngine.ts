@@ -458,6 +458,82 @@ export function findKeyframeAtTime(
   );
 }
 
+/**
+ * Fast cubic Bezier solver using Newton-Raphson with bisection fallback.
+ * Computes y(t) given cubic control points [p1x, p1y, p2x, p2y] and progress in [0, 1].
+ */
+export function solveCubicBezier(
+  p1x: number,
+  p1y: number,
+  p2x: number,
+  p2y: number,
+  progress: number
+): number {
+  if (progress <= 0) return 0;
+  if (progress >= 1) return 1;
+
+  if (p1x === p1y && p2x === p2y) return progress;
+
+  let t = progress;
+  for (let i = 0; i < 8; i++) {
+    const currentX =
+      3 * (1 - t) * (1 - t) * t * p1x +
+      3 * (1 - t) * t * t * p2x +
+      t * t * t;
+    const dx = currentX - progress;
+    if (Math.abs(dx) < 1e-5) break;
+    const dxdt =
+      3 * (1 - t) * (1 - t) * p1x +
+      6 * (1 - t) * t * (p2x - p1x) +
+      3 * t * t * (1 - p2x);
+    if (Math.abs(dxdt) < 1e-5) break;
+    t = Math.max(0, Math.min(1, t - dx / dxdt));
+  }
+
+  return (
+    3 * (1 - t) * (1 - t) * t * p1y +
+    3 * (1 - t) * t * t * p2y +
+    t * t * t
+  );
+}
+
+export const CUBIC_BEZIER_PRESETS: Record<string, [number, number, number, number]> = {
+  linear: [0, 0, 1, 1],
+  easeIn: [0.42, 0, 1, 1],
+  easeOut: [0, 0, 0.58, 1],
+  easeInOut: [0.42, 0, 0.58, 1],
+  smooth: [0.25, 0.1, 0.25, 1],
+  whip: [0.85, 0, 0.15, 1],
+  bounce: [0.34, 1.56, 0.64, 1],
+  jump: [0.175, 0.885, 0.32, 1.275],
+  anticipate: [0.68, -0.55, 0.265, 1.55],
+};
+
+export function evaluateKeyframeEasing(
+  easingType: string | undefined,
+  progress: number,
+  customCurve?: [number, number, number, number]
+): number {
+  if (progress <= 0) return 0;
+  if (progress >= 1) return 1;
+
+  if (customCurve && customCurve.length === 4) {
+    return solveCubicBezier(customCurve[0], customCurve[1], customCurve[2], customCurve[3], progress);
+  }
+
+  const preset = easingType ? CUBIC_BEZIER_PRESETS[easingType] : null;
+  if (preset) {
+    return solveCubicBezier(preset[0], preset[1], preset[2], preset[3], progress);
+  }
+
+  if (easingType === "spring") {
+    return 1 + Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
+  }
+
+  // Hermite smoothstep fallback
+  return progress * progress * (3 - 2 * progress);
+}
+
 function interpolateMaskPair(
   m1: MaskConfig,
   m2: MaskConfig,
@@ -557,25 +633,8 @@ export function getInterpolatedMask(
         const span = k2.time - k1.time;
         const progress = span > 0 ? (localTime - k1.time) / span : 0;
         const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
-        let ease = progress;
-        if (easingType === "linear") {
-          ease = progress;
-        } else if (easingType === "easeIn") {
-          ease = progress * progress * progress;
-        } else if (easingType === "easeOut") {
-          ease = 1 - Math.pow(1 - progress, 3);
-        } else if (easingType === "easeInOut") {
-          ease =
-            progress < 0.5
-              ? 4 * progress * progress * progress
-              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-        } else if (easingType === "spring") {
-          ease =
-            1 +
-            Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
-        } else {
-          ease = progress * progress * (3 - 2 * progress);
-        }
+        const customCurve = (k1 as any).bezierCurve || (k2 as any).bezierCurve;
+        const ease = evaluateKeyframeEasing(easingType, progress, customCurve);
 
         const m1 = k1.mask || baseMask;
         const m2 = k2.mask || baseMask;
@@ -788,26 +847,8 @@ export function getInterpolatedTransform(
     const progress = span > 0 ? (localTime - k1.time) / span : 0;
 
     const easingType = (k1 as any).easing || (k2 as any).easing || "smooth";
-    let ease = progress;
-    if (easingType === "linear") {
-      ease = progress;
-    } else if (easingType === "easeIn") {
-      ease = progress * progress * progress;
-    } else if (easingType === "easeOut") {
-      ease = 1 - Math.pow(1 - progress, 3);
-    } else if (easingType === "easeInOut") {
-      ease =
-        progress < 0.5
-          ? 4 * progress * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-    } else if (easingType === "spring") {
-      ease =
-        1 +
-        Math.sin(progress * Math.PI * 4) * Math.pow(1 - progress, 2) * 0.3;
-    } else {
-      // Hermite smoothstep cubic ease curve
-      ease = progress * progress * (3 - 2 * progress);
-    }
+    const customCurve = (k1 as any).bezierCurve || (k2 as any).bezierCurve;
+    const ease = evaluateKeyframeEasing(easingType, progress, customCurve);
 
     const t1 = k1.transform || {};
     const t2 = k2.transform || {};

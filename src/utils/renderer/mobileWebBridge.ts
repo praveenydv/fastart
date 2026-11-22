@@ -1960,24 +1960,35 @@ export function generateCanvasBridgeHtml(
             var segId = readEbmlId(pos);
             if (!segId || segId.id !== 0x18538067) return bytes;
             pos += segId.length;
+            var segSizePos = pos;
             var segSize = readVint(pos);
             if (!segSize) return bytes;
             pos += segSize.length;
+            var segDataStart = pos;
 
             var infoPos = -1;
             var infoDataPos = -1;
             var infoDataSize = -1;
+            var infoVintPos = -1;
             var infoVintLen = -1;
+            var seekHeadPos = -1;
+            var seekHeadEnd = -1;
 
             while (pos + 4 < fileLen) {
               var elId = readEbmlId(pos);
               if (!elId) break;
-              if (elId.id === 0x1549A966) {
-                infoPos = pos;
+              if (elId.id === 0x114D9B74) {
+                seekHeadPos = pos;
                 var v = readVint(pos + elId.length);
+                if (v) seekHeadEnd = pos + elId.length + v.length + v.value;
+                pos += elId.length + (v ? v.length + v.value : 0);
+              } else if (elId.id === 0x1549A966) {
+                infoPos = pos;
+                infoVintPos = pos + elId.length;
+                var v = readVint(infoVintPos);
                 if (v) {
                   infoVintLen = v.length;
-                  infoDataPos = pos + elId.length + v.length;
+                  infoDataPos = infoVintPos + v.length;
                   infoDataSize = v.value;
                 }
                 break;
@@ -2033,43 +2044,147 @@ export function generateCanvasBridgeHtml(
               }
 
               if (voidOffset >= 0 && voidSize >= 7) {
-                bytes[voidOffset] = 0x44;
-                bytes[voidOffset + 1] = 0x89;
-                bytes[voidOffset + 2] = 0x84;
-                dv.setFloat32(voidOffset + 3, durationInScale);
-
-                var rem = voidSize - 7;
-                if (rem >= 2) {
-                  bytes[voidOffset + 7] = 0xEC;
-                  bytes[voidOffset + 8] = 0x80 | (rem - 2);
+                if (voidSize >= 11) {
+                  bytes[voidOffset] = 0x44;
+                  bytes[voidOffset + 1] = 0x89;
+                  bytes[voidOffset + 2] = 0x88;
+                  dv.setFloat64(voidOffset + 3, durationInScale);
+                  var rem = voidSize - 11;
+                  if (rem >= 2) {
+                    bytes[voidOffset + 11] = 0xEC;
+                    bytes[voidOffset + 12] = 0x80 | (rem - 2);
+                  }
+                  return bytes;
+                } else {
+                  bytes[voidOffset] = 0x44;
+                  bytes[voidOffset + 1] = 0x89;
+                  bytes[voidOffset + 2] = 0x84;
+                  dv.setFloat32(voidOffset + 3, durationInScale);
+                  var rem = voidSize - 7;
+                  if (rem >= 2) {
+                    bytes[voidOffset + 7] = 0xEC;
+                    bytes[voidOffset + 8] = 0x80 | (rem - 2);
+                  }
+                  return bytes;
                 }
-                return bytes;
               }
 
-              var injectBytes = new Uint8Array(7);
-              injectBytes[0] = 0x44;
-              injectBytes[1] = 0x89;
-              injectBytes[2] = 0x84;
-              new DataView(injectBytes.buffer).setFloat32(3, durationInScale);
+              var durBytes = new Uint8Array(11);
+              durBytes[0] = 0x44;
+              durBytes[1] = 0x89;
+              durBytes[2] = 0x88;
+              new DataView(durBytes.buffer).setFloat64(3, durationInScale);
+              var injectLen = durBytes.length;
 
-              var newBytes = new Uint8Array(bytes.length + 7);
-              newBytes.set(bytes.subarray(0, infoDataPos), 0);
-              newBytes.set(injectBytes, infoDataPos);
-              newBytes.set(bytes.subarray(infoDataPos), infoDataPos + 7);
+              var newInfoDataSize = infoDataSize + injectLen;
+              var newBytes;
 
-              var newInfoDataSize = infoDataSize + 7;
-              var infoVintPos = infoPos + 4;
               if (infoVintLen === 1 && newInfoDataSize <= 127) {
+                newBytes = new Uint8Array(bytes.length + injectLen);
+                newBytes.set(bytes.subarray(0, infoEnd), 0);
+                newBytes.set(durBytes, infoEnd);
+                newBytes.set(bytes.subarray(infoEnd), infoEnd + injectLen);
                 newBytes[infoVintPos] = 0x80 | newInfoDataSize;
-              } else if (infoVintLen === 2) {
-                newBytes[infoVintPos] = 0x40 | (newInfoDataSize >> 8);
-                newBytes[infoVintPos + 1] = newInfoDataSize & 0xFF;
-              } else if (infoVintLen === 4) {
-                newBytes[infoVintPos] = 0x10 | (newInfoDataSize >> 24);
-                newBytes[infoVintPos + 1] = (newInfoDataSize >> 16) & 0xFF;
-                newBytes[infoVintPos + 2] = (newInfoDataSize >> 8) & 0xFF;
-                newBytes[infoVintPos + 3] = newInfoDataSize & 0xFF;
+              } else {
+                var bCount = 1;
+                var limit = 127;
+                while (bCount <= 8 && newInfoDataSize > limit) {
+                  bCount++;
+                  limit = (limit << 7) | 0x7F;
+                }
+                var vBuf = new Uint8Array(bCount);
+                var remVal = newInfoDataSize;
+                var flag = 1 << (7 - (bCount - 1));
+                vBuf[0] = flag | Math.floor(remVal / Math.pow(256, bCount - 1));
+                for (var i = 1; i < bCount; i++) {
+                  vBuf[i] = Math.floor(remVal / Math.pow(256, bCount - 1 - i)) % 256;
+                }
+                var deltaVint = bCount - infoVintLen;
+                newBytes = new Uint8Array(bytes.length + injectLen + deltaVint);
+                newBytes.set(bytes.subarray(0, infoVintPos), 0);
+                newBytes.set(vBuf, infoVintPos);
+                newBytes.set(bytes.subarray(infoDataPos, infoEnd), infoVintPos + bCount);
+                newBytes.set(durBytes, infoVintPos + bCount + infoDataSize);
+                newBytes.set(bytes.subarray(infoEnd), infoVintPos + bCount + newInfoDataSize);
               }
+
+              var totalShift = newBytes.length - bytes.length;
+
+              if (seekHeadPos >= 0 && seekHeadEnd > seekHeadPos) {
+                var sp = seekHeadPos;
+                var shId = readEbmlId(sp);
+                if (shId) {
+                  sp += shId.length;
+                  var shv = readVint(sp);
+                  if (shv) {
+                    sp += shv.length;
+                    var shLimit = sp + shv.value;
+                    while (sp + 4 < shLimit) {
+                      var sid = readEbmlId(sp);
+                      if (!sid) break;
+                      var sv = readVint(sp + sid.length);
+                      if (!sv) break;
+                      var seekContentStart = sp + sid.length + sv.length;
+                      var nextSeek = seekContentStart + sv.value;
+
+                      if (sid.id === 0x4DBB) {
+                        var kp = seekContentStart;
+                        var sPosOffset = -1;
+                        var sPosLen = 0;
+                        while (kp < nextSeek) {
+                          var kid = readEbmlId(kp);
+                          if (!kid) break;
+                          var kv = readVint(kp + kid.length);
+                          if (!kv) break;
+                          var kvalPos = kp + kid.length + kv.length;
+                          if (kid.id === 0x53AC) {
+                            sPosOffset = kvalPos;
+                            sPosLen = kv.value;
+                          }
+                          kp = kvalPos + kv.value;
+                        }
+                        if (sPosOffset >= 0 && sPosLen > 0 && sPosLen <= 8) {
+                          var curPos = 0;
+                          for (var b = 0; b < sPosLen; b++) curPos = (curPos * 256) + newBytes[sPosOffset + b];
+                          if (curPos >= (infoPos - segDataStart)) {
+                            curPos += totalShift;
+                            for (var b = sPosLen - 1; b >= 0; b--) {
+                              newBytes[sPosOffset + b] = curPos % 256;
+                              curPos = Math.floor(curPos / 256);
+                            }
+                          }
+                        }
+                      }
+                      sp = nextSeek;
+                    }
+                  }
+                }
+              }
+
+              if (segSize && segSize.length <= 8) {
+                var isUnknown = segSize.length === 8 &&
+                  bytes[segSizePos] === 0x01 &&
+                  bytes[segSizePos + 1] === 0xFF &&
+                  bytes[segSizePos + 2] === 0xFF &&
+                  bytes[segSizePos + 3] === 0xFF &&
+                  bytes[segSizePos + 4] === 0xFF &&
+                  bytes[segSizePos + 5] === 0xFF &&
+                  bytes[segSizePos + 6] === 0xFF &&
+                  bytes[segSizePos + 7] === 0xFF;
+                if (!isUnknown && segSize.value > 0) {
+                  var curSegVal = segSize.value + totalShift;
+                  var maskByte = 1 << (7 - (segSize.length - 1));
+                  for (var b = segSize.length - 1; b >= 0; b--) {
+                    if (b === 0) {
+                      newBytes[segSizePos + b] = maskByte | (curSegVal % maskByte);
+                    } else {
+                      newBytes[segSizePos + b] = curSegVal % 256;
+                      curSegVal = Math.floor(curSegVal / 256);
+                    }
+                  }
+                }
+              }
+
               return newBytes;
             }
             return bytes;
@@ -3124,16 +3239,16 @@ export function generateCanvasBridgeHtml(
                 }
               }
 
-              // 2. Immediately stop MediaStream tracks so encoder stops receiving frames
-              if (stream) {
-                try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
-              }
-
-              // 3. Stop MediaRecorder
+              // 2. Stop MediaRecorder FIRST so Chromium/WebKit encodes all pending frames cleanly
               if (recorder.state === "recording") {
                 try { recorder.stop(); } catch(e) {
                   console.warn("[mobileWebBridge] Stop recorder error:", e);
                 }
+              }
+
+              // 3. Immediately stop MediaStream tracks so encoder stops receiving frames
+              if (stream) {
+                try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
               }
 
               // 4. Fallback watchdog timer (3.5s): If recorder.onstop fails to fire, force completion

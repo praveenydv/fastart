@@ -538,7 +538,7 @@ export class VideoRenderer {
         let hasAdjacentNext = false;
         for (let j = 0; j < sameTrackClips.length; j++) {
           const other = sameTrackClips[j];
-          if (other.id !== c.id && Math.abs(other.startTime - cEnd) < 0.01) {
+          if (other.id !== c.id && Math.abs(other.startTime - cEnd) < 0.035) {
             hasAdjacentNext = true;
             break;
           }
@@ -551,15 +551,6 @@ export class VideoRenderer {
           activeVideoItems.push({
             clip: c,
             trackIndex: (c.trackIndex || 0) * 100,
-          });
-          handledVideoIds.add(c.id);
-        } else if (!handledVideoIds.has(c.id) && hasAdjacentNext && time >= cEnd && time <= cEnd + 0.12) {
-          // Continuous temporal tail-hold: keep outgoing clip rendered directly underneath incoming clip
-          // for up to 120ms so cut transitions are 100% gapless without flashing raw background
-          activeVideoItems.push({
-            clip: c,
-            trackIndex: (c.trackIndex || 0) * 100 - 1,
-            transitionState: null,
           });
           handledVideoIds.add(c.id);
         }

@@ -661,20 +661,20 @@ export async function exportBrowserVideo(
             } catch {}
           }
 
-          // 3. Immediately stop all MediaStream tracks so encoder stops receiving frames
-          if (stream) {
-            try {
-              stream.getTracks().forEach((track: any) => track.stop());
-            } catch (e) {}
-          }
-
-          // 4. Stop MediaRecorder FIRST so Chromium encodes all pending frames cleanly
+          // 3. Stop MediaRecorder FIRST so Chromium encodes all pending frames cleanly
           if (mediaRecorder.state === "recording") {
             try {
               mediaRecorder.stop();
             } catch (e) {
               console.warn("[browserVideoExporter] Stop recorder error:", e);
             }
+          }
+
+          // 4. Immediately stop all MediaStream tracks so encoder stops receiving frames
+          if (stream) {
+            try {
+              stream.getTracks().forEach((track: any) => track.stop());
+            } catch (e) {}
           }
 
           // 5. Fail-safe watchdog (3.5s): If mediaRecorder.onstop fails to fire, force completion

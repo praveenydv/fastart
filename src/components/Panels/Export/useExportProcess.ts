@@ -26,8 +26,8 @@ export function useExportProcess(
   visible: boolean,
 ) {
   const [mediaType, setMediaType] = useState<ExportFormat>("mp4");
-  const [resolution, setResolution] = useState(project.resolution || "1080p");
-  const [fps, setFps] = useState(project.fps || 30);
+  const [resolution, setResolution] = useState("1080p");
+  const [fps, setFps] = useState(30);
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -89,18 +89,19 @@ export function useExportProcess(
   };
 
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
+      setMediaType("mp4");
+      setResolution("1080p");
+      setFps(30);
+      setIsSaved(false);
+      setIsSaving(false);
+      setExportFilename(getInitialFilename());
+      isCancelledRef.current = false;
+      lastSeenProgressRef.current = 0;
+    } else {
       isCancelledRef.current = true;
     }
   }, [visible]);
-
-  useEffect(() => {
-    if (project?.resolution) setResolution(project.resolution);
-    if (project?.fps) setFps(project.fps);
-    setIsSaved(false);
-    setIsSaving(false);
-    setExportFilename(getInitialFilename());
-  }, [project?.resolution, project?.fps, project?.title, project?.name, visible]);
 
   const selectedFormatConfig =
     MEDIA_FORMATS.find((f) => f.id === mediaType) || MEDIA_FORMATS[0];

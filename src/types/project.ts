@@ -24,6 +24,7 @@ export interface MaskKeyframePoint {
   time: number;
   mask: MaskConfig;
   easing?: KeyframeEasing;
+  bezierCurve?: [number, number, number, number];
 }
 
 export interface CutoutConfig {
@@ -149,7 +150,18 @@ export type VoiceEffectId =
   | 'vinyl'
   | 'helium';
 
-export type KeyframeEasing = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'spring' | 'smooth';
+export type KeyframeEasing =
+  | 'linear'
+  | 'easeIn'
+  | 'easeOut'
+  | 'easeInOut'
+  | 'spring'
+  | 'smooth'
+  | 'whip'
+  | 'bounce'
+  | 'jump'
+  | 'anticipate'
+  | 'bezier';
 
 export interface ClipTransform {
   scale?: number;
@@ -183,6 +195,7 @@ export interface KeyframePoint {
   transform: ClipTransform;
   opacity: number;
   easing?: KeyframeEasing;
+  bezierCurve?: [number, number, number, number];
   mask?: MaskConfig;
 }
 
@@ -282,6 +295,7 @@ export interface AudioClip {
   sourceMediaId?: string;
   trackIndex?: number;
   peaks?: number[];
+  beatMarkers?: number[];
   voiceEffect?: VoiceEffectId;
   isMissing?: boolean;
   needsPermission?: boolean;

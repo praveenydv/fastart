@@ -437,11 +437,15 @@ function Player({
         let high = sorted.length;
         while (low < high) {
           const mid = (low + high) >>> 1;
-          if (sorted[mid].startTime < end - 0.01) low = mid + 1;
+          if (sorted[mid].startTime < end - 0.035) low = mid + 1;
           else high = mid;
         }
-        for (let i = low; i < sorted.length && sorted[i].startTime <= end + 0.01; i++) {
-          if (sorted[i].id !== clip.id && Math.abs(sorted[i].startTime - end) < 0.01) {
+        for (let i = low; i < sorted.length && sorted[i].startTime <= end + 0.035; i++) {
+          if (
+            sorted[i].id !== clip.id &&
+            (sorted[i].trackIndex || 0) === (clip.trackIndex || 0) &&
+            Math.abs(sorted[i].startTime - end) < 0.035
+          ) {
             set.add(clip.id);
             break;
           }
@@ -484,7 +488,7 @@ function Player({
       // 2. Pre-warm upcoming clip within 1.0s before its cut
       if (currentTime < start && start - currentTime <= 1.0) return true;
       // 3. Tail-hold recently finished clip for seamless cut transition without unmount flicker
-      if (currentTime > end && currentTime - end <= 0.15) return true;
+      if (currentTime >= end && currentTime - end <= 0.15) return true;
       return false;
     });
 
@@ -905,6 +909,7 @@ function Player({
                 onSelectClip={onSelectClip}
                 getItemBaseDimensions={getItemDimsHelper}
                 getInterpolatedTransform={getInterpolatedTransform}
+                adjacentNextClipIds={adjacentNextClipIds}
               />
             </>
           )}

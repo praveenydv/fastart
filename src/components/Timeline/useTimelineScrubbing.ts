@@ -13,6 +13,7 @@ interface UseTimelineScrubbingParams {
   isHapticEnabled: boolean;
   onSeek: (time: number) => void;
   rulerRef: React.RefObject<any>;
+  beatMarkers?: number[];
 }
 
 export function useTimelineScrubbing({
@@ -23,6 +24,7 @@ export function useTimelineScrubbing({
   isHapticEnabled,
   onSeek,
   rulerRef,
+  beatMarkers,
 }: UseTimelineScrubbingParams) {
   const [isScrubbingRuler, setIsScrubbingRuler] = useState(false);
   const isDraggingPlayhead = useRef(false);
@@ -47,9 +49,20 @@ export function useTimelineScrubbing({
   const snapPoints = useMemo(() => {
     if (!isSnappingEnabled) return [];
     const points = new Set<number>([0]);
+    if (beatMarkers && Array.isArray(beatMarkers)) {
+      for (const b of beatMarkers) {
+        points.add(Number(b.toFixed(3)));
+      }
+    }
     for (const c of allClips) {
       points.add(Number(c.startTime.toFixed(3)));
       points.add(Number((c.startTime + c.duration).toFixed(3)));
+      const beats = (c.rawClip as any)?.beatMarkers;
+      if (Array.isArray(beats)) {
+        for (const b of beats) {
+          points.add(Number((c.startTime + b).toFixed(3)));
+        }
+      }
       const kfs = c.rawClip?.keyframes;
       if (Array.isArray(kfs)) {
         for (const kf of kfs) {
@@ -64,7 +77,7 @@ export function useTimelineScrubbing({
       }
     }
     return Array.from(points).sort((a, b) => a - b);
-  }, [allClips, isSnappingEnabled]);
+  }, [allClips, isSnappingEnabled, beatMarkers]);
 
   const snapPointsRef = useRef(snapPoints);
   snapPointsRef.current = snapPoints;
