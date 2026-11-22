@@ -410,7 +410,12 @@ export function drawClip(
   // NEVER downgrade or replace the video element with a low-res thumbnail during player preview or export!
   let activeMedia: any = (isVideoReady || isImageReady) ? mediaEl : null;
 
-  if (!activeMedia && clip.thumbnail) {
+  if (!activeMedia && isVideo && mediaEl && !(mediaEl as any).error) {
+    // Prefer true video element over a low-res thumbnail to keep player preview and export crisp
+    activeMedia = mediaEl;
+  }
+
+  if (!activeMedia && clip.thumbnail && !renderCtx.isExporting) {
     let thumbEl = renderCtx.thumbnailElements.get(clip.id);
     if (!thumbEl) {
       thumbEl = new Image();
@@ -428,8 +433,8 @@ export function drawClip(
   }
 
   if (activeMedia) {
-    const mw = (activeMedia as any).videoWidth || (activeMedia as any).naturalWidth || (activeMedia as any).width || 1920;
-    const mh = (activeMedia as any).videoHeight || (activeMedia as any).naturalHeight || (activeMedia as any).height || 1080;
+    const mw = (activeMedia as any).videoWidth || (activeMedia as any).naturalWidth || (activeMedia as any).width || clip.width || clip.naturalWidth || 1920;
+    const mh = (activeMedia as any).videoHeight || (activeMedia as any).naturalHeight || (activeMedia as any).height || clip.height || clip.naturalHeight || 1080;
 
     const isPreviewCropping = renderCtx.previewCropClipId === clip.id;
     const crop = isPreviewCropping ? null : (clip.crop || clip.transform?.crop);

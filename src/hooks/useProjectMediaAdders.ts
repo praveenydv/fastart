@@ -89,6 +89,7 @@ export function useProjectMediaAdders({
       if (textIdx >= 0) {
         textList[textIdx] = { ...textList[textIdx], ...updatedClip };
         updateProjectWithHistory({
+          ...current,
           tracks: { ...current.tracks, text: textList },
         });
         if (setSelectedClipId) setSelectedClipId(updatedClip.id);
@@ -101,6 +102,7 @@ export function useProjectMediaAdders({
       if (capIdx >= 0) {
         capList[capIdx] = { ...capList[capIdx], ...updatedClip };
         updateProjectWithHistory({
+          ...current,
           tracks: { ...current.tracks, captions: capList },
         });
         if (setSelectedClipId) setSelectedClipId(updatedClip.id);
@@ -122,6 +124,7 @@ export function useProjectMediaAdders({
       if (capIdx >= 0) {
         capList[capIdx] = { ...capList[capIdx], ...updatedClip };
         updateProjectWithHistory({
+          ...current,
           tracks: { ...current.tracks, captions: capList },
         });
         if (setSelectedClipId) setSelectedClipId(updatedClip.id);
@@ -134,6 +137,7 @@ export function useProjectMediaAdders({
       if (textIdx >= 0) {
         textList[textIdx] = { ...textList[textIdx], ...updatedClip };
         updateProjectWithHistory({
+          ...current,
           tracks: { ...current.tracks, text: textList },
         });
         if (setSelectedClipId) setSelectedClipId(updatedClip.id);

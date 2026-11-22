@@ -376,33 +376,10 @@ export function patchMediaContainerDuration(
           return bytes;
         }
 
-        // If neither Duration nor Void is in Info, inject 7-byte Duration element into Info
-        const injectBytes = new Uint8Array(7);
-        injectBytes[0] = 0x44;
-        injectBytes[1] = 0x89;
-        injectBytes[2] = 0x84;
-        new DataView(injectBytes.buffer).setFloat32(3, durationInScale);
-
-        const newBytes = new Uint8Array(bytes.length + 7);
-        newBytes.set(bytes.subarray(0, infoDataPos), 0);
-        newBytes.set(injectBytes, infoDataPos);
-        newBytes.set(bytes.subarray(infoDataPos), infoDataPos + 7);
-
-        // Update Info element's VINT size in newBytes
-        const newInfoDataSize = infoDataSize + 7;
-        const infoVintPos = infoPos + 4; // Info ID is 4 bytes (0x1549A966)
-        if (infoVintLen === 1 && newInfoDataSize <= 127) {
-          newBytes[infoVintPos] = 0x80 | newInfoDataSize;
-        } else if (infoVintLen === 2) {
-          newBytes[infoVintPos] = 0x40 | (newInfoDataSize >> 8);
-          newBytes[infoVintPos + 1] = newInfoDataSize & 0xff;
-        } else if (infoVintLen === 4) {
-          newBytes[infoVintPos] = 0x10 | (newInfoDataSize >> 24);
-          newBytes[infoVintPos + 1] = (newInfoDataSize >> 16) & 0xff;
-          newBytes[infoVintPos + 2] = (newInfoDataSize >> 8) & 0xff;
-          newBytes[infoVintPos + 3] = newInfoDataSize & 0xff;
-        }
-        return newBytes;
+        // If neither Duration nor Void is in Info, avoid byte injection that would shift all
+        // subsequent Cluster and SeekHead offsets by 7 bytes. The recording stops at exact
+        // duration, so returning the uncorrupted bytes preserves cluster boundary validity!
+        return bytes;
       }
       return bytes;
     } catch (e) {

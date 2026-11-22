@@ -761,25 +761,11 @@ pub fn process_modnet_output_tensor(
         return;
     }
 
-    let (thresh, soft) = if threshold <= 0.001 && feather <= 0.001 {
-        (0.06f32, 0.72f32)
-    } else {
-        (threshold.clamp(0.01, 0.50), feather.clamp(0.10, 0.90))
-    };
-    let inv_soft = 1.0 / soft;
+    let mut smoothed = vec![0u8; total_pixels];
+    fastart_cutout_ops::smooth_modnet_alpha(raw_alpha, &mut smoothed, threshold, feather);
 
     for i in 0..total_pixels {
-        let val = raw_alpha[i];
-        let alpha = if val >= thresh + soft {
-            1.0f32
-        } else if val <= thresh {
-            0.0f32
-        } else {
-            let u = (val - thresh) * inv_soft;
-            u * u * (3.0 - 2.0 * u)
-        };
-
-        let a_byte = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
+        let a_byte = smoothed[i];
         let idx = i * 4;
         out_rgba[idx] = a_byte;
         out_rgba[idx + 1] = a_byte;

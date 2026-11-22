@@ -1616,8 +1616,8 @@ export async function processClipStudioCutout(
   clipId: string,
   frameIdx = 0,
   frameTime = 0,
-  threshold = 0.06,
-  feather = 0.72,
+  threshold = 0.04,
+  feather = 0.80,
   mediaType?: "video" | "photo",
 ): Promise<boolean> {
   if (typeof document === "undefined") return false;
@@ -1905,8 +1905,8 @@ export async function processVideoFrameByFrame(
   trimIn = 0,
   speed = 1,
   fps = 30,
-  threshold = 0.06,
-  feather = 0.72,
+  threshold = 0.04,
+  feather = 0.80,
   onProgress?: (pct: number, current: number, total: number) => void,
   signal?: AbortSignal,
   quality?: string,
@@ -2296,8 +2296,8 @@ export async function renderCutoutToVideoBlob(
   trimIn = 0,
   speed = 1,
   fps = 30,
-  threshold = 0.06,
-  feather = 0.72,
+  threshold = 0.04,
+  feather = 0.80,
   bgColor = "none",
   strokeColor = "none",
   strokeWidth = 0,
@@ -3004,22 +3004,22 @@ export async function processClipUnified(
   clipId: string,
   frameIdx = 0,
   frameTime = 0,
-  threshold = 0.06,
-  feather = 0.72,
+  threshold = 0.04,
+  feather = 0.80,
   mode: "auto" | "chroma" = "auto",
   keyColor = "#00FF00",
   mediaType?: "video" | "photo",
 ): Promise<boolean> {
   const isAuto = mode === "auto";
   const effThreshold = isAuto
-    ? threshold && threshold > 0.01
+    ? threshold && threshold > 0.005
       ? threshold
-      : 0.06
+      : 0.04
     : threshold;
   const effFeather = isAuto
-    ? feather && feather > 0.01
+    ? feather && feather > 0.05
       ? feather
-      : 0.72
+      : 0.80
     : feather;
 
   if (typeof document !== "undefined") {
@@ -3108,8 +3108,8 @@ export async function processVideoUnified(
   trimIn = 0,
   speed = 1,
   fps = 20,
-  threshold = 0.06,
-  feather = 0.72,
+  threshold = 0.04,
+  feather = 0.80,
   mode: "auto" | "chroma" = "auto",
   keyColor = "#00FF00",
   onProgress?: (pct: number, current: number, total: number) => void,

@@ -65,20 +65,16 @@ pub fn prepare_modnet_row(
 }
 
 pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u8> {
-    let (thresh, soft) = if threshold <= 0.001 && feather <= 0.001 {
-        (0.06f32, 0.72f32)
-    } else {
-        (threshold.clamp(0.01, 0.50), feather.clamp(0.10, 0.90))
-    };
-    let inv_softness = 1.0 / soft;
+    let mut smoothed = vec![0u8; alpha.len()];
+    smooth_modnet_alpha(alpha, &mut smoothed, threshold, feather);
+
     let mut encoded = Vec::with_capacity(alpha.len() / 8);
-    let Some((&first, rest)) = alpha.split_first() else {
+    let Some((&first, rest)) = smoothed.split_first() else {
         return encoded;
     };
-    let mut current = alpha_to_byte(first, true, thresh, soft, inv_softness);
+    let mut current = first;
     let mut count = 1usize;
-    for &value in rest {
-        let byte = alpha_to_byte(value, true, thresh, soft, inv_softness);
+    for &byte in rest {
         if byte == current && count < 255 {
             count += 1;
         } else {
@@ -91,6 +87,86 @@ pub fn modnet_alpha_to_rle(alpha: &[f32], threshold: f32, feather: f32) -> Vec<u
     encoded.push(count as u8);
     encoded.push(current);
     encoded
+}
+
+/// Converts raw float alpha values into a smoothed, anti-aliased 8-bit alpha mask.
+/// Applies a calibrated Hermite S-curve that preserves hair transparency and soft edges,
+/// followed by an edge-aware 3x3 anti-aliasing pass on transition contours to eliminate
+/// jagged staircases, pinholes, and background noise.
+#[inline]
+pub fn smooth_modnet_alpha(
+    alpha: &[f32],
+    output: &mut [u8],
+    threshold: f32,
+    feather: f32,
+) {
+    let (thresh, soft) = if threshold <= 0.001 && feather <= 0.001 {
+        (0.04f32, 0.80f32)
+    } else {
+        (threshold.clamp(0.005, 0.40), feather.clamp(0.20, 0.95))
+    };
+    let inv_softness = 1.0 / soft;
+    let total = alpha.len().min(output.len());
+    if total != MODNET_SIZE * MODNET_SIZE {
+        for i in 0..total {
+            output[i] = alpha_to_byte(alpha[i], true, thresh, soft, inv_softness);
+        }
+        return;
+    }
+
+    // Step 1: Base Hermite S-curve mapping with smooth rolloff
+    for i in 0..total {
+        output[i] = alpha_to_byte(alpha[i], true, thresh, soft, inv_softness);
+    }
+
+    // Step 2: Edge-Aware 3x3 Anti-Aliasing on transition boundaries.
+    // Smoothing is selectively applied to boundary contour pixels (0 < val < 255)
+    // using a normalized 2D Gaussian [1, 2, 1] kernel, making edges silky-smooth without
+    // degrading solid interior foreground or background contrast.
+    let scratch = output.to_vec();
+    for y in 1..MODNET_SIZE - 1 {
+        let row = y * MODNET_SIZE;
+        let row_prev = (y - 1) * MODNET_SIZE;
+        let row_next = (y + 1) * MODNET_SIZE;
+        for x in 1..MODNET_SIZE - 1 {
+            let idx = row + x;
+            let val = scratch[idx];
+            if val > 0 && val < 255 {
+                let tl = scratch[row_prev + x - 1] as u32;
+                let tc = scratch[row_prev + x] as u32;
+                let tr = scratch[row_prev + x + 1] as u32;
+                let cl = scratch[row + x - 1] as u32;
+                let cc = val as u32;
+                let cr = scratch[row + x + 1] as u32;
+                let bl = scratch[row_next + x - 1] as u32;
+                let bc = scratch[row_next + x] as u32;
+                let br = scratch[row_next + x + 1] as u32;
+
+                let sum = (tl + tr + bl + br)
+                    + ((tc + cl + cr + bc) << 1)
+                    + (cc << 2);
+                output[idx] = ((sum + 8) >> 4) as u8;
+            } else if val == 0 {
+                // Heal small isolated 1-pixel background holes in subject
+                let neighbors_active = (scratch[row_prev + x] > 200) as u8
+                    + (scratch[row_next + x] > 200) as u8
+                    + (scratch[row + x - 1] > 200) as u8
+                    + (scratch[row + x + 1] > 200) as u8;
+                if neighbors_active >= 3 {
+                    output[idx] = 200;
+                }
+            } else if val == 255 {
+                // Suppress floating noise speckles in background
+                let neighbors_zero = (scratch[row_prev + x] == 0) as u8
+                    + (scratch[row_next + x] == 0) as u8
+                    + (scratch[row + x - 1] == 0) as u8
+                    + (scratch[row + x + 1] == 0) as u8;
+                if neighbors_zero >= 3 {
+                    output[idx] = 0;
+                }
+            }
+        }
+    }
 }
 
 /// Unpacks RLE-encoded alpha bytes directly into a 32-bit RGBA mask buffer in a single pass.

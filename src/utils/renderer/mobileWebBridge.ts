@@ -262,34 +262,39 @@ export function generateCanvasBridgeHtml(
         var kr = parseInt(hex.slice(0, 2), 16) || 0;
         var kg = parseInt(hex.slice(2, 4), 16) || 0;
         var kb = parseInt(hex.slice(4, 6), 16) || 0;
-        var th = Math.max(0.02, (intensity !== undefined ? intensity : 45) / 100);
-        var fth = Math.max(0.01, (shadow !== undefined ? shadow : 25) / 100);
+        var th = Math.max(0.01, (intensity !== undefined ? intensity : 45) / 100);
+        var fth = Math.max(0.005, (shadow !== undefined ? shadow : 25) / 100);
         var thSq = th * th;
         var fthEnd = th + fth;
         var fthEndSq = fthEnd * fthEnd;
         var invFth = 1 / fth;
-        var inv255 = 1 / 255;
 
         for (var i = 0; i < data.length; i += 4) {
           var r = data[i], g = data[i + 1], b = data[i + 2];
-          var dr = (r - kr) * inv255, dg = (g - kg) * inv255, db = (b - kb) * inv255;
-          var distSq = dr * dr + dg * dg + db * db;
+          // Rec. 709 normalized perceptual color difference
+          var dr = (r - kr) * 0.2126;
+          var dg = (g - kg) * 0.7152;
+          var db = (b - kb) * 0.0722;
+          var distSq = (dr * dr + dg * dg + db * db) / 65025;
 
-          if (distSq < thSq) {
+          if (distSq <= thSq) {
             data[i + 3] = 0;
           } else if (distSq < fthEndSq) {
             var dist = Math.sqrt(distSq);
             var t = (dist - th) * invFth;
-            data[i + 3] = Math.round(data[i + 3] * t * t * (3 - 2 * t));
+            data[i + 3] = Math.round(data[i + 3] * Math.max(0, Math.min(1, t * t * (3 - 2 * t))));
           }
 
           if (despill && data[i + 3] > 0) {
             if (kg > kr && kg > kb) {
               var maxRB = r > b ? r : b;
-              if (g > maxRB) data[i + 1] = maxRB;
+              if (g > maxRB) data[i + 1] = Math.round(g * 0.35 + maxRB * 0.65);
             } else if (kb > kr && kb > kg) {
               var maxRG = r > g ? r : g;
-              if (b > maxRG) data[i + 2] = maxRG;
+              if (b > maxRG) data[i + 2] = Math.round(b * 0.35 + maxRG * 0.65);
+            } else if (kr > kg && kr > kb) {
+              var maxGB = g > b ? g : b;
+              if (r > maxGB) data[i] = Math.round(r * 0.35 + maxGB * 0.65);
             }
           }
         }
@@ -713,8 +718,10 @@ export function generateCanvasBridgeHtml(
               v.onerror = finish;
               setTimeout(finish, 15000);
             }));
-            mediaMap.set(clip.url, v);
             mediaMap.set(clip.id, v);
+            if (!mediaMap.has(clip.url)) {
+              mediaMap.set(clip.url, v);
+            }
 
             // Preload isolated Audio element for video soundtrack so canvas muting never silences the export
             if (!clip.muted) {
@@ -737,7 +744,9 @@ export function generateCanvasBridgeHtml(
                 setTimeout(finish, 15000);
               }));
               mediaMap.set("video_audio_" + clip.id, va);
-              mediaMap.set("video_audio_" + clip.url, va);
+              if (!mediaMap.has("video_audio_" + clip.url)) {
+                mediaMap.set("video_audio_" + clip.url, va);
+              }
             }
 
             if (clip.thumbnail) {
@@ -777,8 +786,10 @@ export function generateCanvasBridgeHtml(
               setTimeout(resolve, 500);
             }));
             img.src = clip.url;
-            mediaMap.set(clip.url, img);
             mediaMap.set(clip.id, img);
+            if (!mediaMap.has(clip.url)) {
+              mediaMap.set(clip.url, img);
+            }
           }
         }
 
@@ -887,7 +898,7 @@ export function generateCanvasBridgeHtml(
             videoClips.find(function(v) { return time >= v.startTime && time <= v.startTime + v.duration && !v.cutout?.enabled; }) ||
             videoClips[0];
           if (activeVid) {
-            blurMedia = mediaMap.get(activeVid.url) || mediaMap.get(activeVid.id);
+            blurMedia = mediaMap.get(activeVid.id) || (activeVid.sourceMediaId ? mediaMap.get(activeVid.sourceMediaId) : null) || mediaMap.get(activeVid.url);
           }
           if (blurMedia) {
             const mw = blurMedia.videoWidth || blurMedia.naturalWidth || blurMedia.width || width;
@@ -965,7 +976,7 @@ export function generateCanvasBridgeHtml(
           const item = activeVideoItems[vi];
           const vid = item.clip;
           ctx.save();
-          let el = mediaMap.get(vid.url) || mediaMap.get(vid.id);
+          let el = mediaMap.get(vid.id) || (vid.sourceMediaId ? mediaMap.get(vid.sourceMediaId) : null) || mediaMap.get(vid.url);
           const isVideo = el && el instanceof HTMLVideoElement;
           const isImage = el && el instanceof HTMLImageElement;
           const isVideoReady = isVideo && (el.videoWidth > 0 || el.readyState >= 1 || el.duration > 0);
@@ -1107,8 +1118,12 @@ export function generateCanvasBridgeHtml(
                   if (rleB64) {
                     const maskCanvas = unpackRleMaskToCanvas(rleB64);
                     if (maskCanvas) {
+                      tCtx.save();
+                      tCtx.imageSmoothingEnabled = true;
+                      tCtx.imageSmoothingQuality = "high";
                       tCtx.globalCompositeOperation = "destination-in";
                       tCtx.drawImage(maskCanvas, 0, 0, procW, procH);
+                      tCtx.restore();
                       tCtx.globalCompositeOperation = "source-over";
                       drawSource = cutoutSourceCanvas;
                       drawSx = 0; drawSy = 0; drawSw = procW; drawSh = procH;
@@ -2605,6 +2620,10 @@ export function generateCanvasBridgeHtml(
           return;
         }
 
+        try {
+          renderFrame(0);
+        } catch(e) {}
+
         var stream = null;
         var videoTrack = null;
         try {
@@ -2639,7 +2658,7 @@ export function generateCanvasBridgeHtml(
             for (const clip of videoClips) {
               if (clip.type === "video") {
                 const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-                const el = va || mediaMap.get(clip.url) || mediaMap.get(clip.id);
+                const el = va || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
                 if (el && (el instanceof HTMLAudioElement || el instanceof HTMLVideoElement)) {
                   try {
                     const source = audioCtx.createMediaElementSource(el);
@@ -2997,7 +3016,7 @@ export function generateCanvasBridgeHtml(
         for (var vi = 0; vi < videoClips.length; vi++) {
           var clip = videoClips[vi];
           if (clip.type !== "video") continue;
-          var el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
+          var el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
           if (el && el instanceof HTMLVideoElement) {
             el.muted = true;
             el.defaultMuted = true;
@@ -3028,7 +3047,7 @@ export function generateCanvasBridgeHtml(
           }
         }
         if (firstClip) {
-          var firstEl = mediaMap.get(firstClip.url) || mediaMap.get(firstClip.id) || (firstClip.sourceMediaId ? mediaMap.get(firstClip.sourceMediaId) : null);
+          var firstEl = mediaMap.get(firstClip.id) || (firstClip.sourceMediaId ? mediaMap.get(firstClip.sourceMediaId) : null) || mediaMap.get(firstClip.url);
           if (firstEl && firstEl instanceof HTMLVideoElement) {
             try {
               firstEl.currentTime = Math.max(0, firstClip.trimIn || 0);
@@ -3071,37 +3090,99 @@ export function generateCanvasBridgeHtml(
         renderFrame(0);
         sendToNative({ type: "CHUNK_START", mimeType: mimeType, extension: extension });
         sendToNative({ type: "PROGRESS", progress: 0, status: "Encoding video stream..." });
-        // Start recording with 1-second timeslice for optimal GOP compression and stable streaming
-        recorder.start(1000);
+        // Start recording with 250ms timeslice to stream chunks rapidly to native with minimal buffer bloat
+        recorder.start(250);
         const startTime = performance.now();
         durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         const targetFps = Math.max(1, EXPORT_OPTIONS.fps || 30);
-        const totalFrames = Math.max(1, Math.ceil(durationSec * targetFps));
-        const targetFrameInterval = 1 / targetFps;
         const targetFrameIntervalMs = 1000 / targetFps;
-        let frameIndex = 0;
 
         function tick() {
           try {
-            const curTime = Math.min(durationSec, frameIndex * targetFrameInterval);
+            const elapsedWallMs = performance.now() - startTime;
+            const curTime = Math.min(durationSec, elapsedWallMs / 1000);
+
+            if (elapsedWallMs >= durationSec * 1000 || curTime >= durationSec) {
+              renderFrame(durationSec);
+              sendToNative({ type: "PROGRESS", progress: 99, currentTime: durationSec, duration: durationSec });
+
+              // 1. Stop all media playback immediately
+              for (const clip of videoClips) {
+                const el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
+                if (el && el instanceof HTMLVideoElement && !el.paused) {
+                  try { el.pause(); } catch(e) {}
+                }
+                const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
+                if (va && va instanceof HTMLAudioElement && !va.paused) {
+                  try { va.pause(); } catch(e) {}
+                }
+              }
+              for (const clip of audioClips) {
+                const a = mediaMap.get("audio_" + clip.id);
+                if (a && a instanceof HTMLAudioElement && !a.paused) {
+                  try { a.pause(); } catch(e) {}
+                }
+              }
+
+              // 2. Immediately stop MediaStream tracks so encoder stops receiving frames
+              if (stream) {
+                try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
+              }
+
+              // 3. Stop MediaRecorder
+              if (recorder.state === "recording") {
+                try { recorder.stop(); } catch(e) {
+                  console.warn("[mobileWebBridge] Stop recorder error:", e);
+                }
+              }
+
+              // 4. Fallback watchdog timer (3.5s): If recorder.onstop fails to fire, force completion
+              if (!stopWatchdogTimer) {
+                stopWatchdogTimer = setTimeout(function() {
+                  if (!hasFinishedStop) {
+                    console.warn("[mobileWebBridge] Recorder onstop watchdog triggered fallback finalization");
+                    if (isTransferring || chunkQueue.length > 0) {
+                      transferDrainCb = finishStop;
+                      pumpTransferQueue();
+                    } else {
+                      finishStop();
+                    }
+                  }
+                }, 3500);
+              }
+              return;
+            }
 
           // Synchronize active video playback with exact seek and micro-adjustments
           for (const clip of videoClips) {
             if (clip.type !== "video") continue;
-            const el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
+            const el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
             if (!el || !(el instanceof HTMLVideoElement)) continue;
 
-            const isInside = curTime >= clip.startTime && curTime < clip.startTime + clip.duration;
-            const isApproaching = curTime >= clip.startTime - 0.75 && curTime < clip.startTime;
-
-            // Pre-roll / warm up upcoming clip so it starts seamlessly without freeze
-            if (isApproaching && !el._preRolled) {
-              el._preRolled = true;
-              el.muted = true;
-              el.defaultMuted = true;
-              el.currentTime = Math.max(0, clip.trimIn || 0);
-              el.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+            // Check if an incoming transition from a preceding clip requires this clip to play early
+            var transLead = 0;
+            for (var oi = 0; oi < videoClips.length; oi++) {
+              var other = videoClips[oi];
+              if (other.id !== clip.id && (other.trackIndex || 0) === (clip.trackIndex || 0)) {
+                var otherEnd = (other.startTime || 0) + (other.duration || 0);
+                var otherTrans = other.transition;
+                if (
+                  otherTrans &&
+                  otherTrans.duration > 0 &&
+                  otherTrans.type &&
+                  otherTrans.type !== "none" &&
+                  otherTrans.type !== "cut" &&
+                  Math.abs(otherEnd - clip.startTime) < 0.35
+                ) {
+                  transLead = otherTrans.duration;
+                  break;
+                }
+              }
             }
+
+            var activeStart = Math.max(0, clip.startTime - transLead);
+            var activeEnd = clip.startTime + clip.duration;
+            var isInside = curTime >= activeStart && curTime < activeEnd;
 
             const vGain = videoGainNodes.get(clip.id);
             if (vGain && audioCtx) {
@@ -3123,8 +3204,12 @@ export function generateCanvasBridgeHtml(
             }
 
             if (isInside) {
-              const clipLocalTime = Math.max(0, curTime - clip.startTime);
-              let speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
+              var clipLocalTime = Math.max(0, curTime - clip.startTime);
+              if (curTime < clip.startTime && transLead > 0) {
+                var transProg = Math.max(0, Math.min(1, (curTime - (clip.startTime - transLead)) / transLead));
+                clipLocalTime = transProg * transLead;
+              }
+              var speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
               if (clip.speedCurve) {
                 speed = evaluateSpeedCurveJs(clip.speedCurve, clipLocalTime / Math.max(0.1, clip.duration || 1));
               }
@@ -3149,9 +3234,8 @@ export function generateCanvasBridgeHtml(
               } else {
                 el._playStarted = false;
                 const drift = el.currentTime - targetTime;
-                // Only adjust playbackRate smoothly without decoder pipeline flushes
-                if (Math.abs(drift) > 0.02) {
-                  const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
+                if (Math.abs(drift) > 0.08) {
+                  const comp = Math.max(0.80, Math.min(1.20, 1 - drift * 0.4));
                   try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
                 } else if (Math.abs(el.playbackRate - speed) > 0.01) {
                   try { el.playbackRate = speed; } catch(e) {}
@@ -3172,9 +3256,11 @@ export function generateCanvasBridgeHtml(
                 } else {
                   va._playStarted = false;
                   const drift = va.currentTime - targetTime;
-                  if (Math.abs(drift) > 0.02) {
-                    const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.8));
+                  if (Math.abs(drift) > 0.08) {
+                    const comp = Math.max(0.80, Math.min(1.20, 1 - drift * 0.4));
                     try { va.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
+                  } else if (Math.abs(va.playbackRate - speed) > 0.01) {
+                    try { va.playbackRate = speed; } catch(e) {}
                   }
                 }
               }
@@ -3250,62 +3336,13 @@ export function generateCanvasBridgeHtml(
           }
 
           renderFrame(curTime);
-          if (videoTrack && typeof videoTrack.requestFrame === "function") {
-            try { videoTrack.requestFrame(); } catch(e) {}
-          }
 
-          frameIndex++;
-          const progress = Math.min(99, Math.floor((frameIndex / totalFrames) * 100));
+          const progress = Math.min(99, Math.floor((curTime / durationSec) * 100));
           sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });
 
-          if (frameIndex < totalFrames) {
-            const nextTargetWallMs = frameIndex * targetFrameIntervalMs;
-            const elapsedWallMs = performance.now() - startTime;
-            const delayMs = Math.max(0, Math.round(nextTargetWallMs - elapsedWallMs));
-            setTimeout(tick, delayMs);
-          } else {
-            sendToNative({ type: "PROGRESS", progress: 99, status: "Finalizing video file..." });
-
-            // 1. Stop all media playback
-            for (const clip of videoClips) {
-              const el = mediaMap.get(clip.url) || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null);
-              if (el && el instanceof HTMLVideoElement && !el.paused) {
-                try { el.pause(); } catch(e) {}
-              }
-              const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-              if (va && va instanceof HTMLAudioElement && !va.paused) {
-                try { va.pause(); } catch(e) {}
-              }
-            }
-            for (const clip of audioClips) {
-              const a = mediaMap.get("audio_" + clip.id);
-              if (a && a instanceof HTMLAudioElement && !a.paused) {
-                try { a.pause(); } catch(e) {}
-              }
-            }
-
-            // 2. Directly stop MediaRecorder WITHOUT requestData() (which causes Blink/WebKit state collisions)
-            if (recorder.state === "recording") {
-              try { recorder.stop(); } catch(e) {
-                console.warn("[mobileWebBridge] Stop recorder error:", e);
-              }
-            }
-
-            // 3. Fallback watchdog timer (3.5s): If recorder.onstop fails to fire, force completion
-            if (!stopWatchdogTimer) {
-              stopWatchdogTimer = setTimeout(function() {
-                if (!hasFinishedStop) {
-                  console.warn("[mobileWebBridge] Recorder onstop watchdog triggered fallback finalization");
-                  if (isTransferring || chunkQueue.length > 0) {
-                    transferDrainCb = finishStop;
-                    pumpTransferQueue();
-                  } else {
-                    finishStop();
-                  }
-                }
-              }, 3500);
-            }
-          }
+          const nextTargetWallMs = Math.floor(elapsedWallMs / targetFrameIntervalMs + 1) * targetFrameIntervalMs;
+          const delayMs = Math.max(4, Math.round(nextTargetWallMs - elapsedWallMs));
+          setTimeout(tick, delayMs);
         } catch (tickErr) {
           sendToNative({ type: "ERROR", message: String(tickErr && tickErr.message ? tickErr.message : tickErr) });
         }

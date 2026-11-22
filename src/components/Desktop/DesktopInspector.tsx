@@ -634,10 +634,10 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
       {isText && (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Text Content</Text>
-            <View style={styles.inputBox}>
+            <Text style={styles.sectionTitle}>Edit Text</Text>
+            <View style={styles.textAreaBox}>
               <TextInput
-                style={[styles.textInput, { minHeight: 60 }]}
+                style={styles.textAreaInput}
                 multiline
                 value={selectedClip?.text || ''}
                 onChangeText={(val: string) => {
@@ -646,12 +646,12 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                       const texts = project.tracks.text.map((t) =>
                         t.id === selectedClip.id ? { ...t, text: val } : t
                       );
-                      onUpdateProject({ tracks: { ...project.tracks, text: texts } });
+                      onUpdateProject({ ...project, tracks: { ...project.tracks, text: texts } });
                     } else if (project.tracks.captions?.some((c) => c.id === selectedClip.id)) {
                       const caps = project.tracks.captions.map((c) =>
                         c.id === selectedClip.id ? { ...c, text: val } : c
                       );
-                      onUpdateProject({ tracks: { ...project.tracks, captions: caps } });
+                      onUpdateProject({ ...project, tracks: { ...project.tracks, captions: caps } });
                     }
                   }
                 }}
@@ -850,6 +850,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     height: 30,
   },
+  textAreaBox: {
+    backgroundColor: THEME_COLORS.card,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.borderSubtle,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 76,
+    overflow: 'hidden',
+  },
+  textAreaInput: {
+    color: THEME_COLORS.textPrimary,
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    padding: 0,
+    minWidth: 0,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+  },
   inputPrefix: {
     color: THEME_COLORS.textMuted,
     fontSize: 11,
@@ -861,6 +882,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flex: 1,
     padding: 0,
+    minWidth: 0,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   chipsRow: {
     flexDirection: 'row',

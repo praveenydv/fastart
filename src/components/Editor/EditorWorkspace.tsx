@@ -358,6 +358,19 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const isHistoryOpen = propIsHistoryOpen !== undefined ? propIsHistoryOpen : localHistoryOpen;
   const setIsHistoryOpen = propSetIsHistoryOpen || setLocalHistoryOpen;
 
+  // Desktop panels state
+  const [desktopTab, setDesktopTab] =
+    React.useState<DesktopResourceTab>("media");
+  const [isMediaPanelCollapsed, setIsMediaPanelCollapsed] =
+    React.useState(false);
+  const [isConfigPanelExpanded, setIsConfigPanelExpanded] =
+    React.useState(true);
+  const [configPanelWidth, setConfigPanelWidth] = React.useState(320);
+  const [mediaPanelWidth, setMediaPanelWidth] = React.useState(260);
+  const [desktopPanelOrder, setDesktopPanelOrder] = React.useState<
+    "config_left" | "media_left"
+  >("media_left");
+
   const activeModalRef = React.useRef(activeModal);
   activeModalRef.current = activeModal;
 
@@ -401,6 +414,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
       const defaultMenu = CLIP_TYPE_DEFAULT_MENU[normalizedType];
       if (defaultMenu) {
+        setIsConfigPanelExpanded(true);
         openModal(defaultMenu);
       }
     },
@@ -410,6 +424,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       setSelectedClipId,
       setSelectedClipType,
       openModal,
+      setIsConfigPanelExpanded,
     ],
   );
 
@@ -501,12 +516,21 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         if (!isToolSupported) {
           const defaultMenu = CLIP_TYPE_DEFAULT_MENU[normalizedType];
           if (defaultMenu) {
+            setIsConfigPanelExpanded(true);
             openModal(defaultMenu);
           }
         }
+      } else {
+        if (normalizedType === "text") {
+          setIsConfigPanelExpanded(true);
+          openModal("text");
+        } else if (normalizedType === "caption") {
+          setIsConfigPanelExpanded(true);
+          openModal("captions");
+        }
       }
     },
-    [project, activeModal, openModal, setSelectedClipId, setSelectedClipType],
+    [project, activeModal, openModal, setSelectedClipId, setSelectedClipType, setIsConfigPanelExpanded],
   );
 
   const resolveActiveClipId = React.useCallback(
@@ -875,19 +899,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       setWorkspaceRealHeight(Math.round(layout.height));
     }
   }, []);
-
-  // Desktop: track which left-panel tab is open
-  const [desktopTab, setDesktopTab] =
-    React.useState<DesktopResourceTab>("media");
-  const [isMediaPanelCollapsed, setIsMediaPanelCollapsed] =
-    React.useState(false);
-  const [isConfigPanelExpanded, setIsConfigPanelExpanded] =
-    React.useState(true);
-  const [configPanelWidth, setConfigPanelWidth] = React.useState(320);
-  const [mediaPanelWidth, setMediaPanelWidth] = React.useState(260);
-  const [desktopPanelOrder, setDesktopPanelOrder] = React.useState<
-    "config_left" | "media_left"
-  >("media_left");
 
   const handleConfigResizeStart = React.useCallback(
     (e: any) => {

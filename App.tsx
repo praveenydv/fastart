@@ -116,6 +116,8 @@ export default function App() {
 
   // Modals that support interactive preview with cancel rollback
   const PREVIEW_MODALS = new Set([
+    "text",
+    "captions",
     "filters",
     "effects",
     "transitions",
@@ -301,14 +303,21 @@ export default function App() {
         (typeof Event !== "undefined" && updatedProject instanceof Event) ||
         (typeof window !== "undefined" && updatedProject === window) ||
         updatedProject.constructor?.name === "Window" ||
-        !updatedProject.id
+        (!updatedProject.id && !projectRef.current?.id)
       ) {
         return;
       }
+      const fullProj: FastArtProject = updatedProject.id
+        ? updatedProject
+        : {
+            ...projectRef.current,
+            ...updatedProject,
+            tracks: updatedProject.tracks || projectRef.current?.tracks,
+          };
       if (modalInitialSnapshotRef.current) {
-        updateProjectPreview(updatedProject);
+        updateProjectPreview(fullProj);
       } else {
-        updateProjectWithHistory(updatedProject);
+        updateProjectWithHistory(fullProj);
       }
     },
     [updateProjectPreview, updateProjectWithHistory],

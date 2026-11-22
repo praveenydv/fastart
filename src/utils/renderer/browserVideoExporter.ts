@@ -67,10 +67,135 @@ export async function exportBrowserVideo(
   // Set export mode for highest quality bicubic filtering
   exportRenderer.isExporting = true;
 
-  // Inherit preloaded media cache from the live player renderer so clips render immediately
-  if (renderer.videoElements) {
-    exportRenderer.videoElements = new Map(renderer.videoElements);
+  // Dedicated, isolated video and image element instances for export:
+  // Each project clip gets its own independent HTMLVideoElement keyed by clip.id,
+  // preventing play/pause collisions across multiple clips, split segments, or transitions,
+  // and ensuring the live preview player's media cache is never corrupted or destroyed!
+  exportRenderer.videoElements = new Map();
+  const createdExportMediaElements: (HTMLVideoElement | HTMLImageElement)[] = [];
+
+  const videoClips = project.tracks?.video || [];
+  for (let i = 0; i < videoClips.length; i++) {
+    const clip = videoClips[i];
+    if (!clip || !clip.url) continue;
+    const clipKey = clip.id || `export_clip_${i}`;
+
+    if (clip.type === "video") {
+      const vid = document.createElement("video");
+      vid.muted = true;
+      vid.defaultMuted = true;
+      vid.playsInline = true;
+      (vid as any).playsinline = true;
+      vid.preload = "auto";
+      if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
+        vid.crossOrigin = "anonymous";
+      }
+      vid.src = clip.url;
+      try {
+        vid.load();
+      } catch (e) {}
+      if (domContainer) {
+        domContainer.appendChild(vid);
+      }
+      createdExportMediaElements.push(vid);
+      exportRenderer.videoElements.set(clipKey, vid);
+      if (clip.id) exportRenderer.videoElements.set(clip.id, vid);
+      if (clip.sourceMediaId) exportRenderer.videoElements.set(clip.sourceMediaId, vid);
+      if (!exportRenderer.videoElements.has(clip.url)) {
+        exportRenderer.videoElements.set(clip.url, vid);
+      }
+    } else {
+      const img = new Image();
+      if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
+        img.crossOrigin = "anonymous";
+      }
+      img.src = clip.url;
+      createdExportMediaElements.push(img);
+      exportRenderer.videoElements.set(clipKey, img);
+      if (clip.id) exportRenderer.videoElements.set(clip.id, img);
+      if (!exportRenderer.videoElements.has(clip.url)) {
+        exportRenderer.videoElements.set(clip.url, img);
+      }
+    }
   }
+
+  // Pre-cue all media elements to readyState >= 2 and exact trimIn before rendering frame 0
+  const cuePromises = (project.tracks.video || []).map(async (c, idx) => {
+    if (!c) return;
+    const clipKey = c.id || `export_clip_${idx}`;
+    if (c.type !== "video") {
+      const img =
+        (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+        exportRenderer.videoElements.get(clipKey) ||
+        exportRenderer.videoElements.get(c.url);
+      if (img && img instanceof HTMLImageElement && !img.complete) {
+        await new Promise<void>((res) => {
+          img.onload = () => res();
+          img.onerror = () => res();
+          setTimeout(res, 2500);
+        });
+      }
+      return;
+    }
+    const el =
+      (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+      (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+      exportRenderer.videoElements.get(clipKey) ||
+      exportRenderer.videoElements.get(c.url);
+    if (el && el instanceof HTMLVideoElement) {
+      el.muted = true;
+      el.defaultMuted = true;
+      const targetTrim = c.reverse
+        ? (c.trimOut || (c.trimIn || 0) + (c.duration || 0))
+        : Math.max(0, c.trimIn || 0);
+      el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
+
+      // Ensure video has loaded data before seeking
+      if (el.readyState < 2) {
+        await new Promise<void>((res) => {
+          let done = false;
+          const onReady = () => {
+            if (!done) {
+              done = true;
+              el.removeEventListener("loadeddata", onReady);
+              el.removeEventListener("canplay", onReady);
+              res();
+            }
+          };
+          el.addEventListener("loadeddata", onReady, { once: true });
+          el.addEventListener("canplay", onReady, { once: true });
+          setTimeout(onReady, 2500);
+        });
+      }
+
+      if (Math.abs(el.currentTime - targetTrim) > 0.04 || el.seeking) {
+        await new Promise<void>((res) => {
+          let done = false;
+          const onSeek = () => {
+            if (!done) {
+              done = true;
+              el.removeEventListener("seeked", onSeek);
+              res();
+            }
+          };
+          el.addEventListener("seeked", onSeek, { once: true });
+          try {
+            el.currentTime = targetTrim;
+          } catch {
+            onSeek();
+          }
+          setTimeout(onSeek, 2500);
+        });
+      }
+      try {
+        el.pause();
+      } catch (e) {}
+      (el as any)._isExportStarted = false;
+      (el as any)._isPlayPending = false;
+    }
+  });
+  await Promise.all(cuePromises);
+
   if ((renderer as any).thumbnailElements) {
     exportRenderer.thumbnailElements = new Map((renderer as any).thumbnailElements);
   }
@@ -78,23 +203,6 @@ export async function exportBrowserVideo(
     exportRenderer.bgImageElements = new Map((renderer as any).bgImageElements);
   }
 
-  onProgress?.(0, 0, duration);
-
-  // Guarantee all project clips are preloaded before recording begins
-  const videoClips = project.tracks?.video || [];
-  const preloadPromises = videoClips.map(async (clip) => {
-    if (!exportRenderer.videoElements.has(clip.url) && !exportRenderer.videoElements.has(clip.id)) {
-      try {
-        await Promise.race([
-          exportRenderer.preloadClip(clip),
-          new Promise((r) => setTimeout(r, 1000)), // Fast 1.0s timeout prevents slow assets from blocking export
-        ]);
-      } catch (e) {
-        console.warn("[browserVideoExporter] Preload clip error:", e);
-      }
-    }
-  });
-  await Promise.all(preloadPromises);
   onProgress?.(0, 0, duration);
 
   const exportLogicalW =
@@ -382,11 +490,18 @@ export async function exportBrowserVideo(
         } catch (e) {}
         audioCtx = null;
       }
-      if (typeof exportRenderer.cleanup === "function") {
-        try {
-          exportRenderer.cleanup();
-        } catch (e) {}
-      }
+      createdExportMediaElements.forEach((el) => {
+        if (el instanceof HTMLVideoElement) {
+          try {
+            el.pause();
+            el.removeAttribute("src");
+            el.load();
+            if (el.parentNode) el.parentNode.removeChild(el);
+          } catch (e) {}
+        }
+      });
+      createdExportMediaElements.length = 0;
+      exportRenderer.videoElements.clear();
       try {
         const { setActiveVideoRenderer } = require("../videoRenderer");
         if (typeof setActiveVideoRenderer === "function") {
@@ -421,28 +536,13 @@ export async function exportBrowserVideo(
           recordedChunks.length = 0;
           finalBlob = rawBlob;
 
-          // Header duration metadata (moov/mvhd/tkhd or EBML Segment Info) resides strictly
-          // within the container header. Slicing only the first 128KB prevents duplicating
-          // the entire video file in RAM as a contiguous ArrayBuffer.
-          const HEADER_SCAN_LIMIT = 131072;
           try {
-            if (rawBlob.size <= HEADER_SCAN_LIMIT) {
-              const rawBuffer = await rawBlob.arrayBuffer();
-              const patchedBytes = patchMediaContainerDuration(
-                new Uint8Array(rawBuffer),
-                duration
-              );
-              finalBlob = new Blob([patchedBytes as any], { type: mimeType });
-            } else {
-              const headerBlob = rawBlob.slice(0, HEADER_SCAN_LIMIT);
-              const headerBuffer = await headerBlob.arrayBuffer();
-              const patchedHeader = patchMediaContainerDuration(
-                new Uint8Array(headerBuffer),
-                duration
-              );
-              const remainderBlob = rawBlob.slice(HEADER_SCAN_LIMIT);
-              finalBlob = new Blob([patchedHeader as any, remainderBlob], { type: mimeType });
-            }
+            const rawBuffer = await rawBlob.arrayBuffer();
+            const patchedBytes = patchMediaContainerDuration(
+              new Uint8Array(rawBuffer),
+              duration
+            );
+            finalBlob = new Blob([patchedBytes as any], { type: mimeType });
           } catch (patchErr) {
             console.warn("[browserVideoExporter] Container duration patch warning:", patchErr);
             finalBlob = rawBlob;
@@ -479,76 +579,6 @@ export async function exportBrowserVideo(
       reject(err);
     };
 
-    // Cue all video elements to exact trimIn, muted state, and initial speed before recording begins
-    const cuePromises = (project.tracks.video || []).map(async (c) => {
-      const el =
-        (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
-        (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
-        exportRenderer.videoElements.get(c.url);
-      if (el && el instanceof HTMLVideoElement) {
-        el.muted = true;
-        el.defaultMuted = true;
-        const targetTrim = Math.max(0, c.trimIn || 0);
-        el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
-        if (Math.abs(el.currentTime - targetTrim) > 0.05) {
-          await new Promise<void>((res) => {
-            let done = false;
-            const onSeek = () => {
-              if (!done) {
-                done = true;
-                el.removeEventListener("seeked", onSeek);
-                res();
-              }
-            };
-            el.addEventListener("seeked", onSeek, { once: true });
-            try {
-              el.currentTime = targetTrim;
-            } catch {
-              onSeek();
-            }
-            setTimeout(onSeek, 250);
-          });
-        }
-        try {
-          el.pause();
-        } catch (e) {}
-        (el as any)._preRolled = false;
-      }
-    });
-    await Promise.all(cuePromises);
-
-    // Ensure initial active video clip has decoded frames ready
-    const firstActiveVideoClip = (project.tracks.video || []).find(
-      (c) => (c.startTime || 0) <= 0.05 && c.type === "video"
-    );
-    if (firstActiveVideoClip) {
-      const el =
-        (firstActiveVideoClip.id ? exportRenderer.videoElements.get(firstActiveVideoClip.id) : null) ||
-        (firstActiveVideoClip.sourceMediaId ? exportRenderer.videoElements.get(firstActiveVideoClip.sourceMediaId) : null) ||
-        exportRenderer.videoElements.get(firstActiveVideoClip.url);
-      if (el && el instanceof HTMLVideoElement) {
-        el.muted = true;
-        el.defaultMuted = true;
-        el.currentTime = Math.max(0, firstActiveVideoClip.trimIn || 0);
-        el.playbackRate = Math.max(0.1, Math.min(16, firstActiveVideoClip.speed || 1.0));
-        if (el.readyState < 2) {
-          await new Promise<void>((res) => {
-            const onReady = () => {
-              el.removeEventListener("loadeddata", onReady);
-              el.removeEventListener("canplay", onReady);
-              res();
-            };
-            el.addEventListener("loadeddata", onReady, { once: true });
-            el.addEventListener("canplay", onReady, { once: true });
-            setTimeout(res, 300);
-          });
-        }
-      }
-    }
-
-    // Start recording with 1-second timeslice for optimal GOP compression and smooth streaming
-    mediaRecorder.start(1000);
-
     // Start studio audio stream synchronously
     if (audioSourceNode) {
       try {
@@ -556,23 +586,32 @@ export async function exportBrowserVideo(
       } catch (e) {}
     }
 
-    // Start first active video clip playback synchronously with recording
-    if (firstActiveVideoClip) {
+    // Start initial active video clips (startTime <= 0.05) synchronously with recording
+    const initialClips = (project.tracks.video || []).filter(
+      (c) => (c.startTime || 0) <= 0.05 && c.type === "video"
+    );
+    for (const initClip of initialClips) {
       const el =
-        (firstActiveVideoClip.id ? exportRenderer.videoElements.get(firstActiveVideoClip.id) : null) ||
-        (firstActiveVideoClip.sourceMediaId ? exportRenderer.videoElements.get(firstActiveVideoClip.sourceMediaId) : null) ||
-        exportRenderer.videoElements.get(firstActiveVideoClip.url);
+        (initClip.id ? exportRenderer.videoElements.get(initClip.id) : null) ||
+        (initClip.sourceMediaId ? exportRenderer.videoElements.get(initClip.sourceMediaId) : null) ||
+        exportRenderer.videoElements.get(initClip.url);
       if (el && el instanceof HTMLVideoElement) {
+        (el as any)._isExportStarted = true;
+        (el as any)._isPlayPending = false;
         el.play().catch(() => {});
       }
     }
 
+    // Render frame 0 with isPlaying=true immediately before starting recorder
+    exportRenderer.renderFrame(project, 0, true, exportLogicalW, exportLogicalH);
+
+    // Start recording with 250ms timeslice: continuously streams chunks to JS to keep
+    // Chromium's native encoder memory strictly bounded (< 20 MB) with zero frame accumulation
+    mediaRecorder.start(250);
+
     const recStartTime = performance.now();
     let completed = false;
-    const totalFrames = Math.max(1, Math.ceil(duration * fps));
-    const targetFrameInterval = 1 / Math.max(1, fps);
     const targetFrameIntervalMs = 1000 / Math.max(1, fps);
-    let frameIndex = 0;
 
     const renderTick = () => {
       if (completed || isAborted) return;
@@ -591,88 +630,18 @@ export async function exportBrowserVideo(
           return;
         }
 
-        const curTime = Math.min(duration, frameIndex * targetFrameInterval);
+        const elapsedWallMs = performance.now() - recStartTime;
+        const curTime = Math.min(duration, elapsedWallMs / 1000);
 
-        // Synchronize and pre-roll video elements with smooth drift compensation
-        (project.tracks.video || []).forEach((c) => {
-          if (c.type !== "video") return;
-          const el =
-            (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
-            (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
-            exportRenderer.videoElements.get(c.url);
-          if (!el || !(el instanceof HTMLVideoElement)) return;
-
-          const isInside = curTime >= c.startTime && curTime < c.startTime + c.duration;
-          // Pre-roll warm playback 350ms before cut (or during incoming transition)
-          const isApproaching = curTime >= c.startTime - 0.35 && curTime < c.startTime;
-
-          if (isApproaching) {
-            if (!(el as any)._preRolled) {
-              (el as any)._preRolled = true;
-              el.muted = true;
-              el.defaultMuted = true;
-              el.currentTime = Math.max(0, c.trimIn || 0);
-              el.playbackRate = Math.max(0.1, Math.min(16, c.speed || 1.0));
-              el.play().catch(() => {});
-            }
-          }
-
-          if (isInside) {
-            const clipLocalTime = Math.max(0, curTime - c.startTime);
-            let speed = Math.max(0.1, Math.min(16, c.speed || 1.0));
-            if (c.speedCurve) {
-              speed = exportRenderer.evaluateSpeedCurve(c.speedCurve, clipLocalTime / Math.max(0.1, c.duration));
-            }
-            const expectedMediaTime = (c.trimIn || 0) + clipLocalTime * speed;
-            const drift = el.currentTime - expectedMediaTime;
-
-            if (el.paused) {
-              el.playbackRate = speed;
-              el.play().catch(() => {});
-            } else {
-              // Smooth micro-adjustment via playbackRate WITHOUT decoder-flushing hard seeks
-              if (Math.abs(drift) > 1.2) {
-                try { el.currentTime = expectedMediaTime; } catch {}
-              } else if (Math.abs(drift) > 0.04) {
-                const comp = Math.max(0.85, Math.min(1.15, 1 - drift * 0.4));
-                try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
-              } else if (Math.abs(el.playbackRate - speed) > 0.01) {
-                el.playbackRate = speed;
-              }
-            }
-          } else if (!isApproaching && !el.paused) {
-            (el as any)._preRolled = false;
-            try { el.pause(); } catch {}
-          }
-        });
-
-        // Render live frame at exact timeline timestamp
-        exportRenderer.renderFrame(project, curTime, true, exportLogicalW, exportLogicalH);
-
-        // Prompt stream track to deliver updated frame immediately
-        if (videoTrack && typeof videoTrack.requestFrame === "function") {
-          try {
-            videoTrack.requestFrame();
-          } catch (e) {}
-        }
-
-        frameIndex++;
-        if (onProgress) {
-          const percent = Math.min(99, Math.floor((frameIndex / totalFrames) * 100));
-          onProgress(percent, curTime, duration);
-        }
-
-        if (frameIndex < totalFrames) {
-          // Precise next-frame pacing: self-correcting wall-clock timer schedule
-          const nextTargetWallMs = frameIndex * targetFrameIntervalMs;
-          const elapsedWallMs = performance.now() - recStartTime;
-          const delayMs = Math.max(0, Math.round(nextTargetWallMs - elapsedWallMs));
-          setTimeout(renderTick, delayMs);
-        } else {
+        // Check if recording duration has been reached
+        if (elapsedWallMs >= duration * 1000 || curTime >= duration) {
           completed = true;
+
+          // Render exact final frame
+          exportRenderer.renderFrame(project, duration, true, exportLogicalW, exportLogicalH);
           if (onProgress) onProgress(99, duration, duration);
 
-          // 1. Pause video elements
+          // 1. Immediately pause video elements
           (project.tracks.video || []).forEach((c) => {
             const el =
               (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
@@ -692,7 +661,14 @@ export async function exportBrowserVideo(
             } catch {}
           }
 
-          // 3. Stop MediaRecorder FIRST so Chromium encodes all pending frames cleanly
+          // 3. Immediately stop all MediaStream tracks so encoder stops receiving frames
+          if (stream) {
+            try {
+              stream.getTracks().forEach((track: any) => track.stop());
+            } catch (e) {}
+          }
+
+          // 4. Stop MediaRecorder FIRST so Chromium encodes all pending frames cleanly
           if (mediaRecorder.state === "recording") {
             try {
               mediaRecorder.stop();
@@ -701,7 +677,7 @@ export async function exportBrowserVideo(
             }
           }
 
-          // 4. Fail-safe watchdog (3.5s): If mediaRecorder.onstop fails to fire, force completion
+          // 5. Fail-safe watchdog (3.5s): If mediaRecorder.onstop fails to fire, force completion
           if (!stopWatchdogTimer) {
             stopWatchdogTimer = setTimeout(() => {
               if (!hasFinalized) {
@@ -710,7 +686,127 @@ export async function exportBrowserVideo(
               }
             }, 3500);
           }
+          return;
         }
+
+        const videoClips = project.tracks.video || [];
+
+        // Synchronize video element playback across timeline cuts and transitions
+        for (let i = 0; i < videoClips.length; i++) {
+          const c = videoClips[i];
+          if (c.type !== "video") continue;
+          const el =
+            (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+            (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+            exportRenderer.videoElements.get(c.url);
+          if (!el || !(el instanceof HTMLVideoElement)) continue;
+
+          // Check if an incoming transition from a preceding clip on the same track requires this clip to play early
+          let transLead = 0;
+          for (let j = 0; j < videoClips.length; j++) {
+            const other = videoClips[j];
+            if (other.id !== c.id && (other.trackIndex || 0) === (c.trackIndex || 0)) {
+              const otherEnd = (other.startTime || 0) + (other.duration || 0);
+              const otherTrans = other.transition;
+              if (
+                otherTrans &&
+                otherTrans.duration > 0 &&
+                otherTrans.type &&
+                otherTrans.type !== "none" &&
+                otherTrans.type !== "cut" &&
+                Math.abs(otherEnd - c.startTime) < 0.35
+              ) {
+                transLead = otherTrans.duration;
+                break;
+              }
+            }
+          }
+
+          const activeStart = Math.max(0, c.startTime - transLead);
+          const activeEnd = c.startTime + c.duration;
+          const isInside = curTime >= activeStart && curTime < activeEnd;
+
+          // Pre-cue upcoming clip if it drifted while dormant so it's ready at the cut
+          const isApproaching = curTime >= c.startTime - 1.0 && curTime < c.startTime;
+          if (isApproaching && el.paused && !el.seeking) {
+            const targetTrim = c.reverse
+              ? (c.trimOut || (c.trimIn || 0) + (c.duration || 0))
+              : Math.max(0, c.trimIn || 0);
+            if (Math.abs(el.currentTime - targetTrim) > 0.05) {
+              try { el.currentTime = targetTrim; } catch {}
+            }
+          }
+
+          if (isInside) {
+            let clipLocalTime = Math.max(0, curTime - c.startTime);
+            if (curTime < c.startTime && transLead > 0) {
+              const transProg = Math.max(0, Math.min(1, (curTime - (c.startTime - transLead)) / transLead));
+              clipLocalTime = transProg * transLead;
+            }
+            let speed = Math.max(0.1, Math.min(16, c.speed || 1.0));
+            if (c.speedCurve) {
+              speed = exportRenderer.evaluateSpeedCurve(c.speedCurve, clipLocalTime / Math.max(0.1, c.duration));
+            }
+            const rawMediaTime = c.reverse
+              ? Math.max(0, (c.trimOut || (c.trimIn || 0) + (c.duration || 0)) - clipLocalTime * speed)
+              : (c.trimIn || 0) + clipLocalTime * speed;
+            const expectedMediaTime = el.duration && el.duration > 0
+              ? Math.min(el.duration, Math.max(0, rawMediaTime))
+              : Math.max(0, rawMediaTime);
+
+            if (el.paused) {
+              if (!(el as any)._isPlayPending) {
+                (el as any)._isPlayPending = true;
+                if (Math.abs(el.currentTime - expectedMediaTime) > 0.05) {
+                  try { el.currentTime = expectedMediaTime; } catch {}
+                }
+                el.playbackRate = speed;
+                const p = el.play();
+                if (p && typeof p.then === "function") {
+                  p.then(() => {
+                    (el as any)._isPlayPending = false;
+                  }).catch(() => {
+                    (el as any)._isPlayPending = false;
+                  });
+                } else {
+                  (el as any)._isPlayPending = false;
+                }
+              }
+            } else {
+              (el as any)._isPlayPending = false;
+              const drift = el.currentTime - expectedMediaTime;
+              // Smooth micro-adjustment via playbackRate WITHOUT decoder-flushing hard seeks.
+              // Hard seeking during playback flushes the hardware decoder pipeline, stalling frames!
+              if (Math.abs(drift) > 0.08) {
+                const comp = Math.max(0.80, Math.min(1.20, 1 - drift * 0.4));
+                try {
+                  el.playbackRate = Math.max(0.1, Math.min(16, speed * comp));
+                } catch {}
+              } else if (Math.abs(el.playbackRate - speed) > 0.01) {
+                el.playbackRate = speed;
+              }
+            }
+          } else {
+            (el as any)._isExportStarted = false;
+            (el as any)._isPlayPending = false;
+            if (!el.paused) {
+              try { el.pause(); } catch {}
+            }
+          }
+        }
+
+        // Render live frame at exact timeline timestamp
+        exportRenderer.renderFrame(project, curTime, true, exportLogicalW, exportLogicalH);
+
+        if (onProgress) {
+          const percent = Math.min(99, Math.floor((curTime / duration) * 100));
+          onProgress(percent, curTime, duration);
+        }
+
+        // Precise next-frame pacing: self-correcting wall-clock timer schedule
+        const nextTargetWallMs = Math.floor(elapsedWallMs / targetFrameIntervalMs + 1) * targetFrameIntervalMs;
+        const delayMs = Math.max(4, Math.round(nextTargetWallMs - elapsedWallMs));
+        setTimeout(renderTick, delayMs);
       } catch (renderErr) {
         isAborted = true;
         completed = true;
@@ -719,21 +815,7 @@ export async function exportBrowserVideo(
       }
     };
 
-    let initialScheduled = false;
-    const initialTimer = setTimeout(() => {
-      if (!initialScheduled) {
-        initialScheduled = true;
-        renderTick();
-      }
-    }, 16);
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => {
-        if (!initialScheduled) {
-          initialScheduled = true;
-          clearTimeout(initialTimer);
-          renderTick();
-        }
-      });
-    }
+    // Synchronously execute frame 0 so the recorder captures the pristine, cued initial frame
+    renderTick();
   });
 }

@@ -42,7 +42,7 @@ export function cleanupMedia(
   ctx: MediaSyncContext,
   offscreenCanvas?: HTMLCanvasElement | null,
 ) {
-  ctx.videoElements.forEach((el) => {
+  ctx.videoElements.forEach((el, key) => {
     if (el instanceof HTMLVideoElement) {
       try {
         el.pause();
@@ -53,9 +53,11 @@ export function cleanupMedia(
         }
       } catch (e) {}
     }
+    if (globalActiveVideoElements.get(key) === el) {
+      globalActiveVideoElements.delete(key);
+    }
   });
   ctx.videoElements.clear();
-  globalActiveVideoElements.clear();
   ctx.thumbnailElements.clear();
   ctx.lastUsedTimestamp.clear();
   if (offscreenCanvas) {

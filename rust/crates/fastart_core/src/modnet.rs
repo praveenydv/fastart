@@ -137,11 +137,29 @@ pub fn infer_modnet_rgba(
     let mut matte_rgba = vec![0; MODNET_OUTPUT_FLOATS * 4];
     process_modnet_output_tensor(&alpha, &mut matte_rgba, threshold, feather);
     let mut output = vec![0; pixels];
+    let scale_x = 512.0f32 / width as f32;
+    let scale_y = 512.0f32 / height as f32;
     for y in 0..height {
-        let source_y = y * 512 / height;
+        let sy = (y as f32 * scale_y).clamp(0.0, 511.0);
+        let y0 = sy.floor() as usize;
+        let y1 = (y0 + 1).min(511);
+        let ty = sy - y0 as f32;
+        let row0 = y0 * 512;
+        let row1 = y1 * 512;
         for x in 0..width {
-            let source_x = x * 512 / width;
-            output[y * width + x] = matte_rgba[(source_y * 512 + source_x) * 4 + 3];
+            let sx = (x as f32 * scale_x).clamp(0.0, 511.0);
+            let x0 = sx.floor() as usize;
+            let x1 = (x0 + 1).min(511);
+            let tx = sx - x0 as f32;
+
+            let a00 = matte_rgba[(row0 + x0) * 4 + 3] as f32;
+            let a10 = matte_rgba[(row0 + x1) * 4 + 3] as f32;
+            let a01 = matte_rgba[(row1 + x0) * 4 + 3] as f32;
+            let a11 = matte_rgba[(row1 + x1) * 4 + 3] as f32;
+
+            let a = (a00 * (1.0 - tx) + a10 * tx) * (1.0 - ty)
+                + (a01 * (1.0 - tx) + a11 * tx) * ty;
+            output[y * width + x] = (a.round().clamp(0.0, 255.0)) as u8;
         }
     }
     Ok(output)

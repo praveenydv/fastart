@@ -991,7 +991,7 @@ export class VideoRenderer {
       }
     });
 
-    if (this.canvas && canvasW > 0 && canvasH > 0 && typeof document !== "undefined") {
+    if (!this.isExporting && this.canvas && canvasW > 0 && canvasH > 0 && typeof document !== "undefined") {
       try {
         if (!this.snapshotCanvas) {
           this.snapshotCanvas = document.createElement("canvas");

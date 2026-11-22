@@ -67,6 +67,8 @@ export default function TextModal({
   const lastLoadedClipIdRef = useRef<string | null>(null);
   const wasVisibleRef = useRef<boolean>(false);
   const isInitialLoadRef = useRef<boolean>(true);
+  const editingClipRef = useRef(editingClip);
+  editingClipRef.current = editingClip;
 
   const [isListening, setIsListening] = useState(false);
   const recognitionSessionRef = useRef<{ stop: () => void } | null>(null);
@@ -233,18 +235,19 @@ export default function TextModal({
 
   // Live apply updates directly to editingClip in real time
   useEffect(() => {
-    if (!visible || !editingClip || !onUpdateText) return;
+    const target = editingClipRef.current || editingClip;
+    if (!visible || !target || !onUpdateText) return;
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
       return;
     }
 
     const baseStyle = buildBaseStyle();
-    let updatedWords = (editingClip as any).words;
+    let updatedWords = (target as any).words;
     if (updatedWords && inputText.trim()) {
       const newWordStrings = inputText.trim().split(/\s+/).filter(Boolean);
-      const clipStart = editingClip.startTime || 0;
-      const clipDur = duration || editingClip.duration || 3.0;
+      const clipStart = target.startTime || 0;
+      const clipDur = duration || target.duration || 3.0;
       const wDur = clipDur / Math.max(1, newWordStrings.length);
       updatedWords = newWordStrings.map((w: string, wIdx: number) => ({
         word: w,
@@ -254,16 +257,16 @@ export default function TextModal({
     }
 
     const updatedClip: TextClip = {
-      ...editingClip,
+      ...target,
       text: inputText,
-      duration: duration || editingClip.duration || 3.0,
-      animation: editingClip.animation,
-      scale: editingClip.scale ?? selectedScale,
-      rotation: editingClip.rotation ?? selectedRotation,
-      position: editingClip.position ?? selectedPosition,
+      duration: duration || target.duration || 3.0,
+      animation: target.animation,
+      scale: selectedScale ?? target.scale ?? 1.0,
+      rotation: selectedRotation ?? target.rotation ?? 0,
+      position: selectedPosition ?? target.position ?? { x: 50, y: 35 },
       ...(updatedWords ? { words: updatedWords } : {}),
       style: {
-        ...editingClip.style,
+        ...target.style,
         ...baseStyle,
       },
     };
@@ -278,6 +281,9 @@ export default function TextModal({
     selectedTextEffect,
     selectedStrokeColor,
     selectedStrokeWidth,
+    selectedScale,
+    selectedRotation,
+    selectedPosition,
     duration,
   ]);
 

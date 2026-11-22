@@ -251,8 +251,8 @@ function CutoutModalComponent({
       const isAuto = (previewConfig.mode || "auto") === "auto";
       const rawThresh = (previewConfig.intensity ?? 45) / 100;
       const rawFeath = (previewConfig.shadow ?? 25) / 100;
-      const threshold = isAuto ? Math.max(0.02, 0.02 + rawThresh * 0.15) : rawThresh;
-      const feather = isAuto ? Math.max(0.20, 0.40 + rawFeath * 0.45) : rawFeath;
+      const threshold = isAuto ? Math.max(0.01, 0.01 + rawThresh * 0.08) : rawThresh;
+      const feather = isAuto ? Math.max(0.55, 0.65 + rawFeath * 0.30) : rawFeath;
       const ok = await processClipUnified(
         clip.url,
         id,
@@ -299,8 +299,8 @@ function CutoutModalComponent({
       if (config.enabled && config.mode === "auto" && newConfig.mode === "auto" && clipId) {
         const rawIntensity = newConfig.intensity ?? 45;
         const rawShadow = newConfig.shadow ?? 25;
-        const thresh = Math.max(0.02, 0.02 + (rawIntensity / 100) * 0.15);
-        const feat = Math.max(0.20, 0.40 + (rawShadow / 100) * 0.45);
+        const thresh = Math.max(0.01, 0.01 + (rawIntensity / 100) * 0.08);
+        const feat = Math.max(0.55, 0.65 + (rawShadow / 100) * 0.30);
         updateActiveFrameMatteParams(
           clipId,
           frameIdx,
