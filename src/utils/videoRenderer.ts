@@ -959,9 +959,19 @@ export class VideoRenderer {
         const clipToDraw: CaptionClip = isOverridden
           ? {
               ...item.clip,
-              position: { x: transientOverride!.x, y: transientOverride!.y },
-              scale: transientOverride!.scale,
-              rotation: transientOverride!.rotation,
+              position: {
+                x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.position?.x ?? 50),
+                y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.position?.y ?? 82),
+              },
+              scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.scale ?? 1.0),
+              rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.rotation ?? 0),
+              transform: {
+                ...(item.clip.transform || {}),
+                x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.transform?.x ?? item.clip.position?.x ?? 50),
+                y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.transform?.y ?? item.clip.position?.y ?? 82),
+                scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.transform?.scale ?? item.clip.scale ?? 1.0),
+                rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.transform?.rotation ?? item.clip.rotation ?? 0),
+              },
               keyframes: undefined,
               motionTrack: effectiveTrack || item.clip.motionTrack,
             }
@@ -977,9 +987,19 @@ export class VideoRenderer {
         const clipToDraw: TextClip = isOverridden
           ? {
               ...item.clip,
-              position: { x: transientOverride!.x, y: transientOverride!.y },
-              scale: transientOverride!.scale,
-              rotation: transientOverride!.rotation,
+              position: {
+                x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.position?.x ?? 50),
+                y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.position?.y ?? 35),
+              },
+              scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.scale ?? 1.0),
+              rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.rotation ?? 0),
+              transform: {
+                ...(item.clip.transform || {}),
+                x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.transform?.x ?? item.clip.position?.x ?? 50),
+                y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.transform?.y ?? item.clip.position?.y ?? 35),
+                scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.transform?.scale ?? item.clip.scale ?? 1.0),
+                rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.transform?.rotation ?? item.clip.rotation ?? 0),
+              },
               keyframes: undefined,
               motionTrack: effectiveTrack || item.clip.motionTrack,
             }
@@ -995,9 +1015,19 @@ export class VideoRenderer {
         const clipToDraw: StickerClip = isOverridden
           ? {
               ...item.clip,
-              position: { x: transientOverride!.x, y: transientOverride!.y },
-              scale: transientOverride!.scale,
-              rotation: transientOverride!.rotation,
+              position: {
+                x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.position?.x ?? 50),
+                y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.position?.y ?? 50),
+              },
+              scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.scale ?? 1.0),
+              rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.rotation ?? 0),
+              transform: {
+                ...(item.clip.transform || {}),
+                x: transientOverride!.x !== undefined ? transientOverride!.x : (item.clip.transform?.x ?? item.clip.position?.x ?? 50),
+                y: transientOverride!.y !== undefined ? transientOverride!.y : (item.clip.transform?.y ?? item.clip.position?.y ?? 50),
+                scale: transientOverride!.scale !== undefined ? transientOverride!.scale : (item.clip.transform?.scale ?? item.clip.scale ?? 1.0),
+                rotation: transientOverride!.rotation !== undefined ? transientOverride!.rotation : (item.clip.transform?.rotation ?? item.clip.rotation ?? 0),
+              },
               keyframes: undefined,
               motionTrack: effectiveTrack || item.clip.motionTrack,
             }

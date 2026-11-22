@@ -48,42 +48,42 @@ export default function NotificationsScreen({
       return {
         icon: "trash-outline",
         color: "#EF4444",
-        bgColor: "rgba(239, 68, 68, 0.15)",
+        bgColor: "rgba(239, 68, 68, 0.12)",
       };
     }
     if (combined.includes("export") || combined.includes("render") || combined.includes("download")) {
       return {
         icon: "cloud-download-outline",
-        color: "#00F2FE",
-        bgColor: "rgba(0, 242, 254, 0.15)",
+        color: "#EDEDED",
+        bgColor: "rgba(255, 255, 255, 0.08)",
       };
     }
     if (combined.includes("duplicate") || combined.includes("copy")) {
       return {
         icon: "copy-outline",
-        color: "#A78BFA",
-        bgColor: "rgba(167, 139, 250, 0.15)",
+        color: "#A1A1AA",
+        bgColor: "rgba(255, 255, 255, 0.06)",
       };
     }
     if (combined.includes("create") || combined.includes("new project") || combined.includes("ready for editing")) {
       return {
         icon: "film-outline",
         color: "#10B981",
-        bgColor: "rgba(16, 185, 129, 0.15)",
+        bgColor: "rgba(16, 185, 129, 0.12)",
       };
     }
     if (combined.includes("media") || combined.includes("audio") || combined.includes("music") || combined.includes("sound")) {
       return {
         icon: "musical-notes-outline",
-        color: "#38BDF8",
-        bgColor: "rgba(56, 189, 248, 0.15)",
+        color: "#EDEDED",
+        bgColor: "rgba(255, 255, 255, 0.08)",
       };
     }
 
     return {
       icon: item.projectId ? "videocam-outline" : "notifications-outline",
-      color: item.unread ? "#00F2FE" : "#94A3B8",
-      bgColor: item.unread ? "rgba(0, 242, 254, 0.12)" : "rgba(255, 255, 255, 0.05)",
+      color: item.unread ? "#FFFFFF" : "#71717A",
+      bgColor: item.unread ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.04)",
     };
   };
 
@@ -131,7 +131,7 @@ export default function NotificationsScreen({
                 <Ionicons
                   name="checkmark-done"
                   size={14}
-                  color="#00F2FE"
+                  color="#EDEDED"
                 />
                 <Text style={styles.markReadText}>Mark read</Text>
               </TouchableOpacity>
@@ -147,7 +147,7 @@ export default function NotificationsScreen({
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 accessibilityLabel="Clear all notifications"
               >
-                <Ionicons name="trash-outline" size={16} color="#94A3B8" />
+                <Ionicons name="trash-outline" size={15} color="#71717A" />
               </TouchableOpacity>
             )}
           </View>
@@ -218,8 +218,8 @@ export default function NotificationsScreen({
               <View style={styles.emptyIconCircle}>
                 <Ionicons
                   name={filter === "unread" ? "checkmark-done-circle-outline" : "notifications-off-outline"}
-                  size={36}
-                  color="#00F2FE"
+                  size={32}
+                  color="#71717A"
                 />
               </View>
               <Text style={styles.emptyTitle}>
@@ -269,7 +269,7 @@ export default function NotificationsScreen({
                     >
                       <Ionicons
                         name={meta.icon}
-                        size={17}
+                        size={16}
                         color={meta.color}
                       />
                     </View>
@@ -307,7 +307,7 @@ export default function NotificationsScreen({
                               <Ionicons
                                 name="folder-outline"
                                 size={11}
-                                color="#94A3B8"
+                                color="#71717A"
                               />
                               <Text
                                 style={styles.projectBadgeText}
@@ -333,7 +333,7 @@ export default function NotificationsScreen({
                               <Ionicons
                                 name="arrow-forward"
                                 size={11}
-                                color="#00F2FE"
+                                color="#EDEDED"
                               />
                             </TouchableOpacity>
                           )}
@@ -352,7 +352,7 @@ export default function NotificationsScreen({
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityLabel="Dismiss notification"
                       >
-                        <Ionicons name="close" size={15} color="#64748B" />
+                        <Ionicons name="close" size={15} color="#71717A" />
                       </TouchableOpacity>
                     )}
                   </TouchableOpacity>
@@ -369,7 +369,7 @@ export default function NotificationsScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#08090E",
+    backgroundColor: "#121214",
   },
   desktopWrapper: {
     width: "100%",
@@ -380,10 +380,10 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   navBar: {
-    height: 56,
+    height: 52,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#0F131D",
+    borderBottomColor: "#1F1F23",
+    backgroundColor: "#121214",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
@@ -400,9 +400,9 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   backButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
+    color: "#EDEDED",
+    fontSize: 13,
+    fontWeight: "500",
   },
   titleRow: {
     flexDirection: "row",
@@ -411,20 +411,22 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: -0.3,
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: -0.2,
   },
   unreadCountBadge: {
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 6.5,
-    paddingVertical: 1.5,
-    borderRadius: 10,
+    backgroundColor: "#27272A",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3F3F46",
   },
   unreadCountText: {
-    color: "#08090E",
+    color: "#EDEDED",
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   navActions: {
     flexDirection: "row",
@@ -436,23 +438,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: "#131826",
+    paddingHorizontal: 9,
+    borderRadius: 6,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   markReadText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#EDEDED",
+    fontSize: 11.5,
+    fontWeight: "500",
   },
   clearBtn: {
-    padding: 7,
-    borderRadius: 8,
-    backgroundColor: "#131826",
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   scrollView: {
     flex: 1,
@@ -470,31 +472,31 @@ const styles = StyleSheet.create({
   },
   filterTrack: {
     flexDirection: "row",
-    backgroundColor: "#0F131D",
-    borderRadius: 10,
-    padding: 3,
+    backgroundColor: "#141416",
+    borderRadius: 8,
+    padding: 2.5,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     alignSelf: "flex-start",
   },
   filterPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
   filterPillActive: {
-    backgroundColor: "#1B2234",
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "#2C364D",
+    borderColor: "#3F3F46",
   },
   filterPillText: {
-    color: "#64748B",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#71717A",
+    fontSize: 11.5,
+    fontWeight: "500",
   },
   filterPillTextActive: {
     color: "#FFFFFF",
-    fontWeight: "700",
+    fontWeight: "600",
   },
   cardList: {
     gap: 8,
@@ -503,30 +505,30 @@ const styles = StyleSheet.create({
     position: "relative",
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#131826",
-    borderRadius: 12,
+    backgroundColor: "#18181A",
+    borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     overflow: "hidden",
   },
   notifCardUnread: {
-    backgroundColor: "#161D2E",
-    borderColor: "#2A3650",
+    backgroundColor: "#1D1D20",
+    borderColor: "#27272A",
   },
   unreadAccentBar: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
-    width: 3.5,
-    backgroundColor: "#00F2FE",
+    width: 3,
+    backgroundColor: "#FFFFFF",
   },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
@@ -550,73 +552,73 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   notifTitle: {
-    color: "#94A3B8",
-    fontSize: 13.5,
-    fontWeight: "600",
+    color: "#A1A1AA",
+    fontSize: 13,
+    fontWeight: "500",
     letterSpacing: -0.1,
   },
   notifTitleUnread: {
     color: "#FFFFFF",
-    fontWeight: "700",
+    fontWeight: "600",
   },
   unreadDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#00F2FE",
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#FFFFFF",
     flexShrink: 0,
   },
   timeText: {
-    color: "#64748B",
-    fontSize: 11.5,
-    fontWeight: "500",
+    color: "#71717A",
+    fontSize: 11,
+    fontWeight: "400",
     flexShrink: 0,
   },
   notifDesc: {
-    color: "#94A3B8",
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginTop: 4,
+    color: "#A1A1AA",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
+    marginTop: 8,
   },
   projectBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4.5,
-    backgroundColor: "#0F131D",
+    gap: 4,
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#1F2637",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    borderColor: "#1F1F23",
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
   },
   projectBadgeText: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "600",
+    color: "#71717A",
+    fontSize: 10.5,
+    fontWeight: "500",
     maxWidth: 200,
   },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4.5,
-    backgroundColor: "#1B2234",
+    gap: 4,
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "#2C364D",
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 6,
+    borderColor: "#3F3F46",
+    paddingVertical: 2.5,
+    paddingHorizontal: 8,
+    borderRadius: 5,
   },
   actionBtnText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "600",
+    color: "#EDEDED",
+    fontSize: 10.5,
+    fontWeight: "500",
   },
   deleteItemBtn: {
     padding: 4,
@@ -627,36 +629,36 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 64,
+    paddingVertical: 56,
     paddingHorizontal: 20,
-    backgroundColor: "#0F131D",
-    borderRadius: 16,
+    backgroundColor: "#141416",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     marginTop: 12,
   },
   emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.2)",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   emptyTitle: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 4,
   },
   emptySubtitle: {
-    color: "#64748B",
-    fontSize: 13,
+    color: "#71717A",
+    fontSize: 12,
     textAlign: "center",
-    maxWidth: 320,
-    lineHeight: 19,
+    maxWidth: 300,
+    lineHeight: 18,
   },
 });

@@ -56,19 +56,19 @@ export function PresetGridCard({
           <Ionicons
             name={icon}
             size={24}
-            color={isSelected ? "#00F2FE" : "#94A3B8"}
+            color={isSelected ? "#FFFFFF" : "#71717A"}
           />
         ) : (
           <Ionicons
             name="cube-outline"
             size={24}
-            color={isSelected ? "#00F2FE" : "#94A3B8"}
+            color={isSelected ? "#FFFFFF" : "#71717A"}
           />
         )}
 
         {isSelected && (
           <View style={styles.selectedBadge}>
-            <Ionicons name="checkmark" size={10} color="#08090E" />
+            <Ionicons name="checkmark" size={10} color="#121214" />
           </View>
         )}
 
@@ -91,23 +91,18 @@ export function PresetGridCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#131826",
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#1F2637",
+    backgroundColor: "#18181A",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#27272A",
     padding: 6,
     alignItems: "center",
     justifyContent: "space-between",
     overflow: "hidden",
   },
   cardActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "#162032",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: "#FFFFFF",
+    backgroundColor: "#222226",
   },
   thumbnailContainer: {
     flex: 1,
@@ -119,7 +114,7 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
-    borderRadius: 8,
+    borderRadius: 6,
   },
   selectedBadge: {
     position: "absolute",
@@ -128,7 +123,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -138,27 +133,27 @@ const styles = StyleSheet.create({
     left: 4,
     paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.2)",
+    borderRadius: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
     borderWidth: 1,
-    borderColor: "#00F2FE",
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   topBadgeText: {
-    color: "#00F2FE",
-    fontSize: 9,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "600",
   },
   label: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "500",
+    color: "#A1A1AA",
+    fontSize: 10,
+    fontWeight: "400",
     textAlign: "center",
     marginTop: 4,
     width: "100%",
   },
   labelActive: {
     color: "#FFFFFF",
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });
 

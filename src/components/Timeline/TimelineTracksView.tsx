@@ -326,12 +326,12 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                             (dragState.targetStart ?? dragState.currentStart) *
                               pxPerSec,
                           ),
-                          backgroundColor: "#08090E",
-                          borderWidth: 1.5,
-                          borderColor: "#00F2FE",
-                          borderRadius: 12,
+                          backgroundColor: "#18181A",
+                          borderWidth: 1,
+                          borderColor: "#27272A",
+                          borderRadius: 6,
                           paddingHorizontal: 8,
-                          paddingVertical: 2,
+                          paddingVertical: 3,
                           flexDirection: "row",
                           alignItems: "center",
                           gap: 4,
@@ -342,18 +342,18 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                           ],
                           ...(Platform.OS === "web"
                             ? {
-                                boxShadow: "0 0 12px rgba(0, 242, 254, 0.4)",
+                                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.5)",
                               }
                             : {}),
                         }}
                       >
-                        <Ionicons name="add-circle" size={13} color="#00F2FE" />
+                        <Ionicons name="add-circle" size={13} color="#EDEDED" />
                         <Text
                           style={{
-                            color: "#FFFFFF",
+                            color: "#EDEDED",
                             fontSize: 10,
-                            fontWeight: "700",
-                            letterSpacing: 0.3,
+                            fontWeight: "500",
+                            letterSpacing: 0.1,
                           }}
                         >
                           {dragState.insertTrackIndex >= activeTrackCount

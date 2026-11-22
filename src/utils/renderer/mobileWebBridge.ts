@@ -1306,8 +1306,11 @@ export function generateCanvasBridgeHtml(
             ctx.translate(-posX, -posY);
           }
 
-          ctx.font = (txt.bold ? "bold " : "") + (txt.italic ? "italic " : "") + fontSize + "px " + (txt.fontFamily || "sans-serif");
-          ctx.textAlign = (txt.textAlign || "center").toLowerCase();
+          const isItalic = Boolean(txt.italic || (txt as any).style?.fontStyle === "italic");
+          const isBold = Boolean(txt.bold || (txt as any).style?.fontWeight === "bold" || (txt as any).style?.fontWeight === "800");
+          const fontFam = (txt as any).style?.fontFamily || txt.fontFamily || "sans-serif";
+          ctx.font = (isItalic ? "italic " : "") + (isBold ? "bold " : "") + fontSize + "px " + fontFam;
+          ctx.textAlign = (((txt as any).style?.textAlign || txt.textAlign || "center").toLowerCase()) as CanvasTextAlign;
           ctx.textBaseline = "middle";
 
           // Optional Background Badge

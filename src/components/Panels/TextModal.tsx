@@ -70,6 +70,9 @@ export default function TextModal({
   const [selectedFontWeight, setSelectedFontWeight] = useState<
     "normal" | "bold" | "800"
   >("800");
+  const [selectedFontStyle, setSelectedFontStyle] = useState<
+    "normal" | "italic"
+  >("normal");
   const [selectedUppercase, setSelectedUppercase] = useState<boolean>(false);
 
   const [selectedScale, setSelectedScale] = useState<number>(1.0);
@@ -182,6 +185,10 @@ export default function TextModal({
             setSelectedTextAlign(editingClip.style.textAlign as any);
           if (editingClip.style?.fontWeight)
             setSelectedFontWeight(editingClip.style.fontWeight as any);
+          if (editingClip.style?.fontStyle)
+            setSelectedFontStyle(editingClip.style.fontStyle as any);
+          else
+            setSelectedFontStyle("normal");
           if (editingClip.style?.uppercase !== undefined)
             setSelectedUppercase(editingClip.style.uppercase);
           setSelectedScale(editingClip.scale ?? 1.0);
@@ -200,6 +207,7 @@ export default function TextModal({
           setSelectedStrokeWidth(0);
           setSelectedTextAlign("center");
           setSelectedFontWeight("800");
+          setSelectedFontStyle("normal");
           setSelectedUppercase(false);
           setSelectedScale(1.0);
           setSelectedRotation(0);
@@ -264,6 +272,7 @@ export default function TextModal({
       color: selectedColor,
       fontSize: selectedFontSize,
       fontWeight: selectedFontWeight as any,
+      fontStyle: selectedFontStyle,
       fontFamily: selectedFont,
       backgroundColor: hasBg ? selectedBg : "transparent",
       borderColor: hasBorder ? selectedBorderColor : undefined,
@@ -342,6 +351,7 @@ export default function TextModal({
     selectedStrokeWidth,
     selectedTextAlign,
     selectedFontWeight,
+    selectedFontStyle,
     selectedUppercase,
     selectedScale,
     selectedRotation,
@@ -417,12 +427,15 @@ export default function TextModal({
               isListening ? "Listening... Speak now" : "Type text..."
             }
             placeholderTextColor={isListening ? "#FF0050" : "#64748B"}
-            returnKeyType="done"
-            onSubmitEditing={handleSave}
+            multiline={true}
+            scrollEnabled={true}
+            returnKeyType="default"
+            blurOnSubmit={false}
             {...(Platform.OS === "web"
               ? {
                   onKeyDown: (e: any) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    // Cmd+Enter or Ctrl+Enter submits
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                       e.preventDefault();
                       handleSave();
                     }
@@ -430,57 +443,57 @@ export default function TextModal({
                 }
               : {})}
           />
-          {inputText.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setInputText("")}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              style={{ marginRight: 6 }}
-            >
-              <Ionicons name="close-circle" size={15} color="#8E95A5" />
-            </TouchableOpacity>
-          )}
-
-          {/* Speech to Text Microphone */}
-          <TouchableOpacity
-            onPress={handleToggleSpeechToText}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{
-              marginRight: isInline && !editingClip ? 6 : 0,
-              padding: 3,
-              borderRadius: 4,
-              backgroundColor: isListening
-                ? "rgba(255, 0, 80, 0.2)"
-                : "rgba(0, 242, 254, 0.08)",
-            }}
-            accessibilityLabel={
-              isListening ? "Stop voice dictation" : "Speech to Text"
-            }
-          >
-            <Ionicons
-              name={isListening ? "mic" : "mic-outline"}
-              size={14}
-              color={isListening ? "#FF0050" : "#EDEDED"}
-            />
-          </TouchableOpacity>
-
-          {isInline && !editingClip && (
-            <TouchableOpacity
-              onPress={handleAddTextClip}
-              style={[
-                styles.inlineApplyBtn,
-                { opacity: inputText.trim() ? 1 : 0.4 },
-              ]}
-              disabled={!inputText.trim()}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={13} color="#000000" />
-              <Text
-                style={{ color: "#000000", fontSize: 10.5, fontWeight: "700" }}
+          <View style={styles.inputActionsRow}>
+            {inputText.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setInputText("")}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                Add
-              </Text>
+                <Ionicons name="close-circle" size={15} color="#8E95A5" />
+              </TouchableOpacity>
+            )}
+
+            {/* Speech to Text Microphone */}
+            <TouchableOpacity
+              onPress={handleToggleSpeechToText}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{
+                padding: 4,
+                borderRadius: 4,
+                backgroundColor: isListening
+                  ? "rgba(255, 0, 80, 0.2)"
+                  : "rgba(0, 242, 254, 0.08)",
+              }}
+              accessibilityLabel={
+                isListening ? "Stop voice dictation" : "Speech to Text"
+              }
+            >
+              <Ionicons
+                name={isListening ? "mic" : "mic-outline"}
+                size={14}
+                color={isListening ? "#FF0050" : "#EDEDED"}
+              />
             </TouchableOpacity>
-          )}
+
+            {isInline && !editingClip && (
+              <TouchableOpacity
+                onPress={handleAddTextClip}
+                style={[
+                  styles.inlineApplyBtn,
+                  { opacity: inputText.trim() ? 1 : 0.4 },
+                ]}
+                disabled={!inputText.trim()}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={13} color="#000000" />
+                <Text
+                  style={{ color: "#000000", fontSize: 10.5, fontWeight: "700" }}
+                >
+                  Add
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* 2. TYPOGRAPHY & FONT SIZE */}
@@ -533,6 +546,216 @@ export default function TextModal({
               );
             })}
           </ScrollView>
+
+          {/* Typography Formatting Toolbar (Bold, Italic, Uppercase, Alignment) */}
+          <View style={styles.formatBar}>
+            {/* Bold Toggle */}
+            <TouchableOpacity
+              style={[
+                styles.formatBtn,
+                (selectedFontWeight === "bold" ||
+                  selectedFontWeight === "800") &&
+                  styles.formatBtnActive,
+              ]}
+              onPress={() => {
+                const isCurrentlyBold =
+                  selectedFontWeight === "bold" ||
+                  selectedFontWeight === "800";
+                setSelectedFontWeight(isCurrentlyBold ? "normal" : "bold");
+              }}
+              activeOpacity={0.7}
+              accessibilityLabel="Toggle Bold"
+            >
+              <Text
+                style={[
+                  styles.formatBtnText,
+                  (selectedFontWeight === "bold" ||
+                    selectedFontWeight === "800") &&
+                    styles.formatBtnTextActive,
+                  { fontWeight: "bold" },
+                ]}
+              >
+                B
+              </Text>
+            </TouchableOpacity>
+
+            {/* Italic Toggle */}
+            <TouchableOpacity
+              style={[
+                styles.formatBtn,
+                selectedFontStyle === "italic" && styles.formatBtnActive,
+              ]}
+              onPress={() =>
+                setSelectedFontStyle(
+                  selectedFontStyle === "italic" ? "normal" : "italic"
+                )
+              }
+              activeOpacity={0.7}
+              accessibilityLabel="Toggle Italic"
+            >
+              <Text
+                style={[
+                  styles.formatBtnText,
+                  selectedFontStyle === "italic" && styles.formatBtnTextActive,
+                  { fontStyle: "italic", fontWeight: "700" },
+                ]}
+              >
+                I
+              </Text>
+            </TouchableOpacity>
+
+            {/* Uppercase Toggle */}
+            <TouchableOpacity
+              style={[
+                styles.formatBtn,
+                selectedUppercase && styles.formatBtnActive,
+              ]}
+              onPress={() => setSelectedUppercase(!selectedUppercase)}
+              activeOpacity={0.7}
+              accessibilityLabel="Toggle Uppercase"
+            >
+              <Text
+                style={[
+                  styles.formatBtnText,
+                  selectedUppercase && styles.formatBtnTextActive,
+                ]}
+              >
+                AA
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={{
+                width: 1,
+                height: 16,
+                backgroundColor: "#1C2436",
+                marginHorizontal: 2,
+              }}
+            />
+
+            {/* Align Left */}
+            <TouchableOpacity
+              style={[
+                styles.formatBtn,
+                selectedTextAlign === "left" && styles.formatBtnActive,
+              ]}
+              onPress={() => setSelectedTextAlign("left")}
+              activeOpacity={0.7}
+              accessibilityLabel="Align Left"
+            >
+              <View style={{ width: 14, gap: 2, alignItems: "flex-start" }}>
+                <View
+                  style={{
+                    width: 14,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "left" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+                <View
+                  style={{
+                    width: 9,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "left" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+                <View
+                  style={{
+                    width: 12,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "left" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {/* Align Center */}
+            <TouchableOpacity
+              style={[
+                styles.formatBtn,
+                selectedTextAlign === "center" && styles.formatBtnActive,
+              ]}
+              onPress={() => setSelectedTextAlign("center")}
+              activeOpacity={0.7}
+              accessibilityLabel="Align Center"
+            >
+              <View style={{ width: 14, gap: 2, alignItems: "center" }}>
+                <View
+                  style={{
+                    width: 14,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "center" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+                <View
+                  style={{
+                    width: 9,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "center" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+                <View
+                  style={{
+                    width: 12,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "center" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {/* Align Right */}
+            <TouchableOpacity
+              style={[
+                styles.formatBtn,
+                selectedTextAlign === "right" && styles.formatBtnActive,
+              ]}
+              onPress={() => setSelectedTextAlign("right")}
+              activeOpacity={0.7}
+              accessibilityLabel="Align Right"
+            >
+              <View style={{ width: 14, gap: 2, alignItems: "flex-end" }}>
+                <View
+                  style={{
+                    width: 14,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "right" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+                <View
+                  style={{
+                    width: 9,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "right" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+                <View
+                  style={{
+                    width: 12,
+                    height: 1.5,
+                    backgroundColor:
+                      selectedTextAlign === "right" ? "#00F2FE" : "#8E9AA8",
+                    borderRadius: 1,
+                  }}
+                />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.sectionDivider} />
@@ -766,97 +989,6 @@ export default function TextModal({
                   );
                 })}
               </ScrollView>
-
-              {/* Text Formatting Toolbar (Bold, Uppercase, Alignment) */}
-              <View style={styles.formatBar}>
-                <TouchableOpacity
-                  style={[
-                    styles.formatBtn,
-                    selectedFontWeight === "bold" && styles.formatBtnActive,
-                  ]}
-                  onPress={() =>
-                    setSelectedFontWeight(
-                      selectedFontWeight === "bold" ? "normal" : "bold"
-                    )
-                  }
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.formatBtnText,
-                      selectedFontWeight === "bold" && styles.formatBtnTextActive,
-                      { fontWeight: "bold" },
-                    ]}
-                  >
-                    B
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.formatBtn,
-                    selectedUppercase && styles.formatBtnActive,
-                  ]}
-                  onPress={() => setSelectedUppercase(!selectedUppercase)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.formatBtnText,
-                      selectedUppercase && styles.formatBtnTextActive,
-                    ]}
-                  >
-                    AA
-                  </Text>
-                </TouchableOpacity>
-
-                <View style={{ width: 1, height: 16, backgroundColor: "#1C2436", marginHorizontal: 2 }} />
-
-                <TouchableOpacity
-                  style={[
-                    styles.formatBtn,
-                    selectedTextAlign === "left" && styles.formatBtnActive,
-                  ]}
-                  onPress={() => setSelectedTextAlign("left")}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="filter-outline"
-                    size={12}
-                    color={selectedTextAlign === "left" ? "#FFFFFF" : "#8E9AA8"}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.formatBtn,
-                    selectedTextAlign === "center" && styles.formatBtnActive,
-                  ]}
-                  onPress={() => setSelectedTextAlign("center")}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="menu-outline"
-                    size={12}
-                    color={selectedTextAlign === "center" ? "#FFFFFF" : "#8E9AA8"}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.formatBtn,
-                    selectedTextAlign === "right" && styles.formatBtnActive,
-                  ]}
-                  onPress={() => setSelectedTextAlign("right")}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="list-outline"
-                    size={12}
-                    color={selectedTextAlign === "right" ? "#FFFFFF" : "#8E9AA8"}
-                  />
-                </TouchableOpacity>
-              </View>
             </View>
           )}
 

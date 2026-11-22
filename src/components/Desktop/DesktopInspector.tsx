@@ -482,7 +482,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.actionBtn}
+                      style={[styles.actionBtn, { borderColor: "rgba(0, 242, 254, 0.3)", backgroundColor: "rgba(0, 242, 254, 0.08)" }]}
                       onPress={() => {
                         handleTransformChange({
                           scale: 1,
@@ -496,8 +496,8 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="refresh" size={14} color={THEME_COLORS.textSecondary} />
-                      <Text style={styles.actionBtnText}>Reset</Text>
+                      <Ionicons name="refresh" size={13} color="#00F2FE" />
+                      <Text style={[styles.actionBtnText, { color: "#00F2FE", fontWeight: "600" }]}>Reset</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -505,15 +505,15 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                   <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: THEME_COLORS.borderSubtle, paddingTop: 10 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Ionicons name="layers-outline" size={14} color="#00F2FE" />
+                        <Ionicons name="layers-outline" size={14} color="#EDEDED" />
                         <Text style={styles.controlLabel}>Layer Order</Text>
                       </View>
                       <TouchableOpacity
                         onPress={() => onOpenModal?.('layer')}
                         style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                       >
-                        <Text style={{ fontSize: 11, color: '#00F2FE', fontWeight: '700' }}>Manage Layers</Text>
-                        <Ionicons name="chevron-forward" size={12} color="#00F2FE" />
+                        <Text style={{ fontSize: 11, color: '#EDEDED', fontWeight: '500' }}>Manage Layers</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#71717A" />
                       </TouchableOpacity>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 6 }}>

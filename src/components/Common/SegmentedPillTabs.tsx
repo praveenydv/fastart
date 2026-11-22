@@ -64,7 +64,7 @@ export function SegmentedPillTabs<T extends string = string>({
           <Ionicons
             name={tab.icon}
             size={13}
-            color={isActive ? "#08090E" : "#94A3B8"}
+            color={isActive ? "#FFFFFF" : "#71717A"}
             style={styles.pillIcon}
           />
         )}
@@ -102,11 +102,11 @@ export function SegmentedPillTabs<T extends string = string>({
 const styles = StyleSheet.create({
   fixedContainer: {
     flexDirection: "row",
-    backgroundColor: "#131826",
-    borderRadius: 8,
+    backgroundColor: "#141416",
+    borderRadius: 6,
     padding: 2,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     marginHorizontal: 8,
     marginVertical: 4,
     height: 28,
@@ -125,49 +125,50 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    borderRadius: 5,
   },
   scrollablePill: {
     flex: undefined,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     paddingVertical: 3.5,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: 6,
   },
   activePill: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
+    backgroundColor: "#27272A",
+    borderWidth: 1,
+    borderColor: "#3F3F46",
   },
   pillIcon: {
     marginRight: 4,
   },
   pillText: {
-    color: "#94A3B8",
+    color: "#71717A",
     fontSize: 10.5,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   activePillText: {
-    color: "#08090E",
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   badge: {
     marginLeft: 4,
     paddingHorizontal: 4,
     paddingVertical: 0.5,
-    borderRadius: 6,
-    backgroundColor: "#1E293B",
+    borderRadius: 4,
+    backgroundColor: "#27272A",
   },
   activeBadge: {
-    backgroundColor: "rgba(8, 9, 14, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
   badgeText: {
-    color: "#94A3B8",
+    color: "#71717A",
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   activeBadgeText: {
-    color: "#08090E",
+    color: "#FFFFFF",
   },
 });

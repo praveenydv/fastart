@@ -150,7 +150,7 @@ export function useWebTransformPointer({
       } else if (dragSession.mode === "scale") {
         const currentDist = Math.hypot(curX - dragSession.absCenterX, curY - dragSession.absCenterY);
         const scaleRatio = currentDist / Math.max(10, dragSession.startDist);
-        const newScale = Math.max(0.15, Math.min(5.0, Number((dragSession.startScale * scaleRatio).toFixed(2))));
+        const newScale = Math.max(0.15, Math.min(5.0, Number((dragSession.startScale * scaleRatio).toFixed(3))));
 
         if (dragSession.clipType === "video") {
           scheduleTransformUpdateRef.current(

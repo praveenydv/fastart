@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#141416',
   },
   listThumbnail: {
     width: '100%',
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#121623',
+    backgroundColor: '#18181A',
   },
   listDurationBadge: {
     position: 'absolute',

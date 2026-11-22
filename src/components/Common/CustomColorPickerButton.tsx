@@ -144,7 +144,7 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
       ? {
           backgroundColor: value,
           borderWidth: 1.5,
-          borderColor: "#00F2FE",
+          borderColor: "#FFFFFF",
           transform: [{ scale: 1.05 }],
         }
       : {}),
@@ -152,9 +152,9 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
 
   const iconColor = isCustomActive
     ? isLightColor(value)
-      ? "#08090E"
+      ? "#121214"
       : "#FFFFFF"
-    : "#00F2FE";
+    : "#EDEDED";
 
   return (
     <View style={s.container}>
@@ -206,7 +206,7 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
             {/* Header */}
             <View style={s.modalHeader}>
               <View style={s.headerTitleRow}>
-                <Ionicons name="color-palette" size={16} color="#00F2FE" />
+                <Ionicons name="color-palette" size={15} color="#EDEDED" />
                 <Text style={s.modalTitle}>Custom Color</Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -219,7 +219,7 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
                     }}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="eyedrop" size={12} color="#00F2FE" />
+                    <Ionicons name="eyedrop" size={12} color="#EDEDED" />
                     <Text style={s.pickFromScreenBtnText}>Sample Screen</Text>
                   </TouchableOpacity>
                 )}
@@ -228,7 +228,7 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
                   style={s.closeBtn}
                   accessibilityLabel="Close color picker"
                 >
-                  <Ionicons name="close" size={16} color="#94A3B8" />
+                  <Ionicons name="close" size={16} color="#71717A" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -318,7 +318,7 @@ export const CustomColorPickerButton: React.FC<CustomColorPickerButtonProps> = (
                 onPress={handleApply}
                 activeOpacity={0.8}
               >
-                <Ionicons name="checkmark" size={14} color="#08090E" />
+                <Ionicons name="checkmark" size={14} color="#121214" />
                 <Text style={s.applyBtnText}>Apply</Text>
               </TouchableOpacity>
             </View>
@@ -336,8 +336,8 @@ const s = StyleSheet.create({
   },
   btn: {
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.4)",
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -358,10 +358,10 @@ const s = StyleSheet.create({
   modalSheet: {
     width: "100%",
     maxWidth: 320,
-    backgroundColor: "#0F1420",
-    borderRadius: 14,
+    backgroundColor: "#18181A",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
@@ -381,10 +381,10 @@ const s = StyleSheet.create({
     gap: 6,
   },
   modalTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#EDEDED",
+    letterSpacing: 0.1,
   },
   closeBtn: {
     padding: 4,
@@ -393,17 +393,17 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
+    borderColor: "#3F3F46",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   pickFromScreenBtnText: {
     fontSize: 10,
-    fontWeight: "600",
-    color: "#00F2FE",
+    fontWeight: "500",
+    color: "#EDEDED",
   },
   spectrumContainer: {
     marginBottom: 12,
@@ -417,12 +417,12 @@ const s = StyleSheet.create({
   spectrumSwatch: {
     width: 24,
     height: 24,
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
   spectrumSwatchSelected: {
-    borderColor: "#00F2FE",
+    borderColor: "#FFFFFF",
     borderWidth: 2,
     transform: [{ scale: 1.15 }],
   },
@@ -435,33 +435,33 @@ const s = StyleSheet.create({
   livePreviewSwatch: {
     width: 38,
     height: 38,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
   hexInputContainer: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0A0D15",
-    borderRadius: 8,
+    backgroundColor: "#141416",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     paddingHorizontal: 10,
-    height: 38,
+    height: 36,
   },
   hexPrefix: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#00F2FE",
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#71717A",
     marginRight: 2,
   },
   hexTextInput: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    letterSpacing: 0.8,
+    fontSize: 12.5,
+    fontWeight: "500",
+    color: "#EDEDED",
+    letterSpacing: 0.6,
     padding: 0,
   },
   paletteScroll: {
@@ -470,8 +470,8 @@ const s = StyleSheet.create({
   },
   paletteLabel: {
     fontSize: 9,
-    fontWeight: "700",
-    color: "#64748B",
+    fontWeight: "600",
+    color: "#71717A",
     letterSpacing: 0.5,
     marginBottom: 8,
   },
@@ -483,14 +483,14 @@ const s = StyleSheet.create({
   paletteSwatch: {
     width: 27,
     height: 27,
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   paletteSwatchSelected: {
-    borderColor: "#00F2FE",
+    borderColor: "#FFFFFF",
     borderWidth: 2,
     transform: [{ scale: 1.15 }],
   },
@@ -500,16 +500,18 @@ const s = StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 7,
-    backgroundColor: "#161D2E",
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#27272A",
+    borderWidth: 1,
+    borderColor: "#3F3F46",
     alignItems: "center",
     justifyContent: "center",
   },
   cancelBtnText: {
     fontSize: 11,
-    fontWeight: "600",
-    color: "#94A3B8",
+    fontWeight: "500",
+    color: "#A1A1AA",
   },
   applyBtn: {
     flex: 1.5,
@@ -517,13 +519,13 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingVertical: 9,
-    borderRadius: 7,
-    backgroundColor: "#00F2FE",
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
   },
   applyBtnText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: "#08090E",
+    fontWeight: "600",
+    color: "#121214",
   },
 });

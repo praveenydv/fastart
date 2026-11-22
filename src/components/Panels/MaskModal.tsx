@@ -1007,7 +1007,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 4,
     borderTopWidth: 1,
-    borderTopColor: "#1F2637",
+    borderTopColor: "#1F1F23",
   },
   stepperRow: {
     flexDirection: "row",
@@ -1017,12 +1017,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   stepBtn: {
-    backgroundColor: "#1B2234",
+    backgroundColor: "#27272A",
     width: 22,
     height: 22,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#3F3F46",
     alignItems: "center",
     justifyContent: "center",
   },

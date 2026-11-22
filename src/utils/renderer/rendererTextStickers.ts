@@ -146,8 +146,9 @@ function getCachedWordWidth(
   fontSize: number,
   fontFamily: string,
   fontWeight: string,
+  fontStyle: string = "normal",
 ): number {
-  const key = `${word}_${fontSize}_${fontFamily}_${fontWeight}`;
+  const key = `${word}_${fontSize}_${fontFamily}_${fontWeight}_${fontStyle}`;
   const cached = wordWidthCache.get(key);
   if (cached !== undefined) return cached;
   const w = ctx.measureText(word).width;
@@ -166,8 +167,9 @@ function getWrappedLines(
   fontFamily: string,
   fontWeight: string,
   maxAllowedW: number,
+  fontStyle: string = "normal",
 ): { lines: string[]; textWidth: number; textHeight: number } {
-  const cacheKey = `${displayText}_${fontSize}_${fontFamily}_${fontWeight}_${Math.round(maxAllowedW)}`;
+  const cacheKey = `${displayText}_${fontSize}_${fontFamily}_${fontWeight}_${fontStyle}_${Math.round(maxAllowedW)}`;
   const cached = textLinesCache.get(cacheKey);
   if (cached) return cached;
 
@@ -297,15 +299,17 @@ export function drawTextOverlay(
   const style = txt.style || {};
   const rawFontSize = style.fontSize || 24;
   const fontSize = Math.round(rawFontSize * previewScale);
-  const fontWeight = style.fontWeight || "bold";
+  const fontWeight = style.fontWeight || "800";
+  const fontStyle = style.fontStyle || "normal";
+  const align = style.textAlign || "center";
   const fontFamily =
     style.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
-  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-  ctx.textAlign = "center";
+  ctx.font = `${fontStyle === "italic" ? "italic " : ""}${fontWeight} ${fontSize}px ${fontFamily}`;
+  ctx.textAlign = align as CanvasTextAlign;
   ctx.textBaseline = "middle";
 
-  // Fast cached multi-line word wrapping so long text never spills outside canvas
-  const maxAllowedW = Math.max(120 * previewScale, (w * 0.88) / Math.max(0.1, scale));
+  // Fast cached multi-line word wrapping matching container boundary
+  const maxAllowedW = Math.max(100 * previewScale, w * 0.88);
   const { lines: effectiveLines, textWidth, textHeight } = getWrappedLines(
     ctx,
     displayText,
@@ -313,6 +317,7 @@ export function drawTextOverlay(
     fontFamily,
     fontWeight,
     maxAllowedW,
+    fontStyle,
   );
   const lineHeight = fontSize * 1.35;
 
@@ -410,8 +415,9 @@ export function drawTextOverlay(
     ctx.shadowOffsetY = (style.textShadowOffset?.height || 0) * previewScale;
   }
 
-  // Render each wrapped line centered vertically and horizontally
+  // Render each wrapped line according to horizontal alignment
   const startY = -(effectiveLines.length - 1) * (lineHeight / 2);
+  const lineX = align === "left" ? -textWidth / 2 : align === "right" ? textWidth / 2 : 0;
 
   effectiveLines.forEach((line, idx) => {
     const lineY = startY + idx * lineHeight;
@@ -420,29 +426,29 @@ export function drawTextOverlay(
       ctx.save();
       ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
       for (let offset = Math.max(1, Math.round(4 * previewScale)); offset >= 1; offset--) {
-        ctx.fillText(line, offset, lineY + offset);
+        ctx.fillText(line, lineX + offset, lineY + offset);
       }
       ctx.restore();
     } else if (effect === "cyber") {
       ctx.save();
       ctx.fillStyle = "rgba(255, 0, 80, 0.85)";
-      ctx.fillText(line, 3 * previewScale, lineY + 2 * previewScale);
+      ctx.fillText(line, lineX + 3 * previewScale, lineY + 2 * previewScale);
       ctx.fillStyle = "rgba(0, 242, 254, 0.85)";
-      ctx.fillText(line, -2 * previewScale, lineY - 2 * previewScale);
+      ctx.fillText(line, lineX - 2 * previewScale, lineY - 2 * previewScale);
       ctx.restore();
     } else if (effect === "glitch") {
       ctx.save();
       ctx.fillStyle = "rgba(255, 0, 80, 0.8)";
-      ctx.fillText(line, 3 * previewScale, lineY);
+      ctx.fillText(line, lineX + 3 * previewScale, lineY);
       ctx.fillStyle = "rgba(0, 242, 254, 0.8)";
-      ctx.fillText(line, -3 * previewScale, lineY);
+      ctx.fillText(line, lineX - 3 * previewScale, lineY);
       ctx.restore();
     } else if (effect === "hologram") {
       ctx.save();
       ctx.fillStyle = "rgba(0, 242, 254, 0.6)";
-      ctx.fillText(line, -2 * previewScale, lineY);
+      ctx.fillText(line, lineX - 2 * previewScale, lineY);
       ctx.fillStyle = "rgba(255, 0, 128, 0.6)";
-      ctx.fillText(line, 2 * previewScale, lineY);
+      ctx.fillText(line, lineX + 2 * previewScale, lineY);
       ctx.restore();
     }
 
@@ -461,11 +467,11 @@ export function drawTextOverlay(
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.miterLimit = 2;
-      ctx.strokeText(line, 0, lineY);
+      ctx.strokeText(line, lineX, lineY);
     }
 
     ctx.fillStyle = style.color || "#FFFFFF";
-    ctx.fillText(line, 0, lineY);
+    ctx.fillText(line, lineX, lineY);
   });
 
   ctx.restore();
@@ -557,7 +563,7 @@ export function drawCaptionOverlay(
   const isUppercase = Boolean((style as any)?.uppercase ?? (cap as any)?.uppercase);
   const rawText = isUppercase ? (cap.text || "").toUpperCase() : cap.text || "";
   const spaceWidth = getCachedWordWidth(ctx, " ", fontSize, fontFamily, fontWeight);
-  const maxAllowedW = Math.max(140 * previewScale, (w * 0.9) / Math.max(0.1, scale));
+  const maxAllowedW = Math.max(140 * previewScale, w * 0.9);
 
   const cacheKey = `${cap.id}_${rawText}_${cap.startTime}_${cap.duration}_${fontSize}_${fontFamily}_${fontWeight}_${Math.round(maxAllowedW)}_${cap.words?.length || 0}`;
   let layout = captionLayoutCache.get(cacheKey);

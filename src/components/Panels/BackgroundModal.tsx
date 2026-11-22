@@ -369,7 +369,7 @@ function BackgroundModalContent({
                             styles.colorCircle,
                             { backgroundColor: col.id },
                             col.id === '#FFFFFF' && { borderWidth: 1, borderColor: '#52525B' },
-                            col.id === '#000000' && { borderWidth: 1, borderColor: '#1F2637' },
+                            col.id === '#000000' && { borderWidth: 1, borderColor: '#27272A' },
                           ]}
                         >
                           {isSelected && (
