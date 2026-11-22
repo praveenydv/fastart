@@ -43,7 +43,7 @@ export default function TextEffectsTab({
                 <Ionicons
                   name={eff.icon as any}
                   size={16}
-                  color={isActive ? "#00F2FE" : "#94A3B8"}
+                  color={isActive ? "#FFFFFF" : "#8E8E93"}
                 />
                 <View style={{ marginLeft: 6 }}>
                   <Text

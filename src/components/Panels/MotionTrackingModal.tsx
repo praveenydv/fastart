@@ -518,7 +518,7 @@ export default function MotionTrackingModal({
       {/* Header for standalone modal */}
       {!isInline && (
         <ModalHeader
-          title="Motion Tracking"
+          title="Tracking"
           subtitle={hasTrajectory ? `${trajectory.length} pts` : undefined}
           iconName="scan-outline"
           onClose={handleClose}
@@ -571,7 +571,7 @@ export default function MotionTrackingModal({
                   : "layers"
               }
               size={14}
-              color={THEME_COLORS.accent}
+              color="#FFFFFF"
             />
           </View>
           <View style={styles.elementInfoCol}>
@@ -605,7 +605,7 @@ export default function MotionTrackingModal({
             <Ionicons
               name="eye-off-outline"
               size={13}
-              color={activeTab === "censor" ? THEME_COLORS.accent : "#94A3B8"}
+              color={activeTab === "censor" ? "#121214" : "#8E8E93"}
             />
             <Text style={[styles.tabText, activeTab === "censor" && styles.tabTextActive]}>
               Censor Blur
@@ -625,7 +625,7 @@ export default function MotionTrackingModal({
             <Ionicons
               name="attach-outline"
               size={13}
-              color={activeTab === "pin" ? THEME_COLORS.accent : "#94A3B8"}
+              color={activeTab === "pin" ? "#121214" : "#8E8E93"}
             />
             <Text style={[styles.tabText, activeTab === "pin" && styles.tabTextActive]}>
               Pin Element
@@ -645,7 +645,7 @@ export default function MotionTrackingModal({
             <Ionicons
               name="videocam-outline"
               size={13}
-              color={activeTab === "camera" ? THEME_COLORS.accent : "#94A3B8"}
+              color={activeTab === "camera" ? "#121214" : "#8E8E93"}
             />
             <Text style={[styles.tabText, activeTab === "camera" && styles.tabTextActive]}>
               Lock Camera
@@ -664,7 +664,7 @@ export default function MotionTrackingModal({
           <View style={styles.scanningCard}>
             <View style={styles.scanningHeader}>
               <View style={styles.scanningLeft}>
-                <ActivityIndicator size="small" color={THEME_COLORS.accent} />
+                <ActivityIndicator size="small" color="#FFFFFF" />
                 <Text style={styles.scanningTitle}>{scanStatusText || "Tracking Target…"}</Text>
               </View>
               <Text style={styles.scanningPercent}>{scanProgress}%</Text>
@@ -711,7 +711,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={bakedSuccess ? "checkmark-circle" : "key-outline"}
                   size={13}
-                  color={bakedSuccess ? "#10B981" : THEME_COLORS.accent}
+                  color={bakedSuccess ? "#10B981" : "#EDEDED"}
                   style={{ marginRight: 4 }}
                 />
                 <Text style={[styles.bakeBtnText, bakedSuccess && styles.bakeBtnTextSuccess]}>
@@ -726,7 +726,7 @@ export default function MotionTrackingModal({
         {isElementClip && (
           <View style={{ marginBottom: 6 }}>
             <View style={styles.elementTipCard}>
-              <Ionicons name="scan-outline" size={13} color={THEME_COLORS.accent} style={{ marginRight: 6 }} />
+              <Ionicons name="scan-outline" size={13} color="#EDEDED" style={{ marginRight: 6 }} />
               <Text style={styles.elementTipText}>
                 Position the green box on video player over the subject to follow.
               </Text>
@@ -746,7 +746,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackScale ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackScale ? THEME_COLORS.accent : "#64748B"}
+                  color={trackScale ? "#121214" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
                   Follow Scale
@@ -766,7 +766,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackRotation ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackRotation ? THEME_COLORS.accent : "#64748B"}
+                  color={trackRotation ? "#121214" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
                   Follow Tilt
@@ -793,7 +793,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="square-outline"
                   size={14}
-                  color={mosaicShape === "rectangle" ? THEME_COLORS.accent : "#94A3B8"}
+                  color={mosaicShape === "rectangle" ? "#121214" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicShape === "rectangle" && styles.segmentTextActive]}>
@@ -813,7 +813,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="ellipse-outline"
                   size={14}
-                  color={mosaicShape === "circle" ? THEME_COLORS.accent : "#94A3B8"}
+                  color={mosaicShape === "circle" ? "#121214" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicShape === "circle" && styles.segmentTextActive]}>
@@ -836,7 +836,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="water-outline"
                   size={14}
-                  color={mosaicStyle === "blur" ? THEME_COLORS.accent : "#94A3B8"}
+                  color={mosaicStyle === "blur" ? "#121214" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicStyle === "blur" && styles.segmentTextActive]}>
@@ -856,7 +856,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="grid-outline"
                   size={14}
-                  color={mosaicStyle === "pixelate" ? THEME_COLORS.accent : "#94A3B8"}
+                  color={mosaicStyle === "pixelate" ? "#121214" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicStyle === "pixelate" && styles.segmentTextActive]}>
@@ -874,7 +874,7 @@ export default function MotionTrackingModal({
               step={1}
               unit="px"
               layout="inline"
-              accentColor={THEME_COLORS.accent}
+              accentColor="#FFFFFF"
               onChange={(val) => {
                 setMosaicRadius(val);
                 syncTracking({ mosaicRadius: val });
@@ -942,7 +942,7 @@ export default function MotionTrackingModal({
                           <Ionicons
                             name={c.icon as any}
                             size={14}
-                            color={isSelected ? THEME_COLORS.accent : "#94A3B8"}
+                            color={isSelected ? "#FFFFFF" : "#8E8E93"}
                           />
                         </View>
                         <View style={styles.pinClipInfo}>
@@ -985,7 +985,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackScale ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackScale ? THEME_COLORS.accent : "#64748B"}
+                  color={trackScale ? "#121214" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
                   Follow Scale
@@ -1005,7 +1005,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackRotation ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackRotation ? THEME_COLORS.accent : "#64748B"}
+                  color={trackRotation ? "#121214" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
                   Follow Tilt
@@ -1019,7 +1019,7 @@ export default function MotionTrackingModal({
         {!isElementClip && activeTab === "camera" && (
           <View style={styles.tabContentSection}>
             <View style={styles.cameraInfoCard}>
-              <Ionicons name="videocam" size={16} color={THEME_COLORS.accent} style={{ marginRight: 8 }} />
+              <Ionicons name="videocam" size={16} color="#EDEDED" style={{ marginRight: 8 }} />
               <Text style={styles.cameraInfoDesc}>
                 Locks player camera onto tracked subject. Auto-centers screen and scales to eliminate canvas borders.
               </Text>
@@ -1039,7 +1039,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={cameraFitToScreen ? "checkbox" : "square-outline"}
                   size={15}
-                  color={cameraFitToScreen ? THEME_COLORS.accent : "#64748B"}
+                  color={cameraFitToScreen ? "#121214" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, cameraFitToScreen && styles.togglePillTextActive]}>
                   Fit to Screen
@@ -1059,7 +1059,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={cameraLockCenter ? "checkbox" : "square-outline"}
                   size={15}
-                  color={cameraLockCenter ? THEME_COLORS.accent : "#64748B"}
+                  color={cameraLockCenter ? "#121214" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, cameraLockCenter && styles.togglePillTextActive]}>
                   Lock Center
@@ -1077,7 +1077,7 @@ export default function MotionTrackingModal({
                   step={5}
                   unit="%"
                   layout="inline"
-                  accentColor={THEME_COLORS.accent}
+                  accentColor="#FFFFFF"
                   onChange={(val) => {
                     const z = Number((val / 100).toFixed(2));
                     setCameraZoom(z);
@@ -1100,7 +1100,7 @@ export default function MotionTrackingModal({
             step={5}
             unit="%"
             layout="inline"
-            accentColor={THEME_COLORS.accent}
+            accentColor="#FFFFFF"
             onChange={(val) => {
               setSmoothness(val);
               syncTracking({ smoothness: val });
@@ -1156,7 +1156,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: "rgba(0, 229, 201, 0.12)",
+    backgroundColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1243,19 +1243,19 @@ const styles = StyleSheet.create({
   elementHeaderCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 229, 201, 0.08)",
+    backgroundColor: "#18181A",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 7,
     marginVertical: 6,
     borderWidth: 1,
-    borderColor: "rgba(0, 229, 201, 0.25)",
+    borderColor: "#27272A",
   },
   elementIconBadge: {
     width: 26,
     height: 26,
     borderRadius: 6,
-    backgroundColor: "rgba(0, 229, 201, 0.16)",
+    backgroundColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 9,
@@ -1311,9 +1311,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabBtnActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.12)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(0, 229, 201, 0.4)",
+    borderColor: "#FFFFFF",
   },
   tabText: {
     color: "#94A3B8",
@@ -1321,8 +1321,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   tabTextActive: {
-    color: THEME_COLORS.accent || "#00E5C9",
-    fontWeight: "700",
+    color: "#121214",
+    fontWeight: "600",
   },
   sheetBody: {
     flex: 1,
@@ -1331,11 +1331,11 @@ const styles = StyleSheet.create({
     paddingBottom: 56,
   },
   scanningCard: {
-    backgroundColor: "rgba(0, 229, 201, 0.06)",
+    backgroundColor: "#18181A",
     borderRadius: 8,
     padding: 8,
     borderWidth: 1,
-    borderColor: "rgba(0, 229, 201, 0.25)",
+    borderColor: "#27272A",
     marginBottom: 6,
   },
   scanningHeader: {
@@ -1355,7 +1355,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   scanningPercent: {
-    color: THEME_COLORS.accent || "#00E5C9",
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1368,7 +1368,7 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: THEME_COLORS.accent || "#00E5C9",
+    backgroundColor: "#FFFFFF",
     borderRadius: 2,
   },
   cancelScanBtn: {
@@ -1394,18 +1394,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: THEME_COLORS.accent || "#00E5C9",
+    backgroundColor: "#FFFFFF",
     paddingVertical: 8,
-    borderRadius: 7,
+    borderRadius: 6,
   },
   retrackBtn: {
-    backgroundColor: THEME_COLORS.accent || "#00E5C9",
+    backgroundColor: "#FFFFFF",
   },
   startTrackBtnText: {
-    color: "#000000",
+    color: "#121214",
     fontSize: 11.5,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   bakeBtn: {
     flexDirection: "row",
@@ -1421,7 +1421,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(16, 185, 129, 0.3)",
   },
   bakeBtnText: {
-    color: THEME_COLORS.accent || "#00E5C9",
+    color: "#EDEDED",
     fontSize: 10.5,
     fontWeight: "700",
   },
@@ -1453,8 +1453,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
   segmentBtnActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.12)",
-    borderColor: "rgba(0, 229, 201, 0.4)",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   segmentText: {
     color: "#94A3B8",
@@ -1462,8 +1462,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   segmentTextActive: {
-    color: THEME_COLORS.accent || "#00E5C9",
-    fontWeight: "700",
+    color: "#121214",
+    fontWeight: "600",
   },
   compactSliderWrap: {
     marginVertical: 0,
@@ -1519,8 +1519,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.07)",
   },
   pinClipRowActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.10)",
-    borderColor: "rgba(0, 229, 201, 0.4)",
+    backgroundColor: "#18181A",
+    borderColor: "#FFFFFF",
   },
   pinClipIconWrap: {
     width: 26,
@@ -1532,7 +1532,7 @@ const styles = StyleSheet.create({
     marginRight: 9,
   },
   pinClipIconWrapActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.18)",
+    backgroundColor: "#27272A",
   },
   pinClipInfo: {
     flex: 1,
@@ -1544,8 +1544,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   pinClipLabelActive: {
-    color: THEME_COLORS.accent || "#00E5C9",
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   pinClipSubtext: {
     color: "#64748B",
@@ -1563,8 +1563,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   pinRadioIndicatorActive: {
-    backgroundColor: THEME_COLORS.accent || "#00E5C9",
-    borderColor: THEME_COLORS.accent || "#00E5C9",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   toggleRow: {
     flexDirection: "row",
@@ -1583,8 +1583,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.06)",
   },
   togglePillActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.08)",
-    borderColor: "rgba(0, 229, 201, 0.25)",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   togglePillText: {
     color: "#94A3B8",
@@ -1592,8 +1592,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   togglePillTextActive: {
-    color: "#E2E8F0",
-    fontWeight: "700",
+    color: "#121214",
+    fontWeight: "600",
   },
   cameraInfoCard: {
     flexDirection: "row",

@@ -269,12 +269,12 @@ function BackgroundModalContent({
               <Ionicons
                 name="color-palette-outline"
                 size={12}
-                color={activeTab === 'color' ? '#00F2FE' : '#94A3B8'}
+                color={activeTab === 'color' ? '#FFFFFF' : '#8E8E93'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'color' && { color: '#00F2FE', fontWeight: '500' },
+                  activeTab === 'color' && { color: '#FFFFFF', fontWeight: '500' },
                 ]}
               >
                 Color
@@ -291,12 +291,12 @@ function BackgroundModalContent({
               <Ionicons
                 name="image-outline"
                 size={12}
-                color={activeTab === 'image' ? '#00F2FE' : '#94A3B8'}
+                color={activeTab === 'image' ? '#FFFFFF' : '#8E8E93'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'image' && { color: '#00F2FE', fontWeight: '500' },
+                  activeTab === 'image' && { color: '#FFFFFF', fontWeight: '500' },
                 ]}
               >
                 Image
@@ -313,12 +313,12 @@ function BackgroundModalContent({
               <Ionicons
                 name="water-outline"
                 size={12}
-                color={activeTab === 'blur' ? '#00F2FE' : '#94A3B8'}
+                color={activeTab === 'blur' ? '#FFFFFF' : '#8E8E93'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'blur' && { color: '#00F2FE', fontWeight: '500' },
+                  activeTab === 'blur' && { color: '#FFFFFF', fontWeight: '500' },
                 ]}
               >
                 Blur
@@ -332,7 +332,7 @@ function BackgroundModalContent({
                 activeOpacity={0.8}
                 accessibilityLabel="Reset background to default"
               >
-                <Ionicons name="refresh-outline" size={12} color="#00F2FE" />
+                <Ionicons name="refresh-outline" size={12} color="#8E8E93" />
               </TouchableOpacity>
             )}
           </View>
@@ -512,7 +512,7 @@ function BackgroundModalContent({
                           <Ionicons name="checkmark" size={9} color="#000000" />
                         </View>
                       ) : (
-                        <Ionicons name="add-circle-outline" size={16} color="#00F2FE" />
+                        <Ionicons name="add-circle-outline" size={16} color="#FFFFFF" />
                       )}
                     </TouchableOpacity>
                   </>
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -653,25 +653,25 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: '#121214',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     maxHeight: Platform.OS === 'web' ? '70%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#1F1F23',
   },
   sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#3F3F46',
-    borderRadius: 2,
+    width: 28,
+    height: 2.5,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 1.5,
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   header: {
     flexDirection: 'row',
@@ -680,17 +680,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   headerCloseBtn: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -706,24 +706,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
     flexDirection: 'row',
     alignItems: 'center',
   },
   resetText: {
-    color: '#94A3B8',
+    color: '#00F2FE',
     fontSize: 9,
-    fontWeight: '400',
+    fontWeight: '600',
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#131826',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -732,11 +732,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     marginTop: 4,
     marginBottom: 4,
-    backgroundColor: '#08090E',
-    borderRadius: 6,
+    backgroundColor: '#141416',
+    borderRadius: 5,
     padding: 2,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     height: 26,
   },
   tabBtn: {
@@ -748,13 +748,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   tabBtnActive: {
-    backgroundColor: '#131826',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: '#00F2FE',
+    borderColor: '#FFFFFF',
   },
   tabText: {
     fontSize: 9.5,
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontWeight: '400',
   },
   contentScroll: {
@@ -768,9 +768,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionTitle: {
-    color: '#94A3B8',
+    color: '#CBD5E1',
     fontSize: 8.5,
-    fontWeight: '500',
+    fontWeight: '400',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 4,
@@ -796,147 +796,147 @@ const styles = StyleSheet.create({
   },
   colorLabel: {
     fontSize: 7.5,
-    color: '#64748B',
+    color: '#71717A',
     marginTop: 1,
     textAlign: 'center',
     fontWeight: '400',
   },
   colorLabelActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   hexInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
-    borderRadius: 8,
+    backgroundColor: '#18181A',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
-    paddingHorizontal: 10,
-    height: 36,
-    gap: 8,
+    borderColor: '#27272A',
+    paddingHorizontal: 8,
+    height: 30,
+    gap: 6,
     marginTop: 4,
-    marginBottom: 16,
+    marginBottom: 10,
   },
   colorCircleSmall: {
     width: 18,
     height: 18,
     borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#38BDF8',
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   hexInput: {
     flex: 1,
-    color: '#FFFFFF',
-    fontSize: 13,
+    color: '#EDEDED',
+    fontSize: 11,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    fontWeight: '600',
-    letterSpacing: 1,
-    paddingVertical: 4,
+    fontWeight: '400',
+    letterSpacing: 0.5,
+    paddingVertical: 2,
   },
   uploadCardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     borderStyle: 'dashed',
-    borderRadius: 6,
+    borderRadius: 5,
     padding: 6,
     gap: 6,
   },
   uploadIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#1B2234',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#141416',
     alignItems: 'center',
     justifyContent: 'center',
   },
   uploadTitle: {
-    color: '#FFFFFF',
-    fontSize: 10.5,
+    color: '#EDEDED',
+    fontSize: 10,
     fontWeight: '500',
   },
   uploadSubtitle: {
-    color: '#64748B',
-    fontSize: 8.5,
+    color: '#71717A',
+    fontSize: 8,
     marginTop: 1,
   },
   activeCustomImageContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
-    borderRadius: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     padding: 5,
     marginTop: 6,
   },
   liveFrameCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
-    borderRadius: 6,
-    padding: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
+    padding: 5,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     marginTop: 4,
     marginBottom: 4,
   },
   liveFrameCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   liveFrameThumb: {
-    width: 48,
-    height: 34,
+    width: 44,
+    height: 30,
     borderRadius: 4,
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
   },
   liveDot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
   },
   liveFrameTitle: {
-    color: '#FFFFFF',
-    fontSize: 10.5,
+    color: '#EDEDED',
+    fontSize: 10,
     fontWeight: '500',
   },
   liveFrameSubtitle: {
-    color: '#94A3B8',
-    fontSize: 8.5,
+    color: '#8E8E93',
+    fontSize: 8,
     marginTop: 1,
   },
   liveSelectedBadge: {
-    width: 15,
-    height: 15,
-    borderRadius: 7.5,
-    backgroundColor: '#00F2FE',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeCustomImageThumb: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     borderRadius: 4,
   },
   activeCustomImageText: {
-    color: '#FFFFFF',
-    fontSize: 9.5,
+    color: '#EDEDED',
+    fontSize: 9,
     fontWeight: '500',
   },
   activeCustomImageSub: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8,
     marginTop: 1,
   },
   removeImageBtn: {
     padding: 4,
     borderRadius: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
   wallpaperGrid: {
     flexDirection: 'row',
@@ -945,15 +945,15 @@ const styles = StyleSheet.create({
   },
   wallpaperCard: {
     width: '23.5%',
-    height: 46,
-    borderRadius: 5,
+    height: 44,
+    borderRadius: 4,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     position: 'relative',
   },
   wallpaperCardActive: {
-    borderColor: '#00F2FE',
+    borderColor: '#FFFFFF',
   },
   wallpaperCardImage: {
     width: '100%',
@@ -966,7 +966,7 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 3,
-    paddingVertical: 1.5,
+    paddingVertical: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -989,16 +989,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     padding: 6,
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     marginBottom: 6,
   },
   blurNoticeText: {
-    color: '#94A3B8',
-    fontSize: 9.5,
+    color: '#8E8E93',
+    fontSize: 9,
     flex: 1,
     lineHeight: 12,
   },
@@ -1009,23 +1009,23 @@ const styles = StyleSheet.create({
   },
   blurPresetCard: {
     width: '23.5%',
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderRadius: 5,
     padding: 3,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   blurPresetCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   blurThumbnailContainer: {
     width: '100%',
-    height: 34,
+    height: 32,
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
     marginBottom: 2,
     position: 'relative',
     alignItems: 'center',
@@ -1047,21 +1047,21 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   blurCardTitle: {
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '400',
   },
   blurCardTitleActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   blurCardDesc: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 7.5,
     marginTop: 1,
   },
@@ -1069,7 +1069,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -1078,7 +1078,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
-    color: '#08090E',
+    color: '#000000',
     fontSize: 9.5,
     fontWeight: '500',
   },

@@ -245,9 +245,9 @@ export default function TextStyleTab({
                   style={[
                     styles.colorCircle,
                     {
-                      backgroundColor: "#131926",
+                      backgroundColor: "#18181A",
                       borderWidth: 1,
-                      borderColor: isSelected ? "#00F2FE" : "#1F293D",
+                      borderColor: isSelected ? "#FFFFFF" : "#27272A",
                       alignItems: "center",
                       justifyContent: "center",
                     },

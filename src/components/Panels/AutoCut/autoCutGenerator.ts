@@ -137,7 +137,7 @@ export function generateAutoCutProject({
           style: {
             fontSize: 26,
             fontWeight: '800',
-            color: '#00F2FE',
+            color: '#FFFFFF',
             backgroundColor: 'rgba(0,0,0,0.65)',
             borderRadius: 8,
             paddingHorizontal: 12,

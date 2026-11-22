@@ -42,7 +42,7 @@ export default function TextAnimTab({
                 <Ionicons
                   name={anim.icon as any}
                   size={14}
-                  color={isActive ? "#00F2FE" : "#94A3B8"}
+                  color={isActive ? "#FFFFFF" : "#8E8E93"}
                 />
                 <Text
                   style={[

@@ -423,7 +423,7 @@ export default function EffectsModal({
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
         <ModalHeader
-          title={editingClip ? "Edit Effect" : "Video Effects"}
+          title="Effects"
           iconName="sparkles"
           onClose={onClose}
           onReset={handleClear}
@@ -444,8 +444,8 @@ export default function EffectsModal({
                   style={[
                     styles.categoryPill,
                     {
-                      borderColor: '#00F2FE',
-                      backgroundColor: 'rgba(0, 242, 254, 0.12)',
+                      borderColor: 'rgba(255, 255, 255, 0.25)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
                       flexDirection: 'row',
                       alignItems: 'center',
                     },
@@ -453,11 +453,11 @@ export default function EffectsModal({
                   onPress={handleClear}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 4 }} />
+                  <Ionicons name="refresh-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
                   <Text
                     style={[
                       styles.categoryPillText,
-                      { color: '#00F2FE', fontWeight: '700', flexShrink: 0 },
+                      { color: '#FFFFFF', fontWeight: '500', flexShrink: 0 },
                       Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : null,
                     ]}
                     numberOfLines={1}
@@ -495,7 +495,7 @@ export default function EffectsModal({
               <View style={styles.intensityCard}>
                 <View style={styles.intensityHeaderRow}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Ionicons name="sparkles" size={13} color="#00F2FE" />
+                    <Ionicons name="sparkles" size={13} color="#FFFFFF" />
                     <Text style={styles.intensityActiveName} numberOfLines={1}>
                       {EFFECT_PRESETS.find((p) => p.id === selectedEffectId || p.type === selectedEffectId)?.name || 'Active Effect'}
                     </Text>
@@ -504,14 +504,14 @@ export default function EffectsModal({
                 </View>
 
                 <CompactSliderInput
-                  label="Effect Intensity"
+                  label="Strength"
                   value={Math.round(intensity * 100)}
                   min={5}
                   max={100}
                   step={1}
                   unit="%"
                   defaultValue={80}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onChange={(newPct) => handleIntensityChange(newPct / 100)}
                 />
@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -640,19 +640,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#121214',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 16 : 6,
     borderTopWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#1F1F23',
   },
   sheetHandle: {
-    width: 32,
-    height: 4,
-    backgroundColor: '#1F2637',
-    borderRadius: 2,
+    width: 28,
+    height: 2.5,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 1.5,
     alignSelf: 'center',
     marginTop: 6,
   },
@@ -660,11 +660,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#08090E',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#121214',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -672,33 +672,33 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sheetTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    color: '#EDEDED',
+    fontSize: 11.5,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   resetBtn: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: '#131826',
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
     flexDirection: 'row',
     alignItems: 'center',
   },
   resetText: {
-    color: '#8E95A5',
+    color: '#00F2FE',
     fontSize: 9.5,
-    fontWeight: '400',
+    fontWeight: '600',
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#131826',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -706,9 +706,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     gap: 4,
-    backgroundColor: '#08090E',
+    backgroundColor: '#121214',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   categoryScroll: {
     gap: 4,
@@ -718,30 +718,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   categoryPillText: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 9.5,
     fontWeight: '400',
   },
   categoryPillTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   intensityCard: {
-    backgroundColor: '#0F131F',
-    borderRadius: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
     padding: 6,
     marginTop: 4,
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.2)',
+    borderColor: '#27272A',
   },
   intensityHeaderRow: {
     flexDirection: 'row',
@@ -750,13 +750,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   intensityActiveName: {
-    color: '#E2E8F0',
+    color: '#EDEDED',
     fontSize: 9.5,
     fontWeight: '500',
     maxWidth: 200,
   },
   intensityBadgeText: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontSize: 9.5,
     fontWeight: '500',
   },
@@ -771,13 +771,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: '#141416',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   quickPresetPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
-    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#FFFFFF',
   },
   quickPresetText: {
     color: '#8E95A5',
@@ -785,7 +785,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   quickPresetTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   sheetBody: {
@@ -804,21 +804,21 @@ const styles = StyleSheet.create({
     width: '23.8%',
     alignItems: 'center',
     padding: 3,
-    borderRadius: 5,
-    backgroundColor: '#131826',
+    borderRadius: 6,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   effectCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   previewBox: {
     width: '100%',
     height: 36,
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: '#090B10',
+    backgroundColor: '#121214',
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
@@ -831,13 +831,13 @@ const styles = StyleSheet.create({
   nonePreviewBox: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#0A0D14',
+    backgroundColor: '#141416',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
   },
   nonePreviewText: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     fontWeight: '400',
   },
@@ -845,10 +845,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 2,
     right: 2,
-    width: 11,
-    height: 11,
-    borderRadius: 5.5,
-    backgroundColor: '#00F2FE',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
   recText: {
     color: '#FFFFFF',
     fontSize: 7.5,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   glitchStripe1: {
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 6,
-    backgroundColor: 'rgba(0, 242, 254, 0.45)',
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
   glitchStripe2: {
     position: 'absolute',
@@ -892,7 +892,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 5,
-    backgroundColor: 'rgba(255, 0, 80, 0.45)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   matrixOverlay: {
     position: 'absolute',
@@ -903,20 +903,20 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 2,
     borderWidth: 0.5,
-    borderColor: '#10B981',
+    borderColor: '#71717A',
     zIndex: 5,
   },
   matrixCodeText: {
-    color: '#10B981',
+    color: '#EDEDED',
     fontSize: 7,
-    fontWeight: '800',
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   thermalOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(239, 68, 68, 0.25)',
-    borderBottomWidth: 3,
-    borderColor: '#F59E0B',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomWidth: 2,
+    borderColor: '#FFFFFF',
   },
   crtScanlines: {
     ...StyleSheet.absoluteFill,
@@ -952,7 +952,7 @@ const styles = StyleSheet.create({
   neonBorder: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1.5,
-    borderColor: '#00F2FE',
+    borderColor: '#FFFFFF',
     borderRadius: 5,
   },
   vignetteShadow: {
@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
     right: -10,
     width: 30,
     height: 60,
-    backgroundColor: 'rgba(245, 158, 11, 0.35)',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
     transform: [{ rotate: '35deg' }],
   },
   badgeTag: {
@@ -990,34 +990,34 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   badgeTagText: {
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontSize: 7,
-    fontWeight: '700',
+    fontWeight: '500',
     textTransform: 'uppercase',
   },
   iconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#08090E',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#141416',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 3,
   },
   iconBoxActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   iconBoxNone: {
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
   },
   effectLabel: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '400',
     textAlign: 'center',
   },
   effectLabelActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   effectDescText: {
@@ -1027,16 +1027,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     height: 22,
     borderRadius: 5,
   },
   inlineAppliedBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#27272A',
   },
   inlineApplyText: {
-    color: '#08090E',
+    color: '#121214',
     fontSize: 9.5,
     fontWeight: '500',
   },

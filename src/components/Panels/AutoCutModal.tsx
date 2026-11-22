@@ -235,7 +235,7 @@ export default function AutoCutModal({
       {/* Standardized Header */}
       {!isInline && (
         <ModalHeader
-          title="AutoCut Reel"
+          title="AutoCut"
           iconName="flash"
           onClose={onClose}
           onDone={handleGenerate}
@@ -272,10 +272,10 @@ export default function AutoCutModal({
                         <Ionicons
                           name={tmpl.icon as any}
                           size={18}
-                          color={isSelected ? '#00F2FE' : '#8E95A5'}
+                          color={isSelected ? '#FFFFFF' : '#8E8E93'}
                         />
                         {isSelected && (
-                          <Ionicons name="checkmark-circle" size={16} color="#00F2FE" />
+                          <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
                         )}
                       </View>
                       <Text
@@ -307,7 +307,7 @@ export default function AutoCutModal({
                   activeOpacity={0.8}
                   accessibilityLabel="Upload media files"
                 >
-                  <Ionicons name="cloud-upload-outline" size={14} color="#00F2FE" />
+                  <Ionicons name="cloud-upload-outline" size={14} color="#EDEDED" />
                   <Text style={styles.uploadBtnText}>Upload Files</Text>
                 </TouchableOpacity>
               </View>
@@ -340,7 +340,7 @@ export default function AutoCutModal({
                       )}
                       {isSelected && (
                         <View style={styles.checkIcon}>
-                          <Ionicons name="checkmark-circle" size={22} color="#00F2FE" />
+                          <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
                         </View>
                       )}
                       <View style={styles.clipMetaOverlay}>
@@ -372,7 +372,7 @@ export default function AutoCutModal({
                       <Ionicons
                         name={isSelected ? 'radio-button-on' : 'radio-button-off'}
                         size={18}
-                        color={isSelected ? '#00F2FE' : '#64748B'}
+                        color={isSelected ? '#FFFFFF' : '#52525B'}
                         style={{ marginRight: 10 }}
                       />
                       <View style={{ flex: 1 }}>
@@ -452,7 +452,7 @@ export default function AutoCutModal({
               onPress={handleGenerate}
               activeOpacity={0.8}
             >
-              <Ionicons name="sparkles" size={18} color="#000000" />
+              <Ionicons name="sparkles" size={16} color="#121214" />
               <Text style={styles.generateBtnText}>
                 Generate Beat-Synced Reel ({selectedClips.length} Clips)
               </Text>

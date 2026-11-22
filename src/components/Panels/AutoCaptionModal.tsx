@@ -842,7 +842,7 @@ function AutoCaptionModalComponent({
       {/* Top Header - Rendered only in Standalone Modal Mode (Hidden in Inline Mobile Sheet) */}
       {!isInline && (
         <ModalHeader
-          title="Auto Captions"
+          title="Captions"
           iconName="chatbox-ellipses-outline"
           onClose={handleClose}
           onReset={handleResetToDefaults}
@@ -1217,7 +1217,7 @@ function AutoCaptionModalComponent({
                   style={styles.resetPresetBtn}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="refresh-outline" size={10} color={THEME_COLORS.textMuted} />
+                  <Ionicons name="refresh-outline" size={10} color="#00F2FE" />
                   <Text style={styles.resetPresetText}>Reset</Text>
                 </TouchableOpacity>
               </View>
@@ -1257,7 +1257,7 @@ function AutoCaptionModalComponent({
                             backgroundColor:
                               preset.bgColor && preset.bgColor !== "transparent"
                                 ? preset.bgColor
-                                : "#08090E",
+                                : "#141416",
                             borderColor: preset.strokeColor || "transparent",
                             borderWidth: preset.strokeWidth ? 1 : 0,
                           },
@@ -2271,12 +2271,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 4,
-    backgroundColor: THEME_COLORS.background,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
+    borderColor: "rgba(0, 242, 254, 0.35)",
   },
   resetPresetText: {
-    color: THEME_COLORS.textMuted,
+    color: "#00F2FE",
     fontSize: 9,
     fontWeight: "600",
   },

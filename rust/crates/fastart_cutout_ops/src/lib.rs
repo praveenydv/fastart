@@ -100,23 +100,33 @@ pub fn smooth_modnet_alpha(
     threshold: f32,
     feather: f32,
 ) {
-    let (thresh, soft) = if threshold <= 0.001 && feather <= 0.001 {
-        (0.04f32, 0.80f32)
+    let (t_norm, s_norm) = if threshold <= 0.001 && feather <= 0.001 {
+        (0.45f32, 0.25f32)
     } else {
-        (threshold.clamp(0.005, 0.40), feather.clamp(0.20, 0.95))
+        (threshold.clamp(0.0, 1.0), feather.clamp(0.0, 1.0))
     };
-    let inv_softness = 1.0 / soft;
+
+    // Center cutoff threshold in [0.10, 0.65]
+    let center = 0.10f32 + t_norm * 0.55f32;
+    // Transition spread half-width in [0.015, 0.25]
+    let half_w = 0.015f32 + s_norm * 0.235f32;
+
+    let v_min = (center - half_w).max(0.01f32);
+    let v_max = (center + half_w).min(0.98f32);
+    let span = (v_max - v_min).max(0.02f32);
+    let inv_span = 1.0f32 / span;
+
     let total = alpha.len().min(output.len());
     if total != MODNET_SIZE * MODNET_SIZE {
         for i in 0..total {
-            output[i] = alpha_to_byte(alpha[i], true, thresh, soft, inv_softness);
+            output[i] = alpha_to_byte(alpha[i], v_min, v_max, inv_span);
         }
         return;
     }
 
     // Step 1: Base Hermite S-curve mapping with smooth rolloff
     for i in 0..total {
-        output[i] = alpha_to_byte(alpha[i], true, thresh, soft, inv_softness);
+        output[i] = alpha_to_byte(alpha[i], v_min, v_max, inv_span);
     }
 
     // Step 2: Edge-Aware 3x3 Anti-Aliasing on transition boundaries.
@@ -196,29 +206,16 @@ pub fn unpack_alpha_rle_rgba(rle: &[u8], out_rgba: &mut [u8]) -> usize {
 #[inline]
 fn alpha_to_byte(
     value: f32,
-    use_curve: bool,
-    threshold: f32,
-    softness: f32,
-    inv_softness: f32,
+    v_min: f32,
+    v_max: f32,
+    inv_span: f32,
 ) -> u8 {
-    let byte = if use_curve {
-        if value >= threshold + softness {
-            255
-        } else if value <= threshold {
-            0
-        } else {
-            let u = (value - threshold) * inv_softness;
-            (u * u * (3.0 - 2.0 * u) * 255.0) as i32
-        }
+    if value <= v_min {
+        0
+    } else if value >= v_max {
+        255
     } else {
-        if value <= 0.06 {
-            0
-        } else if value >= 0.78 {
-            255
-        } else {
-            let u = (value - 0.06) / 0.72;
-            (u * u * (3.0 - 2.0 * u) * 255.0) as i32
-        }
-    };
-    byte.clamp(0, 255) as u8
+        let u = (value - v_min) * inv_span;
+        ((u * u * (3.0 - 2.0 * u) * 255.0) as i32).clamp(0, 255) as u8
+    }
 }

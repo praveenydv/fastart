@@ -843,7 +843,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             defaultValue={100}
             showReset={true}
             showSteppers={true}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             onChange={(val) => handleUpdateOpacity(val)}
             onReset={() => {
               handleUpdateOpacity(100);
@@ -993,8 +993,8 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
       {/* Clip Deletion Confirmation Modal */}
       <ConfirmDeleteModal
         visible={!!clipToDelete}
-        title="Delete Clip?"
-        message="Are you sure you want to delete this clip from the timeline?"
+        title="Delete"
+        message="Delete selected clip?"
         itemName={clipToDelete?.name}
         itemType={clipToDelete?.type}
         itemDetails={
@@ -1002,7 +1002,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             ? `Duration: ${clipToDelete.duration.toFixed(1)}s`
             : undefined
         }
-        confirmText="Delete Clip"
+        confirmText="Delete"
         cancelText="Cancel"
         onConfirm={handleConfirmDeleteClip}
         onCancel={() => setClipToDelete(null)}
@@ -1041,33 +1041,33 @@ const modalStyles = StyleSheet.create({
   panelContainer: {
     padding: 6,
     flex: 1,
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   panelSectionTitle: {
     fontSize: 8.5,
     fontWeight: "500",
-    color: "#94A3B8",
+    color: "#71717A",
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   layerInfoBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderRadius: 6,
     padding: 6,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     marginBottom: 6,
   },
   layerInfoTitle: {
     fontSize: 10.5,
     fontWeight: "500",
-    color: "#FFFFFF",
+    color: "#EDEDED",
   },
   layerInfoSubtitle: {
     fontSize: 8.5,
-    color: "#94A3B8",
+    color: "#8E8E93",
     marginTop: 1,
   },
   btnGrid: {
@@ -1079,17 +1079,17 @@ const modalStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     paddingVertical: 5,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     gap: 3,
   },
   actionCardText: {
     fontSize: 9.5,
     fontWeight: "400",
-    color: "#FFFFFF",
+    color: "#EDEDED",
   },
   chipRow: {
     flexDirection: "row",
@@ -1100,21 +1100,21 @@ const modalStyles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   chipBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   chipText: {
     fontSize: 9.5,
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontWeight: "400",
   },
   chipTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
   chipGrid: {
@@ -1126,24 +1126,24 @@ const modalStyles = StyleSheet.create({
     width: "48%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     paddingVertical: 6,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     gap: 3,
   },
   animCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   animCardText: {
     fontSize: 9.5,
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontWeight: "400",
   },
   animCardTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
 });

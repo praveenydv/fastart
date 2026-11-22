@@ -44,7 +44,7 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
 
         {clipDuration > 0 && (
           <View style={styles.audioDurationPill}>
-            <Ionicons name="time-outline" size={13} color="#00F2FE" />
+            <Ionicons name="time-outline" size={13} color="#EDEDED" />
             <Text style={styles.audioDurationText}>
               {baseDuration.toFixed(1)}s ➔ {newDuration.toFixed(1)}s
             </Text>
@@ -96,7 +96,7 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
           decimals={2}
           unit="x"
           defaultValue={1.0}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onChange={(val) => onSelectSpeed(val)}
         />
@@ -115,7 +115,7 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
             <Ionicons
               name={keepPitch ? 'musical-note' : 'musical-note-outline'}
               size={16}
-              color={keepPitch ? '#00F2FE' : '#94A3B8'}
+              color={keepPitch ? '#FFFFFF' : '#8E8E93'}
             />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
@@ -131,7 +131,7 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
           <Ionicons
             name={keepPitch ? 'checkmark-circle' : 'ellipse-outline'}
             size={18}
-            color={keepPitch ? '#00F2FE' : '#64748B'}
+            color={keepPitch ? '#FFFFFF' : '#71717A'}
           />
         </View>
       </TouchableOpacity>

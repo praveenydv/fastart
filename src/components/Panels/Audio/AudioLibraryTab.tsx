@@ -29,14 +29,14 @@ export const AudioLibraryTab: React.FC<AudioLibraryTabProps> = ({
           {activeTab === 'sfx' ? 'OPEN SOURCE SOUND EFFECTS' : 'OPEN SOURCE SOUNDTRACKS'}
         </Text>
         <View style={styles.ossBadge}>
-          <Ionicons name="globe-outline" size={10} color="#00F2FE" />
+          <Ionicons name="globe-outline" size={10} color="#8E8E93" />
           <Text style={styles.ossBadgeText}>{"Openverse & CC0 Library"}</Text>
         </View>
       </View>
 
       {isLoading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color="#00F2FE" />
+          <ActivityIndicator size="small" color="#FFFFFF" />
           <Text style={styles.loadingText}>Searching open-source library...</Text>
         </View>
       ) : audioItems.length === 0 ? (

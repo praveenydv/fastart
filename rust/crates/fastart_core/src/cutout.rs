@@ -723,12 +723,59 @@ fn process_modnet_alpha_row(
     cut: f32,
     soft: f32,
 ) {
-    let source_y = y * 512 / height;
+    let inv_soft = 1.0 / soft;
+    if width == 512 && height == 512 {
+        let row_start = y * 512;
+        for (x, alpha) in output_row.iter_mut().enumerate() {
+            let value = raw_alpha[row_start + x];
+            let opacity = if value >= cut + soft {
+                1.0
+            } else if value <= cut {
+                0.0
+            } else {
+                let u = (value - cut) * inv_soft;
+                u * u * (3.0 - 2.0 * u)
+            };
+            *alpha = (opacity * 255.0).clamp(0.0, 255.0) as u8;
+        }
+        return;
+    }
+
+    // High-precision Bilinear Interpolation: eliminates blocky pixel staircases at 1080p and 4K
+    let scale_y = 511.0f32 / (height - 1).max(1) as f32;
+    let scale_x = 511.0f32 / (width - 1).max(1) as f32;
+
+    let sy = (y as f32 * scale_y).clamp(0.0, 511.0);
+    let y0 = sy.floor() as usize;
+    let y1 = (y0 + 1).min(511);
+    let ty = sy - y0 as f32;
+    let row0 = y0 * 512;
+    let row1 = y1 * 512;
+
     for (x, alpha) in output_row.iter_mut().enumerate() {
-        let value = raw_alpha[source_y * 512 + x * 512 / width];
-        let u = (value - cut) / soft;
-        let opacity = if value >= cut + soft { 1.0 } else if value <= cut { 0.0 } else { u * u * (3.0 - 2.0 * u) };
-        *alpha = (opacity * 255.0).round().clamp(0.0, 255.0) as u8;
+        let sx = (x as f32 * scale_x).clamp(0.0, 511.0);
+        let x0 = sx.floor() as usize;
+        let x1 = (x0 + 1).min(511);
+        let tx = sx - x0 as f32;
+
+        let v00 = raw_alpha[row0 + x0];
+        let v10 = raw_alpha[row0 + x1];
+        let v01 = raw_alpha[row1 + x0];
+        let v11 = raw_alpha[row1 + x1];
+
+        let top = v00 + tx * (v10 - v00);
+        let btm = v01 + tx * (v11 - v01);
+        let value = top + ty * (btm - top);
+
+        let opacity = if value >= cut + soft {
+            1.0
+        } else if value <= cut {
+            0.0
+        } else {
+            let u = (value - cut) * inv_soft;
+            u * u * (3.0 - 2.0 * u)
+        };
+        *alpha = (opacity * 255.0).clamp(0.0, 255.0) as u8;
     }
 }
 

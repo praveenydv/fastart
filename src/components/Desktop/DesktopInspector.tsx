@@ -97,7 +97,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
           activeOpacity={0.7}
           accessibilityLabel="Expand properties inspector"
         >
-          <Ionicons name="chevron-back" size={16} color={THEME_COLORS.accent} />
+          <Ionicons name="chevron-back" size={14} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.collapsedLabel}>
           {selectedClip ? (selectedClip.title || 'Clip') : 'Project'}
@@ -120,12 +120,12 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
         {/* Panel Header */}
         <View style={styles.header}>
           <View style={styles.headerTitleRow}>
-            <Ionicons name="options-outline" size={15} color={THEME_COLORS.accent} />
-            <Text style={styles.headerTitle}>Project Settings</Text>
+            <Ionicons name="options-outline" size={14} color="#8E8E93" />
+            <Text style={styles.headerTitle}>Project</Text>
           </View>
           {onToggleCollapse && (
             <TouchableOpacity onPress={onToggleCollapse} style={styles.iconBtn}>
-              <Ionicons name="chevron-forward" size={15} color={THEME_COLORS.textSecondary} />
+              <Ionicons name="chevron-forward" size={14} color="#8E8E93" />
             </TouchableOpacity>
           )}
         </View>
@@ -322,11 +322,11 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                 ? 'musical-notes-outline'
                 : 'text-outline'
             }
-            size={15}
-            color={THEME_COLORS.accent}
+            size={14}
+            color="#8E8E93"
           />
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {selectedClip.title || 'Selected Clip'}
+            {selectedClip.title || 'Clip'}
           </Text>
         </View>
 
@@ -337,7 +337,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
               style={styles.iconBtn}
               accessibilityLabel="Duplicate"
             >
-              <Ionicons name="copy-outline" size={14} color={THEME_COLORS.textSecondary} />
+              <Ionicons name="copy-outline" size={13} color="#8E8E93" />
             </TouchableOpacity>
           )}
           {onDeleteClip && (
@@ -346,12 +346,12 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
               style={styles.iconBtn}
               accessibilityLabel="Delete"
             >
-              <Ionicons name="trash-outline" size={14} color={THEME_COLORS.error} />
+              <Ionicons name="trash-outline" size={13} color={THEME_COLORS.error} />
             </TouchableOpacity>
           )}
           {onToggleCollapse && (
             <TouchableOpacity onPress={onToggleCollapse} style={styles.iconBtn}>
-              <Ionicons name="chevron-forward" size={15} color={THEME_COLORS.textSecondary} />
+              <Ionicons name="chevron-forward" size={14} color="#8E8E93" />
             </TouchableOpacity>
           )}
         </View>
@@ -685,144 +685,148 @@ const webSliderStyle: any = {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: THEME_COLORS.surface,
+    backgroundColor: '#121214',
     borderLeftWidth: 1,
-    borderLeftColor: THEME_COLORS.borderSubtle,
+    borderLeftColor: '#1F1F23',
     height: '100%',
     flexDirection: 'column',
   },
   collapsedRail: {
     width: 24,
     height: '100%',
-    backgroundColor: THEME_COLORS.surface,
+    backgroundColor: '#121214',
     borderLeftWidth: 1,
-    borderLeftColor: THEME_COLORS.borderSubtle,
+    borderLeftColor: '#1F1F23',
     alignItems: 'center',
     paddingTop: 8,
   },
   expandBtn: {
     width: 20,
-    height: 44,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: THEME_COLORS.card,
+    backgroundColor: '#18181A',
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   collapsedLabel: {
-    color: THEME_COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#8E8E93',
+    fontSize: 9.5,
+    fontWeight: '400',
     marginTop: 20,
     transform: [{ rotate: '90deg' }],
     width: 100,
   },
   header: {
-    height: 38,
+    height: 34,
     borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.borderSubtle,
+    borderBottomColor: '#1F1F23',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 10,
-    backgroundColor: THEME_COLORS.surfaceElevated,
+    backgroundColor: '#121214',
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     flex: 1,
   },
   headerTitle: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#EDEDED',
+    fontSize: 11.5,
+    fontWeight: '500',
   },
   iconBtn: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 4,
-    backgroundColor: THEME_COLORS.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   primaryTabBar: {
-    height: 34,
+    height: 32,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.borderSubtle,
+    borderBottomColor: '#1F1F23',
     paddingHorizontal: 8,
-    backgroundColor: THEME_COLORS.background,
+    backgroundColor: '#121214',
     gap: 4,
   },
   primaryTab: {
-    paddingHorizontal: 10,
-    height: 26,
+    paddingHorizontal: 8,
+    height: 24,
     borderRadius: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryTabActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderBottomWidth: 2,
-    borderBottomColor: THEME_COLORS.accent,
+    borderBottomColor: '#FFFFFF',
   },
   primaryTabText: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#8E8E93',
+    fontSize: 10.5,
+    fontWeight: '400',
   },
   primaryTabTextActive: {
-    color: THEME_COLORS.accent,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   subTabBar: {
-    height: 30,
+    height: 28,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    backgroundColor: THEME_COLORS.surface,
+    backgroundColor: '#18181A',
     borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.borderSubtle,
-    gap: 4,
+    borderBottomColor: '#1F1F23',
+    gap: 3,
   },
   subTab: {
     flex: 1,
-    height: 22,
+    height: 20,
     borderRadius: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   subTabActive: {
-    backgroundColor: THEME_COLORS.cardHover,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   subTabText: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#8E8E93',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   subTabTextActive: {
-    color: THEME_COLORS.textPrimary,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   scrollArea: {
     flex: 1,
   },
   section: {
-    padding: 12,
+    padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.borderSubtle,
+    borderBottomColor: '#1F1F23',
   },
   sectionTitle: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 8,
+    color: '#CBD5E1',
+    fontSize: 10.5,
+    fontWeight: '500',
+    marginBottom: 6,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   controlRow: {
-    marginBottom: 10,
+    marginBottom: 8,
   },
   labelValueHeader: {
     flexDirection: 'row',
@@ -830,56 +834,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   controlLabel: {
-    color: THEME_COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
+    color: '#8E8E93',
+    fontSize: 10.5,
+    fontWeight: '400',
   },
   controlValue: {
-    color: THEME_COLORS.accent,
-    fontSize: 11,
-    fontWeight: '700',
+    color: '#EDEDED',
+    fontSize: 10.5,
+    fontWeight: '500',
     fontVariant: ['tabular-nums'],
   },
   inputBox: {
-    backgroundColor: THEME_COLORS.card,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
-    borderRadius: 6,
+    borderColor: '#27272A',
+    borderRadius: 5,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    height: 30,
+    height: 28,
   },
   textAreaBox: {
-    backgroundColor: THEME_COLORS.card,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 76,
+    borderColor: '#27272A',
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minHeight: 68,
     overflow: 'hidden',
   },
   textAreaInput: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 12,
-    lineHeight: 18,
+    color: '#EDEDED',
+    fontSize: 11,
+    lineHeight: 16,
     flex: 1,
-    minHeight: 60,
+    minHeight: 52,
     textAlignVertical: 'top',
     padding: 0,
     minWidth: 0,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   inputPrefix: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#71717A',
+    fontSize: 10.5,
+    fontWeight: '400',
     marginRight: 6,
   },
   textInput: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 11,
+    color: '#EDEDED',
+    fontSize: 10.5,
+    fontWeight: '400',
     flex: 1,
     padding: 0,
     minWidth: 0,
@@ -888,60 +893,61 @@ const styles = StyleSheet.create({
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
   },
   chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-    backgroundColor: THEME_COLORS.card,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
+    borderColor: '#27272A',
   },
   chipActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
-    borderColor: THEME_COLORS.cyanBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   chipText: {
-    color: THEME_COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#8E8E93',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   chipTextActive: {
-    color: THEME_COLORS.accent,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   colorSwatchesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   colorSwatch: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: THEME_COLORS.borderSubtle,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#27272A',
     justifyContent: 'center',
     alignItems: 'center',
   },
   colorSwatchActive: {
-    borderColor: THEME_COLORS.accent,
-    transform: [{ scale: 1.15 }],
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.1 }],
   },
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
   statLabel: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 11,
+    color: '#71717A',
+    fontSize: 10,
+    fontWeight: '400',
   },
   statValue: {
-    color: THEME_COLORS.textPrimary,
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#EDEDED',
+    fontSize: 10,
+    fontWeight: '400',
   },
   actionBtn: {
     flex: 1,
@@ -949,86 +955,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: THEME_COLORS.card,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
-    borderRadius: 5,
-    height: 28,
+    borderColor: '#27272A',
+    borderRadius: 4,
+    height: 26,
   },
   actionBtnActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
-    borderColor: THEME_COLORS.cyanBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   actionBtnText: {
-    color: THEME_COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#8E8E93',
+    fontSize: 9.5,
+    fontWeight: '400',
   },
   actionBtnTextActive: {
-    color: THEME_COLORS.accent,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   primaryActionBtn: {
-    backgroundColor: THEME_COLORS.primary,
-    borderRadius: 6,
-    height: 32,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 5,
+    height: 28,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
   },
   primaryActionBtnText: {
     color: '#000000',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '500',
   },
   miniToggle: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: THEME_COLORS.card,
+    borderRadius: 3,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
+    borderColor: '#27272A',
   },
   miniToggleActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
-    borderColor: THEME_COLORS.cyanBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   miniToggleText: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 9,
-    fontWeight: '700',
+    color: '#71717A',
+    fontSize: 8.5,
+    fontWeight: '400',
   },
   miniToggleTextActive: {
-    color: THEME_COLORS.accent,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   maskGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
   },
   maskCard: {
     width: '31%',
-    backgroundColor: THEME_COLORS.card,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: THEME_COLORS.borderSubtle,
-    borderRadius: 6,
-    paddingVertical: 8,
+    borderColor: '#27272A',
+    borderRadius: 5,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
   },
   maskCardActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
-    borderColor: THEME_COLORS.cyanBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: '#FFFFFF',
   },
   maskCardLabel: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 9,
-    fontWeight: '600',
+    color: '#71717A',
+    fontSize: 8.5,
+    fontWeight: '400',
   },
   maskCardLabelActive: {
-    color: THEME_COLORS.accent,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });

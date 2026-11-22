@@ -63,8 +63,8 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               {isActive && <View style={styles.activeBar} />}
               <Ionicons
                 name={item.icon as any}
-                size={20}
-                color={isActive ? THEME_COLORS.accent : THEME_COLORS.textMuted}
+                size={18}
+                color={isActive ? "#FFFFFF" : "#8E8E93"}
               />
               <Text
                 style={[styles.btnLabel, isActive && styles.btnLabelActive]}
@@ -147,48 +147,48 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: DESIGN_CONSTANTS.DIMENSIONS.desktopSidebarWidth,
-    backgroundColor: THEME_COLORS.surface,
+    backgroundColor: "#121214",
     borderRightWidth: 1,
-    borderRightColor: THEME_COLORS.borderSubtle,
+    borderRightColor: "#1F1F23",
     height: '100%',
     zIndex: 20,
   },
   scrollContent: {
-    paddingVertical: 6,
+    paddingVertical: 4,
     alignItems: 'center',
     gap: 2,
   },
   sidebarBtn: {
-    width: 52,
-    height: 42,
-    borderRadius: 6,
+    width: 48,
+    height: 38,
+    borderRadius: 5,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    paddingVertical: 2,
+    paddingVertical: 1,
   },
   sidebarBtnActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   activeBar: {
     position: 'absolute',
     left: 2,
-    top: 8,
-    bottom: 8,
-    width: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: THEME_COLORS.accent,
+    top: 6,
+    bottom: 6,
+    width: 2,
+    borderRadius: 1,
+    backgroundColor: "#FFFFFF",
   },
   btnLabel: {
-    color: THEME_COLORS.textMuted,
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 2,
-    letterSpacing: 0.1,
+    color: "#71717A",
+    fontSize: 8.5,
+    fontWeight: '400',
+    marginTop: 1,
+    letterSpacing: 0,
   },
   btnLabelActive: {
-    color: THEME_COLORS.accent,
-    fontWeight: '700',
+    color: "#FFFFFF",
+    fontWeight: '500',
   },
   clipSection: {
     width: '100%',
@@ -197,33 +197,33 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   divider: {
-    width: 36,
+    width: 32,
     height: 1,
-    backgroundColor: THEME_COLORS.borderSubtle,
+    backgroundColor: "#1F1F23",
     marginBottom: 4,
   },
   sectionHeader: {
-    color: THEME_COLORS.textMuted,
+    color: "#71717A",
     fontSize: 7.5,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontWeight: '400',
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
   clipActionBtn: {
-    width: 50,
-    height: 36,
-    borderRadius: 6,
+    width: 46,
+    height: 32,
+    borderRadius: 5,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
   },
   clipActionText: {
-    color: THEME_COLORS.textMuted,
+    color: "#8E8E93",
     fontSize: 8,
-    fontWeight: '600',
+    fontWeight: '400',
     marginTop: 1,
   },
   deleteBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
 });

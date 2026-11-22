@@ -174,13 +174,19 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     } catch {}
   });
 
+  const [isReady, setIsReady] = useState(() => (player as any)?.status === "readyToPlay");
+
   // Track status changes and perform one-time initial frame pre-warm when ready
   useEffect(() => {
     if (!player) return;
+    if ((player as any).status === "readyToPlay") {
+      setIsReady(true);
+    }
     const sub = (player as any).addListener?.("statusChange", (payload: any) => {
       if (payload?.status === "error" || payload?.error) {
         setHasError(true);
       } else if (payload?.status === "readyToPlay") {
+        setIsReady(true);
         const curTarget = targetMediaTimeRef.current;
         if (!isPlayingRef.current && Math.abs(player.currentTime - curTarget) > 0.05) {
           try {
@@ -248,8 +254,8 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
         wasPlayingRef.current = isPlaying && isInside;
         // Stay paused and hold pre-warmed frame
         player.pause();
-        // If not actively inside playback (upcoming or recent tail-hold), seek to target frame so it is pre-warmed & ready
-        if (Math.abs(lastSeekTargetRef.current - curTarget) > 0.03) {
+        // If paused and not actively playing across a cut, seek to target frame so it is pre-warmed & ready
+        if (!isPlaying && Math.abs(lastSeekTargetRef.current - curTarget) > 0.03) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
@@ -339,9 +345,17 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
 
   return (
     <View style={styles.fullMedia} needsOffscreenAlphaCompositing={opacity < 1}>
+      {fallbackThumbnail ? (
+        <ExpoImage
+          source={{ uri: fallbackThumbnail }}
+          style={StyleSheet.absoluteFill}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+        />
+      ) : null}
       <VideoView
         player={player}
-        style={[styles.fullMedia, { opacity }]}
+        style={[styles.fullMedia, { opacity: isReady ? opacity : 0 }]}
         contentFit="contain"
         nativeControls={false}
         surfaceType="textureView"

@@ -295,6 +295,9 @@ export class VideoRenderer {
   }
 
   cleanup() {
+    if (activeVideoRenderer === this) {
+      activeVideoRenderer = null;
+    }
     cleanupMedia(this.getMediaSyncContext(), this.offscreenCanvas);
     this.bgImageElements.clear();
     this.offscreenCanvas = null;
@@ -555,6 +558,34 @@ export class VideoRenderer {
           handledVideoIds.add(c.id);
         }
       }
+
+      // Safety Fallback: If a track had clips, but due to floating-point precision at an exact split/cut
+      // point no clip was selected on that track, pick the adjacent clip on that track within 0.05s
+      // so the canvas never drops a frame or flashes blank!
+      clipsByTrack.forEach((trackClips, tIdx) => {
+        const hasTrackItem = activeVideoItems.some((item) => (item.clip.trackIndex || 0) === tIdx);
+        if (!hasTrackItem && trackClips.length > 0) {
+          let closestClip: VideoClip | null = null;
+          let minDistance = 0.05;
+          for (let i = 0; i < trackClips.length; i++) {
+            const tc = trackClips[i];
+            const distStart = Math.abs(time - tc.startTime);
+            const distEnd = Math.abs(time - (tc.startTime + tc.duration));
+            const dist = Math.min(distStart, distEnd);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestClip = tc;
+            }
+          }
+          if (closestClip && !handledVideoIds.has(closestClip.id)) {
+            activeVideoItems.push({
+              clip: closestClip,
+              trackIndex: (closestClip.trackIndex || 0) * 100,
+            });
+            handledVideoIds.add(closestClip.id);
+          }
+        }
+      });
 
       // Pre-warm and pre-seek upcoming video clips within 1.2s lookahead window with zero allocation
       const upcomingVideoClips = this._upcomingClipsScratch;

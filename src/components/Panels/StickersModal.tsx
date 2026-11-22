@@ -113,7 +113,7 @@ export default function StickersModal({
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
         <ModalHeader
-          title={editingClip ? 'Edit Sticker' : 'Stickers & Badges'}
+          title="Stickers"
           iconName="happy-outline"
           onClose={onClose}
         />
@@ -163,7 +163,7 @@ export default function StickersModal({
                     <Text style={[styles.stickerEmoji, isBadge && styles.badgeText]}>
                       {item.char}
                     </Text>
-                    <Text style={[styles.stickerLabel, isSelected && { color: '#00F2FE', fontWeight: '700' }]} numberOfLines={1}>
+                    <Text style={[styles.stickerLabel, isSelected && { color: '#FFFFFF', fontWeight: '500' }]} numberOfLines={1}>
                       {item.label}
                     </Text>
                   </TouchableOpacity>
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -200,18 +200,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#121214',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     maxHeight: Platform.OS === 'web' ? '74%' : '82%',
     borderTopWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#1F1F23',
   },
   sheetHandle: {
-    width: 32,
-    height: 4,
-    backgroundColor: '#1F2637',
-    borderRadius: 2,
+    width: 28,
+    height: 3,
+    backgroundColor: '#27272A',
+    borderRadius: 1.5,
     alignSelf: 'center',
     marginTop: 6,
   },
@@ -222,18 +222,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 5,
     paddingBottom: 5,
-    backgroundColor: '#08090E',
+    backgroundColor: '#121214',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   sheetTitle: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 11.5,
     fontWeight: '500',
     letterSpacing: 0.2,
   },
   sheetSubtitle: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     marginTop: 1,
   },
@@ -241,9 +241,9 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -251,51 +251,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: 6,
     paddingBottom: 6,
-    backgroundColor: '#08090E',
+    backgroundColor: '#121214',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderRadius: 5,
     paddingHorizontal: 8,
     height: 26,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     marginBottom: 4,
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 10,
     marginLeft: 5,
     paddingVertical: 0,
   },
   categoryScroll: {
-    gap: 5,
+    gap: 4,
     paddingVertical: 2,
   },
   categoryPill: {
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 5,
-    backgroundColor: '#131826',
+    borderRadius: 4,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#FFFFFF',
   },
   categoryPillText: {
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontSize: 9.5,
     fontWeight: '400',
   },
   categoryPillTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   sheetBody: {
@@ -307,36 +307,36 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 4,
   },
   stickerCard: {
-    width: '23.5%',
-    backgroundColor: '#131826',
+    width: '23.8%',
+    backgroundColor: '#18181A',
     borderRadius: 5,
     padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1F2637',
-    minHeight: 50,
+    borderColor: '#27272A',
+    minHeight: 48,
   },
   badgeCard: {
     width: '48%',
-    backgroundColor: '#131826',
-    borderColor: '#1F2637',
+    backgroundColor: '#18181A',
+    borderColor: '#27272A',
   },
   stickerEmoji: {
-    fontSize: 20,
+    fontSize: 18,
     marginBottom: 2,
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '500',
-    color: '#FFFFFF',
+    color: '#EDEDED',
     letterSpacing: 0.5,
   },
   stickerLabel: {
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontSize: 8,
     fontWeight: '400',
     textAlign: 'center',
@@ -345,18 +345,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     borderRadius: 5,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   doneBtnText: {
-    color: '#08090E',
+    color: '#121214',
     fontSize: 9.5,
     fontWeight: '500',
   },
   selectedStickerCard: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
 });

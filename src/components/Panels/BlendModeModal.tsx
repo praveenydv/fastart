@@ -149,8 +149,8 @@ function BlendModeModalComponent({
         {/* Standardized Header - only shown in standalone modal */}
         {!isInline && (
           <ModalHeader
-            title="Blend Mode"
-            iconName="layers"
+            title="Blend"
+            iconName="layers-outline"
             onClose={onClose}
             onReset={handleReset}
             resetText="Reset"
@@ -167,7 +167,7 @@ function BlendModeModalComponent({
           {/* Layer Opacity Slider & Quick Presets */}
           <View style={styles.opacityCard}>
             <CompactSliderInput
-              label="Layer Opacity"
+              label="Opacity"
               value={Math.round(opacity * 100)}
               min={0}
               max={100}
@@ -176,7 +176,7 @@ function BlendModeModalComponent({
               defaultValue={100}
               showReset={true}
               showSteppers={true}
-              accentColor="#00F2FE"
+              accentColor="#FFFFFF"
               onDragStart={() => setIsSliderDragging(true)}
               onDragEnd={() => setIsSliderDragging(false)}
               onChange={(val) => {
@@ -189,7 +189,7 @@ function BlendModeModalComponent({
                 onApply(selectedMode, 1.0);
               }}
             />
-            <View style={[styles.opacityPillsRow, { marginTop: 8 }]}>
+            <View style={[styles.opacityPillsRow, { marginTop: 6 }]}>
               {[0, 0.25, 0.5, 0.75, 1.0].map((val) => (
                 <TouchableOpacity
                   key={val}
@@ -216,7 +216,7 @@ function BlendModeModalComponent({
           </View>
 
           {/* Blend Mode Grid */}
-          <Text style={styles.sectionTitle}>Compositing Presets</Text>
+          <Text style={styles.sectionTitle}>Modes</Text>
           <View style={styles.presetGrid}>
             {BLEND_PRESETS.map((preset) => {
               const isSelected = selectedMode === preset.id;
@@ -236,7 +236,7 @@ function BlendModeModalComponent({
                     <MaterialCommunityIcons
                       name={preset.icon as any}
                       size={20}
-                      color={isSelected ? '#00F2FE' : '#F4F4F5'}
+                      color={isSelected ? '#FFFFFF' : '#8E8E93'}
                     />
                   </View>
 
@@ -257,7 +257,7 @@ function BlendModeModalComponent({
 
                   {isSelected && (
                     <View style={styles.selectedBadge}>
-                      <Ionicons name="checkmark-circle" size={16} color="#00F2FE" />
+                      <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    backgroundColor: '#12141F',
+    backgroundColor: '#121214',
   },
   cancelBtn: {
     width: 24,
@@ -334,18 +334,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetBtnText: {
     fontSize: 9.5,
-    color: '#A1A1AA',
-    fontWeight: '400',
+    color: '#00F2FE',
+    fontWeight: '600',
   },
   applyBtn: {
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -357,12 +359,12 @@ const styles = StyleSheet.create({
     paddingBottom: 56,
   },
   opacityCard: {
-    backgroundColor: '#171926',
-    borderRadius: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
     padding: 6,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: '#27272A',
   },
   opacityRowHeader: {
     flexDirection: 'row',
@@ -372,15 +374,15 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 8.5,
-    fontWeight: '500',
-    color: '#A1A1AA',
+    fontWeight: '400',
+    color: '#71717A',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   opacityValueBadge: {
     fontSize: 9.5,
     fontWeight: '500',
-    color: '#00F2FE',
+    color: '#FFFFFF',
   },
   opacityPillsRow: {
     flexDirection: 'row',
@@ -390,20 +392,23 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#141416',
+    borderWidth: 1,
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
   opacityPillActive: {
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   opacityPillText: {
     fontSize: 9,
     fontWeight: '400',
-    color: '#D4D4D8',
+    color: '#8E8E93',
   },
   opacityPillTextActive: {
-    color: '#0B0D13',
+    color: '#000000',
     fontWeight: '500',
   },
   presetGrid: {
@@ -416,16 +421,16 @@ const styles = StyleSheet.create({
     width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#171926',
-    borderRadius: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
     padding: 5,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#27272A',
     gap: 5,
   },
   presetCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   cardIconBox: {
     width: 24,
@@ -440,10 +445,10 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 9.5,
     fontWeight: '400',
-    color: '#FFFFFF',
+    color: '#EDEDED',
   },
   cardNameActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   cardDesc: {

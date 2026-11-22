@@ -226,7 +226,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
       {/* Standardized Header */}
       {!isInline && (
         <ModalHeader
-          title="Import Media"
+          title="Media"
           iconName="images-outline"
           onClose={onClose}
           onDone={onClose}
@@ -246,9 +246,9 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
           activeOpacity={0.8}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color="#00F2FE" />
+            <ActivityIndicator size="small" color="#EDEDED" />
           ) : (
-            <Ionicons name="cloud-upload-outline" size={16} color="#00F2FE" />
+            <Ionicons name="cloud-upload-outline" size={16} color="#EDEDED" />
           )}
           <Text style={styles.fullWidthUploadButtonText}>
             {isLoading ? 'Importing Media...' : '+ Import Video / Photo'}
@@ -307,7 +307,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                         <Ionicons
                           name={clip.type === 'photo' ? 'image-outline' : 'videocam-outline'}
                           size={18}
-                          color="#00F2FE"
+                          color="#EDEDED"
                         />
                       </View>
                     )}
@@ -353,7 +353,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                           activeOpacity={0.7}
                           accessibilityLabel="Add to timeline"
                         >
-                          <Ionicons name="add" size={13} color="#000000" />
+                          <Ionicons name="add" size={13} color="#121214" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -403,19 +403,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: '80%',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     borderBottomWidth: 0,
     overflow: 'hidden',
   },
   sheetHandle: {
     width: 32,
     height: 3,
-    backgroundColor: '#1F2637',
+    backgroundColor: '#27272A',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
@@ -426,9 +426,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#27272A',
   },
   sheetTitle: {
     color: '#FFFFFF',
@@ -440,9 +440,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -459,16 +459,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.4)',
+    borderColor: '#27272A',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
     marginBottom: 12,
   },
   fullWidthUploadButtonText: {
-    color: '#00F2FE',
+    color: '#EDEDED',
     fontSize: 12.5,
     fontWeight: '700',
     letterSpacing: 0.2,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     borderStyle: 'dashed',
     gap: 4,
   },
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   importedCountText: {
-    color: '#00F2FE',
+    color: '#EDEDED',
     fontSize: 10.5,
     fontWeight: '700',
   },
@@ -521,17 +521,17 @@ const styles = StyleSheet.create({
   importedCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     overflow: 'hidden',
     paddingRight: 8,
   },
   importedThumbBox: {
     width: 60,
     height: 48,
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },

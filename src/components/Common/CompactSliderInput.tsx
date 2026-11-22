@@ -11,7 +11,81 @@ import {
 import { TactileTouchable as TouchableOpacity } from './TactileTouchable';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
-import { THEME_COLORS } from '../../constants/designConstants';
+
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const styleId = 'capcut-slider-styles';
+  let styleEl = document.getElementById(styleId);
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    .capcut-thin-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 18px;
+      background-color: transparent !important;
+      background-repeat: no-repeat !important;
+      background-size: 100% 2px !important;
+      background-position: center !important;
+      outline: none;
+      margin: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+    .capcut-thin-slider:focus,
+    .capcut-thin-slider:active {
+      outline: none;
+      background-size: 100% 2px !important;
+    }
+    .capcut-thin-slider::-webkit-slider-runnable-track {
+      height: 2px !important;
+      max-height: 2px !important;
+      border-radius: 1px;
+      background: transparent !important;
+      border: none;
+    }
+    .capcut-thin-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      margin-top: -4px;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      border: none;
+    }
+    .capcut-thin-slider::-webkit-slider-thumb:active {
+      width: 10px;
+      height: 10px;
+      background: #FFFFFF;
+    }
+    .capcut-thin-slider::-moz-range-track {
+      height: 2px !important;
+      max-height: 2px !important;
+      border-radius: 1px;
+      background: transparent !important;
+      border: none;
+    }
+    .capcut-thin-slider::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      border: none;
+      cursor: pointer;
+    }
+    .capcut-thin-slider::-moz-range-thumb:active {
+      width: 10px;
+      height: 10px;
+      background: #FFFFFF;
+    }
+  `;
+}
 
 export interface CompactSliderInputProps {
   label?: string;
@@ -69,11 +143,11 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   defaultValue,
   showReset,
   showSteppers = false,
-  accentColor = THEME_COLORS.accent,
+  accentColor = '#FFFFFF',
   icon,
   hint,
   layout = 'stack',
-  inputWidth = 54,
+  inputWidth = 48,
   containerStyle,
   disabled = false,
   onChange,
@@ -335,11 +409,13 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
         : 0;
     const effectiveStep =
       step && step > 0 ? step : precision > 0 ? Math.pow(10, -precision) : 1;
+    const fillColor = accentColor || '#FFFFFF';
 
     return (
       <View style={styles.sliderTrackContainer}>
         <input
           type="range"
+          className="capcut-thin-slider"
           min={min}
           max={max}
           step={effectiveStep}
@@ -376,15 +452,17 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
           style={
             {
               width: "100%",
-              height: 20,
+              height: 18,
               cursor: disabled ? "not-allowed" : "pointer",
-              accentColor: accentColor,
-              background: `linear-gradient(to right, ${accentColor} 0%, ${accentColor} ${rangePercent}%, #27272A ${rangePercent}%, #27272A 100%)`,
-              borderRadius: 3,
+              backgroundImage: `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${rangePercent}%, #27272A ${rangePercent}%, #27272A 100%)`,
+              backgroundRepeat: "no-repeat",
+              backgroundSize: "100% 2px",
+              backgroundPosition: "center",
+              backgroundColor: "transparent",
               outline: "none",
               margin: 0,
               padding: 0,
-              opacity: disabled ? 0.4 : 1,
+              opacity: disabled ? 0.35 : 1,
             } as any
           }
         />
@@ -400,9 +478,9 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
         minimumValue={min}
         maximumValue={max}
         step={step}
-        minimumTrackTintColor={accentColor}
+        minimumTrackTintColor={accentColor || "#FFFFFF"}
         maximumTrackTintColor="#27272A"
-        thumbTintColor={accentColor}
+        thumbTintColor="#FFFFFF"
         disabled={disabled}
         tapToSeek={true}
         onSlidingStart={() => {
@@ -476,7 +554,7 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               accessibilityLabel="Reset"
             >
-              <Ionicons name="refresh" size={11} color={THEME_COLORS.textMuted} />
+              <Ionicons name="refresh" size={11} color="#00F2FE" />
             </TouchableOpacity>
           ) : null}
           {renderSmallInput()}
@@ -505,7 +583,7 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               accessibilityLabel="Reset to default"
             >
-              <Ionicons name="refresh" size={10} color={THEME_COLORS.accent} />
+              <Ionicons name="refresh" size={10} color="#00F2FE" />
               <Text style={styles.resetBadgeText}>Reset</Text>
             </TouchableOpacity>
           ) : null}
@@ -523,14 +601,14 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
 const styles = StyleSheet.create({
   stackContainer: {
     width: '100%',
-    paddingVertical: 2,
+    paddingVertical: 1,
   },
   inlineContainer: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 2,
+    paddingVertical: 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -553,40 +631,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    minWidth: 70,
-    maxWidth: 110,
+    minWidth: 65,
+    maxWidth: 105,
   },
   iconBox: {
     marginRight: 2,
   },
   labelTitle: {
-    color: '#CBD5E1',
+    color: '#94A3B8',
     fontSize: 10,
     fontWeight: '400',
     letterSpacing: 0,
   },
   positivePrefix: {
-    color: THEME_COLORS.accent,
-    fontSize: 9.5,
-    fontWeight: '500',
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '400',
   },
   sliderRow: {
     width: '100%',
-    marginTop: 1,
+    marginTop: 0,
   },
   trackWithSteppersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     width: '100%',
   },
   stepperBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    width: 17,
+    height: 17,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -601,19 +679,19 @@ const styles = StyleSheet.create({
   },
   // Small size numeric input box
   inputWrapper: {
-    height: 20,
+    height: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#16171B',
+    backgroundColor: '#141416',
     borderWidth: 1,
-    borderColor: '#292B33',
+    borderColor: '#26262B',
     borderRadius: 3,
     paddingHorizontal: 3,
   },
   inputWrapperFocused: {
-    borderColor: THEME_COLORS.accent,
-    backgroundColor: '#1B1C22',
+    borderColor: '#FFFFFF',
+    backgroundColor: '#18181B',
   },
   textInput: {
     flex: 1,
@@ -621,13 +699,13 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '400',
     textAlign: 'center',
     outlineStyle: 'none' as any,
   },
   unitText: {
-    color: '#94A3B8',
+    color: '#71717A',
     fontSize: 8.5,
     fontWeight: '400',
     marginLeft: 1,
@@ -635,17 +713,19 @@ const styles = StyleSheet.create({
   // Native slider container with comfortable height & hit targets
   sliderTrackContainer: {
     width: '100%',
-    height: 24,
+    height: 18,
     justifyContent: 'center',
   },
   nativeSlider: {
     width: '100%',
-    height: 24,
+    height: 18,
   },
   tinyResetBtn: {
     padding: 2,
     borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetBadgeBtn: {
     flexDirection: 'row',
@@ -654,14 +734,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
-    backgroundColor: 'rgba(0, 229, 201, 0.1)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 201, 0.25)',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetBadgeText: {
-    color: THEME_COLORS.accent,
+    color: '#00F2FE',
     fontSize: 8.5,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   hintText: {
     color: '#64748B',
@@ -669,7 +749,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   disabledOpacity: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
 });
 

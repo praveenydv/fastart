@@ -37,9 +37,9 @@ export const SpeedSlowMoSection: React.FC<SpeedSlowMoSectionProps> = ({
   return (
     <View style={styles.slowMoSection}>
       <View style={styles.slowMoHeader}>
-        <Ionicons name="film-outline" size={18} color="#00F2FE" />
+        <Ionicons name="film-outline" size={18} color="#EDEDED" />
         <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={styles.slowMoTitle}>Smooth Slow-Mo (CapCut Pro)</Text>
+          <Text style={styles.slowMoTitle}>Smooth Slow-Mo</Text>
           <Text style={styles.slowMoSub}>
             Interpolate frames for buttery smooth slow-motion
           </Text>
@@ -62,7 +62,7 @@ export const SpeedSlowMoSection: React.FC<SpeedSlowMoSectionProps> = ({
               <Ionicons
                 name={opt.icon as any}
                 size={16}
-                color={isSelected ? '#00F2FE' : '#94A3B8'}
+                color={isSelected ? '#FFFFFF' : '#8E8E93'}
               />
               <Text
                 style={[

@@ -459,7 +459,7 @@ function Player({
   const activeVideos = useMemo(() => {
     const vids = project.tracks.video;
     if (!vids || vids.length === 0) return EMPTY_ARRAY;
-    const filtered = queryTimedIntervalIndex(videoIndex, currentTime, currentTime).filter((v) => {
+    let filtered = queryTimedIntervalIndex(videoIndex, currentTime, currentTime).filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
@@ -468,6 +468,14 @@ function Player({
       }
       return currentTime >= start && currentTime <= end;
     });
+    // Boundary recovery: if floating-point precision gap caused 0 clips to be returned at an exact cut boundary,
+    // pick the closest adjacent clip within 0.04s so the player never drops a frame
+    if (filtered.length === 0 && vids.length > 0) {
+      const near = queryTimedIntervalIndex(videoIndex, currentTime - 0.04, currentTime + 0.04);
+      if (near.length > 0) {
+        filtered = near.slice(0, 1);
+      }
+    }
     const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
     const stable = stabilizeArrayRef(prevVideosRef.current, next);
     prevVideosRef.current = stable;
@@ -479,41 +487,55 @@ function Player({
   const bufferedNativeVideos = useMemo(() => {
     const list = project.tracks.video || [];
     if (list.length === 0) return EMPTY_ARRAY;
-    const filtered = queryTimedIntervalIndex(videoIndex, currentTime - 0.2, currentTime + 1.0).filter((v) => {
+    let filtered = queryTimedIntervalIndex(videoIndex, currentTime - 0.4, currentTime + 1.2).filter((v) => {
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
       // 1. Actively inside playback
       if (hasAdjacentNext ? (currentTime >= start && currentTime < end) : (currentTime >= start && currentTime <= end)) return true;
-      // 2. Pre-warm upcoming clip within 1.0s before its cut
-      if (currentTime < start && start - currentTime <= 1.0) return true;
+      // 2. Pre-warm upcoming clip within 1.2s before its cut
+      if (currentTime < start && start - currentTime <= 1.2) return true;
       // 3. Tail-hold recently finished clip for seamless cut transition without unmount flicker
-      if (currentTime >= end && currentTime - end <= 0.15) return true;
+      if (currentTime >= end && currentTime - end <= 0.4) return true;
       return false;
     });
 
     if (filtered.length === 0) {
-      prevBufferedVideosRef.current = EMPTY_ARRAY;
-      return EMPTY_ARRAY;
+      const near = queryTimedIntervalIndex(videoIndex, currentTime - 0.05, currentTime + 0.05);
+      if (near.length > 0) {
+        filtered = near.slice(0, 1);
+      } else {
+        prevBufferedVideosRef.current = EMPTY_ARRAY;
+        return EMPTY_ARRAY;
+      }
     }
 
-    // Prioritize visible media first, then the closest upcoming clip. Keep the
-    // decoder budget conservative because Android allocates source-sized codec
-    // buffers even when the preview is rendered into a small view.
+    // Prioritize visible media first, then adjacent cut clips (outgoing tail-held clip + immediate next).
     filtered.sort((a, b) => {
-      const aActive = currentTime >= a.startTime && currentTime <= a.startTime + a.duration;
-      const bActive = currentTime >= b.startTime && currentTime <= b.startTime + b.duration;
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
+      const aInside = adjacentNextClipIds.has(a.id)
+        ? currentTime >= a.startTime && currentTime < a.startTime + a.duration
+        : currentTime >= a.startTime && currentTime <= a.startTime + a.duration;
+      const bInside = adjacentNextClipIds.has(b.id)
+        ? currentTime >= b.startTime && currentTime < b.startTime + b.duration
+        : currentTime >= b.startTime && currentTime <= b.startTime + b.duration;
+      if (aInside && !bInside) return -1;
+      if (!aInside && bInside) return 1;
+
+      // Both active or neither active: prioritize clips closest to the playhead
+      const aDist = Math.min(Math.abs(currentTime - a.startTime), Math.abs(currentTime - (a.startTime + a.duration)));
+      const bDist = Math.min(Math.abs(currentTime - b.startTime), Math.abs(currentTime - (b.startTime + b.duration)));
+      if (Math.abs(aDist - bDist) > 0.001) {
+        return aDist - bDist;
+      }
       return (a.trackIndex || 0) - (b.trackIndex || 0);
     });
 
     const activeHas4KSource = filtered.some((clip) => {
       const active = currentTime >= clip.startTime && currentTime <= clip.startTime + clip.duration;
       const pixels = (clip.width || clip.naturalWidth || 0) * (clip.height || clip.naturalHeight || 0);
-      return active && clip.type !== "photo" && (pixels === 0 || pixels >= 3840 * 2160);
+      return active && clip.type !== "photo" && pixels >= 3840 * 2160;
     });
-    const decoderBudget = activeHas4KSource ? 1 : 2;
+    const decoderBudget = activeHas4KSource ? 2 : 4;
     const bufferedVideoDecoders = filtered
       .filter((clip) => clip.type !== "photo")
       .slice(0, decoderBudget);

@@ -39,7 +39,7 @@ export function ModalHeader({
   title,
   subtitle,
   iconName,
-  iconColor = "#00F2FE",
+  iconColor = "#A1A1AA",
   onClose,
   closeAriaLabel = "Cancel",
   closeIconName = "close",
@@ -76,7 +76,7 @@ export function ModalHeader({
             accessibilityLabel={closeAriaLabel}
             accessibilityRole="button"
           >
-            <Ionicons name={closeIconName} size={15} color="#94A3B8" />
+            <Ionicons name={closeIconName} size={14} color="#8E8E93" />
           </TactileTouchable>
         ) : (
           <View style={styles.leftSpacer} />
@@ -90,7 +90,7 @@ export function ModalHeader({
             accessibilityLabel={resetText}
             accessibilityRole="button"
           >
-            <Ionicons name="refresh-outline" size={10.5} color="#00F2FE" style={{ marginRight: 3 }} />
+            <Ionicons name="refresh-outline" size={10} color="#00F2FE" style={{ marginRight: 2.5 }} />
             <Text style={styles.resetChipText}>{resetText}</Text>
           </TactileTouchable>
         )}
@@ -105,7 +105,7 @@ export function ModalHeader({
             {iconName && (
               <Ionicons
                 name={iconName}
-                size={14}
+                size={12}
                 color={iconColor}
                 style={styles.headerIcon}
               />
@@ -145,11 +145,11 @@ export function ModalHeader({
             {doneLoading ? (
               <ActivityIndicator
                 size="small"
-                color="#08090E"
+                color="#121214"
               />
             ) : (
               <>
-                <Ionicons name={doneIconName} size={14} color="#08090E" style={{ fontWeight: "800" }} />
+                <Ionicons name={doneIconName} size={13} color={showApplyText ? "#0E0E10" : "#FFFFFF"} />
                 {showApplyText && (
                   <Text style={styles.applyButtonText}>{displayDoneText}</Text>
                 )}
@@ -166,14 +166,14 @@ export function ModalHeader({
 
 const styles = StyleSheet.create({
   headerBar: {
-    height: 40,
+    height: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    backgroundColor: "#0B0E17",
+    paddingHorizontal: 8,
+    backgroundColor: "#121214",
     borderBottomWidth: 1,
-    borderBottomColor: "#1C2436",
+    borderBottomColor: "#1F1F23",
     zIndex: 10,
   },
   noBorder: {
@@ -182,20 +182,20 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    minWidth: 40,
-    gap: 6,
+    minWidth: 36,
+    gap: 4,
   },
   centerSection: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
   },
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    minWidth: 40,
+    minWidth: 36,
   },
   titleRow: {
     flexDirection: "row",
@@ -204,88 +204,76 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   headerIcon: {
-    marginRight: 5,
+    marginRight: 4,
   },
   titleText: {
-    color: "#F1F5F9",
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.2,
+    color: "#EDEDED",
+    fontSize: 11.5,
+    fontWeight: "500",
+    letterSpacing: 0,
   },
   subtitleText: {
-    color: "#64748B",
-    fontSize: 10.5,
-    marginLeft: 5,
-    fontWeight: "500",
+    color: "#71717A",
+    fontSize: 9.5,
+    marginLeft: 4,
+    fontWeight: "400",
   },
   cancelButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.10)",
+    width: 24,
+    height: 24,
+    borderRadius: 3,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
   leftSpacer: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
   },
   rightSpacer: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
   },
   applyPillButton: {
-    height: 28,
-    paddingHorizontal: 11,
-    borderRadius: 14,
-    backgroundColor: "#00F2FE",
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 3,
+    gap: 3,
   },
   applyIconButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#00F2FE",
+    width: 24,
+    height: 24,
+    borderRadius: 3,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#00F2FE",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 3,
   },
   applyButtonText: {
-    color: "#08090E",
-    fontSize: 11.5,
-    fontWeight: "700",
-    letterSpacing: 0.1,
+    color: "#0E0E10",
+    fontSize: 10,
+    fontWeight: "500",
+    letterSpacing: 0,
   },
   resetChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    paddingHorizontal: 6,
+    height: 20,
+    borderRadius: 3,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.20)",
+    borderColor: "rgba(0, 242, 254, 0.35)",
   },
   resetChipText: {
     color: "#00F2FE",
-    fontSize: 10.5,
+    fontSize: 9.5,
     fontWeight: "600",
   },
   disabledButton: {
-    opacity: 0.45,
+    opacity: 0.35,
   },
 });

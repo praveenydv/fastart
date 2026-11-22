@@ -126,8 +126,7 @@ export const UndoHistoryModal: React.FC<UndoHistoryModalProps> = ({
         <View style={[styles.card, isMobile && styles.cardMobile]}>
           {/* Header */}
           <ModalHeader
-            title="Edit History"
-            subtitle={`${historyStack.length} undo step${historyStack.length !== 1 ? "s" : ""} available`}
+            title="History"
             iconName="time-outline"
             onClose={onClose}
           />

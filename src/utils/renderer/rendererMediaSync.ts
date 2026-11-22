@@ -116,8 +116,22 @@ export async function preloadClip(
     ctx.thumbnailElements.set(clip.id, thumb);
   }
 
-  const cachedEl = ctx.videoElements.get(elementKey) || ctx.videoElements.get(clip.url);
+  const cachedEl =
+    ctx.videoElements.get(elementKey) ||
+    ctx.videoElements.get(clip.url) ||
+    (clip.id ? globalActiveVideoElements.get(clip.id) : null) ||
+    (clip.sourceMediaId ? globalActiveVideoElements.get(clip.sourceMediaId) : null) ||
+    globalActiveVideoElements.get(clip.url);
+
   if (cachedEl) {
+    // ALWAYS ensure the cached element is registered under elementKey, clip.id, sourceMediaId and clip.url
+    ctx.videoElements.set(elementKey, cachedEl);
+    if (cachedEl instanceof HTMLVideoElement) {
+      if (clip.id) globalActiveVideoElements.set(clip.id, cachedEl);
+      if (clip.sourceMediaId) globalActiveVideoElements.set(clip.sourceMediaId, cachedEl);
+      if (clip.url) globalActiveVideoElements.set(clip.url, cachedEl);
+    }
+
     if (clip.type === "video" && cachedEl instanceof HTMLVideoElement) {
       if (typeof document !== "undefined" && !cachedEl.parentNode) {
         const container = getMediaContainer();
@@ -405,8 +419,16 @@ export function syncPlayback(
       const el =
         (c.id ? ctx.videoElements.get(c.id) : null) ||
         (c.sourceMediaId ? ctx.videoElements.get(c.sourceMediaId) : null) ||
-        ctx.videoElements.get(c.url);
-      if (el) activeElements.add(el);
+        ctx.videoElements.get(c.url) ||
+        (c.id ? globalActiveVideoElements.get(c.id) : null) ||
+        (c.sourceMediaId ? globalActiveVideoElements.get(c.sourceMediaId) : null) ||
+        (c.url ? globalActiveVideoElements.get(c.url) : null);
+      if (el) {
+        activeElements.add(el);
+        if (c.id && !ctx.videoElements.has(c.id)) {
+          ctx.videoElements.set(c.id, el);
+        }
+      }
     }
   }
 
@@ -418,14 +440,32 @@ export function syncPlayback(
       const el =
         (c.id ? ctx.videoElements.get(c.id) : null) ||
         (c.sourceMediaId ? ctx.videoElements.get(c.sourceMediaId) : null) ||
-        ctx.videoElements.get(c.url);
-      if (el) upcomingElements.add(el);
+        ctx.videoElements.get(c.url) ||
+        (c.id ? globalActiveVideoElements.get(c.id) : null) ||
+        (c.sourceMediaId ? globalActiveVideoElements.get(c.sourceMediaId) : null) ||
+        (c.url ? globalActiveVideoElements.get(c.url) : null);
+      if (el) {
+        upcomingElements.add(el);
+        if (c.id && !ctx.videoElements.has(c.id)) {
+          ctx.videoElements.set(c.id, el);
+        }
+      }
     }
   }
 
   // 1. Pause any video element that is NOT active and NOT upcoming
   ctx.videoElements.forEach((el) => {
     if (el instanceof HTMLVideoElement && !activeElements.has(el) && !upcomingElements.has(el)) {
+      // Safety: Never pause a video element that shares the URL or source of any currently active clip!
+      const elSrc = el.src || el.currentSrc || "";
+      for (let i = 0; i < activeClips.length; i++) {
+        const ac = activeClips[i];
+        if (ac.url && (elSrc.endsWith(ac.url) || ac.url.endsWith(elSrc))) {
+          activeElements.add(el);
+          return;
+        }
+      }
+
       if (!el.paused) {
         try {
           el.pause();
@@ -478,7 +518,14 @@ export function syncPlayback(
     const mediaEl =
       (activeClip.id ? ctx.videoElements.get(activeClip.id) : null) ||
       (activeClip.sourceMediaId ? ctx.videoElements.get(activeClip.sourceMediaId) : null) ||
-      ctx.videoElements.get(activeClip.url);
+      ctx.videoElements.get(activeClip.url) ||
+      (activeClip.id ? globalActiveVideoElements.get(activeClip.id) : null) ||
+      (activeClip.sourceMediaId ? globalActiveVideoElements.get(activeClip.sourceMediaId) : null) ||
+      (activeClip.url ? globalActiveVideoElements.get(activeClip.url) : null);
+
+    if (mediaEl && activeClip.id && !ctx.videoElements.has(activeClip.id)) {
+      ctx.videoElements.set(activeClip.id, mediaEl);
+    }
     if (!mediaEl || !(mediaEl instanceof HTMLVideoElement)) return;
     const vid = mediaEl as HTMLVideoElement;
 
@@ -552,11 +599,12 @@ export function syncPlayback(
         (vid as any)._playSessionActive = true;
         (vid as any)._activeClipId = activeClip.id;
 
-        // If the video was already playing and is within continuous range (< 0.08s drift, e.g. seamless cut/split),
+        // If the video was already playing and is within continuous range (< 1.0s drift, e.g. seamless cut/split),
         // DO NOT perform a hard seek! Just let it keep playing without decoder flush!
-        if (wasAlreadyPlaying && startDrift < 0.08) {
+        const isContinuousSplitHandoff = wasAlreadyPlaying && startDrift < 1.0;
+        if (isContinuousSplitHandoff) {
           // Continuous split cut handoff
-        } else if (vid.readyState >= 1 && startDrift > 0.04) {
+        } else if (vid.readyState >= 1 && startDrift > 0.05) {
           (vid as any)._lastHardSeek = now;
           (vid as any)._seekStartTime = now;
           try {

@@ -248,11 +248,10 @@ function CutoutModalComponent({
     setIsProcessingActiveFrame(true);
     setProcessingError(null);
     try {
-      const isAuto = (previewConfig.mode || "auto") === "auto";
       const rawThresh = (previewConfig.intensity ?? 45) / 100;
       const rawFeath = (previewConfig.shadow ?? 25) / 100;
-      const threshold = isAuto ? Math.max(0.01, 0.01 + rawThresh * 0.08) : rawThresh;
-      const feather = isAuto ? Math.max(0.55, 0.65 + rawFeath * 0.30) : rawFeath;
+      const threshold = Math.max(0, Math.min(1, rawThresh));
+      const feather = Math.max(0, Math.min(1, rawFeath));
       const ok = await processClipUnified(
         clip.url,
         id,
@@ -294,35 +293,39 @@ function CutoutModalComponent({
     }
     onApplyCutout(newConfig, clipId);
 
+    const targetIdx = isVideoClip ? frameIdx : 0;
+    const targetTime = isVideoClip ? mediaTime : 0;
+
     // If auto cutout and threshold/shadow changed, update cached active frame matte instantly via Rust
+    let updatedSynchronously = false;
     if (Platform.OS === "web") {
-      if (config.enabled && config.mode === "auto" && newConfig.mode === "auto" && clipId) {
+      if (newConfig.enabled && newConfig.mode === "auto" && clipId) {
         const rawIntensity = newConfig.intensity ?? 45;
         const rawShadow = newConfig.shadow ?? 25;
-        const thresh = Math.max(0.01, 0.01 + (rawIntensity / 100) * 0.08);
-        const feat = Math.max(0.55, 0.65 + (rawShadow / 100) * 0.30);
-        updateActiveFrameMatteParams(
+        const thresh = Math.max(0, Math.min(1, rawIntensity / 100));
+        const feat = Math.max(0, Math.min(1, rawShadow / 100));
+        updatedSynchronously = updateActiveFrameMatteParams(
           clipId,
-          frameIdx,
+          targetIdx,
           thresh,
           feat,
         );
       }
     }
 
-    // Automatically trigger active frame preview when enabling Auto Cutout or Chroma Key, or when adjusting Chroma Key
+    // Automatically trigger active frame preview when:
+    // 1. Enabling cutout or changing mode
+    // 2. Adjusting Chroma Key
+    // 3. Adjusting Auto Cutout if active frame raw tensor is not yet cached (or on native)
     if (newConfig.enabled && newConfig.mode !== "none" && selectedClip?.url) {
       const modeChanged = newConfig.mode !== config.mode || (!config.enabled && newConfig.enabled);
       const isChroma = newConfig.mode === "chroma";
-      const isPhoto = !isVideoClip;
+      const isAutoCutoutNeedsPreview = newConfig.mode === "auto" && !updatedSynchronously;
 
-      // On mode switch, chroma adjustment, or photo clip, preview active frame so cutout displays on the player immediately
-      if (modeChanged || isChroma || isPhoto) {
+      if (modeChanged || isChroma || isAutoCutoutNeedsPreview) {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        const delay = isChroma ? 100 : (isPhoto ? 80 : 150);
+        const delay = modeChanged ? 0 : 50;
         debounceTimerRef.current = setTimeout(() => {
-          const targetIdx = isVideoClip ? frameIdx : 0;
-          const targetTime = isVideoClip ? mediaTime : 0;
           void runPreview(selectedClip, clipId, targetIdx, targetTime, newConfig).then((ok) => {
             if (ok) {
               onApplyCutout(newConfig, clipId);
@@ -409,11 +412,10 @@ function CutoutModalComponent({
 
     try {
       setProcessingError(null);
-      const isAuto = (processingConfig.mode || "auto") === "auto";
       const rawThresh = (processingConfig.intensity ?? 45) / 100;
       const rawFeath = (processingConfig.shadow ?? 25) / 100;
-      const threshold = isAuto ? Math.max(0.02, 0.02 + rawThresh * 0.15) : rawThresh;
-      const feather = isAuto ? Math.max(0.20, 0.40 + rawFeath * 0.45) : rawFeath;
+      const threshold = Math.max(0, Math.min(1, rawThresh));
+      const feather = Math.max(0, Math.min(1, rawFeath));
       const processed = await processVideoUnified(
         selectedClip.url,
         clipId,
@@ -622,11 +624,11 @@ const s = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   sheetContainer: {
     flex: 1,
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   inlineSheet: {
     borderTopLeftRadius: 0,
@@ -638,9 +640,9 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: "#08090E",
+    backgroundColor: "#121214",
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
+    borderBottomColor: "#1F1F23",
   },
   titleRow: {
     flexDirection: "row",
@@ -648,9 +650,9 @@ const s = StyleSheet.create({
     gap: 6,
   },
   sheetTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#EDEDED",
     letterSpacing: 0.2,
   },
   resetBtn: {
@@ -659,22 +661,22 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   resetText: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 9,
-    fontWeight: "500",
+    fontWeight: "400",
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#131826",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },

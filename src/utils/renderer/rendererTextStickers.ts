@@ -317,11 +317,18 @@ export function drawTextOverlay(
   const lineHeight = fontSize * 1.35;
 
   // Draw Background Pill or Box if present
-  if (style.backgroundColor && style.backgroundColor !== "transparent") {
-    ctx.fillStyle = style.backgroundColor;
+  const hasBg = Boolean(style.backgroundColor && style.backgroundColor !== "transparent" && style.backgroundColor !== "none");
+  const hasBorder = Boolean(
+    style.borderColor &&
+    style.borderColor !== "transparent" &&
+    style.borderColor !== "none" &&
+    style.borderWidth !== undefined &&
+    style.borderWidth > 0
+  );
+  if (hasBg || hasBorder) {
     const padX = (style.paddingHorizontal || 14) * previewScale;
     const padY = (style.paddingVertical || 8) * previewScale;
-    const radius = (style.borderRadius || 8) * previewScale;
+    const radius = (style.borderRadius !== undefined ? style.borderRadius : 8) * previewScale;
 
     ctx.beginPath();
     if ((ctx as any).roundRect) {
@@ -340,20 +347,23 @@ export function drawTextOverlay(
         textHeight + padY * 2,
       );
     }
-    ctx.fill();
+    if (hasBg) {
+      ctx.fillStyle = style.backgroundColor!;
+      ctx.fill();
+    }
 
-    if (style.borderColor && (style.borderWidth || 1)) {
-      ctx.strokeStyle = style.borderColor;
-      ctx.lineWidth = Math.max(1, (style.borderWidth || 2) * previewScale);
+    if (hasBorder) {
+      ctx.strokeStyle = style.borderColor!;
+      ctx.lineWidth = Math.max(1, (style.borderWidth || 1) * previewScale);
       ctx.stroke();
     }
   }
 
-  // Text Effects & Shadows Setup
+  // Text Effects & Shadows Setup (applied strictly to text glyphs)
   const effect = style.textEffect || "none";
 
   if (effect === "neon") {
-    const glowColor = style.borderColor || style.color || "#00F2FE";
+    const glowColor = style.color || "#00F2FE";
     ctx.shadowColor = glowColor;
     ctx.shadowBlur = 20 * previewScale;
     ctx.shadowOffsetX = 0;
@@ -393,7 +403,7 @@ export function drawTextOverlay(
       textHeight + 8 * previewScale,
     );
     ctx.restore();
-  } else if (style.textShadowColor) {
+  } else if (style.textShadowColor && (style.textShadowRadius || 0) > 0) {
     ctx.shadowColor = style.textShadowColor;
     ctx.shadowBlur = (style.textShadowRadius || 12) * previewScale;
     ctx.shadowOffsetX = (style.textShadowOffset?.width || 0) * previewScale;
@@ -436,10 +446,21 @@ export function drawTextOverlay(
       ctx.restore();
     }
 
-    // Optional Stroke / Outline
-    if (effect === "stroke" || (style.strokeColor && (style.strokeWidth || 2))) {
-      ctx.strokeStyle = style.strokeColor || style.borderColor || "#000000";
+    // Optional Stroke / Outline (strictly on text letters)
+    const hasStroke = Boolean(
+      effect === "stroke" ||
+      (style.strokeColor &&
+        style.strokeColor !== "none" &&
+        style.strokeColor !== "transparent" &&
+        style.strokeWidth !== undefined &&
+        style.strokeWidth > 0)
+    );
+    if (hasStroke) {
+      ctx.strokeStyle = style.strokeColor || "#000000";
       ctx.lineWidth = Math.max(0.5, (style.strokeWidth || 3) * previewScale);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.miterLimit = 2;
       ctx.strokeText(line, 0, lineY);
     }
 
@@ -625,15 +646,29 @@ export function drawCaptionOverlay(
   const highlightColor =
     cap.highlightColor || cap.style?.highlightColor || "#FFE600";
   const baseTextColor = style.color || "#FFFFFF";
+  const hasStroke = Boolean(
+    style.strokeColor &&
+    style.strokeColor !== "none" &&
+    style.strokeColor !== "transparent" &&
+    style.strokeWidth !== undefined &&
+    style.strokeWidth > 0
+  );
   const strokeColor = style.strokeColor || "#000000";
-  const strokeWidth = Math.max(0.5, (style.strokeWidth ?? 3.5) * previewScale);
+  const strokeWidth = hasStroke ? Math.max(0.5, style.strokeWidth! * previewScale) : 0;
 
   // Draw Background Box / Pill if configured (e.g. Minimal subtitle box)
-  if (style.backgroundColor && style.backgroundColor !== "transparent") {
-    ctx.fillStyle = style.backgroundColor;
+  const hasBg = Boolean(style.backgroundColor && style.backgroundColor !== "transparent" && style.backgroundColor !== "none");
+  const hasBorder = Boolean(
+    style.borderColor &&
+    style.borderColor !== "transparent" &&
+    style.borderColor !== "none" &&
+    style.borderWidth !== undefined &&
+    style.borderWidth > 0
+  );
+  if (hasBg || hasBorder) {
     const padX = (style.paddingHorizontal || 16) * previewScale;
     const padY = (style.paddingVertical || 8) * previewScale;
-    const radius = (style.borderRadius || 10) * previewScale;
+    const radius = (style.borderRadius !== undefined ? style.borderRadius : 10) * previewScale;
 
     ctx.beginPath();
     if ((ctx as any).roundRect) {
@@ -652,11 +687,14 @@ export function drawCaptionOverlay(
         totalTextHeight + padY * 2,
       );
     }
-    ctx.fill();
+    if (hasBg) {
+      ctx.fillStyle = style.backgroundColor!;
+      ctx.fill();
+    }
 
-    if (style.borderColor && (style.borderWidth || 1)) {
-      ctx.strokeStyle = style.borderColor;
-      ctx.lineWidth = Math.max(1, (style.borderWidth || 2) * previewScale);
+    if (hasBorder) {
+      ctx.strokeStyle = style.borderColor!;
+      ctx.lineWidth = Math.max(1, (style.borderWidth || 1) * previewScale);
       ctx.stroke();
     }
   }
@@ -739,6 +777,8 @@ export function drawCaptionOverlay(
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = isHighlighted ? strokeWidth + 1 : strokeWidth;
         ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.miterLimit = 2;
         ctx.strokeText(mw.word, curX, lineY);
       }
 

@@ -136,11 +136,11 @@ export const CutoutColorDropperModal: React.FC<CutoutColorDropperModalProps> = (
             <Ionicons name="close" size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={s.headerTitleWrap}>
-            <Ionicons name="eyedrop" size={15} color="#00F2FE" />
+            <Ionicons name="eyedrop" size={15} color="#FFFFFF" />
             <Text style={s.headerTitle}>Color Dropper</Text>
           </View>
           <TouchableOpacity onPress={handleApply} style={s.applyHeaderBtn} activeOpacity={0.8}>
-            <Ionicons name="checkmark" size={16} color="#08090E" />
+            <Ionicons name="checkmark" size={16} color="#121214" />
             <Text style={s.applyHeaderBtnText}>Done</Text>
           </TouchableOpacity>
         </View>
@@ -258,7 +258,7 @@ export const CutoutColorDropperModal: React.FC<CutoutColorDropperModalProps> = (
           <TouchableOpacity style={s.setButton} onPress={handleApply} activeOpacity={0.85}>
             <View style={[s.btnColorPreview, { backgroundColor: sampledColor }]} />
             <Text style={s.setButtonText}>Set Chroma Color ({sampledColor.toUpperCase()})</Text>
-            <Ionicons name="checkmark-circle" size={18} color="#08090E" />
+            <Ionicons name="checkmark-circle" size={18} color="#121214" />
           </TouchableOpacity>
         </View>
       </View>
@@ -269,7 +269,7 @@ export const CutoutColorDropperModal: React.FC<CutoutColorDropperModalProps> = (
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#07090E",
+    backgroundColor: "#121214",
   },
   header: {
     flexDirection: "row",
@@ -278,15 +278,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 50,
     paddingBottom: 12,
-    backgroundColor: "#0C101A",
+    backgroundColor: "#121214",
     borderBottomWidth: 1,
-    borderBottomColor: "#1E273A",
+    borderBottomColor: "#1F1F23",
   },
   headerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#161D2E",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -296,34 +298,34 @@ const s = StyleSheet.create({
     gap: 6,
   },
   headerTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#EDEDED",
   },
   applyHeaderBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#00F2FE",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   applyHeaderBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: "#08090E",
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#121214",
   },
   guidanceBanner: {
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-    paddingVertical: 7,
+    backgroundColor: "#18181A",
+    paddingVertical: 6,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 242, 254, 0.15)",
+    borderBottomColor: "#1F1F23",
   },
   guidanceText: {
-    fontSize: 11,
-    color: "#94A3B8",
+    fontSize: 10.5,
+    color: "#8E8E93",
     textAlign: "center",
   },
   canvasArea: {
@@ -479,7 +481,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   swatchItemSelected: {
-    borderColor: "#00F2FE",
+    borderColor: "#FFFFFF",
     borderWidth: 2,
     transform: [{ scale: 1.1 }],
   },
@@ -488,20 +490,20 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#00F2FE",
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   btnColorPreview: {
     width: 14,
     height: 14,
     borderRadius: 7,
     borderWidth: 1.5,
-    borderColor: "#08090E",
+    borderColor: "#121214",
   },
   setButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#08090E",
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#121214",
   },
 });

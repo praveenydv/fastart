@@ -43,7 +43,7 @@ export const AudioUploadTab: React.FC<AudioUploadTabProps> = ({
               style={styles.emptyUploadCta}
               onPress={onDeviceUpload}
             >
-              <Ionicons name="cloud-upload" size={16} color="#08090E" />
+              <Ionicons name="cloud-upload" size={16} color="#121214" />
               <Text style={styles.emptyUploadCtaText}>Choose Audio File</Text>
             </TouchableOpacity>
           )}

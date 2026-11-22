@@ -99,9 +99,9 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
         <View style={styles.timelineBarLeft}>
           <View style={styles.trackPreferenceGroup}>
             <View style={styles.trackTitleBadge}>
-              <Ionicons name="layers-outline" size={12} color="#00F2FE" />
+              <Ionicons name="layers-outline" size={11} color="#8E8E93" />
               <Text style={styles.trackLabelTitle}>
-                {isMobile ? "TRACKS" : "MULTI-TRACK"}
+                {isMobile ? "Tracks" : "Tracks"}
               </Text>
             </View>
           </View>
@@ -112,20 +112,20 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
               style={[
                 styles.actionBtn,
                 {
-                  paddingHorizontal: 7,
-                  height: 22,
-                  backgroundColor: "rgba(0, 229, 201, 0.12)",
-                  borderColor: "rgba(0, 229, 201, 0.35)",
+                  paddingHorizontal: 6,
+                  height: 20,
+                  backgroundColor: "rgba(255, 255, 255, 0.08)",
+                  borderColor: "rgba(255, 255, 255, 0.16)",
                 },
               ]}
               onPress={onSplitClip}
               accessibilityLabel="Split clip at playhead"
             >
-              <Ionicons name="cut-outline" size={11} color="#00E5C9" />
+              <Ionicons name="cut-outline" size={10} color="#FFFFFF" />
               <Text
                 style={[
                   styles.actionBtnText,
-                  { color: "#00E5C9", fontSize: 10, fontWeight: "600" },
+                  { color: "#FFFFFF", fontSize: 9.5, fontWeight: "400" },
                 ]}
               >
                 Split
@@ -170,7 +170,7 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
                   disabled={!hasSelectedClip}
                   accessibilityLabel="Split clip at playhead"
                 >
-                  <Ionicons name="cut-outline" size={12} color={hasSelectedClip ? "#00F2FE" : "#64748B"} />
+                  <Ionicons name="cut-outline" size={11} color={hasSelectedClip ? "#FFFFFF" : "#64748B"} />
                   <Text style={styles.actionBtnText}>Split</Text>
                 </TouchableOpacity>
               )}
@@ -181,7 +181,7 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
                   disabled={!hasSelectedClip}
                   accessibilityLabel="Freeze frame at playhead"
                 >
-                  <Ionicons name="snow-outline" size={12} color={hasSelectedClip ? "#38BDF8" : "#64748B"} />
+                  <Ionicons name="snow-outline" size={11} color={hasSelectedClip ? "#FFFFFF" : "#64748B"} />
                   <Text style={styles.actionBtnText}>Freeze</Text>
                 </TouchableOpacity>
               )}
@@ -192,7 +192,7 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
                   disabled={!hasSelectedClip}
                   accessibilityLabel="Reverse clip"
                 >
-                  <Ionicons name="swap-horizontal-outline" size={12} color={hasSelectedClip ? "#A78BFA" : "#64748B"} />
+                  <Ionicons name="swap-horizontal-outline" size={11} color={hasSelectedClip ? "#FFFFFF" : "#64748B"} />
                   <Text style={styles.actionBtnText}>Reverse</Text>
                 </TouchableOpacity>
               )}

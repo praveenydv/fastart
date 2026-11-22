@@ -177,8 +177,8 @@ function FiltersModalComponent({
               style={[
                 styles.categoryPill,
                 {
-                  borderColor: 'rgba(255, 255, 255, 0.35)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                  borderColor: 'rgba(0, 242, 254, 0.35)',
+                  backgroundColor: 'rgba(0, 242, 254, 0.12)',
                   flexDirection: 'row',
                   alignItems: 'center',
                 },
@@ -186,11 +186,11 @@ function FiltersModalComponent({
               onPress={handleResetToNormal}
               activeOpacity={0.7}
             >
-              <Ionicons name="refresh-outline" size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
+              <Ionicons name="refresh-outline" size={10} color="#00F2FE" style={{ marginRight: 3 }} />
               <Text
                 style={[
                   styles.categoryPillText,
-                  { color: '#FFFFFF', fontWeight: '500', flexShrink: 0 },
+                  { color: '#00F2FE', fontWeight: '600', flexShrink: 0 },
                   Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : null,
                 ]}
                 numberOfLines={1}
@@ -229,14 +229,14 @@ function FiltersModalComponent({
       {!isNormal && (
         <View style={styles.intensitySliderRow}>
           <CompactSliderInput
-            label="Filter Strength"
+            label="Strength"
             value={filterIntensity}
             min={0}
             max={100}
             step={1}
             unit="%"
             defaultValue={100}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             showSteppers={true}
             onChange={(val) => {
               setFilterIntensity(val);
@@ -263,7 +263,7 @@ function FiltersModalComponent({
               <>
                 {/* 1. Custom .cube file import button */}
                 <TouchableOpacity
-                  style={[styles.card, { borderColor: '#00F2FE', borderStyle: 'dashed' }]}
+                  style={[styles.card, { borderColor: 'rgba(255, 255, 255, 0.3)', borderStyle: 'dashed' }]}
                   onPress={handleImportCubeFile}
                   activeOpacity={0.7}
                 >
@@ -271,16 +271,16 @@ function FiltersModalComponent({
                     style={[
                       styles.faceFrame,
                       {
-                        backgroundColor: 'rgba(0, 242, 254, 0.08)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.06)',
                         justifyContent: 'center',
                         alignItems: 'center',
                       },
                     ]}
                   >
-                    <Ionicons name="folder-open-outline" size={26} color="#00F2FE" />
+                    <Ionicons name="folder-open-outline" size={24} color="#FFFFFF" />
                   </View>
                   <View style={styles.metaBox}>
-                    <Text style={[styles.filterName, { color: '#00F2FE' }]} numberOfLines={1}>
+                    <Text style={[styles.filterName, { color: '#FFFFFF' }]} numberOfLines={1}>
                       + Import .cube
                     </Text>
                     <Text style={styles.filterDescText} numberOfLines={1}>
@@ -467,7 +467,7 @@ const styles: any = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   unifiedHeader: {
     flexDirection: 'row',
@@ -476,16 +476,16 @@ const styles: any = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
-    backgroundColor: '#08090E',
+    borderBottomColor: '#1F1F23',
+    backgroundColor: '#121214',
   },
   closeBtnCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#131826',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -505,18 +505,18 @@ const styles: any = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 12 : 4,
     borderTopWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#1F1F23',
   },
   sheetHandle: {
     width: 28,
     height: 2.5,
-    backgroundColor: '#1F2637',
+    backgroundColor: '#2C2C2E',
     borderRadius: 1.5,
     alignSelf: 'center',
     marginTop: 4,
@@ -528,8 +528,8 @@ const styles: any = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
-    backgroundColor: '#08090E',
+    borderBottomColor: '#1F1F23',
+    backgroundColor: '#121214',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -548,22 +548,22 @@ const styles: any = StyleSheet.create({
     paddingHorizontal: 6,
     height: 22,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetText: {
-    color: '#8E95A5',
+    color: '#00F2FE',
     fontSize: 9.5,
-    fontWeight: '400',
+    fontWeight: '600',
     flexShrink: 0,
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#00F2FE',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -571,8 +571,8 @@ const styles: any = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
-    backgroundColor: '#08090E',
+    borderBottomColor: '#1F1F23',
+    backgroundColor: '#121214',
   },
   categoryScroll: {
     gap: 4,
@@ -584,23 +584,23 @@ const styles: any = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   categoryPillText: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 9.5,
     fontWeight: '400',
     flexShrink: 0,
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   categoryPillTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   sheetBody: {
@@ -616,16 +616,16 @@ const styles: any = StyleSheet.create({
   intensitySliderRow: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    backgroundColor: 'rgba(0, 242, 254, 0.03)',
+    backgroundColor: '#141416',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    borderBottomColor: '#1F1F23',
     marginBottom: 2,
   },
   sectionHeader: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
-    fontWeight: '500',
-    letterSpacing: 0.6,
+    fontWeight: '400',
+    letterSpacing: 0.5,
     marginBottom: 3,
   },
   grid: {
@@ -635,29 +635,29 @@ const styles: any = StyleSheet.create({
   },
   card: {
     width: '23.8%',
-    backgroundColor: '#131826',
-    borderRadius: 7,
+    backgroundColor: '#18181A',
+    borderRadius: 6,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     padding: 2,
     alignItems: 'center',
   },
   cardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   faceFrame: {
     height: 48,
     width: '100%',
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#242C3D',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
   },
   previewImage: {
     width: '100%',
@@ -667,7 +667,7 @@ const styles: any = StyleSheet.create({
     position: 'absolute',
     top: 2,
     right: 2,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     width: 11,
     height: 11,
     borderRadius: 3,
@@ -681,13 +681,13 @@ const styles: any = StyleSheet.create({
     alignItems: 'center',
   },
   filterName: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '400',
     textAlign: 'center',
   },
   filterNameActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   filterDescText: {
@@ -740,9 +740,9 @@ const styles: any = StyleSheet.create({
     position: 'absolute',
     bottom: 1,
     right: 1,
-    backgroundColor: 'rgba(0, 242, 254, 0.35)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 0.5,
-    borderColor: '#00F2FE',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     paddingHorizontal: 2,
     paddingVertical: 0.5,
     borderRadius: 2,

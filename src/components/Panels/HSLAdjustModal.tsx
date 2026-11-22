@@ -9,6 +9,7 @@ import { TactileTouchable as TouchableOpacity } from '../Common/TactileTouchable
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { HSLAdjustments, HSLColorChannel, HSLChannelConfig } from '../../types/project';
 import { CompactSliderInput } from '../Common/CompactSliderInput';
+import { ModalHeader } from '../Common/ModalHeader';
 
 export interface HSLAdjustModalProps {
   visible: boolean;
@@ -119,32 +120,14 @@ function HSLAdjustModalComponent({
       <View style={styles.sheetContainer}>
         {/* Standardized Header - only shown in standalone modal */}
         {!isInline && (
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={20} color="#EF4444" />
-            </TouchableOpacity>
-
-            <View style={styles.headerTitleRow}>
-              <View style={styles.headerIconBadge}>
-                <MaterialCommunityIcons name="palette-swatch" size={16} color="#00F2FE" />
-              </View>
-              <Text style={styles.headerTitle}>HSL Color Grading</Text>
-            </View>
-
-            <View style={styles.headerRightActions}>
-              <TouchableOpacity style={styles.resetBtn} onPress={handleResetAll}>
-                <Text style={styles.resetBtnText}>Reset All</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.applyBtn} onPress={handleDone}>
-                <Ionicons name="checkmark" size={18} color="#0B0D13" />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <ModalHeader
+            title="HSL"
+            iconName="color-filter-outline"
+            onClose={onClose}
+            onReset={handleResetAll}
+            resetText="Reset All"
+            onDone={handleDone}
+          />
         )}
 
         <ScrollView
@@ -205,20 +188,20 @@ function HSLAdjustModalComponent({
                     { backgroundColor: currentDef.color },
                   ]}
                 />
-                <Text style={styles.tuningCardTitle}>{currentDef.name} Tuning</Text>
+                <Text style={styles.tuningCardTitle}>{currentDef.name}</Text>
               </View>
               <TouchableOpacity
                 style={styles.resetChannelBtn}
                 onPress={handleResetChannel}
               >
-                <Text style={styles.resetChannelText}>Reset Channel</Text>
+                <Text style={styles.resetChannelText}>Reset</Text>
               </TouchableOpacity>
             </View>
 
             {/* Slider 1: Hue */}
             <View style={styles.controlRow}>
               <CompactSliderInput
-                label="Hue (Shift)"
+                label="Hue"
                 value={currentConfig.hue}
                 min={-180}
                 max={180}
@@ -231,44 +214,12 @@ function HSLAdjustModalComponent({
                 onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => handleSet('hue', val)}
               />
-              <View style={styles.stepperRow}>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('hue', -10)}
-                >
-                  <Text style={styles.stepBtnText}>-10°</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('hue', -2)}
-                >
-                  <Text style={styles.stepBtnText}>-2°</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepperCenter}
-                  onPress={() => handleSet('hue', 0)}
-                >
-                  <Text style={styles.stepperCenterText}>0° (Reset)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('hue', 2)}
-                >
-                  <Text style={styles.stepBtnText}>+2°</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('hue', 10)}
-                >
-                  <Text style={styles.stepBtnText}>+10°</Text>
-                </TouchableOpacity>
-              </View>
             </View>
 
             {/* Slider 2: Saturation */}
             <View style={styles.controlRow}>
               <CompactSliderInput
-                label="Saturation (Vibrancy)"
+                label="Saturation"
                 value={currentConfig.saturation}
                 min={-100}
                 max={100}
@@ -281,44 +232,12 @@ function HSLAdjustModalComponent({
                 onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => handleSet('saturation', val)}
               />
-              <View style={styles.stepperRow}>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('saturation', -10)}
-                >
-                  <Text style={styles.stepBtnText}>-10%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('saturation', -2)}
-                >
-                  <Text style={styles.stepBtnText}>-2%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepperCenter}
-                  onPress={() => handleSet('saturation', 0)}
-                >
-                  <Text style={styles.stepperCenterText}>0% (Reset)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('saturation', 2)}
-                >
-                  <Text style={styles.stepBtnText}>+2%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('saturation', 10)}
-                >
-                  <Text style={styles.stepBtnText}>+10%</Text>
-                </TouchableOpacity>
-              </View>
             </View>
 
             {/* Slider 3: Luminance */}
             <View style={styles.controlRow}>
               <CompactSliderInput
-                label="Luminance (Brightness)"
+                label="Luminance"
                 value={currentConfig.luminance}
                 min={-100}
                 max={100}
@@ -331,38 +250,6 @@ function HSLAdjustModalComponent({
                 onDragEnd={() => setIsSliderDragging(false)}
                 onChange={(val) => handleSet('luminance', val)}
               />
-              <View style={styles.stepperRow}>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('luminance', -10)}
-                >
-                  <Text style={styles.stepBtnText}>-10%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('luminance', -2)}
-                >
-                  <Text style={styles.stepBtnText}>-2%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepperCenter}
-                  onPress={() => handleSet('luminance', 0)}
-                >
-                  <Text style={styles.stepperCenterText}>0% (Reset)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('luminance', 2)}
-                >
-                  <Text style={styles.stepBtnText}>+2%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => handleUpdate('luminance', 10)}
-                >
-                  <Text style={styles.stepBtnText}>+10%</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </View>
         </ScrollView>
@@ -378,32 +265,32 @@ const styles = StyleSheet.create({
   inlineWrapper: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#0D0E15',
+    backgroundColor: '#121214',
   },
   inlineWrapperDocked: {
     height: '100%',
   },
   sheetContainer: {
     flex: 1,
-    backgroundColor: '#0D0E15',
+    backgroundColor: '#121214',
     display: 'flex',
     flexDirection: 'column',
   },
   header: {
     height: 34,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.07)',
+    borderBottomColor: '#1F1F23',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    backgroundColor: '#12141F',
+    backgroundColor: '#121214',
   },
   cancelBtn: {
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -416,14 +303,14 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 5,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 11.5,
     fontWeight: '500',
-    color: '#FFFFFF',
+    color: '#EDEDED',
     letterSpacing: 0.1,
   },
   headerRightActions: {
@@ -435,18 +322,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetBtnText: {
     fontSize: 9.5,
-    color: '#A1A1AA',
-    fontWeight: '400',
+    color: '#00F2FE',
+    fontWeight: '600',
   },
   applyBtn: {
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -460,7 +349,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 8.5,
     fontWeight: '500',
-    color: '#A1A1AA',
+    color: '#71717A',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -470,11 +359,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 4,
     marginBottom: 6,
-    backgroundColor: '#13151F',
-    borderRadius: 8,
+    backgroundColor: '#18181A',
+    borderRadius: 6,
     padding: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#27272A',
   },
   swatchBtn: {
     flexBasis: '22%',
@@ -484,14 +373,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 4,
     paddingHorizontal: 2,
-    borderRadius: 6,
+    borderRadius: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: 'transparent',
   },
   swatchBtnSelected: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#FFFFFF',
   },
   swatchDot: {
     width: 16,
@@ -513,26 +402,26 @@ const styles = StyleSheet.create({
   },
   swatchLabel: {
     fontSize: 8.5,
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontWeight: '400',
   },
   swatchLabelSelected: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   tuningCard: {
-    backgroundColor: '#171926',
-    borderRadius: 8,
+    backgroundColor: '#18181A',
+    borderRadius: 6,
     padding: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: '#27272A',
   },
   tuningCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    borderBottomColor: '#27272A',
     paddingBottom: 4,
     marginBottom: 6,
   },
@@ -549,18 +438,20 @@ const styles = StyleSheet.create({
   tuningCardTitle: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#FFFFFF',
+    color: '#EDEDED',
   },
   resetChannelBtn: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetChannelText: {
     fontSize: 9,
-    color: '#A1A1AA',
-    fontWeight: '400',
+    color: '#00F2FE',
+    fontWeight: '600',
   },
   controlRow: {
     marginBottom: 6,
@@ -574,12 +465,12 @@ const styles = StyleSheet.create({
   controlName: {
     fontSize: 9.5,
     fontWeight: '400',
-    color: '#D4D4D8',
+    color: '#A1A1AA',
   },
   controlValue: {
     fontSize: 9.5,
     fontWeight: '500',
-    color: '#00F2FE',
+    color: '#FFFFFF',
   },
   stepperRow: {
     flexDirection: 'row',

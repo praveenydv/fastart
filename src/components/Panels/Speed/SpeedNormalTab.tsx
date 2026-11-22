@@ -17,7 +17,7 @@ export const SpeedNormalTab: React.FC<SpeedNormalTabProps> = ({
   return (
     <>
       <Text style={styles.speedDisplay}>{speedVal.toFixed(2)}x</Text>
-      <Text style={styles.sectionTitle}>SPEED PRESETS</Text>
+      <Text style={styles.sectionTitle}>Presets</Text>
       <View style={styles.speedGrid}>
         {SPEED_PRESETS.map((item) => {
           const isActive = Math.abs(speedVal - item.value) < 0.02;
@@ -39,7 +39,7 @@ export const SpeedNormalTab: React.FC<SpeedNormalTabProps> = ({
       {/* Fine Speed Slider with Continuous Dragging & Stepper Buttons */}
       <View style={styles.sliderBox}>
         <CompactSliderInput
-          label="Fine Tuning"
+          label="Speed"
           value={speedVal}
           min={0.1}
           max={5.0}
@@ -47,7 +47,7 @@ export const SpeedNormalTab: React.FC<SpeedNormalTabProps> = ({
           decimals={2}
           unit="x"
           defaultValue={1.0}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onChange={(val) => onSelectSpeed(val)}
         />

@@ -1,6 +1,7 @@
 import { VideoClip } from "../../types/project";
 import { getClipBakedFps, getCutoutQualityFps } from "../../services/selfieSegmentationService";
 import { getInterpolatedTransform, getInterpolatedMask } from "../keyframeEngine";
+import { globalActiveVideoElements } from "./rendererMediaSync";
 import {
   applyMaskPath,
   drawClipWithMask,
@@ -383,18 +384,46 @@ export function drawClip(
     clip.filterIntensity !== undefined ? clip.filterIntensity : 1.0,
   );
 
-  if (
-    !renderCtx.videoElements.has(clip.id) &&
-    (!clip.sourceMediaId || !renderCtx.videoElements.has(clip.sourceMediaId)) &&
-    !renderCtx.videoElements.has(clip.url)
-  ) {
-    renderCtx.preloadClip(clip);
-  }
-
-  const mediaEl =
+  let mediaEl =
     (clip.id ? renderCtx.videoElements.get(clip.id) : null) ||
     (clip.sourceMediaId ? renderCtx.videoElements.get(clip.sourceMediaId) : null) ||
-    renderCtx.videoElements.get(clip.url);
+    (clip.url ? renderCtx.videoElements.get(clip.url) : null) ||
+    (clip.id ? globalActiveVideoElements.get(clip.id) : null) ||
+    (clip.sourceMediaId ? globalActiveVideoElements.get(clip.sourceMediaId) : null) ||
+    (clip.url ? globalActiveVideoElements.get(clip.url) : null);
+
+  // If not found directly, perform suffix/prefix matching on cached elements to handle blob or relative URL variances
+  if (!mediaEl && clip.url) {
+    for (const [key, el] of renderCtx.videoElements.entries()) {
+      if (el && (key.endsWith(clip.url) || clip.url.endsWith(key))) {
+        mediaEl = el;
+        break;
+      }
+    }
+    if (!mediaEl) {
+      for (const [key, el] of globalActiveVideoElements.entries()) {
+        if (el && (key.endsWith(clip.url) || clip.url.endsWith(key))) {
+          mediaEl = el;
+          break;
+        }
+      }
+    }
+  }
+
+  // Synchronously populate renderCtx so subsequent frames hit O(1) cache
+  if (mediaEl) {
+    if (clip.id && !renderCtx.videoElements.has(clip.id)) {
+      renderCtx.videoElements.set(clip.id, mediaEl);
+    }
+    if (clip.sourceMediaId && !renderCtx.videoElements.has(clip.sourceMediaId)) {
+      renderCtx.videoElements.set(clip.sourceMediaId, mediaEl);
+    }
+    if (clip.url && !renderCtx.videoElements.has(clip.url)) {
+      renderCtx.videoElements.set(clip.url, mediaEl);
+    }
+  } else {
+    renderCtx.preloadClip(clip);
+  }
   const isImage = mediaEl instanceof HTMLImageElement || (mediaEl && (mediaEl as any).tagName === "IMG");
   const isVideo = mediaEl instanceof HTMLVideoElement || (mediaEl && (mediaEl as any).tagName === "VIDEO");
 
@@ -652,26 +681,34 @@ export function drawClip(
       }
     }
   } else {
-    // If media element is still decoding or buffering during active playback, never draw the loading
-    // placeholder with borders and text which causes a flash on cut. Instead, let the tail-held clip show through.
+    // If media element is still decoding or buffering during active playback or paused, never draw the loading
+    // placeholder with borders and text if any candidate media element or thumbnail is available.
     if (!renderCtx.isPlaying) {
-      const hasError = Boolean(mediaEl && (mediaEl as any).error);
-      const aspect = 16 / 9;
-      let dw = w;
-      let dh = w / aspect;
-      const fitMode = clip.fit || "contain";
-      if (fitMode === "cover") {
-        if (dh < h) {
-          dh = h;
-          dw = h * aspect;
+      const hasAnyCandidate =
+        mediaEl ||
+        (clip.id && (renderCtx.videoElements.has(clip.id) || globalActiveVideoElements.has(clip.id))) ||
+        (clip.url && (renderCtx.videoElements.has(clip.url) || globalActiveVideoElements.has(clip.url))) ||
+        (clip.sourceMediaId && (renderCtx.videoElements.has(clip.sourceMediaId) || globalActiveVideoElements.has(clip.sourceMediaId)));
+
+      if (!hasAnyCandidate) {
+        const hasError = Boolean(mediaEl && (mediaEl as any).error);
+        const aspect = 16 / 9;
+        let dw = w;
+        let dh = w / aspect;
+        const fitMode = clip.fit || "contain";
+        if (fitMode === "cover") {
+          if (dh < h) {
+            dh = h;
+            dw = h * aspect;
+          }
+        } else {
+          if (dh > h) {
+            dh = h;
+            dw = h * aspect;
+          }
         }
-      } else {
-        if (dh > h) {
-          dh = h;
-          dw = h * aspect;
-        }
+        drawLoadingPreview(ctx, clip, clipLocalTime, dw, dh, hasError);
       }
-      drawLoadingPreview(ctx, clip, clipLocalTime, dw, dh, hasError);
     }
   }
 

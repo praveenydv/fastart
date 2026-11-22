@@ -1328,6 +1328,9 @@ export function generateCanvasBridgeHtml(
           if (txt.strokeColor && (txt.strokeWidth || 0) > 0) {
             ctx.strokeStyle = txt.strokeColor;
             ctx.lineWidth = (txt.strokeWidth || 2) * (width / 360);
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.miterLimit = 2;
             ctx.strokeText(txt.text || "", posX, posY);
           }
 
@@ -1372,6 +1375,9 @@ export function generateCanvasBridgeHtml(
           // Stroke & Neon Highlight
           ctx.strokeStyle = "#000000";
           ctx.lineWidth = 4 * (width / 360);
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.miterLimit = 2;
           ctx.strokeText(capText, posX, posY);
           ctx.fillStyle = cap.color || "#FFE600";
           ctx.fillText(capText, posX, posY);

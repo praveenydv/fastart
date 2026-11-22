@@ -23,9 +23,9 @@ export const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0D111A",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: "#121214",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     maxHeight: Platform.OS === "web" ? "76%" : "82%",
     borderTopWidth: 1,
     borderColor: "#1E2638",
@@ -44,8 +44,8 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#1A2234",
     backgroundColor: "#090C12",
@@ -53,18 +53,18 @@ export const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
   },
   sheetTitle: {
     color: "#F8FAFC",
-    fontSize: 11.5,
-    fontWeight: "500",
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.3,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "#131926",
     borderWidth: 1,
     borderColor: "#1F293D",
@@ -72,40 +72,40 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#00F2FE",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
   sheetBody: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   scrollContent: {
-    paddingBottom: 56,
+    paddingBottom: 40,
+    gap: 14,
   },
 
-  // Input Box with mic & action buttons
+  // Spacious Input Box with mic & action buttons
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#131926",
+    backgroundColor: "#18181A",
     borderRadius: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    minHeight: 38,
+    minHeight: 40,
     borderWidth: 1,
-    borderColor: "#202A3E",
-    marginBottom: 8,
+    borderColor: "#1F2A3E",
     overflow: "hidden",
   },
   textInput: {
     flex: 1,
     minWidth: 0,
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 13.5,
     lineHeight: 18,
     fontWeight: "400",
     paddingVertical: 4,
@@ -114,244 +114,164 @@ export const styles = StyleSheet.create({
   },
   inlineApplyBtn: {
     backgroundColor: "#FFFFFF",
-    height: 22,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+    height: 26,
+    paddingHorizontal: 12,
+    borderRadius: 6,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 4,
   },
 
-  // Primary Tab Bar
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: "#090C12",
-    borderRadius: 6,
-    padding: 2,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    height: 26,
+  // Clean Section Dividers
+  sectionDivider: {
+    height: 1,
+    backgroundColor: "#161D2C",
+    marginVertical: 3,
   },
-  tabBtn: {
+
+  // Spacious Control Groups & Headers
+  controlGroup: {
+    gap: 10,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sectionTitle: {
+    color: "#94A3B8",
+    fontSize: 9.5,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  subSliderTitle: {
+    color: "#94A3B8",
+    fontSize: 9.5,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  horizontalRow: {
+    marginVertical: 2,
+  },
+
+  // Spacious Color Target Mode Selector Bar (Text | Stroke | Background | Border)
+  colorModeBar: {
+    flexDirection: "row",
+    backgroundColor: "#101522",
+    borderRadius: 8,
+    padding: 3,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#182030",
+  },
+  colorModeBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    borderRadius: 6,
   },
-  tabBtnActive: {
+  colorModeBtnActive: {
     backgroundColor: "#161E2E",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
     shadowColor: "#00F2FE",
     shadowOpacity: 0.2,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
-  tabBtnText: {
-    color: "#8E9AA8",
+  colorModeBtnText: {
     fontSize: 9.5,
-    fontWeight: "400",
-  },
-  tabBtnTextActive: {
-    color: "#FFFFFF",
     fontWeight: "500",
+    color: "#8E9AA8",
+  },
+  colorModeBtnTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  colorModeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
 
-  // Sub Tab Bar (for Style sub-segments: Text | Background | Stroke)
-  subTabBar: {
+  // Spacious Quick Format Toggles (B, AA, Align)
+  formatBar: {
     flexDirection: "row",
-    backgroundColor: "#090C12",
-    borderRadius: 6,
-    padding: 2,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: "#1A2234",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
   },
-  subTabBtn: {
-    flex: 1,
+  formatBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  subTabBtnActive: {
-    backgroundColor: "#161E2E",
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.35)",
+    borderColor: "#27272A",
+    minHeight: 28,
   },
-  subTabBtnText: {
-    color: "#8E9AA8",
-    fontSize: 9.5,
-    fontWeight: "400",
-  },
-  subTabBtnTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-
-  // Section Headers
-  sectionTitle: {
-    color: "#8E9AA8",
-    fontSize: 8.5,
-    fontWeight: "500",
-    letterSpacing: 0.7,
-    textTransform: "uppercase",
-    marginBottom: 4,
-    marginTop: 2,
-  },
-  horizontalRow: {
-    marginBottom: 8,
-  },
-
-  // Font Tab Styles
-  tabSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-    gap: 6,
-  },
-  categoryChip: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: "#131926",
-    borderWidth: 1,
-    borderColor: "#1E2638",
-  },
-  categoryChipActive: {
+  formatBtnActive: {
     backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "rgba(255, 255, 255, 0.4)",
-  },
-  categoryChipText: {
-    color: "#8E9AA8",
-    fontSize: 9,
-    fontWeight: "400",
-  },
-  categoryChipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  fontCard: {
-    width: 68,
-    height: 50,
-    backgroundColor: "#131926",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 4,
-  },
-  fontCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderColor: "#FFFFFF",
-    shadowColor: "#000000",
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
   },
-  fontCardPreview: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#E2E8F0",
-    marginBottom: 2,
-  },
-  fontCardPreviewActive: {
-    color: "#FFFFFF",
-  },
-  fontCardLabel: {
-    fontSize: 8,
-    color: "#8E9AA8",
-    fontWeight: "400",
-    textAlign: "center",
-    maxWidth: "100%",
-  },
-  fontCardLabelActive: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-
-  // Font Size Stepper & Quick Presets
-  sizeSection: {
-    marginTop: 3,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#161E2E",
-  },
-  sizeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-  },
-  stepperBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#131926",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-    padding: 2,
-  },
-  stepperBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    backgroundColor: "#182030",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperValue: {
-    color: "#FFFFFF",
+  formatBtnText: {
     fontSize: 10,
-    fontWeight: "400",
-    minWidth: 32,
-    textAlign: "center",
-  },
-  presetGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    flexWrap: "wrap",
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  presetChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: "#131926",
-    borderWidth: 1,
-    borderColor: "#1E2638",
-  },
-  presetChipActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
-  },
-  presetChipText: {
+    fontWeight: "600",
     color: "#8E9AA8",
-    fontSize: 9,
-    fontWeight: "400",
   },
-  presetChipTextActive: {
+  formatBtnTextActive: {
     color: "#FFFFFF",
-    fontWeight: "500",
+    fontWeight: "700",
   },
 
-  // Color Swatches
+  // Spacious Font Chips
+  fontChip: {
+    height: 30,
+    paddingHorizontal: 13,
+    backgroundColor: "#18181A",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#27272A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fontChipActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
+  },
+  fontChipText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#CBD5E1",
+  },
+  fontChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+
+  // Spacious Color Swatches (24px diameter)
   colorCircle: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    marginRight: 6,
+    marginRight: 8,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -360,76 +280,66 @@ export const styles = StyleSheet.create({
   colorCircleSelected: {
     borderColor: "#FFFFFF",
     borderWidth: 2,
-    shadowColor: "#000000",
-    shadowOpacity: 0.4,
+        shadowOpacity: 0.4,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
 
-  // Background Option Pills
-  bgOptionPill: {
+  // None Option Circle (Identical to Swatches)
+  noneCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#131926",
+    borderWidth: 1,
+    borderColor: "#1F293D",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  noneCircleSelected: {
+    borderColor: "#FFFFFF",
+    borderWidth: 2,
+  },
+
+  // Spacious Effect Chips
+  effectChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#131926",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
-    marginRight: 6,
+    gap: 6,
+    backgroundColor: "#18181A",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
+    height: 30,
   },
-  bgOptionPillActive: {
+  effectChipActive: {
     backgroundColor: "rgba(255, 255, 255, 0.12)",
     borderColor: "#FFFFFF",
   },
-  bgPreviewDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  bgOptionText: {
+  effectChipText: {
     color: "#94A3B8",
-    fontSize: 9.5,
-    fontWeight: "400",
-  },
-  bgOptionTextActive: {
-    color: "#FFFFFF",
+    fontSize: 10,
     fontWeight: "500",
   },
-
-  // Effects Tab
-  effectPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#131926",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
-    marginRight: 6,
-    borderWidth: 1,
-    borderColor: "#1E2638",
-  },
-  effectPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
-  },
-  effectPillTitle: {
-    color: "#94A3B8",
-    fontSize: 9.5,
-    fontWeight: "400",
-  },
-  effectPillTitleActive: {
+  effectChipTextActive: {
     color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  effectPillDesc: {
-    color: "#64748B",
-    fontSize: 8,
-    fontWeight: "400",
+    fontWeight: "700",
   },
 
-  // Anim Tab
+  // Sliders container inside tabs
+  tabSlidersContainer: {
+    gap: 10,
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#161D2C",
+  },
+
+  // Legacy tab properties for typecheck compatibility
   animPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -469,6 +379,197 @@ export const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: "500",
   },
+  effectPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#18181A",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
+    marginRight: 5,
+    borderWidth: 1,
+    borderColor: "#27272A",
+  },
+  effectPillActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
+  },
+  effectPillTitle: {
+    color: "#94A3B8",
+    fontSize: 8.5,
+    fontWeight: "500",
+  },
+  effectPillTitleActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  effectPillDesc: {
+    color: "#64748B",
+    fontSize: 7.5,
+    fontWeight: "400",
+  },
+  fontCard: {
+    width: 56,
+    height: 38,
+    backgroundColor: "#18181A",
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#27272A",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 2,
+  },
+  fontCardActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
+  },
+  fontCardPreview: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#E2E8F0",
+    marginBottom: 1,
+  },
+  fontCardPreviewActive: {
+    color: "#FFFFFF",
+  },
+  fontCardLabel: {
+    fontSize: 7.5,
+    color: "#8E9AA8",
+    fontWeight: "500",
+    textAlign: "center",
+    maxWidth: "100%",
+  },
+  fontCardLabelActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  sizeSection: {
+    marginTop: 3,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#161E2E",
+  },
+  sizeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  stepperBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#131926",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#1E2638",
+    padding: 1,
+  },
+  stepperBtn: {
+    width: 18,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: "#182030",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperValue: {
+    color: "#FFFFFF",
+    fontSize: 9.5,
+    fontWeight: "600",
+    minWidth: 28,
+    textAlign: "center",
+  },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#090C12",
+    borderRadius: 6,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: "#1E2638",
+    height: 26,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  tabBtnActive: {
+    backgroundColor: "#161E2E",
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+  },
+  tabBtnText: {
+    color: "#8E9AA8",
+    fontSize: 9.5,
+    fontWeight: "400",
+  },
+  tabBtnTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  subTabBar: {
+    flexDirection: "row",
+    backgroundColor: "#090C12",
+    borderRadius: 6,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: "#1A2234",
+  },
+  subTabBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  subTabBtnActive: {
+    backgroundColor: "#161E2E",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+  },
+  subTabBtnText: {
+    color: "#8E9AA8",
+    fontSize: 9.5,
+    fontWeight: "400",
+  },
+  subTabBtnTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  tabSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+    gap: 6,
+  },
+  categoryChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: "#131926",
+    borderWidth: 1,
+    borderColor: "#1E2638",
+  },
+  categoryChipActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  categoryChipText: {
+    color: "#8E9AA8",
+    fontSize: 9,
+    fontWeight: "400",
+  },
+  categoryChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
   fontPill: {
     backgroundColor: "#131926",
     paddingHorizontal: 8,
@@ -493,5 +594,101 @@ export const styles = StyleSheet.create({
   fontPillTextActive: {
     color: "#FFFFFF",
     fontWeight: "500",
+  },
+  bgOptionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#18181A",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
+    marginRight: 5,
+    borderWidth: 1,
+    borderColor: "#27272A",
+  },
+  bgOptionPillActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
+  },
+  bgPreviewDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  bgOptionText: {
+    color: "#94A3B8",
+    fontSize: 8.5,
+    fontWeight: "500",
+  },
+  bgOptionTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  presetGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  presetChip: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+    backgroundColor: "#131926",
+    borderWidth: 1,
+    borderColor: "#1E2638",
+  },
+  presetChipActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
+  },
+  presetChipText: {
+    color: "#8E9AA8",
+    fontSize: 8,
+    fontWeight: "500",
+  },
+  presetChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  sectionBlock: {
+    backgroundColor: "#121214",
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "#172030",
+    paddingHorizontal: 7,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  subSectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  subSectionTitle: {
+    color: "#64748B",
+    fontSize: 8,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  bgSubPanel: {
+    backgroundColor: "rgba(18, 23, 36, 0.5)",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#1A2334",
+    padding: 6,
+    gap: 5,
+    marginTop: 2,
+  },
+  geometryBlock: {
+    gap: 5,
+    paddingVertical: 2,
   },
 });

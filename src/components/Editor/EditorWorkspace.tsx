@@ -137,7 +137,6 @@ const CLIP_TYPE_AVAILABLE_MENUS: Record<string, Set<string>> = {
     "opacity",
     "tracking",
     "extract_audio",
-    "denoise",
     "reverse",
     "background",
     "canvas",

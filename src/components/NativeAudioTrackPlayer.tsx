@@ -133,7 +133,7 @@ const NativeAudioPlayerInstance = React.memo(function NativeAudioPlayerInstance(
         }
         wasPlayingRef.current = isPlaying && isInside;
         player.pause();
-        if (!isInside && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
+        if (!isPlaying && !isInside && Math.abs(lastSeekTargetRef.current - curTarget) > 0.04) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }

@@ -238,7 +238,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
       {/* Mode Content */}
       {selectedTab === "none" ? (
         <View style={sc.compactNoneBox}>
-          <Ionicons name="shield-checkmark-outline" size={14} color="#00F2FE" />
+          <Ionicons name="shield-checkmark-outline" size={14} color="#EDEDED" />
           <Text style={sc.compactNoneText}>
             Original video background is preserved. Select Auto Cutout or Chroma Key above to remove background.
           </Text>
@@ -299,7 +299,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   <View style={[sc.compactColorSwatch, { backgroundColor: keyColor }]} />
                   <Text style={sc.compactHex}>{keyColor.toUpperCase()}</Text>
                   <View style={sc.dropperIconBadge}>
-                    <Ionicons name="eyedrop" size={12} color="#00F2FE" />
+                    <Ionicons name="eyedrop" size={12} color="#EDEDED" />
                     <Text style={sc.dropperBadgeText}>Sample Screen</Text>
                   </View>
                 </TouchableOpacity>
@@ -326,7 +326,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                     label=""
                     value={intensity}
                     unit="%"
-                    min={1}
+                    min={0}
                     max={100}
                     step={1}
                     onChange={(v) => onChange({ ...config, enabled: true, mode: "chroma", intensity: v })}
@@ -356,7 +356,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                 <View style={sc.compactProcessingBanner}>
                   <View style={sc.compactProcessingHeader}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
-                      <ActivityIndicator size="small" color="#00F2FE" />
+                      <ActivityIndicator size="small" color="#FFFFFF" />
                       <Text style={sc.compactProgressPct} numberOfLines={1}>
                         Removing background... {frameProgress}% ({processedFrames}/{totalFramesToProcess})
                       </Text>
@@ -400,7 +400,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                       <View style={{ marginTop: 2, marginBottom: 4 }}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <Text style={sc.sectionHeader}>PROCESSING QUALITY</Text>
-                          <Text style={{ fontSize: 10, color: "#00F2FE", fontWeight: "600" }}>
+                          <Text style={{ fontSize: 10, color: "#EDEDED", fontWeight: "500" }}>
                             {quality === "best" ? "Every Frame (60 FPS)" : quality === "studio" ? "Smooth (~30 FPS)" : "Draft (~10 FPS)"}
                           </Text>
                         </View>
@@ -455,12 +455,12 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                         disabled={isProcessingActiveFrame}
                       >
                         {isProcessingActiveFrame ? (
-                          <ActivityIndicator size="small" color={isAlreadyProcessed ? "#00F2FE" : "#08090E"} />
+                          <ActivityIndicator size="small" color={isAlreadyProcessed ? "#FFFFFF" : "#121214"} />
                         ) : (
                           <Ionicons
                             name={isAlreadyProcessed ? "refresh" : "sparkles"}
                             size={14}
-                            color={isAlreadyProcessed ? "#00F2FE" : "#08090E"}
+                            color={isAlreadyProcessed ? "#EDEDED" : "#121214"}
                           />
                         )}
                         <Text style={[sc.heroBtnText, isAlreadyProcessed && sc.heroBtnSecondaryText]}>
@@ -484,11 +484,11 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                           disabled={isProcessingActiveFrame || isProcessingFrames}
                         >
                           {isProcessingActiveFrame ? (
-                            <ActivityIndicator size="small" color="#00F2FE" />
+                            <ActivityIndicator size="small" color="#FFFFFF" />
                           ) : (
-                            <Ionicons name="eye-outline" size={14} color="#00F2FE" />
+                            <Ionicons name="eye-outline" size={14} color="#EDEDED" />
                           )}
-                          <Text style={[sc.secondaryActionText, { color: "#00F2FE" }]} numberOfLines={1}>
+                          <Text style={[sc.secondaryActionText, { color: "#EDEDED" }]} numberOfLines={1}>
                             {isProcessingActiveFrame ? "Processing..." : "Preview Frame"}
                           </Text>
                         </TouchableOpacity>
@@ -518,7 +518,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                           label=""
                           value={intensity}
                           unit="%"
-                          min={1}
+                          min={0}
                           max={100}
                           step={1}
                           onChange={(v) => onChange({ ...config, enabled: true, mode: "auto", intensity: v })}
@@ -562,12 +562,12 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                 <Ionicons
                   name="color-palette-outline"
                   size={12}
-                  color={finishTab === "bg" ? "#00F2FE" : "#94A3B8"}
+                  color={finishTab === "bg" ? "#FFFFFF" : "#8E8E93"}
                 />
                 <Text style={[sc.stylingTabText, finishTab === "bg" && sc.stylingTabTextActive]}>
                   Background
                 </Text>
-                {bgColor !== "none" && <View style={[sc.activeDot, { backgroundColor: bgColor === "#FFFFFF" ? "#FFFFFF" : "#00F2FE" }]} />}
+                {bgColor !== "none" && <View style={[sc.activeDot, { backgroundColor: "#FFFFFF" }]} />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -578,12 +578,12 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                 <Ionicons
                   name="brush-outline"
                   size={12}
-                  color={finishTab === "outline" ? "#00F2FE" : "#94A3B8"}
+                  color={finishTab === "outline" ? "#FFFFFF" : "#8E8E93"}
                 />
                 <Text style={[sc.stylingTabText, finishTab === "outline" && sc.stylingTabTextActive]}>
                   Outline
                 </Text>
-                {strokeColor !== "none" && <View style={[sc.activeDot, { backgroundColor: strokeColor === "#FFFFFF" ? "#FFFFFF" : "#00F2FE" }]} />}
+                {strokeColor !== "none" && <View style={[sc.activeDot, { backgroundColor: "#FFFFFF" }]} />}
               </TouchableOpacity>
             </View>
 
@@ -596,7 +596,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                 style={sc.resetStylingBtn}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close-circle" size={12} color="#94A3B8" />
+                <Ionicons name="close-circle" size={12} color="#00F2FE" />
                 <Text style={sc.resetStylingText}>Reset</Text>
               </TouchableOpacity>
             )}
@@ -624,7 +624,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   <Ionicons
                     name="ban-outline"
                     size={14}
-                    color={bgColor === "none" ? "#00F2FE" : "#64748B"}
+                    color={bgColor === "none" ? "#FFFFFF" : "#71717A"}
                   />
                 </TouchableOpacity>
 
@@ -688,7 +688,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                   <Ionicons
                     name="ban-outline"
                     size={14}
-                    color={strokeColor === "none" ? "#00F2FE" : "#64748B"}
+                    color={strokeColor === "none" ? "#FFFFFF" : "#71717A"}
                   />
                 </TouchableOpacity>
 
@@ -833,47 +833,47 @@ const sc = StyleSheet.create({
     borderRadius: 5,
   },
   modeSegmentItemActive: {
-    backgroundColor: "#161D2E",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   modeSegmentText: {
     fontSize: 10,
-    fontWeight: "500",
-    color: "#94A3B8",
+    fontWeight: "400",
+    color: "#8E8E93",
   },
   modeSegmentTextActive: {
-    color: "#00F2FE",
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "500",
   },
   compactNoneBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#0F1420",
+    backgroundColor: "#18181A",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     marginBottom: 6,
   },
   compactNoneText: {
     fontSize: 9.5,
-    color: "#94A3B8",
+    color: "#8E8E93",
     flex: 1,
     lineHeight: 13,
   },
   sectionBox: {
-    backgroundColor: "#0F1420",
+    backgroundColor: "#18181A",
     borderRadius: 6,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     marginBottom: 6,
   },
   sectionHeader: {
     fontSize: 9,
-    fontWeight: "700",
-    color: "#64748B",
+    fontWeight: "500",
+    color: "#71717A",
     letterSpacing: 0.5,
   },
   compactChromaHeaderRow: {
@@ -897,19 +897,19 @@ const sc = StyleSheet.create({
     justifyContent: "center",
   },
   compactPresetSwatchSelected: {
-    borderColor: "#00F2FE",
+    borderColor: "#FFFFFF",
     transform: [{ scale: 1.1 }],
   },
   compactPickerTrigger: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#0A0D15",
+    backgroundColor: "#141416",
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     marginBottom: 6,
   },
   compactColorSwatch: {
@@ -921,25 +921,25 @@ const sc = StyleSheet.create({
   },
   compactHex: {
     fontSize: 10,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontWeight: "500",
+    color: "#EDEDED",
     letterSpacing: 0.3,
   },
   dropperIconBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "#27272A",
   },
   dropperBadgeText: {
     fontSize: 8.5,
-    fontWeight: "600",
-    color: "#00F2FE",
+    fontWeight: "500",
+    color: "#EDEDED",
   },
   sliderRow: {
     flexDirection: "row",
@@ -949,8 +949,8 @@ const sc = StyleSheet.create({
   },
   sliderLabel: {
     fontSize: 9.5,
-    fontWeight: "500",
-    color: "#94A3B8",
+    fontWeight: "400",
+    color: "#8E8E93",
     flex: 1,
   },
   sliderWrapper: {
@@ -960,11 +960,11 @@ const sc = StyleSheet.create({
     gap: 6,
   },
   compactProcessingBanner: {
-    backgroundColor: "#0A0D15",
+    backgroundColor: "#141416",
     padding: 6,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     gap: 4,
   },
   compactProcessingHeader: {
@@ -974,8 +974,8 @@ const sc = StyleSheet.create({
   },
   compactProgressPct: {
     fontSize: 9,
-    color: "#00F2FE",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "500",
   },
   compactCancelBtn: {
     paddingHorizontal: 6,
@@ -985,53 +985,53 @@ const sc = StyleSheet.create({
   },
   compactCancelText: {
     fontSize: 8.5,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#EF4444",
   },
   progressBarTrack: {
-    height: 3,
-    backgroundColor: "#161D2E",
-    borderRadius: 1.5,
+    height: 2,
+    backgroundColor: "#141416",
+    borderRadius: 1,
     overflow: "hidden",
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#00F2FE",
-    borderRadius: 1.5,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 1,
   },
   actionsContainer: {
     gap: 6,
   },
   qualityTabBtn: {
     flex: 1,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: "#161D2E",
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
   qualityTabBtnSelected: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   qualityTabLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#94A3B8",
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: "#8E8E93",
   },
   qualityTabLabelSelected: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
   },
   qualityTabSublabel: {
-    fontSize: 9,
-    color: "#64748B",
+    fontSize: 8.5,
+    color: "#71717A",
     marginTop: 1,
   },
   qualityTabSublabelSelected: {
-    color: "rgba(0, 242, 254, 0.75)",
+    color: "#EDEDED",
   },
   processedSuccessCard: {
     flexDirection: "row",
@@ -1047,7 +1047,7 @@ const sc = StyleSheet.create({
   },
   processedSuccessTitle: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#10B981",
   },
   processedSuccessSubtext: {
@@ -1059,62 +1059,62 @@ const sc = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "#27272A",
   },
   reprocessChipText: {
     fontSize: 9,
-    fontWeight: "600",
-    color: "#00F2FE",
+    fontWeight: "500",
+    color: "#EDEDED",
   },
   heroBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
     paddingVertical: 7,
     borderRadius: 6,
   },
   heroBtnText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: "#08090E",
+    fontWeight: "500",
+    color: "#121214",
   },
   heroBtnSecondary: {
-    backgroundColor: "#131826",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#27272A",
   },
   heroBtnSecondaryText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
   },
   secondaryActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "#141416",
     paddingVertical: 6,
     paddingHorizontal: 8,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
+    borderColor: "#27272A",
   },
   secondaryActionText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   stylingBox: {
-    backgroundColor: "#0F1420",
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: "#18181A",
+    borderRadius: 6,
+    padding: 8,
     borderWidth: 1,
-    borderColor: "#1E2638",
+    borderColor: "#27272A",
     marginTop: 2,
     marginBottom: 6,
   },
@@ -1122,12 +1122,12 @@ const sc = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   stylingTabGroup: {
     flexDirection: "row",
-    backgroundColor: "#080B12",
-    borderRadius: 6,
+    backgroundColor: "#141416",
+    borderRadius: 5,
     padding: 2,
     gap: 3,
   },
@@ -1135,103 +1135,105 @@ const sc = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   stylingTabBtnActive: {
-    backgroundColor: "#161D2E",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   stylingTabText: {
     fontSize: 10,
-    fontWeight: "500",
-    color: "#94A3B8",
+    fontWeight: "400",
+    color: "#8E8E93",
   },
   stylingTabTextActive: {
-    color: "#00F2FE",
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "500",
   },
   activeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: "#00F2FE",
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#FFFFFF",
   },
   resetStylingBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 242, 254, 0.35)",
   },
   resetStylingText: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: "#94A3B8",
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#00F2FE",
   },
   paletteContainer: {
-    gap: 8,
+    gap: 6,
   },
   swatchScrollContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     paddingVertical: 2,
   },
   paletteSwatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   paletteSwatchSelected: {
-    borderColor: "#00F2FE",
-    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    borderWidth: 1.5,
     transform: [{ scale: 1.06 }],
   },
   transparentSwatch: {
-    backgroundColor: "#131826",
+    backgroundColor: "#141416",
     borderStyle: "dashed",
-    borderColor: "rgba(255, 255, 255, 0.25)",
+    borderColor: "#27272A",
   },
   outlineControlsSection: {
     marginTop: 4,
-    paddingTop: 8,
+    paddingTop: 6,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.06)",
-    gap: 6,
+    borderTopColor: "#27272A",
+    gap: 4,
   },
   thicknessPillRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 4,
   },
   thicknessPill: {
     flex: 1,
-    paddingVertical: 5,
+    paddingVertical: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#161D2E",
-    borderRadius: 5,
+    backgroundColor: "#141416",
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#27272A",
   },
   thicknessPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   thicknessPillText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#94A3B8",
+    fontSize: 9.5,
+    fontWeight: "400",
+    color: "#8E8E93",
   },
   thicknessPillTextActive: {
-    color: "#00F2FE",
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "500",
   },
 });
 

@@ -107,7 +107,7 @@ function VolumeModalComponent({
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
         <ModalHeader
-          title="Volume & Fade"
+          title="Volume"
           iconName="volume-high"
           onClose={onClose}
           onReset={handleReset}
@@ -123,17 +123,10 @@ function VolumeModalComponent({
       >
         {isFromVideo && !hasAudio && (
           <View style={styles.noAudioBanner}>
-            <View style={styles.noAudioIconBox}>
-              <Ionicons name="volume-mute" size={18} color="#F59E0B" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.noAudioTitle}>No Audio Track Detected</Text>
-              <Text style={styles.noAudioSubtitle}>
-                This video contains no audio stream or was recorded without
-                sound. Adjusting volume or fades will not produce audible
-                playback.
-              </Text>
-            </View>
+            <Ionicons name="volume-mute" size={13} color="#A1A1AA" style={{ marginRight: 6 }} />
+            <Text style={styles.noAudioSubtitle}>
+              No audio stream detected.
+            </Text>
           </View>
         )}
 
@@ -143,10 +136,10 @@ function VolumeModalComponent({
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <Text style={styles.sectionTitle}>Volume Level</Text>
+              <Text style={styles.sectionTitle}>Volume</Text>
               {isFromVideo && !hasAudio && (
                 <View style={styles.silentBadge}>
-                  <Text style={styles.silentBadgeText}>Silent Video</Text>
+                  <Text style={styles.silentBadgeText}>Silent</Text>
                 </View>
               )}
             </View>
@@ -154,16 +147,16 @@ function VolumeModalComponent({
           </View>
 
           {/* Slider for Web / Mobile with Small Text Input */}
-          <View style={{ marginVertical: 8 }}>
+          <View style={{ marginVertical: 4 }}>
             <CompactSliderInput
-              label="Audio Level"
+              label="Level"
               value={Math.round(volume * 100)}
               min={0}
               max={200}
               step={1}
               unit="%"
               defaultValue={100}
-              accentColor="#00E5C9"
+              accentColor="#FFFFFF"
               showSteppers={true}
               onDragStart={() => setIsSliderDragging(true)}
               onDragEnd={() => setIsSliderDragging(false)}
@@ -188,8 +181,8 @@ function VolumeModalComponent({
                 >
                   <Ionicons
                     name={p.icon as any}
-                    size={14}
-                    color={isSelected ? "#000000" : "#8E95A5"}
+                    size={12}
+                    color={isSelected ? "#FFFFFF" : "#8A8A8E"}
                   />
                   <Text
                     style={[
@@ -210,10 +203,10 @@ function VolumeModalComponent({
           <Text style={styles.sectionTitle}>Fades</Text>
 
           {/* Fade In */}
-          <View style={{ marginVertical: 4 }}>
+          <View style={{ marginVertical: 2 }}>
             <CompactSliderInput
               label="Fade In"
-              icon={<Ionicons name="trending-up" size={14} color="#10B981" />}
+              icon={<Ionicons name="trending-up" size={12} color="#94A3B8" />}
               value={parseFloat(fadeIn.toFixed(1))}
               min={0}
               max={5}
@@ -221,7 +214,7 @@ function VolumeModalComponent({
               unit="s"
               decimals={1}
               defaultValue={0}
-              accentColor="#10B981"
+              accentColor="#FFFFFF"
               showSteppers={true}
               onDragStart={() => setIsSliderDragging(true)}
               onDragEnd={() => setIsSliderDragging(false)}
@@ -230,10 +223,10 @@ function VolumeModalComponent({
           </View>
 
           {/* Fade Out */}
-          <View style={{ marginVertical: 4 }}>
+          <View style={{ marginVertical: 2 }}>
             <CompactSliderInput
               label="Fade Out"
-              icon={<Ionicons name="trending-down" size={14} color="#F59E0B" />}
+              icon={<Ionicons name="trending-down" size={12} color="#94A3B8" />}
               value={parseFloat(fadeOut.toFixed(1))}
               min={0}
               max={5}
@@ -241,7 +234,7 @@ function VolumeModalComponent({
               unit="s"
               decimals={1}
               defaultValue={0}
-              accentColor="#F59E0B"
+              accentColor="#FFFFFF"
               showSteppers={true}
               onDragStart={() => setIsSliderDragging(true)}
               onDragEnd={() => setIsSliderDragging(false)}
@@ -266,7 +259,7 @@ function VolumeModalComponent({
               >
                 <Ionicons
                   name={denoise ? "ear" : "ear-outline"}
-                  size={18}
+                  size={14}
                   color={denoise ? "#FFFFFF" : "#71717A"}
                 />
               </View>
@@ -280,7 +273,7 @@ function VolumeModalComponent({
                       denoise && styles.denoiseTitleActive,
                     ]}
                   >
-                    AI Audio Denoise
+                    Denoise
                   </Text>
                   <View
                     style={[
@@ -294,13 +287,10 @@ function VolumeModalComponent({
                         denoise && styles.denoiseBadgeTextActive,
                       ]}
                     >
-                      {denoise ? "ACTIVE" : "OFF"}
+                      {denoise ? "ON" : "OFF"}
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.denoiseSubtitle}>
-                  Attenuates background hiss, hum & room noise
-                </Text>
               </View>
             </View>
             <View
@@ -331,7 +321,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   inlineSheetContainer: {
     flex: 1,
@@ -349,18 +339,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0F131D",
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
+    backgroundColor: "#121214",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     maxHeight: Platform.OS === "web" ? "72%" : "80%",
     paddingBottom: 8,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: "#1F2637",
+    width: 28,
+    height: 2.5,
+    backgroundColor: "#2C2C2E",
     borderRadius: 1.5,
     alignSelf: "center",
     marginTop: 6,
@@ -372,8 +362,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#08090E",
+    borderBottomColor: "#1F1F23",
+    backgroundColor: "#121214",
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -384,7 +374,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -406,14 +396,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.35)",
   },
   resetBtnText: {
-    color: "#8E95A5",
+    color: "#00F2FE",
     fontSize: 9.5,
-    fontWeight: "400",
+    fontWeight: "600",
   },
   doneBtn: {
     flexDirection: "row",
@@ -422,17 +412,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   doneBtnCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#131826",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -449,12 +439,12 @@ const styles = StyleSheet.create({
     paddingBottom: 56,
   },
   compactSection: {
-    backgroundColor: "#131826",
-    borderRadius: 6,
-    padding: 6,
-    marginBottom: 4,
+    backgroundColor: "#18181A",
+    borderRadius: 4,
+    padding: 5,
+    marginBottom: 3,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -468,15 +458,15 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   valueBadge: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontSize: 9.5,
-    fontWeight: "500",
-    backgroundColor: "#08090E",
+    fontWeight: "400",
+    backgroundColor: "#141416",
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   stepperRow: {
     flexDirection: "row",
@@ -495,22 +485,22 @@ const styles = StyleSheet.create({
   stepBtn: {
     width: 22,
     height: 22,
-    borderRadius: 5,
-    backgroundColor: "#1B2234",
+    borderRadius: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   stepBtnSmall: {
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: "#1B2234",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   presetsGrid: {
     flexDirection: "row",
@@ -523,24 +513,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     paddingVertical: 4,
-    borderRadius: 5,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   presetCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   presetCardText: {
-    color: "#8E95A5",
+    color: "#8A8A8E",
     fontSize: 8.5,
     fontWeight: "400",
   },
   presetCardTextActive: {
-    color: "#00F2FE",
-    fontWeight: "500",
+    color: "#FFFFFF",
+    fontWeight: "400",
   },
   fadeRow: {
     flexDirection: "row",
@@ -619,16 +609,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     padding: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     marginTop: 4,
   },
   denoiseCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   denoiseLeft: {
     flexDirection: "row",
@@ -641,15 +631,15 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   denoiseIconBoxActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   denoiseTitle: {
     color: "#CBD5E1",
@@ -661,7 +651,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   denoiseSubtitle: {
-    color: "#64748B",
+    color: "#71717A",
     fontSize: 8.5,
     marginTop: 1,
   },
@@ -669,42 +659,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   denoiseBadgeActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   denoiseBadgeText: {
-    color: "#8E95A5",
+    color: "#8E8E93",
     fontSize: 8,
-    fontWeight: "500",
+    fontWeight: "400",
     letterSpacing: 0.3,
   },
   denoiseBadgeTextActive: {
-    color: "#08090E",
+    color: "#000000",
   },
   toggleTrack: {
-    width: 40,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#1F2637",
+    width: 36,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#27272A",
     padding: 2,
     justifyContent: "center",
   },
   toggleTrackActive: {
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
   },
   toggleThumb: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#94A3B8",
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#71717A",
   },
   toggleThumbActive: {
-    backgroundColor: "#08090E",
+    backgroundColor: "#000000",
     alignSelf: "flex-end",
   },
 });

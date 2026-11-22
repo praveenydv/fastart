@@ -72,7 +72,7 @@ export default function KeyframePointsList({
                     <Ionicons
                       name="diamond"
                       size={12}
-                      color={isCurrent ? "#08090E" : "#00F2FE"}
+                      color={isCurrent ? "#121214" : "#EDEDED"}
                     />
                   </View>
                   <View>
@@ -94,7 +94,7 @@ export default function KeyframePointsList({
                     <Ionicons
                       name={isCurrent ? "locate" : "arrow-forward"}
                       size={13}
-                      color={isCurrent ? "#00F2FE" : "#8E95A5"}
+                      color={isCurrent ? "#FFFFFF" : "#8E8E93"}
                     />
                   </TouchableOpacity>
 

@@ -25,8 +25,8 @@ export interface ConfirmDeleteModalProps {
 
 export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   visible,
-  title = 'Delete Confirmation',
-  message = 'Are you sure you want to delete this item? This action cannot be undone.',
+  title = 'Delete',
+  message = 'Delete this item?',
   itemName,
   itemType,
   itemDetails,

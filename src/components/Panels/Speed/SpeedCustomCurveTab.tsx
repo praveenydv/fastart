@@ -389,7 +389,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           <Text style={styles.gridText}>2.0x</Text>
         </View>
         <View style={[styles.gridLine, styles.gridLineNormal, { top: y1x }]} pointerEvents="none">
-          <Text style={[styles.gridText, { color: '#00F2FE', fontWeight: '700' }]}>
+          <Text style={[styles.gridText, { color: '#FFFFFF', fontWeight: '500' }]}>
             1.0x (Normal)
           </Text>
         </View>
@@ -407,9 +407,9 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
                 left: seg.midX - seg.len / 2,
                 top: seg.midY - 1.5,
                 width: seg.len + 0.6,
-                height: 3,
-                borderRadius: 1.5,
-                backgroundColor: '#00F2FE',
+                height: 2.5,
+                borderRadius: 1.25,
+                backgroundColor: '#FFFFFF',
                 transform: [{ rotate: `${seg.angle}deg` }],
               }}
               pointerEvents="none"
@@ -440,7 +440,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
                   height: Math.max(2.5, Math.round(peak * 30)),
                   borderRadius: 1,
                   backgroundColor: audioSource?.isNativeAudio
-                    ? 'rgba(0, 242, 254, 0.35)'
+                    ? 'rgba(255, 255, 255, 0.35)'
                     : 'rgba(52, 211, 153, 0.35)',
                 }}
               />
@@ -458,8 +458,8 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           >
             <defs>
               <linearGradient id="curveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#00F2FE" stopOpacity="0.28" />
-                <stop offset="100%" stopColor="#00F2FE" stopOpacity="0.02" />
+                <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.02" />
               </linearGradient>
             </defs>
 
@@ -481,7 +481,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
                     width={barWidth}
                     height={barH}
                     rx={1.2}
-                    fill={audioSource?.isNativeAudio ? 'rgba(0, 242, 254, 0.42)' : 'rgba(52, 211, 153, 0.42)'}
+                    fill={audioSource?.isNativeAudio ? 'rgba(255, 255, 255, 0.35)' : 'rgba(52, 211, 153, 0.35)'}
                   />
                 );
               })
@@ -491,7 +491,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
                 y1={graphHeight - 4}
                 x2={graphWidth}
                 y2={graphHeight - 4}
-                stroke="rgba(0, 242, 254, 0.2)"
+                stroke="rgba(255, 255, 255, 0.15)"
                 strokeWidth="1.5"
                 strokeDasharray="4 3"
               />
@@ -503,7 +503,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
               y1={graphHeight - 3}
               x2={graphWidth}
               y2={graphHeight - 3}
-              stroke={audioSource?.isNativeAudio ? 'rgba(0, 242, 254, 0.28)' : 'rgba(52, 211, 153, 0.28)'}
+              stroke={audioSource?.isNativeAudio ? 'rgba(255, 255, 255, 0.2)' : 'rgba(52, 211, 153, 0.2)'}
               strokeWidth="1.2"
             />
 
@@ -514,8 +514,8 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             <path
               d={buildSvgPath()}
               fill="none"
-              stroke="#00F2FE"
-              strokeWidth="3.5"
+              stroke="#FFFFFF"
+              strokeWidth="3"
               strokeLinecap="round"
             />
           </svg>
@@ -527,7 +527,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             <Ionicons
               name="musical-notes"
               size={9}
-              color={audioSource?.isNativeAudio ? '#00F2FE' : '#34D399'}
+              color={audioSource?.isNativeAudio ? '#EDEDED' : '#34D399'}
             />
             <Text
               style={[
@@ -582,7 +582,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             activeOpacity={0.7}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Ionicons name="add" size={14} color="#00F2FE" />
+            <Ionicons name="add" size={14} color="#EDEDED" />
             <Text style={styles.graphActionText}>Add Point</Text>
           </TouchableOpacity>
 
@@ -601,13 +601,13 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.graphActionBtn}
+            style={[styles.graphActionBtn, { borderColor: 'rgba(0, 242, 254, 0.35)', backgroundColor: 'rgba(0, 242, 254, 0.12)' }]}
             onPress={handleResetCurve}
             activeOpacity={0.7}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Ionicons name="refresh-outline" size={13} color="#94A3B8" />
-            <Text style={styles.graphActionText}>Reset</Text>
+            <Ionicons name="refresh-outline" size={13} color="#00F2FE" />
+            <Text style={[styles.graphActionText, { color: '#00F2FE' }]}>Reset</Text>
           </TouchableOpacity>
         </View>
 
@@ -617,13 +617,13 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             style={{
               paddingHorizontal: 8,
               paddingVertical: 3,
-              borderRadius: 6,
-              backgroundColor: 'rgba(0, 242, 254, 0.1)',
+              borderRadius: 4,
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
               borderWidth: 1,
-              borderColor: 'rgba(0, 242, 254, 0.3)',
+              borderColor: '#27272A',
             }}
           >
-            <Text style={{ fontSize: 10, color: '#00F2FE', fontWeight: '700' }}>
+            <Text style={{ fontSize: 10, color: '#EDEDED', fontWeight: '500' }}>
               Pt #{selectedPointIndex + 1}: {customPoints[selectedPointIndex].s.toFixed(1)}x
             </Text>
           </View>
@@ -642,7 +642,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
             decimals={1}
             unit="x"
             defaultValue={1.0}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             showSteppers={true}
             onChange={(val) => {
               const copy = [...customPoints];
@@ -659,7 +659,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
         onPress={onApplyCustomCurve}
         activeOpacity={0.8}
       >
-        <Ionicons name="checkmark" size={16} color="#08090E" />
+        <Ionicons name="checkmark" size={16} color="#121214" />
         <Text style={styles.applyCustomBtnText}>Apply Custom Curve</Text>
       </TouchableOpacity>
     </View>

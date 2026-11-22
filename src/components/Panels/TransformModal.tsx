@@ -483,7 +483,7 @@ function TransformModalComponent({
             else if (activeTab === "stretch") handleResetStretch();
             else handleResetAngle();
           }}
-          resetText={`Reset ${activeTab.toUpperCase()}`}
+          resetText="Reset"
         />
       ) : null}
 
@@ -504,7 +504,7 @@ function TransformModalComponent({
             <Ionicons
               name="crop"
               size={13}
-              color={activeTab === "crop" ? "#00F2FE" : "#94A3B8"}
+              color={activeTab === "crop" ? "#121214" : "#8E8E93"}
             />
             <Text
               style={[
@@ -529,7 +529,7 @@ function TransformModalComponent({
             <Ionicons
               name="reload"
               size={13}
-              color={activeTab === "rotate" ? "#00F2FE" : "#94A3B8"}
+              color={activeTab === "rotate" ? "#121214" : "#8E8E93"}
             />
             <Text
               style={[
@@ -551,7 +551,7 @@ function TransformModalComponent({
             <MaterialCommunityIcons
               name="flip-horizontal"
               size={14}
-              color={activeTab === "flip" ? "#00F2FE" : "#94A3B8"}
+              color={activeTab === "flip" ? "#121214" : "#8E8E93"}
             />
             <Text
               style={[
@@ -576,7 +576,7 @@ function TransformModalComponent({
             <MaterialCommunityIcons
               name="arrow-expand-horizontal"
               size={14}
-              color={activeTab === "stretch" ? "#00F2FE" : "#94A3B8"}
+              color={activeTab === "stretch" ? "#121214" : "#8E8E93"}
             />
             <Text
               style={[
@@ -602,7 +602,7 @@ function TransformModalComponent({
             <MaterialCommunityIcons
               name="cube-outline"
               size={14}
-              color={activeTab === "angle" ? "#00F2FE" : "#94A3B8"}
+              color={activeTab === "angle" ? "#121214" : "#8E8E93"}
             />
             <Text
               style={[
@@ -639,7 +639,7 @@ function TransformModalComponent({
                   style={styles.openScreenCropBtn}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="expand" size={12} color="#00F2FE" />
+                  <Ionicons name="expand" size={12} color="#EDEDED" />
                   <Text style={styles.openScreenCropBtnText}>Edit on Canvas</Text>
                 </TouchableOpacity>
               )}
@@ -685,7 +685,7 @@ function TransformModalComponent({
                 step={1}
                 unit="%"
                 defaultValue={100}
-                accentColor="#00F2FE"
+                accentColor="#FFFFFF"
                 showSteppers={true}
                 onDragStart={() => setIsSliderDragging(true)}
                 onDragEnd={() => setIsSliderDragging(false)}
@@ -711,7 +711,7 @@ function TransformModalComponent({
                 step={1}
                 unit="%"
                 defaultValue={100}
-                accentColor="#00F2FE"
+                accentColor="#FFFFFF"
                 showSteppers={true}
                 onDragStart={() => setIsSliderDragging(true)}
                 onDragEnd={() => setIsSliderDragging(false)}
@@ -762,7 +762,7 @@ function TransformModalComponent({
               onPress={handleRotate90}
               activeOpacity={0.8}
             >
-              <Ionicons name="reload" size={20} color="#00F2FE" />
+              <Ionicons name="reload" size={18} color="#EDEDED" />
               <Text style={styles.quickRotateBtnText}>
                 Rotate +90° (Current: {Math.round(rotation)}°)
               </Text>
@@ -807,7 +807,7 @@ function TransformModalComponent({
                 unit="°"
                 defaultValue={0}
                 showReset={true}
-                accentColor="#00F2FE"
+                accentColor="#FFFFFF"
                 showSteppers={true}
                 onDragStart={() => setIsSliderDragging(true)}
                 onDragEnd={() => setIsSliderDragging(false)}
@@ -915,7 +915,7 @@ function TransformModalComponent({
                   <MaterialCommunityIcons
                     name="flip-horizontal"
                     size={28}
-                    color={flipX ? "#000000" : "#00F2FE"}
+                    color={flipX ? "#121214" : "#EDEDED"}
                   />
                   <Text
                     style={[
@@ -944,7 +944,7 @@ function TransformModalComponent({
                   <MaterialCommunityIcons
                     name="flip-vertical"
                     size={28}
-                    color={flipY ? "#000000" : "#00F2FE"}
+                    color={flipY ? "#121214" : "#EDEDED"}
                   />
                   <Text
                     style={[
@@ -1046,7 +1046,7 @@ function TransformModalComponent({
                   <Ionicons
                     name={isAspectLinked ? "lock-closed" : "lock-open-outline"}
                     size={14}
-                    color={isAspectLinked ? "#000000" : "#00F2FE"}
+                    color={isAspectLinked ? "#121214" : "#EDEDED"}
                   />
                   <Text
                     style={[
@@ -1067,7 +1067,7 @@ function TransformModalComponent({
                     <MaterialCommunityIcons
                       name="arrow-expand-horizontal"
                       size={15}
-                      color="#00F2FE"
+                      color="#EDEDED"
                     />
                   }
                   value={scaleX}
@@ -1077,7 +1077,7 @@ function TransformModalComponent({
                   unit="x"
                   decimals={2}
                   defaultValue={1.0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => setIsSliderDragging(false)}
@@ -1127,7 +1127,7 @@ function TransformModalComponent({
                     <MaterialCommunityIcons
                       name="arrow-expand-vertical"
                       size={15}
-                      color="#00F2FE"
+                      color="#EDEDED"
                     />
                   }
                   value={scaleY}
@@ -1137,7 +1137,7 @@ function TransformModalComponent({
                   unit="x"
                   decimals={2}
                   defaultValue={1.0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => setIsSliderDragging(false)}
@@ -1253,7 +1253,7 @@ function TransformModalComponent({
                     <MaterialCommunityIcons
                       name="road-variant"
                       size={15}
-                      color="#00F2FE"
+                      color="#EDEDED"
                     />
                   }
                   value={rotateX}
@@ -1262,7 +1262,7 @@ function TransformModalComponent({
                   step={1}
                   unit="°"
                   defaultValue={0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   hint="Tilts backward to create a receding distance view (ground / horizon perspective)."
                   onChange={(val) => {
                     setRotateX(val);
@@ -1332,7 +1332,7 @@ function TransformModalComponent({
                     <MaterialCommunityIcons
                       name="axis-z-rotate-clockwise"
                       size={15}
-                      color="#00F2FE"
+                      color="#EDEDED"
                     />
                   }
                   value={rotateY}
@@ -1341,7 +1341,7 @@ function TransformModalComponent({
                   step={1}
                   unit="°"
                   defaultValue={0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   hint="Angles the clip from the left or right side in 3D space."
                   onChange={(val) => {
                     setRotateY(val);
@@ -1411,7 +1411,7 @@ function TransformModalComponent({
                     <MaterialCommunityIcons
                       name="skew-more"
                       size={15}
-                      color="#00F2FE"
+                      color="#EDEDED"
                     />
                   }
                   value={skewX}
@@ -1420,7 +1420,7 @@ function TransformModalComponent({
                   step={1}
                   unit="°"
                   defaultValue={0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   onChange={(val) => {
                     setSkewX(val);
                     syncTransform({ skewX: val });
@@ -1469,7 +1469,7 @@ function TransformModalComponent({
                     <MaterialCommunityIcons
                       name="camera-iris"
                       size={15}
-                      color="#00F2FE"
+                      color="#EDEDED"
                     />
                   }
                   value={perspective}
@@ -1478,7 +1478,7 @@ function TransformModalComponent({
                   step={50}
                   unit="px"
                   defaultValue={800}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   onChange={(val) => {
                     setPerspective(val);
                     syncTransform({ perspective: val });
@@ -1527,7 +1527,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   inlineSheetContainer: {
     flex: 1,
@@ -1543,9 +1543,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: "#131826",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.35)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1558,15 +1558,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
+    borderColor: "#3F3F46",
     paddingHorizontal: 8,
     paddingVertical: 3.5,
     borderRadius: 5,
   },
   openScreenCropBtnText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 10.5,
     fontWeight: "600",
   },
@@ -1576,12 +1576,12 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: "80%",
     borderTopWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     paddingBottom: 16,
   },
   sheetHandle: {
@@ -1600,8 +1600,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderColor: "#1F2637",
-    backgroundColor: "#08090E",
+    borderColor: "#27272A",
+    backgroundColor: "#141416",
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -1618,7 +1618,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#EDEDED",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1626,9 +1626,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1648,13 +1648,13 @@ const styles = StyleSheet.create({
     paddingVertical: 3.5,
     paddingHorizontal: 7,
     borderRadius: 5,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   tabBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   tabBtnText: {
     color: "#8E95A5",
@@ -1662,8 +1662,8 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   tabBtnTextActive: {
-    color: "#00F2FE",
-    fontWeight: "500",
+    color: "#121214",
+    fontWeight: "600",
   },
   contentScroll: {
     paddingHorizontal: 6,
@@ -1697,14 +1697,14 @@ const styles = StyleSheet.create({
   ratioChip: {
     paddingHorizontal: 7,
     paddingVertical: 3.5,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   ratioChipActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   ratioChipText: {
     color: "#8E95A5",
@@ -1712,31 +1712,31 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   ratioChipTextActive: {
-    color: "#00F2FE",
-    fontWeight: "500",
+    color: "#121214",
+    fontWeight: "600",
   },
   screenCropBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "#3F3F46",
     paddingVertical: 5,
     borderRadius: 5,
   },
   screenCropBtnText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 10,
     fontWeight: "500",
   },
   card: {
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderRadius: 6,
     padding: 6,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     gap: 5,
   },
   sliderRow: {
@@ -1758,7 +1758,7 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   badge: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 9.5,
     fontWeight: "500",
   },
@@ -1768,30 +1768,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 3,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
+    borderBottomColor: "#27272A",
   },
   lockBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "#3F3F46",
     paddingVertical: 2.5,
     paddingHorizontal: 6,
     borderRadius: 4,
   },
   lockBtnActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   lockBtnText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 8.5,
     fontWeight: "400",
   },
   lockBtnTextActive: {
-    color: "#08090E",
+    color: "#141416",
     fontWeight: "500",
   },
   actionBtnRow: {
@@ -1805,9 +1805,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     paddingVertical: 5,
     borderRadius: 5,
   },
@@ -1822,12 +1822,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
     paddingVertical: 5,
     borderRadius: 5,
   },
   primaryActionBtnText: {
-    color: "#08090E",
+    color: "#141416",
     fontSize: 9.5,
     fontWeight: "500",
   },
@@ -1837,9 +1837,9 @@ const styles = StyleSheet.create({
   },
   flipCard: {
     flex: 1,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     borderRadius: 6,
     paddingVertical: 6,
     paddingHorizontal: 4,
@@ -1847,8 +1847,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   flipCardActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   flipCardTitle: {
     color: "#FFFFFF",
@@ -1856,8 +1856,8 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   flipCardTitleActive: {
-    color: "#00F2FE",
-    fontWeight: "500",
+    color: "#121214",
+    fontWeight: "600",
   },
   flipCardSub: {
     color: "#8E95A5",
@@ -1865,22 +1865,22 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   flipCardSubActive: {
-    color: "#00F2FE",
-    fontWeight: "600",
+    color: "#121214",
+    fontWeight: "500",
   },
   quickRotateBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "#27272A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
+    borderColor: "#3F3F46",
     paddingVertical: 9,
     borderRadius: 7,
   },
   quickRotateBtnText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 11.5,
     fontWeight: "700",
   },
@@ -1890,16 +1890,16 @@ const styles = StyleSheet.create({
   },
   rotatePresetBtn: {
     flex: 1,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     paddingVertical: 7,
     borderRadius: 7,
     alignItems: "center",
   },
   rotatePresetBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   rotatePresetBtnText: {
     color: "#94A3B8",
@@ -1907,8 +1907,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   rotatePresetBtnTextActive: {
-    color: "#00F2FE",
-    fontWeight: "700",
+    color: "#121214",
+    fontWeight: "600",
   },
   fineTuneRow: {
     flexDirection: "row",
@@ -1917,9 +1917,9 @@ const styles = StyleSheet.create({
   },
   fineBtn: {
     flex: 1,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     paddingVertical: 6,
     borderRadius: 6,
     alignItems: "center",

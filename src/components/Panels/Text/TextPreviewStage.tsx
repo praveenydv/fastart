@@ -152,7 +152,7 @@ export default function TextPreviewStage({
   let webStroke: string | undefined = undefined;
 
   if (selectedTextEffect === "neon") {
-    const glowColor = selectedBorderColor || selectedColor || "#00F2FE";
+    const glowColor = selectedColor || "#00F2FE";
     effectShadowColor = glowColor;
     effectShadowRadius = 18;
     webTextShadow = `0 0 8px ${glowColor}, 0 0 18px ${glowColor}, 0 0 32px ${glowColor}`;
@@ -202,9 +202,6 @@ export default function TextPreviewStage({
     effectShadowColor = "rgba(0, 242, 254, 0.7)";
     effectShadowRadius = 8;
     webTextShadow = "-2px 0 0 rgba(0, 242, 254, 0.8), 2px 0 0 rgba(255, 0, 128, 0.8)";
-  } else if (selectedBorderColor) {
-    effectShadowColor = selectedBorderColor;
-    effectShadowRadius = 8;
   }
 
   // Universal custom stroke application (independent of effect)
@@ -235,9 +232,9 @@ export default function TextPreviewStage({
           </Text>
         </View>
         {isStrokeActive && (
-          <View style={[styles.effectBadge, { borderColor: "#00F2FE", backgroundColor: "rgba(0, 242, 254, 0.15)" }]}>
-            <Ionicons name="brush" size={10} color="#00F2FE" />
-            <Text style={[styles.effectBadgeText, { color: "#00F2FE" }]}>
+          <View style={[styles.effectBadge, { borderColor: "#FFFFFF", backgroundColor: "rgba(255, 255, 255, 0.08)" }]}>
+            <Ionicons name="brush" size={10} color="#FFFFFF" />
+            <Text style={[styles.effectBadgeText, { color: "#FFFFFF" }]}>
               STROKE {selectedStrokeWidth}PX
             </Text>
           </View>
@@ -297,14 +294,14 @@ export default function TextPreviewStage({
 
 const styles = StyleSheet.create({
   previewStage: {
-    backgroundColor: "#08090E",
-    borderRadius: 8,
+    backgroundColor: "#141416",
+    borderRadius: 6,
     padding: 10,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     minHeight: 80,
     position: "relative",
     overflow: "hidden",
@@ -323,34 +320,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   effectBadgeText: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 8.5,
-    fontWeight: "700",
+    fontWeight: "500",
     letterSpacing: 0.3,
   },
   animBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   animBadgeText: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 8.5,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   previewPill: {
     paddingHorizontal: 12,

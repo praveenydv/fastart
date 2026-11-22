@@ -127,11 +127,11 @@ export default function KeyframeModal({
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
         <ModalHeader
-          title="Keyframe Animation"
+          title="Keyframes"
           iconName="diamond"
           onClose={onClose}
           onReset={keyframes.length > 0 && onClearAllKeyframes ? onClearAllKeyframes : undefined}
-          resetText="Clear All"
+          resetText="Clear"
         />
       ) : null}
 
@@ -174,7 +174,7 @@ export default function KeyframeModal({
                           : "add"
                       }
                       size={18}
-                      color={hasKeyframeAtCurrentTime ? "#EF4444" : "#00F2FE"}
+                      color={hasKeyframeAtCurrentTime ? "#EF4444" : "#FFFFFF"}
                     />
                   </TouchableOpacity>
                 </View>
@@ -196,7 +196,7 @@ export default function KeyframeModal({
                     <Ionicons
                       name="caret-back"
                       size={14}
-                      color={prevKeyframe ? "#00F2FE" : "#64748B"}
+                      color={prevKeyframe ? "#FFFFFF" : "#52525B"}
                     />
                   </TouchableOpacity>
 
@@ -204,7 +204,7 @@ export default function KeyframeModal({
                     <Ionicons
                       name="diamond"
                       size={11}
-                      color={hasKeyframeAtCurrentTime ? "#00F2FE" : "#64748B"}
+                      color={hasKeyframeAtCurrentTime ? "#FFFFFF" : "#52525B"}
                     />
                     <Text style={styles.navStatusText}>
                       {hasKeyframeAtCurrentTime
@@ -228,7 +228,7 @@ export default function KeyframeModal({
                     <Ionicons
                       name="caret-forward"
                       size={14}
-                      color={nextKeyframe ? "#00F2FE" : "#64748B"}
+                      color={nextKeyframe ? "#FFFFFF" : "#52525B"}
                     />
                   </TouchableOpacity>
                 </View>
@@ -270,7 +270,7 @@ export default function KeyframeModal({
 
   if (!visible) return null;
   return (
-    <View style={{ flex: 1, width: "100%", height: "100%", backgroundColor: "#0F131D" }}>
+    <View style={{ flex: 1, width: "100%", height: "100%", backgroundColor: "#121214" }}>
       {sheetContent}
     </View>
   );

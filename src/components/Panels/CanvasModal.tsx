@@ -89,7 +89,7 @@ export default function CanvasModal({
       {/* Unified Live Header - only shown in standalone modal to avoid duplicate header on desktop */}
       {!isInline ? (
         <ModalHeader
-          title="Canvas Ratio"
+          title="Canvas"
           iconName="scan-outline"
           onClose={onClose}
         />
@@ -120,7 +120,7 @@ export default function CanvasModal({
                   <Ionicons
                     name={item.icon}
                     size={14}
-                    color={isSelected ? "#00F2FE" : "#8E95A5"}
+                    color={isSelected ? "#FFFFFF" : "#8E95A5"}
                   />
                 </View>
                 <Text
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   inlineSheetContainer: {
     flex: 1,
@@ -174,18 +174,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0F131D",
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
+    backgroundColor: "#121214",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     maxHeight: Platform.OS === "web" ? "55%" : "65%",
     paddingBottom: Platform.OS === "ios" ? 20 : 10,
     borderTopWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
   },
   sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: "#1F2637",
+    width: 28,
+    height: 2.5,
+    backgroundColor: "#2C2C2E",
     borderRadius: 1.5,
     alignSelf: "center",
     marginTop: 6,
@@ -197,16 +197,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#08090E",
+    borderBottomColor: "#1F1F23",
+    backgroundColor: "#121214",
   },
   headerCloseBtn: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -224,24 +224,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     flexDirection: "row",
     alignItems: "center",
   },
   resetText: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 9,
     fontWeight: "400",
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#131826",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -259,47 +259,47 @@ const styles = StyleSheet.create({
   },
   ratioCard: {
     width: "23.5%",
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     borderRadius: 5,
     paddingVertical: 5,
     paddingHorizontal: 2,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     position: "relative",
   },
   ratioCardActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   ratioIconBox: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#08090E",
+    backgroundColor: "#141416",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 2,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   ratioIconBoxActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "#FFFFFF",
   },
   ratioLabel: {
     fontSize: 8.5,
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontWeight: "400",
     marginBottom: 1,
   },
   ratioLabelActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
   ratioDesc: {
     fontSize: 7.5,
-    color: "#64748B",
+    color: "#71717A",
     textAlign: "center",
     fontWeight: "400",
   },
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#10B981",
   },
   inlineApplyText: {
-    color: "#08090E",
+    color: "#000000",
     fontSize: 9.5,
     fontWeight: "500",
   },

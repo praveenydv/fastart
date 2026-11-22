@@ -15,6 +15,37 @@ export const COLOR_SWATCHES = [
   "#000000",
 ];
 
+export const BG_COLOR_SWATCHES = [
+  "#000000",
+  "rgba(0,0,0,0.75)",
+  "#FFFFFF",
+  "rgba(255,255,255,0.9)",
+  "#FF0050",
+  "#00F2FE",
+  "#FFE600",
+  "#10B981",
+  "#8B5CF6",
+  "#E50914",
+  "#1E293B",
+  "#F59E0B",
+  "#FB7185",
+  "#38BDF8",
+];
+
+export const STROKE_SWATCH_COLORS = [
+  "#000000",
+  "#FFFFFF",
+  "#FFE600",
+  "#00F2FE",
+  "#FF0050",
+  "#10B981",
+  "#8B5CF6",
+  "#FB7185",
+  "#F59E0B",
+  "#38BDF8",
+  "#64748B",
+];
+
 export const BG_SWATCHES = [
   { label: "None", value: "transparent" },
   { label: "Red", value: "#FF0050" },

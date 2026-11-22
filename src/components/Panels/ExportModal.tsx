@@ -83,12 +83,7 @@ function ExportModalComponent({
 
           {/* Header */}
           <ModalHeader
-            title={isDesktop ? "Export Project" : "Export Video"}
-            subtitle={
-              isDesktop
-                ? "Configure format, resolution, and render settings"
-                : undefined
-            }
+            title="Export"
             iconName="cloud-download-outline"
             onClose={() => {
               if (status === "rendering") {
@@ -107,7 +102,7 @@ function ExportModalComponent({
             rightNode={
               isDesktop ? (
                 <View style={styles.headerFormatBadge}>
-                  <Ionicons name={selectedFormatConfig.icon} size={12} color="#00F2FE" />
+                  <Ionicons name={selectedFormatConfig.icon} size={12} color="#CBD5E1" />
                   <Text style={styles.headerFormatBadgeText}>
                     {selectedFormatConfig.shortLabel}
                     {mediaType !== "wav" && mediaType !== "png" ? ` • ${resolution}` : ""}
@@ -186,15 +181,15 @@ function ExportModalComponent({
                 style={[
                   styles.noticeIconCircle,
                   {
-                    backgroundColor: `${noticeDialog.iconColor || "#00F2FE"}1A`,
-                    borderColor: `${noticeDialog.iconColor || "#00F2FE"}44`,
+                    backgroundColor: `${noticeDialog.iconColor || "#FFFFFF"}1A`,
+                    borderColor: `${noticeDialog.iconColor || "#FFFFFF"}44`,
                   },
                 ]}
               >
                 <Ionicons
                   name={noticeDialog.icon || "information-circle-outline"}
                   size={32}
-                  color={noticeDialog.iconColor || "#00F2FE"}
+                  color={noticeDialog.iconColor || "#FFFFFF"}
                 />
               </View>
               <Text style={styles.noticeTitle}>{noticeDialog.title}</Text>

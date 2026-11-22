@@ -68,15 +68,15 @@ export default function KeyframePropertyControls({
     <View style={styles.propertySection}>
       <Text style={styles.sectionHeader}>
         {hasKeyframeAtCurrentTime
-          ? "KEYFRAME PROPERTIES (AT DIAMOND)"
-          : "CLIP PROPERTIES (ADD KEYFRAME TO SAVE)"}
+          ? "Keyframe Properties"
+          : "Clip Properties"}
       </Text>
 
       {/* 1. SCALE */}
       <View style={styles.propertyRow}>
         <CompactSliderInput
-          label="Scale / Zoom"
-          icon={<Ionicons name="expand" size={14} color="#00F2FE" />}
+          label="Scale"
+          icon={<Ionicons name="expand" size={12} color="#EDEDED" />}
           value={activeScale}
           min={0.2}
           max={3.0}
@@ -84,7 +84,7 @@ export default function KeyframePropertyControls({
           unit="x"
           decimals={2}
           defaultValue={1.0}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -120,14 +120,14 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <CompactSliderInput
           label="Rotation"
-          icon={<Ionicons name="refresh" size={14} color="#00F2FE" />}
+          icon={<Ionicons name="refresh" size={14} color="#EDEDED" />}
           value={activeRotation}
           min={-180}
           max={180}
           step={1}
           unit="°"
           defaultValue={0}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -162,14 +162,14 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <CompactSliderInput
           label="Position X"
-          icon={<Ionicons name="move-outline" size={14} color="#00F2FE" />}
+          icon={<Ionicons name="move-outline" size={14} color="#EDEDED" />}
           value={activeX}
           min={-400}
           max={400}
           step={1}
           unit="px"
           defaultValue={0}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -177,14 +177,14 @@ export default function KeyframePropertyControls({
         />
         <CompactSliderInput
           label="Position Y"
-          icon={<Ionicons name="move-outline" size={14} color="#00F2FE" />}
+          icon={<Ionicons name="move-outline" size={14} color="#EDEDED" />}
           value={activeY}
           min={-400}
           max={400}
           step={1}
           unit="px"
           defaultValue={0}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -243,14 +243,14 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <CompactSliderInput
           label="Opacity"
-          icon={<Ionicons name="contrast-outline" size={14} color="#00F2FE" />}
+          icon={<Ionicons name="contrast-outline" size={14} color="#EDEDED" />}
           value={Math.round(activeOpacity * 100)}
           min={0}
           max={100}
           step={1}
           unit="%"
           defaultValue={100}
-          accentColor="#00F2FE"
+          accentColor="#FFFFFF"
           showSteppers={true}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
@@ -286,7 +286,7 @@ export default function KeyframePropertyControls({
       <View style={styles.propertyRow}>
         <View style={styles.propLabelRow}>
           <View style={styles.propLabelLeft}>
-            <Ionicons name="pulse" size={14} color="#00F2FE" />
+            <Ionicons name="pulse" size={14} color="#EDEDED" />
             <Text style={styles.propName}>Animation Curve / Easing</Text>
           </View>
           <View style={styles.easingBadge}>
@@ -343,7 +343,7 @@ export default function KeyframePropertyControls({
                 <Ionicons
                   name={c.icon as any}
                   size={14}
-                  color={isSelected ? "#00F2FE" : "#94A3B8"}
+                  color={isSelected ? "#FFFFFF" : "#8E8E93"}
                 />
                 <Text
                   numberOfLines={1}
@@ -366,7 +366,7 @@ export default function KeyframePropertyControls({
         <View style={styles.propertyRow}>
           <View style={styles.propLabelRow}>
             <View style={styles.propLabelLeft}>
-              <Ionicons name="shapes-outline" size={14} color="#00F2FE" />
+              <Ionicons name="shapes-outline" size={14} color="#EDEDED" />
               <Text style={styles.propName}>
                 Mask Keyframe ({(activeTransform.mask.shape || "").toUpperCase()})
               </Text>
@@ -375,14 +375,14 @@ export default function KeyframePropertyControls({
 
           <CompactSliderInput
             label="Mask Size"
-            icon={<Ionicons name="resize-outline" size={13} color="#00F2FE" />}
+            icon={<Ionicons name="resize-outline" size={13} color="#EDEDED" />}
             value={activeTransform.mask.size ?? 60}
             min={10}
             max={100}
             step={1}
             unit="%"
             defaultValue={60}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             onChange={(val) => {
               if (onUpdateKeyframeTransform) {
                 const updatedMask = {
@@ -403,14 +403,14 @@ export default function KeyframePropertyControls({
 
           <CompactSliderInput
             label="Mask Feather"
-            icon={<Ionicons name="water-outline" size={13} color="#00F2FE" />}
+            icon={<Ionicons name="water-outline" size={13} color="#EDEDED" />}
             value={activeTransform.mask.feather ?? 0}
             min={0}
             max={50}
             step={1}
             unit="px"
             defaultValue={0}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             onChange={(val) => {
               if (onUpdateKeyframeTransform) {
                 const updatedMask = {
@@ -429,14 +429,14 @@ export default function KeyframePropertyControls({
 
           <CompactSliderInput
             label="Mask Rotation"
-            icon={<Ionicons name="refresh-outline" size={13} color="#00F2FE" />}
+            icon={<Ionicons name="refresh-outline" size={13} color="#EDEDED" />}
             value={activeTransform.mask.rotation ?? 0}
             min={-180}
             max={180}
             step={1}
             unit="°"
             defaultValue={0}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             onChange={(val) => {
               if (onUpdateKeyframeTransform) {
                 const updatedMask = {
@@ -455,14 +455,14 @@ export default function KeyframePropertyControls({
 
           <CompactSliderInput
             label="Mask Position X"
-            icon={<Ionicons name="move-outline" size={13} color="#00F2FE" />}
+            icon={<Ionicons name="move-outline" size={13} color="#EDEDED" />}
             value={activeTransform.mask.x ?? 0}
             min={-100}
             max={100}
             step={1}
             unit="%"
             defaultValue={0}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             onChange={(val) => {
               if (onUpdateKeyframeTransform) {
                 const updatedMask = {
@@ -481,14 +481,14 @@ export default function KeyframePropertyControls({
 
           <CompactSliderInput
             label="Mask Position Y"
-            icon={<Ionicons name="move-outline" size={13} color="#00F2FE" />}
+            icon={<Ionicons name="move-outline" size={13} color="#EDEDED" />}
             value={activeTransform.mask.y ?? 0}
             min={-100}
             max={100}
             step={1}
             unit="%"
             defaultValue={0}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             onChange={(val) => {
               if (onUpdateKeyframeTransform) {
                 const updatedMask = {

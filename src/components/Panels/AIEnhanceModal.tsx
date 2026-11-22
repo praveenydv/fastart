@@ -119,7 +119,7 @@ export default function AIEnhanceModal({
       {/* Unified Live Header - only shown in standalone modal */}
       {!isInline ? (
         <ModalHeader
-          title="AI Enhance"
+          title="Enhance"
           iconName="sparkles"
           onClose={onClose}
           onReset={handleReset}
@@ -139,12 +139,12 @@ export default function AIEnhanceModal({
               <Ionicons
                 name="person-outline"
                 size={12}
-                color={activeTab === 'beauty' ? '#00F2FE' : '#94A3B8'}
+                color={activeTab === 'beauty' ? '#FFFFFF' : '#8A8A8E'}
               />
               <Text
-                style={[styles.tabText, activeTab === 'beauty' && { color: '#00F2FE', fontWeight: '500' }]}
+                style={[styles.tabText, activeTab === 'beauty' && { color: '#FFFFFF', fontWeight: '400' }]}
               >
-                Face Beauty
+                Beauty
               </Text>
               {(skinSmoothing > 0 || faceRadiance > 0) && <View style={styles.activeDot} />}
             </TouchableOpacity>
@@ -159,12 +159,12 @@ export default function AIEnhanceModal({
               <Ionicons
                 name="color-wand-outline"
                 size={12}
-                color={activeTab === 'clarity' ? '#00F2FE' : '#94A3B8'}
+                color={activeTab === 'clarity' ? '#FFFFFF' : '#8A8A8E'}
               />
               <Text
-                style={[styles.tabText, activeTab === 'clarity' && { color: '#00F2FE', fontWeight: '500' }]}
+                style={[styles.tabText, activeTab === 'clarity' && { color: '#FFFFFF', fontWeight: '400' }]}
               >
-                Clarity &amp; HDR
+                Clarity
               </Text>
               {(hdr || sharpness > 0 || colorBoost > 0) && <View style={styles.activeDotCyan} />}
             </TouchableOpacity>
@@ -182,8 +182,8 @@ export default function AIEnhanceModal({
                 {/* Skin Smoothing */}
                 <View style={styles.sliderCard}>
                   <CompactSliderInput
-                    label="Skin Smoothing"
-                    icon={<Ionicons name="sparkles-outline" size={14} color="#00F2FE" />}
+                    label="Smoothing"
+                    icon={<Ionicons name="sparkles-outline" size={12} color="#94A3B8" />}
                     value={skinSmoothing}
                     min={0}
                     max={100}
@@ -191,7 +191,7 @@ export default function AIEnhanceModal({
                     unit="%"
                     defaultValue={0}
                     showSteppers={true}
-                    accentColor="#00F2FE"
+                    accentColor="#FFFFFF"
                     onDragStart={() => setIsSliderDragging(true)}
                     onDragEnd={() => setIsSliderDragging(false)}
                     onChange={(val) => {
@@ -204,8 +204,8 @@ export default function AIEnhanceModal({
                 {/* Face Radiance */}
                 <View style={styles.sliderCard}>
                   <CompactSliderInput
-                    label="Face Radiance & Glow"
-                    icon={<Ionicons name="sunny-outline" size={14} color="#00F2FE" />}
+                    label="Radiance"
+                    icon={<Ionicons name="sunny-outline" size={12} color="#94A3B8" />}
                     value={faceRadiance}
                     min={0}
                     max={100}
@@ -213,7 +213,7 @@ export default function AIEnhanceModal({
                     unit="%"
                     defaultValue={0}
                     showSteppers={true}
-                    accentColor="#00F2FE"
+                    accentColor="#FFFFFF"
                     onDragStart={() => setIsSliderDragging(true)}
                     onDragEnd={() => setIsSliderDragging(false)}
                     onChange={(val) => {
@@ -238,24 +238,24 @@ export default function AIEnhanceModal({
                   activeOpacity={0.7}
                 >
                   <View style={styles.toggleInfo}>
-                    <Ionicons name="sparkles" size={15} color="#00F2FE" />
+                    <Ionicons name="sparkles" size={13} color="#CBD5E1" />
                     <View style={{ marginLeft: 8 }}>
-                      <Text style={styles.toggleTitle}>Auto HDR Dynamic Range</Text>
-                      <Text style={styles.toggleSub}>Expand highlights and shadow recovery</Text>
+                      <Text style={styles.toggleTitle}>Auto HDR</Text>
+                      <Text style={styles.toggleSub}>Highlights & shadows</Text>
                     </View>
                   </View>
                   <Ionicons
                     name={hdr ? 'checkbox' : 'square-outline'}
-                    size={20}
-                    color={hdr ? '#00F2FE' : '#94A3B8'}
+                    size={16}
+                    color={hdr ? '#FFFFFF' : '#71717A'}
                   />
                 </TouchableOpacity>
 
                 {/* Sharpness */}
                 <View style={styles.sliderCard}>
                   <CompactSliderInput
-                    label="Crisp Sharpness"
-                    icon={<Ionicons name="eye-outline" size={14} color="#00F2FE" />}
+                    label="Sharpness"
+                    icon={<Ionicons name="eye-outline" size={12} color="#94A3B8" />}
                     value={sharpness}
                     min={0}
                     max={100}
@@ -263,7 +263,7 @@ export default function AIEnhanceModal({
                     unit="%"
                     defaultValue={0}
                     showSteppers={true}
-                    accentColor="#00F2FE"
+                    accentColor="#FFFFFF"
                     onDragStart={() => setIsSliderDragging(true)}
                     onDragEnd={() => setIsSliderDragging(false)}
                     onChange={(val) => {
@@ -276,8 +276,8 @@ export default function AIEnhanceModal({
                 {/* Color Saturation / Vibrance */}
                 <View style={styles.sliderCard}>
                   <CompactSliderInput
-                    label="Color Saturation"
-                    icon={<Ionicons name="color-palette-outline" size={14} color="#00F2FE" />}
+                    label="Saturation"
+                    icon={<Ionicons name="color-palette-outline" size={12} color="#94A3B8" />}
                     value={colorBoost}
                     min={0}
                     max={100}
@@ -285,7 +285,7 @@ export default function AIEnhanceModal({
                     unit="%"
                     defaultValue={0}
                     showSteppers={true}
-                    accentColor="#00F2FE"
+                    accentColor="#FFFFFF"
                     onDragStart={() => setIsSliderDragging(true)}
                     onDragEnd={() => setIsSliderDragging(false)}
                     onChange={(val) => {
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -327,18 +327,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 16 : 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#1F1F23',
   },
   sheetHandle: {
     width: 32,
     height: 4,
-    backgroundColor: '#1F2637',
+    backgroundColor: '#27272A',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 6,
@@ -349,9 +349,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    backgroundColor: '#08090E',
+    backgroundColor: '#121214',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 11.5,
     fontWeight: '500',
     letterSpacing: 0.2,
@@ -368,24 +368,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: '#1F2637',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderColor: "rgba(0, 242, 254, 0.35)",
+    flexDirection: "row",
+    alignItems: "center",
   },
   resetText: {
-    color: '#94A3B8',
+    color: "#00F2FE",
     fontSize: 9,
-    fontWeight: '400',
+    fontWeight: "600",
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#131826',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -394,11 +394,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     marginTop: 4,
     marginBottom: 3,
-    backgroundColor: '#08090E',
+    backgroundColor: '#18181A',
     borderRadius: 6,
     padding: 2,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   tabBtn: {
     flex: 1,
@@ -411,20 +411,20 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   tabBtnActive: {
-    backgroundColor: '#131826',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: '#00F2FE',
+    borderColor: '#FFFFFF',
   },
   tabText: {
     fontSize: 9.5,
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontWeight: '400',
   },
   activeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     position: 'absolute',
     top: 4,
     right: 8,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     position: 'absolute',
     top: 4,
     right: 8,
@@ -450,11 +450,11 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   sliderCard: {
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderRadius: 6,
     padding: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   labelRow: {
     flexDirection: 'row',
@@ -467,24 +467,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sliderLabel: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 9.5,
     fontWeight: '400',
   },
   badge: {
     fontSize: 9.5,
     fontWeight: '500',
-    color: '#00F2FE',
+    color: '#FFFFFF',
   },
   toggleCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderRadius: 6,
     padding: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   toggleInfo: {
     flexDirection: 'row',
@@ -492,12 +492,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toggleTitle: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 10.5,
     fontWeight: '500',
   },
   toggleSub: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     marginTop: 1,
   },
@@ -509,17 +509,17 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   stepBtn: {
-    backgroundColor: '#1B2234',
+    backgroundColor: '#141416',
     width: 22,
     height: 22,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   stepperVal: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 9.5,
     fontWeight: '400',
     minWidth: 30,
@@ -529,16 +529,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     height: 22,
     borderRadius: 4,
   },
   inlineAppliedBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#27272A',
   },
   inlineApplyText: {
-    color: '#08090E',
+    color: '#121214',
     fontSize: 9.5,
     fontWeight: '500',
   },

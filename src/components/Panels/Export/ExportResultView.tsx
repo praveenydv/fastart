@@ -159,13 +159,13 @@ export default function ExportResultView({
       <View style={styles.doneContainer}>
         {/* Glowing Success Emblem */}
         <View style={styles.successIconBox}>
-          <Ionicons name="checkmark" size={36} color="#00F2FE" />
+          <Ionicons name="checkmark" size={32} color="#10B981" />
         </View>
 
         <Text style={styles.doneTitle}>Export Complete!</Text>
         <Text style={styles.doneSubtext}>
           {exportFilename ? (
-            <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
+            <Text style={{ color: "#EDEDED", fontWeight: "600" }}>
               {exportFilename}{selectedFormatConfig.ext}{" "}
             </Text>
           ) : null}
@@ -211,7 +211,7 @@ export default function ExportResultView({
             <Text
               style={[
                 styles.doneMetaValue,
-                { color: isSaving ? "#FFE600" : isSaved ? "#10B981" : "#00F2FE" },
+                { color: isSaving ? "#FFE600" : isSaved ? "#10B981" : "#EDEDED" },
               ]}
             >
               {isSaving ? "Downloading..." : isSaved ? "Saved" : "Ready"}
@@ -223,7 +223,7 @@ export default function ExportResultView({
         <TouchableOpacity
           style={[
             styles.downloadBtn,
-            isSaved && !isSaving && { backgroundColor: "#00F2FE" },
+            isSaved && !isSaving && { backgroundColor: "#FFFFFF" },
             isSaving && { backgroundColor: "#FFE600", opacity: 0.95 },
           ]}
           onPress={onDownload}
@@ -231,12 +231,12 @@ export default function ExportResultView({
           activeOpacity={0.8}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#08090E" />
+            <ActivityIndicator size="small" color="#121214" />
           ) : (
             <Ionicons
               name={isSaved ? "checkmark-done" : "cloud-download"}
-              size={19}
-              color="#08090E"
+              size={18}
+              color="#121214"
             />
           )}
           <Text style={styles.downloadBtnText}>{getButtonText()}</Text>
@@ -246,7 +246,7 @@ export default function ExportResultView({
         {isSaving && (
           <View style={styles.downloadingBanner}>
             <View style={styles.downloadingBannerHeader}>
-              <ActivityIndicator size="small" color="#00F2FE" />
+              <ActivityIndicator size="small" color="#FFFFFF" />
               <Text style={styles.downloadingBannerTitle}>
                 {isWeb ? "Download in progress..." : "Saving directly to device..."}
               </Text>
@@ -265,7 +265,7 @@ export default function ExportResultView({
         {/* 2. Download Location Info Card */}
         <View style={styles.downloadLocationCard}>
           <View style={styles.downloadLocationHeader}>
-            <Ionicons name="folder-open-outline" size={15} color="#00F2FE" />
+            <Ionicons name="folder-open-outline" size={15} color="#EDEDED" />
             <Text style={styles.downloadLocationTitle}>Saved Location</Text>
           </View>
           <Text style={styles.downloadLocationPath} numberOfLines={2}>
@@ -276,7 +276,7 @@ export default function ExportResultView({
 
         {/* 3. Secondary Actions */}
         <TouchableOpacity style={styles.reExportBtn} onPress={onReExport} activeOpacity={0.7}>
-          <Ionicons name="refresh-outline" size={15} color="#94A3B8" />
+          <Ionicons name="refresh-outline" size={15} color="#8E8E93" />
           <Text style={styles.reExportBtnText}>
             Export In Another Format
           </Text>
@@ -301,7 +301,7 @@ export default function ExportResultView({
             "Unable to encode video in the selected format. Please try PNG cover or GIF."}
         </Text>
         <TouchableOpacity style={styles.downloadBtn} onPress={onReExport} activeOpacity={0.8}>
-          <Ionicons name="refresh-outline" size={18} color="#08090E" />
+          <Ionicons name="refresh-outline" size={18} color="#121214" />
           <Text style={styles.downloadBtnText}>Try Another Format</Text>
         </TouchableOpacity>
       </View>

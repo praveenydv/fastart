@@ -277,7 +277,7 @@ const TransitionLivePreview = React.memo(({ id, isActive }: { id: string; isActi
         <Ionicons
           name={getTransitionIcon(id)}
           size={12}
-          color={isActive ? '#00F2FE' : '#FFFFFF'}
+          color={isActive ? '#FFFFFF' : '#8E8E93'}
         />
       </View>
     </View>
@@ -424,7 +424,7 @@ export default function TransitionsModal({
           {!isNone && (
             <View style={styles.durationCard}>
               <CompactSliderInput
-                label="Transition Duration"
+                label="Duration"
                 value={duration}
                 min={0.1}
                 max={3.0}
@@ -432,7 +432,7 @@ export default function TransitionsModal({
                 decimals={1}
                 unit="s"
                 defaultValue={0.5}
-                accentColor="#00F2FE"
+                accentColor="#FFFFFF"
                 showSteppers={true}
                 onChange={(val) => {
                   setDuration(val);
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   inlineSheetContainer: {
     flex: 1,
@@ -550,19 +550,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#0F131D',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#121214',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     maxHeight: Platform.OS === 'web' ? '72%' : '80%',
     paddingBottom: Platform.OS === 'ios' ? 16 : 6,
     borderTopWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#1F1F23',
   },
   sheetHandle: {
-    width: 32,
-    height: 4,
-    backgroundColor: '#1F2637',
-    borderRadius: 2,
+    width: 28,
+    height: 2.5,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 1.5,
     alignSelf: 'center',
     marginTop: 6,
   },
@@ -570,11 +570,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#08090E',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#121214',
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
+    borderBottomColor: '#1F1F23',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -582,74 +582,74 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sheetTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    color: '#EDEDED',
+    fontSize: 11.5,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    backgroundColor: '#131826',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
     flexDirection: 'row',
     alignItems: 'center',
   },
   resetText: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: '#00F2FE',
+    fontSize: 9.5,
     fontWeight: '600',
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#131826',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
   durationCard: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(0, 242, 254, 0.04)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#18181A',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomColor: '#1F1F23',
     marginBottom: 4,
   },
   durationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingTop: 6,
+    gap: 5,
+    paddingTop: 4,
   },
   durationLabel: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 9.5,
     fontWeight: '400',
   },
   durationPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: '#131826',
+    backgroundColor: '#141416',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   durationPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00F2FE',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#FFFFFF',
   },
   durationText: {
-    color: '#8E95A5',
-    fontSize: 9.5,
+    color: '#8E8E93',
+    fontSize: 9,
     fontWeight: '400',
   },
   durationTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   sheetBody: {
@@ -669,19 +669,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 3,
     borderRadius: 5,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
   },
   transitionCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   transPreviewStage: {
     width: '100%',
     height: 36,
     borderRadius: 4,
-    backgroundColor: '#090B10',
+    backgroundColor: '#121214',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   noneStageText: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     fontWeight: '400',
   },
@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
   },
   clipLayerBOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 242, 254, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   clipImg: {
     width: '100%',
@@ -738,9 +738,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 1,
     left: 1,
-    backgroundColor: 'rgba(0, 242, 254, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 0.5,
-    borderColor: '#00F2FE',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     paddingHorizontal: 2,
     paddingVertical: 0.5,
     borderRadius: 2,
@@ -767,8 +767,8 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   transPillCenterActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.25)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   transitionDescText: {
     display: 'none' as any,
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -789,29 +789,29 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#08090E',
+    backgroundColor: '#141416',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
   iconBoxActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
   transitionLabel: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '400',
     textAlign: 'center',
   },
   transitionLabelActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   inlineApplyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
-    color: '#08090E',
+    color: '#000000',
     fontSize: 9.5,
     fontWeight: '500',
   },

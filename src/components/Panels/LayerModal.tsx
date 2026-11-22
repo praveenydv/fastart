@@ -202,7 +202,7 @@ function LayerModalContent({
       {/* Header */}
       {!isInline && (
         <ModalHeader
-          title="Layer Order"
+          title="Layers"
           iconName="layers-outline"
           onClose={onClose}
         />
@@ -237,7 +237,7 @@ function LayerModalContent({
             onPress={handleBringToFront}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons name="format-vertical-align-top" size={16} color="#00F2FE" />
+            <MaterialCommunityIcons name="format-vertical-align-top" size={16} color="#EDEDED" />
             <Text style={s.actionBtnText}>Bring to Front</Text>
             <Text style={s.actionBtnSub}>Topmost</Text>
           </TouchableOpacity>
@@ -248,7 +248,7 @@ function LayerModalContent({
             onPress={handleBringForward}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-up" size={16} color="#38BDF8" />
+            <Ionicons name="arrow-up" size={16} color="#EDEDED" />
             <Text style={s.actionBtnText}>Bring Forward</Text>
             <Text style={s.actionBtnSub}>+1 Layer</Text>
           </TouchableOpacity>
@@ -259,7 +259,7 @@ function LayerModalContent({
             onPress={handleSendBackward}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-down" size={16} color="#A78BFA" />
+            <Ionicons name="arrow-down" size={16} color="#EDEDED" />
             <Text style={s.actionBtnText}>Send Backward</Text>
             <Text style={s.actionBtnSub}>-1 Layer</Text>
           </TouchableOpacity>
@@ -270,7 +270,7 @@ function LayerModalContent({
             onPress={handleSendToBack}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons name="format-vertical-align-bottom" size={16} color="#F43F5E" />
+            <MaterialCommunityIcons name="format-vertical-align-bottom" size={16} color="#EDEDED" />
             <Text style={s.actionBtnText}>Send to Back</Text>
             <Text style={s.actionBtnSub}>Background</Text>
           </TouchableOpacity>
@@ -302,7 +302,7 @@ function LayerModalContent({
         <View style={s.stackList}>
           {activeLayers.length === 0 ? (
             <View style={s.emptyState}>
-              <Ionicons name="layers-outline" size={24} color="#475569" />
+              <Ionicons name="layers-outline" size={24} color="#52525B" />
               <Text style={s.emptyStateText}>No visual clips at playhead</Text>
             </View>
           ) : (
@@ -326,12 +326,12 @@ function LayerModalContent({
 
                   <View style={s.stackItemIconBox}>
                     {item.type === "video" && (
-                      <Ionicons name="videocam-outline" size={13} color={item.hasCutout ? "#00F2FE" : "#38BDF8"} />
+                      <Ionicons name="videocam-outline" size={13} color="#EDEDED" />
                     )}
-                    {item.type === "photo" && <Ionicons name="image-outline" size={13} color="#38BDF8" />}
-                    {item.type === "text" && <MaterialCommunityIcons name="format-text" size={13} color="#FBBF24" />}
-                    {item.type === "caption" && <Ionicons name="chatbox-ellipses-outline" size={13} color="#A78BFA" />}
-                    {item.type === "sticker" && <Ionicons name="happy-outline" size={13} color="#34D399" />}
+                    {item.type === "photo" && <Ionicons name="image-outline" size={13} color="#EDEDED" />}
+                    {item.type === "text" && <MaterialCommunityIcons name="format-text" size={13} color="#EDEDED" />}
+                    {item.type === "caption" && <Ionicons name="chatbox-ellipses-outline" size={13} color="#EDEDED" />}
+                    {item.type === "sticker" && <Ionicons name="happy-outline" size={13} color="#EDEDED" />}
                   </View>
 
                   <View style={s.stackItemDetails}>
@@ -352,10 +352,10 @@ function LayerModalContent({
 
                   {isSelected ? (
                     <View style={s.activeCheck}>
-                      <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
+                      <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
                     </View>
                   ) : (
-                    <Ionicons name="chevron-forward" size={13} color="#475569" />
+                    <Ionicons name="chevron-forward" size={13} color="#52525B" />
                   )}
                 </TouchableOpacity>
               );
@@ -370,7 +370,7 @@ function LayerModalContent({
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B0E17",
+    backgroundColor: "#121214",
   },
   header: {
     flexDirection: "row",
@@ -379,7 +379,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A2234",
+    borderBottomColor: "#1F1F23",
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -387,7 +387,7 @@ const s = StyleSheet.create({
     gap: 6,
   },
   headerTitle: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 11.5,
     fontWeight: "500",
     letterSpacing: 0.2,
@@ -405,38 +405,38 @@ const s = StyleSheet.create({
   infoBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#131927",
+    backgroundColor: "#18181A",
     padding: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: "#27272A",
     marginBottom: 8,
   },
   infoBadge: {
-    backgroundColor: "#00F2FE20",
+    backgroundColor: "#27272A",
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#00F2FE60",
+    borderColor: "#3F3F46",
   },
   infoBadgeText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 10.5,
     fontWeight: "500",
   },
   infoTitle: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 10.5,
     fontWeight: "500",
   },
   infoSubtitle: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 8.5,
     marginTop: 1,
   },
   sectionTitle: {
-    color: "#64748B",
+    color: "#8E8E93",
     fontSize: 8.5,
     fontWeight: "500",
     letterSpacing: 0.6,
@@ -450,27 +450,27 @@ const s = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    backgroundColor: "#131927",
+    backgroundColor: "#18181A",
     borderRadius: 6,
     paddingVertical: 6,
     paddingHorizontal: 3,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: "#27272A",
   },
   actionBtnDisabled: {
     opacity: 0.35,
   },
   actionBtnText: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 9,
     fontWeight: "400",
     marginTop: 2,
     textAlign: "center",
   },
   actionBtnSub: {
-    color: "#64748B",
+    color: "#8E8E93",
     fontSize: 7.5,
     marginTop: 1,
     fontWeight: "400",
@@ -482,32 +482,32 @@ const s = StyleSheet.create({
   },
   presetChip: {
     flex: 1,
-    backgroundColor: "#131927",
+    backgroundColor: "#18181A",
     paddingVertical: 5,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: "#27272A",
   },
   presetChipActive: {
-    backgroundColor: "#00F2FE18",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   presetChipText: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 9.5,
     fontWeight: "400",
   },
   presetChipTextActive: {
-    color: "#00F2FE",
-    fontWeight: "500",
+    color: "#121214",
+    fontWeight: "600",
   },
   stackList: {
-    backgroundColor: "#131927",
+    backgroundColor: "#18181A",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: "#27272A",
     overflow: "hidden",
   },
   emptyState: {
@@ -517,7 +517,7 @@ const s = StyleSheet.create({
     gap: 4,
   },
   emptyStateText: {
-    color: "#64748B",
+    color: "#8E8E93",
     fontSize: 9.5,
     fontWeight: "400",
   },
@@ -527,38 +527,39 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A2333",
+    borderBottomColor: "#1F1F23",
   },
   stackItemActive: {
-    backgroundColor: "#00F2FE10",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
   layerNumberBadge: {
     width: 24,
     height: 18,
-    backgroundColor: "#1E293B",
+    backgroundColor: "#27272A",
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 6,
   },
   layerNumberBadgeActive: {
-    backgroundColor: "#00F2FE30",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#00F2FE",
+    borderColor: "#FFFFFF",
   },
   layerNumberText: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 8.5,
     fontWeight: "500",
   },
   layerNumberTextActive: {
-    color: "#00F2FE",
+    color: "#121214",
+    fontWeight: "600",
   },
   stackItemIconBox: {
     width: 22,
     height: 22,
     borderRadius: 4,
-    backgroundColor: "#0F131D",
+    backgroundColor: "#141416",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 6,
@@ -567,29 +568,29 @@ const s = StyleSheet.create({
     flex: 1,
   },
   stackItemTitle: {
-    color: "#E2E8F0",
+    color: "#EDEDED",
     fontSize: 10.5,
     fontWeight: "400",
   },
   stackItemTitleActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
   stackItemSub: {
-    color: "#64748B",
+    color: "#8E8E93",
     fontSize: 8.5,
     marginTop: 1,
   },
   cutoutPill: {
-    backgroundColor: "#00F2FE25",
+    backgroundColor: "#27272A",
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: "#00F2FE80",
+    borderColor: "#3F3F46",
   },
   cutoutPillText: {
-    color: "#00F2FE",
+    color: "#EDEDED",
     fontSize: 7.5,
     fontWeight: "500",
   },

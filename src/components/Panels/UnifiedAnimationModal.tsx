@@ -226,11 +226,11 @@ function NativeAnimationModal(props: AnimationModalProps) {
     <View style={[styles.container, isInline && styles.inlineContainer]}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Ionicons name="play-circle-outline" size={18} color="#00F2FE" />
-          <Text style={styles.title}>Clip Animation</Text>
+          <Ionicons name="play-circle-outline" size={13} color="#CBD5E1" />
+          <Text style={styles.title}>Animation</Text>
         </View>
         <TouchableOpacity accessibilityRole="button" onPress={onClose} style={styles.closeButton}>
-          <Ionicons name="close" size={22} color="#fff" />
+          <Ionicons name="close" size={14} color="#8E8E93" />
         </TouchableOpacity>
       </View>
 
@@ -270,8 +270,8 @@ function NativeAnimationModal(props: AnimationModalProps) {
               onPress={() => handlePresetSelect(item)}
               style={[styles.preset, selected && styles.selectedPreset]}
             >
-              <Ionicons name={item.icon} size={24} color={selected ? "#00F2FE" : "#c8d0da"} />
-              <Text numberOfLines={2} style={styles.presetLabel}>{item.name}</Text>
+              <Ionicons name={item.icon} size={20} color={selected ? "#FFFFFF" : "#8E8E93"} />
+              <Text numberOfLines={1} style={styles.presetLabel}>{item.name}</Text>
             </TouchableOpacity>
           );
         })}
@@ -347,81 +347,85 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
+    color: "#EDEDED",
+    fontSize: 11.5,
+    fontWeight: "500",
   },
   closeButton: {
-    padding: 6,
+    padding: 4,
   },
   tabs: {
     flexDirection: "row",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#39424e",
-    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1F1F23",
+    marginBottom: 8,
   },
   tab: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 2,
+    paddingVertical: 6,
+    borderBottomWidth: 1.5,
     borderBottomColor: "transparent",
   },
   activeTab: {
-    borderBottomColor: "#00F2FE",
+    borderBottomColor: "#FFFFFF",
   },
   tabText: {
-    color: "#8b96a5",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#8E8E93",
+    fontSize: 11,
+    fontWeight: "400",
   },
   activeTabText: {
-    color: "#fff",
+    color: "#FFFFFF",
+    fontWeight: "500",
   },
   presetGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingBottom: 8,
+    gap: 5,
+    paddingBottom: 6,
   },
   preset: {
-    width: "31.5%",
-    minHeight: 84,
-    marginBottom: 10,
-    padding: 8,
+    width: "23.5%",
+    minHeight: 58,
+    marginBottom: 4,
+    padding: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1e2631",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#2b3542",
-    borderRadius: 10,
+    borderColor: "#27272A",
+    borderRadius: 6,
   },
   selectedPreset: {
-    borderColor: "#00F2FE",
-    backgroundColor: "#123037",
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   presetLabel: {
-    marginTop: 6,
-    color: "#e3e8ef",
-    fontSize: 11,
+    marginTop: 4,
+    color: "#CBD5E1",
+    fontSize: 9.5,
+    fontWeight: "400",
     textAlign: "center",
   },
   durationRow: {
     marginTop: 4,
   },
   durationLabel: {
-    marginBottom: 6,
-    color: "#c8d0da",
-    fontSize: 12,
+    marginBottom: 4,
+    color: "#CBD5E1",
+    fontSize: 10,
+    fontWeight: "400",
   },
   clearButton: {
     alignSelf: "flex-end",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
   clearText: {
-    color: "#aab5c3",
-    fontSize: 12,
+    color: "#8E8E93",
+    fontSize: 10,
+    fontWeight: "400",
   },
   preview: {
     alignItems: "center",

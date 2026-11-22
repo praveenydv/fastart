@@ -84,6 +84,10 @@ let lastModnetRawAlpha: Float32Array | null = null;
 let lastModnetRawAlphaClipId = "";
 let lastModnetRawAlphaFrameIdx = -1;
 let lastModnetRawAlphaMediaTime = -1;
+let lastModnetCropDx = 0;
+let lastModnetCropDy = 0;
+let lastModnetCropDw = 512;
+let lastModnetCropDh = 512;
 
 let activeMediaProvider:
   | ((urlOrId: string) => HTMLVideoElement | HTMLImageElement | null)
@@ -107,13 +111,14 @@ export function getCutoutQualityFps(quality?: string, sourceFps = 30): number {
   const norm = (quality || "best").toLowerCase();
   const baseSourceFps = Number.isFinite(sourceFps) && sourceFps > 0 ? Math.round(sourceFps) : 30;
   if (norm === "fast" || norm === "draft" || norm === "10fps") {
-    return Math.min(10, baseSourceFps);
+    return Math.min(12, baseSourceFps);
   }
-  if (norm === "studio" || norm === "smooth" || norm === "30fps") {
-    return Math.min(30, Math.max(15, baseSourceFps));
+  if (norm === "studio" || norm === "smooth" || norm === "20fps") {
+    return Math.min(20, Math.max(12, baseSourceFps));
   }
-  // "best" / "full" / "60fps" / "every_frame": Every source frame (full native source frame rate)
-  return Math.max(1, Math.min(120, baseSourceFps));
+  // "best": Cap neural matting inference at 30fps for ultra-fast CapCut-grade turnaround
+  // (Temporal Hermite smoothstep blending seamlessly reconstructs 60fps/120fps in the player compositor)
+  return Math.min(30, Math.max(15, baseSourceFps));
 }
 
 function getCutoutFrameStep(sourceFps: number, quality?: string): number {
@@ -743,11 +748,22 @@ export function updateActiveFrameMatteParams(
 ): boolean {
   if (
     !lastModnetRawAlpha ||
-    !modnetMaskCanvas ||
-    !modnetMaskCtx ||
-    !modnetMaskImgData ||
-    lastModnetRawAlphaClipId !== clipId
+    (lastModnetRawAlphaClipId && lastModnetRawAlphaClipId !== clipId)
   ) {
+    return false;
+  }
+
+  if (!modnetMaskCanvas) {
+    modnetMaskCanvas = document.createElement("canvas");
+    modnetMaskCanvas.width = 512;
+    modnetMaskCanvas.height = 512;
+    modnetMaskCtx = modnetMaskCanvas.getContext("2d", { willReadFrequently: true });
+    if (modnetMaskCtx) {
+      modnetMaskImgData = modnetMaskCtx.createImageData(512, 512);
+    }
+  }
+
+  if (!modnetMaskCtx || !modnetMaskImgData) {
     return false;
   }
 
@@ -759,21 +775,33 @@ export function updateActiveFrameMatteParams(
   );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-  const updated = document.createElement("canvas");
-  updated.width = 512;
-  updated.height = 512;
+  const dw = lastModnetCropDw > 0 ? lastModnetCropDw : 512;
+  const dh = lastModnetCropDh > 0 ? lastModnetCropDh : 512;
+  const dx = lastModnetCropDx >= 0 ? lastModnetCropDx : 0;
+  const dy = lastModnetCropDy >= 0 ? lastModnetCropDy : 0;
+
+  const updated = getPooledCanvas(dw, dh);
   const uCtx = updated.getContext("2d");
   if (uCtx) {
-    uCtx.drawImage(modnetMaskCanvas, 0, 0);
+    uCtx.clearRect(0, 0, dw, dh);
+    uCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
     setMaskInCache(`${clipId}_${frameIdx}`, updated);
     if (frameIdx === 0) {
       setMaskInCache(`${clipId}_0`, updated);
     }
+    const fps = clipMaskFpsMap.get(clipId) || 30;
+    const mediaTime = lastModnetRawAlphaMediaTime >= 0 ? lastModnetRawAlphaMediaTime : 0;
+    const sourceFrameIdx = Math.max(0, Math.round(mediaTime * fps));
+    setMaskInCache(`${clipId}_src_${sourceFrameIdx}`, updated);
+    if (sourceFrameIdx === 0) {
+      setMaskInCache(`${clipId}_src_0`, updated);
+    }
+
     lastSegmentedMask = updated;
     lastSegmentedClipId = clipId;
     if (!isCutoutProcessingActive()) {
-    notifyMaskUpdated();
-  }
+      notifyMaskUpdated();
+    }
     return true;
   }
   return false;
@@ -1226,10 +1254,16 @@ export async function segmentWithStudioEngine(
         feather,
       );
       modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
-      const cached = getPooledCanvas(512, 512);
+      const dw = lastModnetCropDw > 0 ? lastModnetCropDw : 512;
+      const dh = lastModnetCropDh > 0 ? lastModnetCropDh : 512;
+      const dx = lastModnetCropDx >= 0 ? lastModnetCropDx : 0;
+      const dy = lastModnetCropDy >= 0 ? lastModnetCropDy : 0;
+
+      const cached = getPooledCanvas(dw, dh);
       const cCtx = cached.getContext("2d");
       if (cCtx) {
-        cCtx.drawImage(modnetMaskCanvas, 0, 0);
+        cCtx.clearRect(0, 0, dw, dh);
+        cCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
         return cached;
       }
     }
@@ -1251,6 +1285,26 @@ export async function segmentWithStudioEngine(
 
   if (vw === 0 || vh === 0) return null;
 
+  // Aspect-ratio preserved scaling: eliminates squashing/stretching of human subjects
+  let dw = 512;
+  let dh = 512;
+  let dx = 0;
+  let dy = 0;
+  if (vw >= vh) {
+    dw = 512;
+    dh = Math.max(16, Math.round((512 * vh) / vw));
+    dy = Math.round((512 - dh) / 2);
+  } else {
+    dh = 512;
+    dw = Math.max(16, Math.round((512 * vw) / vh));
+    dx = Math.round((512 - dw) / 2);
+  }
+
+  lastModnetCropDx = dx;
+  lastModnetCropDy = dy;
+  lastModnetCropDw = dw;
+  lastModnetCropDh = dh;
+
   if (!modnetInputCanvas) {
     modnetInputCanvas = document.createElement("canvas");
     modnetInputCanvas.width = 512;
@@ -1261,7 +1315,10 @@ export async function segmentWithStudioEngine(
   }
   if (!modnetInputCtx) return null;
 
-  modnetInputCtx.drawImage(sourceMedia as any, 0, 0, 512, 512);
+  modnetInputCtx.clearRect(0, 0, 512, 512);
+  modnetInputCtx.fillStyle = "#12141A";
+  modnetInputCtx.fillRect(0, 0, 512, 512);
+  modnetInputCtx.drawImage(sourceMedia as any, dx, dy, dw, dh);
   const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
 
   const total = 512 * 512;
@@ -1333,11 +1390,11 @@ export async function segmentWithStudioEngine(
   );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-  // Return a clean independent canvas from pool for caching
-  const finalCanvas = getPooledCanvas(512, 512);
+  // Return a clean independent canvas matching source aspect ratio for distortion-free compositing
+  const finalCanvas = getPooledCanvas(dw, dh);
   const finalCtx = finalCanvas.getContext("2d");
   if (!finalCtx) return null;
-  finalCtx.drawImage(modnetMaskCanvas, 0, 0);
+  finalCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
 
   return finalCanvas;
 }
@@ -1616,8 +1673,8 @@ export async function processClipStudioCutout(
   clipId: string,
   frameIdx = 0,
   frameTime = 0,
-  threshold = 0.04,
-  feather = 0.80,
+  threshold = 0.45,
+  feather = 0.25,
   mediaType?: "video" | "photo",
 ): Promise<boolean> {
   if (typeof document === "undefined") return false;
@@ -1905,8 +1962,8 @@ export async function processVideoFrameByFrame(
   trimIn = 0,
   speed = 1,
   fps = 30,
-  threshold = 0.04,
-  feather = 0.80,
+  threshold = 0.45,
+  feather = 0.25,
   onProgress?: (pct: number, current: number, total: number) => void,
   signal?: AbortSignal,
   quality?: string,
@@ -1936,7 +1993,7 @@ export async function processVideoFrameByFrame(
     const concurrency = cutoutWorkerBridge.getConcurrency();
     const maxInFlight = concurrency;
     const numDecoders =
-      totalFrames <= 1 ? 1 : Math.min(Math.max(2, concurrency), 3);
+      totalFrames <= 1 ? 1 : Math.min(Math.max(2, concurrency), 4);
 
     const createDecoderVideo = (): HTMLVideoElement => {
       const v = document.createElement("video");
@@ -2048,7 +2105,27 @@ export async function processVideoFrameByFrame(
           modnetInputCanvas.height = 512;
         }
         if (modnetInputCtx) {
-          modnetInputCtx.drawImage(decoder, 0, 0, 512, 512);
+          const vw = decoder.videoWidth || 512;
+          const vh = decoder.videoHeight || 512;
+          let dw = 512;
+          let dh = 512;
+          let dx = 0;
+          let dy = 0;
+          if (vw > 0 && vh > 0) {
+            if (vw >= vh) {
+              dw = 512;
+              dh = Math.max(16, Math.round((512 * vh) / vw));
+              dy = Math.round((512 - dh) / 2);
+            } else {
+              dh = 512;
+              dw = Math.max(16, Math.round((512 * vw) / vh));
+              dx = Math.round((512 - dw) / 2);
+            }
+          }
+          modnetInputCtx.clearRect(0, 0, 512, 512);
+          modnetInputCtx.fillStyle = "#12141A";
+          modnetInputCtx.fillRect(0, 0, 512, 512);
+          modnetInputCtx.drawImage(decoder, dx, dy, dw, dh);
           const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
           if (cutoutWorkerBridge.isSupported()) {
             inferenceSubmitted = true;
@@ -2175,10 +2252,14 @@ export async function processVideoFrameByFrame(
         };
 
         v.addEventListener("seeked", onSeeked, { once: true });
-        timeoutId = setTimeout(finish, 500);
+        timeoutId = setTimeout(finish, 350);
 
         try {
-          v.currentTime = targetTime;
+          if (typeof (v as any).fastSeek === "function") {
+            (v as any).fastSeek(targetTime);
+          } else {
+            v.currentTime = targetTime;
+          }
         } catch {
           finish();
         }
@@ -2296,8 +2377,8 @@ export async function renderCutoutToVideoBlob(
   trimIn = 0,
   speed = 1,
   fps = 30,
-  threshold = 0.04,
-  feather = 0.80,
+  threshold = 0.45,
+  feather = 0.25,
   bgColor = "none",
   strokeColor = "none",
   strokeWidth = 0,
@@ -2871,6 +2952,19 @@ export async function processFramePixelsUnified(
       );
       const rawAlpha = await cutoutWorkerBridge.runInference(inputTensor);
       if (!rawAlpha) return false;
+
+      // Cache raw neural output tensor for instant live slider adjustments
+      if (clipId) {
+        if (!lastModnetRawAlpha || lastModnetRawAlpha.length !== rawAlpha.length) {
+          lastModnetRawAlpha = new Float32Array(rawAlpha.length);
+        }
+        lastModnetRawAlpha.set(rawAlpha);
+        lastModnetRawAlphaClipId = clipId;
+        lastModnetRawAlphaFrameIdx = frameIdx;
+        const fps = clipMaskFpsMap.get(clipId) || 30;
+        lastModnetRawAlphaMediaTime = frameIdx / fps;
+      }
+
       alpha = new Uint8Array(procW * procH);
       const rgbaMatte = new Uint8ClampedArray(512 * 512 * 4);
       rustCoreBridge.processModnetOutput(
@@ -3004,23 +3098,14 @@ export async function processClipUnified(
   clipId: string,
   frameIdx = 0,
   frameTime = 0,
-  threshold = 0.04,
-  feather = 0.80,
+  threshold = 0.45,
+  feather = 0.25,
   mode: "auto" | "chroma" = "auto",
   keyColor = "#00FF00",
   mediaType?: "video" | "photo",
 ): Promise<boolean> {
-  const isAuto = mode === "auto";
-  const effThreshold = isAuto
-    ? threshold && threshold > 0.005
-      ? threshold
-      : 0.04
-    : threshold;
-  const effFeather = isAuto
-    ? feather && feather > 0.05
-      ? feather
-      : 0.80
-    : feather;
+  const effThreshold = typeof threshold === "number" ? Math.max(0, Math.min(1, threshold)) : 0.45;
+  const effFeather = typeof feather === "number" ? Math.max(0, Math.min(1, feather)) : 0.25;
 
   if (typeof document !== "undefined") {
     if (mode === "chroma") {
@@ -3108,8 +3193,8 @@ export async function processVideoUnified(
   trimIn = 0,
   speed = 1,
   fps = 20,
-  threshold = 0.04,
-  feather = 0.80,
+  threshold = 0.45,
+  feather = 0.25,
   mode: "auto" | "chroma" = "auto",
   keyColor = "#00FF00",
   onProgress?: (pct: number, current: number, total: number) => void,

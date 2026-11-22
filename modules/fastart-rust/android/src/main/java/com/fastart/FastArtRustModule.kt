@@ -531,28 +531,30 @@ class FastArtRustModule : Module() {
                 }
                 outputFloats.get(rawFloats)
 
-                val useCurve = threshold > 0f || feather > 0f
-                val cut = threshold.coerceIn(0f, 1f)
-                val soft = feather.coerceIn(0.01f, 1.0f)
-                val invSoft = 1.0f / soft
+                val (tNorm, sNorm) = if (threshold <= 0.001f && feather <= 0.001f) {
+                    Pair(0.45f, 0.25f)
+                } else {
+                    Pair(threshold.coerceIn(0f, 1f), feather.coerceIn(0f, 1f))
+                }
+
+                val center = 0.10f + tNorm * 0.55f
+                val halfW = 0.015f + sNorm * 0.235f
+                val vMin = maxOf(0.01f, center - halfW)
+                val vMax = minOf(0.98f, center + halfW)
+                val span = maxOf(0.02f, vMax - vMin)
+                val invSpan = 1.0f / span
 
                 val alpha = ByteArray(width * height)
                 if (width == mWidth && height == mHeight) {
-                    if (useCurve) {
-                        for (i in 0 until planeSize) {
-                            val v = rawFloats[i]
-                            val a = if (v <= cut) 0f
-                            else if (v >= cut + soft) 1f
-                            else {
-                                val u = (v - cut) * invSoft
-                                u * u * (3f - 2f * u)
-                            }
-                            alpha[i] = (a.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                    for (i in 0 until planeSize) {
+                        val v = rawFloats[i]
+                        val a = if (v <= vMin) 0f
+                        else if (v >= vMax) 1f
+                        else {
+                            val u = (v - vMin) * invSpan
+                            u * u * (3f - 2f * u)
                         }
-                    } else {
-                        for (i in 0 until planeSize) {
-                            alpha[i] = (rawFloats[i].coerceIn(0f, 1f) * 255f).toInt().toByte()
-                        }
+                        alpha[i] = (a.coerceIn(0f, 1f) * 255f).toInt().toByte()
                     }
                 } else {
                     val invW = (mWidth - 1).toFloat() / maxOf(1, width - 1).toFloat()
@@ -582,17 +584,39 @@ class FastArtRustModule : Module() {
                             val btm = v01 + fx * (v11 - v01)
                             val v = top + fy * (btm - top)
 
-                            val a = if (useCurve) {
-                                if (v <= cut) 0f
-                                else if (v >= cut + soft) 1f
-                                else {
-                                    val u = (v - cut) * invSoft
-                                    u * u * (3f - 2f * u)
-                                }
-                            } else {
-                                v
+                            val a = if (v <= vMin) 0f
+                            else if (v >= vMax) 1f
+                            else {
+                                val u = (v - vMin) * invSpan
+                                u * u * (3f - 2f * u)
                             }
                             alpha[dstRow + x] = (a.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                        }
+                    }
+                }
+
+                // Edge-aware 3x3 anti-aliasing on transition boundaries to eliminate jagged staircases
+                if (width > 2 && height > 2) {
+                    val scratch = alpha.clone()
+                    for (y in 1 until height - 1) {
+                        val row = y * width
+                        val rowPrev = (y - 1) * width
+                        val rowNext = (y + 1) * width
+                        for (x in 1 until width - 1) {
+                            val idx = row + x
+                            val v = scratch[idx].toInt() and 0xFF
+                            if (v in 1..254) {
+                                val tl = scratch[rowPrev + x - 1].toInt() and 0xFF
+                                val tc = scratch[rowPrev + x].toInt() and 0xFF
+                                val tr = scratch[rowPrev + x + 1].toInt() and 0xFF
+                                val cl = scratch[row + x - 1].toInt() and 0xFF
+                                val cr = scratch[row + x + 1].toInt() and 0xFF
+                                val bl = scratch[rowNext + x - 1].toInt() and 0xFF
+                                val bc = scratch[rowNext + x].toInt() and 0xFF
+                                val br = scratch[rowNext + x + 1].toInt() and 0xFF
+                                val sum = (tl + tr + bl + br) + ((tc + cl + cr + bc) shl 1) + (v shl 2)
+                                alpha[idx] = ((sum + 8) shr 4).toByte()
+                            }
                         }
                     }
                 }
@@ -751,8 +775,8 @@ class FastArtRustModule : Module() {
                 )
                 ByteArray(targetWidth * targetHeight) { index -> processed[index * 4 + 3] }
             } else {
-                val effThresh = if (threshold == 0.45f) 0f else threshold
-                val effFeath = if (feather == 0.25f) 0f else feather
+                val effThresh = if (threshold <= 0.001f) 0.04f else threshold.coerceIn(0.001f, 0.60f)
+                val effFeath = if (feather <= 0.001f) 0.72f else feather.coerceIn(0.02f, 0.95f)
                 inferAlphaRgba(rgba, targetWidth, targetHeight, effThresh, effFeath)
             }
 

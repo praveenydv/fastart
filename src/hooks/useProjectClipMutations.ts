@@ -13,6 +13,8 @@ import {
 } from "../utils/mediaThumbnailGenerator";
 import { cloneClipMasks, clearClipMasks } from "../services/selfieSegmentationService";
 import { useClipTransformOperations } from "./useClipTransformOperations";
+import { getActiveVideoRenderer } from "../utils/videoRenderer";
+import { globalActiveVideoElements } from "../utils/renderer/rendererMediaSync";
 
 interface UseProjectClipMutationsParams {
   project: FastArtProject | null;
@@ -101,7 +103,6 @@ export function useProjectClipMutations({
     }
 
     triggerHaptic("medium", settings?.hapticFeedback !== false);
-    startProcessing?.("Splitting Clip at Playhead...", 350);
 
     const speed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
     const firstDuration = Number((curTime - clipStart).toFixed(3));
@@ -151,18 +152,23 @@ export function useProjectClipMutations({
     };
 
     const instantSplitThumb = isMediaClip && clip.url ? captureActiveFrameNow(clip.url, splitTrimPoint) : null;
+    const cachedSplitThumb =
+      instantSplitThumb ||
+      (clip.url ? globalThumbnailCache.get(`${clip.url}_t${splitTrimPoint.toFixed(2)}`) : null) ||
+      (clip.id ? globalThumbnailCache.get(`${clip.id}_t${splitTrimPoint.toFixed(2)}`) : null) ||
+      null;
 
     const secondClip = {
       ...clip,
       id: `clip-${String(key)[0]}-${Date.now()}`,
       sourceMediaId: baseSourceId,
-      startTime: Number(curTime.toFixed(3)),
+      startTime: Number((clipStart + firstDuration).toFixed(3)),
       duration: secondDuration,
       maxDuration: secondDuration,
       minTrimIn: splitTrimPoint,
       maxTrimOut: parentMaxTrimOut,
-      thumbnail: instantSplitThumb || undefined, // Immediate frame preview if active in player
-      thumbnailTrimIn: splitTrimPoint,
+      thumbnail: cachedSplitThumb || undefined, // Immediate frame preview if active in player
+      thumbnailTrimIn: cachedSplitThumb ? splitTrimPoint : undefined,
       ...(isMediaClip
         ? {
             trimIn: splitTrimPoint,
@@ -173,11 +179,44 @@ export function useProjectClipMutations({
       ...(rawKeyframes.length > 0 ? { keyframes: secondKeyframes } : {}),
     };
 
-    if (instantSplitThumb) {
-      globalThumbnailCache.set(secondClip.id, instantSplitThumb);
-      globalThumbnailCache.set(`${secondClip.id}_t${splitTrimPoint.toFixed(2)}`, instantSplitThumb);
+    if (cachedSplitThumb) {
+      globalThumbnailCache.set(secondClip.id, cachedSplitThumb);
+      globalThumbnailCache.set(`${secondClip.id}_t${splitTrimPoint.toFixed(2)}`, cachedSplitThumb);
       if (secondClip.url) {
-        globalThumbnailCache.set(`${secondClip.url}_t${splitTrimPoint.toFixed(2)}`, instantSplitThumb);
+        globalThumbnailCache.set(`${secondClip.url}_t${splitTrimPoint.toFixed(2)}`, cachedSplitThumb);
+      }
+      const activeRenderer = getActiveVideoRenderer();
+      if (activeRenderer && typeof Image !== "undefined") {
+        const thumbImg = new Image();
+        thumbImg.src = cachedSplitThumb;
+        activeRenderer.thumbnailElements.set(secondClip.id, thumbImg);
+      }
+    }
+
+    // Synchronously bind the active video element to the new secondClip.id and sourceMediaId
+    // to guarantee 0ms uninterrupted rendering with zero decoder reloading or placeholder flash
+    const existingVideoEl =
+      (clip.id ? globalActiveVideoElements.get(clip.id) : null) ||
+      (clip.url ? globalActiveVideoElements.get(clip.url) : null) ||
+      (baseSourceId ? globalActiveVideoElements.get(baseSourceId) : null);
+
+    if (existingVideoEl) {
+      globalActiveVideoElements.set(secondClip.id, existingVideoEl);
+      if (clip.url) {
+        globalActiveVideoElements.set(clip.url, existingVideoEl);
+      }
+      if (baseSourceId) {
+        globalActiveVideoElements.set(baseSourceId, existingVideoEl);
+      }
+      const activeRenderer = getActiveVideoRenderer();
+      if (activeRenderer) {
+        activeRenderer.videoElements.set(secondClip.id, existingVideoEl);
+        if (clip.url) {
+          activeRenderer.videoElements.set(clip.url, existingVideoEl);
+        }
+        if (baseSourceId) {
+          activeRenderer.videoElements.set(baseSourceId, existingVideoEl);
+        }
       }
     }
 

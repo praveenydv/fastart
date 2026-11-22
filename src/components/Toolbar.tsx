@@ -82,12 +82,12 @@ const ROOT_TOOLS = [
   { id: "media", title: "Media", icon: "folder-open-outline" as const },
   { id: "audio", title: "Audio", icon: "music-note-outline" as const },
   { id: "text", title: "Text", icon: "format-text" as const },
-  { id: "captions", title: "Caption", icon: "subtitles-outline" as const },
-  { id: "effects", title: "Effect", icon: "auto-fix" as const },
-  { id: "filters", title: "Filter", icon: "palette-outline" as const },
-  { id: "stickers", title: "Sticker", icon: "emoticon-happy-outline" as const },
+  { id: "captions", title: "Captions", icon: "subtitles-outline" as const },
+  { id: "effects", title: "Effects", icon: "auto-fix" as const },
+  { id: "filters", title: "Filters", icon: "palette-outline" as const },
+  { id: "stickers", title: "Stickers", icon: "emoticon-happy-outline" as const },
   { id: "canvas", title: "Canvas", icon: "aspect-ratio" as const },
-  { id: "background", title: "BG", icon: "image-outline" as const },
+  { id: "background", title: "Background", icon: "image-outline" as const },
 ];
 
 // Clip-specific tools (when video clip is selected) - CapCut hierarchy
@@ -107,9 +107,9 @@ const VIDEO_CLIP_TOOLS = [
   { id: "mask", title: "Mask", icon: "shape-outline" as const },
   { id: "blend", title: "Blend", icon: "layers-outline" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
-  { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
-  { id: "effects", title: "Effect", icon: "auto-fix" as const },
-  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
+  { id: "hsl", title: "HSL", icon: "palette-swatch-outline" as const },
+  { id: "effects", title: "Effects", icon: "auto-fix" as const },
+  { id: "transitions", title: "Transitions", icon: "swap-horizontal" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "opacity", title: "Opacity", icon: "opacity" as const },
   {
@@ -118,17 +118,11 @@ const VIDEO_CLIP_TOOLS = [
     icon: "microphone-outline" as const,
     requiresAudio: true,
   },
-  { id: "tracking", title: "Track & Blur", icon: "crosshairs-gps" as const },
+  { id: "tracking", title: "Tracking", icon: "crosshairs-gps" as const },
   {
     id: "extract_audio",
     title: "Extract",
     icon: "music-box-outline" as const,
-    requiresAudio: true,
-  },
-  {
-    id: "denoise",
-    title: "Denoise",
-    icon: "ear-hearing" as const,
     requiresAudio: true,
   },
   { id: "reverse", title: "Reverse", icon: "rewind-outline" as const },
@@ -145,9 +139,9 @@ const PHOTO_CLIP_TOOLS = [
   { id: "mask", title: "Mask", icon: "shape-outline" as const },
   { id: "blend", title: "Blend", icon: "layers-outline" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
-  { id: "hsl", title: "HSL Color", icon: "palette-swatch-outline" as const },
-  { id: "effects", title: "Effect", icon: "auto-fix" as const },
-  { id: "transitions", title: "Transit", icon: "swap-horizontal" as const },
+  { id: "hsl", title: "HSL", icon: "palette-swatch-outline" as const },
+  { id: "effects", title: "Effects", icon: "auto-fix" as const },
+  { id: "transitions", title: "Transitions", icon: "swap-horizontal" as const },
   { id: "keyframe", title: "Keyframe", icon: "motion-play-outline" as const },
   { id: "opacity", title: "Opacity", icon: "opacity" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
@@ -551,14 +545,14 @@ function ToolbarComponent({
                   name={item.icon}
                   size={17}
                   color={
-                    isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#FFFFFF"
+                    isDelete ? "#EF4444" : isActive ? "#FFFFFF" : "#8E8E93"
                   }
                 />
                 <Text
                   style={[
                     styles.verticalToolLabel,
                     isDelete && { color: "#EF4444" },
-                    isActive && { color: "#00E5FF", fontWeight: "500" },
+                    isActive && { color: "#FFFFFF", fontWeight: "500" },
                   ]}
                   numberOfLines={1}
                 >
@@ -619,14 +613,14 @@ function ToolbarComponent({
             >
               <MaterialCommunityIcons
                 name={tool.icon}
-                size={21}
-                color={isDelete ? "#EF4444" : isActive ? "#00E5FF" : "#E2E8F0"}
+                size={19}
+                color={isDelete ? "#EF4444" : isActive ? "#FFFFFF" : "#8E8E93"}
               />
               <Text
                 style={[
                   styles.horizontalToolLabel,
                   isDelete && { color: "#EF4444" },
-                  isActive && { color: "#00E5FF", fontWeight: "600" },
+                  isActive && { color: "#FFFFFF", fontWeight: "500" },
                 ]}
                 numberOfLines={1}
               >
@@ -643,10 +637,10 @@ function ToolbarComponent({
 const styles = StyleSheet.create({
   // Desktop Vertical Toolbar
   verticalContainer: {
-    width: 50,
-    backgroundColor: "#08090E",
+    width: 48,
+    backgroundColor: "#121214",
     borderRightWidth: 1,
-    borderRightColor: "#1F2637",
+    borderRightColor: "#1F1F23",
     height: "100%",
     justifyContent: "space-between",
   },
@@ -656,8 +650,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   verticalToolBtn: {
-    width: 44,
-    height: 38,
+    width: 42,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 6,
@@ -665,10 +659,10 @@ const styles = StyleSheet.create({
     marginVertical: 1,
   },
   verticalToolBtnActive: {
-    backgroundColor: "rgba(0, 229, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   verticalToolLabel: {
-    color: "#8E95A5",
+    color: "#71717A",
     fontSize: 8.5,
     fontWeight: "400",
     marginTop: 1,
@@ -681,7 +675,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
+    borderBottomColor: "#1F1F23",
     gap: 3,
   },
   verticalBackBtn: {
@@ -689,16 +683,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    backgroundColor: "#0F131D",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     paddingVertical: 3,
     paddingHorizontal: 4,
     borderRadius: 5,
     width: "100%",
   },
   verticalBackText: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 9,
     fontWeight: "400",
   },
@@ -721,9 +715,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   verticalLogoBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 7,
+    width: 30,
+    height: 30,
+    borderRadius: 6,
     backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
@@ -734,13 +728,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
+    borderBottomColor: "#1F1F23",
   },
   verticalRootTitle: {
-    color: "#64748B",
+    color: "#71717A",
     fontSize: 8,
-    fontWeight: "500",
-    letterSpacing: 0.8,
+    fontWeight: "400",
+    letterSpacing: 0.5,
   },
   verticalDeleteBtn: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
@@ -752,21 +746,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   verticalDivider: {
-    width: 34,
+    width: 30,
     height: 1,
-    backgroundColor: "#1F2637",
+    backgroundColor: "#1F1F23",
     marginVertical: 2,
   },
   verticalActionBtn: {
-    width: 44,
-    height: 30,
+    width: 42,
+    height: 28,
     borderRadius: 5,
     backgroundColor: "rgba(255, 255, 255, 0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
   verticalActionText: {
-    color: "#8E95A5",
+    color: "#71717A",
     fontSize: 8,
     fontWeight: "400",
     marginTop: 1,
@@ -776,60 +770,60 @@ const styles = StyleSheet.create({
   horizontalContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#08090E",
+    backgroundColor: "#121214",
     borderTopWidth: 1,
-    borderTopColor: "#1F2637",
-    height: 60,
+    borderTopColor: "#1F1F23",
+    height: 52,
     paddingHorizontal: 6,
   },
   horizontalToolBtnActive: {
-    backgroundColor: "rgba(0, 229, 255, 0.12)",
-    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(0, 229, 255, 0.3)",
+    borderColor: "rgba(255, 255, 255, 0.16)",
   },
   horizontalToolBtnDelete: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   mobileBackBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 32,
+    height: 32,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0F131D",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     marginRight: 6,
   },
   mobileBackDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: "#1F2637",
+    height: 20,
+    backgroundColor: "#1F1F23",
     marginRight: 6,
   },
   mobileBackText: {
     color: "#FFFFFF",
-    fontSize: 9.5,
-    fontWeight: "500",
+    fontSize: 9,
+    fontWeight: "400",
   },
   horizontalScrollContent: {
     alignItems: "center",
     paddingHorizontal: 2,
-    gap: 4,
+    gap: 2,
   },
   horizontalToolBtn: {
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 52,
-    height: 50,
-    paddingHorizontal: 4,
-    borderRadius: 8,
+    minWidth: 46,
+    height: 44,
+    paddingHorizontal: 3,
+    borderRadius: 6,
   },
   horizontalToolLabel: {
-    color: "#8E95A5",
-    fontSize: 10,
-    fontWeight: "500",
+    color: "#71717A",
+    fontSize: 9.5,
+    fontWeight: "400",
     marginTop: 2,
     textAlign: "center",
     letterSpacing: 0,

@@ -42,7 +42,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'Metallic ring synthesizer',
     icon: 'robot-outline',
     badge: 'Popular',
-    color: '#00F2FE',
+    color: '#EDEDED',
   },
   {
     id: 'chipmunk',
@@ -50,7 +50,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'High-speed comic pitch',
     icon: 'paw',
     badge: 'Trending',
-    color: '#FACC15',
+    color: '#EDEDED',
   },
   {
     id: 'deep_bass',
@@ -58,7 +58,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'Low-frequency monster resonance',
     icon: 'speaker',
     badge: 'Cinema',
-    color: '#8B5CF6',
+    color: '#EDEDED',
   },
   {
     id: 'megaphone',
@@ -66,7 +66,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'Walkie-talkie bandpass drive',
     icon: 'bullhorn-outline',
     badge: 'Retro',
-    color: '#F97316',
+    color: '#EDEDED',
   },
   {
     id: 'echo',
@@ -74,7 +74,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'Expansive spatial delay decay',
     icon: 'waveform',
     badge: 'Spatial',
-    color: '#10B981',
+    color: '#EDEDED',
   },
   {
     id: 'vinyl',
@@ -82,7 +82,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'Warm crackle gramophone tone',
     icon: 'disc',
     badge: 'Vintage',
-    color: '#EC4899',
+    color: '#EDEDED',
   },
   {
     id: 'helium',
@@ -90,7 +90,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     desc: 'Ultra-light vocal balloon shift',
     icon: 'balloon',
     badge: 'Funny',
-    color: '#38BDF8',
+    color: '#EDEDED',
   },
 ];
 
@@ -130,7 +130,7 @@ export default function VoiceEffectsModal({
         {/* Standardized Header */}
         {!isInline && (
           <ModalHeader
-            title="Voice Changer & Audio FX"
+            title="Voice Effects"
             iconName="mic-outline"
             onClose={onClose}
             onReset={handleReset}
@@ -144,7 +144,7 @@ export default function VoiceEffectsModal({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.sectionTitle}>Character Voice Profiles</Text>
+          <Text style={styles.sectionTitle}>Voice Profiles</Text>
           <View style={styles.presetGrid}>
             {VOICE_PRESETS.map((preset) => {
               const isSelected = selectedEffect === preset.id;
@@ -200,7 +200,7 @@ export default function VoiceEffectsModal({
 
                   {isSelected && (
                     <View style={styles.selectedCheck}>
-                      <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
+                      <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -217,32 +217,32 @@ const styles = StyleSheet.create({
   inlineWrapper: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#0D0E15',
+    backgroundColor: '#121214',
   },
   inlineWrapperDocked: {
     height: '100%',
   },
   sheetContainer: {
     flex: 1,
-    backgroundColor: '#0D0E15',
+    backgroundColor: '#121214',
     display: 'flex',
     flexDirection: 'column',
   },
   header: {
     height: 34,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.07)',
+    borderBottomColor: '#1F1F23',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 10,
-    backgroundColor: '#12141F',
+    backgroundColor: '#121214',
   },
   cancelBtn: {
     width: 24,
     height: 24,
-    borderRadius: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderRadius: 5,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '500',
     color: '#FFFFFF',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   headerRightActions: {
     flexDirection: 'row',
@@ -272,20 +272,22 @@ const styles = StyleSheet.create({
   },
   resetBtn: {
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.35)',
   },
   resetBtnText: {
     fontSize: 9.5,
-    color: '#A1A1AA',
-    fontWeight: '400',
+    color: '#00F2FE',
+    fontWeight: '600',
   },
   applyBtn: {
     width: 24,
     height: 24,
-    borderRadius: 6,
-    backgroundColor: '#00F2FE',
+    borderRadius: 5,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -298,10 +300,10 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 8.5,
-    fontWeight: '500',
-    color: '#A1A1AA',
+    fontWeight: '400',
+    color: '#71717A',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     marginBottom: 6,
   },
   presetGrid: {
@@ -310,21 +312,21 @@ const styles = StyleSheet.create({
   presetCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#171926',
+    backgroundColor: '#18181A',
     borderRadius: 6,
     padding: 6,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#27272A',
     gap: 8,
   },
   presetCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   cardIconBox: {
     width: 28,
     height: 28,
-    borderRadius: 6,
+    borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -340,10 +342,10 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 10.5,
     fontWeight: '400',
-    color: '#FFFFFF',
+    color: '#EDEDED',
   },
   cardNameActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   tagBadge: {
@@ -355,7 +357,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '400',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   cardDesc: {
     fontSize: 8.5,

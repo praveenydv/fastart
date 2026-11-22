@@ -53,7 +53,7 @@ export function ModalActionFooter({
               ]}
             >
               {applyToAllChecked && (
-                <Ionicons name="checkmark" size={12} color="#08090E" />
+                <Ionicons name="checkmark" size={12} color="#121214" />
               )}
             </View>
             <Text style={styles.applyToAllText}>{applyToAllLabel}</Text>
@@ -66,7 +66,7 @@ export function ModalActionFooter({
             style={styles.secondaryBtn}
             accessibilityRole="button"
           >
-            <Ionicons name="refresh-outline" size={14} color="#94A3B8" />
+            <Ionicons name="refresh-outline" size={13} color="#00F2FE" />
             <Text style={styles.secondaryBtnText}>{resetLabel}</Text>
           </TactileTouchable>
         )}
@@ -100,14 +100,14 @@ export function ModalActionFooter({
 
 const styles = StyleSheet.create({
   footerBar: {
-    height: 52,
+    height: 38,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    backgroundColor: "#08090E",
+    paddingHorizontal: 10,
+    backgroundColor: "#121214",
     borderTopWidth: 1,
-    borderTopColor: "#1F2637",
+    borderTopColor: "#1F1F23",
   },
   leftSection: {
     flexDirection: "row",
@@ -116,76 +116,74 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   applyToAllBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
   checkbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 3,
     borderWidth: 1,
-    borderColor: "#334155",
-    backgroundColor: "#131826",
+    borderColor: "#27272A",
+    backgroundColor: "#18181A",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    marginRight: 6,
   },
   checkboxActive: {
-    backgroundColor: "#00F2FE",
-    borderColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
   applyToAllText: {
     color: "#94A3B8",
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "400",
   },
   secondaryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: "#131826",
+    gap: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 3,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.35)",
   },
   secondaryBtnText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: "#00F2FE",
+    fontSize: 10,
     fontWeight: "600",
   },
   cancelBtn: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: "#131826",
-    borderWidth: 1,
-    borderColor: "#1F2637",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 3,
+    backgroundColor: "transparent",
   },
   cancelBtnText: {
-    color: "#94A3B8",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#8E8E93",
+    fontSize: 10.5,
+    fontWeight: "400",
   },
   applyBtn: {
-    paddingVertical: 7,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#00F2FE",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
   },
   applyBtnDisabled: {
-    opacity: 0.45,
+    opacity: 0.35,
   },
   applyBtnText: {
-    color: "#08090E",
-    fontSize: 12,
-    fontWeight: "700",
+    color: "#0E0E10",
+    fontSize: 10.5,
+    fontWeight: "500",
   },
 });
 

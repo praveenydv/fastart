@@ -234,7 +234,7 @@ export default function AudioModal({
         {/* Unified Live Panel Header - only shown in standalone modal */}
         {!isInline && (
           <ModalHeader
-            title="Audio Studio"
+            title="Audio"
             iconName="musical-notes"
             onClose={onClose}
           />
@@ -254,9 +254,9 @@ export default function AudioModal({
               activeOpacity={0.8}
             >
               {isLoading ? (
-                <ActivityIndicator size="small" color="#00F2FE" />
+                <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Ionicons name="musical-notes-outline" size={15} color="#00F2FE" />
+                <Ionicons name="musical-notes-outline" size={15} color="#FFFFFF" />
               )}
               <Text style={styles.fullWidthUploadButtonText} numberOfLines={1}>
                 {isLoading ? 'Importing...' : '+ Import Audio'}
@@ -271,10 +271,10 @@ export default function AudioModal({
                   marginVertical: 0,
                   backgroundColor: project?.beatMarkers?.length
                     ? 'rgba(255, 230, 0, 0.12)'
-                    : 'rgba(0, 242, 254, 0.08)',
+                    : 'rgba(255, 255, 255, 0.05)',
                   borderColor: project?.beatMarkers?.length
                     ? 'rgba(255, 230, 0, 0.6)'
-                    : 'rgba(0, 242, 254, 0.25)',
+                    : '#27272A',
                 },
               ]}
               onPress={project?.beatMarkers?.length ? handleClearBeats : handleAutoBeatDetect}
@@ -287,13 +287,13 @@ export default function AudioModal({
                 <Ionicons
                   name={project?.beatMarkers?.length ? 'flash' : 'pulse-outline'}
                   size={15}
-                  color={project?.beatMarkers?.length ? '#FFE600' : '#00F2FE'}
+                  color={project?.beatMarkers?.length ? '#FFE600' : '#EDEDED'}
                 />
               )}
               <Text
                 style={[
                   styles.fullWidthUploadButtonText,
-                  { color: project?.beatMarkers?.length ? '#FFE600' : '#00F2FE' },
+                  { color: project?.beatMarkers?.length ? '#FFE600' : '#EDEDED' },
                 ]}
                 numberOfLines={1}
               >
@@ -350,7 +350,7 @@ export default function AudioModal({
                       : {})}
                   >
                     <View style={styles.importedAudioIconBox}>
-                      <Ionicons name="musical-note" size={13} color="#00F2FE" />
+                      <Ionicons name="musical-note" size={13} color="#FFFFFF" />
                     </View>
                     <View style={styles.importedAudioInfo}>
                       <Text style={styles.importedAudioTitle} numberOfLines={1}>
@@ -398,11 +398,11 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
   },
   sheetContainer: {
     flex: 1,
-    backgroundColor: '#0F131D',
+    backgroundColor: '#121214',
     width: '100%',
     height: '100%',
   },
@@ -413,8 +413,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2637',
-    backgroundColor: '#08090E',
+    borderBottomColor: '#1F1F23',
+    backgroundColor: '#121214',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -422,17 +422,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sheetTitle: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 11.5,
     fontWeight: '500',
   },
   closeBtnCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#131826',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -449,16 +449,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#131826',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.4)',
+    borderColor: '#27272A',
     borderRadius: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
     marginBottom: 8,
   },
   fullWidthUploadButtonText: {
-    color: '#00F2FE',
+    color: '#EDEDED',
     fontSize: 10.5,
     fontWeight: '500',
     letterSpacing: 0.2,
@@ -468,21 +468,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 18,
     paddingHorizontal: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    backgroundColor: '#141416',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     borderStyle: 'dashed',
     gap: 3,
   },
   emptyStateTitle: {
-    color: '#94A3B8',
+    color: '#EDEDED',
     fontSize: 10.5,
     fontWeight: '500',
     marginTop: 3,
   },
   emptyStateSubtitle: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 9,
   },
   importedSection: {
@@ -497,13 +497,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   importedSectionTitle: {
-    color: '#94A3B8',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '500',
     letterSpacing: 0.8,
   },
   importedCountText: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     fontFamily: 'monospace',
   },
@@ -515,10 +515,10 @@ const styles = StyleSheet.create({
   importedAudioCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#121622',
+    backgroundColor: '#18181A',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1F2637',
+    borderColor: '#27272A',
     padding: 6,
     gap: 8,
   },
@@ -526,9 +526,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 5,
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    backgroundColor: '#141416',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.25)',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -536,29 +536,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   importedAudioTitle: {
-    color: '#FFFFFF',
+    color: '#EDEDED',
     fontSize: 10.5,
     fontWeight: '400',
     marginBottom: 1,
   },
   importedAudioSubtitle: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     fontFamily: 'monospace',
   },
   importedAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#00F2FE',
+    borderColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 3.5,
     borderRadius: 5,
     gap: 2,
   },
   importedAddBtnText: {
-    color: '#00F2FE',
+    color: '#121214',
     fontSize: 9.5,
     fontWeight: '500',
   },

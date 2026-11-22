@@ -1426,10 +1426,10 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           : currentTime >= vid.startTime && currentTime <= vid.startTime + vid.duration;
         const isUpcoming = currentTime < vid.startTime;
         const isRecent = hasAdjacentNext
-          ? currentTime >= vid.startTime + vid.duration
-          : currentTime > vid.startTime + vid.duration;
+          ? currentTime >= vid.startTime + vid.duration && currentTime - (vid.startTime + vid.duration) <= 0.4
+          : currentTime > vid.startTime + vid.duration && currentTime - (vid.startTime + vid.duration) <= 0.4;
 
-        let effectiveOpacity = (isUpcoming || isRecent) ? 0 : opacity;
+        let effectiveOpacity = isUpcoming ? 0 : isRecent ? (hasAdjacentNext ? opacity : 0) : opacity;
         let isInteractive = isInside;
         let transX = 0;
         let transY = 0;
@@ -1493,8 +1493,9 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
             }
           }
         } else if (isRecent) {
-          // Outgoing clip stays mounted in background at 0 opacity to keep decoders warm without visual flash
-          effectiveOpacity = 0;
+          // Outgoing clip with adjacent next stays visible directly underneath incoming clip at lower z-index (vidZ = 4 vs 10)
+          // holding the exact cut frame so there is never a single-frame blank black gap while incoming decoder locks.
+          effectiveOpacity = hasAdjacentNext ? opacity : 0;
           isInteractive = false;
         }
 

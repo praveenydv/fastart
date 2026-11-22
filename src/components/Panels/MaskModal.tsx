@@ -332,8 +332,8 @@ function MaskModalComponent({
                 >
                   <Ionicons
                     name={m.icon as any}
-                    size={16}
-                    color={isSelected ? "#00F2FE" : "#8E95A5"}
+                    size={15}
+                    color={isSelected ? "#FFFFFF" : "#8A8A8E"}
                   />
                   <Text
                     style={[
@@ -353,7 +353,7 @@ function MaskModalComponent({
             <View style={styles.keyframeBar}>
               <View style={styles.kfLeftGroup}>
                 <View style={styles.kfTimePill}>
-                  <Ionicons name="time-outline" size={10} color="#00F2FE" />
+                  <Ionicons name="time-outline" size={10} color="#FFFFFF" />
                   <Text style={styles.kfTimeText} numberOfLines={1}>
                     {formatSec(currentTime)}
                   </Text>
@@ -361,7 +361,7 @@ function MaskModalComponent({
 
                 {keyframeCount > 0 && (
                   <View style={[styles.kfCountBadge, isKeyframeAtCurrent && styles.kfCountBadgeActive]}>
-                    <Ionicons name="diamond" size={8} color={isKeyframeAtCurrent ? "#00F2FE" : "#A855F7"} />
+                    <Ionicons name="diamond" size={8} color={isKeyframeAtCurrent ? "#FFFFFF" : "#A855F7"} />
                     <Text style={[styles.kfCountText, isKeyframeAtCurrent && styles.kfCountTextActive]}>
                       {isKeyframeAtCurrent
                         ? `${currentKeyframeIndex + 1}/${keyframeCount}`
@@ -386,7 +386,7 @@ function MaskModalComponent({
                   <Ionicons
                     name="caret-back"
                     size={12}
-                    color={hasPrev ? "#00F2FE" : "#334155"}
+                    color={hasPrev ? "#FFFFFF" : "#3F3F46"}
                   />
                 </TouchableOpacity>
 
@@ -425,7 +425,7 @@ function MaskModalComponent({
                   <Ionicons
                     name={isKeyframeAtCurrent ? "remove" : "add"}
                     size={16}
-                    color={isKeyframeAtCurrent ? "#EF4444" : "#00F2FE"}
+                    color={isKeyframeAtCurrent ? "#EF4444" : "#FFFFFF"}
                   />
                 </TouchableOpacity>
 
@@ -443,7 +443,7 @@ function MaskModalComponent({
                   <Ionicons
                     name="caret-forward"
                     size={12}
-                    color={hasNext ? "#00F2FE" : "#334155"}
+                    color={hasNext ? "#FFFFFF" : "#3F3F46"}
                   />
                 </TouchableOpacity>
 
@@ -493,7 +493,7 @@ function MaskModalComponent({
                 <View
                   style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
                 >
-                  <Ionicons name="resize-outline" size={13} color="#00F2FE" />
+                  <Ionicons name="resize-outline" size={13} color="#EDEDED" />
                   <Text style={styles.dimLabel}>Dimensions & Deformation</Text>
                 </View>
                 <TouchableOpacity
@@ -510,7 +510,7 @@ function MaskModalComponent({
                   <Ionicons
                     name={isAspectLocked ? "lock-closed" : "lock-open-outline"}
                     size={13}
-                    color={isAspectLocked ? "#00F2FE" : "#8E95A5"}
+                    color={isAspectLocked ? "#FFFFFF" : "#8E8E93"}
                   />
                 </TouchableOpacity>
               </View>
@@ -561,14 +561,14 @@ function MaskModalComponent({
               {/* Mask Width Slider */}
               <View style={styles.sliderRow}>
                 <CompactSliderInput
-                  label="Mask Width"
+                  label="Width"
                   value={maskWidth}
                   min={10}
                   max={150}
                   step={1}
                   unit="%"
                   defaultValue={60}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => {
@@ -607,14 +607,14 @@ function MaskModalComponent({
               {/* Mask Height Slider */}
               <View style={styles.sliderRow}>
                 <CompactSliderInput
-                  label="Mask Height"
+                  label="Height"
                   value={maskHeight}
                   min={10}
                   max={150}
                   step={1}
                   unit="%"
                   defaultValue={60}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => {
@@ -653,14 +653,14 @@ function MaskModalComponent({
               {/* Edge Softness (Feather) */}
               <View style={styles.sliderRow}>
                 <CompactSliderInput
-                  label="Edge Softness (Feather)"
+                  label="Feather"
                   value={maskFeather}
                   min={0}
                   max={80}
                   step={1}
                   unit="%"
                   defaultValue={0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => {
@@ -678,14 +678,14 @@ function MaskModalComponent({
               {maskShape === "rectangle" && (
                 <View style={styles.sliderRow}>
                   <CompactSliderInput
-                    label="Corner Roundness"
+                    label="Roundness"
                     value={maskRoundness}
                     min={0}
                     max={60}
                     step={1}
                     unit="px"
                     defaultValue={16}
-                    accentColor="#00F2FE"
+                    accentColor="#FFFFFF"
                     showSteppers={true}
                     onDragStart={() => setIsSliderDragging(true)}
                     onDragEnd={() => {
@@ -703,7 +703,7 @@ function MaskModalComponent({
               {/* Rotation Angle Slider */}
               <View style={styles.sliderRow}>
                 <CompactSliderInput
-                  label="Rotation Angle"
+                  label="Rotate"
                   value={maskRotation}
                   min={-180}
                   max={180}
@@ -712,7 +712,7 @@ function MaskModalComponent({
                   defaultValue={0}
                   showReset={true}
                   showSteppers={true}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => {
                     setIsSliderDragging(false);
@@ -732,7 +732,7 @@ function MaskModalComponent({
               {/* Position HUD & Sliders */}
               <View style={styles.sliderRow}>
                 <View style={styles.labelValueRow}>
-                  <Text style={styles.sliderLabel}>Position Offset</Text>
+                  <Text style={styles.sliderLabel}>Position</Text>
                   {(maskX !== 0 || maskY !== 0) && (
                     <TouchableOpacity
                       onPress={() => {
@@ -741,31 +741,29 @@ function MaskModalComponent({
                         triggerUpdate({ x: 0, y: 0 });
                       }}
                       style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        backgroundColor: "rgba(0, 242, 254, 0.12)",
-                        borderWidth: 1,
-                        borderColor: "rgba(0, 242, 254, 0.35)",
+                        width: 18,
+                        height: 18,
+                        borderRadius: 3,
+                        backgroundColor: "rgba(255, 255, 255, 0.06)",
                         alignItems: "center",
                         justifyContent: "center",
                       }}
                       activeOpacity={0.7}
                       accessibilityLabel="Center mask position"
                     >
-                      <Ionicons name="locate-outline" size={13} color="#00F2FE" />
+                      <Ionicons name="locate-outline" size={11} color="#A1A1AA" />
                     </TouchableOpacity>
                   )}
                 </View>
                 <CompactSliderInput
-                  label="Position X"
+                  label="X"
                   value={maskX}
                   min={-100}
                   max={100}
                   step={1}
                   unit="%"
                   defaultValue={0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => setIsSliderDragging(false)}
@@ -775,14 +773,14 @@ function MaskModalComponent({
                   }}
                 />
                 <CompactSliderInput
-                  label="Position Y"
+                  label="Y"
                   value={maskY}
                   min={-100}
                   max={100}
                   step={1}
                   unit="%"
                   defaultValue={0}
-                  accentColor="#00F2FE"
+                  accentColor="#FFFFFF"
                   showSteppers={true}
                   onDragStart={() => setIsSliderDragging(true)}
                   onDragEnd={() => setIsSliderDragging(false)}
@@ -791,11 +789,6 @@ function MaskModalComponent({
                     triggerUpdate({ y: val });
                   }}
                 />
-                <Text
-                  style={{ color: "#64748B", fontSize: 10.5, marginTop: 4 }}
-                >
-                  💡 Tip: Drag, rotate & scale mask directly on preview
-                </Text>
               </View>
 
               {/* Invert Mask Toggle */}
@@ -813,8 +806,8 @@ function MaskModalComponent({
                 </Text>
                 <Ionicons
                   name={maskInverted ? "checkbox" : "square-outline"}
-                  size={20}
-                  color={maskInverted ? "#00F2FE" : "#8E95A5"}
+                  size={18}
+                  color={maskInverted ? "#FFFFFF" : "#71717A"}
                 />
               </TouchableOpacity>
             </View>
@@ -836,7 +829,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
   },
   unifiedHeader: {
     flexDirection: "row",
@@ -845,21 +838,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1F2637",
-    backgroundColor: "#08090E",
+    borderBottomColor: "#1F1F23",
+    backgroundColor: "#121214",
   },
   sheetTitle: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 11.5,
     fontWeight: "500",
   },
   closeBtnCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#131826",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -880,19 +873,19 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    backgroundColor: "#0F131D",
+    backgroundColor: "#121214",
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
     maxHeight: "75%",
     borderTopWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
     paddingBottom: 8,
   },
   sheetHandle: {
     width: 28,
     height: 2.5,
     borderRadius: 1.5,
-    backgroundColor: "#1F2637",
+    backgroundColor: "#27272A",
     alignSelf: "center",
     marginTop: 4,
     marginBottom: 2,
@@ -903,9 +896,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: "#08090E",
+    backgroundColor: "#121214",
     borderBottomWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#1F1F23",
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -913,16 +906,16 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   headerTitle: {
-    color: "#FFFFFF",
+    color: "#EDEDED",
     fontSize: 11.5,
     fontWeight: "500",
     letterSpacing: 0.1,
   },
   doneBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#00F2FE",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -930,16 +923,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "#131826",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.35)",
     flexDirection: "row",
     alignItems: "center",
   },
   resetText: {
-    color: "#8E95A5",
+    color: "#00F2FE",
     fontSize: 9.5,
-    fontWeight: "400",
+    fontWeight: "600",
   },
   contentScroll: {
     paddingHorizontal: 6,
@@ -959,39 +952,39 @@ const styles = StyleSheet.create({
   },
   maskCard: {
     width: "23.8%",
-    backgroundColor: "#131826",
-    borderRadius: 5,
-    paddingVertical: 5,
+    backgroundColor: "#18181A",
+    borderRadius: 4,
+    paddingVertical: 4,
     paddingHorizontal: 2,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   maskCardActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   maskCardTitle: {
-    color: "#8E95A5",
+    color: "#8A8A8E",
     fontSize: 8.5,
     fontWeight: "400",
     marginTop: 2,
     textAlign: "center",
   },
   maskCardTitleActive: {
-    color: "#00F2FE",
-    fontWeight: "500",
+    color: "#FFFFFF",
+    fontWeight: "400",
   },
   controlsCard: {
-    backgroundColor: "#131826",
-    borderRadius: 6,
-    padding: 6,
+    backgroundColor: "#18181A",
+    borderRadius: 4,
+    padding: 5,
     borderWidth: 1,
-    borderColor: "#1F2637",
-    gap: 5,
+    borderColor: "#27272A",
+    gap: 4,
   },
   sliderRow: {
-    gap: 3,
+    gap: 2,
   },
   labelValueRow: {
     flexDirection: "row",
@@ -999,14 +992,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sliderLabel: {
-    color: "#8E95A5",
+    color: "#94A3B8",
     fontSize: 9.5,
     fontWeight: "400",
   },
   badge: {
-    color: "#00F2FE",
+    color: "#CBD5E1",
     fontSize: 9.5,
-    fontWeight: "500",
+    fontWeight: "400",
   },
   toggleRow: {
     flexDirection: "row",
@@ -1046,34 +1039,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: 3,
     borderBottomWidth: 1,
-    borderBottomColor: "#1A2130",
+    borderBottomColor: "#1F1F23",
   },
   dimLabel: {
-    color: "#CBD5E1",
+    color: "#EDEDED",
     fontSize: 9.5,
     fontWeight: "400",
   },
   lockBtn: {
     width: 26,
     height: 26,
-    borderRadius: 6,
-    backgroundColor: "#161D2B",
+    borderRadius: 5,
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#242F45",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
   lockBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   lockBtnText: {
-    color: "#8E95A5",
+    color: "#8E8E93",
     fontSize: 8.5,
     fontWeight: "400",
   },
   lockBtnTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
   ratioPillsRow: {
@@ -1083,24 +1076,24 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   ratioPill: {
-    backgroundColor: "#131826",
+    backgroundColor: "#18181A",
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "#27272A",
   },
   ratioPillActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   ratioPillText: {
-    color: "#8E95A5",
+    color: "#8E8E93",
     fontSize: 8.5,
     fontWeight: "400",
   },
   ratioPillTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
     fontWeight: "500",
   },
   keyframeBar: {
@@ -1108,12 +1101,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "nowrap",
-    backgroundColor: "#121724",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1E2638",
-    borderRadius: 8,
+    borderColor: "#27272A",
+    borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
     marginTop: 6,
     marginBottom: 4,
     gap: 4,
@@ -1128,29 +1121,29 @@ const styles = StyleSheet.create({
   kfTimePill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.25)",
-    borderRadius: 5,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 4,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 2.5,
     gap: 3,
     flexShrink: 1,
   },
   kfTimeText: {
-    color: "#00F2FE",
-    fontSize: 10.5,
-    fontWeight: "700",
+    color: "#EDEDED",
+    fontSize: 10,
+    fontWeight: "500",
   },
   kfOffsetTime: {
-    color: "#94A3B8",
+    color: "#8E8E93",
     fontSize: 9.5,
-    fontWeight: "500",
+    fontWeight: "400",
   },
   kfCountBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1B2234",
+    backgroundColor: "#141416",
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 2,
@@ -1158,9 +1151,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   kfCountText: {
-    color: "#CBD5E1",
+    color: "#EDEDED",
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   kfActionGroup: {
     flexDirection: "row",
@@ -1169,101 +1162,101 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   kfStepBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 5,
-    backgroundColor: "#182030",
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#26334A",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
   kfStepBtnDisabled: {
     opacity: 0.35,
-    backgroundColor: "#121724",
+    backgroundColor: "#141416",
   },
   kfIconBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 5,
-    backgroundColor: "#182030",
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#26334A",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
   },
   kfIconBtnAdd: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "rgba(0, 242, 254, 0.5)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "rgba(255, 255, 255, 0.25)",
   },
   kfIconBtnRemove: {
     backgroundColor: "rgba(239, 68, 68, 0.15)",
-    borderColor: "rgba(239, 68, 68, 0.5)",
+    borderColor: "rgba(239, 68, 68, 0.4)",
   },
   kfIconBtnDisabled: {
     opacity: 0.35,
-    backgroundColor: "#121724",
-    borderColor: "#1E293B",
+    backgroundColor: "#141416",
+    borderColor: "#27272A",
   },
   kfDiamondBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "#182030",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#26334A",
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 4.5,
+    borderColor: "#27272A",
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     position: "relative",
   },
   kfDiamondBtnActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
-    borderColor: "#00F2FE",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#FFFFFF",
   },
   kfDiamondBtnAdd: {
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
-    borderColor: "rgba(0, 242, 254, 0.4)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   kfDiamondBtnRemove: {
     backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderColor: "rgba(239, 68, 68, 0.4)",
+    borderColor: "rgba(239, 68, 68, 0.3)",
   },
   kfDiamondText: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "700",
+    color: "#8E8E93",
+    fontSize: 10.5,
+    fontWeight: "500",
   },
   kfDiamondTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
   },
   kfDiamondTextAdd: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
   },
   kfDiamondTextRemove: {
     color: "#EF4444",
   },
   kfDiamondBadge: {
-    width: 11,
-    height: 11,
-    borderRadius: 5.5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 1,
   },
   kfDiamondBadgeAdd: {
-    backgroundColor: "#00F2FE",
+    backgroundColor: "#FFFFFF",
   },
   kfDiamondBadgeRemove: {
     backgroundColor: "#EF4444",
   },
   kfCountBadgeActive: {
-    backgroundColor: "rgba(0, 242, 254, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "rgba(255, 255, 255, 0.25)",
   },
   kfCountTextActive: {
-    color: "#00F2FE",
+    color: "#FFFFFF",
   },
   kfNoKeyframesBadge: {
     backgroundColor: "#161B26",

@@ -11,6 +11,80 @@ import { Ionicons } from "@expo/vector-icons";
 import { TactileTouchable } from "./TactileTouchable";
 import Slider from "@react-native-community/slider";
 
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  const styleId = "capcut-slider-styles";
+  if (!document.getElementById(styleId)) {
+    const styleEl = document.createElement("style");
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      .capcut-thin-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 18px;
+        background-color: transparent !important;
+        background-repeat: no-repeat !important;
+        background-size: 100% 2px !important;
+        background-position: center !important;
+        outline: none;
+        margin: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+      .capcut-thin-slider:focus,
+      .capcut-thin-slider:active {
+        outline: none;
+        background-size: 100% 2px !important;
+      }
+      .capcut-thin-slider::-webkit-slider-runnable-track {
+        height: 2px !important;
+        max-height: 2px !important;
+        border-radius: 1px;
+        background: transparent !important;
+        border: none;
+      }
+      .capcut-thin-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #FFFFFF;
+        margin-top: -4px;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        border: none;
+      }
+      .capcut-thin-slider::-webkit-slider-thumb:active {
+        width: 10px;
+        height: 10px;
+        background: #FFFFFF;
+      }
+      .capcut-thin-slider::-moz-range-track {
+        height: 2px !important;
+        max-height: 2px !important;
+        border-radius: 1px;
+        background: transparent !important;
+        border: none;
+      }
+      .capcut-thin-slider::-moz-range-thumb {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #FFFFFF;
+        border: none;
+        cursor: pointer;
+      }
+      .capcut-thin-slider::-moz-range-thumb:active {
+        width: 10px;
+        height: 10px;
+        background: #FFFFFF;
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+}
+
 export interface SliderControlRowProps {
   label: string;
   value: number;
@@ -170,8 +244,8 @@ export function SliderControlRow({
           {icon && (
             <Ionicons
               name={icon}
-              size={14}
-              color="#00F2FE"
+              size={12}
+              color="#94A3B8"
               style={styles.labelIcon}
             />
           )}
@@ -196,7 +270,7 @@ export function SliderControlRow({
               accessibilityLabel={`Reset ${label}`}
               accessibilityRole="button"
             >
-              <Ionicons name="refresh-outline" size={13} color="#64748B" />
+              <Ionicons name="refresh-outline" size={11} color="#00F2FE" />
             </TactileTouchable>
           )}
         </View>
@@ -206,6 +280,7 @@ export function SliderControlRow({
         {Platform.OS === "web" ? (
           <input
             type="range"
+            className="capcut-thin-slider"
             min={min}
             max={max}
             step={step || 1}
@@ -239,11 +314,13 @@ export function SliderControlRow({
             style={
               {
                 width: "100%",
-                height: 20,
+                height: 18,
                 cursor: "pointer",
-                accentColor: "#00F2FE",
-                background: `linear-gradient(to right, #00F2FE 0%, #00F2FE ${rangePercent}%, #1F2637 ${rangePercent}%, #1F2637 100%)`,
-                borderRadius: 3,
+                backgroundImage: `linear-gradient(to right, #FFFFFF 0%, #FFFFFF ${rangePercent}%, #27272A ${rangePercent}%, #27272A 100%)`,
+                backgroundRepeat: "no-repeat",
+                backgroundSize: "100% 2px",
+                backgroundPosition: "center",
+                backgroundColor: "transparent",
                 outline: "none",
                 margin: 0,
                 padding: 0,
@@ -256,9 +333,9 @@ export function SliderControlRow({
             minimumValue={min}
             maximumValue={max}
             step={step}
-            minimumTrackTintColor="#00F2FE"
-            maximumTrackTintColor="#1F2637"
-            thumbTintColor="#00F2FE"
+            minimumTrackTintColor="#FFFFFF"
+            maximumTrackTintColor="#27272A"
+            thumbTintColor="#FFFFFF"
             onSlidingStart={() => {
               isDraggingRef.current = true;
             }}
@@ -274,62 +351,62 @@ export function SliderControlRow({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   titleWrapper: {
     flexDirection: "row",
     alignItems: "center",
   },
   labelIcon: {
-    marginRight: 6,
+    marginRight: 4,
   },
   labelText: {
-    color: "#E2E8F0",
-    fontSize: 13,
-    fontWeight: "600",
+    color: "#CBD5E1",
+    fontSize: 10.5,
+    fontWeight: "400",
   },
   valueRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   valueBadge: {
-    backgroundColor: "#131826",
+    backgroundColor: "#141416",
     borderWidth: 1,
-    borderColor: "#1F2637",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
+    borderColor: "#26262B",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
   },
   valueText: {
-    color: "#00F2FE",
-    fontSize: 12,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 9.5,
+    fontWeight: "400",
   },
   resetBtn: {
-    marginLeft: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#131826",
+    marginLeft: 6,
+    width: 17,
+    height: 17,
+    borderRadius: 3,
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
     borderWidth: 1,
-    borderColor: "#1F2637",
+    borderColor: "rgba(0, 242, 254, 0.35)",
     alignItems: "center",
     justifyContent: "center",
   },
   sliderWrapper: {
-    height: 36,
+    height: 18,
     justifyContent: "center",
   },
   slider: {
     width: "100%",
-    height: 36,
+    height: 18,
   },
 });
 

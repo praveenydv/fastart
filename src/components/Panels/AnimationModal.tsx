@@ -710,7 +710,7 @@ export default function AnimationModal({
       {/* Header - only shown in standalone modal */}
       {!isInline && (
         <ModalHeader
-          title="Clip Animation"
+          title="Animation"
           iconName="play-circle-outline"
           onClose={onClose}
           onReset={!isNoneActive ? handleClearAll : undefined}
@@ -772,7 +772,7 @@ export default function AnimationModal({
             decimals={1}
             unit="s"
             defaultValue={0.5}
-            accentColor="#00F2FE"
+            accentColor="#FFFFFF"
             showSteppers={true}
             onChange={(val) => handleDurationChange(val)}
           />
@@ -899,9 +899,9 @@ const styles = StyleSheet.create({
   resetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+    backgroundColor: 'rgba(0, 242, 254, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.3)',
+    borderColor: 'rgba(0, 242, 254, 0.35)',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -913,21 +913,21 @@ const styles = StyleSheet.create({
   },
   resetBtnText: {
     color: '#00F2FE',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   closeBtn: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#161922',
-    borderRadius: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
     padding: 2,
     marginBottom: 6,
     gap: 3,
@@ -942,30 +942,30 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   tabItemActive: {
-    backgroundColor: '#272B3B',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
   },
   tabText: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 9.5,
     fontWeight: '400',
   },
   tabTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   tabBadgeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
   },
   durationRow: {
-    backgroundColor: '#161922',
-    borderRadius: 6,
+    backgroundColor: '#18181A',
+    borderRadius: 5,
     paddingHorizontal: 8,
     paddingVertical: 5,
     marginBottom: 6,
@@ -977,12 +977,12 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   durationLabel: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 9.5,
     fontWeight: '400',
   },
   durationValue: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontSize: 9.5,
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
@@ -998,17 +998,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   quickDurPillActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: '#00F2FE',
+    borderColor: '#FFFFFF',
   },
   quickDurText: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '400',
   },
   quickDurTextActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   presetScroll: {
@@ -1022,23 +1022,23 @@ const styles = StyleSheet.create({
   },
   presetCard: {
     width: '23.8%',
-    backgroundColor: '#161922',
+    backgroundColor: '#18181A',
     borderRadius: 5,
     padding: 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: '#27272A',
   },
   presetCardActive: {
-    borderColor: '#00F2FE',
-    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   animStage: {
     width: '100%',
     height: 36,
     borderRadius: 4,
-    backgroundColor: '#090B10',
+    backgroundColor: '#121214',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1051,7 +1051,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   noneAnimText: {
-    color: '#64748B',
+    color: '#71717A',
     fontSize: 8.5,
     fontWeight: '400',
   },
@@ -1063,9 +1063,9 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E2433',
+    backgroundColor: '#141416',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: '#27272A',
     shadowColor: '#000',
     shadowOpacity: 0.35,
     shadowRadius: 2,
@@ -1099,7 +1099,7 @@ const styles = StyleSheet.create({
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -1108,22 +1108,22 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#222634',
+    backgroundColor: '#141416',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 3,
   },
   iconCircleActive: {
-    backgroundColor: '#00F2FE',
+    backgroundColor: '#FFFFFF',
   },
   presetName: {
-    color: '#8E95A5',
+    color: '#8E8E93',
     fontSize: 8.5,
     fontWeight: '400',
     textAlign: 'center',
   },
   presetNameActive: {
-    color: '#00F2FE',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   animDescText: {

@@ -106,7 +106,7 @@ export default function ExportIdleSettings({
       </View>
 
       <View style={styles.fileNameInputContainer}>
-        <Ionicons name="document-text-outline" size={16} color="#00F2FE" />
+        <Ionicons name="document-text-outline" size={16} color="#EDEDED" />
         <TextInput
           style={styles.fileNameInput}
           value={exportFilename}
@@ -145,7 +145,7 @@ export default function ExportIdleSettings({
                 <Ionicons
                   name={fmt.icon}
                   size={14}
-                  color={isSelected ? "#00F2FE" : "#94A3B8"}
+                  color={isSelected ? "#FFFFFF" : "#8E8E93"}
                 />
                 <Text
                   style={[
@@ -294,7 +294,7 @@ export default function ExportIdleSettings({
       {/* SPECIAL NOTICES FOR WAV / STILL FRAME */}
       {mediaType === "wav" && (
         <View style={styles.noticeCard}>
-          <Ionicons name="musical-notes" size={15} color="#00F2FE" />
+          <Ionicons name="musical-notes" size={15} color="#EDEDED" />
           <Text style={styles.noticeCardText}>
             Master 16-bit 48kHz Stereo PCM audio mixdown from all audio and video tracks.
           </Text>
@@ -302,7 +302,7 @@ export default function ExportIdleSettings({
       )}
       {mediaType === "png" && (
         <View style={styles.noticeCard}>
-          <Ionicons name="image" size={15} color="#00F2FE" />
+          <Ionicons name="image" size={15} color="#EDEDED" />
           <Text style={styles.noticeCardText}>
             Single full-resolution lossless snapshot frame captured at current playhead position.
           </Text>
@@ -312,26 +312,26 @@ export default function ExportIdleSettings({
       {/* 5. COMPACT STATS STRIP */}
       <View style={styles.compactSummaryCard}>
         <View style={styles.summaryItem}>
-          <Ionicons name="document-text-outline" size={13} color="#00F2FE" />
+          <Ionicons name="document-text-outline" size={13} color="#EDEDED" />
           <Text style={styles.summaryValue}>
             {selectedFormatConfig.shortLabel}
           </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Ionicons name="speedometer-outline" size={13} color="#00F2FE" />
+          <Ionicons name="speedometer-outline" size={13} color="#EDEDED" />
           <Text style={styles.summaryValue}>{calculateEstimatedSize()}</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Ionicons name="time-outline" size={13} color="#00F2FE" />
+          <Ionicons name="time-outline" size={13} color="#EDEDED" />
           <Text style={styles.summaryValue}>
             {mediaType === "png" ? "1 Frame" : `${totalDuration.toFixed(1)}s`}
           </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Ionicons name="crop-outline" size={13} color="#00F2FE" />
+          <Ionicons name="crop-outline" size={13} color="#EDEDED" />
           <Text style={styles.summaryValue}>{aspectRatio}</Text>
         </View>
       </View>
@@ -342,7 +342,7 @@ export default function ExportIdleSettings({
         onPress={onStartExport}
         activeOpacity={0.8}
       >
-        <Ionicons name="arrow-up-circle-outline" size={19} color="#08090E" />
+        <Ionicons name="arrow-up-circle-outline" size={19} color="#121214" />
         <Text style={styles.exportCtaText}>
           Export {selectedFormatConfig.shortLabel}
           {mediaType !== "wav" && mediaType !== "png" ? ` (${resolution})` : ""}
@@ -375,7 +375,7 @@ export default function ExportIdleSettings({
                 ]}
               >
                 <View style={styles.canvasCenterEmblem}>
-                  <Ionicons name="play" size={14} color="#00F2FE" style={{ marginLeft: 2 }} />
+                  <Ionicons name="play" size={14} color="#EDEDED" style={{ marginLeft: 2 }} />
                 </View>
 
                 {mediaType !== "wav" && (
@@ -413,19 +413,19 @@ export default function ExportIdleSettings({
             <View style={styles.trackBadgesRow}>
               {mediaCount > 0 && (
                 <View style={styles.trackBadgeItem}>
-                  <Ionicons name="videocam-outline" size={11} color="#00F2FE" />
+                  <Ionicons name="videocam-outline" size={11} color="#EDEDED" />
                   <Text style={styles.trackBadgeText}>{mediaCount} Media</Text>
                 </View>
               )}
               {audioCount > 0 && (
                 <View style={styles.trackBadgeItem}>
-                  <Ionicons name="musical-notes-outline" size={11} color="#00F2FE" />
+                  <Ionicons name="musical-notes-outline" size={11} color="#EDEDED" />
                   <Text style={styles.trackBadgeText}>{audioCount} Audio</Text>
                 </View>
               )}
               {textCount > 0 && (
                 <View style={styles.trackBadgeItem}>
-                  <Ionicons name="text-outline" size={11} color="#00F2FE" />
+                  <Ionicons name="text-outline" size={11} color="#EDEDED" />
                   <Text style={styles.trackBadgeText}>{textCount} Text</Text>
                 </View>
               )}
