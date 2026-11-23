@@ -384,7 +384,7 @@ export function drawClip(
 
   const t = getInterpolatedTransform(clip, time, "video");
 
-  if (clip.motionTrack && clip.motionTrack.enabled) {
+  if (clip.motionTrack && clip.motionTrack.enabled && clip.motionTrack.actionType !== 'mosaic_censor') {
     const motion = applyMotionTracking(time, clip.startTime, clip.duration, clip.motionTrack);
     xOffset += (motion.dx / 100) * w;
     yOffset += (motion.dy / 100) * h;

@@ -292,6 +292,9 @@ export class ObjectTrackerEngine {
     const maxTime = videoEl.duration > 0 ? Math.max(0, videoEl.duration - 0.05) : 999999;
     const clampedTime = Math.max(0, Math.min(maxTime, timeSec));
 
+    // Clear any renderer pause lock on target media time so video seeks freely to sample frames
+    delete (videoEl as any)._targetMediaTime;
+
     // If already at or very close to desired time and has frame data
     if (Math.abs(videoEl.currentTime - clampedTime) < 0.025 && videoEl.readyState >= 2) {
       try {
@@ -321,18 +324,8 @@ export class ObjectTrackerEngine {
 
       const onSeeked = () => {
         videoEl.removeEventListener('seeked', onSeeked);
-        if (typeof (videoEl as any).requestVideoFrameCallback === 'function') {
-          let rVfcDone = false;
-          (videoEl as any).requestVideoFrameCallback(() => {
-            rVfcDone = true;
-            finishCapture();
-          });
-          setTimeout(() => {
-            if (!rVfcDone) finishCapture();
-          }, 40);
-        } else {
-          finishCapture();
-        }
+        // Small 25ms tick allows the hardware video decoder / GPU compositor to commit the newly seeked texture
+        setTimeout(finishCapture, 25);
       };
 
       videoEl.addEventListener('seeked', onSeeked);
@@ -645,9 +638,55 @@ export class ObjectTrackerEngine {
     const validDisplacements: Array<{ dx: number; dy: number; pOrig: FeatureKeypoint }> = [];
 
     for (const pt of points) {
-      // Forward Lucas-Kanade
-      let vx = 0;
-      let vy = 0;
+      // Level 1: Coarse Optical Flow Search (stride 2, window radius 6, covers up to ±36px motion)
+      let coarseVx = 0;
+      let coarseVy = 0;
+      for (let iter = 0; iter < 4; iter++) {
+        let a00 = 0, a11 = 0, a01 = 0;
+        let b0 = 0, b1 = 0;
+
+        for (let wy = -6; wy <= 6; wy += 2) {
+          const py = Math.floor(pt.y + wy);
+          const cy = Math.floor(pt.y + coarseVy + wy);
+          if (py < 2 || py >= fh - 2 || cy < 2 || cy >= fh - 2) continue;
+
+          for (let wx = -6; wx <= 6; wx += 2) {
+            const px = Math.floor(pt.x + wx);
+            const cx = Math.floor(pt.x + coarseVx + wx);
+            if (px < 2 || px >= fw - 2 || cx < 2 || cx >= fw - 2) continue;
+
+            const idxPrev = (py * fw + px) * 4;
+            const idxCurr = (cy * fw + cx) * 4;
+
+            const lumPrev = 0.2126 * prevData[idxPrev] + 0.7152 * prevData[idxPrev + 1] + 0.0722 * prevData[idxPrev + 2];
+            const lumCurr = 0.2126 * currData[idxCurr] + 0.7152 * currData[idxCurr + 1] + 0.0722 * currData[idxCurr + 2];
+
+            const ix = (0.2126 * prevData[idxPrev + 8] - 0.2126 * prevData[idxPrev - 8]) * 0.25;
+            const iy = (0.2126 * prevData[(py + 2) * fw * 4 + px * 4] - 0.2126 * prevData[(py - 2) * fw * 4 + px * 4]) * 0.25;
+            const it = lumCurr - lumPrev;
+
+            a00 += ix * ix;
+            a11 += iy * iy;
+            a01 += ix * iy;
+            b0 += ix * it;
+            b1 += iy * it;
+          }
+        }
+
+        const det = a00 * a11 - a01 * a01;
+        if (Math.abs(det) < 1e-4) break;
+
+        const dvx = -(a11 * b0 - a01 * b1) / det;
+        const dvy = -(a00 * b1 - a01 * b0) / det;
+
+        coarseVx += Math.max(-10, Math.min(10, dvx));
+        coarseVy += Math.max(-10, Math.min(10, dvy));
+        if (dvx * dvx + dvy * dvy < 0.05) break;
+      }
+
+      // Level 0: Fine Sub-pixel Lucas-Kanade (initialized from coarse displacement)
+      let vx = coarseVx;
+      let vy = coarseVy;
 
       for (let iter = 0; iter < maxIter; iter++) {
         let a00 = 0, a11 = 0, a01 = 0;
@@ -742,7 +781,7 @@ export class ObjectTrackerEngine {
 
       // Check distance between original point and backwards-tracked point
       const roundtripError = Math.hypot(vx + backVx, vy + backVy);
-      if (roundtripError < 2.0 && Math.hypot(vx, vy) < 45) {
+      if (roundtripError < 3.5 && Math.hypot(vx, vy) < 65) {
         validDisplacements.push({ dx: vx, dy: vy, pOrig: pt });
       }
     }
@@ -1164,6 +1203,7 @@ export class ObjectTrackerEngine {
         // This ensures the user sees a calm, frozen preview while seeking happens silently underneath
         if (activeVid && activeVid.videoWidth > 0) {
           originalTime = activeVid.currentTime;
+          delete (activeVid as any)._targetMediaTime;
           freezeOverlay = document.createElement('canvas');
           freezeOverlay.width = activeVid.videoWidth;
           freezeOverlay.height = activeVid.videoHeight;
@@ -1584,6 +1624,7 @@ export class ObjectTrackerEngine {
       }
       if (activeVid) {
         try {
+          (activeVid as any)._targetMediaTime = originalTime;
           activeVid.currentTime = originalTime;
           activeVid.pause();
         } catch (_) {}

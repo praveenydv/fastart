@@ -36,23 +36,18 @@ import {
   syncPlayback,
   pauseAllMedia,
   MediaSyncContext,
+  isMotionTrackingActive,
+  setMotionTrackingActive,
 } from "./renderer/rendererMediaSync";
 import { drawClip as renderClipItem, TransitionRenderState } from "./renderer/rendererClip";
 import { setOnMaskUpdated, registerMediaProvider, isCutoutProcessingActive, cancelLiveSegmentation } from "../services/selfieSegmentationService";
 
 export type { ExportFormat, ExportOptions, ExportResult };
 
+export { isMotionTrackingActive, setMotionTrackingActive };
+
 let activeVideoRenderer: VideoRenderer | null = null;
 let latestLiveSnapshot: string | null = null;
-let isTrackingProcessingActive = false;
-
-export function isMotionTrackingActive(): boolean {
-  return isTrackingProcessingActive;
-}
-
-export function setMotionTrackingActive(active: boolean): void {
-  isTrackingProcessingActive = active;
-}
 
 export function getActiveVideoRenderer(): VideoRenderer | null {
   return activeVideoRenderer;

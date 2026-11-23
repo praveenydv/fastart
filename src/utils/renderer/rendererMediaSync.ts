@@ -17,6 +17,16 @@ export interface MediaSyncContext {
 // Global registry of active player video elements for 0ms frame extraction and split snapshots
 export const globalActiveVideoElements = new Map<string, HTMLVideoElement>();
 
+let isTrackingProcessingActive = false;
+
+export function isMotionTrackingActive(): boolean {
+  return isTrackingProcessingActive;
+}
+
+export function setMotionTrackingActive(active: boolean): void {
+  isTrackingProcessingActive = active;
+}
+
 export function getMediaContainer(): HTMLElement | null {
   if (typeof document === "undefined") return null;
   let container = document.getElementById("fastart-media-sync-container");
@@ -253,6 +263,7 @@ export async function preloadClip(
     vid.addEventListener("loadeddata", trigger);
     vid.addEventListener("canplay", trigger);
     const onSeeked = () => {
+      if (isMotionTrackingActive()) return;
       trigger();
       if (vid.paused && typeof (vid as any)._targetMediaTime === "number") {
         const target = (vid as any)._targetMediaTime;
@@ -451,6 +462,10 @@ export function syncPlayback(
         }
       }
     }
+  }
+
+  if (isMotionTrackingActive()) {
+    return;
   }
 
   // 1. Pause any video element that is NOT active and NOT upcoming
