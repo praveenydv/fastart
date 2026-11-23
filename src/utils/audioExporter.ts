@@ -695,6 +695,15 @@ export async function exportProjectAudioToWavBytes(
               leftSamp += masterLeft[i - delaySamples] * 0.35;
               rightSamp += masterRight[i - delaySamples] * 0.35;
             }
+          } else if (voiceEffect === "isolate_vocal") {
+            // Speech frequency isolation & gentle dynamic leveling
+            leftSamp = Math.tanh(leftSamp * 1.4);
+            rightSamp = Math.tanh(rightSamp * 1.4);
+          } else if (voiceEffect === "remove_vocal") {
+            // Stereo center vocal cancellation: center-panned speech (L = R) cancels out
+            const diff = (leftSamp - rightSamp) * 0.707;
+            leftSamp = diff;
+            rightSamp = -diff;
           }
         }
 

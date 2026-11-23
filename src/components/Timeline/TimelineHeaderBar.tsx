@@ -35,6 +35,8 @@ interface TimelineHeaderBarProps {
   selectedClipType?: string;
   isMagnetic?: boolean;
   onToggleMagnetic?: () => void;
+  isTimelineHidden?: boolean;
+  onToggleHideTimeline?: () => void;
 }
 
 const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
@@ -62,6 +64,8 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
   selectedClipType,
   isMagnetic = true,
   onToggleMagnetic,
+  isTimelineHidden = false,
+  onToggleHideTimeline,
 }) => {
   const isVideoSelected = selectedClipType === "video" || (!selectedClipType && hasSelectedClip);
 
@@ -309,6 +313,21 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
           >
             <Ionicons name="add" size={12} color="#8E95A5" />
           </TouchableOpacity>
+
+          {onToggleHideTimeline && (
+            <TouchableOpacity
+              style={[styles.zoomBtn, { marginLeft: 3 }]}
+              onPress={onToggleHideTimeline}
+              activeOpacity={0.7}
+              accessibilityLabel={isTimelineHidden ? "Show Timeline" : "Hide Timeline"}
+            >
+              <Ionicons
+                name={isTimelineHidden ? "eye-outline" : "eye-off-outline"}
+                size={12}
+                color={isTimelineHidden ? "#00F2FE" : "#8E95A5"}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </>

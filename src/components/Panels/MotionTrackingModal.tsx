@@ -103,6 +103,9 @@ export default function MotionTrackingModal({
   const [smoothness, setSmoothness] = useState<number>(
     currentTrack?.smoothness ?? 75,
   );
+  const [trackDirection, setTrackDirection] = useState<'forward' | 'backward' | 'bidirectional'>(
+    currentTrack?.trackDirection || 'bidirectional'
+  );
 
   // Tracking Progress & Trajectory
   const [isScanning, setIsScanning] = useState<boolean>(false);
@@ -159,6 +162,7 @@ export default function MotionTrackingModal({
         cameraZoom: overrides?.cameraZoom !== undefined ? overrides.cameraZoom : cameraZoom,
         cameraLockCenter: overrides?.cameraLockCenter !== undefined ? overrides.cameraLockCenter : cameraLockCenter,
         smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
+        trackDirection: overrides?.trackDirection || trackDirection,
         anchorTime: overrides?.anchorTime !== undefined ? overrides.anchorTime : currentTrack?.anchorTime,
         trackingStatus:
           overrides?.trackingStatus ||
@@ -301,6 +305,7 @@ export default function MotionTrackingModal({
         smoothness,
         trackScale,
         trackRotation,
+        direction: trackDirection,
         currentTime: anchorTime,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
@@ -684,41 +689,105 @@ export default function MotionTrackingModal({
             </TouchableOpacity>
           </View>
         ) : (
-          /* Primary Tracking Action Bar */
-          <View style={styles.actionBtnRow}>
-            <TouchableOpacity
-              style={[styles.startTrackBtn, hasTrajectory && styles.retrackBtn]}
-              onPress={handleStartTracking}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={hasTrajectory ? "refresh" : "scan"}
-                size={14}
-                color="#000000"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.startTrackBtnText}>
-                {hasTrajectory ? "RE-TRACK TARGET" : "START TRACKING"}
-              </Text>
-            </TouchableOpacity>
+          /* Primary Tracking Action Bar & Controls */
+          <View style={{ gap: 8 }}>
+            {/* Quick Target Presets & Direction Card */}
+            <View style={styles.trackingConfigCard}>
+              <View style={styles.configRow}>
+                <Text style={styles.configLabel}>Target:</Text>
+                <View style={styles.presetChipGroup}>
+                  {[
+                    { id: "face", label: "Face", rect: { x: 37.5, y: 15, width: 25, height: 25 } },
+                    { id: "upper", label: "Upper", rect: { x: 30, y: 18, width: 40, height: 42 } },
+                    { id: "full", label: "Full", rect: { x: 25, y: 12, width: 50, height: 74 } },
+                    { id: "center", label: "Center", rect: { x: 35, y: 35, width: 30, height: 30 } },
+                  ].map((p) => (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={styles.targetPresetChip}
+                      onPress={() => {
+                        triggerHaptic("selection");
+                        setTargetRect(p.rect);
+                        syncTracking({ targetRect: p.rect });
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.targetPresetChipText}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
-            {hasTrajectory && (
+              <View style={[styles.configRow, { marginTop: 6 }]}>
+                <Text style={styles.configLabel}>Direction:</Text>
+                <View style={styles.directionGroup}>
+                  {[
+                    { id: "bidirectional" as const, label: "Both" },
+                    { id: "forward" as const, label: "Forward" },
+                    { id: "backward" as const, label: "Backward" },
+                  ].map((d) => (
+                    <TouchableOpacity
+                      key={d.id}
+                      style={[
+                        styles.directionChip,
+                        trackDirection === d.id && styles.directionChipActive,
+                      ]}
+                      onPress={() => {
+                        triggerHaptic("selection");
+                        setTrackDirection(d.id);
+                        syncTracking({ trackDirection: d.id });
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.directionChipText,
+                          trackDirection === d.id && styles.directionChipTextActive,
+                        ]}
+                      >
+                        {d.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.actionBtnRow}>
               <TouchableOpacity
-                style={[styles.bakeBtn, bakedSuccess && styles.bakeBtnSuccess]}
-                onPress={handleBakeKeyframes}
-                activeOpacity={0.7}
+                style={[styles.startTrackBtn, hasTrajectory && styles.retrackBtn]}
+                onPress={handleStartTracking}
+                activeOpacity={0.8}
               >
                 <Ionicons
-                  name={bakedSuccess ? "checkmark-circle" : "key-outline"}
-                  size={13}
-                  color={bakedSuccess ? "#10B981" : "#EDEDED"}
-                  style={{ marginRight: 4 }}
+                  name={hasTrajectory ? "refresh" : "scan"}
+                  size={14}
+                  color="#000000"
+                  style={{ marginRight: 6 }}
                 />
-                <Text style={[styles.bakeBtnText, bakedSuccess && styles.bakeBtnTextSuccess]}>
-                  {bakedSuccess ? "Baked!" : "Bake Keyframes"}
+                <Text style={styles.startTrackBtnText}>
+                  {hasTrajectory ? "RE-TRACK TARGET" : "START TRACKING"}
                 </Text>
               </TouchableOpacity>
-            )}
+
+              {hasTrajectory && (
+                <TouchableOpacity
+                  style={[styles.bakeBtn, bakedSuccess && styles.bakeBtnSuccess]}
+                  onPress={handleBakeKeyframes}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={bakedSuccess ? "checkmark-circle" : "key-outline"}
+                    size={13}
+                    color={bakedSuccess ? "#10B981" : "#EDEDED"}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={[styles.bakeBtnText, bakedSuccess && styles.bakeBtnTextSuccess]}>
+                    {bakedSuccess ? "Baked!" : "Bake Keyframes"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
 
@@ -1606,5 +1675,71 @@ const styles = StyleSheet.create({
     color: "#CBD5E1",
     fontSize: 11,
     lineHeight: 15,
+  },
+  trackingConfigCard: {
+    backgroundColor: "#16181F",
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  configRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  configLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94A3B8",
+    width: 58,
+  },
+  presetChipGroup: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 4,
+  },
+  targetPresetChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    borderRadius: 5,
+    backgroundColor: "#0E101A",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  targetPresetChipText: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#CBD5E1",
+  },
+  directionGroup: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 4,
+  },
+  directionChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    borderRadius: 5,
+    backgroundColor: "#0E101A",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  directionChipActive: {
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+  },
+  directionChipText: {
+    fontSize: 9.5,
+    fontWeight: "500",
+    color: "#8E8E93",
+  },
+  directionChipTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
   },
 });

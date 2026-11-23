@@ -23,7 +23,7 @@ import {
   setCachedMediaPeaks,
   getMediaAudioDuration,
 } from "../utils/mediaAudioDetector";
-import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
+import { allocateClipPlacement, allocateNewTrackForClip, getAllTrackClips } from "../utils/trackPlacement";
 import { clearClipMasks } from "../services/selfieSegmentationService";
 
 interface UseProjectFilterEffectsParams {
@@ -390,7 +390,7 @@ export function useProjectFilterEffects({
     ) => {
       const current = projectRef.current || project;
       if (!current) return;
-      const targetId = resolveTargetClipId("video");
+      const targetId = resolveTargetClipId(selectedClipType === "audio" ? "audio" : "video");
       if (!targetId) return;
 
       // Determine effective speed multiplier (from curve points or direct speedVal)
@@ -508,7 +508,7 @@ export function useProjectFilterEffects({
         return;
       }
     },
-    [project, projectRef, resolveTargetClipId, updateProjectWithHistory],
+    [project, projectRef, selectedClipType, resolveTargetClipId, updateProjectWithHistory],
   );
 
   // Apply Volume & Fades to video or audio clips smoothly without flashing spinners
@@ -939,6 +939,150 @@ export function useProjectFilterEffects({
     [project, projectRef, resolveTargetClipId, selectedClipType, updateProjectWithHistory],
   );
 
+  // Add dedicated Adjustment Layer to timeline
+  const handleAddAdjustmentLayer = useCallback(
+    (startTime?: number, duration?: number) => {
+      const current = projectRef.current || project;
+      if (!current) return null;
+      const curTime = currentTimeRef?.current ?? currentTime;
+      const desiredStart = startTime ?? curTime;
+
+      // Smart duration: default to remaining duration of main video or 5.0s
+      let clipDuration = duration;
+      if (!clipDuration) {
+        const mainVid = current.tracks.video?.[0];
+        const remainingDur = mainVid
+          ? Math.max(1, (mainVid.startTime + mainVid.duration) - desiredStart)
+          : 5.0;
+        clipDuration = Math.min(10, Math.max(3.0, remainingDur));
+      }
+
+      // Find top-most track so Adjustment Layer sits ABOVE all video and image tracks
+      const allClips = getAllTrackClips(current);
+      const usedTracks = allClips.map((c) => c.trackIndex);
+      const maxTrack = usedTracks.length > 0 ? Math.max(...usedTracks) : 0;
+      const newTrackIndex = maxTrack + 1;
+
+      const newAdjClip: EffectClip = {
+        id: "eff-adj-" + Date.now(),
+        name: "Adjustment Layer",
+        type: "adjustment",
+        isAdjustmentLayer: true,
+        startTime: Math.max(0, Number(desiredStart.toFixed(3))),
+        duration: Number(clipDuration.toFixed(3)),
+        trackIndex: newTrackIndex,
+        opacity: 1,
+        brightness: 0,
+        contrast: 0,
+        saturation: 0,
+        exposure: 0,
+        temperature: 0,
+        vignette: 0,
+        sharpness: 0,
+      };
+
+      const effectClips = [...(current.tracks.effects || []), newAdjClip];
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, effects: effectClips },
+      });
+
+      if (setSelectedClipId) setSelectedClipId(newAdjClip.id);
+      if (setSelectedClipType) setSelectedClipType("effects");
+      return newAdjClip.id;
+    },
+    [project, projectRef, currentTimeRef, currentTime, updateProjectWithHistory, setSelectedClipId, setSelectedClipType],
+  );
+
+  // Apply color adjustments to adjustment layer or active video clip
+  const handleApplyAdjustments = useCallback(
+    (adjustments: any, clipId?: string) => {
+      const current = projectRef.current || project;
+      if (!current) return;
+
+      const targetId = clipId || selectedClipId;
+      // 1. Check if an effect clip (Adjustment Layer) is targeted
+      if (current.tracks.effects && targetId) {
+        const effIdx = current.tracks.effects.findIndex((e) => e.id === targetId);
+        if (effIdx >= 0) {
+          const effectClips = [...current.tracks.effects];
+          const opacityNorm = adjustments.opacity !== undefined ? adjustments.opacity / 100 : effectClips[effIdx].opacity;
+          effectClips[effIdx] = {
+            ...effectClips[effIdx],
+            brightness: adjustments.brightness ?? effectClips[effIdx].brightness,
+            contrast: adjustments.contrast ?? effectClips[effIdx].contrast,
+            saturation: adjustments.saturation ?? effectClips[effIdx].saturation,
+            exposure: adjustments.exposure ?? effectClips[effIdx].exposure,
+            temperature: adjustments.temperature ?? effectClips[effIdx].temperature,
+            vignette: adjustments.vignette ?? effectClips[effIdx].vignette,
+            sharpness: adjustments.sharpness ?? effectClips[effIdx].sharpness,
+            opacity: opacityNorm,
+          };
+          updateProjectWithHistory({
+            ...current,
+            tracks: { ...current.tracks, effects: effectClips },
+          });
+          return;
+        }
+      }
+
+      // 2. Otherwise apply adjustments directly to the video clip
+      const targetVideoId = targetId || resolveTargetClipId("video");
+      if (targetVideoId) {
+        const videoClips = (current.tracks.video || []).map((c) => {
+          if (c.id === targetVideoId) {
+            return {
+              ...c,
+              brightness: adjustments.brightness,
+              contrast: adjustments.contrast,
+              saturation: adjustments.saturation,
+              exposure: adjustments.exposure,
+              temperature: adjustments.temperature,
+              vignette: adjustments.vignette,
+              sharpness: adjustments.sharpness,
+            };
+          }
+          return c;
+        });
+        updateProjectWithHistory({
+          ...current,
+          tracks: { ...current.tracks, video: videoClips },
+        });
+      }
+    },
+    [project, projectRef, selectedClipId, resolveTargetClipId, updateProjectWithHistory],
+  );
+
+  // Apply AI Auto-Reframe to video clip
+  const handleApplyAutoReframe = useCallback(
+    (config: { targetRatio: string; trackingSpeed?: 'slow' | 'default' | 'fast'; enabled?: boolean }, clipId?: string) => {
+      const current = projectRef.current || project;
+      if (!current) return;
+      const targetId = clipId || selectedClipId || resolveTargetClipId("video");
+      if (!targetId) return;
+
+      const videoClips = (current.tracks.video || []).map((c) => {
+        if (c.id === targetId) {
+          return {
+            ...c,
+            autoReframe: {
+              targetRatio: config.targetRatio,
+              trackingSpeed: config.trackingSpeed || 'default',
+              enabled: config.enabled ?? true,
+            },
+          };
+        }
+        return c;
+      });
+
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, video: videoClips },
+      });
+    },
+    [project, projectRef, selectedClipId, resolveTargetClipId, updateProjectWithHistory],
+  );
+
   return {
     handleApplyFilter,
     handleApplyCutout,
@@ -953,6 +1097,9 @@ export function useProjectFilterEffects({
     handleApplyBlendMode,
     handleApplyHSL,
     handleApplyVoiceEffect,
+    handleAddAdjustmentLayer,
+    handleApplyAdjustments,
+    handleApplyAutoReframe,
     isProcessing,
     processingMessage,
     startProcessing,

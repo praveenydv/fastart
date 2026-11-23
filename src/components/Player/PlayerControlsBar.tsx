@@ -27,6 +27,8 @@ interface PlayerControlsBarProps {
   toggleFullscreen: () => void;
   isMobile: boolean;
   onSeek?: (time: number) => void;
+  isTimelineHidden?: boolean;
+  onToggleHideTimeline?: () => void;
 }
 
 const TimecodePill = React.memo<{
@@ -68,6 +70,8 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
   toggleFullscreen,
   isMobile,
   onSeek,
+  isTimelineHidden = false,
+  onToggleHideTimeline,
 }) => {
   const { width } = useWindowDimensions();
   const isNarrow = width < 375;
@@ -197,13 +201,32 @@ const PlayerControlsBarComponent: React.FC<PlayerControlsBarProps> = ({
           fullscreen ? styles.fullscreenButtonsRow : styles.normalControlsRow
         }
       >
-        {/* Left: Timecode */}
+        {/* Left: Timecode & Timeline Hide Toggle */}
         <View style={styles.controlGroupLeft}>
           <TimecodePill
             currentTime={isDragging ? dragValue : currentTime}
             totalDuration={totalDuration}
             isNarrow={isNarrow}
           />
+          {onToggleHideTimeline && (
+            <TouchableOpacity
+              style={[
+                styles.smallBtn,
+                isTimelineHidden && styles.smallBtnActive,
+                { marginLeft: 4 },
+              ]}
+              onPress={onToggleHideTimeline}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityLabel={isTimelineHidden ? "Show Timeline" : "Hide Timeline"}
+            >
+              <Ionicons
+                name={isTimelineHidden ? "eye-outline" : "eye-off-outline"}
+                size={13}
+                color={isTimelineHidden ? THEME_COLORS.accent : THEME_COLORS.textMuted}
+              />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Center: Frame Step & Play / Pause Button */}

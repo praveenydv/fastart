@@ -2217,8 +2217,15 @@ class RustCoreBridgeService {
 
           ctx.save();
           const strokeW = Math.max(1, Math.min(16, options.strokeWidth));
-          const steps = 12;
+          const isGlow = options.strokeStyle === "glow";
+          const isDotted = options.strokeStyle === "dotted";
+          if (isGlow) {
+            ctx.shadowColor = options.strokeColor;
+            ctx.shadowBlur = strokeW * 3;
+          }
+          const steps = isDotted ? 8 : 12;
           for (let i = 0; i < steps; i++) {
+            if (isDotted && i % 2 === 1) continue;
             const angle = (i * 2 * Math.PI) / steps;
             const ox = Math.round(Math.cos(angle) * strokeW);
             const oy = Math.round(Math.sin(angle) * strokeW);

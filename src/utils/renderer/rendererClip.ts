@@ -75,6 +75,61 @@ export function resolveCompositeOperation(blendMode?: string): GlobalCompositeOp
   }
 }
 
+export function computeAutoReframeCrop(
+  autoReframe: { targetRatio: string; trackingSpeed?: 'slow' | 'default' | 'fast'; enabled?: boolean } | undefined,
+  mw: number,
+  mh: number,
+  motionTrack?: any
+): { x: number; y: number; width: number; height: number } | null {
+  if (!autoReframe || !autoReframe.enabled || !autoReframe.targetRatio || mw <= 0 || mh <= 0) {
+    return null;
+  }
+  let targetAspect = 9 / 16;
+  const r = autoReframe.targetRatio;
+  if (r === "9:16") targetAspect = 9 / 16;
+  else if (r === "1:1") targetAspect = 1.0;
+  else if (r === "4:5") targetAspect = 4 / 5;
+  else if (r === "16:9") targetAspect = 16 / 9;
+  else if (r === "2.35:1") targetAspect = 2.35;
+  else {
+    const parts = r.split(":");
+    if (parts.length === 2) {
+      const num = parseFloat(parts[0]);
+      const den = parseFloat(parts[1]);
+      if (num > 0 && den > 0) targetAspect = num / den;
+    }
+  }
+
+  const sourceAspect = mw / mh;
+  if (Math.abs(sourceAspect - targetAspect) < 0.01) {
+    return { x: 0, y: 0, width: 100, height: 100 };
+  }
+
+  if (sourceAspect > targetAspect) {
+    // Source is wider than target: crop horizontally
+    const targetNormW = Math.max(10, Math.min(100, (targetAspect / sourceAspect) * 100));
+    let centerX = 50;
+    if (motionTrack && motionTrack.enabled && motionTrack.targetRect) {
+      const tr = motionTrack.targetRect;
+      centerX = tr.x + tr.width / 2;
+    }
+    const halfW = targetNormW / 2;
+    const cropX = Math.max(0, Math.min(100 - targetNormW, centerX - halfW));
+    return { x: cropX, y: 0, width: targetNormW, height: 100 };
+  } else {
+    // Source is taller than target: crop vertically
+    const targetNormH = Math.max(10, Math.min(100, (sourceAspect / targetAspect) * 100));
+    let centerY = 50;
+    if (motionTrack && motionTrack.enabled && motionTrack.targetRect) {
+      const tr = motionTrack.targetRect;
+      centerY = tr.y + tr.height / 2;
+    }
+    const halfH = targetNormH / 2;
+    const cropY = Math.max(0, Math.min(100 - targetNormH, centerY - halfH));
+    return { x: 0, y: cropY, width: 100, height: targetNormH };
+  }
+}
+
 const BLEND_MAP: Record<string, GlobalCompositeOperation> = {
   normal: "source-over",
   screen: "screen",
@@ -478,7 +533,9 @@ export function drawClip(
     const mh = (activeMedia as any).videoHeight || (activeMedia as any).naturalHeight || (activeMedia as any).height || clip.height || clip.naturalHeight || 1080;
 
     const isPreviewCropping = renderCtx.previewCropClipId === clip.id;
-    const crop = isPreviewCropping ? null : (clip.crop || clip.transform?.crop);
+    const crop = isPreviewCropping
+      ? null
+      : (clip.crop || clip.transform?.crop || computeAutoReframeCrop(clip.autoReframe, mw, mh, clip.motionTrack));
 
     // Compute base display dimensions of the full video on canvas
     const baseAspect = mw / mh;
@@ -608,8 +665,18 @@ export function drawClip(
         (clip.speed || 1.0) < 1.0
       ) {
         ctx.save();
-        ctx.globalAlpha = clip.smoothSlowMo === "optical_flow" ? 0.35 : 0.22;
-        ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
+        if (clip.smoothSlowMo === "optical_flow") {
+          // Multi-frame bidirectional motion vector blend emulation
+          const flowShiftX = Math.sin(time * 24) * 1.5;
+          const flowShiftY = Math.cos(time * 24) * 0.75;
+          ctx.globalAlpha = 0.38;
+          ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + flowShiftX, -dh / 2 + flowShiftY, dw, dh);
+          ctx.globalAlpha = 0.18;
+          ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 - flowShiftX * 0.5, -dh / 2 - flowShiftY * 0.5, dw, dh);
+        } else {
+          ctx.globalAlpha = 0.25;
+          ctx.drawImage(activeMedia, sx, sy, sw, sh, -dw / 2 + 1, -dh / 2, dw, dh);
+        }
         ctx.restore();
       }
 

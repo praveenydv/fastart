@@ -37,6 +37,22 @@ const VOICE_PRESETS: VoicePreset[] = [
     color: '#71717A',
   },
   {
+    id: 'isolate_vocal',
+    name: 'Isolate Vocals',
+    desc: 'Extract clean speech, strip background music',
+    icon: 'account-voice',
+    badge: 'AI Vocal',
+    color: '#38BDF8',
+  },
+  {
+    id: 'remove_vocal',
+    name: 'Remove Vocals',
+    desc: 'Karaoke mode: mute vocals & keep backing tracks',
+    icon: 'music-off',
+    badge: 'Karaoke',
+    color: '#F43F5E',
+  },
+  {
     id: 'robot',
     name: 'Robot',
     desc: 'Metallic ring synthesizer',

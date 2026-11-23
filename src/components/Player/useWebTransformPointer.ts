@@ -119,8 +119,17 @@ export function useWebTransformPointer({
       if (dragSession.mode === "move") {
         const dx = curX - dragSession.startClientX;
         const dy = curY - dragSession.startClientY;
-        const newCenterX = dragSession.startCenterX + dx;
-        const newCenterY = dragSession.startCenterY + dy;
+        let newCenterX = dragSession.startCenterX + dx;
+        let newCenterY = dragSession.startCenterY + dy;
+
+        // Magnetic Center Snapping (within 6px proximity threshold)
+        const snapThreshold = 6;
+        if (Math.abs(newCenterX - boxWidth / 2) < snapThreshold) {
+          newCenterX = boxWidth / 2;
+        }
+        if (Math.abs(newCenterY - canvasHeight / 2) < snapThreshold) {
+          newCenterY = canvasHeight / 2;
+        }
 
         if (dragSession.clipType === "video") {
           scheduleTransformUpdateRef.current(

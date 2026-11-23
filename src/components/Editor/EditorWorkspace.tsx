@@ -228,6 +228,7 @@ interface EditorWorkspaceProps {
   ) => void;
   handleRotateClip: () => void;
   handleToggleReverse: () => void;
+  handleToggleCompoundClip?: () => void;
   handleOpenTransitionsModal: (clipId: string) => void;
   handleDeselectClip: () => void;
   handleOpenSpeedModal: () => void;
@@ -312,6 +313,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   handleTrimClip,
   handleRotateClip,
   handleToggleReverse,
+  handleToggleCompoundClip,
   handleOpenTransitionsModal,
   handleDeselectClip,
   isProcessing,
@@ -707,19 +709,35 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   );
 
   const handleApplyVolume = React.useCallback(
-    (volume: number, fade?: { in: number; out: number }) => {
+    (
+      volume: number,
+      fade?: { in: number; out: number },
+      denoise?: boolean,
+    ) => {
       const targetId = resolveActiveClipId(
         selectedClipType === "audio" ? "audio" : "video",
       );
       if (!targetId || !project) return;
       const updatedVideos = (project.tracks?.video || []).map((c: any) =>
         c.id === targetId
-          ? { ...c, volume, fadeIn: fade?.in, fadeOut: fade?.out }
+          ? {
+              ...c,
+              volume,
+              fadeIn: fade?.in,
+              fadeOut: fade?.out,
+              ...(denoise !== undefined ? { denoise } : {}),
+            }
           : c,
       );
       const updatedAudios = (project.tracks?.audio || []).map((c: any) =>
         c.id === targetId
-          ? { ...c, volume, fadeIn: fade?.in, fadeOut: fade?.out }
+          ? {
+              ...c,
+              volume,
+              fadeIn: fade?.in,
+              fadeOut: fade?.out,
+              ...(denoise !== undefined ? { denoise } : {}),
+            }
           : c,
       );
       updateProjectWithHistory({
@@ -999,6 +1017,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     windowHeight,
   });
 
+  // Timeline visibility (hide/show toggle)
+  const [isTimelineHidden, setIsTimelineHidden] = React.useState(false);
+  const handleToggleHideTimeline = React.useCallback(() => {
+    setIsTimelineHidden((prev) => !prev);
+  }, []);
+
   // Unified Root Draggable Bottom Container (Hosts either Tool Modal OR Timeline in the exact same space)
   const minBottomHeight = !isDesktop ? 180 : 100;
 
@@ -1014,12 +1038,20 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
   // Active height of the root draggable bottom container - Timeline & Modal share the exact same height and parent!
   const activeBottomHeight = React.useMemo(() => {
+    if (isTimelineHidden && !isMobileInlineActive) return 30;
     if (isDesktop) return currentTimelineHeight;
     return Math.max(
       minBottomHeight,
       Math.min(maxBottomHeight, currentTimelineHeight),
     );
-  }, [isDesktop, minBottomHeight, maxBottomHeight, currentTimelineHeight]);
+  }, [
+    isTimelineHidden,
+    isMobileInlineActive,
+    isDesktop,
+    minBottomHeight,
+    maxBottomHeight,
+    currentTimelineHeight,
+  ]);
 
   const activeBottomHeightRef = React.useRef(activeBottomHeight);
   activeBottomHeightRef.current = activeBottomHeight;
@@ -1231,6 +1263,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       voice_effects: "🎙️ Voice FX",
       blend: "🎨 Blend Mode",
       hsl: "🌈 HSL Color",
+      adjust: "🎛️ Color Adjust",
+      reframe: "📐 Auto-Reframe",
     };
     return activeModal ? TITLES[activeModal] || activeModal : "";
   };
@@ -1274,6 +1308,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       onMoveClip={handleMoveClip}
       onRotateClip={handleRotateClip}
       onToggleReverse={handleToggleReverse}
+      onToggleCompoundClip={handleToggleCompoundClip}
       onFreezeFrame={handleFreezeFrame}
       onOpenSpeedModal={handleOpenSpeedModal}
       onOpenVolumeModal={handleOpenVolumeModal}
@@ -1324,6 +1359,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       onOpenAudioEffectsModal={() => openModal("audio_effects")}
       onOpenBlendModal={() => openModal("blend")}
       onOpenHSLModal={() => openModal("hsl")}
+      onOpenAdjustModal={() => openModal("adjust")}
+      onOpenAutoReframeModal={() => openModal("reframe")}
       onCloseModal={handleCloseMenu}
       onBackToHome={onBackToHome}
     />
@@ -1449,6 +1486,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       onOpenEditModal={handleOpenEditModal}
       onAddMedia={handleAddMediaCb}
       onAddAudio={handleAddAudioCb}
+      isTimelineHidden={isTimelineHidden}
+      onToggleHideTimeline={handleToggleHideTimeline}
     />
   );
 
@@ -1653,6 +1692,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           activeModal={activeModal}
           onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
           onRelinkClip={handleRelinkClip}
+          isTimelineHidden={isTimelineHidden}
+          onToggleHideTimeline={handleToggleHideTimeline}
         />
       </ErrorBoundary>
     );
@@ -1838,8 +1879,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                           getPlaybackTime(),
                         )
                       }
-                      onApplyVolume={(vol, fIn, fOut) =>
-                        handleApplyVolume(vol, { in: fIn, out: fOut })
+                      onApplyVolume={(vol, fIn, fOut, denoise) =>
+                        handleApplyVolume(vol, { in: fIn, out: fOut }, denoise)
                       }
                       onApplySpeed={(speed, curve, slowMo) =>
                         handleApplySpeed(speed, curve, slowMo)
@@ -1847,6 +1888,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       onApplyFilter={handleApplyFilter}
                       onDeleteClip={() => handleDeleteClip()}
                       onDuplicateClip={() => handleDuplicateClip()}
+                      onToggleCompoundClip={handleToggleCompoundClip}
                       onAddKeyframe={onAddKeyframe}
                       hasKeyframeAtPlayhead={isKeyframeAtPlayhead}
                       onOpenModal={openModal}
@@ -2125,8 +2167,8 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                           getPlaybackTime(),
                         )
                       }
-                      onApplyVolume={(vol, fIn, fOut) =>
-                        handleApplyVolume(vol, { in: fIn, out: fOut })
+                      onApplyVolume={(vol, fIn, fOut, denoise) =>
+                        handleApplyVolume(vol, { in: fIn, out: fOut }, denoise)
                       }
                       onApplySpeed={(speed, curve, slowMo) =>
                         handleApplySpeed(speed, curve, slowMo)
@@ -2134,6 +2176,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       onApplyFilter={handleApplyFilter}
                       onDeleteClip={() => handleDeleteClip()}
                       onDuplicateClip={() => handleDuplicateClip()}
+                      onToggleCompoundClip={handleToggleCompoundClip}
                       onAddKeyframe={onAddKeyframe}
                       hasKeyframeAtPlayhead={isKeyframeAtPlayhead}
                       onOpenModal={openModal}
@@ -2177,7 +2220,31 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           </View>
 
           {/* ⑤ Bottom: Full-width Timeline */}
-          <View style={styles.desktopTimelineArea}>{renderTimelineOnly()}</View>
+          {isTimelineHidden ? (
+            <TouchableOpacity
+              style={styles.desktopTimelineCollapsedRail}
+              onPress={handleToggleHideTimeline}
+              activeOpacity={0.8}
+              accessibilityLabel="Show timeline"
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Ionicons name="eye-off-outline" size={13} color="#00F2FE" />
+                <Text style={styles.desktopTimelineCollapsedText}>
+                  Timeline Hidden
+                </Text>
+                <Text style={{ color: "#71717A", fontSize: 10 }}>
+                  • Click to show
+                </Text>
+              </View>
+              <Ionicons name="chevron-up" size={13} color="#00F2FE" />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.desktopTimelineArea}>
+              {renderTimelineOnly()}
+            </View>
+          )}
         </View>
 
         {/* Global Modals for Desktop */}
@@ -2243,58 +2310,75 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
             },
           ]}
         >
-          {/* Unified Grab Handle at the root of the draggable bottom section */}
-          <View
-            style={[
-              styles.bottomDragHandle,
-              isDraggingBottom && styles.bottomDragHandleActive,
-            ]}
-            hitSlop={{ top: 10, bottom: 10, left: 24, right: 24 }}
-            {...(Platform.OS === "web"
-              ? {
-                  onMouseDown: handleBottomDragStart,
-                  onTouchStart: handleBottomDragStart,
+          {isTimelineHidden && !isMobileInlineActive ? (
+            <TouchableOpacity
+              style={styles.mobileTimelineCollapsedRail}
+              onPress={handleToggleHideTimeline}
+              activeOpacity={0.8}
+              accessibilityLabel="Show timeline"
+            >
+              <Ionicons name="eye-off-outline" size={12} color="#00F2FE" />
+              <Text style={styles.mobileTimelineCollapsedText}>
+                Timeline Hidden • Tap to show
+              </Text>
+              <Ionicons name="chevron-up" size={12} color="#00F2FE" />
+            </TouchableOpacity>
+          ) : (
+            <>
+              {/* Unified Grab Handle at the root of the draggable bottom section */}
+              <View
+                style={[
+                  styles.bottomDragHandle,
+                  isDraggingBottom && styles.bottomDragHandleActive,
+                ]}
+                hitSlop={{ top: 10, bottom: 10, left: 24, right: 24 }}
+                {...(Platform.OS === "web"
+                  ? {
+                      onMouseDown: handleBottomDragStart,
+                      onTouchStart: handleBottomDragStart,
+                    }
+                  : bottomDragPanResponder.panHandlers)}
+                accessibilityLabel={
+                  isMobileInlineActive
+                    ? "Drag up to expand tool, drag down to shrink tool"
+                    : "Drag up or down to adjust timeline height"
                 }
-              : bottomDragPanResponder.panHandlers)}
-            accessibilityLabel={
-              isMobileInlineActive
-                ? "Drag up to expand tool, drag down to shrink tool"
-                : "Drag up or down to adjust timeline height"
-            }
-          >
-            <View
-              style={[
-                styles.bottomDragPill,
-                isDraggingBottom && styles.bottomDragPillActive,
-              ]}
-            />
-          </View>
-
-          {/* Direct Root Content: Active Modal Tool OR Timeline + Toolbar (Timeline stays mounted with display:none to guarantee instant 0ms modal open/close) */}
-          <View
-            style={[
-              styles.timelineContentRoot,
-              isMobileInlineActive && { display: "none" },
-            ]}
-          >
-            <View style={styles.timelineBodyWrap}>{renderTimelineOnly()}</View>
-            {renderToolbar("horizontal")}
-          </View>
-
-          {isMobileInlineActive && (
-            <View style={styles.modalContentRoot}>
-              <ModalHeader
-                title={getConfigPanelTitle()}
-                onClose={onCancelModal || handleCloseMenu}
-                closeAriaLabel="Close tool"
-                onDone={onApplyModal || handleCloseMenu}
-                doneAriaLabel="Apply"
-              />
-
-              <View style={styles.modalBodyWrap}>
-                {renderModals ? renderModals(true) : null}
+              >
+                <View
+                  style={[
+                    styles.bottomDragPill,
+                    isDraggingBottom && styles.bottomDragPillActive,
+                  ]}
+                />
               </View>
-            </View>
+
+              {/* Direct Root Content: Active Modal Tool OR Timeline + Toolbar (Timeline stays mounted with display:none to guarantee instant 0ms modal open/close) */}
+              <View
+                style={[
+                  styles.timelineContentRoot,
+                  isMobileInlineActive && { display: "none" },
+                ]}
+              >
+                <View style={styles.timelineBodyWrap}>{renderTimelineOnly()}</View>
+                {renderToolbar("horizontal")}
+              </View>
+
+              {isMobileInlineActive && (
+                <View style={styles.modalContentRoot}>
+                  <ModalHeader
+                    title={getConfigPanelTitle()}
+                    onClose={onCancelModal || handleCloseMenu}
+                    closeAriaLabel="Close tool"
+                    onDone={onApplyModal || handleCloseMenu}
+                    doneAriaLabel="Apply"
+                  />
+
+                  <View style={styles.modalBodyWrap}>
+                    {renderModals ? renderModals(true) : null}
+                  </View>
+                </View>
+              )}
+            </>
           )}
         </Animated.View>
       )}
@@ -2663,6 +2747,38 @@ const styles = StyleSheet.create({
     width: "100%",
     flexShrink: 0,
     backgroundColor: THEME_COLORS.background,
+  },
+  desktopTimelineCollapsedRail: {
+    height: 28,
+    width: "100%",
+    backgroundColor: "#121214",
+    borderTopWidth: 1,
+    borderTopColor: "#1F1F23",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 12,
+  },
+  desktopTimelineCollapsedText: {
+    color: "#00F2FE",
+    fontSize: 10.5,
+    fontWeight: "600" as const,
+  },
+  mobileTimelineCollapsedRail: {
+    height: 30,
+    width: "100%",
+    backgroundColor: "#121214",
+    borderTopWidth: 1,
+    borderTopColor: "#1F1F23",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+  },
+  mobileTimelineCollapsedText: {
+    color: "#00F2FE",
+    fontSize: 10.5,
+    fontWeight: "600" as const,
   },
 
   // ── Mobile / Shared Layout ──

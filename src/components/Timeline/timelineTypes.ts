@@ -131,4 +131,6 @@ export interface TimelineProps {
   onToggleMagnetic?: () => void;
   onAddMedia?: (clip: any) => void;
   onAddAudio?: (clip: any) => void;
+  isTimelineHidden?: boolean;
+  onToggleHideTimeline?: () => void;
 }

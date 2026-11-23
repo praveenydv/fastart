@@ -500,6 +500,38 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
         {/* Unselected Clickable & Immediately Draggable Hit Areas */}
         {unselectedHitboxes}
 
+        {/* Magnetic Center Alignment Guidelines (when item is snapped to center) */}
+        {activeTransformItem && Math.abs(activeTransformItem.pos.x - 50) < 0.25 && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: Math.round(boxWidth / 2),
+              width: 1,
+              backgroundColor: "#00F2FE",
+              zIndex: 9999,
+              opacity: 0.85,
+            }}
+          />
+        )}
+        {activeTransformItem && Math.abs(activeTransformItem.pos.y - 50) < 0.25 && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: Math.round(canvasHeight / 2),
+              height: 1,
+              backgroundColor: "#00F2FE",
+              zIndex: 9999,
+              opacity: 0.85,
+            }}
+          />
+        )}
+
         {/* Active Selected Transform Bounding Box with Hand Drag, Resize & Rotate Handles */}
         {activeTransformItem && (
           <View

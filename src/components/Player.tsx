@@ -135,6 +135,8 @@ function Player({
   containerHeight,
   onUpdateClipMotionTrack,
   onRelinkClip,
+  isTimelineHidden = false,
+  onToggleHideTimeline,
 }: PlayerProps) {
   const currentTime = usePlaybackTime();
   const prevCaptionsRef = useRef<any[]>(EMPTY_ARRAY);
@@ -376,44 +378,60 @@ function Player({
     [project.tracks.effects],
   );
 
+  const isTrackVisible = useCallback(
+    (trackIndex?: number, defaultTrack = 0) => {
+      const hidden = project.hiddenTracks;
+      if (!hidden || hidden.length === 0) return true;
+      const idx = typeof trackIndex === "number" ? trackIndex : defaultTrack;
+      return !hidden.includes(idx);
+    },
+    [project.hiddenTracks],
+  );
+
   const activeCaptions = useMemo(() => {
     const list = project.tracks.captions;
     if (!list || list.length === 0) return EMPTY_ARRAY;
     const filtered = queryTimedIntervalIndex(captionIndex, currentTime, currentTime).filter(
       (c) =>
-        currentTime >= c.startTime && currentTime <= c.startTime + c.duration,
+        isTrackVisible(c.trackIndex, 2) &&
+        currentTime >= c.startTime &&
+        currentTime <= c.startTime + c.duration,
     );
     const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
     const stable = stabilizeArrayRef(prevCaptionsRef.current, next);
     prevCaptionsRef.current = stable;
     return stable;
-  }, [project.tracks.captions, captionIndex, currentTime]);
+  }, [project.tracks.captions, captionIndex, currentTime, isTrackVisible]);
 
   const activeTexts = useMemo(() => {
     const list = project.tracks.text;
     if (!list || list.length === 0) return EMPTY_ARRAY;
     const filtered = queryTimedIntervalIndex(textIndex, currentTime, currentTime).filter(
       (t) =>
-        currentTime >= t.startTime && currentTime <= t.startTime + t.duration,
+        isTrackVisible(t.trackIndex, 2) &&
+        currentTime >= t.startTime &&
+        currentTime <= t.startTime + t.duration,
     );
     const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
     const stable = stabilizeArrayRef(prevTextsRef.current, next);
     prevTextsRef.current = stable;
     return stable;
-  }, [project.tracks.text, textIndex, currentTime]);
+  }, [project.tracks.text, textIndex, currentTime, isTrackVisible]);
 
   const activeStickers = useMemo(() => {
     const list = project.tracks.stickers;
     if (!list || list.length === 0) return EMPTY_ARRAY;
     const filtered = queryTimedIntervalIndex(stickerIndex, currentTime, currentTime).filter(
       (s) =>
-        currentTime >= s.startTime && currentTime <= s.startTime + s.duration,
+        isTrackVisible(s.trackIndex, 3) &&
+        currentTime >= s.startTime &&
+        currentTime <= s.startTime + s.duration,
     );
     const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
     const stable = stabilizeArrayRef(prevStickersRef.current, next);
     prevStickersRef.current = stable;
     return stable;
-  }, [project.tracks.stickers, stickerIndex, currentTime]);
+  }, [project.tracks.stickers, stickerIndex, currentTime, isTrackVisible]);
 
   // Precomputed set of video clip IDs that have adjacent next clips on the same track.
   // Calculated once per track topology change instead of running O(N^2) loops 60 times a second.
@@ -460,6 +478,7 @@ function Player({
     const vids = project.tracks.video;
     if (!vids || vids.length === 0) return EMPTY_ARRAY;
     let filtered = queryTimedIntervalIndex(videoIndex, currentTime, currentTime).filter((v) => {
+      if (!isTrackVisible(v.trackIndex, 0)) return false;
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
@@ -471,7 +490,9 @@ function Player({
     // Boundary recovery: if floating-point precision gap caused 0 clips to be returned at an exact cut boundary,
     // pick the closest adjacent clip within 0.04s so the player never drops a frame
     if (filtered.length === 0 && vids.length > 0) {
-      const near = queryTimedIntervalIndex(videoIndex, currentTime - 0.04, currentTime + 0.04);
+      const near = queryTimedIntervalIndex(videoIndex, currentTime - 0.04, currentTime + 0.04).filter(
+        (v) => isTrackVisible(v.trackIndex, 0),
+      );
       if (near.length > 0) {
         filtered = near.slice(0, 1);
       }
@@ -480,7 +501,7 @@ function Player({
     const stable = stabilizeArrayRef(prevVideosRef.current, next);
     prevVideosRef.current = stable;
     return stable;
-  }, [project.tracks.video, videoIndex, currentTime, adjacentNextClipIds]);
+  }, [project.tracks.video, videoIndex, currentTime, adjacentNextClipIds, isTrackVisible]);
 
   // Buffered native media: keep decoder memory bounded. 4K sources can consume
   // hundreds of MB across decoder surfaces, so only keep one 4K decoder alive.
@@ -488,6 +509,7 @@ function Player({
     const list = project.tracks.video || [];
     if (list.length === 0) return EMPTY_ARRAY;
     let filtered = queryTimedIntervalIndex(videoIndex, currentTime - 0.4, currentTime + 1.2).filter((v) => {
+      if (!isTrackVisible(v.trackIndex, 0)) return false;
       const start = v.startTime;
       const end = v.startTime + v.duration;
       const hasAdjacentNext = adjacentNextClipIds.has(v.id);
@@ -501,7 +523,9 @@ function Player({
     });
 
     if (filtered.length === 0) {
-      const near = queryTimedIntervalIndex(videoIndex, currentTime - 0.05, currentTime + 0.05);
+      const near = queryTimedIntervalIndex(videoIndex, currentTime - 0.05, currentTime + 0.05).filter(
+        (v) => isTrackVisible(v.trackIndex, 0),
+      );
       if (near.length > 0) {
         filtered = near.slice(0, 1);
       } else {
@@ -583,19 +607,22 @@ function Player({
     if (!list || list.length === 0) return EMPTY_ARRAY;
     const filtered = queryTimedIntervalIndex(audioIndex, currentTime, currentTime).filter(
       (a) =>
-        currentTime >= a.startTime && currentTime <= a.startTime + a.duration,
+        isTrackVisible(a.trackIndex, 1) &&
+        currentTime >= a.startTime &&
+        currentTime <= a.startTime + a.duration,
     );
     const next = filtered.length > 0 ? filtered : EMPTY_ARRAY;
     const stable = stabilizeArrayRef(prevAudiosRef.current, next);
     prevAudiosRef.current = stable;
     return stable;
-  }, [project.tracks.audio, audioIndex, currentTime]);
+  }, [project.tracks.audio, audioIndex, currentTime, isTrackVisible]);
 
   // Buffered native audio tracks: includes 1.5s lookahead pre-warming
   const bufferedNativeAudios = useMemo(() => {
     const list = project.tracks.audio;
     if (!list || list.length === 0) return EMPTY_ARRAY;
     const filtered = queryTimedIntervalIndex(audioIndex, currentTime, currentTime + 1.5).filter((a) => {
+      if (!isTrackVisible(a.trackIndex, 1)) return false;
       const start = a.startTime;
       const end = a.startTime + a.duration;
       if (currentTime >= start && currentTime <= end) return true;
@@ -623,7 +650,7 @@ function Player({
     const stable = stabilizeArrayRef(prevBufferedAudiosRef.current, next);
     prevBufferedAudiosRef.current = stable;
     return stable;
-  }, [project.tracks.audio, audioIndex, currentTime]);
+  }, [project.tracks.audio, audioIndex, currentTime, isTrackVisible]);
 
   // Crop Gestures Hook
   const {
@@ -998,6 +1025,8 @@ function Player({
                   !!targetTrackingClip.motionTrack?.trajectory &&
                   targetTrackingClip.motionTrack.trajectory.length > 0
                 }
+                trajectory={targetTrackingClip.motionTrack?.trajectory}
+                currentTime={currentTime}
               />
             ) : !isPlaying ? (
               <PlayerTransformOverlay
@@ -1452,6 +1481,8 @@ function Player({
           fullscreen={fullscreen}
           toggleFullscreen={toggleFullscreen}
           isMobile={isMobile}
+          isTimelineHidden={isTimelineHidden}
+          onToggleHideTimeline={onToggleHideTimeline}
         />
       )}
     </View>

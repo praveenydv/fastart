@@ -37,6 +37,8 @@ export interface CutoutConfig {
   shadow: number; // 0..100 (edge smoothness/feather)
   strokeColor?: string; // outline color e.g. '#00F2FE'
   strokeWidth?: number; // outline width 0..10
+  strokeStyle?: 'solid' | 'glow' | 'dotted'; // outline style preset
+  edgeRefine?: boolean; // AI edge refinement for fine hair & translucent edges
   bgColor?: string; // background fill color e.g. '#000000', '#FFFFFF', '#00F2FE' or 'none'
   clipId?: string;
   clipTime?: number;
@@ -97,6 +99,7 @@ export interface MotionTrackConfig {
   cameraZoom?: number; // Custom camera zoom level (e.g. 1.0 to 2.5, default: 1.25)
   cameraLockCenter?: boolean; // Center the tracked subject at (50%, 50%) of canvas (default: true)
   smoothness?: number; // Damping filter strength 0..100 (default: 60)
+  trackDirection?: 'forward' | 'backward' | 'bidirectional'; // Tracking timeline direction
   anchorTime?: number; // Timeline time where tracking target was selected
   trackingStatus?: 'idle' | 'tracking' | 'completed' | 'failed';
   lastTrackedAt?: number;
@@ -148,7 +151,9 @@ export type VoiceEffectId =
   | 'megaphone'
   | 'echo'
   | 'vinyl'
-  | 'helium';
+  | 'helium'
+  | 'isolate_vocal'
+  | 'remove_vocal';
 
 export type KeyframeEasing =
   | 'linear'
@@ -259,6 +264,9 @@ export interface VideoClip {
   needsPermission?: boolean;
   isLinked?: boolean;
   peaks?: number[];
+  autoReframe?: { targetRatio: string; trackingSpeed?: 'slow' | 'default' | 'fast'; enabled?: boolean };
+  isCompoundClip?: boolean;
+  compoundClips?: any[];
 }
 
 export interface ClipAnimationConfig {
@@ -402,6 +410,16 @@ export interface EffectClip {
   trackIndex?: number;
   layer?: number;
   isWholeProject?: boolean;
+  isAdjustmentLayer?: boolean;
+  hslAdjustments?: HSLAdjustments;
+  opacity?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  exposure?: number;
+  temperature?: number;
+  vignette?: number;
+  sharpness?: number;
 }
 
 export interface ProjectTracks {
@@ -450,6 +468,7 @@ export interface FastArtProject {
   filterIntensity?: number; // 0..1 (default 1.0)
   customLut?: CustomLutConfig;
   assets?: ProjectAsset[];
+  hiddenTracks?: number[];
   tracks: ProjectTracks;
 }
 

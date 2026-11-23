@@ -7,7 +7,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TrackingRect } from '../../types/project';
+import { TrackingRect, TrajectoryPoint } from '../../types/project';
 
 interface PlayerTrackingReticleProps {
   targetRect: TrackingRect; // 0..100%
@@ -17,6 +17,8 @@ interface PlayerTrackingReticleProps {
   isScanning?: boolean;
   scanProgress?: number; // 0..100
   isCompleted?: boolean;
+  trajectory?: TrajectoryPoint[];
+  currentTime?: number;
 }
 
 type DragHandleType = 'pan' | 'nw' | 'ne' | 'sw' | 'se';
@@ -29,6 +31,8 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
   isScanning = false,
   scanProgress = 0,
   isCompleted = false,
+  trajectory,
+  currentTime,
 }) => {
   const rectRef = useRef(targetRect);
   rectRef.current = targetRect;
@@ -301,6 +305,40 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
       ]}
       pointerEvents="box-none"
     >
+      {/* Motion Trajectory Trail / Breadcrumbs */}
+      {trajectory && trajectory.length > 0 && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {trajectory.map((pt, idx) => {
+            const posX = (pt.x / 100) * bw;
+            const posY = (pt.y / 100) * bh;
+            const isCurrent =
+              typeof currentTime === 'number' &&
+              Math.abs(pt.time - currentTime) < 0.15;
+            return (
+              <View
+                key={`traj-${idx}`}
+                style={[
+                  styles.trajectoryDot,
+                  {
+                    left: posX - (isCurrent ? 6 : 2.5),
+                    top: posY - (isCurrent ? 6 : 2.5),
+                    width: isCurrent ? 12 : 5,
+                    height: isCurrent ? 12 : 5,
+                    borderRadius: isCurrent ? 6 : 2.5,
+                    backgroundColor: isCurrent ? '#00F2FE' : 'rgba(0, 242, 254, 0.55)',
+                    borderWidth: isCurrent ? 2 : 0,
+                    borderColor: '#FFFFFF',
+                    shadowColor: '#00F2FE',
+                    shadowRadius: isCurrent ? 6 : 2,
+                    shadowOpacity: isCurrent ? 0.9 : 0.5,
+                  },
+                ]}
+              />
+            );
+          })}
+        </View>
+      )}
+
       {/* Reticle Bounding Box */}
       <View
         style={[
@@ -317,6 +355,36 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         {...panResponder.panHandlers}
         {...webDragProps('pan')}
       >
+        {/* Quick Target Presets Pill Bar (Face, Upper, Full, Center) */}
+        {!isScanning && (
+          <View style={styles.presetsBar} pointerEvents="box-none">
+            {[
+              { id: 'face', label: 'Face', rect: { x: 37.5, y: 15, width: 25, height: 25 } },
+              { id: 'upper', label: 'Upper', rect: { x: 30, y: 18, width: 40, height: 42 } },
+              { id: 'full', label: 'Full', rect: { x: 25, y: 12, width: 50, height: 74 } },
+              { id: 'center', label: 'Center', rect: { x: 35, y: 35, width: 30, height: 30 } },
+            ].map((preset) => (
+              <View
+                key={preset.id}
+                style={styles.presetPill}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  onChangeTargetRect(preset.rect);
+                }}
+                {...(Platform.OS === 'web'
+                  ? {
+                      onMouseDown: (e: any) => {
+                        e.stopPropagation();
+                        onChangeTargetRect(preset.rect);
+                      },
+                    }
+                  : {})}
+              >
+                <Text style={styles.presetPillText}>{preset.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
         {/* Animated Scanning Beam when tracking is in progress */}
         {isScanning && (
           <View
@@ -509,6 +577,31 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  trajectoryDot: {
+    position: 'absolute',
+    zIndex: 10,
+  },
+  presetsBar: {
+    position: 'absolute',
+    top: -28,
+    right: 0,
+    flexDirection: 'row',
+    gap: 4,
+    zIndex: 30,
+  },
+  presetPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(13, 14, 21, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 242, 254, 0.4)',
+  },
+  presetPillText: {
+    color: '#00F2FE',
+    fontSize: 8.5,
+    fontWeight: '700',
   },
 });
 

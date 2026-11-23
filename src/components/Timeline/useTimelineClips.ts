@@ -37,15 +37,17 @@ export function useTimelineClips({
           typeof v.trackIndex === "number"
             ? Math.min(MAX_TRACKS - 1, Math.max(0, v.trackIndex))
             : 0,
-        title: v.title || (isImageClip(v) ? `Photo ${i + 1}` : `Video ${i + 1}`),
-        subtitle: isImageClip(v)
-          ? `Photo • ${v.duration.toFixed(2)}s`
-          : `${v.duration.toFixed(2)}s • ${v.speed || 1}x`,
-        badge: `${i + 1}`,
-        accentColor: THEME_COLORS.primary,
-        bgColor: THEME_COLORS.clipVideoBg,
-        borderColor: THEME_COLORS.borderSubtle,
-        iconName: (isImageClip(v) ? "image" : "videocam") as any,
+        title: v.isCompoundClip ? (v.title || "Compound Clip") : (v.title || (isImageClip(v) ? `Photo ${i + 1}` : `Video ${i + 1}`)),
+        subtitle: v.isCompoundClip
+          ? `Compound (${v.compoundClips?.length || 0}) • ${v.duration.toFixed(2)}s`
+          : (isImageClip(v)
+            ? `Photo • ${v.duration.toFixed(2)}s`
+            : `${v.duration.toFixed(2)}s • ${v.speed || 1}x`),
+        badge: v.isCompoundClip ? "GRP" : `${i + 1}`,
+        accentColor: v.isCompoundClip ? "#00F2FE" : THEME_COLORS.primary,
+        bgColor: v.isCompoundClip ? "rgba(0, 242, 254, 0.15)" : THEME_COLORS.clipVideoBg,
+        borderColor: v.isCompoundClip ? "rgba(0, 242, 254, 0.6)" : THEME_COLORS.borderSubtle,
+        iconName: (v.isCompoundClip ? "layers" : (isImageClip(v) ? "image" : "videocam")) as any,
         rawClip: v,
       })),
       ...audioClips.map((a) => ({
@@ -120,24 +122,29 @@ export function useTimelineClips({
         iconName: "happy" as const,
         rawClip: s,
       })),
-      ...effectClips.map((e) => ({
-        id: e.id,
-        type: "effects" as const,
-        startTime: e.startTime,
-        duration: e.duration,
-        trackIndex: e.trackIndex,
-        effectiveTrackIndex:
-          typeof e.trackIndex === "number"
-            ? Math.min(MAX_TRACKS - 1, Math.max(0, e.trackIndex))
-            : 4,
-        title: e.name || "Effect",
-        subtitle: `FX • ${e.duration.toFixed(2)}s`,
-        accentColor: THEME_COLORS.accent,
-        bgColor: THEME_COLORS.clipEffectBg,
-        borderColor: THEME_COLORS.borderSubtle,
-        iconName: "sparkles" as const,
-        rawClip: e,
-      })),
+      ...effectClips.map((e) => {
+        const isAdj = Boolean((e as any).isAdjustmentLayer || e.type === "adjustment");
+        return {
+          id: e.id,
+          type: "effects" as const,
+          startTime: e.startTime,
+          duration: e.duration,
+          trackIndex: e.trackIndex,
+          effectiveTrackIndex:
+            typeof e.trackIndex === "number"
+              ? Math.min(MAX_TRACKS - 1, Math.max(0, e.trackIndex))
+              : 4,
+          title: e.name || (isAdj ? "Adjustment Layer" : "Effect"),
+          subtitle: isAdj
+            ? `Adjust • ${e.duration.toFixed(2)}s`
+            : `FX • ${e.duration.toFixed(2)}s`,
+          accentColor: isAdj ? "#F59E0B" : THEME_COLORS.accent,
+          bgColor: isAdj ? "rgba(245, 158, 11, 0.22)" : THEME_COLORS.clipEffectBg,
+          borderColor: isAdj ? "rgba(245, 158, 11, 0.55)" : THEME_COLORS.borderSubtle,
+          iconName: isAdj ? ("color-filter" as const) : ("sparkles" as const),
+          rawClip: e,
+        };
+      }),
     ];
   }, [videoClips, audioClips, captionClips, textClips, stickerClips, effectClips]);
 

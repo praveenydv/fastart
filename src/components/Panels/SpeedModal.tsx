@@ -91,7 +91,11 @@ function SpeedModalComponent({
 
   const handleSelectPresetCurve = (curve: any) => {
     setActiveCurveId(curve.id);
-    onApplySpeed(1.5, curve, smoothSlowMo);
+    if (curve.id === 'custom') {
+      setActiveTab('custom');
+      return;
+    }
+    onApplySpeed(1.0, curve, smoothSlowMo);
   };
 
   const handleApplyCustomCurve = () => {

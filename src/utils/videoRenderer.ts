@@ -479,10 +479,12 @@ export class VideoRenderer {
       handledVideoIds.clear();
 
       // Fast track partitioning for O(1) adjacent clip lookups with zero allocation
+      const hiddenTracks = project.hiddenTracks || [];
       const clipsByTrack = this._clipsByTrack;
       clipsByTrack.clear();
       for (let i = 0; i < videoClips.length; i++) {
         const c = videoClips[i];
+        if (hiddenTracks.includes(c.trackIndex || 0)) continue;
         const tIdx = c.trackIndex || 0;
         let trackList = clipsByTrack.get(tIdx);
         if (!trackList) {
@@ -496,6 +498,7 @@ export class VideoRenderer {
       // Check transitions between adjacent clips on the same track
       for (let i = 0; i < videoClips.length; i++) {
         const c = videoClips[i];
+        if (hiddenTracks.includes(c.trackIndex || 0)) continue;
         const cEnd = c.startTime + c.duration;
         const trans = c.transition;
         const transDur =
@@ -858,8 +861,10 @@ export class VideoRenderer {
       }
       for (let i = 0; i < activeCaptions.length; i++) {
         const c = activeCaptions[i];
+        const rawTrk = typeof c.trackIndex === "number" ? c.trackIndex : 2;
+        if (hiddenTracks.includes(rawTrk)) continue;
         let p = this._visualItemPool[poolIdx];
-        const tIdx = (typeof c.trackIndex === "number" ? c.trackIndex : 2) * 100 + 2;
+        const tIdx = rawTrk * 100 + 2;
         if (!p) {
           p = { kind: "caption", clip: c, trackIndex: tIdx };
           this._visualItemPool[poolIdx] = p;
@@ -874,8 +879,10 @@ export class VideoRenderer {
       }
       for (let i = 0; i < activeTexts.length; i++) {
         const t = activeTexts[i];
+        const rawTrk = typeof t.trackIndex === "number" ? t.trackIndex : 2;
+        if (hiddenTracks.includes(rawTrk)) continue;
         let p = this._visualItemPool[poolIdx];
-        const tIdx = (typeof t.trackIndex === "number" ? t.trackIndex : 2) * 100 + 3;
+        const tIdx = rawTrk * 100 + 3;
         if (!p) {
           p = { kind: "text", clip: t, trackIndex: tIdx };
           this._visualItemPool[poolIdx] = p;
@@ -890,8 +897,10 @@ export class VideoRenderer {
       }
       for (let i = 0; i < activeStickers.length; i++) {
         const s = activeStickers[i];
+        const rawTrk = typeof s.trackIndex === "number" ? s.trackIndex : 3;
+        if (hiddenTracks.includes(rawTrk)) continue;
         let p = this._visualItemPool[poolIdx];
-        const tIdx = (typeof s.trackIndex === "number" ? s.trackIndex : 3) * 100 + 4;
+        const tIdx = rawTrk * 100 + 4;
         if (!p) {
           p = { kind: "sticker", clip: s, trackIndex: tIdx };
           this._visualItemPool[poolIdx] = p;
@@ -906,8 +915,10 @@ export class VideoRenderer {
       }
       for (let i = 0; i < activeEffects.length; i++) {
         const e = activeEffects[i];
+        const rawTrk = typeof e.trackIndex === "number" ? e.trackIndex : 4;
+        if (hiddenTracks.includes(rawTrk)) continue;
         let p = this._visualItemPool[poolIdx];
-        const tIdx = (typeof e.trackIndex === "number" ? e.trackIndex : 4) * 100 + 5;
+        const tIdx = rawTrk * 100 + 5;
         if (!p) {
           p = { kind: "effect", clip: e, trackIndex: tIdx };
           this._visualItemPool[poolIdx] = p;

@@ -597,6 +597,8 @@ export function applyEffectOverlay(
   const cw = canvas.width;
   const ch = canvas.height;
   const needsOffscreenSnapshot =
+    eff.isAdjustmentLayer ||
+    eff.type === "adjustment" ||
     eff.type === "glitch" ||
     eff.type === "glitch_shake" ||
     eff.type === "glitchshake" ||
@@ -618,6 +620,53 @@ export function applyEffectOverlay(
   const sourceCanvas = needsOffscreenSnapshot
     ? ensureOffscreen(cw, ch) || canvas
     : canvas;
+
+  if (eff.isAdjustmentLayer || eff.type === "adjustment") {
+    const layerOpacity = eff.opacity !== undefined ? eff.opacity : 1.0;
+    const temp = eff.temperature || 0;
+    const bright = eff.brightness || 0;
+    const vig = eff.vignette || 0;
+    const cont = eff.contrast || 0;
+    const sat = eff.saturation || 0;
+
+    // 1. Color Grading filter pass
+    if (sourceCanvas && (bright !== 0 || cont !== 0 || sat !== 0)) {
+      ctx.save();
+      const bMult = (1 + bright / 100).toFixed(2);
+      const cMult = (1 + cont / 100).toFixed(2);
+      const sMult = (1 + sat / 100).toFixed(2);
+      ctx.filter = `brightness(${bMult}) contrast(${cMult}) saturate(${sMult})`;
+      ctx.globalAlpha = layerOpacity;
+      ctx.drawImage(sourceCanvas, 0, 0, cw, ch, 0, 0, w, h);
+      ctx.restore();
+    }
+
+    // 2. Temperature tint
+    if (temp !== 0) {
+      ctx.save();
+      if (temp > 0) {
+        ctx.fillStyle = `rgba(255, 160, 20, ${Math.min(0.35, (temp / 100) * 0.25 * layerOpacity)})`;
+      } else {
+        ctx.fillStyle = `rgba(0, 140, 255, ${Math.min(0.35, (-temp / 100) * 0.25 * layerOpacity)})`;
+      }
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+
+    // 3. Vignette
+    if (vig > 0) {
+      ctx.save();
+      const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.7);
+      grad.addColorStop(0, "rgba(0,0,0,0)");
+      grad.addColorStop(1, `rgba(0,0,0,${Math.min(0.85, (vig / 100) * 0.75 * layerOpacity)})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+
+    ctx.restore();
+    return;
+  }
 
   if (eff.type === "glitch" || eff.type === "glitch_shake" || eff.type === "glitchshake") {
     // 1. Horizontal slice displacement from source snapshot

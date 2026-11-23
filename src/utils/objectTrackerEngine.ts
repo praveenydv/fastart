@@ -31,6 +31,7 @@ export interface TrackOptions {
   smoothness?: number; // 0..100
   trackScale?: boolean;
   trackRotation?: boolean;
+  direction?: 'forward' | 'backward' | 'bidirectional';
   currentTime?: number;
   signal?: AbortSignal;
   onProgress?: TrackProgressCallback;
@@ -471,6 +472,7 @@ export class ObjectTrackerEngine {
       smoothness = 75,
       trackScale = true,
       trackRotation = false,
+      direction = 'bidirectional',
       currentTime: requestedTime,
       signal,
       onProgress,
@@ -818,66 +820,84 @@ export class ObjectTrackerEngine {
 
       // Forward Pass: anchorIdx + 1 -> totalFrames - 1
       if (anchorIdx < totalFrames - 1) {
-        const forwardState = {
-          currX: initialPixelX,
-          currY: initialPixelY,
-          currScale: 1.0,
-          currRot: 0,
-          velX: 0,
-          velY: 0,
-          template: initialTemplate ? { ...initialTemplate, data: new Float32Array(initialTemplate.data) } : null,
-        };
-
-        for (let frameIdx = anchorIdx + 1; frameIdx < totalFrames; frameIdx++) {
-          if (signal && signal.aborted) break;
-          const fTime = clipStart + frameIdx * stepSec;
-          await processFrame(frameIdx, fTime, forwardState);
-
-          framesCompleted++;
-          const percent = Math.round((framesCompleted / totalFrames) * 100);
-          if (onProgress) {
-            onProgress({
-              percent,
-              currentSec: fTime - clipStart,
-              totalSec: clipDur,
-              statusText: `Scanning Forward ${percent}%`,
-            });
+        if (direction === 'backward') {
+          for (let frameIdx = anchorIdx + 1; frameIdx < totalFrames; frameIdx++) {
+            trajectory[frameIdx] = {
+              ...trajectory[anchorIdx],
+              time: clipStart + frameIdx * stepSec,
+            };
           }
-          if (frameIdx % 3 === 0) {
-            await new Promise((r) => setTimeout(r, 4));
+        } else {
+          const forwardState = {
+            currX: initialPixelX,
+            currY: initialPixelY,
+            currScale: 1.0,
+            currRot: 0,
+            velX: 0,
+            velY: 0,
+            template: initialTemplate ? { ...initialTemplate, data: new Float32Array(initialTemplate.data) } : null,
+          };
+
+          for (let frameIdx = anchorIdx + 1; frameIdx < totalFrames; frameIdx++) {
+            if (signal && signal.aborted) break;
+            const fTime = clipStart + frameIdx * stepSec;
+            await processFrame(frameIdx, fTime, forwardState);
+
+            framesCompleted++;
+            const percent = Math.round((framesCompleted / totalFrames) * 100);
+            if (onProgress) {
+              onProgress({
+                percent,
+                currentSec: fTime - clipStart,
+                totalSec: clipDur,
+                statusText: `Scanning Forward ${percent}%`,
+              });
+            }
+            if (frameIdx % 3 === 0) {
+              await new Promise((r) => setTimeout(r, 4));
+            }
           }
         }
       }
 
       // Backward Pass: anchorIdx - 1 -> 0
       if (anchorIdx > 0) {
-        const backwardState = {
-          currX: initialPixelX,
-          currY: initialPixelY,
-          currScale: 1.0,
-          currRot: 0,
-          velX: 0,
-          velY: 0,
-          template: initialTemplate ? { ...initialTemplate, data: new Float32Array(initialTemplate.data) } : null,
-        };
-
-        for (let frameIdx = anchorIdx - 1; frameIdx >= 0; frameIdx--) {
-          if (signal && signal.aborted) break;
-          const fTime = clipStart + frameIdx * stepSec;
-          await processFrame(frameIdx, fTime, backwardState);
-
-          framesCompleted++;
-          const percent = Math.round((framesCompleted / totalFrames) * 100);
-          if (onProgress) {
-            onProgress({
-              percent,
-              currentSec: fTime - clipStart,
-              totalSec: clipDur,
-              statusText: `Scanning Backward ${percent}%`,
-            });
+        if (direction === 'forward') {
+          for (let frameIdx = anchorIdx - 1; frameIdx >= 0; frameIdx--) {
+            trajectory[frameIdx] = {
+              ...trajectory[anchorIdx],
+              time: clipStart + frameIdx * stepSec,
+            };
           }
-          if (frameIdx % 3 === 0) {
-            await new Promise((r) => setTimeout(r, 4));
+        } else {
+          const backwardState = {
+            currX: initialPixelX,
+            currY: initialPixelY,
+            currScale: 1.0,
+            currRot: 0,
+            velX: 0,
+            velY: 0,
+            template: initialTemplate ? { ...initialTemplate, data: new Float32Array(initialTemplate.data) } : null,
+          };
+
+          for (let frameIdx = anchorIdx - 1; frameIdx >= 0; frameIdx--) {
+            if (signal && signal.aborted) break;
+            const fTime = clipStart + frameIdx * stepSec;
+            await processFrame(frameIdx, fTime, backwardState);
+
+            framesCompleted++;
+            const percent = Math.round((framesCompleted / totalFrames) * 100);
+            if (onProgress) {
+              onProgress({
+                percent,
+                currentSec: fTime - clipStart,
+                totalSec: clipDur,
+                statusText: `Scanning Backward ${percent}%`,
+              });
+            }
+            if (frameIdx % 3 === 0) {
+              await new Promise((r) => setTimeout(r, 4));
+            }
           }
         }
       }

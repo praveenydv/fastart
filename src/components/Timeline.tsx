@@ -83,6 +83,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
   onToggleMagnetic,
   onAddMedia,
   onAddAudio,
+  isTimelineHidden = false,
+  onToggleHideTimeline,
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
@@ -584,6 +586,21 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     [project?.beatMarkers, pxPerSec, visibleXMin, visibleXMax],
   );
 
+  const handleToggleTrackVisibility = useCallback(
+    (trackIdx: number) => {
+      if (!onUpdateProject || !project) return;
+      const currentHidden = project.hiddenTracks || [];
+      const nextHidden = currentHidden.includes(trackIdx)
+        ? currentHidden.filter((t) => t !== trackIdx)
+        : [...currentHidden, trackIdx];
+      onUpdateProject({
+        ...project,
+        hiddenTracks: nextHidden,
+      });
+    },
+    [project, onUpdateProject],
+  );
+
   // Left track header cells (aligned in exact reversed order matching TimelineTracksView)
   const renderedTrackHeaders = useMemo(() => {
     const headers: React.ReactNode[] = [];
@@ -631,6 +648,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     for (let idx = trackRows.length - 1; idx >= 0; idx--) {
       const isSeamActive =
         dragState?.isInsertingNewTrack && dragState?.insertTrackIndex === idx;
+      const isTrackHidden = Boolean(project?.hiddenTracks?.includes(idx));
 
       headers.push(
         <View
@@ -638,6 +656,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
           style={[
             styles.trackHeaderCellUniversal,
             { height: trackRowHeight },
+            isTrackHidden && { opacity: 0.7 },
           ]}
         >
           {/* Inter-Track Boundary Seam Indicator between headers */}
@@ -680,9 +699,34 @@ const TimelineComponent: React.FC<TimelineProps> = ({
           )}
 
           <View style={styles.trackHeaderLabelBox}>
-            <Text style={styles.trackHeaderLabelUniversal}>
+            <Text
+              style={[
+                styles.trackHeaderLabelUniversal,
+                isTrackHidden && { color: "#71717A" },
+              ]}
+            >
               {`T${idx + 1}`}
             </Text>
+            <TouchableOpacity
+              style={[
+                styles.trackHideBtn,
+                isTrackHidden && styles.trackHideBtnHidden,
+              ]}
+              onPress={() => handleToggleTrackVisibility(idx)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityLabel={
+                isTrackHidden
+                  ? `Show timeline ${idx + 1}`
+                  : `Hide timeline ${idx + 1}`
+              }
+            >
+              <Ionicons
+                name={isTrackHidden ? "eye-off" : "eye-outline"}
+                size={11}
+                color={isTrackHidden ? "#00F2FE" : "#71717A"}
+              />
+            </TouchableOpacity>
           </View>
         </View>,
       );
@@ -761,6 +805,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     activeTrackCount,
     handleRemoveTrack,
     trackRowHeight,
+    project?.hiddenTracks,
+    handleToggleTrackVisibility,
   ]);
 
   return (
@@ -808,6 +854,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
         selectedClipType={selectedClipType}
         isMagnetic={isMagnetic}
         onToggleMagnetic={onToggleMagnetic}
+        isTimelineHidden={isTimelineHidden}
+        onToggleHideTimeline={onToggleHideTimeline}
       />
 
       {/* Pinned Sticky Time Ruler Row (pinned to top; tracks scroll vertically underneath) */}
@@ -986,6 +1034,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
                 : {})}
             >
               <TimelineTracksView
+                hiddenTracks={project?.hiddenTracks}
                 beatMarkers={project?.beatMarkers}
                 trackRows={trackRows}
                 activeTrackCount={activeTrackCount}

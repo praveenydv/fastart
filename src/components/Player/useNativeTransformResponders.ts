@@ -145,8 +145,19 @@ export function useNativeTransformResponders({
             );
           }
         } else {
-          const dx = gs.dx;
-          const dy = gs.dy;
+          let dx = gs.dx;
+          let dy = gs.dy;
+
+          // Magnetic Center Snapping (within 6px proximity threshold)
+          const currentPosX = s.startCenterX + dx;
+          const currentPosY = s.startCenterY + dy;
+          if (Math.abs(currentPosX - bw / 2) < 6) {
+            dx = bw / 2 - s.startCenterX;
+          }
+          if (Math.abs(currentPosY - ch / 2) < 6) {
+            dy = ch / 2 - s.startCenterY;
+          }
+
           if (s.clipType === "video" || s.clipType === "photo") {
             scheduleTransformUpdateRef.current(
               s.clipId,

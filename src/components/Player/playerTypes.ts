@@ -56,6 +56,8 @@ export interface PlayerProps {
     newUrl: string,
     sourceMediaId?: string,
   ) => void;
+  isTimelineHidden?: boolean;
+  onToggleHideTimeline?: () => void;
 }
 
 export interface CropPreset {

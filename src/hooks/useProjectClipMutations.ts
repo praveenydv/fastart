@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { Alert } from "react-native";
-import { FastArtProject } from "../types/project";
+import { FastArtProject, VideoClip } from "../types/project";
 import { triggerHaptic } from "../utils/haptics";
 import { deleteMedia } from "../utils/largeMediaStorage";
 import { allocateClipPlacement, allocateNewTrackForClip } from "../utils/trackPlacement";
@@ -662,6 +662,63 @@ export function useProjectClipMutations({
     [project, selectedClipId, selectedClipType, setSelectedClipId, setSelectedClipType, updateProjectWithHistory],
   );
 
+  // Group / Compound Clip & Decompound Separator
+  const handleToggleCompoundClip = useCallback(
+    (targetId?: string) => {
+      if (!project) return;
+      const clipId = targetId || selectedClipId;
+      if (!clipId) return;
+
+      const videoClips = [...(project.tracks.video || [])];
+      const idx = videoClips.findIndex((c) => c.id === clipId);
+      if (idx === -1) return;
+
+      const clip = videoClips[idx];
+      if (clip.isCompoundClip) {
+        // Unpack / Decompound back to original clips
+        startProcessing?.("Unpacking Compound Clip...", 300);
+        if (Array.isArray(clip.compoundClips) && clip.compoundClips.length > 0) {
+          const unpacked = clip.compoundClips.map((c) => ({
+            ...c,
+            startTime: Number((clip.startTime + (c.startTime || 0)).toFixed(3)),
+          }));
+          videoClips.splice(idx, 1, ...unpacked);
+          updateProjectWithHistory({
+            ...project,
+            tracks: { ...project.tracks, video: videoClips },
+          });
+          if (setSelectedClipId) setSelectedClipId(unpacked[0]?.id || null);
+        } else {
+          const reverted: VideoClip = { ...clip, isCompoundClip: false };
+          delete reverted.compoundClips;
+          videoClips[idx] = reverted;
+          updateProjectWithHistory({
+            ...project,
+            tracks: { ...project.tracks, video: videoClips },
+          });
+          if (setSelectedClipId) setSelectedClipId(reverted.id);
+        }
+      } else {
+        // Pack into Compound Clip
+        startProcessing?.("Creating Compound Clip...", 300);
+        const compoundClip: VideoClip = {
+          ...clip,
+          id: "compound-" + Date.now(),
+          title: "Compound Clip",
+          isCompoundClip: true,
+          compoundClips: [{ ...clip, startTime: 0 }],
+        };
+        videoClips[idx] = compoundClip;
+        updateProjectWithHistory({
+          ...project,
+          tracks: { ...project.tracks, video: videoClips },
+        });
+        if (setSelectedClipId) setSelectedClipId(compoundClip.id);
+      }
+    },
+    [project, selectedClipId, startProcessing, updateProjectWithHistory, setSelectedClipId],
+  );
+
   return {
     handleSplitClip,
     handleFreezeFrame,
@@ -675,5 +732,6 @@ export function useProjectClipMutations({
     handleUpdateClipMask,
     handleTrimClip,
     handleMoveClip,
+    handleToggleCompoundClip,
   };
 }

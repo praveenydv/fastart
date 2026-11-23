@@ -56,6 +56,7 @@ interface DesktopInspectorProps {
   onApplyFilter?: (filterId: string) => void;
   onDeleteClip?: () => void;
   onDuplicateClip?: () => void;
+  onToggleCompoundClip?: () => void;
   onAddKeyframe?: () => void;
   hasKeyframeAtPlayhead?: boolean;
   onOpenModal?: (modal: string) => void;
@@ -90,6 +91,7 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
   onApplyFilter,
   onDeleteClip,
   onDuplicateClip,
+  onToggleCompoundClip,
   onAddKeyframe,
   hasKeyframeAtPlayhead = false,
   onOpenModal,
@@ -392,6 +394,22 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
         </View>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          {onToggleCompoundClip && selectedClipType === "video" && (
+            <TouchableOpacity
+              onPress={onToggleCompoundClip}
+              style={[
+                styles.iconBtn,
+                selectedClip?.isCompoundClip && { backgroundColor: "rgba(0, 242, 254, 0.2)" },
+              ]}
+              accessibilityLabel={selectedClip?.isCompoundClip ? "Unpack Compound Clip" : "Create Compound Clip"}
+            >
+              <Ionicons
+                name="layers-outline"
+                size={13}
+                color={selectedClip?.isCompoundClip ? "#00F2FE" : "#8E8E93"}
+              />
+            </TouchableOpacity>
+          )}
           {onDuplicateClip && (
             <TouchableOpacity
               onPress={onDuplicateClip}
@@ -672,6 +690,38 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     : "Open Cutout (Remove Background)"}
                 </Text>
               </TouchableOpacity>
+
+              {/* Quick Pro Actions: Blend Mode, Color Adjust, Auto-Reframe */}
+              <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#27272A", borderRadius: 6, justifyContent: "center" }]}
+                  onPress={() => onOpenModal?.("blend")}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="layers-outline" size={13} color={selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#EDEDED"} />
+                  <Text style={[styles.actionBtnText, { color: selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#EDEDED", fontSize: 10 }]}>Blend</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: "#27272A", borderRadius: 6, justifyContent: "center" }]}
+                  onPress={() => onOpenModal?.("adjust")}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="color-filter-outline" size={13} color="#EDEDED" />
+                  <Text style={[styles.actionBtnText, { color: "#EDEDED", fontSize: 10 }]}>Adjust</Text>
+                </TouchableOpacity>
+
+                {selectedClipType === "video" && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: selectedClip.autoReframe?.enabled ? "#00F2FE" : "#27272A", borderRadius: 6, justifyContent: "center" }]}
+                    onPress={() => onOpenModal?.("reframe")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="crop-outline" size={13} color={selectedClip.autoReframe?.enabled ? "#00F2FE" : "#EDEDED"} />
+                    <Text style={[styles.actionBtnText, { color: selectedClip.autoReframe?.enabled ? "#00F2FE" : "#EDEDED", fontSize: 10 }]}>Reframe</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             {/* Video Audio & Volume Controls (when video has audio) */}

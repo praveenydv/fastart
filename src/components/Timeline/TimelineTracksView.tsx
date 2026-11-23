@@ -18,6 +18,7 @@ import {
 } from "../../utils/mediaAudioDetector";
 
 interface TimelineTracksViewProps {
+  hiddenTracks?: number[];
   beatMarkers?: number[];
   trackRows: UnifiedClipItem[][];
   activeTrackCount: number;
@@ -114,6 +115,7 @@ interface TimelineTracksViewProps {
 }
 
 const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
+  hiddenTracks,
   beatMarkers,
   trackRows,
   activeTrackCount,
@@ -263,6 +265,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
         const isSourceOfDrag =
           dragState && rowClips.some((c) => c.id === dragState.clipId);
         const isTargetOfDrag = dragState && dragState.currentTrack === trackIdx;
+        const isTrackHidden = Boolean(hiddenTracks?.includes(trackIdx));
 
         return (
           <React.Fragment key={`track-row-fragment-${trackIdx}`}>
@@ -274,6 +277,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                   height: effectiveRowHeight,
                   zIndex: isSourceOfDrag ? 10000 : isTargetOfDrag ? 5000 : 1,
                   overflow: "visible",
+                  opacity: isTrackHidden ? 0.38 : 1,
                 },
               ]}
               onPress={() => {

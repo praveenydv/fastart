@@ -565,6 +565,28 @@ export function usePlayerAudioSync({
               nodes.voiceEqMid.gain.setTargetAtTime(16, now, 0.02);
               nodes.voiceEqHigh.frequency.setTargetAtTime(5000, now, 0.02);
               nodes.voiceEqHigh.gain.setTargetAtTime(10, now, 0.02);
+            } else if (effect === "isolate_vocal") {
+              nodes.dryGain.gain.setTargetAtTime(1.0, now, 0.02);
+              nodes.wetGain.gain.setTargetAtTime(0.0, now, 0.02);
+              nodes.voiceEqLow.frequency.setTargetAtTime(300, now, 0.02);
+              nodes.voiceEqLow.gain.setTargetAtTime(-24, now, 0.02);
+              nodes.voiceEqMid.frequency.setTargetAtTime(1800, now, 0.02);
+              nodes.voiceEqMid.gain.setTargetAtTime(12, now, 0.02);
+              nodes.voiceEqHigh.frequency.setTargetAtTime(5500, now, 0.02);
+              nodes.voiceEqHigh.gain.setTargetAtTime(-18, now, 0.02);
+              if (nodes.compressor) {
+                nodes.compressor.threshold.setTargetAtTime(-28, now, 0.02);
+                nodes.compressor.ratio.setTargetAtTime(10, now, 0.02);
+              }
+            } else if (effect === "remove_vocal") {
+              nodes.dryGain.gain.setTargetAtTime(1.0, now, 0.02);
+              nodes.wetGain.gain.setTargetAtTime(0.0, now, 0.02);
+              nodes.voiceEqLow.frequency.setTargetAtTime(250, now, 0.02);
+              nodes.voiceEqLow.gain.setTargetAtTime(4, now, 0.02);
+              nodes.voiceEqMid.frequency.setTargetAtTime(1400, now, 0.02);
+              nodes.voiceEqMid.gain.setTargetAtTime(-24, now, 0.02);
+              nodes.voiceEqHigh.frequency.setTargetAtTime(4000, now, 0.02);
+              nodes.voiceEqHigh.gain.setTargetAtTime(3, now, 0.02);
             }
           }
 

@@ -410,6 +410,9 @@ export default function App() {
     handleApplyBlendMode,
     handleApplyHSL,
     handleApplyVoiceEffect,
+    handleAddAdjustmentLayer,
+    handleApplyAdjustments,
+    handleApplyAutoReframe,
     handleAddCaptions,
     isProcessing,
     processingMessage,
@@ -438,6 +441,7 @@ export default function App() {
     handleDuplicateClip,
     handleRotateClip,
     handleToggleReverse,
+    handleToggleCompoundClip,
     handleUpdateClipTransform,
     handleUpdateClipCrop,
     handleUpdateClipMask,
@@ -905,6 +909,7 @@ export default function App() {
       <EditorModals
         key={isInline ? "inline-modals" : "overlay-modals"}
         activeModal={activeModal}
+        openModal={openModal}
         closeModal={handleCancelModal}
         onCancelModal={handleCancelModal}
         onApplyModal={handleApplyModal}
@@ -954,6 +959,9 @@ export default function App() {
         handleApplyBlendMode={handleApplyBlendMode}
         handleApplyHSL={handleApplyHSL}
         handleApplyVoiceEffect={handleApplyVoiceEffect}
+        handleAddAdjustmentLayer={handleAddAdjustmentLayer}
+        handleApplyAdjustments={handleApplyAdjustments}
+        handleApplyAutoReframe={handleApplyAutoReframe}
         handleAddKeyframe={handleAddKeyframe}
         isKeyframeAtPlayhead={isKeyframeAtPlayhead}
         hasPrevKeyframe={hasPrevKeyframe}
@@ -1036,6 +1044,9 @@ export default function App() {
       handleApplyBlendMode,
       handleApplyHSL,
       handleApplyVoiceEffect,
+      handleAddAdjustmentLayer,
+      handleApplyAdjustments,
+      handleApplyAutoReframe,
       handleAddKeyframe,
       isKeyframeAtPlayhead,
       hasPrevKeyframe,
@@ -1184,6 +1195,7 @@ export default function App() {
                   handleTrimClip={handleTrimClip}
                   handleRotateClip={handleRotateClip}
                   handleToggleReverse={handleToggleReverse}
+                  handleToggleCompoundClip={handleToggleCompoundClip}
                   handleOpenTransitionsModal={handleOpenTransitionsModal}
                   handleDeselectClip={handleDeselectClip}
                   handleOpenSpeedModal={handleOpenSpeedModal}

@@ -13,6 +13,7 @@ import { computeVideoClipDimensions } from "./playerUtils";
 import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking, FILTER_CSS_MAP, scaleCssFilter } from "../../utils/renderer/rendererEffects";
+import { computeAutoReframeCrop } from "../../utils/renderer/rendererClip";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
 import { buildKaraokeWordTimings, getActiveKaraokeIndex } from "../../utils/karaokeEngine";
 import {
@@ -508,6 +509,9 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
     );
   }, [isCutoutActive, effectiveMaskUri]);
 
+  const strokeStyle = cutout?.strokeStyle || "solid";
+  const isGlow = strokeStyle === "glow";
+
   const strokeElements = useMemo(() => {
     if (!hasStroke || !effectiveMaskUri) return null;
     return (
@@ -521,6 +525,15 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
               {
                 transform: [{ translateX: ox * strokeWidth }, { translateY: oy * strokeWidth }],
                 tintColor: strokeColor,
+                opacity: isGlow ? 0.88 : 1.0,
+                ...(isGlow
+                  ? {
+                      shadowColor: strokeColor,
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.9,
+                      shadowRadius: strokeWidth * 2.5,
+                    }
+                  : {}),
               },
             ]}
             contentFit="contain"
@@ -531,7 +544,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
         ))}
       </View>
     );
-  }, [hasStroke, effectiveMaskUri, strokeWidth, strokeColor]);
+  }, [hasStroke, effectiveMaskUri, strokeWidth, strokeColor, isGlow]);
 
   const video = (
     <NativeVideoClipPlayer
@@ -559,13 +572,90 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
 });
 
 function renderEffectContent(
-  eff: { id?: string; type?: string; filter?: string; intensity?: number },
+  eff: {
+    id?: string;
+    type?: string;
+    filter?: string;
+    intensity?: number;
+    isAdjustmentLayer?: boolean;
+    brightness?: number;
+    contrast?: number;
+    saturation?: number;
+    exposure?: number;
+    temperature?: number;
+    vignette?: number;
+    sharpness?: number;
+    opacity?: number;
+  },
   width: number,
   height: number,
   currentTime: number,
 ): React.ReactNode {
   const intensity = eff.intensity !== undefined ? eff.intensity : 0.8;
   const type = (eff.type || "").toLowerCase().replace(/[-_]/g, "");
+
+  // -1. Dedicated Adjustment Layer
+  if (eff.isAdjustmentLayer || type === "adjustment") {
+    const layerOpacity = eff.opacity !== undefined ? eff.opacity : 1.0;
+    const temp = eff.temperature || 0;
+    const bright = eff.brightness || 0;
+    const cont = eff.contrast || 0;
+    const sat = eff.saturation || 0;
+    const exp = eff.exposure || 0;
+    const vig = eff.vignette || 0;
+
+    let tempColor = "transparent";
+    if (temp > 0) {
+      tempColor = `rgba(255, 160, 20, ${Math.min(0.35, (temp / 100) * 0.25 * layerOpacity)})`;
+    } else if (temp < 0) {
+      tempColor = `rgba(0, 140, 255, ${Math.min(0.35, (-temp / 100) * 0.25 * layerOpacity)})`;
+    }
+
+    let brightColor = "transparent";
+    if (bright > 0 && Platform.OS !== "web") {
+      brightColor = `rgba(255, 255, 255, ${Math.min(0.3, (bright / 100) * 0.25 * layerOpacity)})`;
+    } else if (bright < 0 && Platform.OS !== "web") {
+      brightColor = `rgba(0, 0, 0, ${Math.min(0.4, (-bright / 100) * 0.35 * layerOpacity)})`;
+    }
+
+    const bMult = Math.max(0, 1 + ((bright + exp) / 100) * layerOpacity).toFixed(2);
+    const cMult = Math.max(0, 1 + (cont / 100) * layerOpacity).toFixed(2);
+    const sMult = Math.max(0, 1 + (sat / 100) * layerOpacity).toFixed(2);
+
+    const hasBackdrop = bright !== 0 || cont !== 0 || sat !== 0 || exp !== 0;
+    const backdropFilterStyle =
+      Platform.OS === "web" && hasBackdrop
+        ? ({
+            backdropFilter: `brightness(${bMult}) contrast(${cMult}) saturate(${sMult})`,
+            WebkitBackdropFilter: `brightness(${bMult}) contrast(${cMult}) saturate(${sMult})`,
+          } as any)
+        : undefined;
+
+    return (
+      <View key={eff.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {backdropFilterStyle && (
+          <View style={[StyleSheet.absoluteFill, backdropFilterStyle]} />
+        )}
+        {tempColor !== "transparent" && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: tempColor }]} />
+        )}
+        {brightColor !== "transparent" && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: brightColor }]} />
+        )}
+        {vig > 0 && (
+          <LinearGradient
+            colors={[
+              `rgba(0,0,0,${Math.min(0.85, (vig / 100) * 0.7 * layerOpacity)})`,
+              "transparent",
+              "transparent",
+              `rgba(0,0,0,${Math.min(0.85, (vig / 100) * 0.7 * layerOpacity)})`,
+            ]}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+      </View>
+    );
+  }
 
   // 0. Filter clip on timeline
   if (eff.filter || eff.type?.startsWith("filter_")) {
@@ -1414,7 +1504,15 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const cy = canvasHeight / 2 + posY + motionY;
 
         const mask = (isTrans && activeTransient?.mask) ? activeTransient.mask : (kfT?.mask || vid.mask || vid.transform?.mask);
-        const crop = vid.crop || vid.transform?.crop;
+        const crop =
+          vid.crop ||
+          vid.transform?.crop ||
+          computeAutoReframeCrop(
+            vid.autoReframe,
+            clipDims.uncroppedW,
+            clipDims.uncroppedH,
+            vid.motionTrack,
+          );
         const hasCrop =
           !!crop &&
           (crop.width < 100 ||
@@ -1572,7 +1670,18 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
           const blurFilter = clipBlur > 0 ? `blur(${clipBlur}px)` : "";
           const hslFilter = vid.hslAdjustments ? buildHslCssFilter(vid.hslAdjustments) : "";
-          const filterParts = [scaledFilterCss, blurFilter, hslFilter].filter(Boolean);
+          let adjustFilter = "";
+          const vBright = vid.brightness || 0;
+          const vCont = vid.contrast || 0;
+          const vSat = vid.saturation || 0;
+          const vExp = vid.exposure || 0;
+          if (vBright !== 0 || vCont !== 0 || vSat !== 0 || vExp !== 0) {
+            const bMult = Math.max(0, 1 + (vBright + vExp) / 100).toFixed(2);
+            const cMult = Math.max(0, 1 + vCont / 100).toFixed(2);
+            const sMult = Math.max(0, 1 + vSat / 100).toFixed(2);
+            adjustFilter = `brightness(${bMult}) contrast(${cMult}) saturate(${sMult})`;
+          }
+          const filterParts = [scaledFilterCss, blurFilter, hslFilter, adjustFilter].filter(Boolean);
           const filterStr = filterParts.join(" ");
           const webBlurStyle =
             Platform.OS === "web" && filterStr
@@ -1701,7 +1810,18 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         const clipBlur = (vid as any).blur || vid.transform?.blur || 0;
         const blurFilter = clipBlur > 0 ? `blur(${clipBlur}px)` : "";
         const hslFilter = vid.hslAdjustments ? buildHslCssFilter(vid.hslAdjustments) : "";
-        const filterParts = [scaledFilterCss, blurFilter, hslFilter].filter(Boolean);
+        let adjustFilter = "";
+        const vBright = vid.brightness || 0;
+        const vCont = vid.contrast || 0;
+        const vSat = vid.saturation || 0;
+        const vExp = vid.exposure || 0;
+        if (vBright !== 0 || vCont !== 0 || vSat !== 0 || vExp !== 0) {
+          const bMult = Math.max(0, 1 + (vBright + vExp) / 100).toFixed(2);
+          const cMult = Math.max(0, 1 + vCont / 100).toFixed(2);
+          const sMult = Math.max(0, 1 + vSat / 100).toFixed(2);
+          adjustFilter = `brightness(${bMult}) contrast(${cMult}) saturate(${sMult})`;
+        }
+        const filterParts = [scaledFilterCss, blurFilter, hslFilter, adjustFilter].filter(Boolean);
         const filterStr = filterParts.join(" ");
         const webBlurStyle =
           Platform.OS === "web" && filterStr

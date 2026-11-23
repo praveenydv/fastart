@@ -427,7 +427,7 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                       </View>
                     )}
 
-                    {/* Edge Smoothness */}
+                    {/* Edge Smoothness & AI Hair Refinement */}
                     <View style={{ marginTop: 6, marginBottom: 8 }}>
                       <CompactSliderInput
                         label="Smoothness"
@@ -438,6 +438,38 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                         step={1}
                         onChange={(v) => onChange({ ...config, enabled: true, mode: "auto", shadow: v })}
                       />
+                    </View>
+
+                    {/* AI Hair & Edge Refinement Toggle */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        backgroundColor: "#16181F",
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: config?.edgeRefine ? "rgba(0, 242, 254, 0.4)" : "rgba(255, 255, 255, 0.08)",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Ionicons name="sparkles" size={13} color={config?.edgeRefine ? "#00F2FE" : "#94A3B8"} />
+                        <Text style={{ fontSize: 11, color: config?.edgeRefine ? "#00F2FE" : "#EDEDED", fontWeight: "600" }}>
+                          AI Hair & Edge Refine
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[sc.togglePill, config?.edgeRefine && sc.togglePillActive]}
+                        onPress={() => onChange({ ...config, enabled: true, mode: "auto", edgeRefine: !config?.edgeRefine })}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[sc.togglePillText, config?.edgeRefine && sc.togglePillTextActive]}>
+                          {config?.edgeRefine ? "ON" : "OFF"}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
 
                     {(!isAlreadyProcessed || isVideoClip) && (
@@ -701,9 +733,37 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                 />
               </ScrollView>
 
-              {/* Stroke Width Controls (Only if outline active) */}
+              {/* Stroke Width & Style Controls (Only if outline active) */}
               {strokeColor !== "none" && (
                 <View style={sc.outlineControlsSection}>
+                  {/* Outline Style Selector: Solid | Neon Glow | Sticker Dot */}
+                  <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+                    {[
+                      { id: "solid" as const, label: "Solid", icon: "square-outline" as const },
+                      { id: "glow" as const, label: "Neon Glow", icon: "sparkles" as const },
+                      { id: "dotted" as const, label: "Sticker Dot", icon: "radio-button-off" as const },
+                    ].map((st) => {
+                      const isSel = (config?.strokeStyle || "solid") === st.id;
+                      return (
+                        <TouchableOpacity
+                          key={st.id}
+                          style={[sc.outlineStyleBtn, isSel && sc.outlineStyleBtnActive]}
+                          onPress={() => onChange({ ...config, strokeStyle: st.id })}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name={st.icon}
+                            size={11}
+                            color={isSel ? "#00F2FE" : "#8E8E93"}
+                          />
+                          <Text style={[sc.outlineStyleLabel, isSel && sc.outlineStyleLabelActive]}>
+                            {st.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
                   {/* Quick Preset Thickness Pills */}
                   <View style={sc.thicknessPillRow}>
                     {[
@@ -1191,6 +1251,51 @@ const sc = StyleSheet.create({
   thicknessPillTextActive: {
     color: "#00F2FE",
     fontWeight: "500",
+  },
+  outlineStyleBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#141416",
+    borderWidth: 1,
+    borderColor: "#27272A",
+  },
+  outlineStyleBtnActive: {
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+  },
+  outlineStyleLabel: {
+    fontSize: 9.5,
+    fontWeight: "500",
+    color: "#8E8E93",
+  },
+  outlineStyleLabelActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+  togglePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 10,
+    backgroundColor: "#141416",
+    borderWidth: 1,
+    borderColor: "#27272A",
+  },
+  togglePillActive: {
+    backgroundColor: "#00F2FE",
+    borderColor: "#00F2FE",
+  },
+  togglePillText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#71717A",
+  },
+  togglePillTextActive: {
+    color: "#08090E",
   },
 });
 

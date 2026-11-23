@@ -33,6 +33,8 @@ import UnifiedAnimationModal from "../Panels/UnifiedAnimationModal";
 import BlendModeModal from "../Panels/BlendModeModal";
 import HSLAdjustModal from "../Panels/HSLAdjustModal";
 import VoiceEffectsModal from "../Panels/VoiceEffectsModal";
+import AdjustModal from "../Panels/AdjustModal";
+import AutoReframeModal from "../Panels/AutoReframeModal";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { getInterpolatedMask } from "../../utils/keyframeEngine";
 import { usePlaybackTime } from "../../utils/playbackTimeStore";
@@ -162,6 +164,10 @@ interface EditorModalsProps {
   handleDeleteClip?: (targetId?: string, targetType?: string) => void;
   handleDeleteProjectAsset?: (assetId: string, type?: string) => void;
   handleSelectClip?: (id: string, type: any) => void;
+  handleAddAdjustmentLayer?: (startTime?: number, duration?: number) => void;
+  handleApplyAdjustments?: (adjustments: any, clipId?: string) => void;
+  handleApplyAutoReframe?: (config: any, clipId?: string) => void;
+  openModal?: (modal: string) => void;
 }
 
 if (Platform.OS === "web" && typeof document !== "undefined") {
@@ -213,6 +219,8 @@ export const INLINE_MODAL_KEYS = new Set([
   "voice_effects",
   "blend",
   "hsl",
+  "adjust",
+  "reframe",
 ]);
 
 const EditorModalsComponent: React.FC<EditorModalsProps> = ({
@@ -265,6 +273,10 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   handleApplyBlendMode,
   handleApplyHSL,
   handleApplyVoiceEffect,
+  handleAddAdjustmentLayer,
+  handleApplyAdjustments,
+  handleApplyAutoReframe,
+  openModal,
   handleAddKeyframe,
   isKeyframeAtPlayhead,
   hasPrevKeyframe,
@@ -654,6 +666,8 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
               selectedClipType === "audio" || mediaHasAudioTrack(selectedClip)
             }
             onApplyVolume={handleApplyVolume}
+            onApplyVoiceEffect={handleApplyVoiceEffect}
+            onOpenVoiceEffectsModal={() => openModal?.("voice_effects")}
             onExtractAudio={handleExtractAudioFromVideo}
             isInline={isInline}
             project={project}
@@ -999,6 +1013,57 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             />
           );
         })()}
+
+      {/* Tone & Atmosphere Adjustment Modal / Adjustment Layer */}
+      {activeModal === "adjust" && (
+        <AdjustModal
+          visible={true}
+          isInline={isInline}
+          onClose={closeModal}
+          onApply={(adj, explicitClipId) => {
+            if (handleApplyAdjustments) {
+              handleApplyAdjustments(adj, explicitClipId || selectedClip?.id);
+            }
+          }}
+          onAddAdjustmentLayer={handleAddAdjustmentLayer}
+          selectedClip={selectedClip}
+          initialValues={
+            selectedClip
+              ? {
+                  brightness: selectedClip.brightness,
+                  contrast: selectedClip.contrast,
+                  saturation: selectedClip.saturation,
+                  exposure: selectedClip.exposure,
+                  temperature: selectedClip.temperature,
+                  vignette: selectedClip.vignette,
+                  sharpness: selectedClip.sharpness,
+                  opacity:
+                    selectedClip.opacity !== undefined
+                      ? Math.round(selectedClip.opacity * 100)
+                      : 100,
+                }
+              : undefined
+          }
+          isAdjustmentLayer={Boolean(
+            selectedClip?.isAdjustmentLayer || selectedClip?.type === "adjustment",
+          )}
+        />
+      )}
+
+      {/* AI Smart Subject Auto-Reframe Modal */}
+      {activeModal === "reframe" && (
+        <AutoReframeModal
+          visible={true}
+          isInline={isInline}
+          onClose={handleApply}
+          onApply={(cfg) => {
+            if (handleApplyAutoReframe) {
+              handleApplyAutoReframe(cfg, selectedClip?.id);
+            }
+          }}
+          selectedClip={selectedClip?.type === "video" ? selectedClip : null}
+        />
+      )}
 
       {/* Clip Deletion Confirmation Modal */}
       <ConfirmDeleteModal

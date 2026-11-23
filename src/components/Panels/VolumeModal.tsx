@@ -33,9 +33,21 @@ interface VolumeModalProps {
     fadeOut: number,
     denoise?: boolean,
   ) => void;
+  onApplyVoiceEffect?: (effectId: string) => void;
+  onOpenVoiceEffectsModal?: () => void;
   onExtractAudio?: () => void;
   isInline?: boolean;
 }
+
+const QUICK_VOICE_EFFECTS = [
+  { id: "none", label: "Normal", icon: "mic-outline" as const },
+  { id: "isolate_vocal", label: "Isolate Vocals", icon: "person-outline" as const, badge: "AI" },
+  { id: "remove_vocal", label: "Remove Vocals", icon: "musical-notes-outline" as const, badge: "Karaoke" },
+  { id: "deep", label: "Deep Bass", icon: "volume-high-outline" as const },
+  { id: "chipmunk", label: "Chipmunk", icon: "sparkles-outline" as const },
+  { id: "robot", label: "Robot", icon: "hardware-chip-outline" as const },
+  { id: "echo", label: "Echo", icon: "repeat-outline" as const },
+];
 
 function VolumeModalComponent({
   visible,
@@ -52,6 +64,8 @@ function VolumeModalComponent({
   currentTime,
   selectedClip,
   onApplyVolume,
+  onApplyVoiceEffect,
+  onOpenVoiceEffectsModal,
   isInline = false,
 }: VolumeModalProps) {
   const [volume, setVolume] = useState(currentVolume);
@@ -59,6 +73,29 @@ function VolumeModalComponent({
   const [fadeOut, setFadeOut] = useState(currentFadeOut);
   const [denoise, setDenoise] = useState(currentDenoise);
   const [isSliderDragging, setIsSliderDragging] = useState(false);
+
+  const activeVoiceEffect = selectedClip?.voiceEffect || "none";
+
+  const handleSelectVoiceEffect = (effectId: string) => {
+    if (onApplyVoiceEffect) {
+      onApplyVoiceEffect(effectId);
+    } else if (onUpdateProject && project && selectedClip) {
+      const targetId = selectedClip.id;
+      const updatedVideos = (project.tracks?.video || []).map((c: any) =>
+        c.id === targetId ? { ...c, voiceEffect: effectId } : c,
+      );
+      const updatedAudios = (project.tracks?.audio || []).map((c: any) =>
+        c.id === targetId ? { ...c, voiceEffect: effectId } : c,
+      );
+      onUpdateProject({
+        tracks: {
+          ...project.tracks,
+          video: updatedVideos,
+          audio: updatedAudios,
+        },
+      });
+    }
+  };
 
   // Sync when opened
   React.useEffect(() => {
@@ -312,6 +349,74 @@ function VolumeModalComponent({
               />
             </View>
           </TouchableOpacity>
+
+          {/* Voice Effects & Vocal Isolation Card */}
+          <View style={styles.voiceSectionCard}>
+            <View style={styles.voiceHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="mic-outline" size={14} color="#00F2FE" />
+                <Text style={styles.voiceHeaderTitle}>Voice Effects & Vocal Isolation</Text>
+              </View>
+              {onOpenVoiceEffectsModal && (
+                <TouchableOpacity
+                  onPress={onOpenVoiceEffectsModal}
+                  style={styles.voiceMoreBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.voiceMoreText}>All Effects</Text>
+                  <Ionicons name="chevron-forward" size={11} color="#00F2FE" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.voiceChipsScroll}
+            >
+              {QUICK_VOICE_EFFECTS.map((fx) => {
+                const isActive = activeVoiceEffect === fx.id;
+                return (
+                  <TouchableOpacity
+                    key={fx.id}
+                    style={[styles.voiceChip, isActive && styles.voiceChipActive]}
+                    onPress={() => handleSelectVoiceEffect(fx.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={fx.icon}
+                      size={13}
+                      color={isActive ? "#00F2FE" : "#94A3B8"}
+                    />
+                    <Text
+                      style={[
+                        styles.voiceChipText,
+                        isActive && styles.voiceChipTextActive,
+                      ]}
+                    >
+                      {fx.label}
+                    </Text>
+                    {Boolean(fx.badge) && (
+                      <View
+                        style={[
+                          styles.voiceBadge,
+                          isActive && styles.voiceBadgeActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.voiceBadgeText,
+                            isActive && styles.voiceBadgeTextActive,
+                          ]}
+                        >
+                          {fx.badge}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {/* Smart Audio Ducking & Beat Mapping Studio */}
           <BeatAndDuckingCard
@@ -713,5 +818,86 @@ const styles = StyleSheet.create({
   toggleThumbActive: {
     backgroundColor: "#08090E",
     alignSelf: "flex-end",
+  },
+  voiceSectionCard: {
+    backgroundColor: "#16181F",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  voiceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  voiceHeaderTitle: {
+    color: "#F1F5F9",
+    fontSize: 10.5,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  voiceMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "rgba(0, 242, 254, 0.1)",
+  },
+  voiceMoreText: {
+    color: "#00F2FE",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  voiceChipsScroll: {
+    flexDirection: "row",
+    gap: 7,
+    paddingVertical: 2,
+  },
+  voiceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: "#0D0E14",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.07)",
+  },
+  voiceChipActive: {
+    borderColor: "#00F2FE",
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
+  },
+  voiceChipText: {
+    color: "#94A3B8",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  voiceChipTextActive: {
+    color: "#00F2FE",
+    fontWeight: "700",
+  },
+  voiceBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    backgroundColor: "#27272A",
+  },
+  voiceBadgeActive: {
+    backgroundColor: "rgba(0, 242, 254, 0.2)",
+  },
+  voiceBadgeText: {
+    color: "#A1A1AA",
+    fontSize: 7.5,
+    fontWeight: "700",
+  },
+  voiceBadgeTextActive: {
+    color: "#00F2FE",
   },
 });

@@ -71,6 +71,9 @@ export interface ToolbarProps {
   onOpenAudioEffectsModal?: () => void;
   onOpenBlendModal?: () => void;
   onOpenHSLModal?: () => void;
+  onOpenAdjustModal?: () => void;
+  onOpenAutoReframeModal?: () => void;
+  onToggleCompoundClip?: () => void;
   /** ID of the currently-open modal/panel — used to highlight the active toolbar button */
   activeToolId?: string;
   onCloseModal?: () => void;
@@ -84,6 +87,7 @@ const ROOT_TOOLS = [
   { id: "audio", title: "Audio", icon: "music-note-outline" as const },
   { id: "text", title: "Text", icon: "format-text" as const },
   { id: "captions", title: "Captions", icon: "subtitles-outline" as const },
+  { id: "adjust", title: "Adjust", icon: "tune-variant" as const },
   { id: "effects", title: "Effects", icon: "auto-fix" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
   { id: "stickers", title: "Stickers", icon: "emoticon-happy-outline" as const },
@@ -111,9 +115,11 @@ const VIDEO_CLIP_TOOLS = [
   },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "transform", title: "Transform", icon: "crop" as const },
+  { id: "reframe", title: "Reframe", icon: "crop-free" as const },
   { id: "cutout", title: "Cutout", icon: "account-outline" as const },
   { id: "mask", title: "Mask", icon: "shape-outline" as const },
   { id: "blend", title: "Blend", icon: "layers-outline" as const },
+  { id: "adjust", title: "Adjust", icon: "tune-variant" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
   { id: "hsl", title: "HSL", icon: "palette-swatch-outline" as const },
   { id: "effects", title: "Effects", icon: "auto-fix" as const },
@@ -135,6 +141,7 @@ const VIDEO_CLIP_TOOLS = [
   },
   { id: "reverse", title: "Reverse", icon: "rewind-outline" as const },
   { id: "freeze", title: "Freeze", icon: "snowflake" as const },
+  { id: "compound", title: "Compound", icon: "folder-zip-outline" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -147,6 +154,7 @@ const PHOTO_CLIP_TOOLS = [
   { id: "cutout", title: "Cutout", icon: "account-outline" as const },
   { id: "mask", title: "Mask", icon: "shape-outline" as const },
   { id: "blend", title: "Blend", icon: "layers-outline" as const },
+  { id: "adjust", title: "Adjust", icon: "tune-variant" as const },
   { id: "filters", title: "Filters", icon: "palette-outline" as const },
   { id: "hsl", title: "HSL", icon: "palette-swatch-outline" as const },
   { id: "effects", title: "Effects", icon: "auto-fix" as const },
@@ -212,6 +220,16 @@ const EFFECT_CLIP_TOOLS = [
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
 
+const ADJUSTMENT_CLIP_TOOLS = [
+  { id: "adjust", title: "Adjust", icon: "tune-variant" as const },
+  { id: "hsl", title: "HSL", icon: "palette-swatch-outline" as const },
+  { id: "filters", title: "Filters", icon: "palette-outline" as const },
+  { id: "opacity", title: "Opacity", icon: "opacity" as const },
+  { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "copy", title: "Copy", icon: "content-copy" as const },
+  { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
+];
+
 function ToolbarComponent({
   selectedClip,
   selectedClipType = "video",
@@ -253,6 +271,9 @@ function ToolbarComponent({
   onOpenAudioEffectsModal,
   onOpenBlendModal,
   onOpenHSLModal,
+  onOpenAdjustModal,
+  onOpenAutoReframeModal,
+  onToggleCompoundClip,
   activeToolId,
   onCloseModal,
   onBackToHome,
@@ -391,9 +412,12 @@ function ToolbarComponent({
       case "tracking":
         if (onOpenMotionTracking) onOpenMotionTracking();
         break;
+      case "reframe":
+        if (onOpenAutoReframeModal) onOpenAutoReframeModal();
+        break;
       case "adjust":
-      case "enhance":
-        if (onOpenEnhance) onOpenEnhance();
+        if (onOpenAdjustModal) onOpenAdjustModal();
+        else if (onOpenEnhance) onOpenEnhance();
         else onOpenFiltersModal();
         break;
       case "canvas":
@@ -415,6 +439,9 @@ function ToolbarComponent({
         break;
       case "freeze":
         if (onFreezeFrame) onFreezeFrame();
+        break;
+      case "compound":
+        if (onToggleCompoundClip) onToggleCompoundClip();
         break;
       case "copy":
         onDuplicateClip();
@@ -463,7 +490,11 @@ function ToolbarComponent({
       selectedClipType === "effects" ||
       selectedClipType === "effect"
     ) {
-      list = EFFECT_CLIP_TOOLS;
+      if (selectedClip?.isAdjustmentLayer || selectedClip?.type === "adjustment") {
+        list = ADJUSTMENT_CLIP_TOOLS;
+      } else {
+        list = EFFECT_CLIP_TOOLS;
+      }
     } else if (selectedClipType === "photo" || selectedClip?.type === "photo") {
       list = PHOTO_CLIP_TOOLS;
     } else {

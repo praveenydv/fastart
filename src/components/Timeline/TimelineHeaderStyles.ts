@@ -186,7 +186,7 @@ export const headerStyles = {
     flexGrow: 0,
   },
   leftHeadersColumn: {
-    width: 44,
+    width: 48,
     backgroundColor: "#121214",
     borderRightWidth: 1,
     borderRightColor: "#1F1F23",
@@ -194,11 +194,11 @@ export const headerStyles = {
     zIndex: 20,
   },
   leftHeadersColumnMobile: {
-    width: 36,
+    width: 42,
   },
   rulerCornerHeader: {
     height: 24,
-    width: 44,
+    width: 48,
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -209,7 +209,7 @@ export const headerStyles = {
     flexShrink: 0,
   },
   rulerCornerHeaderMobile: {
-    width: 36,
+    width: 42,
   },
   rulerHorizontalScroll: {
     flex: 1,
@@ -234,20 +234,31 @@ export const headerStyles = {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     borderBottomWidth: 1,
     borderBottomColor: "#1F1F23",
     backgroundColor: "#121214",
   },
   trackHeaderLabelBox: {
     flex: 1,
+    flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
+    gap: 3,
   },
   trackHeaderLabelUniversal: {
     fontSize: 9,
-    fontWeight: "400" as const,
+    fontWeight: "600" as const,
     color: "#8E8E93",
+  },
+  trackHideBtn: {
+    padding: 2,
+    borderRadius: 3,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  trackHideBtnHidden: {
+    backgroundColor: "rgba(0, 242, 254, 0.12)",
   },
   trackHeaderEmptySubtext: {
     fontSize: 8,
