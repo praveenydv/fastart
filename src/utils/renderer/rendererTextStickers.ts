@@ -4,6 +4,7 @@ import { generateWordTimings } from "../srtParser";
 import { evaluateClipAnimation } from "../animationEngine";
 import { getInterpolatedTransform } from "../keyframeEngine";
 import { resolveCompositeOperation } from "./rendererClip";
+import { getContextualEmoji } from "../karaokeEngine";
 
 export function drawSticker(
   ctx: CanvasRenderingContext2D,
@@ -795,6 +796,19 @@ export function drawCaptionOverlay(
         ctx.fillStyle = isHighlighted ? highlightColor : baseTextColor;
       }
       ctx.fillText(mw.word, curX, lineY);
+
+      // 3. Draw Contextual Auto-Emoji Badge above highlighted word (CapCut Kinetic Style)
+      if (isHighlighted && (cap as any).autoEmoji !== false) {
+        const emoji = getContextualEmoji(mw.word);
+        if (emoji) {
+          ctx.save();
+          ctx.font = `${Math.round(fontSize * 0.95)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(emoji, curX + mw.width / 2, lineY - fontSize * 0.65);
+          ctx.restore();
+        }
+      }
 
       ctx.restore();
 

@@ -10,6 +10,8 @@ import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable
 import { Ionicons } from "@expo/vector-icons";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { ModalHeader } from "../Common";
+import { BeatAndDuckingCard } from "../Common/BeatAndDuckingCard";
+import { FastArtProject } from "../../types/project";
 
 interface VolumeModalProps {
   visible: boolean;
@@ -21,6 +23,10 @@ interface VolumeModalProps {
   currentDenoise?: boolean;
   isFromVideo?: boolean;
   hasAudio?: boolean;
+  project?: FastArtProject | null;
+  onUpdateProject?: (updates: Partial<FastArtProject>) => void;
+  currentTime?: number;
+  selectedClip?: any;
   onApplyVolume: (
     volume: number,
     fadeIn: number,
@@ -41,6 +47,10 @@ function VolumeModalComponent({
   currentDenoise = false,
   isFromVideo = false,
   hasAudio = true,
+  project,
+  onUpdateProject,
+  currentTime,
+  selectedClip,
   onApplyVolume,
   isInline = false,
 }: VolumeModalProps) {
@@ -242,13 +252,11 @@ function VolumeModalComponent({
             />
           </View>
 
-          {/* AI Audio Denoise Card */}
+          {/* AI Noise Reduction (Denoise) */}
           <TouchableOpacity
             style={[styles.denoiseCard, denoise && styles.denoiseCardActive]}
             onPress={handleToggleDenoise}
             activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle AI Audio Denoise"
           >
             <View style={styles.denoiseLeft}>
               <View
@@ -258,14 +266,14 @@ function VolumeModalComponent({
                 ]}
               >
                 <Ionicons
-                  name={denoise ? "ear" : "ear-outline"}
-                  size={14}
-                  color={denoise ? "#00F2FE" : "#71717A"}
+                  name="ear-outline"
+                  size={13}
+                  color={denoise ? "#00F2FE" : "#94A3B8"}
                 />
               </View>
-              <View style={{ flex: 1 }}>
+              <View>
                 <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 5 }}
                 >
                   <Text
                     style={[
@@ -273,7 +281,7 @@ function VolumeModalComponent({
                       denoise && styles.denoiseTitleActive,
                     ]}
                   >
-                    Denoise
+                    Noise Reduction
                   </Text>
                   <View
                     style={[
@@ -287,23 +295,31 @@ function VolumeModalComponent({
                         denoise && styles.denoiseBadgeTextActive,
                       ]}
                     >
-                      {denoise ? "ON" : "OFF"}
+                      AI
                     </Text>
                   </View>
                 </View>
+                <Text style={styles.denoiseSubtitle}>
+                  Clean background hiss & hum
+                </Text>
               </View>
             </View>
             <View
               style={[styles.toggleTrack, denoise && styles.toggleTrackActive]}
             >
               <View
-                style={[
-                  styles.toggleThumb,
-                  denoise && styles.toggleThumbActive,
-                ]}
+                style={[styles.toggleThumb, denoise && styles.toggleThumbActive]}
               />
             </View>
           </TouchableOpacity>
+
+          {/* Smart Audio Ducking & Beat Mapping Studio */}
+          <BeatAndDuckingCard
+            project={project}
+            onUpdateProject={onUpdateProject}
+            currentTime={currentTime}
+            selectedClip={selectedClip}
+          />
         </View>
       </ScrollView>
     </View>

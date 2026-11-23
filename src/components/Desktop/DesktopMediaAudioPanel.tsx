@@ -25,6 +25,7 @@ export interface DesktopMediaAudioPanelProps {
   onSelectTab: (tab: DesktopResourceTab) => void;
   onAddMedia: (clip: any) => void;
   onAddAudio: (clip: AudioClip) => void;
+  onUpdateProject?: (updates: Partial<FastArtProject>) => void;
   onAddText?: (text: string, color?: string) => void;
   onAddSticker?: (sticker: string) => void;
   onAddEffect?: (effectName: string) => void;
@@ -83,6 +84,7 @@ export const DesktopMediaAudioPanel: React.FC<DesktopMediaAudioPanelProps> = ({
   onSelectTab,
   onAddMedia,
   onAddAudio,
+  onUpdateProject,
   onAddText,
   onAddSticker,
   onAddEffect,

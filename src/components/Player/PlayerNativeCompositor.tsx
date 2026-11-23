@@ -14,6 +14,7 @@ import NativeVideoClipPlayer from "../NativeVideoClipPlayer";
 import NativeAudioTrackPlayer from "../NativeAudioTrackPlayer";
 import { applyMotionTracking, FILTER_CSS_MAP, scaleCssFilter } from "../../utils/renderer/rendererEffects";
 import { evaluateClipAnimation } from "../../utils/animationEngine";
+import { buildKaraokeWordTimings, getActiveKaraokeIndex } from "../../utils/karaokeEngine";
 import {
   buildHslCssFilter,
   isHslActive,
@@ -35,6 +36,8 @@ interface PlayerNativeCompositorProps {
   canvasHeight: number;
   onSelectClip?: (id: string | null, type?: string) => void;
   canvasBackground?: string;
+  audioDucking?: boolean;
+  audioDuckingLevel?: number;
   getItemBaseDimensions: (
     type: "text" | "sticker" | "video" | "caption",
     clip: any,
@@ -1229,6 +1232,8 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
   boxWidth,
   canvasHeight,
   canvasBackground,
+  audioDucking = false,
+  audioDuckingLevel = 0.3,
   onSelectClip,
   getItemBaseDimensions,
   getInterpolatedTransform,
@@ -2085,37 +2090,158 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
               ],
             }}
           >
-            <Text
-              numberOfLines={6}
-              style={[
-                {
-                  color: cap.style?.color || "#FFE600",
-                  fontSize: Math.max(10, fontSize * s * previewScale),
-                  fontWeight: (cap.style?.fontWeight as any) || "900",
-                  backgroundColor: cap.style?.backgroundColor || "transparent",
-                  textAlign: "center",
-                  flexWrap: "wrap",
-                  paddingHorizontal: 12 * s * previewScale,
-                  paddingVertical: 5 * s * previewScale,
-                  borderRadius: 6,
-                  maxWidth: "100%",
-                  ...(Platform.OS === "web" && isCapStroke
-                    ? ({
-                        WebkitTextStroke: `${capStrokeW}px ${capStrokeC}`,
-                        textShadow: `${-capStrokeW}px ${-capStrokeW}px 0 ${capStrokeC}, ${capStrokeW}px ${-capStrokeW}px 0 ${capStrokeC}, ${-capStrokeW}px ${capStrokeW}px 0 ${capStrokeC}, ${capStrokeW}px ${capStrokeW}px 0 ${capStrokeC}`,
-                      } as any)
-                    : isCapStroke
-                      ? {
-                          textShadowColor: capStrokeC,
-                          textShadowRadius: capStrokeW,
-                          textShadowOffset: { width: 0, height: 0 },
+            {(() => {
+              const isKaraokeMode =
+                Boolean(cap.enableWordHighlight) ||
+                cap.animation === "karaoke" ||
+                (cap.words && cap.words.length > 0);
+
+              const wordTimings = isKaraokeMode
+                ? buildKaraokeWordTimings(
+                    displayCapText,
+                    duration,
+                    cap.words,
+                    cap.autoEmoji !== false
+                  )
+                : null;
+
+              const activeWordIdx = wordTimings
+                ? getActiveKaraokeIndex(wordTimings, elapsed)
+                : -1;
+
+              const baseFontSize = Math.max(10, fontSize * s * previewScale);
+              const highlightCol = cap.highlightColor || "#FFE600";
+              const highlightSt = cap.highlightStyle || "color";
+
+              if (wordTimings && wordTimings.length > 1) {
+                return (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      maxWidth: "100%",
+                      paddingHorizontal: 8 * s * previewScale,
+                    }}
+                  >
+                    {wordTimings.map((wt, wIdx) => {
+                      const isActive = wIdx === activeWordIdx;
+                      const isPast = wIdx < activeWordIdx;
+
+                      let wordColor = cap.style?.color || "#FFFFFF";
+                      let wordBg = "transparent";
+                      let wordTransform: any[] = [];
+                      let wordShadow: any = {};
+
+                      if (isActive) {
+                        wordColor = highlightCol;
+                        if (highlightSt === "box") {
+                          wordBg = highlightCol;
+                          wordColor = "#000000";
+                        } else if (highlightSt === "glow") {
+                          wordShadow = {
+                            textShadowColor: highlightCol,
+                            textShadowRadius: 10,
+                            textShadowOffset: { width: 0, height: 0 },
+                          };
+                        } else if (highlightSt === "scale") {
+                          wordTransform = [{ scale: 1.16 }];
                         }
-                      : {}),
-                },
-              ]}
-            >
-              {displayCapText}
-            </Text>
+                      } else if (isPast) {
+                        wordColor = cap.style?.color || "#FFFFFF";
+                      } else {
+                        wordColor = "rgba(255, 255, 255, 0.75)";
+                      }
+
+                      return (
+                        <View
+                          key={wIdx}
+                          style={{
+                            marginHorizontal: 3 * s * previewScale,
+                            marginVertical: 2,
+                            alignItems: "center",
+                            transform: wordTransform,
+                          }}
+                        >
+                          {isActive && wt.emoji ? (
+                            <Text
+                              style={{
+                                fontSize: baseFontSize * 0.95,
+                                marginBottom: 1,
+                              }}
+                            >
+                              {wt.emoji}
+                            </Text>
+                          ) : null}
+                          <Text
+                            style={[
+                              {
+                                color: wordColor,
+                                fontSize: baseFontSize,
+                                fontWeight: (cap.style?.fontWeight as any) || "900",
+                                backgroundColor: wordBg,
+                                paddingHorizontal: highlightSt === "box" && isActive ? 5 : 0,
+                                borderRadius: 4,
+                                textDecorationLine: highlightSt === "underline" && isActive ? "underline" : "none",
+                                ...(Platform.OS === "web" && isCapStroke
+                                  ? ({
+                                      WebkitTextStroke: `${capStrokeW}px ${capStrokeC}`,
+                                    } as any)
+                                  : isCapStroke
+                                    ? {
+                                        textShadowColor: capStrokeC,
+                                        textShadowRadius: capStrokeW,
+                                        textShadowOffset: { width: 0, height: 0 },
+                                      }
+                                    : {}),
+                                ...wordShadow,
+                              },
+                            ]}
+                          >
+                            {wt.word}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              }
+
+              return (
+                <Text
+                  numberOfLines={6}
+                  style={[
+                    {
+                      color: cap.style?.color || "#FFE600",
+                      fontSize: baseFontSize,
+                      fontWeight: (cap.style?.fontWeight as any) || "900",
+                      backgroundColor: cap.style?.backgroundColor || "transparent",
+                      textAlign: "center",
+                      flexWrap: "wrap",
+                      paddingHorizontal: 12 * s * previewScale,
+                      paddingVertical: 5 * s * previewScale,
+                      borderRadius: 6,
+                      maxWidth: "100%",
+                      ...(Platform.OS === "web" && isCapStroke
+                        ? ({
+                            WebkitTextStroke: `${capStrokeW}px ${capStrokeC}`,
+                            textShadow: `${-capStrokeW}px ${-capStrokeW}px 0 ${capStrokeC}, ${capStrokeW}px ${-capStrokeW}px 0 ${capStrokeC}, ${-capStrokeW}px ${capStrokeW}px 0 ${capStrokeC}, ${capStrokeW}px ${capStrokeW}px 0 ${capStrokeC}`,
+                          } as any)
+                        : isCapStroke
+                          ? {
+                              textShadowColor: capStrokeC,
+                              textShadowRadius: capStrokeW,
+                              textShadowOffset: { width: 0, height: 0 },
+                            }
+                          : {}),
+                    },
+                  ]}
+                >
+                  {displayCapText}
+                </Text>
+              );
+            })()}
           </TouchableOpacity>
         );
       })}
@@ -2242,14 +2368,25 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
       })}
 
       {/* Layer 5: Active Dedicated Audio Tracks (BGM, Voiceover, SFX) */}
-      {activeAudios.map((audio) => (
-        <NativeAudioTrackPlayer
-          key={audio.id}
-          clip={audio}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-        />
-      ))}
+      {(() => {
+        const hasActiveSpeechOrVideoAudio =
+          activeVideos.some((v) => v.hasAudio !== false && !v.muted && (v.volume === undefined || v.volume > 0)) ||
+          activeAudios.some((a) => a.isVoiceover);
+
+        return activeAudios.map((audio) => {
+          const isDucked = Boolean(audioDucking && hasActiveSpeechOrVideoAudio && !audio.isVoiceover);
+          return (
+            <NativeAudioTrackPlayer
+              key={audio.id}
+              clip={audio}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              isDucked={isDucked}
+              duckingMultiplier={audioDuckingLevel}
+            />
+          );
+        });
+      })()}
     </View>
   );
 };

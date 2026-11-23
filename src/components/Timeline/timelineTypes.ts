@@ -127,6 +127,8 @@ export interface TimelineProps {
   onTimelineHeightChange?: (height: number) => void;
   onOpenEditModal?: (clipId: string, clipType: string) => void;
   settings?: any;
+  isMagnetic?: boolean;
+  onToggleMagnetic?: () => void;
   onAddMedia?: (clip: any) => void;
   onAddAudio?: (clip: any) => void;
 }

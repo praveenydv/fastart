@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Image } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import { VideoClip } from '../types/project';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import { THEME_COLORS } from '../constants/designConstants';
-import { registerMediaDimensions } from './Player/playerUtils';
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet, Text, Image } from "react-native";
+import { Image as ExpoImage } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
+import { VideoClip } from "../types/project";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { THEME_COLORS } from "../constants/designConstants";
+import { registerMediaDimensions } from "./Player/playerUtils";
 
 interface NativeVideoClipPlayerProps {
   clip: VideoClip;
@@ -23,46 +23,56 @@ function NativeVideoClipPlayerComponent({
   opacity,
   isInside: isInsideProp,
 }: NativeVideoClipPlayerProps) {
-  const mediaUri = clip.url || clip.thumbnail || '';
+  const mediaUri = clip.url || clip.thumbnail || "";
   // Trust the explicit media type. A `file://` URI can point to either a photo
   // or a video; treating every local file as video creates a decoder for large
   // photos and can exhaust native memory.
   const uriPath = mediaUri.split(/[?#]/, 1)[0].toLowerCase();
-  const isVideo = clip.type === 'video' || (
-    !clip.type && /\.(mp4|mov|webm|m4v|3gp|mkv|ts)$/.test(uriPath)
-  );
+  const isVideo =
+    clip.type === "video" ||
+    (!clip.type && /\.(mp4|mov|webm|m4v|3gp|mkv|ts)$/.test(uriPath));
 
   const clipDuration = Math.max(0.05, clip.duration || 10);
   const effSpeed = Math.max(0.1, Math.min(16, clip.speed || 1.0));
-  const isInside = isInsideProp !== undefined
-    ? isInsideProp
-    : currentTime >= clip.startTime && currentTime <= clip.startTime + clipDuration;
+  const isInside =
+    isInsideProp !== undefined
+      ? isInsideProp
+      : currentTime >= clip.startTime &&
+        currentTime <= clip.startTime + clipDuration;
   const isUpcoming = currentTime < clip.startTime;
-  const isRecent = isInsideProp !== undefined
-    ? !isInside && currentTime >= clip.startTime + clipDuration
-    : currentTime > clip.startTime + clipDuration;
+  const isRecent =
+    isInsideProp !== undefined
+      ? !isInside && currentTime >= clip.startTime + clipDuration
+      : currentTime > clip.startTime + clipDuration;
 
   // Frame-accurate position accounting for trimIn, speed, reverse, and lookahead pre-warming
   const elapsed = isUpcoming
     ? 0
     : isRecent
-    ? clipDuration
-    : Math.max(0, Math.min(clipDuration, currentTime - clip.startTime));
+      ? clipDuration
+      : Math.max(0, Math.min(clipDuration, currentTime - clip.startTime));
 
   const targetMediaTime = clip.reverse
     ? Math.max(
         0,
-        (clip.trimOut || (clip.trimIn || 0) + clipDuration) - elapsed * effSpeed,
+        (clip.trimOut || (clip.trimIn || 0) + clipDuration) -
+          elapsed * effSpeed,
       )
     : (clip.trimIn || 0) + elapsed * effSpeed;
 
-  const effectiveOpacity = opacity !== undefined ? Math.max(0, Math.min(1, opacity)) : 1;
+  const effectiveOpacity =
+    opacity !== undefined ? Math.max(0, Math.min(1, opacity)) : 1;
 
   // Pre-load natural dimensions from photo or thumbnail for immediate portrait/landscape alignment
   useEffect(() => {
     if (mediaUri && (!clip.width || !clip.height)) {
       const targetUri = clip.thumbnail || mediaUri;
-      if (typeof targetUri === 'string' && (targetUri.startsWith('file:') || targetUri.startsWith('http') || targetUri.startsWith('content:'))) {
+      if (
+        typeof targetUri === "string" &&
+        (targetUri.startsWith("file:") ||
+          targetUri.startsWith("http") ||
+          targetUri.startsWith("content:"))
+      ) {
         Image.getSize(
           targetUri,
           (w, h) => {
@@ -71,7 +81,7 @@ function NativeVideoClipPlayerComponent({
               registerMediaDimensions(clip.id, w, h);
             }
           },
-          () => {}
+          () => {},
         );
       }
     }
@@ -81,10 +91,31 @@ function NativeVideoClipPlayerComponent({
     return (
       <View style={styles.fallbackBox}>
         <Ionicons name="film-outline" size={32} color={THEME_COLORS.accent} />
-        <Text style={styles.fallbackTitle}>{clip.title || 'Video Clip'}</Text>
+        <Text style={styles.fallbackTitle}>{clip.title || "Video Clip"}</Text>
       </View>
     );
   }
+
+  const clipVol = clip.volume !== undefined ? clip.volume : 1.0;
+  const newElapsed = Math.max(0, currentTime - (clip.startTime || 0));
+  const clipDur = clip.duration || 10;
+  const remaining = Math.max(0, clipDur - newElapsed);
+  let fadeMultiplier = 1.0;
+  if (clip.fadeIn && clip.fadeIn > 0 && newElapsed < clip.fadeIn) {
+    fadeMultiplier = Math.min(
+      fadeMultiplier,
+      Math.max(0, newElapsed / clip.fadeIn),
+    );
+  }
+  if (clip.fadeOut && clip.fadeOut > 0 && remaining < clip.fadeOut) {
+    fadeMultiplier = Math.min(
+      fadeMultiplier,
+      Math.max(0, remaining / clip.fadeOut),
+    );
+  }
+  const effectiveVolume = clip.muted
+    ? 0
+    : Math.max(0, Math.min(1, clipVol * fadeMultiplier));
 
   if (isVideo) {
     return (
@@ -93,7 +124,8 @@ function NativeVideoClipPlayerComponent({
         clipId={clip.id}
         targetMediaTime={targetMediaTime}
         isPlaying={isPlaying}
-        muted={!isInside || (clip.volume !== undefined ? clip.volume === 0 : false)}
+        muted={!isInside || effectiveVolume === 0}
+        volume={effectiveVolume}
         speed={effSpeed}
         fallbackThumbnail={clip.thumbnail}
         isInside={isInside}
@@ -112,7 +144,11 @@ function NativeVideoClipPlayerComponent({
       transition={120}
       onLoad={(evt) => {
         if (evt.source?.width && evt.source?.height) {
-          registerMediaDimensions(mediaUri, evt.source.width, evt.source.height);
+          registerMediaDimensions(
+            mediaUri,
+            evt.source.width,
+            evt.source.height,
+          );
           registerMediaDimensions(clip.id, evt.source.width, evt.source.height);
         }
       }}
@@ -126,6 +162,7 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
   targetMediaTime,
   isPlaying,
   muted,
+  volume = 1.0,
   speed,
   fallbackThumbnail,
   isInside,
@@ -136,6 +173,7 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
   targetMediaTime: number;
   isPlaying: boolean;
   muted: boolean;
+  volume?: number;
   speed: number;
   fallbackThumbnail?: string;
   isInside: boolean;
@@ -168,13 +206,18 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     p.loop = false;
     p.muted = muted;
     p.playbackRate = speed;
+    if (typeof (p as any).volume === "number") {
+      (p as any).volume = muted ? 0 : Math.max(0, Math.min(1, volume));
+    }
     try {
       p.currentTime = targetMediaTime;
       lastSeekTargetRef.current = targetMediaTime;
     } catch {}
   });
 
-  const [isReady, setIsReady] = useState(() => (player as any)?.status === "readyToPlay");
+  const [isReady, setIsReady] = useState(
+    () => (player as any)?.status === "readyToPlay",
+  );
 
   // Track status changes and perform one-time initial frame pre-warm when ready
   useEffect(() => {
@@ -182,34 +225,56 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     if ((player as any).status === "readyToPlay") {
       setIsReady(true);
     }
-    const sub = (player as any).addListener?.("statusChange", (payload: any) => {
-      if (payload?.status === "error" || payload?.error) {
-        setHasError(true);
-      } else if (payload?.status === "readyToPlay") {
-        setIsReady(true);
-        const curTarget = targetMediaTimeRef.current;
-        if (!isPlayingRef.current && Math.abs(player.currentTime - curTarget) > 0.05) {
-          try {
-            player.currentTime = curTarget;
-            lastSeekTargetRef.current = curTarget;
-          } catch {}
+    const sub = (player as any).addListener?.(
+      "statusChange",
+      (payload: any) => {
+        if (payload?.status === "error" || payload?.error) {
+          setHasError(true);
+        } else if (payload?.status === "readyToPlay") {
+          setIsReady(true);
+          const curTarget = targetMediaTimeRef.current;
+          if (
+            !isPlayingRef.current &&
+            Math.abs(player.currentTime - curTarget) > 0.05
+          ) {
+            try {
+              player.currentTime = curTarget;
+              lastSeekTargetRef.current = curTarget;
+            } catch {}
+          }
         }
-      }
-    });
-    const subSource = (player as any).addListener?.("sourceLoad", (payload: any) => {
-      const track = payload?.availableVideoTracks?.[0];
-      if (track?.size?.width && track?.size?.height) {
-        registerMediaDimensions(uri, track.size.width, track.size.height);
-        if (clipId) registerMediaDimensions(clipId, track.size.width, track.size.height);
-      }
-    });
-    const subTrack = (player as any).addListener?.("videoTrackChange", (payload: any) => {
-      const track = payload?.videoTrack;
-      if (track?.size?.width && track?.size?.height) {
-        registerMediaDimensions(uri, track.size.width, track.size.height);
-        if (clipId) registerMediaDimensions(clipId, track.size.width, track.size.height);
-      }
-    });
+      },
+    );
+    const subSource = (player as any).addListener?.(
+      "sourceLoad",
+      (payload: any) => {
+        const track = payload?.availableVideoTracks?.[0];
+        if (track?.size?.width && track?.size?.height) {
+          registerMediaDimensions(uri, track.size.width, track.size.height);
+          if (clipId)
+            registerMediaDimensions(
+              clipId,
+              track.size.width,
+              track.size.height,
+            );
+        }
+      },
+    );
+    const subTrack = (player as any).addListener?.(
+      "videoTrackChange",
+      (payload: any) => {
+        const track = payload?.videoTrack;
+        if (track?.size?.width && track?.size?.height) {
+          registerMediaDimensions(uri, track.size.width, track.size.height);
+          if (clipId)
+            registerMediaDimensions(
+              clipId,
+              track.size.width,
+              track.size.height,
+            );
+        }
+      },
+    );
     return () => {
       sub?.remove?.();
       subSource?.remove?.();
@@ -221,14 +286,17 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     isPlayingRef.current = isPlaying && isInside;
   }, [isPlaying, isInside]);
 
-  // Sync muted & speed
+  // Sync muted, volume & speed
   useEffect(() => {
     if (!player || hasError) return;
     try {
       player.muted = muted;
       player.playbackRate = speed;
+      if (typeof (player as any).volume === "number") {
+        (player as any).volume = muted ? 0 : Math.max(0, Math.min(1, volume));
+      }
     } catch {}
-  }, [player, muted, speed, hasError]);
+  }, [player, muted, volume, speed, hasError]);
 
   // Seamless cut boundary play / pause transition:
   // When isInside becomes true during playback, start immediately from pre-warmed buffer without redundant seek
@@ -255,7 +323,10 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
         // Stay paused and hold pre-warmed frame
         player.pause();
         // If paused and not actively playing across a cut, seek to target frame so it is pre-warmed & ready
-        if (!isPlaying && Math.abs(lastSeekTargetRef.current - curTarget) > 0.03) {
+        if (
+          !isPlaying &&
+          Math.abs(lastSeekTargetRef.current - curTarget) > 0.03
+        ) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
         }
@@ -366,21 +437,21 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
 
 const styles = StyleSheet.create({
   fullMedia: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   fallbackBox: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#161924',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#161924",
     borderRadius: 8,
     padding: 16,
   },
   fallbackTitle: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 8,
   },
 });

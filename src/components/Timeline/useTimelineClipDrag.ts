@@ -11,6 +11,7 @@ import { clampNonOverlapping, getPointerCoords } from "./timelineUtils";
 import { getPlaybackTime } from "../../utils/playbackTimeStore";
 
 interface UseTimelineClipDragParams {
+  beatMarkers?: number[];
   allClips: UnifiedClipItem[];
   selectedClipId: string | null;
   activeTrackCount: number;
@@ -53,6 +54,7 @@ function computeTargetPosition(
   cachedDraggingClip?: UnifiedClipItem,
   cachedOtherClips?: UnifiedClipItem[],
   rowHeight: number = TRACK_ROW_HEIGHT,
+  beatMarkers?: number[],
 ) {
   const rawTrackPos = initialTrack - deltaYPixels / rowHeight;
 
@@ -82,6 +84,20 @@ function computeTargetPosition(
       if (Math.abs(desiredStart + duration - currentTime) < snapDist) {
         bestSnap = Math.max(0, currentTime - duration);
         snapDist = Math.abs(desiredStart + duration - currentTime);
+      }
+    }
+
+    // 2.5. Snap to Beat Markers (CapCut Yellow Beat Dots)
+    if (beatMarkers && Array.isArray(beatMarkers)) {
+      for (const beat of beatMarkers) {
+        if (Math.abs(desiredStart - beat) < snapDist) {
+          bestSnap = beat;
+          snapDist = Math.abs(desiredStart - beat);
+        }
+        if (Math.abs(desiredStart + duration - beat) < snapDist) {
+          bestSnap = Math.max(0, beat - duration);
+          snapDist = Math.abs(desiredStart + duration - beat);
+        }
       }
     }
 
@@ -240,6 +256,7 @@ function computeTargetPosition(
 }
 
 export function useTimelineClipDrag({
+  beatMarkers,
   allClips,
   selectedClipId,
   activeTrackCount,
@@ -264,6 +281,8 @@ export function useTimelineClipDrag({
   const previousInsertTrackRef = useRef<number | null>(null);
 
   // Mutable refs
+  const beatMarkersRef = useRef(beatMarkers);
+  beatMarkersRef.current = beatMarkers;
   const allClipsRef = useRef(allClips);
   allClipsRef.current = allClips;
   const selectedClipIdRef = useRef(selectedClipId);
@@ -460,6 +479,7 @@ export function useTimelineClipDrag({
           cachedDraggingClipRef.current,
           cachedOtherClipsRef.current,
           rowHeightRef.current,
+          beatMarkersRef.current,
         );
 
       const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
@@ -658,6 +678,7 @@ export function useTimelineClipDrag({
               cachedDraggingClipRef.current,
               cachedOtherClipsRef.current,
               rowHeightRef.current,
+              beatMarkersRef.current,
             );
 
           const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
@@ -808,6 +829,7 @@ export function useTimelineClipDrag({
             cachedDraggingClipRef.current,
             cachedOtherClipsRef.current,
             rowHeightRef.current,
+            beatMarkersRef.current,
           );
 
         const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;
@@ -945,6 +967,7 @@ export function useTimelineClipDrag({
             cachedDraggingClipRef.current,
             cachedOtherClipsRef.current,
             rowHeightRef.current,
+            beatMarkersRef.current,
           );
 
         const hasTrackChanged = previousTargetTrackRef.current !== targetTrack;

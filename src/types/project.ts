@@ -297,6 +297,8 @@ export interface AudioClip {
   peaks?: number[];
   beatMarkers?: number[];
   voiceEffect?: VoiceEffectId;
+  ducking?: boolean;
+  isVoiceover?: boolean;
   isMissing?: boolean;
   needsPermission?: boolean;
   isLinked?: boolean;
@@ -325,6 +327,7 @@ export interface TextStyle {
   highlightColor?: string;
   highlightStyle?: 'color' | 'box' | 'scale' | 'glow' | 'underline';
   enableWordHighlight?: boolean;
+  autoEmoji?: boolean;
   uppercase?: boolean;
 }
 
@@ -365,6 +368,7 @@ export interface CaptionClip {
   highlightColor?: string;
   highlightStyle?: 'color' | 'box' | 'scale' | 'glow' | 'underline';
   enableWordHighlight?: boolean;
+  autoEmoji?: boolean;
   uppercase?: boolean;
 }
 
@@ -438,6 +442,9 @@ export interface FastArtProject {
   canvasBackground?: string;
   beatMarkers?: number[];
   aiDenoise?: boolean;
+  magneticTimeline?: boolean;
+  audioDucking?: boolean;
+  audioDuckingLevel?: number;
   captionSettings?: any;
   filter?: string;
   filterIntensity?: number; // 0..1 (default 1.0)
@@ -458,6 +465,9 @@ export const createDefaultProject = (title = 'New Project'): FastArtProject => (
   isPlaying: false,
   zoom: 60,
   canvasBackground: '#000000',
+  magneticTimeline: true,
+  audioDucking: false,
+  audioDuckingLevel: 0.3,
   assets: [],
   tracks: {
     video: [],

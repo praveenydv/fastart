@@ -243,6 +243,7 @@ interface EditorWorkspaceProps {
   handleOpenEffectsModal: () => void;
   handleOpenStickersModal: () => void;
   handleOpenMediaPicker: () => void;
+  handleOpenReplaceMedia?: () => void;
   handleOpenEnhance: () => void;
   handleOpenAutoCut: () => void;
   handleOpenCanvasModal: () => void;
@@ -326,6 +327,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   handleOpenEffectsModal,
   handleOpenStickersModal,
   handleOpenMediaPicker,
+  handleOpenReplaceMedia,
   handleOpenEnhance,
   handleOpenAutoCut,
   handleOpenCanvasModal,
@@ -1284,6 +1286,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       onOpenEffectsModal={handleOpenEffectsModal}
       onOpenStickersModal={handleOpenStickersModal}
       onOpenMediaPicker={handleOpenMediaPicker}
+      onOpenReplaceMedia={handleOpenReplaceMedia}
       onOpenEnhance={handleOpenEnhance}
       onOpenAutoCut={handleOpenAutoCut}
       onOpenCanvasModal={handleOpenCanvasModal}
@@ -1436,6 +1439,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       canRedo={canRedo}
       onUndo={onUndo}
       onRedo={onRedo}
+      isMagnetic={project?.magneticTimeline !== false}
+      onToggleMagnetic={() =>
+        updateProjectWithHistory({
+          magneticTimeline: !(project?.magneticTimeline !== false),
+        })
+      }
       onTimelineHeightChange={setCurrentTimelineHeight}
       onOpenEditModal={handleOpenEditModal}
       onAddMedia={handleAddMediaCb}
@@ -1910,6 +1919,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                   onSelectTab={(tab) => setDesktopTab(tab)}
                   onAddMedia={addMediaFn}
                   onAddAudio={addAudioFn}
+                  onUpdateProject={updateProjectWithHistory}
                   onAddText={(txt, col) => handleAddText(txt, col)}
                   onAddSticker={(stk) => handleAddSticker(stk)}
                   onAddEffect={(eff) => handleAddEffect(eff)}
@@ -1936,6 +1946,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                   onSelectTab={(tab) => setDesktopTab(tab)}
                   onAddMedia={addMediaFn}
                   onAddAudio={addAudioFn}
+                  onUpdateProject={updateProjectWithHistory}
                   onAddText={(txt, col) => handleAddText(txt, col)}
                   onAddSticker={(stk) => handleAddSticker(stk)}
                   onAddEffect={(eff) => handleAddEffect(eff)}

@@ -25,6 +25,8 @@ import { THEME_COLORS } from "../../constants/designConstants";
 import { FILTER_PRESETS } from "../../constants/sampleMedia";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { CustomColorPickerButton } from "../Common/CustomColorPickerButton";
+import { BeatAndDuckingCard } from "../Common/BeatAndDuckingCard";
+import { mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface DesktopInspectorProps {
   project: FastArtProject;
@@ -671,12 +673,185 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Video Audio & Volume Controls (when video has audio) */}
+            {selectedClipType === "video" && mediaHasAudioTrack(selectedClip) && (
+              <View style={{ borderTopWidth: 1, borderTopColor: "#1F1F23", paddingTop: 10, marginTop: 10 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                  <Ionicons name="volume-medium-outline" size={14} color="#00F2FE" />
+                  <Text style={styles.sectionTitle}>AUDIO & VOLUME</Text>
+                </View>
+
+                {/* Volume Slider */}
+                <View style={styles.controlRow}>
+                  <CompactSliderInput
+                    label="Volume"
+                    value={Math.round((selectedClip.volume ?? 1.0) * 100)}
+                    min={0}
+                    max={200}
+                    step={1}
+                    unit="%"
+                    defaultValue={100}
+                    onChange={(val) => {
+                      onApplyVolume?.(
+                        val / 100,
+                        selectedClip.fadeIn || 0,
+                        selectedClip.fadeOut || 0,
+                      );
+                    }}
+                  />
+                </View>
+
+                {/* Fade Duration (s) */}
+                <View style={styles.controlRow}>
+                  <Text style={styles.controlLabel}>Fade Duration (s)</Text>
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                    <View style={[styles.inputBox, { flex: 1 }]}>
+                      <Text style={styles.inputPrefix}>In</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        keyboardType="numeric"
+                        value={String(selectedClip.fadeIn || 0)}
+                        onChangeText={(val: string) => {
+                          const num = Number(val) || 0;
+                          onApplyVolume?.(
+                            selectedClip.volume ?? 1.0,
+                            num,
+                            selectedClip.fadeOut || 0,
+                          );
+                        }}
+                      />
+                    </View>
+                    <View style={[styles.inputBox, { flex: 1 }]}>
+                      <Text style={styles.inputPrefix}>Out</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        keyboardType="numeric"
+                        value={String(selectedClip.fadeOut || 0)}
+                        onChangeText={(val: string) => {
+                          const num = Number(val) || 0;
+                          onApplyVolume?.(
+                            selectedClip.volume ?? 1.0,
+                            selectedClip.fadeIn || 0,
+                            num,
+                          );
+                        }}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* AI Noise Reduction Toggle */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: "#18181A",
+                    paddingHorizontal: 8,
+                    paddingVertical: 6,
+                    borderRadius: 6,
+                    borderWidth: 1,
+                    borderColor: selectedClip?.denoise ? "#00F2FE" : "#27272A",
+                    marginVertical: 4,
+                  }}
+                  onPress={() => {
+                    onApplyVolume?.(
+                      selectedClip.volume ?? 1.0,
+                      selectedClip.fadeIn || 0,
+                      selectedClip.fadeOut || 0,
+                      !selectedClip.denoise,
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons
+                      name="ear-outline"
+                      size={13}
+                      color={selectedClip?.denoise ? "#00F2FE" : "#94A3B8"}
+                    />
+                    <Text
+                      style={{
+                        color: selectedClip?.denoise ? "#00F2FE" : "#CBD5E1",
+                        fontSize: 10,
+                        fontWeight: selectedClip?.denoise ? "600" : "400",
+                      }}
+                    >
+                      Noise Reduction
+                    </Text>
+                    <View
+                      style={{
+                        paddingHorizontal: 4,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        backgroundColor: "#141416",
+                        borderWidth: 1,
+                        borderColor: selectedClip?.denoise
+                          ? "#00F2FE"
+                          : "#27272A",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: selectedClip?.denoise ? "#00F2FE" : "#8E8E93",
+                          fontSize: 8,
+                          fontWeight: selectedClip?.denoise ? "700" : "400",
+                        }}
+                      >
+                        AI
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    style={{
+                      width: 32,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: selectedClip?.denoise
+                        ? "#00F2FE"
+                        : "#27272A",
+                      padding: 2,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        backgroundColor: selectedClip?.denoise
+                          ? "#08090E"
+                          : "#71717A",
+                        alignSelf: selectedClip?.denoise
+                          ? "flex-end"
+                          : "flex-start",
+                      }}
+                    />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Beat Mapping & Smart Audio Ducking */}
+                <BeatAndDuckingCard
+                  project={project}
+                  onUpdateProject={onUpdateProject}
+                  currentTime={currentTime}
+                  selectedClip={selectedClip}
+                />
+              </View>
+            )}
           </View>
         </ScrollView>
       )}
 
       {/* ─────────────────────────────────────────────
-          TAB CONTENT: Audio (Volume, Fade, Denoise)
+          TAB CONTENT: Audio (Volume, Fade, Beat Sync)
           ───────────────────────────────────────────── */}
       {isAudio && (
         <ScrollView
@@ -699,7 +874,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                     val / 100,
                     selectedClip.fadeIn || 0,
                     selectedClip.fadeOut || 0,
-                    selectedClip.denoise || false,
                   );
                 }}
               />
@@ -721,7 +895,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                         selectedClip.volume ?? 1.0,
                         num,
                         selectedClip.fadeOut || 0,
-                        selectedClip.denoise || false,
                       );
                     }}
                   />
@@ -738,7 +911,6 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                         selectedClip.volume ?? 1.0,
                         selectedClip.fadeIn || 0,
                         num,
-                        selectedClip.denoise || false,
                       );
                     }}
                   />
@@ -746,43 +918,109 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
               </View>
             </View>
 
-            {/* Denoise Toggle */}
-            <View style={[styles.controlRow, { marginTop: 8 }]}>
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  selectedClip.denoise && styles.actionBtnActive,
-                ]}
-                onPress={() => {
-                  const nextDenoise = !selectedClip.denoise;
-                  onApplyVolume?.(
-                    selectedClip.volume ?? 1.0,
-                    selectedClip.fadeIn || 0,
-                    selectedClip.fadeOut || 0,
-                    nextDenoise,
-                  );
+            {/* AI Noise Reduction Toggle */}
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#18181A",
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: selectedClip?.denoise ? "#00F2FE" : "#27272A",
+                marginVertical: 4,
+              }}
+              onPress={() => {
+                onApplyVolume?.(
+                  selectedClip.volume ?? 1.0,
+                  selectedClip.fadeIn || 0,
+                  selectedClip.fadeOut || 0,
+                  !selectedClip.denoise,
+                );
+              }}
+              activeOpacity={0.8}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
                 }}
-                activeOpacity={0.7}
               >
                 <Ionicons
                   name="ear-outline"
-                  size={15}
-                  color={
-                    selectedClip.denoise
-                      ? THEME_COLORS.accent
-                      : THEME_COLORS.textSecondary
-                  }
+                  size={13}
+                  color={selectedClip?.denoise ? "#00F2FE" : "#94A3B8"}
                 />
                 <Text
-                  style={[
-                    styles.actionBtnText,
-                    selectedClip.denoise && styles.actionBtnTextActive,
-                  ]}
+                  style={{
+                    color: selectedClip?.denoise ? "#00F2FE" : "#CBD5E1",
+                    fontSize: 10,
+                    fontWeight: selectedClip?.denoise ? "600" : "400",
+                  }}
                 >
-                  Noise Reduction ({selectedClip.denoise ? "ON" : "OFF"})
+                  Noise Reduction
                 </Text>
-              </TouchableOpacity>
-            </View>
+                <View
+                  style={{
+                    paddingHorizontal: 4,
+                    paddingVertical: 1,
+                    borderRadius: 3,
+                    backgroundColor: "#141416",
+                    borderWidth: 1,
+                    borderColor: selectedClip?.denoise
+                      ? "#00F2FE"
+                      : "#27272A",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: selectedClip?.denoise ? "#00F2FE" : "#8E8E93",
+                      fontSize: 8,
+                      fontWeight: selectedClip?.denoise ? "700" : "400",
+                    }}
+                  >
+                    AI
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  width: 32,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: selectedClip?.denoise
+                    ? "#00F2FE"
+                    : "#27272A",
+                  padding: 2,
+                  justifyContent: "center",
+                }}
+              >
+                <View
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 7,
+                    backgroundColor: selectedClip?.denoise
+                      ? "#08090E"
+                      : "#71717A",
+                    alignSelf: selectedClip?.denoise
+                      ? "flex-end"
+                      : "flex-start",
+                  }}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {/* Beat Mapping & Smart Audio Ducking Studio */}
+            <BeatAndDuckingCard
+              project={project}
+              onUpdateProject={onUpdateProject}
+              currentTime={currentTime}
+              selectedClip={selectedClip}
+            />
           </View>
         </ScrollView>
       )}

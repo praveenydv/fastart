@@ -653,6 +653,7 @@ export interface CaptionSettings {
   enableHighlight: boolean;
   highlightColor: string;
   highlightStyle: 'color' | 'box' | 'scale' | 'glow' | 'underline';
+  autoEmoji?: boolean;
   fontSize: number;
   fontFamily: string;
   fontWeight: string;
@@ -674,6 +675,7 @@ export const defaultCaptionSettings: CaptionSettings = {
   enableHighlight: true,
   highlightColor: '#FFE600',
   highlightStyle: 'color',
+  autoEmoji: true,
   fontSize: 26,
   fontFamily: 'Impact, Arial Black, sans-serif',
   fontWeight: '900',

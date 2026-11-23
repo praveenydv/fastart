@@ -259,6 +259,31 @@ export function useClipTransformOperations({
             tracks.video[idx].thumbnailTrimIn = newTrimIn;
             requestMediaThumbnail(tracks.video[idx], true);
           }
+
+          // CapCut Magnetic Timeline: ripple subsequent main-track clips to close or adjust gaps automatically
+          if (isFinal && project.magneticTimeline !== false) {
+            const currentClip = tracks.video[idx];
+            if (!currentClip.trackIndex || currentClip.trackIndex === 0) {
+              // Sort main track clips by startTime to ensure deterministic sequential rippling
+              const mainTrackClips = tracks.video
+                .filter((c) => !c.trackIndex || c.trackIndex === 0)
+                .sort((a, b) => a.startTime - b.startTime);
+
+              const currentMainIdx = mainTrackClips.findIndex((c) => c.id === currentClip.id);
+              if (currentMainIdx >= 0) {
+                let nextStart = mainTrackClips[currentMainIdx].startTime + mainTrackClips[currentMainIdx].duration;
+                for (let m = currentMainIdx + 1; m < mainTrackClips.length; m++) {
+                  const targetClipId = mainTrackClips[m].id;
+                  const realIdx = tracks.video.findIndex((c) => c.id === targetClipId);
+                  if (realIdx >= 0) {
+                    tracks.video[realIdx].startTime = nextStart;
+                    nextStart += tracks.video[realIdx].duration;
+                  }
+                }
+              }
+            }
+          }
+
           found = true;
         }
       }

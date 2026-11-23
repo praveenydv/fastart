@@ -7,15 +7,35 @@ interface NativeAudioTrackPlayerProps {
   clip: AudioClip;
   currentTime: number;
   isPlaying: boolean;
+  isDucked?: boolean;
+  duckingMultiplier?: number;
 }
 
 function NativeAudioTrackPlayerComponent({
   clip,
   currentTime,
   isPlaying,
+  isDucked = false,
+  duckingMultiplier = 0.3,
 }: NativeAudioTrackPlayerProps) {
   const mediaUri = clip.url || "";
   if (!mediaUri) return null;
+
+  const baseVolume = clip.volume ?? 1.0;
+  const elapsed = Math.max(0, currentTime - (clip.startTime || 0));
+  const duration = clip.duration || 10;
+  const remaining = Math.max(0, duration - elapsed);
+
+  let fadeMultiplier = 1.0;
+  if (clip.fadeIn && clip.fadeIn > 0 && elapsed < clip.fadeIn) {
+    fadeMultiplier = Math.min(fadeMultiplier, Math.max(0, elapsed / clip.fadeIn));
+  }
+  if (clip.fadeOut && clip.fadeOut > 0 && remaining < clip.fadeOut) {
+    fadeMultiplier = Math.min(fadeMultiplier, Math.max(0, remaining / clip.fadeOut));
+  }
+
+  const duckFactor = isDucked ? duckingMultiplier : 1.0;
+  const effectiveVolume = Math.max(0, Math.min(1, baseVolume * fadeMultiplier * duckFactor));
 
   return (
     <NativeAudioPlayerInstance
@@ -23,7 +43,7 @@ function NativeAudioTrackPlayerComponent({
       startTime={clip.startTime || 0}
       duration={clip.duration || 10}
       trimIn={clip.trimIn || 0}
-      volume={clip.volume ?? 1.0}
+      volume={effectiveVolume}
       speed={clip.speed || 1.0}
       currentTime={currentTime}
       isPlaying={isPlaying}

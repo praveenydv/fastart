@@ -36,6 +36,7 @@ export interface ToolbarProps {
   onOpenEffectsModal: () => void;
   onOpenStickersModal: () => void;
   onOpenMediaPicker: () => void;
+  onOpenReplaceMedia?: () => void;
   onOpenEnhance?: () => void;
   onOpenAutoCut?: () => void;
   onOpenCutoutModal?: (mode?: "auto" | "chroma") => void;
@@ -93,12 +94,19 @@ const ROOT_TOOLS = [
 // Clip-specific tools (when video clip is selected) - CapCut hierarchy
 const VIDEO_CLIP_TOOLS = [
   { id: "split", title: "Split", icon: "content-cut" as const },
+  { id: "replace", title: "Replace", icon: "sync" as const },
 
   { id: "speed", title: "Speed", icon: "speedometer-slow" as const },
   {
     id: "volume",
     title: "Volume",
     icon: "volume-medium" as const,
+    requiresAudio: true,
+  },
+  {
+    id: "beats",
+    title: "Beats",
+    icon: "pulse" as const,
     requiresAudio: true,
   },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
@@ -133,6 +141,7 @@ const VIDEO_CLIP_TOOLS = [
 
 // Photo/Image-specific tools (tailored for still graphics, removing audio/speed)
 const PHOTO_CLIP_TOOLS = [
+  { id: "replace", title: "Replace", icon: "sync" as const },
   { id: "animation", title: "Animation", icon: "play-circle-outline" as const },
   { id: "transform", title: "Transform", icon: "crop" as const },
   { id: "cutout", title: "Cutout", icon: "account-outline" as const },
@@ -184,15 +193,15 @@ const STICKER_CLIP_TOOLS = [
 
 const AUDIO_CLIP_TOOLS = [
   { id: "split", title: "Split", icon: "content-cut" as const },
-
   { id: "volume", title: "Volume", icon: "volume-high" as const },
+  { id: "beats", title: "Beats", icon: "pulse" as const },
+  { id: "ducking", title: "Ducking", icon: "volume-low" as const },
   { id: "speed", title: "Speed", icon: "speedometer" as const },
   {
     id: "audio_effects",
     title: "Voice FX",
     icon: "microphone-outline" as const,
   },
-  { id: "denoise", title: "Denoise", icon: "ear-hearing" as const },
   { id: "copy", title: "Copy", icon: "content-copy" as const },
   { id: "delete", title: "Delete", icon: "trash-can-outline" as const },
 ];
@@ -225,6 +234,7 @@ function ToolbarComponent({
   onOpenEffectsModal,
   onOpenStickersModal,
   onOpenMediaPicker,
+  onOpenReplaceMedia,
   onOpenEnhance,
   onOpenCutoutModal,
   onOpenMotionTracking,
@@ -368,6 +378,8 @@ function ToolbarComponent({
         onOpenSpeedModal();
         break;
       case "volume":
+      case "beats":
+      case "ducking":
         if (onOpenVolumeModal) onOpenVolumeModal();
         break;
       case "cutout":
@@ -394,6 +406,13 @@ function ToolbarComponent({
       case "split":
         onSplitClip();
         break;
+      case "replace":
+        if (onOpenReplaceMedia) {
+          onOpenReplaceMedia();
+        } else {
+          onOpenMediaPicker();
+        }
+        break;
       case "freeze":
         if (onFreezeFrame) onFreezeFrame();
         break;
@@ -408,9 +427,6 @@ function ToolbarComponent({
         break;
       case "extract_audio":
         if (onExtractAudio) onExtractAudio();
-        break;
-      case "denoise":
-        if (onToggleDenoise) onToggleDenoise();
         break;
       case "opacity":
         if (onOpenOpacityModal) onOpenOpacityModal();

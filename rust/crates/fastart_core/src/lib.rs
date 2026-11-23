@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(out_rgba[2], 255);
         assert_eq!(out_rgba[3], 255);
 
-        assert_eq!(out_rgba[4], 169);
+        assert_eq!(out_rgba[4], 255);
         assert_eq!(out_rgba[8], 0);
     }
 

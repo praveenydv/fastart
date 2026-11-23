@@ -12,6 +12,7 @@ export function computeLeftTrimUpdates(
   isSnappingEnabled = false,
   pxPerSec = 50,
   currentTime = -1,
+  beatMarkers?: number[],
 ) {
   const isUnlimited = isExtendableClip(targetClip, targetClip.type);
   const mediaDur = isUnlimited
@@ -87,6 +88,15 @@ export function computeLeftTrimUpdates(
       }
     });
 
+    if (beatMarkers && Array.isArray(beatMarkers)) {
+      beatMarkers.forEach((beat) => {
+        if (Math.abs(candidateStart - beat) < bestDist) {
+          bestSnap = beat;
+          bestDist = Math.abs(candidateStart - beat);
+        }
+      });
+    }
+
     if (bestSnap !== candidateStart) {
       const snapDelta = bestSnap - initialStart;
       if (snapDelta >= minDelta && snapDelta <= maxDelta && bestSnap >= minAllowedStart) {
@@ -121,6 +131,7 @@ export function computeRightTrimUpdates(
   isSnappingEnabled = false,
   pxPerSec = 50,
   currentTime = -1,
+  beatMarkers?: number[],
 ) {
   const isUnlimited = isExtendableClip(targetClip, targetClip.type);
   const mediaDur = isUnlimited
@@ -197,6 +208,15 @@ export function computeRightTrimUpdates(
         bestDist = Math.abs(candidateEnd - other.startTime);
       }
     });
+
+    if (beatMarkers && Array.isArray(beatMarkers)) {
+      beatMarkers.forEach((beat) => {
+        if (Math.abs(candidateEnd - beat) < bestDist) {
+          bestSnap = beat;
+          bestDist = Math.abs(candidateEnd - beat);
+        }
+      });
+    }
 
     if (bestSnap !== candidateEnd) {
       const snapDur = bestSnap - initialStart;

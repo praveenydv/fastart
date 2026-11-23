@@ -4,6 +4,7 @@ import { useTimelineClipDrag } from "./useTimelineClipDrag";
 import { useTimelineClipTrim } from "./useTimelineClipTrim";
 
 interface UseTimelineDragTrimParams {
+  beatMarkers?: number[];
   allClips: UnifiedClipItem[];
   selectedClipId: string | null;
   activeTrackCount: number;
@@ -38,6 +39,7 @@ interface UseTimelineDragTrimParams {
 }
 
 export function useTimelineDragTrim({
+  beatMarkers,
   allClips,
   selectedClipId,
   activeTrackCount,
@@ -69,6 +71,7 @@ export function useTimelineDragTrim({
     cancelClipDrag,
     lastDragEndTimeRef,
   } = useTimelineClipDrag({
+    beatMarkers,
     allClips,
     selectedClipId,
     activeTrackCount,
@@ -91,6 +94,7 @@ export function useTimelineDragTrim({
     handleLeftTrimStart,
     handleRightTrimStart,
   } = useTimelineClipTrim({
+    beatMarkers,
     allClips,
     selectedClipId,
     pxPerSec,

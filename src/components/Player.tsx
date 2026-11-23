@@ -928,6 +928,8 @@ function Player({
                 boxWidth={boxWidth}
                 canvasHeight={canvasHeight}
                 canvasBackground={project.canvasBackground}
+                audioDucking={project.audioDucking}
+                audioDuckingLevel={project.audioDuckingLevel}
                 onSelectClip={onSelectClip}
                 getItemBaseDimensions={getItemDimsHelper}
                 getInterpolatedTransform={getInterpolatedTransform}

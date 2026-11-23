@@ -18,6 +18,7 @@ import {
 } from "../../utils/mediaAudioDetector";
 
 interface TimelineTracksViewProps {
+  beatMarkers?: number[];
   trackRows: UnifiedClipItem[][];
   activeTrackCount: number;
   timelineContentWidth: number;
@@ -113,6 +114,7 @@ interface TimelineTracksViewProps {
 }
 
 const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
+  beatMarkers,
   trackRows,
   activeTrackCount,
   timelineContentWidth,
@@ -882,6 +884,118 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                                   );
                                 },
                               )}
+                            </View>
+                          )}
+
+                        {/* Audio Fade In/Out Visual Overlays */}
+                        {clip.type === "audio" && (
+                          <View
+                            style={[StyleSheet.absoluteFill, { zIndex: 55 }]}
+                            pointerEvents="none"
+                          >
+                            {/* Fade In visual indicator */}
+                            {clip.rawClip?.fadeIn && clip.rawClip.fadeIn > 0 ? (
+                              <View
+                                style={{
+                                  position: "absolute",
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: Math.min(width * 0.5, clip.rawClip.fadeIn * pxPerSec),
+                                  backgroundColor: "rgba(255, 255, 255, 0.12)",
+                                  borderRightWidth: 1.5,
+                                  borderRightColor: "rgba(255, 255, 255, 0.6)",
+                                  borderStyle: "dashed",
+                                  justifyContent: "flex-end",
+                                  paddingLeft: 2,
+                                  paddingBottom: 2,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: "rgba(255, 255, 255, 0.7)",
+                                    fontSize: 8,
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  ▲ {clip.rawClip.fadeIn}s
+                                </Text>
+                              </View>
+                            ) : null}
+                            {/* Fade Out visual indicator */}
+                            {clip.rawClip?.fadeOut && clip.rawClip.fadeOut > 0 ? (
+                              <View
+                                style={{
+                                  position: "absolute",
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: Math.min(width * 0.5, clip.rawClip.fadeOut * pxPerSec),
+                                  backgroundColor: "rgba(255, 255, 255, 0.12)",
+                                  borderLeftWidth: 1.5,
+                                  borderLeftColor: "rgba(255, 255, 255, 0.6)",
+                                  borderStyle: "dashed",
+                                  alignItems: "flex-end",
+                                  justifyContent: "flex-end",
+                                  paddingRight: 2,
+                                  paddingBottom: 2,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: "rgba(255, 255, 255, 0.7)",
+                                    fontSize: 8,
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  ▼ {clip.rawClip.fadeOut}s
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        )}
+
+                        {/* CapCut Yellow Beat Markers */}
+                        {beatMarkers &&
+                          beatMarkers.length > 0 &&
+                          (clip.type === "audio" ||
+                            (clip.type === "video" && mediaHasAudioTrack(clip))) && (
+                            <View
+                              style={[StyleSheet.absoluteFill, { zIndex: 65 }]}
+                              pointerEvents="none"
+                            >
+                              {beatMarkers.map((beatTime, bIdx) => {
+                                if (
+                                  beatTime < clip.startTime - 0.05 ||
+                                  beatTime > clip.startTime + clip.duration + 0.05
+                                ) {
+                                  return null;
+                                }
+                                const beatPos =
+                                  (beatTime - clip.startTime) * pxPerSec;
+                                if (beatPos < 0 || beatPos > width) return null;
+                                return (
+                                  <View
+                                    key={`beat-${bIdx}`}
+                                    style={{
+                                      position: "absolute",
+                                      left: Math.max(0, Math.min(width - 8, beatPos - 4)),
+                                      bottom: 3,
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: 4,
+                                      backgroundColor: "#FFE600",
+                                      borderWidth: 1,
+                                      borderColor: "#000000",
+                                      shadowColor: "#FFE600",
+                                      shadowOffset: { width: 0, height: 0 },
+                                      shadowOpacity: 0.9,
+                                      shadowRadius: 3,
+                                      elevation: 4,
+                                    }}
+                                  />
+                                );
+                              })}
                             </View>
                           )}
 

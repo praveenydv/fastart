@@ -33,6 +33,8 @@ interface TimelineHeaderBarProps {
   onToggleReverse?: () => void;
   hasSelectedClip?: boolean;
   selectedClipType?: string;
+  isMagnetic?: boolean;
+  onToggleMagnetic?: () => void;
 }
 
 const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
@@ -58,6 +60,8 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
   onToggleReverse,
   hasSelectedClip = false,
   selectedClipType,
+  isMagnetic = true,
+  onToggleMagnetic,
 }) => {
   const isVideoSelected = selectedClipType === "video" || (!selectedClipType && hasSelectedClip);
 
@@ -104,6 +108,41 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
                 {isMobile ? "Tracks" : "Tracks"}
               </Text>
             </View>
+
+            {/* CapCut Magnetic Timeline Mode Toggle */}
+            {onToggleMagnetic && (
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  {
+                    paddingHorizontal: 7,
+                    height: 20,
+                    backgroundColor: isMagnetic ? "rgba(0, 242, 254, 0.14)" : "#18181A",
+                    borderColor: isMagnetic ? "rgba(0, 242, 254, 0.6)" : "#27272A",
+                    marginLeft: 6,
+                  },
+                ]}
+                onPress={onToggleMagnetic}
+                activeOpacity={0.7}
+                accessibilityLabel={isMagnetic ? "Magnetic mode ON (auto-ripple)" : "Magnetic mode OFF (freeform)"}
+              >
+                <Ionicons
+                  name={isMagnetic ? "magnet" : "magnet-outline"}
+                  size={11}
+                  color={isMagnetic ? "#00F2FE" : "#8E95A5"}
+                />
+                {!isMobile && (
+                  <Text
+                    style={[
+                      styles.actionBtnText,
+                      { color: isMagnetic ? "#00F2FE" : "#8E95A5", fontSize: 10, marginLeft: 3 },
+                    ]}
+                  >
+                    {isMagnetic ? "Magnetic" : "Free"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Quick Mobile Split Button when Clip is Selected */}

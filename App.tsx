@@ -649,7 +649,44 @@ export default function App() {
   const handleOpenFiltersModal = useCallback(() => openModal("filters"), [openModal]);
   const handleOpenEffectsModal = useCallback(() => openModal("effects"), [openModal]);
   const handleOpenStickersModal = useCallback(() => openModal("stickers"), [openModal]);
-  const handleOpenMediaPicker = useCallback(() => openModal("media"), [openModal]);
+  const [isReplaceMode, setIsReplaceMode] = useState(false);
+  const handleOpenMediaPicker = useCallback(() => {
+    setIsReplaceMode(false);
+    openModal("media");
+  }, [openModal]);
+  const handleOpenReplaceMedia = useCallback(() => {
+    setIsReplaceMode(true);
+    openModal("media");
+  }, [openModal]);
+  const handleReplaceMedia = useCallback(
+    (clip: any) => {
+      if (!projectRef.current || !selectedClipIdRef.current) return;
+      const currentProj = projectRef.current;
+      const targetId = selectedClipIdRef.current;
+      const videoClips = [...(currentProj.tracks.video || [])];
+      const idx = videoClips.findIndex((c) => c.id === targetId);
+      if (idx >= 0) {
+        const old = videoClips[idx];
+        videoClips[idx] = {
+          ...old,
+          url: clip.url,
+          title: clip.title || old.title,
+          type: clip.type || old.type,
+          thumbnail: clip.thumbnail || old.thumbnail,
+          sourceMediaId: clip.sourceMediaId || clip.id,
+          naturalWidth: clip.naturalWidth || old.naturalWidth,
+          naturalHeight: clip.naturalHeight || old.naturalHeight,
+        };
+        updateProjectDispatcher({
+          ...currentProj,
+          tracks: { ...currentProj.tracks, video: videoClips },
+        });
+        closeModal();
+        setIsReplaceMode(false);
+      }
+    },
+    [updateProjectDispatcher, closeModal]
+  );
   const handleOpenEnhance = useCallback(() => {
     ensureSelectedVideoClip();
     openModal("enhance");
@@ -942,11 +979,15 @@ export default function App() {
         handleMoveClip={handleMoveClip}
         handleUpdateClipMask={handleUpdateClipMask}
         handleSelectClip={handleSelectClip}
+        isReplaceMode={isReplaceMode}
+        handleReplaceMedia={handleReplaceMedia}
         isInline={isInline}
       />
     ),
     [
       activeModal,
+      isReplaceMode,
+      handleReplaceMedia,
       handleCancelModal,
       handleApplyModal,
       project,
@@ -1156,6 +1197,7 @@ export default function App() {
                   handleOpenEffectsModal={handleOpenEffectsModal}
                   handleOpenStickersModal={handleOpenStickersModal}
                   handleOpenMediaPicker={handleOpenMediaPicker}
+                  handleOpenReplaceMedia={handleOpenReplaceMedia}
                   handleOpenEnhance={handleOpenEnhance}
                   handleOpenAutoCut={handleOpenAutoCut}
                   handleOpenCanvasModal={handleOpenCanvasModal}

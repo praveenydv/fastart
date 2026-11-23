@@ -143,6 +143,8 @@ interface EditorModalsProps {
   transformInitialTab?: "crop" | "flip" | "rotate" | "stretch" | "angle";
   onOpenScreenCrop?: () => void;
   setIsCroppingPreview?: (c: boolean) => void;
+  isReplaceMode?: boolean;
+  handleReplaceMedia?: (clip: any) => void;
   isInline?: boolean;
   handleUpdateClipMask?: (
     clipId: string,
@@ -284,6 +286,8 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
   transformInitialTab,
   onOpenScreenCrop,
   setIsCroppingPreview,
+  isReplaceMode = false,
+  handleReplaceMedia,
   isInline = false,
   handleUpdateClipMask,
   handleMoveClip,
@@ -375,10 +379,11 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
         <MediaPickerModal
           visible={true}
           onClose={closeModal}
-          onAddMedia={handleAddMedia}
+          onAddMedia={isReplaceMode && handleReplaceMedia ? handleReplaceMedia : handleAddMedia}
           project={project || undefined}
           onDeleteMedia={handleDeleteProjectAsset || handleDeleteClip}
           isInline={isInline}
+          isReplaceMode={isReplaceMode}
         />
       )}
 
@@ -488,6 +493,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
           project={project}
           onUpdateProject={updateProjectWithHistory}
           isInline={isInline}
+          currentTime={currentTime}
         />
       )}
 
@@ -650,6 +656,10 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
             onApplyVolume={handleApplyVolume}
             onExtractAudio={handleExtractAudioFromVideo}
             isInline={isInline}
+            project={project}
+            onUpdateProject={updateProjectWithHistory}
+            currentTime={currentTime}
+            selectedClip={selectedClip}
           />
         )}
 

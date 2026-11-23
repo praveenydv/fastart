@@ -30,9 +30,10 @@ interface MediaPickerModalProps {
   project?: FastArtProject;
   onDeleteMedia?: (clipId: string, clipType?: string) => void;
   isInline?: boolean;
+  isReplaceMode?: boolean;
 }
 
-export default function MediaPickerModal({ visible, onClose, onAddMedia, project, onDeleteMedia, isInline = false }: MediaPickerModalProps) {
+export default function MediaPickerModal({ visible, onClose, onAddMedia, project, onDeleteMedia, isInline = false, isReplaceMode = false }: MediaPickerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const importedAssets = useMemo(() => {
     if (Array.isArray(project?.assets)) {
@@ -226,8 +227,8 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
       {/* Standardized Header */}
       {!isInline && (
         <ModalHeader
-          title="Media"
-          iconName="images-outline"
+          title={isReplaceMode ? "Replace Media" : "Media"}
+          iconName={isReplaceMode ? "sync" : "images-outline"}
           onClose={onClose}
           onDone={onClose}
         />

@@ -11,6 +11,7 @@ import {
 } from "./timelineTrimHelper";
 
 interface UseTimelineClipTrimParams {
+  beatMarkers?: number[];
   allClips: UnifiedClipItem[];
   selectedClipId: string | null;
   pxPerSec: number;
@@ -31,6 +32,7 @@ interface UseTimelineClipTrimParams {
 }
 
 export function useTimelineClipTrim({
+  beatMarkers,
   allClips,
   selectedClipId,
   pxPerSec,
@@ -51,6 +53,8 @@ export function useTimelineClipTrim({
     duration: number;
   } | null>(null);
 
+  const beatMarkersRef = useRef(beatMarkers);
+  beatMarkersRef.current = beatMarkers;
   const allClipsRef = useRef(allClips);
   allClipsRef.current = allClips;
   const selectedClipIdRef = useRef(selectedClipId);
@@ -115,6 +119,7 @@ export function useTimelineClipTrim({
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
           getPlaybackTime(),
+          beatMarkersRef.current,
         );
 
         latestPanTrimUpdatesRef.current = updates;
@@ -233,6 +238,7 @@ export function useTimelineClipTrim({
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
           getPlaybackTime(),
+          beatMarkersRef.current,
         );
 
         latestPanTrimUpdatesRef.current = updates;
@@ -372,6 +378,7 @@ export function useTimelineClipTrim({
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
           getPlaybackTime(),
+          beatMarkersRef.current,
         );
 
         latestUpdates = updates;
@@ -470,6 +477,7 @@ export function useTimelineClipTrim({
           isSnappingEnabledRef.current,
           pxPerSecRef.current,
           getPlaybackTime(),
+          beatMarkersRef.current,
         );
 
         latestUpdates = updates;

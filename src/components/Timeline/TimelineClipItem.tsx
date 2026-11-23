@@ -15,6 +15,7 @@ import { TimelineClipPreview } from "./TimelineClipPreview";
 import { clipHasAudio, mediaHasAudioTrack } from "../../utils/mediaAudioDetector";
 
 interface TimelineClipItemProps {
+  beatMarkers?: number[];
   clip: UnifiedClipItem;
   trackIdx: number;
   clipIndexInRow: number;
@@ -49,6 +50,7 @@ interface TimelineClipItemProps {
 }
 
 const TimelineClipItemComponent: React.FC<TimelineClipItemProps> = ({
+  beatMarkers,
   clip,
   trackIdx,
   clipIndexInRow,
@@ -208,6 +210,128 @@ const TimelineClipItemComponent: React.FC<TimelineClipItemProps> = ({
             width={width}
             isSelected={isSelected}
           />
+
+          {/* Visual Audio Fade In / Fade Out Ramp Overlays (CapCut Audio Envelope) */}
+          {(() => {
+            const raw = clip.rawClip as any;
+            const fadeInSec = raw?.fadeIn || 0;
+            const fadeOutSec = raw?.fadeOut || 0;
+            if (fadeInSec <= 0 && fadeOutSec <= 0) return null;
+
+            const fadeInPx = Math.min(width * 0.45, fadeInSec * pxPerSec);
+            const fadeOutPx = Math.min(width * 0.45, fadeOutSec * pxPerSec);
+
+            return (
+              <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                {fadeInPx > 0 && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: fadeInPx,
+                      borderRightWidth: 1.5,
+                      borderRightColor: "rgba(0, 242, 254, 0.8)",
+                      backgroundColor: "rgba(0, 242, 254, 0.12)",
+                      borderTopLeftRadius: 6,
+                      borderBottomLeftRadius: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        position: "absolute",
+                        left: 2,
+                        top: 2,
+                        paddingHorizontal: 3,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                      }}
+                    >
+                      <Text style={{ color: "#00F2FE", fontSize: 8, fontWeight: "700" }}>
+                        ▲ {fadeInSec.toFixed(1)}s
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {fadeOutPx > 0 && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: fadeOutPx,
+                      borderLeftWidth: 1.5,
+                      borderLeftColor: "rgba(255, 75, 75, 0.8)",
+                      backgroundColor: "rgba(255, 75, 75, 0.12)",
+                      borderTopRightRadius: 6,
+                      borderBottomRightRadius: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        position: "absolute",
+                        right: 2,
+                        top: 2,
+                        paddingHorizontal: 3,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                      }}
+                    >
+                      <Text style={{ color: "#FF6B6B", fontSize: 8, fontWeight: "700" }}>
+                        ▼ {fadeOutSec.toFixed(1)}s
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+
+          {/* CapCut Yellow Beat Markers */}
+          {beatMarkers &&
+            beatMarkers.length > 0 &&
+            (clip.type === "audio" || (clip.type === "video" && mediaHasAudioTrack(clip))) && (
+              <View
+                style={[StyleSheet.absoluteFill, { zIndex: 65 }]}
+                pointerEvents="none"
+              >
+                {beatMarkers.map((beatTime, bIdx) => {
+                  if (
+                    beatTime < clip.startTime - 0.05 ||
+                    beatTime > clip.startTime + clip.duration + 0.05
+                  ) {
+                    return null;
+                  }
+                  const beatPos = (beatTime - clip.startTime) * pxPerSec;
+                  if (beatPos < 0 || beatPos > width) return null;
+                  return (
+                    <View
+                      key={`beat-${bIdx}`}
+                      style={{
+                        position: "absolute",
+                        left: Math.max(0, Math.min(width - 8, beatPos - 4)),
+                        bottom: 3,
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: "#FFE600",
+                        borderWidth: 1,
+                        borderColor: "#000000",
+                        shadowColor: "#FFE600",
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.9,
+                        shadowRadius: 3,
+                        elevation: 4,
+                      }}
+                    />
+                  );
+                })}
+              </View>
+            )}
 
           {/* Inner Content by Clip Type */}
           <View

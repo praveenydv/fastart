@@ -189,6 +189,9 @@ function AutoCaptionModalComponent({
   const [highlightStyle, setHighlightStyle] = useState<
     "color" | "box" | "scale" | "glow" | "underline"
   >(initialSettings.highlightStyle || "color");
+  const [autoEmoji, setAutoEmoji] = useState<boolean>(
+    initialSettings.autoEmoji !== false
+  );
   const [fontSize, setFontSize] = useState<number>(initialSettings.fontSize);
   const [fontFamily, setFontFamily] = useState<string>(
     initialSettings.fontFamily,
@@ -330,6 +333,7 @@ function AutoCaptionModalComponent({
     presetId: selectedPresetId,
     position: { x: 50, y: captionPositionY },
     enableWordHighlight: enableHighlight,
+    autoEmoji,
     highlightColor,
     highlightStyle,
     animation: enableHighlight ? "karaoke" : animation,
@@ -1098,15 +1102,24 @@ function AutoCaptionModalComponent({
           >
             {/* 1. Live Karaoke Animation Preview Banner */}
             <View style={styles.previewBanner}>
+              <View style={styles.previewHeader}>
+                <View style={styles.liveIndicator}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>LIVE PREVIEW</Text>
+                </View>
+                <Text style={styles.previewSubtext}>
+                  {enableHighlight ? highlightStyle.toUpperCase() : "STATIC"}
+                </Text>
+              </View>
               <View
                 style={[
                   styles.previewBox,
                   backgroundColor &&
                     backgroundColor !== "transparent" && {
                       backgroundColor,
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                      borderRadius: 6,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 8,
                     },
                 ]}
               >
@@ -1211,7 +1224,10 @@ function AutoCaptionModalComponent({
             {/* 2. Viral Preset 3-Column Grid (ALL VISIBLE - ZERO HORIZONTAL SCROLL) */}
             <View style={styles.sectionCard}>
               <View style={styles.rowBetween}>
-                <Text style={styles.sectionTitle}>VIRAL PRESETS</Text>
+                <View style={styles.sectionHeaderLeft}>
+                  <Ionicons name="sparkles" size={13} color="#00F2FE" />
+                  <Text style={styles.sectionTitle}>VIRAL PRESETS</Text>
+                </View>
                 <TouchableOpacity
                   onPress={handleResetToDefaults}
                   style={styles.resetPresetBtn}
@@ -1293,7 +1309,10 @@ function AutoCaptionModalComponent({
             {/* 3. Karaoke Word Highlight Style & Colors (ALL VISIBLE) */}
             <View style={styles.sectionCard}>
               <View style={styles.rowBetween}>
-                <Text style={styles.sectionTitle}>KARAOKE WORD HIGHLIGHT</Text>
+                <View style={styles.sectionHeaderLeft}>
+                  <Ionicons name="flash" size={13} color="#00F2FE" />
+                  <Text style={styles.sectionTitle}>KARAOKE WORD HIGHLIGHT</Text>
+                </View>
                 <TouchableOpacity
                   onPress={() => {
                     const next = !enableHighlight;
@@ -1386,10 +1405,47 @@ function AutoCaptionModalComponent({
                         setHighlightColor(col);
                         persistSettings({ highlightColor: col });
                       }}
-                      size={24}
+                      size={28}
                       shape="circle"
                       accessibilityLabel="Pick custom highlight color"
                     />
+                  </View>
+
+                  {/* Auto-Emoji Badges for Viral Keywords */}
+                  <View
+                    style={[
+                      styles.rowBetween,
+                      {
+                        marginTop: 12,
+                        paddingTop: 10,
+                        borderTopWidth: 1,
+                        borderTopColor: "rgba(255, 255, 255, 0.08)",
+                      },
+                    ]}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Text style={{ fontSize: 13, marginRight: 6 }}>🔥</Text>
+                      <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                        AUTO EMOJI BADGES
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const next = !autoEmoji;
+                        setAutoEmoji(next);
+                        persistSettings({ autoEmoji: next });
+                      }}
+                      style={[styles.pillSwitch, autoEmoji && styles.pillSwitchActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.pillSwitchText,
+                          autoEmoji && styles.pillSwitchTextActive,
+                        ]}
+                      >
+                        {autoEmoji ? "ON" : "OFF"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -1398,7 +1454,10 @@ function AutoCaptionModalComponent({
             {/* 4. Typography: Font Size, 2-Col Font Grid, Weights, Alignment */}
             <View style={styles.sectionCard}>
               <View style={styles.rowBetween}>
-                <Text style={styles.sectionTitle}>TYPOGRAPHY</Text>
+                <View style={styles.sectionHeaderLeft}>
+                  <Ionicons name="text" size={13} color="#00F2FE" />
+                  <Text style={styles.sectionTitle}>TYPOGRAPHY</Text>
+                </View>
                 {/* Font Size Stepper */}
                 <View style={styles.stepperContainer}>
                   <TouchableOpacity
@@ -1534,7 +1593,10 @@ function AutoCaptionModalComponent({
 
             {/* 5. Text & Outline Color (ALL VISIBLE IN 1 ROW - ZERO HORIZONTAL SCROLL) */}
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>TEXT & OUTLINE COLOR</Text>
+              <View style={[styles.sectionHeaderLeft, { marginBottom: 8 }]}>
+                <Ionicons name="color-palette" size={13} color="#00F2FE" />
+                <Text style={styles.sectionTitle}>TEXT & OUTLINE COLOR</Text>
+              </View>
               
               {/* 8 Text Colors in 1 Balanced Row */}
               <View style={styles.swatchesRow}>
@@ -1576,7 +1638,7 @@ function AutoCaptionModalComponent({
                     setTextColor(col);
                     persistSettings({ textColor: col });
                   }}
-                  size={24}
+                  size={28}
                   shape="circle"
                   accessibilityLabel="Pick custom caption text color"
                 />
@@ -1649,7 +1711,7 @@ function AutoCaptionModalComponent({
                       setStrokeColor(col);
                       persistSettings({ strokeColor: col });
                     }}
-                    size={24}
+                    size={28}
                     shape="circle"
                     accessibilityLabel="Pick custom caption stroke color"
                   />
@@ -1659,7 +1721,10 @@ function AutoCaptionModalComponent({
 
             {/* 6. Backdrop Box & Effects (3-COL GRID - ZERO HORIZONTAL SCROLL) */}
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>BACKDROP BOX & EFFECTS</Text>
+              <View style={[styles.sectionHeaderLeft, { marginBottom: 8 }]}>
+                <Ionicons name="shapes" size={13} color="#00F2FE" />
+                <Text style={styles.sectionTitle}>BACKDROP BOX & EFFECTS</Text>
+              </View>
               
               {/* 6 Backdrop Options in 3x2 Grid - All Visible */}
               <View style={styles.boxGrid}>
@@ -1735,8 +1800,11 @@ function AutoCaptionModalComponent({
             </View>
 
             {/* 7. Screen Position (2x2 Grid - ALL VISIBLE) */}
-            <View style={[styles.sectionCard, { marginBottom: 16 }]}>
-              <Text style={styles.sectionTitle}>SCREEN POSITION</Text>
+            <View style={[styles.sectionCard, { marginBottom: 18 }]}>
+              <View style={[styles.sectionHeaderLeft, { marginBottom: 8 }]}>
+                <Ionicons name="scan-outline" size={13} color="#00F2FE" />
+                <Text style={styles.sectionTitle}>SCREEN POSITION</Text>
+              </View>
               <View style={styles.posGrid}>
                 {POSITION_PRESETS.map((pos) => {
                   const isSelected = captionPositionY === pos.value;

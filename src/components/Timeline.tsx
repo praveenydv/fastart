@@ -79,6 +79,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
   onTimelineHeightChange,
   onOpenEditModal,
   onUpdateProject,
+  isMagnetic = true,
+  onToggleMagnetic,
   onAddMedia,
   onAddAudio,
 }) => {
@@ -185,6 +187,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
     handleRightTrimStart,
     lastDragEndTimeRef,
   } = useTimelineDragTrim({
+    beatMarkers: project?.beatMarkers,
     allClips: allClipsWithTracks,
     selectedClipId,
     activeTrackCount,
@@ -803,6 +806,8 @@ const TimelineComponent: React.FC<TimelineProps> = ({
         onToggleReverse={onToggleReverse}
         hasSelectedClip={Boolean(selectedClipId)}
         selectedClipType={selectedClipType}
+        isMagnetic={isMagnetic}
+        onToggleMagnetic={onToggleMagnetic}
       />
 
       {/* Pinned Sticky Time Ruler Row (pinned to top; tracks scroll vertically underneath) */}
@@ -981,6 +986,7 @@ const TimelineComponent: React.FC<TimelineProps> = ({
                 : {})}
             >
               <TimelineTracksView
+                beatMarkers={project?.beatMarkers}
                 trackRows={trackRows}
                 activeTrackCount={activeTrackCount}
                 timelineContentWidth={timelineContentWidth}

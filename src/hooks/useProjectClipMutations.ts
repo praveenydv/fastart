@@ -509,13 +509,15 @@ export function useProjectClipMutations({
     const filtered = list.filter((c) => c.id !== clipId);
 
     if (targetKey === "video") {
-      let t = 0;
-      filtered.forEach((c) => {
-        if (!c.trackIndex || c.trackIndex === 0) {
-          c.startTime = t;
-          t += c.duration;
-        }
-      });
+      if (project.magneticTimeline !== false) {
+        let t = 0;
+        filtered.forEach((c) => {
+          if (!c.trackIndex || c.trackIndex === 0) {
+            c.startTime = t;
+            t += c.duration;
+          }
+        });
+      }
       // Purge any cutout masks or caches for deleted clip to keep storage clean
       clearClipMasks(clipId);
     }
