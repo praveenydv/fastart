@@ -1003,6 +1003,7 @@ function Player({
               />
             ) : activeModal === "tracking" && targetTrackingClip ? (
               <PlayerTrackingReticle
+                targetClip={targetTrackingClip}
                 targetRect={
                   targetTrackingClip.motionTrack?.targetRect || {
                     x: 35,

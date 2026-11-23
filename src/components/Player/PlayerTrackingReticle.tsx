@@ -9,8 +9,10 @@ import {
 import Svg, { Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { TrackingRect, TrajectoryPoint } from '../../types/project';
+import { computeVideoClipDimensions } from './playerUtils';
 
 interface PlayerTrackingReticleProps {
+  targetClip?: any;
   targetRect: TrackingRect; // 0..100%
   onChangeTargetRect: (rect: TrackingRect) => void;
   boxWidth: number; // player container width in px
@@ -25,6 +27,7 @@ interface PlayerTrackingReticleProps {
 type DragHandleType = 'pan' | 'nw' | 'ne' | 'sw' | 'se';
 
 const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
+  targetClip,
   targetRect,
   onChangeTargetRect,
   boxWidth,
@@ -45,6 +48,19 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
   // Pixel coordinates calculation for display
   const bw = Math.max(1, boxWidth);
   const bh = Math.max(1, canvasHeight);
+
+  // Calculate genuine display bounds of the video on canvas (accounting for letterbox/pillarbox)
+  const { videoW, videoH, videoLeft, videoTop } = useMemo(() => {
+    if (!targetClip) {
+      return { videoW: bw, videoH: bh, videoLeft: 0, videoTop: 0 };
+    }
+    const dims = computeVideoClipDimensions(targetClip, bw, bh);
+    const vw = dims.baseW > 0 ? dims.baseW : bw;
+    const vh = dims.baseH > 0 ? dims.baseH : bh;
+    const vl = (bw - vw) / 2;
+    const vt = (bh - vh) / 2;
+    return { videoW: vw, videoH: vh, videoLeft: vl, videoTop: vt };
+  }, [targetClip, bw, bh]);
 
   // When tracked trajectory exists, interpolate box position & scale at currentTime
   const currentTrackedPoint = useMemo(() => {
@@ -89,10 +105,10 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
     normY = currentTrackedPoint.y - normH / 2;
   }
 
-  const pxW = Math.max(36, (normW / 100) * bw);
-  const pxH = Math.max(36, (normH / 100) * bh);
-  const pxX = (normX / 100) * bw;
-  const pxY = (normY / 100) * bh;
+  const pxW = Math.max(20, (normW / 100) * videoW);
+  const pxH = Math.max(20, (normH / 100) * videoH);
+  const pxX = videoLeft + (normX / 100) * videoW;
+  const pxY = videoTop + (normY / 100) * videoH;
 
   // Web Pointer Drag Logic
   useEffect(() => {
@@ -105,8 +121,8 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
       const deltaPixelX = e.clientX - startPointerRef.current.x;
       const deltaPixelY = e.clientY - startPointerRef.current.y;
 
-      const deltaXPercent = (deltaPixelX / bw) * 100;
-      const deltaYPercent = (deltaPixelY / bh) * 100;
+      const deltaXPercent = (deltaPixelX / videoW) * 100;
+      const deltaYPercent = (deltaPixelY / videoH) * 100;
 
       const sr = startRectRef.current;
       let nextX = sr.x;
@@ -172,7 +188,10 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         window.removeEventListener('pointerup', handlePointerUp);
       }
     };
-  }, [bw, bh, onChangeTargetRect]);
+  }, [videoW, videoH, onChangeTargetRect]);
+
+  const videoBoundsRef = useRef({ videoW, videoH, videoLeft, videoTop });
+  videoBoundsRef.current = { videoW, videoH, videoLeft, videoTop };
 
   const startDrag = (handle: DragHandleType, clientX: number, clientY: number) => {
     activeHandleRef.current = handle;
@@ -189,9 +208,10 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         startRectRef.current = { ...rectRef.current };
       },
       onPanResponderMove: (_, gestureState) => {
-        if (bw <= 0 || bh <= 0) return;
-        const deltaXPercent = (gestureState.dx / bw) * 100;
-        const deltaYPercent = (gestureState.dy / bh) * 100;
+        const { videoW: vw, videoH: vh } = videoBoundsRef.current;
+        if (vw <= 0 || vh <= 0) return;
+        const deltaXPercent = (gestureState.dx / vw) * 100;
+        const deltaYPercent = (gestureState.dy / vh) * 100;
         const sr = startRectRef.current;
 
         const maxX = Math.max(0, 100 - sr.width);
@@ -217,9 +237,10 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         startRectRef.current = { ...rectRef.current };
       },
       onPanResponderMove: (_, gestureState) => {
-        if (bw <= 0 || bh <= 0) return;
-        const deltaWPercent = (gestureState.dx / bw) * 100;
-        const deltaHPercent = (gestureState.dy / bh) * 100;
+        const { videoW: vw, videoH: vh } = videoBoundsRef.current;
+        if (vw <= 0 || vh <= 0) return;
+        const deltaWPercent = (gestureState.dx / vw) * 100;
+        const deltaHPercent = (gestureState.dy / vh) * 100;
         const sr = startRectRef.current;
 
         const maxW = 100 - sr.x;
@@ -245,15 +266,16 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         startRectRef.current = { ...rectRef.current };
       },
       onPanResponderMove: (_, gestureState) => {
-        if (bw <= 0 || bh <= 0) return;
-        const deltaXPercent = (gestureState.dx / bw) * 100;
-        const deltaHPercent = (gestureState.dy / bh) * 100;
+        const { videoW: vw, videoH: vh } = videoBoundsRef.current;
+        if (vw <= 0 || vh <= 0) return;
+        const deltaXPercent = (gestureState.dx / vw) * 100;
+        const deltaYPercent = (gestureState.dy / vh) * 100;
         const sr = startRectRef.current;
 
         const candidateX = Math.max(0, Math.min(sr.x + sr.width - 8, sr.x + deltaXPercent));
         const newW = sr.width + (sr.x - candidateX);
         const maxH = 100 - sr.y;
-        const newH = Math.max(8, Math.min(maxH, sr.height + deltaHPercent));
+        const newH = Math.max(8, Math.min(maxH, sr.height + deltaYPercent));
 
         onChangeTargetRect({
           ...sr,
@@ -274,9 +296,10 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         startRectRef.current = { ...rectRef.current };
       },
       onPanResponderMove: (_, gestureState) => {
-        if (bw <= 0 || bh <= 0) return;
-        const deltaWPercent = (gestureState.dx / bw) * 100;
-        const deltaYPercent = (gestureState.dy / bh) * 100;
+        const { videoW: vw, videoH: vh } = videoBoundsRef.current;
+        if (vw <= 0 || vh <= 0) return;
+        const deltaWPercent = (gestureState.dx / vw) * 100;
+        const deltaYPercent = (gestureState.dy / vh) * 100;
         const sr = startRectRef.current;
 
         const candidateY = Math.max(0, Math.min(sr.y + sr.height - 8, sr.y + deltaYPercent));
@@ -303,9 +326,10 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
         startRectRef.current = { ...rectRef.current };
       },
       onPanResponderMove: (_, gestureState) => {
-        if (bw <= 0 || bh <= 0) return;
-        const deltaXPercent = (gestureState.dx / bw) * 100;
-        const deltaYPercent = (gestureState.dy / bh) * 100;
+        const { videoW: vw, videoH: vh } = videoBoundsRef.current;
+        if (vw <= 0 || vh <= 0) return;
+        const deltaXPercent = (gestureState.dx / vw) * 100;
+        const deltaYPercent = (gestureState.dy / vh) * 100;
         const sr = startRectRef.current;
 
         const candidateX = Math.max(0, Math.min(sr.x + sr.width - 8, sr.x + deltaXPercent));
