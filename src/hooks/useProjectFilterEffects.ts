@@ -273,6 +273,7 @@ export function useProjectFilterEffects({
             shadow: cutoutConfig?.shadow ?? 25,
             strokeColor: "none",
             strokeWidth: 3,
+            strokeStyle: "solid",
             bgColor: "none",
             quality: "fast",
           };

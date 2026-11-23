@@ -104,8 +104,10 @@ function renderMosaicCensor(clip: any, clipW: number, clipH: number, currentTime
   // rect.x, rect.width and motion.dx are in percent (0..100)
   const centerNormX = Math.max(0, Math.min(1, (rect.x + rect.width / 2 + motion.dx) / 100));
   const centerNormY = Math.max(0, Math.min(1, (rect.y + rect.height / 2 + motion.dy) / 100));
-  const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * motion.dScale));
-  const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * motion.dScale));
+  const shouldScale = track.trackScale !== false;
+  const dScale = shouldScale ? motion.dScale : 1.0;
+  const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * dScale));
+  const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * dScale));
 
   const boxPixelW = Math.max(20, Math.round(clipW * boxNormW));
   const boxPixelH = Math.max(20, Math.round(clipH * boxNormH));
@@ -511,12 +513,19 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
 
   const strokeStyle = cutout?.strokeStyle || "solid";
   const isGlow = strokeStyle === "glow";
+  const isDotted = strokeStyle === "dotted";
+
+  const strokeOffsets = useMemo(() => {
+    return isDotted
+      ? CUTOUT_STROKE_OFFSETS.filter((_, idx) => idx % 2 === 0)
+      : CUTOUT_STROKE_OFFSETS;
+  }, [isDotted]);
 
   const strokeElements = useMemo(() => {
     if (!hasStroke || !effectiveMaskUri) return null;
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {CUTOUT_STROKE_OFFSETS.map(([ox, oy], idx) => (
+        {strokeOffsets.map(([ox, oy], idx) => (
           <ExpoImage
             key={idx}
             source={{ uri: effectiveMaskUri }}
@@ -544,7 +553,7 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
         ))}
       </View>
     );
-  }, [hasStroke, effectiveMaskUri, strokeWidth, strokeColor, isGlow]);
+  }, [hasStroke, effectiveMaskUri, strokeWidth, strokeColor, isGlow, strokeOffsets]);
 
   const video = (
     <NativeVideoClipPlayer
@@ -1659,7 +1668,8 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
           const croppedContainerH = Math.round(fullH * cropH);
 
           const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
-          const cleanBlendMode = String(blendMode).toLowerCase().replace(/_/g, "-");
+          let cleanBlendMode = String(blendMode).toLowerCase().replace(/_/g, "-");
+          if (cleanBlendMode === "add") cleanBlendMode = "plus-lighter";
           const webBlendStyle =
             Platform.OS === "web" && cleanBlendMode !== "normal"
               ? ({ mixBlendMode: cleanBlendMode } as any)
@@ -1799,7 +1809,8 @@ const PlayerNativeCompositorComponent: React.FC<PlayerNativeCompositorProps> = (
         }
 
         const blendMode = vid.blendMode || vid.transform?.blendMode || "normal";
-        const cleanBlendMode = String(blendMode).toLowerCase().replace(/_/g, "-");
+        let cleanBlendMode = String(blendMode).toLowerCase().replace(/_/g, "-");
+        if (cleanBlendMode === "add") cleanBlendMode = "plus-lighter";
         const webBlendStyle =
           Platform.OS === "web" && cleanBlendMode !== "normal"
             ? ({ mixBlendMode: cleanBlendMode } as any)

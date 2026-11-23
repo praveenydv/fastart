@@ -12,6 +12,7 @@ import { TactileTouchable as TouchableOpacity } from "../../Common/TactileToucha
 import { Ionicons } from "@expo/vector-icons";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
 import { CHROMA_QUICK_PRESETS } from "./CutoutConstants";
+import { getMediaThumbnail, requestMediaThumbnail } from "../../../utils/mediaThumbnailGenerator";
 
 interface CutoutColorDropperModalProps {
   visible: boolean;
@@ -115,15 +116,27 @@ export const CutoutColorDropperModal: React.FC<CutoutColorDropperModalProps> = (
     onClose();
   };
 
+  const thumbUri = selectedClip?.thumbnail || getMediaThumbnail(selectedClip);
+  React.useEffect(() => {
+    if (visible && selectedClip && !thumbUri) {
+      requestMediaThumbnail(selectedClip);
+    }
+  }, [visible, selectedClip, thumbUri]);
+
   if (!visible) return null;
 
   // Float the loupe 55px above the finger touch position so thumb doesn't hide target
   const loupeX = Math.max(45, Math.min(SCREEN_WIDTH - 45, reticlePos.x));
   const loupeY = Math.max(90, Math.min(SCREEN_HEIGHT - 160, reticlePos.y - 55));
 
-  const imageSource = selectedClip?.thumbnail
-    ? { uri: selectedClip.thumbnail }
-    : selectedClip?.url && (selectedClip.url.endsWith(".png") || selectedClip.url.endsWith(".jpg") || selectedClip.url.endsWith(".jpeg") || selectedClip.url.endsWith(".webp"))
+  const imageSource = thumbUri
+    ? { uri: thumbUri }
+    : selectedClip?.url &&
+      (selectedClip.url.endsWith(".png") ||
+        selectedClip.url.endsWith(".jpg") ||
+        selectedClip.url.endsWith(".jpeg") ||
+        selectedClip.url.endsWith(".webp") ||
+        selectedClip.type === "image")
     ? { uri: selectedClip.url }
     : null;
 

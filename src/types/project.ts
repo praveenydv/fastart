@@ -86,6 +86,7 @@ export interface MotionTrackConfig {
   mode: 'follow_center' | 'cinematic_drift' | 'dynamic_zoom' | 'orbit_float' | 'custom' | 'object_track';
   intensity?: number;
   // CapCut Object Tracking
+  aiTarget?: 'auto' | 'face' | 'body' | 'object'; // AI Subject Target: Auto-detect, Face, Body, or Custom Object
   targetRect?: TrackingRect;
   trajectory?: TrajectoryPoint[];
   actionType?: TrackingActionType;

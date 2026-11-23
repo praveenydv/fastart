@@ -448,8 +448,9 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
               : selectedClipType === "stickers" ||
                   selectedClipType === "sticker"
                 ? "sticker"
-                : selectedClip?.trackIndex && selectedClip.trackIndex > 0
-                  ? "overlay"
+                : selectedClipType === "caption" ||
+                    selectedClipType === "captions"
+                  ? "caption"
                   : "video"
           }
           currentTrack={selectedClip?.motionTrack}

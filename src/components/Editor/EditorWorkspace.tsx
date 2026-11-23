@@ -1530,6 +1530,18 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       });
       return;
     }
+    const cIdx = (current.tracks.captions || []).findIndex(
+      (c) => c.id === selectedClipId,
+    );
+    if (cIdx >= 0) {
+      const captions = [...current.tracks.captions];
+      captions[cIdx] = { ...captions[cIdx], motionTrack: track };
+      updateProjectWithHistory({
+        ...current,
+        tracks: { ...current.tracks, captions },
+      });
+      return;
+    }
   };
 
   const handleRelinkClip = (

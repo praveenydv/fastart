@@ -510,6 +510,24 @@ export async function exportProjectAudioToWavBytes(
   const masterLeft = new Float32Array(totalSamples);
   const masterRight = new Float32Array(totalSamples);
 
+  // Pre-compute Smart Audio Ducking speech intervals if enabled
+  const duckIntervals: Array<{ start: number; end: number }> = [];
+  if (project.audioDucking) {
+    // 1. Voiceover clips
+    (project.tracks.audio || []).forEach((a) => {
+      if (a.isVoiceover && (a.volume === undefined || a.volume > 0)) {
+        duckIntervals.push({ start: a.startTime, end: a.startTime + a.duration });
+      }
+    });
+    // 2. Video clips with audible dialogue
+    (project.tracks.video || []).forEach((v) => {
+      if ((v.volume === undefined || v.volume > 0) && (v as any).url) {
+        duckIntervals.push({ start: v.startTime, end: v.startTime + v.duration });
+      }
+    });
+  }
+  const duckLevel = typeof project.audioDuckingLevel === "number" ? project.audioDuckingLevel : 0.3;
+
   // Mix every loaded audio track with frame-accurate interpolation & envelope curves
   for (const track of loadedAudioTracks) {
     const { clip, decoded, volume, speed, trimIn, fadeIn, fadeOut, denoise, voiceEffect } = track;
@@ -707,7 +725,18 @@ export async function exportProjectAudioToWavBytes(
           }
         }
 
-        const effVol = volume * env;
+        let duckMult = 1.0;
+        if (duckIntervals.length > 0 && !(track.clip as any).isVoiceover) {
+          const curTime = i * invSampleRate;
+          for (let d = 0; d < duckIntervals.length; d++) {
+            if (curTime >= duckIntervals[d].start && curTime <= duckIntervals[d].end) {
+              duckMult = duckLevel;
+              break;
+            }
+          }
+        }
+
+        const effVol = volume * env * duckMult;
         masterLeft[i] += leftSamp * effVol;
         masterRight[i] += rightSamp * effVol;
       }

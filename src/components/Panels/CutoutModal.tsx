@@ -81,10 +81,14 @@ function CutoutModalComponent({
       shadow: currentCutout?.shadow ?? 25,
       strokeColor: currentCutout?.strokeColor ?? "none",
       strokeWidth: currentCutout?.strokeWidth ?? 3,
+      strokeStyle: currentCutout?.strokeStyle ?? "solid",
       bgColor: currentCutout?.bgColor ?? "none",
       quality: currentCutout?.quality ?? "best",
     };
   });
+
+  const configRef = useRef<CutoutConfig>(config);
+  configRef.current = config;
 
   // Processing state
   const [isProcessingFrames, setIsProcessingFrames] = useState<boolean>(false);
@@ -154,6 +158,7 @@ function CutoutModalComponent({
         shadow: currentCutout?.shadow ?? 25,
         strokeColor: currentCutout?.strokeColor ?? "none",
         strokeWidth: currentCutout?.strokeWidth ?? 3,
+        strokeStyle: currentCutout?.strokeStyle ?? "solid",
         bgColor: currentCutout?.bgColor ?? "none",
         quality: currentCutout?.quality ?? "best",
       };
@@ -205,8 +210,11 @@ function CutoutModalComponent({
       }
       previewInFlightRef.current = false;
       setIsProcessingActiveFrame(false);
-      // Clean up uncommitted preview frame only if cutout was not enabled
-      if (!currentCutout?.enabled || currentCutout?.mode === "none") {
+      // Clean up uncommitted preview frame only if cutout was truly not enabled
+      const isCutoutActive =
+        (configRef.current?.enabled && configRef.current?.mode !== "none") ||
+        (currentCutout?.enabled && currentCutout?.mode !== "none");
+      if (!isCutoutActive) {
         if (abortCtrlRef.current) {
           abortCtrlRef.current.abort();
           abortCtrlRef.current = null;
@@ -230,8 +238,14 @@ function CutoutModalComponent({
       previewInFlightRef.current = false;
       setIsProcessingFrames(false);
       setIsProcessingActiveFrame(false);
+
+      // Save and persist active cutout config when leaving or unmounting the tool panel
+      if (configRef.current?.enabled && configRef.current?.mode !== "none" && clipId) {
+        onApplyCutout(configRef.current, clipId);
+        notifyMaskUpdated();
+      }
     };
-  }, []);
+  }, [clipId, onApplyCutout]);
 
   const debounceTimerRef = useRef<any>(null);
 
@@ -298,7 +312,8 @@ function CutoutModalComponent({
     const stylingChanged =
       newConfig.bgColor !== config.bgColor ||
       newConfig.strokeColor !== config.strokeColor ||
-      newConfig.strokeWidth !== config.strokeWidth;
+      newConfig.strokeWidth !== config.strokeWidth ||
+      newConfig.strokeStyle !== config.strokeStyle;
     if (stylingChanged) {
       notifyMaskUpdated();
     }
@@ -546,6 +561,7 @@ function CutoutModalComponent({
       ...config,
       enabled: !isNone,
       mode: isNone ? "none" : config.mode,
+      strokeStyle: config.strokeStyle || "solid",
       bakedFps: isNone ? undefined : (config.bakedFps || getCutoutQualityFps(currentQuality, targetFps)),
       quality: currentQuality,
     };
@@ -557,14 +573,34 @@ function CutoutModalComponent({
     notifyMaskUpdated();
     onApply?.();
     onClose();
-  }, [config, clipId, onApplyCutout, onApply, onClose, handleCancelProcessing, selectedClip?.sourceMediaId]);
+  }, [config, clipId, onApplyCutout, onApply, onClose, handleCancelProcessing, selectedClip?.sourceMediaId, selectedClip?.sourceFrameRate, selectedClip?.frameRate, currentQuality]);
 
   const handleClose = useCallback(() => {
     handleCancelProcessing();
-    // If cutout was not active on the clip when opened, clean up temporary preview frame and restore state
-    if (!currentCutout?.enabled || currentCutout?.mode === "none") {
+    // If cutout is configured and active, save and commit it on close
+    if (config.enabled && config.mode !== "none") {
+      const declaredSourceFps = Number(
+        selectedClip?.sourceFrameRate ?? selectedClip?.frameRate ?? 30,
+      );
+      const targetFps =
+        Number.isFinite(declaredSourceFps) && declaredSourceFps > 0
+          ? Math.min(240, Math.max(1, declaredSourceFps))
+          : 30;
+      const finalConfig: CutoutConfig = {
+        ...config,
+        enabled: true,
+        mode: config.mode,
+        strokeStyle: config.strokeStyle || "solid",
+        bakedFps:
+          config.bakedFps ||
+          getCutoutQualityFps(currentQuality, targetFps),
+      };
+      onApplyCutout(finalConfig, clipId);
+      notifyMaskUpdated();
+    } else {
+      // Cutout was turned off or none: clean up preview and persist reset
       clearPreviewFrame(clipId, selectedClip?.sourceMediaId);
-      if (currentCutout) {
+      if (currentCutout && currentCutout.enabled && currentCutout.mode !== "none") {
         onApplyCutout(currentCutout, clipId);
       } else {
         onApplyCutout(
@@ -574,6 +610,11 @@ function CutoutModalComponent({
             keyColor: "#00FF00",
             intensity: 45,
             shadow: 25,
+            strokeColor: "none",
+            strokeWidth: 3,
+            strokeStyle: "solid",
+            bgColor: "none",
+            quality: "fast",
           },
           clipId,
         );
@@ -581,7 +622,18 @@ function CutoutModalComponent({
       notifyMaskUpdated();
     }
     onClose();
-  }, [handleCancelProcessing, currentCutout, clipId, selectedClip?.sourceMediaId, onApplyCutout, onClose]);
+  }, [
+    handleCancelProcessing,
+    config,
+    currentCutout,
+    clipId,
+    selectedClip?.sourceMediaId,
+    selectedClip?.sourceFrameRate,
+    selectedClip?.frameRate,
+    currentQuality,
+    onApplyCutout,
+    onClose,
+  ]);
 
   if (!visible) return null;
 

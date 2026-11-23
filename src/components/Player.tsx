@@ -709,11 +709,14 @@ function Player({
       const match =
         (project.tracks.video || []).find((v) => v.id === selectedClipId) ||
         (project.tracks.text || []).find((t) => t.id === selectedClipId) ||
-        (project.tracks.stickers || []).find((s) => s.id === selectedClipId);
+        (project.tracks.stickers || []).find((s) => s.id === selectedClipId) ||
+        (project.tracks.captions || []).find((c) => c.id === selectedClipId);
       if (match) return match as any;
     }
     return activeVideos[0] || (project.tracks.video || [])[0] || null;
   }, [selectedClipId, project.tracks, activeVideos]);
+
+  const isTrackingScanning = activeModal === "tracking" && targetTrackingClip?.motionTrack?.trackingStatus === "tracking";
 
   // Resolved Active Selected Transform Item
   const activeTransformItem = useActiveTransformItem({
@@ -951,7 +954,7 @@ function Player({
                 activeEffects={activeEffects}
                 activeTransient={activeTransient}
                 currentTime={currentTime}
-                isPlaying={isPlaying}
+                isPlaying={isTrackingScanning ? false : isPlaying}
                 boxWidth={boxWidth}
                 canvasHeight={canvasHeight}
                 canvasBackground={project.canvasBackground}

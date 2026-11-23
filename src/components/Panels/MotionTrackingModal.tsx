@@ -6,6 +6,7 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,12 +23,13 @@ import { ObjectTrackerEngine } from "../../utils/objectTrackerEngine";
 import { CompactSliderInput } from "../Common/CompactSliderInput";
 import { THEME_COLORS } from "../../constants/designConstants";
 import { ModalHeader } from "../Common/ModalHeader";
+import { pauseActiveVideoRenderer, setMotionTrackingActive } from "../../utils/videoRenderer";
 
 interface MotionTrackingModalProps {
   visible: boolean;
   onClose: () => void;
   onApply?: () => void;
-  targetType?: "text" | "sticker" | "overlay" | "video";
+  targetType?: "text" | "sticker" | "overlay" | "video" | "caption";
   currentTrack?: MotionTrackConfig;
   onApplyTracking: (config: MotionTrackConfig) => void;
   isInline?: boolean;
@@ -50,7 +52,10 @@ export default function MotionTrackingModal({
   currentTime,
   updateProjectWithHistory,
 }: MotionTrackingModalProps) {
-  const isElementClip = targetType === "text" || targetType === "sticker" || targetType === "overlay";
+  const { width: screenWidth } = useWindowDimensions();
+  const isSmallScreen = screenWidth < 375;
+
+  const isElementClip = targetType === "text" || targetType === "sticker" || targetType === "caption";
   // Primary States
   const [enabled, setEnabled] = useState<boolean>(
     currentTrack?.enabled || false,
@@ -59,6 +64,8 @@ export default function MotionTrackingModal({
     currentTrack?.actionType === "camera_center"
       ? "camera"
       : currentTrack?.actionType === "pin_element"
+      ? "pin"
+      : isElementClip
       ? "pin"
       : "censor"
   );
@@ -70,7 +77,10 @@ export default function MotionTrackingModal({
 
   // Operations
   const [actionType, setActionType] = useState<TrackingActionType>(
-    currentTrack?.actionType || "mosaic_censor",
+    currentTrack?.actionType || (isElementClip ? "pin_element" : "mosaic_censor"),
+  );
+  const [aiTarget, setAiTarget] = useState<'auto' | 'face' | 'body' | 'object'>(
+    currentTrack?.aiTarget || 'auto'
   );
   const [pinnedClipId, setPinnedClipId] = useState<string>(
     currentTrack?.pinnedClipId || "",
@@ -114,12 +124,14 @@ export default function MotionTrackingModal({
   const [trajectory, setTrajectory] = useState<TrajectoryPoint[]>(
     currentTrack?.trajectory || [],
   );
+  const hasTrajectory = trajectory && trajectory.length > 0;
   const [bakedSuccess, setBakedSuccess] = useState<boolean>(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (visible && currentTrack) {
+    if (!visible) return;
+    if (currentTrack && ((currentTrack.trajectory && currentTrack.trajectory.length > 0) || currentTrack.enabled)) {
       setEnabled(currentTrack.enabled || false);
       if (currentTrack.targetRect) setTargetRect(currentTrack.targetRect);
       if (currentTrack.actionType) {
@@ -128,6 +140,7 @@ export default function MotionTrackingModal({
         else if (currentTrack.actionType === "pin_element") setActiveTab("pin");
         else setActiveTab("censor");
       }
+      if (currentTrack.aiTarget) setAiTarget(currentTrack.aiTarget);
       if (currentTrack.pinnedClipId) setPinnedClipId(currentTrack.pinnedClipId);
       if (currentTrack.trackScale !== undefined) setTrackScale(currentTrack.trackScale);
       if (currentTrack.trackRotation !== undefined) setTrackRotation(currentTrack.trackRotation);
@@ -138,19 +151,54 @@ export default function MotionTrackingModal({
       if (currentTrack.cameraZoom !== undefined) setCameraZoom(currentTrack.cameraZoom);
       if (currentTrack.cameraLockCenter !== undefined) setCameraLockCenter(currentTrack.cameraLockCenter);
       if (currentTrack.smoothness !== undefined) setSmoothness(currentTrack.smoothness);
-      if (currentTrack.trajectory) setTrajectory(currentTrack.trajectory);
+      setTrajectory(currentTrack.trajectory || []);
+    } else {
+      // Untracked or newly switched clip: initialize clean state
+      setEnabled(false);
+      setTrajectory([]);
+      setTargetRect(currentTrack?.targetRect || { x: 35, y: 25, width: 30, height: 30 });
+      const defaultAction = isElementClip ? "pin_element" : "mosaic_censor";
+      setActionType(currentTrack?.actionType || defaultAction);
+      setActiveTab(
+        currentTrack?.actionType === "camera_center"
+          ? "camera"
+          : currentTrack?.actionType === "pin_element"
+          ? "pin"
+          : isElementClip
+          ? "pin"
+          : "censor"
+      );
+      setAiTarget(currentTrack?.aiTarget || "auto");
+      setPinnedClipId(currentTrack?.pinnedClipId || "");
+      setTrackScale(currentTrack?.trackScale !== false);
+      setTrackRotation(currentTrack?.trackRotation === true);
+      setMosaicStyle(currentTrack?.mosaicStyle || "blur");
+      setMosaicRadius(currentTrack?.mosaicRadius ?? 18);
+      setMosaicShape(currentTrack?.mosaicShape || "rectangle");
+      setCameraFitToScreen(currentTrack?.cameraFitToScreen !== false);
+      setCameraZoom(currentTrack?.cameraZoom ?? 1.25);
+      setCameraLockCenter(currentTrack?.cameraLockCenter !== false);
+      setSmoothness(currentTrack?.smoothness ?? 75);
     }
-  }, [visible, currentTrack]);
+  }, [visible, selectedClip?.id, currentTrack, isElementClip]);
 
   // Synchronize updates to parent clip
   const syncTracking = useCallback(
     (overrides?: Partial<MotionTrackConfig>) => {
+      const nextTrajectory = overrides?.trajectory !== undefined ? overrides.trajectory : trajectory;
+      const hasTraj = nextTrajectory.length > 0;
+      // Never enable tracking without trajectory unless explicitly overridden while tracking
+      const nextEnabled = overrides?.enabled !== undefined
+        ? overrides.enabled
+        : (hasTraj ? enabled : false);
+
       const config: MotionTrackConfig = {
-        enabled: overrides?.enabled !== undefined ? overrides.enabled : enabled,
+        enabled: nextEnabled,
         mode: "object_track",
         intensity: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
+        aiTarget: overrides?.aiTarget || aiTarget,
         targetRect: overrides?.targetRect || targetRect,
-        trajectory: overrides?.trajectory || trajectory,
+        trajectory: nextTrajectory,
         actionType: overrides?.actionType || actionType,
         pinnedClipId: overrides?.pinnedClipId !== undefined ? overrides.pinnedClipId : pinnedClipId,
         trackScale: overrides?.trackScale !== undefined ? overrides.trackScale : trackScale,
@@ -162,11 +210,11 @@ export default function MotionTrackingModal({
         cameraZoom: overrides?.cameraZoom !== undefined ? overrides.cameraZoom : cameraZoom,
         cameraLockCenter: overrides?.cameraLockCenter !== undefined ? overrides.cameraLockCenter : cameraLockCenter,
         smoothness: overrides?.smoothness !== undefined ? overrides.smoothness : smoothness,
-        trackDirection: overrides?.trackDirection || trackDirection,
+        trackDirection: 'bidirectional',
         anchorTime: overrides?.anchorTime !== undefined ? overrides.anchorTime : currentTrack?.anchorTime,
         trackingStatus:
           overrides?.trackingStatus ||
-          ((overrides?.trajectory || trajectory).length > 0 ? "completed" : "idle"),
+          (hasTraj ? "completed" : "idle"),
         lastTrackedAt: Date.now(),
       };
 
@@ -191,6 +239,20 @@ export default function MotionTrackingModal({
           proj.tracks = { ...proj.tracks, stickers };
           changed = true;
         }
+        const captions = [...(proj.tracks.captions || [])];
+        const cIdx = captions.findIndex((c) => c.id === effectivePinnedId);
+        if (cIdx >= 0) {
+          captions[cIdx] = { ...captions[cIdx], motionTrack: config };
+          proj.tracks = { ...proj.tracks, captions };
+          changed = true;
+        }
+        const videos = [...(proj.tracks.video || [])];
+        const vIdx = videos.findIndex((v) => v.id === effectivePinnedId);
+        if (vIdx >= 0) {
+          videos[vIdx] = { ...videos[vIdx], motionTrack: config };
+          proj.tracks = { ...proj.tracks, video: videos };
+          changed = true;
+        }
         if (changed) {
           updateProjectWithHistory(proj);
         }
@@ -200,11 +262,13 @@ export default function MotionTrackingModal({
       enabled,
       smoothness,
       targetRect,
+      aiTarget,
       trajectory,
       actionType,
       pinnedClipId,
       trackScale,
       trackRotation,
+      trackDirection,
       mosaicStyle,
       mosaicRadius,
       mosaicShape,
@@ -241,6 +305,17 @@ export default function MotionTrackingModal({
       });
     });
 
+    (project.tracks.captions || []).forEach((c, idx) => {
+      if (c.id !== selectedClip?.id) {
+        list.push({
+          id: c.id,
+          label: c.text ? `"${c.text.slice(0, 14)}${c.text.length > 14 ? "…" : ""}"` : `Caption #${idx + 1}`,
+          icon: "chatbubble-ellipses-outline",
+          type: "caption",
+        });
+      }
+    });
+
     (project.tracks.video || []).forEach((v, idx) => {
       if (v.id !== selectedClip?.id) {
         list.push({
@@ -261,6 +336,19 @@ export default function MotionTrackingModal({
     setIsScanning(true);
     setScanProgress(0);
     setScanStatusText("Analyzing Video Frames...");
+
+    // Silence video playback so preview remains calm and static during background tracking
+    setMotionTrackingActive(true);
+    pauseActiveVideoRenderer();
+    if (typeof document !== 'undefined') {
+      try {
+        document.querySelectorAll('video').forEach((v) => {
+          if (!v.paused) {
+            try { v.pause(); } catch (_) {}
+          }
+        });
+      } catch (_) {}
+    }
 
     syncTracking({ trackingStatus: "tracking" });
 
@@ -301,11 +389,12 @@ export default function MotionTrackingModal({
         sourceVideoClip: bgVideoClip,
         project,
         targetRect,
-        sampleFps: 12,
+        aiTarget,
+        sampleFps: 4, // Optimized sparse keyframe sampling (4 FPS) for fast tracking
         smoothness,
         trackScale,
         trackRotation,
-        direction: trackDirection,
+        direction: 'bidirectional', // Always trace the whole clip
         currentTime: anchorTime,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
@@ -320,13 +409,16 @@ export default function MotionTrackingModal({
       setIsScanning(false);
       setScanStatusText("");
 
-      const effectiveActionType = isElementClip ? "pin_element" : actionType;
-      const effectivePinnedId = isElementClip ? selectedClip.id : pinnedClipId;
+      const effectiveActionType = actionType;
+      const effectivePinnedId = actionType === "pin_element"
+        ? (pinnedClipId || (isElementClip ? selectedClip.id : ""))
+        : "";
 
       syncTracking({
         enabled: true,
         trajectory: generatedTrajectory,
         targetRect,
+        aiTarget,
         actionType: effectiveActionType,
         pinnedClipId: effectivePinnedId,
         anchorTime,
@@ -343,6 +435,7 @@ export default function MotionTrackingModal({
       });
     } catch (err) {
       console.warn("[MotionTracking] Tracking error or abort:", err);
+      setMotionTrackingActive(false);
       setIsScanning(false);
       syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
     }
@@ -352,6 +445,8 @@ export default function MotionTrackingModal({
     selectedClip,
     project,
     targetRect,
+    aiTarget,
+    trackDirection,
     smoothness,
     trackScale,
     trackRotation,
@@ -372,6 +467,7 @@ export default function MotionTrackingModal({
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    setMotionTrackingActive(false);
     setIsScanning(false);
     triggerHaptic("warning");
     syncTracking({ trackingStatus: trajectory.length > 0 ? "completed" : "idle" });
@@ -389,6 +485,7 @@ export default function MotionTrackingModal({
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      setMotionTrackingActive(false);
       setIsScanning(false);
     }
     return () => {
@@ -396,6 +493,7 @@ export default function MotionTrackingModal({
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      setMotionTrackingActive(false);
     };
   }, [visible]);
 
@@ -501,20 +599,69 @@ export default function MotionTrackingModal({
     currentTrack?.anchorTime,
   ]);
 
+  const handleDone = useCallback(() => {
+    triggerHaptic("success");
+    syncTracking({ enabled: hasTrajectory });
+    if (onApply) {
+      onApply();
+    } else {
+      onClose();
+    }
+  }, [hasTrajectory, onApply, onClose, syncTracking]);
+
   const handleReset = useCallback(() => {
-    triggerHaptic("selection");
+    triggerHaptic("warning");
+    const defaultRect = { x: 35, y: 25, width: 30, height: 30 };
     setEnabled(false);
     setTrajectory([]);
+    setTargetRect(defaultRect);
+    setPinnedClipId("");
     syncTracking({
       enabled: false,
       trajectory: [],
+      targetRect: defaultRect,
       pinnedClipId: "",
       actionType: "mosaic_censor",
       trackingStatus: "idle",
     });
-  }, [syncTracking]);
 
-  const hasTrajectory = trajectory && trajectory.length > 0;
+    // If an element was pinned in project, unpin it cleanly
+    if (project && updateProjectWithHistory && pinnedClipId) {
+      const proj = { ...project };
+      let changed = false;
+      const texts = [...(proj.tracks.text || [])];
+      const tIdx = texts.findIndex((t) => t.id === pinnedClipId);
+      if (tIdx >= 0) {
+        texts[tIdx] = { ...texts[tIdx], motionTrack: undefined };
+        proj.tracks = { ...proj.tracks, text: texts };
+        changed = true;
+      }
+      const stickers = [...(proj.tracks.stickers || [])];
+      const sIdx = stickers.findIndex((s) => s.id === pinnedClipId);
+      if (sIdx >= 0) {
+        stickers[sIdx] = { ...stickers[sIdx], motionTrack: undefined };
+        proj.tracks = { ...proj.tracks, stickers };
+        changed = true;
+      }
+      const captions = [...(proj.tracks.captions || [])];
+      const cIdx = captions.findIndex((c) => c.id === pinnedClipId);
+      if (cIdx >= 0) {
+        captions[cIdx] = { ...captions[cIdx], motionTrack: undefined };
+        proj.tracks = { ...proj.tracks, captions };
+        changed = true;
+      }
+      const videos = [...(proj.tracks.video || [])];
+      const vIdx = videos.findIndex((v) => v.id === pinnedClipId);
+      if (vIdx >= 0) {
+        videos[vIdx] = { ...videos[vIdx], motionTrack: undefined };
+        proj.tracks = { ...proj.tracks, video: videos };
+        changed = true;
+      }
+      if (changed) {
+        updateProjectWithHistory(proj);
+      }
+    }
+  }, [project, updateProjectWithHistory, pinnedClipId, syncTracking]);
 
   if (!visible) return null;
 
@@ -554,7 +701,7 @@ export default function MotionTrackingModal({
               onPress={handleReset}
               style={styles.clearBtn}
               activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="trash-outline" size={11} color="#EF4444" style={{ marginRight: 3 }} />
               <Text style={styles.clearBtnText}>Clear Track</Text>
@@ -594,71 +741,6 @@ export default function MotionTrackingModal({
         </View>
       )}
 
-      {/* Mode Switcher Tabs for Main Video Clip */}
-      {!isElementClip && (
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === "censor" && styles.tabBtnActive]}
-            onPress={() => {
-              triggerHaptic("selection");
-              setActiveTab("censor");
-              setActionType("mosaic_censor");
-              syncTracking({ actionType: "mosaic_censor", enabled: true });
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="eye-off-outline"
-              size={13}
-              color={activeTab === "censor" ? "#00F2FE" : "#8E8E93"}
-            />
-            <Text style={[styles.tabText, activeTab === "censor" && styles.tabTextActive]}>
-              Censor Blur
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === "pin" && styles.tabBtnActive]}
-            onPress={() => {
-              triggerHaptic("selection");
-              setActiveTab("pin");
-              setActionType("pin_element");
-              syncTracking({ actionType: "pin_element", enabled: true });
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="attach-outline"
-              size={13}
-              color={activeTab === "pin" ? "#00F2FE" : "#8E8E93"}
-            />
-            <Text style={[styles.tabText, activeTab === "pin" && styles.tabTextActive]}>
-              Pin Element
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === "camera" && styles.tabBtnActive]}
-            onPress={() => {
-              triggerHaptic("selection");
-              setActiveTab("camera");
-              setActionType("camera_center");
-              syncTracking({ actionType: "camera_center", enabled: true });
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="videocam-outline"
-              size={13}
-              color={activeTab === "camera" ? "#00F2FE" : "#8E8E93"}
-            />
-            <Text style={[styles.tabText, activeTab === "camera" && styles.tabTextActive]}>
-              Lock Camera
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       <ScrollView
         style={styles.sheetBody}
         contentContainerStyle={styles.sheetBodyContent}
@@ -689,478 +771,582 @@ export default function MotionTrackingModal({
             </TouchableOpacity>
           </View>
         ) : (
-          /* Primary Tracking Action Bar & Controls */
-          <View style={{ gap: 8 }}>
-            {/* Quick Target Presets & Direction Card */}
-            <View style={styles.trackingConfigCard}>
-              <View style={styles.configRow}>
-                <Text style={styles.configLabel}>Target:</Text>
-                <View style={styles.presetChipGroup}>
-                  {[
-                    { id: "face", label: "Face", rect: { x: 37.5, y: 15, width: 25, height: 25 } },
-                    { id: "upper", label: "Upper", rect: { x: 30, y: 18, width: 40, height: 42 } },
-                    { id: "full", label: "Full", rect: { x: 25, y: 12, width: 50, height: 74 } },
-                    { id: "center", label: "Center", rect: { x: 35, y: 35, width: 30, height: 30 } },
-                  ].map((p) => (
-                    <TouchableOpacity
-                      key={p.id}
-                      style={styles.targetPresetChip}
-                      onPress={() => {
-                        triggerHaptic("selection");
-                        setTargetRect(p.rect);
-                        syncTracking({ targetRect: p.rect });
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.targetPresetChipText}>{p.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+          /* Primary Tracking Action Bar */
+          <View style={styles.actionBtnRow}>
+            {/* Start / Re-Track Target */}
+            <TouchableOpacity
+              style={[
+                styles.startTrackBtn,
+                hasTrajectory && styles.retrackBtn,
+                (hasTrajectory && !isInline) && { flex: 1.4 },
+              ]}
+              onPress={handleStartTracking}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={hasTrajectory ? "refresh" : "scan"}
+                size={isSmallScreen ? 14 : 16}
+                color="#000000"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.startTrackBtnText, isSmallScreen && { fontSize: 11.5 }]} numberOfLines={1}>
+                {hasTrajectory
+                  ? isSmallScreen
+                    ? "RE-TRACK"
+                    : "RE-TRACK CLIP"
+                  : isSmallScreen
+                  ? "TRACK CLIP"
+                  : "START TRACKING"}
+              </Text>
+            </TouchableOpacity>
 
-              <View style={[styles.configRow, { marginTop: 6 }]}>
-                <Text style={styles.configLabel}>Direction:</Text>
-                <View style={styles.directionGroup}>
-                  {[
-                    { id: "bidirectional" as const, label: "Both" },
-                    { id: "forward" as const, label: "Forward" },
-                    { id: "backward" as const, label: "Backward" },
-                  ].map((d) => (
-                    <TouchableOpacity
-                      key={d.id}
-                      style={[
-                        styles.directionChip,
-                        trackDirection === d.id && styles.directionChipActive,
-                      ]}
-                      onPress={() => {
-                        triggerHaptic("selection");
-                        setTrackDirection(d.id);
-                        syncTracking({ trackDirection: d.id });
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.directionChipText,
-                          trackDirection === d.id && styles.directionChipTextActive,
-                        ]}
-                      >
-                        {d.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.actionBtnRow}>
+            {/* Clear Track Button: Only visible in standalone modal when tracked (in inline sheet, inlineStatusBar has it) */}
+            {hasTrajectory && !isInline && (
               <TouchableOpacity
-                style={[styles.startTrackBtn, hasTrajectory && styles.retrackBtn]}
-                onPress={handleStartTracking}
+                style={[styles.resetTrackActionBtn, isSmallScreen && { paddingHorizontal: 10 }]}
+                onPress={handleReset}
                 activeOpacity={0.8}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Ionicons
-                  name={hasTrajectory ? "refresh" : "scan"}
-                  size={14}
-                  color="#000000"
-                  style={{ marginRight: 6 }}
+                  name="trash-outline"
+                  size={isSmallScreen ? 13 : 15}
+                  color="#EF4444"
+                  style={{ marginRight: 4 }}
                 />
-                <Text style={styles.startTrackBtnText}>
-                  {hasTrajectory ? "RE-TRACK TARGET" : "START TRACKING"}
+                <Text style={[styles.resetTrackActionBtnText, isSmallScreen && { fontSize: 10.5 }]} numberOfLines={1}>
+                  Clear Track
                 </Text>
               </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-              {hasTrajectory && (
+        {/* ─────────────────────────────────────────────
+            SECTION: WHAT TO DO AFTER TRACKING
+            ───────────────────────────────────────────── */}
+        <View style={styles.afterTrackingSection}>
+          <View style={styles.afterTrackingHeaderRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flex: 1, paddingRight: 6 }}>
+              <Ionicons
+                name={hasTrajectory ? "checkmark-circle" : "options-outline"}
+                size={isSmallScreen ? 12 : 14}
+                color={hasTrajectory ? "#10B981" : "#00F2FE"}
+              />
+              <Text style={[styles.afterTrackingTitle, isSmallScreen && { fontSize: 10 }]} numberOfLines={1}>
+                {isSmallScreen ? "POST-TRACK ACTION" : "WHAT TO DO AFTER TRACKING"}
+              </Text>
+            </View>
+            <View style={hasTrajectory ? styles.trackedBadgeActive : styles.trackedBadgeIdle}>
+              <Text style={hasTrajectory ? styles.trackedBadgeTextActive : styles.trackedBadgeTextIdle}>
+                {hasTrajectory
+                  ? isSmallScreen
+                    ? `${trajectory.length} pts`
+                    : `${trajectory.length} Pts Tracked`
+                  : "Ready"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Choice Tabs: Censor Blur, Pin Element, Lock Camera */}
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === "censor" && styles.tabBtnActive]}
+              onPress={() => {
+                triggerHaptic("selection");
+                setActiveTab("censor");
+                setActionType("mosaic_censor");
+                syncTracking({ actionType: "mosaic_censor" });
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="eye-off-outline"
+                size={isSmallScreen ? 12 : 13}
+                color={activeTab === "censor" ? "#00F2FE" : "#8E8E93"}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  isSmallScreen && { fontSize: 10 },
+                  activeTab === "censor" && styles.tabTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {isSmallScreen ? "Blur" : "Censor Blur"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === "pin" && styles.tabBtnActive]}
+              onPress={() => {
+                triggerHaptic("selection");
+                setActiveTab("pin");
+                setActionType("pin_element");
+                syncTracking({ actionType: "pin_element" });
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="attach-outline"
+                size={isSmallScreen ? 12 : 13}
+                color={activeTab === "pin" ? "#00F2FE" : "#8E8E93"}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  isSmallScreen && { fontSize: 10 },
+                  activeTab === "pin" && styles.tabTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {isSmallScreen ? "Pin" : "Pin Element"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === "camera" && styles.tabBtnActive]}
+              onPress={() => {
+                triggerHaptic("selection");
+                setActiveTab("camera");
+                setActionType("camera_center");
+                syncTracking({ actionType: "camera_center" });
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="videocam-outline"
+                size={isSmallScreen ? 12 : 13}
+                color={activeTab === "camera" ? "#00F2FE" : "#8E8E93"}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  isSmallScreen && { fontSize: 10 },
+                  activeTab === "camera" && styles.tabTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {isSmallScreen ? "Camera" : "Lock Camera"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ACTION 1: CENSOR BLUR SETTINGS */}
+          {activeTab === "censor" && (
+            <View style={styles.tabContentSection}>
+              {/* Shape Selection: Rectangle vs Circle */}
+              <View style={styles.styleSegmentRow}>
                 <TouchableOpacity
-                  style={[styles.bakeBtn, bakedSuccess && styles.bakeBtnSuccess]}
-                  onPress={handleBakeKeyframes}
+                  style={[styles.segmentBtn, mosaicShape === "rectangle" && styles.segmentBtnActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    setMosaicShape("rectangle");
+                    syncTracking({ mosaicShape: "rectangle" });
+                  }}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                 >
                   <Ionicons
-                    name={bakedSuccess ? "checkmark-circle" : "key-outline"}
-                    size={13}
-                    color={bakedSuccess ? "#10B981" : "#EDEDED"}
+                    name="square-outline"
+                    size={isSmallScreen ? 12 : 14}
+                    color={mosaicShape === "rectangle" ? "#00F2FE" : "#8E8E93"}
                     style={{ marginRight: 4 }}
                   />
-                  <Text style={[styles.bakeBtnText, bakedSuccess && styles.bakeBtnTextSuccess]}>
-                    {bakedSuccess ? "Baked!" : "Bake Keyframes"}
+                  <Text
+                    style={[styles.segmentText, isSmallScreen && { fontSize: 10 }, mosaicShape === "rectangle" && styles.segmentTextActive]}
+                    numberOfLines={1}
+                  >
+                    {isSmallScreen ? "Rectangle" : "Rectangle Box"}
                   </Text>
                 </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
 
-        {/* ELEMENT FOLLOW CONTROLS (for Text, Sticker, PIP Overlay) */}
-        {isElementClip && (
-          <View style={{ marginBottom: 6 }}>
-            <View style={styles.elementTipCard}>
-              <Ionicons name="scan-outline" size={13} color="#EDEDED" style={{ marginRight: 6 }} />
-              <Text style={styles.elementTipText}>
-                Position the green box on video player over the subject to follow.
-              </Text>
-            </View>
-
-            <View style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[styles.togglePill, trackScale && styles.togglePillActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  const nextVal = !trackScale;
-                  setTrackScale(nextVal);
-                  syncTracking({ trackScale: nextVal });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={trackScale ? "checkbox" : "square-outline"}
-                  size={15}
-                  color={trackScale ? "#00F2FE" : "#8E8E93"}
-                />
-                <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
-                  Follow Scale
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.togglePill, trackRotation && styles.togglePillActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  const nextVal = !trackRotation;
-                  setTrackRotation(nextVal);
-                  syncTracking({ trackRotation: nextVal });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={trackRotation ? "checkbox" : "square-outline"}
-                  size={15}
-                  color={trackRotation ? "#00F2FE" : "#8E8E93"}
-                />
-                <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
-                  Follow Tilt
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* MAIN VIDEO TRACKING MODES */}
-        {!isElementClip && activeTab === "censor" && (
-          <View style={styles.tabContentSection}>
-            {/* Shape Selection: Rectangle vs Circle */}
-            <View style={styles.styleSegmentRow}>
-              <TouchableOpacity
-                style={[styles.segmentBtn, mosaicShape === "rectangle" && styles.segmentBtnActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  setMosaicShape("rectangle");
-                  syncTracking({ mosaicShape: "rectangle" });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="square-outline"
-                  size={14}
-                  color={mosaicShape === "rectangle" ? "#00F2FE" : "#8E8E93"}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.segmentText, mosaicShape === "rectangle" && styles.segmentTextActive]}>
-                  Rectangle Box
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.segmentBtn, mosaicShape === "circle" && styles.segmentBtnActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  setMosaicShape("circle");
-                  syncTracking({ mosaicShape: "circle" });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="ellipse-outline"
-                  size={14}
-                  color={mosaicShape === "circle" ? "#00F2FE" : "#8E8E93"}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.segmentText, mosaicShape === "circle" && styles.segmentTextActive]}>
-                  Circle / Oval
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Blur Style Selection: Blur vs Pixelate */}
-            <View style={styles.styleSegmentRow}>
-              <TouchableOpacity
-                style={[styles.segmentBtn, mosaicStyle === "blur" && styles.segmentBtnActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  setMosaicStyle("blur");
-                  syncTracking({ mosaicStyle: "blur" });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="water-outline"
-                  size={14}
-                  color={mosaicStyle === "blur" ? "#00F2FE" : "#8E8E93"}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.segmentText, mosaicStyle === "blur" && styles.segmentTextActive]}>
-                  Gaussian Blur
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.segmentBtn, mosaicStyle === "pixelate" && styles.segmentBtnActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  setMosaicStyle("pixelate");
-                  syncTracking({ mosaicStyle: "pixelate" });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="grid-outline"
-                  size={14}
-                  color={mosaicStyle === "pixelate" ? "#00F2FE" : "#8E8E93"}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.segmentText, mosaicStyle === "pixelate" && styles.segmentTextActive]}>
-                  Pixelate Mosaic
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Compact Blur Radius / Block Size Slider */}
-            <CompactSliderInput
-              label={mosaicStyle === "pixelate" ? "Block Size" : "Blur Radius"}
-              value={mosaicRadius}
-              min={4}
-              max={60}
-              step={1}
-              unit="px"
-              accentColor="#FFFFFF"
-              onChange={(val) => {
-                setMosaicRadius(val);
-                syncTracking({ mosaicRadius: val });
-              }}
-              containerStyle={styles.compactSliderWrap}
-            />
-          </View>
-        )}
-
-        {/* TAB 2: PIN ELEMENT */}
-        {!isElementClip && activeTab === "pin" && (
-          <View style={styles.tabContentSection}>
-            {availableClipsToPin.length === 0 ? (
-              <View style={styles.emptyClipsBox}>
-                <Ionicons name="information-circle-outline" size={14} color="#94A3B8" />
-                <Text style={styles.emptyClipsText}>
-                  Add a Text, Sticker, or PIP Video to pin to this moving target.
-                </Text>
+                <TouchableOpacity
+                  style={[styles.segmentBtn, mosaicShape === "circle" && styles.segmentBtnActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    setMosaicShape("circle");
+                    syncTracking({ mosaicShape: "circle" });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name="ellipse-outline"
+                    size={isSmallScreen ? 12 : 14}
+                    color={mosaicShape === "circle" ? "#00F2FE" : "#8E8E93"}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    style={[styles.segmentText, isSmallScreen && { fontSize: 10 }, mosaicShape === "circle" && styles.segmentTextActive]}
+                    numberOfLines={1}
+                  >
+                    {isSmallScreen ? "Circle" : "Circle / Oval"}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            ) : (
-              <View style={styles.pinVerticalContainer}>
-                <View style={styles.pinSectionHeader}>
-                  <Text style={styles.pinSectionTitle}>ATTACH TO TARGET</Text>
-                  {pinnedClipId ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        triggerHaptic("selection");
-                        setPinnedClipId("");
-                        syncTracking({ pinnedClipId: "", actionType: "pin_element" });
-                      }}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Text style={styles.pinDetachText}>Detach</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
 
-                <View style={styles.pinVerticalList}>
-                  {availableClipsToPin.map((c) => {
-                    const isSelected = pinnedClipId === c.id;
-                    const layerTag =
-                      c.type === "text"
-                        ? "Text Layer"
-                        : c.type === "sticker"
-                        ? "Sticker Layer"
-                        : "Video Overlay";
-                    return (
+              {/* Blur Style Selection: Blur vs Pixelate */}
+              <View style={styles.styleSegmentRow}>
+                <TouchableOpacity
+                  style={[styles.segmentBtn, mosaicStyle === "blur" && styles.segmentBtnActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    setMosaicStyle("blur");
+                    syncTracking({ mosaicStyle: "blur" });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name="water-outline"
+                    size={isSmallScreen ? 12 : 14}
+                    color={mosaicStyle === "blur" ? "#00F2FE" : "#8E8E93"}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    style={[styles.segmentText, isSmallScreen && { fontSize: 10 }, mosaicStyle === "blur" && styles.segmentTextActive]}
+                    numberOfLines={1}
+                  >
+                    {isSmallScreen ? "Gaussian" : "Gaussian Blur"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.segmentBtn, mosaicStyle === "pixelate" && styles.segmentBtnActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    setMosaicStyle("pixelate");
+                    syncTracking({ mosaicStyle: "pixelate" });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name="grid-outline"
+                    size={isSmallScreen ? 12 : 14}
+                    color={mosaicStyle === "pixelate" ? "#00F2FE" : "#8E8E93"}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    style={[styles.segmentText, isSmallScreen && { fontSize: 10 }, mosaicStyle === "pixelate" && styles.segmentTextActive]}
+                    numberOfLines={1}
+                  >
+                    {isSmallScreen ? "Pixelate" : "Pixelate Mosaic"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Compact Blur Radius / Block Size Slider */}
+              <CompactSliderInput
+                label={mosaicStyle === "pixelate" ? "Block Size" : "Blur Radius"}
+                value={mosaicRadius}
+                min={4}
+                max={60}
+                step={1}
+                unit="px"
+                accentColor="#FFFFFF"
+                onChange={(val) => {
+                  setMosaicRadius(val);
+                  syncTracking({ mosaicRadius: val });
+                }}
+                containerStyle={styles.compactSliderWrap}
+              />
+
+              {/* Fit to Scale for Censor Blur */}
+              <View style={[styles.toggleRow, { marginTop: 6 }]}>
+                <TouchableOpacity
+                  style={[styles.togglePill, trackScale && styles.togglePillActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    const nextVal = !trackScale;
+                    setTrackScale(nextVal);
+                    syncTracking({ trackScale: nextVal });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name={trackScale ? "checkbox" : "square-outline"}
+                    size={isSmallScreen ? 13 : 15}
+                    color={trackScale ? "#00F2FE" : "#8E8E93"}
+                  />
+                  <Text
+                    style={[styles.togglePillText, isSmallScreen && { fontSize: 10 }, trackScale && styles.togglePillTextActive]}
+                    numberOfLines={1}
+                  >
+                    {isSmallScreen ? "Fit to Scale" : "Fit to Scale (Follow Target Size)"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* ACTION 2: PIN ELEMENT SETTINGS */}
+          {activeTab === "pin" && (
+            <View style={styles.tabContentSection}>
+              {isElementClip ? (
+                <View style={styles.elementActionNotice}>
+                  <Ionicons name="link-outline" size={13} color="#00F2FE" style={{ marginRight: 5 }} />
+                  <Text style={[styles.elementActionNoticeText, isSmallScreen && { fontSize: 9.5 }]} numberOfLines={2}>
+                    This element automatically follows the tracked subject in video
+                  </Text>
+                </View>
+              ) : availableClipsToPin.length === 0 ? (
+                <View style={styles.emptyClipsBox}>
+                  <Ionicons name="information-circle-outline" size={13} color="#94A3B8" />
+                  <Text style={[styles.emptyClipsText, isSmallScreen && { fontSize: 10 }]}>
+                    Add a Text, Sticker, Caption, or Overlay Video to pin to this moving target.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.pinVerticalContainer}>
+                  <View style={styles.pinSectionHeader}>
+                    <Text style={styles.pinSectionTitle}>ATTACH TO TARGET</Text>
+                    {pinnedClipId ? (
                       <TouchableOpacity
-                        key={c.id}
-                        style={[styles.pinClipRow, isSelected && styles.pinClipRowActive]}
                         onPress={() => {
                           triggerHaptic("selection");
-                          const nextId = isSelected ? "" : c.id;
-                          setPinnedClipId(nextId);
-                          setActionType("pin_element");
-                          syncTracking({
-                            pinnedClipId: nextId,
-                            actionType: "pin_element",
-                            enabled: true,
-                          });
+                          setPinnedClipId("");
+                          syncTracking({ pinnedClipId: "", actionType: "pin_element" });
                         }}
-                        activeOpacity={0.7}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
-                        <View style={[styles.pinClipIconWrap, isSelected && styles.pinClipIconWrapActive]}>
-                          <Ionicons
-                            name={c.icon as any}
-                            size={14}
-                            color={isSelected ? "#00F2FE" : "#8E8E93"}
-                          />
-                        </View>
-                        <View style={styles.pinClipInfo}>
-                          <Text
-                            style={[styles.pinClipLabel, isSelected && styles.pinClipLabelActive]}
-                            numberOfLines={1}
-                          >
-                            {c.label}
-                          </Text>
-                          <Text style={styles.pinClipSubtext}>{layerTag}</Text>
-                        </View>
-                        <View style={[styles.pinRadioIndicator, isSelected && styles.pinRadioIndicatorActive]}>
-                          {isSelected ? (
-                            <Ionicons
-                              name="checkmark"
-                              size={12}
-                              color="#08090E"
-                            />
-                          ) : null}
-                        </View>
+                        <Text style={styles.pinDetachText}>Detach</Text>
                       </TouchableOpacity>
-                    );
-                  })}
+                    ) : null}
+                  </View>
+
+                  <ScrollView style={{ maxHeight: 130 }} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
+                    <View style={styles.pinVerticalList}>
+                      {availableClipsToPin.map((c) => {
+                        const isSelected = pinnedClipId === c.id;
+                        const layerTag =
+                          c.type === "text"
+                            ? "Text"
+                            : c.type === "sticker"
+                            ? "Sticker"
+                            : c.type === "caption"
+                            ? "Caption"
+                            : "Overlay";
+                        return (
+                          <TouchableOpacity
+                            key={c.id}
+                            style={[styles.pinClipRow, isSelected && styles.pinClipRowActive, isSmallScreen && { paddingVertical: 5, paddingHorizontal: 7 }]}
+                            onPress={() => {
+                              triggerHaptic("selection");
+                              const nextId = isSelected ? "" : c.id;
+                              setPinnedClipId(nextId);
+                              setActionType("pin_element");
+                              syncTracking({
+                                pinnedClipId: nextId,
+                                actionType: "pin_element",
+                              });
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[styles.pinClipIconWrap, isSelected && styles.pinClipIconWrapActive, isSmallScreen && { width: 22, height: 22, marginRight: 6 }]}>
+                              <Ionicons
+                                name={c.icon as any}
+                                size={isSmallScreen ? 12 : 14}
+                                color={isSelected ? "#00F2FE" : "#8E8E93"}
+                              />
+                            </View>
+                            <View style={styles.pinClipInfo}>
+                              <Text
+                                style={[styles.pinClipLabel, isSmallScreen && { fontSize: 10.5 }, isSelected && styles.pinClipLabelActive]}
+                                numberOfLines={1}
+                              >
+                                {c.label}
+                              </Text>
+                              <Text style={[styles.pinClipSubtext, isSmallScreen && { fontSize: 9 }]}>{layerTag}</Text>
+                            </View>
+                            <View style={[styles.pinRadioIndicator, isSelected && styles.pinRadioIndicatorActive, isSmallScreen && { width: 16, height: 16, borderRadius: 8 }]}>
+                              {isSelected ? (
+                                <Ionicons
+                                  name="checkmark"
+                                  size={isSmallScreen ? 10 : 12}
+                                  color="#08090E"
+                                />
+                              ) : null}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
                 </View>
-              </View>
-            )}
+              )}
 
-            {/* Scale & Tilt Toggles in 2 compact columns */}
-            <View style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[styles.togglePill, trackScale && styles.togglePillActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  const nextVal = !trackScale;
-                  setTrackScale(nextVal);
-                  syncTracking({ trackScale: nextVal });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={trackScale ? "checkbox" : "square-outline"}
-                  size={15}
-                  color={trackScale ? "#00F2FE" : "#8E8E93"}
-                />
-                <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
-                  Follow Scale
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.togglePill, trackRotation && styles.togglePillActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  const nextVal = !trackRotation;
-                  setTrackRotation(nextVal);
-                  syncTracking({ trackRotation: nextVal });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={trackRotation ? "checkbox" : "square-outline"}
-                  size={15}
-                  color={trackRotation ? "#00F2FE" : "#8E8E93"}
-                />
-                <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
-                  Follow Tilt
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* TAB 3: CAMERA LOCK */}
-        {!isElementClip && activeTab === "camera" && (
-          <View style={styles.tabContentSection}>
-            <View style={styles.cameraInfoCard}>
-              <Ionicons name="videocam" size={16} color="#EDEDED" style={{ marginRight: 8 }} />
-              <Text style={styles.cameraInfoDesc}>
-                Locks player camera onto tracked subject. Auto-centers screen and scales to eliminate canvas borders.
-              </Text>
-            </View>
-
-            <View style={[styles.toggleRow, { marginTop: 8 }]}>
-              <TouchableOpacity
-                style={[styles.togglePill, cameraFitToScreen && styles.togglePillActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  const nextVal = !cameraFitToScreen;
-                  setCameraFitToScreen(nextVal);
-                  syncTracking({ cameraFitToScreen: nextVal, actionType: "camera_center" });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={cameraFitToScreen ? "checkbox" : "square-outline"}
-                  size={15}
-                  color={cameraFitToScreen ? "#00F2FE" : "#8E8E93"}
-                />
-                <Text style={[styles.togglePillText, cameraFitToScreen && styles.togglePillTextActive]}>
-                  Fit to Screen
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.togglePill, cameraLockCenter && styles.togglePillActive]}
-                onPress={() => {
-                  triggerHaptic("selection");
-                  const nextVal = !cameraLockCenter;
-                  setCameraLockCenter(nextVal);
-                  syncTracking({ cameraLockCenter: nextVal, actionType: "camera_center" });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={cameraLockCenter ? "checkbox" : "square-outline"}
-                  size={15}
-                  color={cameraLockCenter ? "#00F2FE" : "#8E8E93"}
-                />
-                <Text style={[styles.togglePillText, cameraLockCenter && styles.togglePillTextActive]}>
-                  Lock Center
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {cameraFitToScreen && (
-              <View style={{ marginTop: 8 }}>
-                <CompactSliderInput
-                  label="Camera Zoom"
-                  value={Math.round(cameraZoom * 100)}
-                  min={100}
-                  max={250}
-                  step={5}
-                  unit="%"
-                  accentColor="#FFFFFF"
-                  onChange={(val) => {
-                    const z = Number((val / 100).toFixed(2));
-                    setCameraZoom(z);
-                    syncTracking({ cameraZoom: z, actionType: "camera_center" });
+              {/* Scale & Tilt Toggles in 2 compact columns */}
+              <View style={[styles.toggleRow, { marginTop: 6 }]}>
+                <TouchableOpacity
+                  style={[styles.togglePill, trackScale && styles.togglePillActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    const nextVal = !trackScale;
+                    setTrackScale(nextVal);
+                    syncTracking({ trackScale: nextVal });
                   }}
-                  containerStyle={styles.compactSliderWrap}
-                />
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name={trackScale ? "checkbox" : "square-outline"}
+                    size={isSmallScreen ? 13 : 15}
+                    color={trackScale ? "#00F2FE" : "#8E8E93"}
+                  />
+                  <Text style={[styles.togglePillText, isSmallScreen && { fontSize: 10 }, trackScale && styles.togglePillTextActive]} numberOfLines={1}>
+                    Fit to Scale
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.togglePill, trackRotation && styles.togglePillActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    const nextVal = !trackRotation;
+                    setTrackRotation(nextVal);
+                    syncTracking({ trackRotation: nextVal });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name={trackRotation ? "checkbox" : "square-outline"}
+                    size={isSmallScreen ? 13 : 15}
+                    color={trackRotation ? "#00F2FE" : "#8E8E93"}
+                  />
+                  <Text style={[styles.togglePillText, isSmallScreen && { fontSize: 10 }, trackRotation && styles.togglePillTextActive]} numberOfLines={1}>
+                    Follow Tilt
+                  </Text>
+                </TouchableOpacity>
               </View>
-            )}
+            </View>
+          )}
+
+          {/* ACTION 3: CAMERA LOCK SETTINGS */}
+          {activeTab === "camera" && (
+            <View style={styles.tabContentSection}>
+              <View style={styles.cameraInfoCard}>
+                <Ionicons name="videocam" size={15} color="#EDEDED" style={{ marginRight: 6 }} />
+                <Text style={[styles.cameraInfoDesc, isSmallScreen && { fontSize: 10, lineHeight: 14 }]}>
+                  Locks camera onto tracked subject and auto-centers the frame.
+                </Text>
+              </View>
+
+              <View style={[styles.toggleRow, { marginTop: 8 }]}>
+                <TouchableOpacity
+                  style={[styles.togglePill, cameraFitToScreen && styles.togglePillActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    const nextVal = !cameraFitToScreen;
+                    setCameraFitToScreen(nextVal);
+                    syncTracking({ cameraFitToScreen: nextVal, actionType: "camera_center" });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name={cameraFitToScreen ? "checkbox" : "square-outline"}
+                    size={isSmallScreen ? 13 : 15}
+                    color={cameraFitToScreen ? "#00F2FE" : "#8E8E93"}
+                  />
+                  <Text style={[styles.togglePillText, isSmallScreen && { fontSize: 10 }, cameraFitToScreen && styles.togglePillTextActive]} numberOfLines={1}>
+                    {isSmallScreen ? "Fit to Scale" : "Fit to Scale (Screen)"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.togglePill, cameraLockCenter && styles.togglePillActive]}
+                  onPress={() => {
+                    triggerHaptic("selection");
+                    const nextVal = !cameraLockCenter;
+                    setCameraLockCenter(nextVal);
+                    syncTracking({ cameraLockCenter: nextVal, actionType: "camera_center" });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons
+                    name={cameraLockCenter ? "checkbox" : "square-outline"}
+                    size={isSmallScreen ? 13 : 15}
+                    color={cameraLockCenter ? "#00F2FE" : "#8E8E93"}
+                  />
+                  <Text style={[styles.togglePillText, isSmallScreen && { fontSize: 10 }, cameraLockCenter && styles.togglePillTextActive]} numberOfLines={1}>
+                    Lock Center
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {cameraFitToScreen && (
+                <View style={{ marginTop: 8 }}>
+                  <CompactSliderInput
+                    label="Camera Zoom"
+                    value={Math.round(cameraZoom * 100)}
+                    min={100}
+                    max={250}
+                    step={5}
+                    unit="%"
+                    accentColor="#FFFFFF"
+                    onChange={(val) => {
+                      const z = Number((val / 100).toFixed(2));
+                      setCameraZoom(z);
+                      syncTracking({ cameraZoom: z, actionType: "camera_center" });
+                    }}
+                    containerStyle={styles.compactSliderWrap}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Burn into Keyframes Action */}
+          <View style={styles.bakeSection}>
+            <View style={styles.bakeInfoRow}>
+              <View style={{ flex: 1, paddingRight: 6 }}>
+                <Text style={[styles.bakeTitle, isSmallScreen && { fontSize: 10.5 }]}>Burn into Keyframes</Text>
+                <Text style={[styles.bakeSubtitle, isSmallScreen && { fontSize: 9 }]} numberOfLines={1}>
+                  {isSmallScreen ? "Convert track into timeline keyframes" : "Converts tracking trajectory into standard editable keyframes"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.bakeActionBtn,
+                  bakedSuccess && styles.bakeActionBtnSuccess,
+                  !hasTrajectory && { opacity: 0.5 },
+                  isSmallScreen && { paddingHorizontal: 8, paddingVertical: 5 },
+                ]}
+                onPress={handleBakeKeyframes}
+                activeOpacity={0.7}
+                disabled={!hasTrajectory}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons
+                  name={bakedSuccess ? "checkmark-circle" : "key-outline"}
+                  size={12}
+                  color={bakedSuccess ? "#10B981" : "#EDEDED"}
+                  style={{ marginRight: 3 }}
+                />
+                <Text
+                  style={[
+                    styles.bakeActionBtnText,
+                    bakedSuccess && styles.bakeActionBtnTextSuccess,
+                    isSmallScreen && { fontSize: 9.5 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {bakedSuccess ? "Baked!" : isSmallScreen ? "Bake" : "Bake Keyframes"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
+        </View>
 
         {/* Motion Smoothness Slider */}
-        <View style={styles.tabContentSection}>
+        <View style={[styles.tabContentSection, { marginTop: 8 }]}>
           <CompactSliderInput
-            label="Smoothness"
+            label="Trajectory Smoothness"
             value={smoothness}
             min={0}
             max={100}
@@ -1175,7 +1361,19 @@ export default function MotionTrackingModal({
           />
         </View>
 
-        <View style={{ height: 16 }} />
+        {/* Confirm / Apply Tracking Button */}
+        <TouchableOpacity
+          style={[styles.doneActionBtn, isSmallScreen && { paddingVertical: 8.5 }]}
+          onPress={handleDone}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="checkmark-circle" size={isSmallScreen ? 15 : 16} color="#08090E" />
+          <Text style={[styles.doneActionBtnText, isSmallScreen && { fontSize: 11.5 }]}>
+            {hasTrajectory ? (isSmallScreen ? "APPLY & DONE" : "APPLY TRACKING & DONE") : "DONE"}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 20 }} />
       </ScrollView>
     </View>
   );
@@ -1394,7 +1592,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetBodyContent: {
-    paddingBottom: 56,
+    paddingBottom: Platform.OS === "ios" ? 72 : 48,
   },
   scanningCard: {
     backgroundColor: "#18181A",
@@ -1461,8 +1659,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
   },
   retrackBtn: {
     backgroundColor: "#FFFFFF",
@@ -1676,70 +1874,158 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
   },
-  trackingConfigCard: {
+  afterTrackingSection: {
+    marginTop: 10,
     backgroundColor: "#16181F",
     borderRadius: 8,
-    padding: 8,
+    padding: 9,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
-  configRow: {
+  afterTrackingHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 6,
   },
-  configLabel: {
-    fontSize: 10,
+  afterTrackingTitle: {
+    color: "#FFFFFF",
+    fontSize: 10.5,
     fontWeight: "700",
-    color: "#94A3B8",
-    width: 58,
+    letterSpacing: 0.3,
   },
-  presetChipGroup: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 4,
-  },
-  targetPresetChip: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
-    borderRadius: 5,
-    backgroundColor: "#0E101A",
+  trackedBadgeActive: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    borderColor: "#10B981",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
   },
-  targetPresetChipText: {
+  trackedBadgeTextActive: {
+    color: "#10B981",
+    fontSize: 9.5,
+    fontWeight: "700",
+  },
+  trackedBadgeIdle: {
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+  },
+  trackedBadgeTextIdle: {
+    color: "#64748B",
     fontSize: 9.5,
     fontWeight: "600",
-    color: "#CBD5E1",
   },
-  directionGroup: {
-    flex: 1,
+  elementActionNotice: {
     flexDirection: "row",
-    gap: 4,
+    alignItems: "center",
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderColor: "rgba(0, 242, 254, 0.2)",
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 6,
   },
-  directionChip: {
+  elementActionNoticeText: {
+    color: "#00F2FE",
+    fontSize: 10,
+    fontWeight: "600",
     flex: 1,
+  },
+  bakeSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.06)",
+  },
+  bakeInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  bakeTitle: {
+    color: "#EDEDED",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  bakeSubtitle: {
+    color: "#64748B",
+    fontSize: 9.5,
+    marginTop: 1,
+  },
+  bakeActionBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 4,
-    borderRadius: 5,
-    backgroundColor: "#0E101A",
+    backgroundColor: "#1F2937",
+    borderColor: "rgba(255, 255, 255, 0.15)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  directionChipActive: {
-    borderColor: "#00F2FE",
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+  bakeActionBtnSuccess: {
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    borderColor: "#10B981",
   },
-  directionChipText: {
+  bakeActionBtnText: {
+    color: "#EDEDED",
+    fontSize: 10.5,
+    fontWeight: "600",
+  },
+  bakeActionBtnTextSuccess: {
+    color: "#10B981",
+    fontWeight: "700",
+  },
+  doneActionBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#00F2FE",
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  doneActionBtnText: {
+    color: "#08090E",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  resetTrackActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.35)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  resetTrackActionBtnText: {
+    color: "#EF4444",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  headerResetPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  headerResetPillText: {
+    color: "#EF4444",
     fontSize: 9.5,
-    fontWeight: "500",
-    color: "#8E8E93",
-  },
-  directionChipTextActive: {
-    color: "#00F2FE",
     fontWeight: "700",
   },
 });

@@ -50,6 +50,10 @@ export function resolveCompositeOperation(blendMode?: string): GlobalCompositeOp
       return "darken";
     case "lighten":
       return "lighten";
+    case "add":
+    case "plus":
+    case "lighter":
+      return "lighter";
     case "colordodge":
       return "color-dodge";
     case "colorburn":
@@ -688,8 +692,10 @@ export function drawClip(
 
         const centerNormX = Math.max(0, Math.min(1, (rect.x + rect.width / 2 + motion.dx) / 100));
         const centerNormY = Math.max(0, Math.min(1, (rect.y + rect.height / 2 + motion.dy) / 100));
-        const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * motion.dScale));
-        const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * motion.dScale));
+        const shouldScale = track.trackScale !== false;
+        const dScale = shouldScale ? motion.dScale : 1.0;
+        const boxNormW = Math.max(0.04, Math.min(1, (rect.width / 100) * dScale));
+        const boxNormH = Math.max(0.04, Math.min(1, (rect.height / 100) * dScale));
 
         const boxPixelW = Math.max(16, Math.round(dw * boxNormW));
         const boxPixelH = Math.max(16, Math.round(dh * boxNormH));

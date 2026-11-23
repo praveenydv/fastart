@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
-import { VideoRenderer, setActiveVideoRenderer } from "../../utils/videoRenderer";
+import { VideoRenderer, setActiveVideoRenderer, isMotionTrackingActive } from "../../utils/videoRenderer";
 import { getLiveMediaUrl } from "../../utils/largeMediaStorage";
 import { FastArtProject } from "../../types/project";
 import { playheadCoordinator } from "../../utils/playheadCoordinator";
@@ -50,6 +50,7 @@ export function usePlayerWebRenderer({
       rendererRef.current = new VideoRenderer(canvasRef.current);
       setActiveVideoRenderer(rendererRef.current);
       rendererRef.current.onFrameNeeded = () => {
+        if (isMotionTrackingActive()) return;
         if (rendererRef.current && canvasRef.current) {
           const activeTime = isPlayingRef.current
             ? playheadCoordinator.getTime()

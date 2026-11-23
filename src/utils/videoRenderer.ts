@@ -44,6 +44,15 @@ export type { ExportFormat, ExportOptions, ExportResult };
 
 let activeVideoRenderer: VideoRenderer | null = null;
 let latestLiveSnapshot: string | null = null;
+let isTrackingProcessingActive = false;
+
+export function isMotionTrackingActive(): boolean {
+  return isTrackingProcessingActive;
+}
+
+export function setMotionTrackingActive(active: boolean): void {
+  isTrackingProcessingActive = active;
+}
 
 export function getActiveVideoRenderer(): VideoRenderer | null {
   return activeVideoRenderer;
@@ -166,7 +175,7 @@ export class VideoRenderer {
     setOnMaskUpdated(() => {
       // If background frame extraction is in progress, skip intermediate mask updates
       // so the player preview stays steady without flashing or hijacking the display!
-      if (isCutoutProcessingActive()) {
+      if (isCutoutProcessingActive() || isMotionTrackingActive()) {
         return;
       }
       // If video is playing, animation loop already renders at 60fps; do NOT re-trigger!
@@ -444,6 +453,7 @@ export class VideoRenderer {
     } | null,
   ) {
     if (!this.canvas || !this.ctx) return;
+    if (isMotionTrackingActive()) return;
     this.isPlaying = isPlaying;
     const ctx = this.ctx;
     const canvasW = this.canvas.width;

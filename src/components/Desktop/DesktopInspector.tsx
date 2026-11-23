@@ -100,7 +100,14 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
   onToggleCollapse,
   style,
 }) => {
-  const isVisual = selectedClipType === "video" || selectedClipType === "photo";
+  const isSticker =
+    selectedClipType === "sticker" || selectedClipType === "stickers";
+  const isEffect =
+    selectedClipType === "effects" || selectedClipType === "effect";
+  const isVisual =
+    selectedClipType === "video" ||
+    selectedClipType === "photo" ||
+    isSticker;
   const isAudio = selectedClipType === "audio";
   const isText =
     selectedClipType === "text" ||
@@ -368,6 +375,11 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
     keyColor: "#00FF00",
     intensity: 45,
     shadow: 25,
+    strokeColor: "none",
+    strokeWidth: 3,
+    strokeStyle: "solid",
+    bgColor: "none",
+    quality: "best",
   };
 
   return (
@@ -377,19 +389,23 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
         <View style={styles.headerTitleRow}>
           <Ionicons
             name={
-              isVisual
-                ? selectedClipType === "photo"
-                  ? "image-outline"
-                  : "videocam-outline"
-                : isAudio
-                  ? "musical-notes-outline"
-                  : "text-outline"
+              isSticker
+                ? "happy-outline"
+                : isEffect
+                  ? "color-wand-outline"
+                  : isVisual
+                    ? selectedClipType === "photo"
+                      ? "image-outline"
+                      : "videocam-outline"
+                    : isAudio
+                      ? "musical-notes-outline"
+                      : "text-outline"
             }
             size={14}
             color="#8E8E93"
           />
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {selectedClip.title || "Clip"}
+            {selectedClip.title || (isSticker ? "Sticker" : isEffect ? "Effect" : "Clip")}
           </Text>
         </View>
 
@@ -615,114 +631,202 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
               </View>
             </View>
 
-            {/* Cutout (Background Removal) Quick Action */}
-            <View style={{ borderTopWidth: 1, borderTopColor: "#1F1F23", paddingTop: 10, marginTop: 4 }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            {/* Sticker Actions */}
+            {isSticker && (
+              <View style={{ borderTopWidth: 1, borderTopColor: "#1F1F23", paddingTop: 10, marginTop: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
                   <Ionicons name="sparkles" size={13} color="#00F2FE" />
-                  <Text style={styles.sectionTitle}>CUTOUT & BACKGROUND</Text>
+                  <Text style={styles.sectionTitle}>STICKER ACTIONS</Text>
                 </View>
-                {currentCutout.enabled && currentCutout.mode !== "none" && (
-                  <View
-                    style={{
-                      backgroundColor: "#18181A",
-                      borderColor: "#00F2FE",
-                      borderWidth: 1,
-                      borderRadius: 4,
-                      paddingHorizontal: 6,
-                      paddingVertical: 1,
-                    }}
-                  >
-                    <Text style={{ color: "#00F2FE", fontSize: 9.5, fontWeight: "600" }}>
-                      {currentCutout.mode === "auto" ? "AI CUTOUT ACTIVE" : "CHROMA KEY"}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  {
-                    height: 32,
-                    backgroundColor: "#18181A",
-                    borderColor:
-                      currentCutout.enabled && currentCutout.mode !== "none"
-                        ? "#00F2FE"
-                        : "#27272A",
-                    borderRadius: 6,
-                    justifyContent: "center",
-                    marginTop: 4,
-                  },
-                ]}
-                onPress={() => onOpenModal?.("cutout")}
-                activeOpacity={0.8}
-                accessibilityLabel="Open Cutout modal"
-              >
-                <Ionicons
-                  name={
-                    currentCutout.enabled && currentCutout.mode !== "none"
-                      ? "checkmark-circle"
-                      : "sparkles-outline"
-                  }
-                  size={14}
-                  color={
-                    currentCutout.enabled && currentCutout.mode !== "none"
-                      ? "#00F2FE"
-                      : "#EDEDED"
-                  }
-                />
-                <Text
-                  style={[
-                    styles.actionBtnText,
-                    {
-                      color:
-                        currentCutout.enabled && currentCutout.mode !== "none"
-                          ? "#00F2FE"
-                          : "#EDEDED",
-                      fontWeight: "600",
-                      fontSize: 11,
-                    },
-                  ]}
-                >
-                  {currentCutout.enabled && currentCutout.mode !== "none"
-                    ? "Edit Cutout Settings"
-                    : "Open Cutout (Remove Background)"}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Quick Pro Actions: Blend Mode, Color Adjust, Auto-Reframe */}
-              <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#27272A", borderRadius: 6, justifyContent: "center" }]}
-                  onPress={() => onOpenModal?.("blend")}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="layers-outline" size={13} color={selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#EDEDED"} />
-                  <Text style={[styles.actionBtnText, { color: selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#EDEDED", fontSize: 10 }]}>Blend</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: "#27272A", borderRadius: 6, justifyContent: "center" }]}
-                  onPress={() => onOpenModal?.("adjust")}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="color-filter-outline" size={13} color="#EDEDED" />
-                  <Text style={[styles.actionBtnText, { color: "#EDEDED", fontSize: 10 }]}>Adjust</Text>
-                </TouchableOpacity>
-
-                {selectedClipType === "video" && (
+                <View style={{ flexDirection: "row", gap: 6 }}>
                   <TouchableOpacity
-                    style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: selectedClip.autoReframe?.enabled ? "#00F2FE" : "#27272A", borderRadius: 6, justifyContent: "center" }]}
-                    onPress={() => onOpenModal?.("reframe")}
+                    style={[
+                      styles.actionBtn,
+                      {
+                        flex: 1,
+                        height: 32,
+                        backgroundColor: "#18181A",
+                        borderColor: selectedClip?.motionTrack?.enabled ? "#00F2FE" : "#27272A",
+                        borderRadius: 6,
+                        justifyContent: "center",
+                      },
+                    ]}
+                    onPress={() => onOpenModal?.("tracking")}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="crop-outline" size={13} color={selectedClip.autoReframe?.enabled ? "#00F2FE" : "#EDEDED"} />
-                    <Text style={[styles.actionBtnText, { color: selectedClip.autoReframe?.enabled ? "#00F2FE" : "#EDEDED", fontSize: 10 }]}>Reframe</Text>
+                    <Ionicons
+                      name="scan-outline"
+                      size={13}
+                      color={selectedClip?.motionTrack?.enabled ? "#00F2FE" : "#EDEDED"}
+                    />
+                    <Text
+                      style={[
+                        styles.actionBtnText,
+                        {
+                          color: selectedClip?.motionTrack?.enabled ? "#00F2FE" : "#EDEDED",
+                          fontSize: 10,
+                        },
+                      ]}
+                    >
+                      Tracking
+                    </Text>
                   </TouchableOpacity>
-                )}
+
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      {
+                        flex: 1,
+                        height: 32,
+                        backgroundColor: "#18181A",
+                        borderColor: "#27272A",
+                        borderRadius: 6,
+                        justifyContent: "center",
+                      },
+                    ]}
+                    onPress={() => onOpenModal?.("animation")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="play-circle-outline" size={13} color="#EDEDED" />
+                    <Text style={[styles.actionBtnText, { color: "#EDEDED", fontSize: 10 }]}>
+                      Animation
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      {
+                        flex: 1,
+                        height: 32,
+                        backgroundColor: "#18181A",
+                        borderColor: "#27272A",
+                        borderRadius: 6,
+                        justifyContent: "center",
+                      },
+                    ]}
+                    onPress={() => onOpenModal?.("stickers")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="happy-outline" size={13} color="#EDEDED" />
+                    <Text style={[styles.actionBtnText, { color: "#EDEDED", fontSize: 10 }]}>
+                      Change
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            )}
+
+            {/* Cutout (Background Removal) Quick Action */}
+            {!isSticker && (
+              <View style={{ borderTopWidth: 1, borderTopColor: "#1F1F23", paddingTop: 10, marginTop: 4 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="sparkles" size={13} color="#00F2FE" />
+                    <Text style={styles.sectionTitle}>CUTOUT & BACKGROUND</Text>
+                  </View>
+                  {currentCutout.enabled && currentCutout.mode !== "none" && (
+                    <View
+                      style={{
+                        backgroundColor: "#18181A",
+                        borderColor: "#00F2FE",
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        paddingHorizontal: 6,
+                        paddingVertical: 1,
+                      }}
+                    >
+                      <Text style={{ color: "#00F2FE", fontSize: 9.5, fontWeight: "600" }}>
+                        {currentCutout.mode === "auto" ? "AI CUTOUT ACTIVE" : "CHROMA KEY"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn,
+                    {
+                      height: 32,
+                      backgroundColor: "#18181A",
+                      borderColor:
+                        currentCutout.enabled && currentCutout.mode !== "none"
+                          ? "#00F2FE"
+                          : "#27272A",
+                      borderRadius: 6,
+                      justifyContent: "center",
+                      marginTop: 4,
+                    },
+                  ]}
+                  onPress={() => onOpenModal?.("cutout")}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Open Cutout modal"
+                >
+                  <Ionicons
+                    name={
+                      currentCutout.enabled && currentCutout.mode !== "none"
+                        ? "checkmark-circle"
+                        : "sparkles-outline"
+                    }
+                    size={14}
+                    color={
+                      currentCutout.enabled && currentCutout.mode !== "none"
+                        ? "#00F2FE"
+                        : "#EDEDED"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.actionBtnText,
+                      {
+                        color:
+                          currentCutout.enabled && currentCutout.mode !== "none"
+                            ? "#00F2FE"
+                            : "#EDEDED",
+                        fontWeight: "600",
+                        fontSize: 11,
+                      },
+                    ]}
+                  >
+                    {currentCutout.enabled && currentCutout.mode !== "none"
+                      ? "Edit Cutout Settings"
+                      : "Open Cutout (Remove Background)"}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Quick Pro Actions: Blend Mode, Color Adjust, Auto-Reframe */}
+                <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#27272A", borderRadius: 6, justifyContent: "center" }]}
+                    onPress={() => onOpenModal?.("blend")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="layers-outline" size={13} color={selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#EDEDED"} />
+                    <Text style={[styles.actionBtnText, { color: selectedClip.blendMode && selectedClip.blendMode !== "normal" ? "#00F2FE" : "#EDEDED", fontSize: 10 }]}>Blend</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: "#27272A", borderRadius: 6, justifyContent: "center" }]}
+                    onPress={() => onOpenModal?.("adjust")}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="color-filter-outline" size={13} color="#EDEDED" />
+                    <Text style={[styles.actionBtnText, { color: "#EDEDED", fontSize: 10 }]}>Adjust</Text>
+                  </TouchableOpacity>
+
+                  {selectedClipType === "video" && (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { flex: 1, height: 30, backgroundColor: "#18181A", borderColor: selectedClip.autoReframe?.enabled ? "#00F2FE" : "#27272A", borderRadius: 6, justifyContent: "center" }]}
+                      onPress={() => onOpenModal?.("reframe")}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="crop-outline" size={13} color={selectedClip.autoReframe?.enabled ? "#00F2FE" : "#EDEDED"} />
+                      <Text style={[styles.actionBtnText, { color: selectedClip.autoReframe?.enabled ? "#00F2FE" : "#EDEDED", fontSize: 10 }]}>Reframe</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
 
             {/* Video Audio & Volume Controls (when video has audio) */}
             {selectedClipType === "video" && mediaHasAudioTrack(selectedClip) && (
@@ -1132,6 +1236,104 @@ export const DesktopInspector: React.FC<DesktopInspectorProps> = ({
                 Edit Font, Styles & Animations
               </Text>
             </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ─────────────────────────────────────────────
+          CONTENT: Effect & Adjustment Layer Inspector
+          ───────────────────────────────────────────── */}
+      {isEffect && (
+        <ScrollView
+          style={styles.scrollArea}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.section}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+              <Ionicons name="color-wand-outline" size={16} color="#00F2FE" />
+              <Text style={styles.sectionTitle}>
+                {selectedClip?.isAdjustmentLayer || selectedClip?.type === "adjustment"
+                  ? "ADJUSTMENT LAYER"
+                  : "VIDEO EFFECT"}
+              </Text>
+            </View>
+
+            {/* Effect Name / Filter ID */}
+            <View style={styles.controlRow}>
+              <Text style={styles.controlLabel}>Name / Preset</Text>
+              <View style={[styles.inputBox, { marginTop: 4 }]}>
+                <TextInput
+                  style={styles.textInput}
+                  value={selectedClip?.title || selectedClip?.filter || selectedClip?.effectId || "Effect"}
+                  onChangeText={(val) => {
+                    if (onUpdateProject && project.tracks.effects) {
+                      const effects = project.tracks.effects.map((e) =>
+                        e.id === selectedClip.id ? { ...e, title: val } : e
+                      );
+                      onUpdateProject({ ...project, tracks: { ...project.tracks, effects } });
+                    }
+                  }}
+                  placeholderTextColor={THEME_COLORS.textMuted}
+                />
+              </View>
+            </View>
+
+            {/* Effect Intensity */}
+            <View style={styles.controlRow}>
+              <CompactSliderInput
+                label="Intensity"
+                value={Math.round((selectedClip?.intensity ?? 1.0) * 100)}
+                min={0}
+                max={100}
+                step={1}
+                unit="%"
+                defaultValue={100}
+                onChange={(val) => {
+                  if (onUpdateProject && project.tracks.effects) {
+                    const effects = project.tracks.effects.map((e) =>
+                      e.id === selectedClip.id ? { ...e, intensity: val / 100 } : e
+                    );
+                    onUpdateProject({ ...project, tracks: { ...project.tracks, effects } });
+                  }
+                }}
+              />
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{ marginTop: 14, gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, { backgroundColor: "#18181A", borderColor: "#00F2FE", borderWidth: 1 }]}
+                onPress={() => onOpenModal?.("adjust")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="options-outline" size={14} color="#00F2FE" />
+                <Text style={[styles.primaryActionBtnText, { color: "#00F2FE" }]}>
+                  Edit Adjustments & Color Grading
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, { backgroundColor: "#18181A", borderColor: "#27272A", borderWidth: 1 }]}
+                onPress={() => onOpenModal?.("hsl")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="color-palette-outline" size={14} color="#EDEDED" />
+                <Text style={[styles.primaryActionBtnText, { color: "#EDEDED" }]}>
+                  Fine-tune HSL Colors
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, { backgroundColor: "#18181A", borderColor: "#27272A", borderWidth: 1 }]}
+                onPress={() => onOpenModal?.("filters")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="color-filter-outline" size={14} color="#EDEDED" />
+                <Text style={[styles.primaryActionBtnText, { color: "#EDEDED" }]}>
+                  Choose Filter Preset
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       )}

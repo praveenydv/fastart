@@ -672,6 +672,54 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
           ) : (
             /* Tab Content: Outline */
             <View style={sc.paletteContainer}>
+              {/* Outline Style Selector: None | Solid | Neon Glow | Sticker Dot */}
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 10 }}>
+                {[
+                  { id: "none" as const, label: "None", icon: "ban-outline" as const },
+                  { id: "solid" as const, label: "Solid", icon: "square-outline" as const },
+                  { id: "glow" as const, label: "Neon Glow", icon: "sparkles" as const },
+                  { id: "dotted" as const, label: "Sticker Dot", icon: "radio-button-off" as const },
+                ].map((st) => {
+                  const isSel =
+                    st.id === "none"
+                      ? strokeColor === "none"
+                      : strokeColor !== "none" && (config?.strokeStyle || "solid") === st.id;
+                  return (
+                    <TouchableOpacity
+                      key={st.id}
+                      style={[sc.outlineStyleBtn, isSel && sc.outlineStyleBtnActive]}
+                      onPress={() => {
+                        if (st.id === "none") {
+                          onChange({ ...config, strokeColor: "none" });
+                        } else {
+                          onChange({
+                            ...config,
+                            strokeStyle: st.id,
+                            strokeColor:
+                              strokeColor === "none"
+                                ? st.id === "glow"
+                                  ? "#00F2FE"
+                                  : "#FFFFFF"
+                                : strokeColor,
+                          });
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={st.icon}
+                        size={12}
+                        color={isSel ? "#00F2FE" : "#8E8E93"}
+                      />
+                      <Text style={[sc.outlineStyleLabel, isSel && sc.outlineStyleLabelActive]}>
+                        {st.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Stroke Color Presets & Picker */}
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -707,7 +755,13 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                         { backgroundColor: sp.color },
                         isSelected && sc.paletteSwatchSelected,
                       ]}
-                      onPress={() => onChange({ ...config, strokeColor: sp.color })}
+                      onPress={() =>
+                        onChange({
+                          ...config,
+                          strokeColor: sp.color,
+                          strokeStyle: config?.strokeStyle || "solid",
+                        })
+                      }
                       activeOpacity={0.8}
                       accessibilityLabel={sp.label}
                     >
@@ -724,92 +778,80 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
 
                 {/* Custom Color Picker Button */}
                 <CustomColorPickerButton
-                  value={strokeColor}
+                  value={strokeColor === "none" ? "#FFFFFF" : strokeColor}
                   presets={STROKE_PRESETS}
-                  onColorChange={(c) => onChange({ ...config, strokeColor: c })}
+                  onColorChange={(c) =>
+                    onChange({
+                      ...config,
+                      strokeColor: c,
+                      strokeStyle: config?.strokeStyle || "solid",
+                    })
+                  }
                   size={32}
                   shape="square"
                   accessibilityLabel="Pick custom outline color"
                 />
               </ScrollView>
 
-              {/* Stroke Width & Style Controls (Only if outline active) */}
-              {strokeColor !== "none" && (
-                <View style={sc.outlineControlsSection}>
-                  {/* Outline Style Selector: Solid | Neon Glow | Sticker Dot */}
-                  <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
-                    {[
-                      { id: "solid" as const, label: "Solid", icon: "square-outline" as const },
-                      { id: "glow" as const, label: "Neon Glow", icon: "sparkles" as const },
-                      { id: "dotted" as const, label: "Sticker Dot", icon: "radio-button-off" as const },
-                    ].map((st) => {
-                      const isSel = (config?.strokeStyle || "solid") === st.id;
-                      return (
-                        <TouchableOpacity
-                          key={st.id}
-                          style={[sc.outlineStyleBtn, isSel && sc.outlineStyleBtnActive]}
-                          onPress={() => onChange({ ...config, strokeStyle: st.id })}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons
-                            name={st.icon}
-                            size={11}
-                            color={isSel ? "#00F2FE" : "#8E8E93"}
-                          />
-                          <Text style={[sc.outlineStyleLabel, isSel && sc.outlineStyleLabelActive]}>
-                            {st.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  {/* Quick Preset Thickness Pills */}
-                  <View style={sc.thicknessPillRow}>
-                    {[
-                      { label: "Thin", width: 2 },
-                      { label: "Medium", width: 5 },
-                      { label: "Bold", width: 10 },
-                      { label: "Ultra", width: 16 },
-                    ].map((item) => {
-                      const isSelected = strokeWidth === item.width;
-                      return (
-                        <TouchableOpacity
-                          key={item.label}
+              {/* Stroke Width Controls (Always visible so users can customize width at any time) */}
+              <View style={sc.outlineControlsSection}>
+                {/* Quick Preset Thickness Pills */}
+                <View style={sc.thicknessPillRow}>
+                  {[
+                    { label: "Thin", width: 2 },
+                    { label: "Medium", width: 5 },
+                    { label: "Bold", width: 10 },
+                    { label: "Ultra", width: 16 },
+                  ].map((item) => {
+                    const isSelected = strokeColor !== "none" && strokeWidth === item.width;
+                    return (
+                      <TouchableOpacity
+                        key={item.label}
+                        style={[
+                          sc.thicknessPill,
+                          isSelected && sc.thicknessPillActive,
+                        ]}
+                        onPress={() =>
+                          onChange({
+                            ...config,
+                            strokeWidth: item.width,
+                            strokeColor: strokeColor === "none" ? "#FFFFFF" : strokeColor,
+                          })
+                        }
+                        activeOpacity={0.8}
+                      >
+                        <Text
                           style={[
-                            sc.thicknessPill,
-                            isSelected && sc.thicknessPillActive,
+                            sc.thicknessPillText,
+                            isSelected && sc.thicknessPillTextActive,
                           ]}
-                          onPress={() => onChange({ ...config, strokeWidth: item.width })}
-                          activeOpacity={0.8}
                         >
-                          <Text
-                            style={[
-                              sc.thicknessPillText,
-                              isSelected && sc.thicknessPillTextActive,
-                            ]}
-                          >
-                            {item.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  {/* Width Slider (Clean stacked layout: title on row 1, full-width slider on row 2) */}
-                  <View style={{ marginTop: 8 }}>
-                    <CompactSliderInput
-                      label="Stroke Width"
-                      value={strokeWidth}
-                      unit="px"
-                      min={1}
-                      max={24}
-                      step={1}
-                      onChange={(w) => onChange({ ...config, strokeWidth: w })}
-                    />
-                  </View>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-              )}
+
+                {/* Width Slider (Clean stacked layout: title on row 1, full-width slider on row 2) */}
+                <View style={{ marginTop: 8 }}>
+                  <CompactSliderInput
+                    label="Stroke Width"
+                    value={strokeWidth}
+                    unit="px"
+                    min={1}
+                    max={24}
+                    step={1}
+                    onChange={(w) =>
+                      onChange({
+                        ...config,
+                        strokeWidth: w,
+                        strokeColor: strokeColor === "none" ? "#FFFFFF" : strokeColor,
+                      })
+                    }
+                  />
+                </View>
+              </View>
             </View>
           )}
         </View>

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   PanResponder,
   Platform,
 } from 'react-native';
+import Svg, { Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { TrackingRect, TrajectoryPoint } from '../../types/project';
 
@@ -45,10 +46,53 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
   const bw = Math.max(1, boxWidth);
   const bh = Math.max(1, canvasHeight);
 
-  const pxW = Math.max(36, (targetRect.width / 100) * bw);
-  const pxH = Math.max(36, (targetRect.height / 100) * bh);
-  const pxX = (targetRect.x / 100) * bw;
-  const pxY = (targetRect.y / 100) * bh;
+  // When tracked trajectory exists, interpolate box position & scale at currentTime
+  const currentTrackedPoint = useMemo(() => {
+    if (!isCompleted || !trajectory || trajectory.length === 0 || typeof currentTime !== 'number') {
+      return null;
+    }
+    if (currentTime <= trajectory[0].time) return trajectory[0];
+    if (currentTime >= trajectory[trajectory.length - 1].time) {
+      return trajectory[trajectory.length - 1];
+    }
+    let low = 0;
+    let high = trajectory.length - 1;
+    while (low + 1 < high) {
+      const mid = (low + high) >> 1;
+      if (trajectory[mid].time <= currentTime) low = mid;
+      else high = mid;
+    }
+    const p0 = trajectory[low];
+    const p1 = trajectory[high];
+    const dt = Math.max(0.0001, p1.time - p0.time);
+    const frac = Math.min(1, Math.max(0, (currentTime - p0.time) / dt));
+
+    return {
+      x: p0.x + (p1.x - p0.x) * frac,
+      y: p0.y + (p1.y - p0.y) * frac,
+      scale: (p0.scale || 1.0) + ((p1.scale || 1.0) - (p0.scale || 1.0)) * frac,
+      rotation: (p0.rotation || 0) + ((p1.rotation || 0) - (p0.rotation || 0)) * frac,
+    };
+  }, [isCompleted, trajectory, currentTime]);
+
+  const currentScale = currentTrackedPoint ? (currentTrackedPoint.scale || 1.0) : 1.0;
+  const currentRotation = currentTrackedPoint ? (currentTrackedPoint.rotation || 0) : 0;
+
+  const normW = targetRect.width * currentScale;
+  const normH = targetRect.height * currentScale;
+
+  let normX = targetRect.x;
+  let normY = targetRect.y;
+
+  if (currentTrackedPoint) {
+    normX = currentTrackedPoint.x - normW / 2;
+    normY = currentTrackedPoint.y - normH / 2;
+  }
+
+  const pxW = Math.max(36, (normW / 100) * bw);
+  const pxH = Math.max(36, (normH / 100) * bh);
+  const pxX = (normX / 100) * bw;
+  const pxY = (normY / 100) * bh;
 
   // Web Pointer Drag Logic
   useEffect(() => {
@@ -348,43 +392,47 @@ const PlayerTrackingReticleComponent: React.FC<PlayerTrackingReticleProps> = ({
             top: pxY,
             width: pxW,
             height: pxH,
-            borderColor: accentColor,
-            shadowColor: accentColor,
+            transform: currentRotation ? [{ rotate: `${currentRotation}deg` }] : undefined,
           },
         ]}
         {...panResponder.panHandlers}
         {...webDragProps('pan')}
       >
-        {/* Quick Target Presets Pill Bar (Face, Upper, Full, Center) */}
-        {!isScanning && (
-          <View style={styles.presetsBar} pointerEvents="box-none">
-            {[
-              { id: 'face', label: 'Face', rect: { x: 37.5, y: 15, width: 25, height: 25 } },
-              { id: 'upper', label: 'Upper', rect: { x: 30, y: 18, width: 40, height: 42 } },
-              { id: 'full', label: 'Full', rect: { x: 25, y: 12, width: 50, height: 74 } },
-              { id: 'center', label: 'Center', rect: { x: 35, y: 35, width: 30, height: 30 } },
-            ].map((preset) => (
-              <View
-                key={preset.id}
-                style={styles.presetPill}
-                onTouchEnd={(e) => {
-                  e.stopPropagation();
-                  onChangeTargetRect(preset.rect);
-                }}
-                {...(Platform.OS === 'web'
-                  ? {
-                      onMouseDown: (e: any) => {
-                        e.stopPropagation();
-                        onChangeTargetRect(preset.rect);
-                      },
-                    }
-                  : {})}
-              >
-                <Text style={styles.presetPillText}>{preset.label}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+        {/* Crisp Dashed Outline (SVG for sharp cross-platform dashed stroke) */}
+        <Svg
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          width={pxW}
+          height={pxH}
+        >
+          {/* Subtle dark backing for contrast */}
+          <Rect
+            x={1}
+            y={1}
+            width={Math.max(0, pxW - 2)}
+            height={Math.max(0, pxH - 2)}
+            rx={4}
+            ry={4}
+            fill="none"
+            stroke="rgba(0, 0, 0, 0.6)"
+            strokeWidth={2.4}
+            strokeDasharray={[6, 9]}
+          />
+          {/* Crisp accent dashed line */}
+          <Rect
+            x={1}
+            y={1}
+            width={Math.max(0, pxW - 2)}
+            height={Math.max(0, pxH - 2)}
+            rx={4}
+            ry={4}
+            fill="none"
+            stroke={accentColor}
+            strokeWidth={1.8}
+            strokeDasharray={[6, 9]}
+          />
+        </Svg>
+
         {/* Animated Scanning Beam when tracking is in progress */}
         {isScanning && (
           <View
@@ -478,12 +526,8 @@ const styles = StyleSheet.create({
   },
   reticleBox: {
     position: 'absolute',
-    borderWidth: 2,
-    borderStyle: 'dashed',
     backgroundColor: 'rgba(0, 242, 254, 0.08)',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
+    borderRadius: 4,
     cursor: 'move' as any,
   },
   scanBeam: {
@@ -581,27 +625,6 @@ const styles = StyleSheet.create({
   trajectoryDot: {
     position: 'absolute',
     zIndex: 10,
-  },
-  presetsBar: {
-    position: 'absolute',
-    top: -28,
-    right: 0,
-    flexDirection: 'row',
-    gap: 4,
-    zIndex: 30,
-  },
-  presetPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: 'rgba(13, 14, 21, 0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.4)',
-  },
-  presetPillText: {
-    color: '#00F2FE',
-    fontSize: 8.5,
-    fontWeight: '700',
   },
 });
 

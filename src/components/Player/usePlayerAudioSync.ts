@@ -82,6 +82,7 @@ export function usePlayerAudioSync({
       denoise: Boolean(a.denoise || project.aiDenoise),
       voiceEffect: (a.voiceEffect || "none") as VoiceEffectId,
       isFromVideo: false,
+      isVoiceover: Boolean(a.isVoiceover),
     }));
 
     const videoAudioClips = (project.tracks.video || [])
@@ -102,6 +103,7 @@ export function usePlayerAudioSync({
         denoise: Boolean(v.denoise || project.aiDenoise),
         voiceEffect: (v.voiceEffect || "none") as VoiceEffectId,
         isFromVideo: true,
+        isVoiceover: false,
       }));
 
     const rawSources = [...rawAudioClips, ...videoAudioClips];
@@ -468,6 +470,31 @@ export function usePlayerAudioSync({
           const remaining = clipEnd - currentTime;
           if (remaining < clip.fadeOut) {
             effVol *= Math.max(0, remaining / clip.fadeOut);
+          }
+        }
+
+        // Smart Audio Ducking: automatically attenuate background audio when voiceover or dialogue is active
+        if (project.audioDucking && !clip.isVoiceover) {
+          const hasActiveSpeech =
+            (project.tracks.audio || []).some(
+              (a) =>
+                a.isVoiceover &&
+                a.volume > 0 &&
+                currentTime >= a.startTime &&
+                currentTime <= a.startTime + a.duration
+            ) ||
+            (project.tracks.video || []).some(
+              (v) =>
+                (v.volume === undefined || v.volume > 0) &&
+                currentTime >= v.startTime &&
+                currentTime <= v.startTime + v.duration
+            );
+          if (hasActiveSpeech) {
+            const duckLevel =
+              typeof project.audioDuckingLevel === "number"
+                ? project.audioDuckingLevel
+                : 0.3;
+            effVol *= duckLevel;
           }
         }
 

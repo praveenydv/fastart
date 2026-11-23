@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Platform, useWindowDimensions } from "react-native";
+import Svg, { Rect } from "react-native-svg";
 import { TactileTouchable as TouchableOpacity } from "../Common/TactileTouchable";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "./PlayerStyles";
@@ -580,6 +581,41 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                 } as any)
               : nativeBoxPanResponder.panHandlers)}
           >
+            {/* Crisp, widely spaced dashed bounding box */}
+            <Svg
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+              width={activeTransformItem.width}
+              height={activeTransformItem.height}
+            >
+              {/* Dark backing dashes for contrast against bright scenes */}
+              <Rect
+                x={1}
+                y={1}
+                width={Math.max(0, activeTransformItem.width - 2)}
+                height={Math.max(0, activeTransformItem.height - 2)}
+                rx={4}
+                ry={4}
+                fill="none"
+                stroke="rgba(0, 0, 0, 0.65)"
+                strokeWidth={2.4}
+                strokeDasharray={[6, 9]}
+              />
+              {/* Crisp white dashes clearly separated with generous 9px gaps */}
+              <Rect
+                x={1}
+                y={1}
+                width={Math.max(0, activeTransformItem.width - 2)}
+                height={Math.max(0, activeTransformItem.height - 2)}
+                rx={4}
+                ry={4}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={1.8}
+                strokeDasharray={[6, 9]}
+              />
+            </Svg>
+
             {/* Top Rotation Stem Line & Handle Knob */}
             <>
               <View style={styles.rotStem} pointerEvents="none" />

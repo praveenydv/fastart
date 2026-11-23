@@ -704,9 +704,11 @@ export default function App() {
     openModal("cutout");
   }, [ensureSelectedVideoClip, openModal]);
   const handleOpenMotionTracking = useCallback(() => {
+    setIsPlaying(false);
+    pauseActiveVideoRenderer();
     ensureSelectedVideoClip();
     openModal("tracking");
-  }, [ensureSelectedVideoClip, openModal]);
+  }, [ensureSelectedVideoClip, openModal, setIsPlaying]);
   const handleOpenAutoCaptions = useCallback(() => openModal("captions"), [openModal]);
 
   // Immediate flush of session and project data (for refresh, close, tab hide, app background)
