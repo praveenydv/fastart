@@ -605,7 +605,7 @@ export default function MotionTrackingModal({
             <Ionicons
               name="eye-off-outline"
               size={13}
-              color={activeTab === "censor" ? "#121214" : "#8E8E93"}
+              color={activeTab === "censor" ? "#00F2FE" : "#8E8E93"}
             />
             <Text style={[styles.tabText, activeTab === "censor" && styles.tabTextActive]}>
               Censor Blur
@@ -625,7 +625,7 @@ export default function MotionTrackingModal({
             <Ionicons
               name="attach-outline"
               size={13}
-              color={activeTab === "pin" ? "#121214" : "#8E8E93"}
+              color={activeTab === "pin" ? "#00F2FE" : "#8E8E93"}
             />
             <Text style={[styles.tabText, activeTab === "pin" && styles.tabTextActive]}>
               Pin Element
@@ -645,7 +645,7 @@ export default function MotionTrackingModal({
             <Ionicons
               name="videocam-outline"
               size={13}
-              color={activeTab === "camera" ? "#121214" : "#8E8E93"}
+              color={activeTab === "camera" ? "#00F2FE" : "#8E8E93"}
             />
             <Text style={[styles.tabText, activeTab === "camera" && styles.tabTextActive]}>
               Lock Camera
@@ -746,7 +746,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackScale ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackScale ? "#121214" : "#8E8E93"}
+                  color={trackScale ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
                   Follow Scale
@@ -766,7 +766,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackRotation ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackRotation ? "#121214" : "#8E8E93"}
+                  color={trackRotation ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
                   Follow Tilt
@@ -793,7 +793,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="square-outline"
                   size={14}
-                  color={mosaicShape === "rectangle" ? "#121214" : "#8E8E93"}
+                  color={mosaicShape === "rectangle" ? "#00F2FE" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicShape === "rectangle" && styles.segmentTextActive]}>
@@ -813,7 +813,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="ellipse-outline"
                   size={14}
-                  color={mosaicShape === "circle" ? "#121214" : "#8E8E93"}
+                  color={mosaicShape === "circle" ? "#00F2FE" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicShape === "circle" && styles.segmentTextActive]}>
@@ -836,7 +836,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="water-outline"
                   size={14}
-                  color={mosaicStyle === "blur" ? "#121214" : "#8E8E93"}
+                  color={mosaicStyle === "blur" ? "#00F2FE" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicStyle === "blur" && styles.segmentTextActive]}>
@@ -856,7 +856,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name="grid-outline"
                   size={14}
-                  color={mosaicStyle === "pixelate" ? "#121214" : "#8E8E93"}
+                  color={mosaicStyle === "pixelate" ? "#00F2FE" : "#8E8E93"}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={[styles.segmentText, mosaicStyle === "pixelate" && styles.segmentTextActive]}>
@@ -873,7 +873,6 @@ export default function MotionTrackingModal({
               max={60}
               step={1}
               unit="px"
-              layout="inline"
               accentColor="#FFFFFF"
               onChange={(val) => {
                 setMosaicRadius(val);
@@ -942,7 +941,7 @@ export default function MotionTrackingModal({
                           <Ionicons
                             name={c.icon as any}
                             size={14}
-                            color={isSelected ? "#FFFFFF" : "#8E8E93"}
+                            color={isSelected ? "#00F2FE" : "#8E8E93"}
                           />
                         </View>
                         <View style={styles.pinClipInfo}>
@@ -959,7 +958,7 @@ export default function MotionTrackingModal({
                             <Ionicons
                               name="checkmark"
                               size={12}
-                              color="#000000"
+                              color="#08090E"
                             />
                           ) : null}
                         </View>
@@ -985,7 +984,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackScale ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackScale ? "#121214" : "#8E8E93"}
+                  color={trackScale ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackScale && styles.togglePillTextActive]}>
                   Follow Scale
@@ -1005,7 +1004,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={trackRotation ? "checkbox" : "square-outline"}
                   size={15}
-                  color={trackRotation ? "#121214" : "#8E8E93"}
+                  color={trackRotation ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, trackRotation && styles.togglePillTextActive]}>
                   Follow Tilt
@@ -1039,7 +1038,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={cameraFitToScreen ? "checkbox" : "square-outline"}
                   size={15}
-                  color={cameraFitToScreen ? "#121214" : "#8E8E93"}
+                  color={cameraFitToScreen ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, cameraFitToScreen && styles.togglePillTextActive]}>
                   Fit to Screen
@@ -1059,7 +1058,7 @@ export default function MotionTrackingModal({
                 <Ionicons
                   name={cameraLockCenter ? "checkbox" : "square-outline"}
                   size={15}
-                  color={cameraLockCenter ? "#121214" : "#8E8E93"}
+                  color={cameraLockCenter ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text style={[styles.togglePillText, cameraLockCenter && styles.togglePillTextActive]}>
                   Lock Center
@@ -1076,7 +1075,6 @@ export default function MotionTrackingModal({
                   max={250}
                   step={5}
                   unit="%"
-                  layout="inline"
                   accentColor="#FFFFFF"
                   onChange={(val) => {
                     const z = Number((val / 100).toFixed(2));
@@ -1099,7 +1097,6 @@ export default function MotionTrackingModal({
             max={100}
             step={5}
             unit="%"
-            layout="inline"
             accentColor="#FFFFFF"
             onChange={(val) => {
               setSmoothness(val);
@@ -1311,9 +1308,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabBtnActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: "#00F2FE",
   },
   tabText: {
     color: "#94A3B8",
@@ -1321,7 +1318,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   tabTextActive: {
-    color: "#121214",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   sheetBody: {
@@ -1453,8 +1450,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
   segmentBtnActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   segmentText: {
     color: "#94A3B8",
@@ -1462,7 +1459,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   segmentTextActive: {
-    color: "#121214",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   compactSliderWrap: {
@@ -1520,7 +1517,7 @@ const styles = StyleSheet.create({
   },
   pinClipRowActive: {
     backgroundColor: "#18181A",
-    borderColor: "#FFFFFF",
+    borderColor: "#00F2FE",
   },
   pinClipIconWrap: {
     width: 26,
@@ -1544,7 +1541,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   pinClipLabelActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   pinClipSubtext: {
@@ -1563,8 +1560,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   pinRadioIndicatorActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
+    borderColor: "#00F2FE",
   },
   toggleRow: {
     flexDirection: "row",
@@ -1583,8 +1580,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.06)",
   },
   togglePillActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   togglePillText: {
     color: "#94A3B8",
@@ -1592,17 +1589,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   togglePillTextActive: {
-    color: "#121214",
-    fontWeight: "600",
+    color: "#00F2FE",
+    fontWeight: "700",
   },
   cameraInfoCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 8,
     borderRadius: 6,
-    backgroundColor: "rgba(0, 229, 201, 0.05)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 229, 201, 0.18)",
+    borderColor: "#27272A",
   },
   cameraInfoDesc: {
     flex: 1,

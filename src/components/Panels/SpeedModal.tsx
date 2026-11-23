@@ -139,11 +139,11 @@ function SpeedModalComponent({
         <View style={{ paddingHorizontal: 12, marginTop: isInline ? 6 : 2, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {isInline && !isDefaultSpeed && (
             <TouchableOpacity
-              style={[styles.tabBtn, { borderColor: 'rgba(0, 242, 254, 0.4)', backgroundColor: 'rgba(0, 242, 254, 0.12)', maxWidth: 48 }]}
+              style={[styles.tabBtn, { borderColor: '#00F2FE', backgroundColor: '#18181A', maxWidth: 48 }]}
               onPress={handleResetSpeed}
               activeOpacity={0.7}
             >
-              <Text style={[styles.tabText, { color: '#00F2FE', fontWeight: '600' }]}>1.0x</Text>
+              <Text style={[styles.tabText, { color: '#00F2FE', fontWeight: '500' }]}>1.0x</Text>
             </TouchableOpacity>
           )}
           <View style={{ flex: 1 }}>

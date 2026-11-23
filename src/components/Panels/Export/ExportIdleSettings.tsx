@@ -145,7 +145,7 @@ export default function ExportIdleSettings({
                 <Ionicons
                   name={fmt.icon}
                   size={14}
-                  color={isSelected ? "#FFFFFF" : "#8E8E93"}
+                  color={isSelected ? "#00F2FE" : "#8E8E93"}
                 />
                 <Text
                   style={[
@@ -342,7 +342,7 @@ export default function ExportIdleSettings({
         onPress={onStartExport}
         activeOpacity={0.8}
       >
-        <Ionicons name="arrow-up-circle-outline" size={19} color="#121214" />
+        <Ionicons name="arrow-up-circle-outline" size={19} color="#08090E" />
         <Text style={styles.exportCtaText}>
           Export {selectedFormatConfig.shortLabel}
           {mediaType !== "wav" && mediaType !== "png" ? ` (${resolution})` : ""}

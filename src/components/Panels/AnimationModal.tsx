@@ -764,7 +764,7 @@ export default function AnimationModal({
       {(activeCategory === 'in' || activeCategory === 'out') && activePresetId !== 'none' && (
         <View style={styles.durationRow}>
           <CompactSliderInput
-            label="Animation Duration"
+            label="Duration"
             value={parseFloat((activeCategory === 'in' ? inDuration : outDuration).toFixed(1))}
             min={0.1}
             max={parseFloat(maxAnimDuration.toFixed(1))}
@@ -832,7 +832,7 @@ export default function AnimationModal({
                     {/* Active checkmark */}
                     {isSelected && (
                       <View style={styles.activeCheckBadge}>
-                        <Ionicons name="checkmark" size={9} color="#000000" />
+                        <Ionicons name="checkmark" size={9} color="#08090E" />
                       </View>
                     )}
                   </>
@@ -899,9 +899,9 @@ const styles = StyleSheet.create({
   resetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -942,11 +942,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   tabItemActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: '#18181A',
+    borderWidth: 1,
+    borderColor: '#00F2FE',
   },
   tabText: {
     color: '#8E8E93',
@@ -954,14 +952,14 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   tabBadgeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
   },
   durationRow: {
     backgroundColor: '#18181A',
@@ -998,9 +996,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   quickDurPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   quickDurText: {
     color: '#8E8E93',
@@ -1008,7 +1006,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   quickDurTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   presetScroll: {
@@ -1031,8 +1029,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   presetCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   animStage: {
     width: '100%',
@@ -1099,7 +1097,7 @@ const styles = StyleSheet.create({
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -1123,7 +1121,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   presetNameActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   animDescText: {

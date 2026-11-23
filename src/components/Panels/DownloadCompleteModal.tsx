@@ -161,7 +161,7 @@ export default function DownloadCompleteModal({
                 }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="checkmark-sharp" size={15} color="#121214" />
+                <Ionicons name="checkmark-sharp" size={15} color="#08090E" />
                 <Text style={styles.primaryBtnText}>Done / Back to Editor</Text>
               </TouchableOpacity>
 
@@ -355,14 +355,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     paddingVertical: 9,
     borderRadius: 6,
   },
   primaryBtnText: {
-    color: "#121214",
+    color: "#08090E",
     fontSize: 11.5,
-    fontWeight: "600",
+    fontWeight: "700",
     letterSpacing: -0.2,
   },
   secondaryBtn: {

@@ -313,19 +313,21 @@ function decompressRLEToCanvas(rle: Uint8Array): HTMLCanvasElement | null {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
-  if (!rleDecompressImgData) {
-    rleDecompressImgData = ctx.createImageData(512, 512);
-  }
-  const imgData = rleDecompressImgData;
+  const imgData = ctx.createImageData(512, 512);
+  imgData.data.fill(0);
   // Direct Rust WASM single-pass decompression: zero JS loops, zero intermediate allocations
   try {
     rustCoreBridge.unpackAlphaRLEToRGBA(rle, imgData.data);
   } catch {
     const totalPixels = 512 * 512;
     const alpha = rustCoreBridge.unpackAlphaRLE(rle, totalPixels);
-    const u32 = new Uint32Array(imgData.data.buffer);
     for (let i = 0; i < totalPixels; i++) {
-      u32[i] = alpha[i] * 0x01010101;
+      const a = alpha[i];
+      const idx = i * 4;
+      imgData.data[idx] = a;
+      imgData.data[idx + 1] = a;
+      imgData.data[idx + 2] = a;
+      imgData.data[idx + 3] = a;
     }
   }
   ctx.putImageData(imgData, 0, 0);
@@ -775,16 +777,11 @@ export function updateActiveFrameMatteParams(
   );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-  const dw = lastModnetCropDw > 0 ? lastModnetCropDw : 512;
-  const dh = lastModnetCropDh > 0 ? lastModnetCropDh : 512;
-  const dx = lastModnetCropDx >= 0 ? lastModnetCropDx : 0;
-  const dy = lastModnetCropDy >= 0 ? lastModnetCropDy : 0;
-
-  const updated = getPooledCanvas(dw, dh);
+  const updated = getPooledCanvas(512, 512);
   const uCtx = updated.getContext("2d");
   if (uCtx) {
-    uCtx.clearRect(0, 0, dw, dh);
-    uCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
+    uCtx.clearRect(0, 0, 512, 512);
+    uCtx.drawImage(modnetMaskCanvas, 0, 0);
     setMaskInCache(`${clipId}_${frameIdx}`, updated);
     if (frameIdx === 0) {
       setMaskInCache(`${clipId}_0`, updated);
@@ -1165,13 +1162,30 @@ async function getDirectWebSession(): Promise<any> {
       if (!res.ok)
         throw new Error(`Model fetch failed with status ${res.status}`);
       const buf = await res.arrayBuffer();
-      directWebSession = await ort.InferenceSession.create(
-        new Uint8Array(buf),
-        {
-          executionProviders: ["wasm"],
-          graphOptimizationLevel: "all",
-        },
-      );
+      let session = null;
+      if (typeof navigator !== "undefined" && (navigator as any).gpu) {
+        try {
+          session = await ort.InferenceSession.create(
+            new Uint8Array(buf),
+            {
+              executionProviders: [{ name: "webgpu", powerPreference: "high-performance" }, "wasm"],
+              graphOptimizationLevel: "all",
+            },
+          );
+        } catch {
+          session = null;
+        }
+      }
+      if (!session) {
+        session = await ort.InferenceSession.create(
+          new Uint8Array(buf),
+          {
+            executionProviders: ["wasm"],
+            graphOptimizationLevel: "all",
+          },
+        );
+      }
+      directWebSession = session;
       return directWebSession;
     } catch (e) {
       console.warn(
@@ -1254,16 +1268,12 @@ export async function segmentWithStudioEngine(
         feather,
       );
       modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
-      const dw = lastModnetCropDw > 0 ? lastModnetCropDw : 512;
-      const dh = lastModnetCropDh > 0 ? lastModnetCropDh : 512;
-      const dx = lastModnetCropDx >= 0 ? lastModnetCropDx : 0;
-      const dy = lastModnetCropDy >= 0 ? lastModnetCropDy : 0;
 
-      const cached = getPooledCanvas(dw, dh);
+      const cached = getPooledCanvas(512, 512);
       const cCtx = cached.getContext("2d");
       if (cCtx) {
-        cCtx.clearRect(0, 0, dw, dh);
-        cCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
+        cCtx.clearRect(0, 0, 512, 512);
+        cCtx.drawImage(modnetMaskCanvas, 0, 0);
         return cached;
       }
     }
@@ -1285,26 +1295,6 @@ export async function segmentWithStudioEngine(
 
   if (vw === 0 || vh === 0) return null;
 
-  // Aspect-ratio preserved scaling: eliminates squashing/stretching of human subjects
-  let dw = 512;
-  let dh = 512;
-  let dx = 0;
-  let dy = 0;
-  if (vw >= vh) {
-    dw = 512;
-    dh = Math.max(16, Math.round((512 * vh) / vw));
-    dy = Math.round((512 - dh) / 2);
-  } else {
-    dh = 512;
-    dw = Math.max(16, Math.round((512 * vw) / vh));
-    dx = Math.round((512 - dw) / 2);
-  }
-
-  lastModnetCropDx = dx;
-  lastModnetCropDy = dy;
-  lastModnetCropDw = dw;
-  lastModnetCropDh = dh;
-
   if (!modnetInputCanvas) {
     modnetInputCanvas = document.createElement("canvas");
     modnetInputCanvas.width = 512;
@@ -1316,9 +1306,7 @@ export async function segmentWithStudioEngine(
   if (!modnetInputCtx) return null;
 
   modnetInputCtx.clearRect(0, 0, 512, 512);
-  modnetInputCtx.fillStyle = "#12141A";
-  modnetInputCtx.fillRect(0, 0, 512, 512);
-  modnetInputCtx.drawImage(sourceMedia as any, dx, dy, dw, dh);
+  modnetInputCtx.drawImage(sourceMedia as any, 0, 0, 512, 512);
   const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
 
   const total = 512 * 512;
@@ -1390,11 +1378,11 @@ export async function segmentWithStudioEngine(
   );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-  // Return a clean independent canvas matching source aspect ratio for distortion-free compositing
-  const finalCanvas = getPooledCanvas(dw, dh);
+  // Return clean independent 512x512 canvas for distortion-free compositing
+  const finalCanvas = getPooledCanvas(512, 512);
   const finalCtx = finalCanvas.getContext("2d");
   if (!finalCtx) return null;
-  finalCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
+  finalCtx.drawImage(modnetMaskCanvas, 0, 0);
 
   return finalCanvas;
 }
@@ -1476,11 +1464,12 @@ export function requestHumanSegmentation(
         }
         if (!modnetLiveCtx) return;
         try {
+          modnetLiveCtx.clearRect(0, 0, 512, 512);
           modnetLiveCtx.drawImage(mediaElement, 0, 0, 512, 512);
           const imgData = modnetLiveCtx.getImageData(0, 0, 512, 512);
           liveInFlightCount++;
           cutoutWorkerBridge
-            .runFrame(imgData.data, 0.06, 0.72, false)
+            .runFrame(imgData.data, 0.45, 0.25, false)
             .then((result) => {
               liveInFlightCount = Math.max(0, liveInFlightCount - 1);
               if (sessionGen !== liveSessionGeneration) {
@@ -1818,13 +1807,12 @@ export async function processClipStudioCutout(
         Math.abs(sourceEl.currentTime - targetTime) > 0.01 ||
         sourceEl.seeking
       ) {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             cleanup();
-            reject(
-              new Error("Timed out seeking video to cutout preview frame"),
-            );
-          }, 5000);
+            console.warn("[StudioCutout] Video seek took longer than expected; using current frame");
+            resolve();
+          }, 3000);
           const cleanup = () => {
             clearTimeout(timeout);
             sourceEl.removeEventListener("seeked", onSeeked);
@@ -1836,9 +1824,7 @@ export async function processClipStudioCutout(
           };
           const onError = () => {
             cleanup();
-            reject(
-              new Error("Video failed while seeking to cutout preview frame"),
-            );
+            resolve();
           };
 
           sourceEl.addEventListener("seeked", onSeeked, { once: true });
@@ -1852,19 +1838,19 @@ export async function processClipStudioCutout(
               cleanup();
               resolve();
             }
-          } catch (error) {
+          } catch {
             cleanup();
-            reject(error);
+            resolve();
           }
         });
       }
 
       if (sourceEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             cleanup();
-            reject(new Error("Timed out loading cutout preview frame"));
-          }, 5000);
+            resolve();
+          }, 2500);
           const cleanup = () => {
             clearTimeout(timeout);
             sourceEl.removeEventListener("loadeddata", onReady);
@@ -1876,9 +1862,7 @@ export async function processClipStudioCutout(
           };
           const onError = () => {
             cleanup();
-            reject(
-              new Error("Video failed while loading cutout preview frame"),
-            );
+            resolve();
           };
           sourceEl.addEventListener("loadeddata", onReady, { once: true });
           sourceEl.addEventListener("error", onError, { once: true });
@@ -2105,27 +2089,8 @@ export async function processVideoFrameByFrame(
           modnetInputCanvas.height = 512;
         }
         if (modnetInputCtx) {
-          const vw = decoder.videoWidth || 512;
-          const vh = decoder.videoHeight || 512;
-          let dw = 512;
-          let dh = 512;
-          let dx = 0;
-          let dy = 0;
-          if (vw > 0 && vh > 0) {
-            if (vw >= vh) {
-              dw = 512;
-              dh = Math.max(16, Math.round((512 * vh) / vw));
-              dy = Math.round((512 - dh) / 2);
-            } else {
-              dh = 512;
-              dw = Math.max(16, Math.round((512 * vw) / vh));
-              dx = Math.round((512 - dw) / 2);
-            }
-          }
           modnetInputCtx.clearRect(0, 0, 512, 512);
-          modnetInputCtx.fillStyle = "#12141A";
-          modnetInputCtx.fillRect(0, 0, 512, 512);
-          modnetInputCtx.drawImage(decoder, dx, dy, dw, dh);
+          modnetInputCtx.drawImage(decoder, 0, 0, 512, 512);
           const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
           if (cutoutWorkerBridge.isSupported()) {
             inferenceSubmitted = true;
@@ -3205,14 +3170,14 @@ export async function processVideoUnified(
 ): Promise<number> {
   const isAuto = mode === "auto";
   const effThreshold = isAuto
-    ? threshold && threshold > 0.01
+    ? typeof threshold === "number" && threshold > 0.01
       ? threshold
-      : 0.06
+      : 0.45
     : threshold;
   const effFeather = isAuto
-    ? feather && feather > 0.01
+    ? typeof feather === "number" && feather >= 0
       ? feather
-      : 0.72
+      : 0.25
     : feather;
   let effectiveFps = getCutoutQualityFps(quality, fps);
   clipMaskFpsMap.set(clipId, effectiveFps);

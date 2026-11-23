@@ -352,7 +352,7 @@ function LayerModalContent({
 
                   {isSelected ? (
                     <View style={s.activeCheck}>
-                      <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
+                      <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
                     </View>
                   ) : (
                     <Ionicons name="chevron-forward" size={13} color="#52525B" />
@@ -491,8 +491,8 @@ const s = StyleSheet.create({
     borderColor: "#27272A",
   },
   presetChipActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   presetChipText: {
     color: "#8E8E93",
@@ -500,8 +500,8 @@ const s = StyleSheet.create({
     fontWeight: "400",
   },
   presetChipTextActive: {
-    color: "#121214",
-    fontWeight: "600",
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   stackList: {
     backgroundColor: "#18181A",
@@ -530,7 +530,7 @@ const s = StyleSheet.create({
     borderBottomColor: "#1F1F23",
   },
   stackItemActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
   },
   layerNumberBadge: {
     width: 24,
@@ -542,9 +542,9 @@ const s = StyleSheet.create({
     marginRight: 6,
   },
   layerNumberBadgeActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: "#00F2FE",
   },
   layerNumberText: {
     color: "#8E8E93",
@@ -552,8 +552,8 @@ const s = StyleSheet.create({
     fontWeight: "500",
   },
   layerNumberTextActive: {
-    color: "#121214",
-    fontWeight: "600",
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   stackItemIconBox: {
     width: 22,
@@ -573,7 +573,7 @@ const s = StyleSheet.create({
     fontWeight: "400",
   },
   stackItemTitleActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   stackItemSub: {

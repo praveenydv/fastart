@@ -88,7 +88,7 @@ export const SpeedAudioView: React.FC<SpeedAudioViewProps> = ({
       {/* Fine Tuning Interactive Slider with Steppers */}
       <View style={styles.audioSliderBox}>
         <CompactSliderInput
-          label="Fine Tuning"
+          label="Speed"
           value={speedVal}
           min={0.2}
           max={4.0}

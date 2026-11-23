@@ -108,12 +108,33 @@ export function useExportProcess(
 
   const calculateEstimatedSize = () => {
     const dur = Math.max(totalDuration || 5, 1);
-    if (mediaType === "png") return "~1.8 MB";
-    if (mediaType === "wav") return `~${(dur * 0.17).toFixed(1)} MB`;
-    const resMultiplier =
-      resolution === "2K/4K" ? 2.5 : resolution === "1080p" ? 1.4 : 0.8;
-    const formatMultiplier = mediaType === "webm" ? 0.75 : 1.0;
-    return `~${(dur * resMultiplier * formatMultiplier).toFixed(1)} MB`;
+    if (mediaType === "png") {
+      const snapMb = resolution === "2K/4K" ? 5.5 : resolution === "1080p" ? 2.2 : 1.1;
+      return `~${snapMb.toFixed(1)} MB`;
+    }
+    if (mediaType === "wav") {
+      // 16-bit 44.1kHz Stereo PCM = 176.4 kB/s = ~0.176 MB/s
+      return `~${(dur * 0.176).toFixed(1)} MB`;
+    }
+
+    // MediaRecorder VBR empirical bitrates across modern browser encoders:
+    // 2K/4K: ~4.5 - 6.0 Mbps, 1080p: ~2.8 - 3.6 Mbps, 720p: ~1.4 - 2.0 Mbps
+    let targetVideoBps = 3_200_000;
+    if (resolution === "2K/4K") {
+      targetVideoBps = 4_600_000;
+    } else if (resolution === "1080p") {
+      targetVideoBps = 3_200_000;
+    } else {
+      targetVideoBps = 1_800_000;
+    }
+    if (fps >= 60) {
+      targetVideoBps = Math.round(targetVideoBps * 1.35);
+    }
+
+    const audioBps = 192_000;
+    const totalBytesPerSec = (targetVideoBps + audioBps) / 8;
+    const estMb = (totalBytesPerSec * dur) / (1024 * 1024);
+    return `~${estMb.toFixed(1)} MB`;
   };
 
   const triggerDirectDownload = async (

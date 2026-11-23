@@ -272,10 +272,10 @@ export default function AutoCutModal({
                         <Ionicons
                           name={tmpl.icon as any}
                           size={18}
-                          color={isSelected ? '#FFFFFF' : '#8E8E93'}
+                          color={isSelected ? '#00F2FE' : '#8E8E93'}
                         />
                         {isSelected && (
-                          <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                          <Ionicons name="checkmark-circle" size={16} color="#00F2FE" />
                         )}
                       </View>
                       <Text
@@ -340,7 +340,7 @@ export default function AutoCutModal({
                       )}
                       {isSelected && (
                         <View style={styles.checkIcon}>
-                          <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+                          <Ionicons name="checkmark-circle" size={22} color="#00F2FE" />
                         </View>
                       )}
                       <View style={styles.clipMetaOverlay}>
@@ -372,7 +372,7 @@ export default function AutoCutModal({
                       <Ionicons
                         name={isSelected ? 'radio-button-on' : 'radio-button-off'}
                         size={18}
-                        color={isSelected ? '#FFFFFF' : '#52525B'}
+                        color={isSelected ? '#00F2FE' : '#52525B'}
                         style={{ marginRight: 10 }}
                       />
                       <View style={{ flex: 1 }}>
@@ -415,7 +415,7 @@ export default function AutoCutModal({
                         <Ionicons
                           name={isSelected ? 'musical-notes' : 'musical-note'}
                           size={16}
-                          color={isSelected ? '#10B981' : '#8E95A5'}
+                          color={isSelected ? '#00F2FE' : '#8E95A5'}
                         />
                       </View>
                       <View style={styles.audioInfo}>
@@ -452,7 +452,7 @@ export default function AutoCutModal({
               onPress={handleGenerate}
               activeOpacity={0.8}
             >
-              <Ionicons name="sparkles" size={16} color="#121214" />
+              <Ionicons name="sparkles" size={16} color="#08090E" />
               <Text style={styles.generateBtnText}>
                 Generate Beat-Synced Reel ({selectedClips.length} Clips)
               </Text>

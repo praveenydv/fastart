@@ -53,7 +53,7 @@ export function ModalActionFooter({
               ]}
             >
               {applyToAllChecked && (
-                <Ionicons name="checkmark" size={12} color="#121214" />
+                <Ionicons name="checkmark" size={12} color="#08090E" />
               )}
             </View>
             <Text style={styles.applyToAllText}>{applyToAllLabel}</Text>
@@ -136,8 +136,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   checkboxActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
+    borderColor: "#00F2FE",
   },
   applyToAllText: {
     color: "#94A3B8",
@@ -151,14 +151,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 3,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
   },
   secondaryBtnText: {
     color: "#00F2FE",
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   cancelBtn: {
     paddingVertical: 4,
@@ -175,15 +175,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 3,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
   },
   applyBtnDisabled: {
     opacity: 0.35,
   },
   applyBtnText: {
-    color: "#0E0E10",
+    color: "#08090E",
     fontSize: 10.5,
-    fontWeight: "500",
+    fontWeight: "700",
   },
 });
 

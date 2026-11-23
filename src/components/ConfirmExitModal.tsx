@@ -215,7 +215,7 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({
               onPress={handleConfirm}
               activeOpacity={0.8}
             >
-              <Ionicons name="exit-outline" size={16} color="#000000" />
+              <Ionicons name="exit-outline" size={16} color="#08090E" />
               <Text style={styles.confirmButtonText}>Exit to Home</Text>
             </TouchableOpacity>
           </View>
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   confirmButton: {
     flex: 1.2,
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   confirmButtonText: {
-    color: '#000000',
+    color: '#08090E',
     fontSize: 12,
     fontWeight: '700',
   },

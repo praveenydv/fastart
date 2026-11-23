@@ -11,13 +11,13 @@ import { CutoutControls } from "./Cutout/CutoutControls";
 import {
   processVideoUnified,
   processClipUnified,
+  updateActiveFrameMatteParams,
   hasClipMasks,
   getClipProcessedCount,
   clearClipMasks,
   clearPreviewFrame,
   getClipBakedFps,
   getCutoutQualityFps,
-  updateActiveFrameMatteParams,
   initStudioNeuralEngine,
   notifyMaskUpdated,
   restoreClipMasksFromStorage,
@@ -248,10 +248,11 @@ function CutoutModalComponent({
     setIsProcessingActiveFrame(true);
     setProcessingError(null);
     try {
-      const rawThresh = (previewConfig.intensity ?? 45) / 100;
-      const rawFeath = (previewConfig.shadow ?? 25) / 100;
-      const threshold = Math.max(0, Math.min(1, rawThresh));
-      const feather = Math.max(0, Math.min(1, rawFeath));
+      const isChroma = previewConfig.mode === "chroma";
+      const threshold = isChroma
+        ? Math.max(0, Math.min(1, (previewConfig.intensity ?? 45) / 100))
+        : 0.45;
+      const feather = Math.max(0, Math.min(1, (previewConfig.shadow ?? 25) / 100));
       const ok = await processClipUnified(
         clip.url,
         id,
@@ -293,38 +294,51 @@ function CutoutModalComponent({
     }
     onApplyCutout(newConfig, clipId);
 
+    // If background fill or stroke outline changed, update the display immediately
+    const stylingChanged =
+      newConfig.bgColor !== config.bgColor ||
+      newConfig.strokeColor !== config.strokeColor ||
+      newConfig.strokeWidth !== config.strokeWidth;
+    if (stylingChanged) {
+      notifyMaskUpdated();
+    }
+
+    const isChroma = newConfig.mode === "chroma";
+    if (isChroma && Platform.OS === "web") {
+      // Real-time GPU/WASM chroma compositing on web canvas
+      notifyMaskUpdated();
+    }
+
     const targetIdx = isVideoClip ? frameIdx : 0;
     const targetTime = isVideoClip ? mediaTime : 0;
 
-    // If auto cutout and threshold/shadow changed, update cached active frame matte instantly via Rust
-    let updatedSynchronously = false;
-    if (Platform.OS === "web") {
-      if (newConfig.enabled && newConfig.mode === "auto" && clipId) {
-        const rawIntensity = newConfig.intensity ?? 45;
-        const rawShadow = newConfig.shadow ?? 25;
-        const thresh = Math.max(0, Math.min(1, rawIntensity / 100));
-        const feat = Math.max(0, Math.min(1, rawShadow / 100));
-        updatedSynchronously = updateActiveFrameMatteParams(
-          clipId,
-          targetIdx,
-          thresh,
-          feat,
-        );
+    // Fast path: instant edge smoothness update on active frame without re-running neural network
+    let instantUpdated = false;
+    if (newConfig.mode === "auto" && newConfig.shadow !== config.shadow) {
+      const sNorm = Math.max(0, Math.min(1, (newConfig.shadow ?? 25) / 100));
+      instantUpdated = updateActiveFrameMatteParams(clipId, targetIdx, 0.45, sNorm);
+      if (instantUpdated) {
+        notifyMaskUpdated();
       }
     }
 
-    // Automatically trigger active frame preview when:
-    // 1. Enabling cutout or changing mode
-    // 2. Adjusting Chroma Key
-    // 3. Adjusting Auto Cutout if active frame raw tensor is not yet cached (or on native)
+    // Trigger preview when enabling cutout, switching modes, or adjusting chroma parameters on native
     if (newConfig.enabled && newConfig.mode !== "none" && selectedClip?.url) {
-      const modeChanged = newConfig.mode !== config.mode || (!config.enabled && newConfig.enabled);
-      const isChroma = newConfig.mode === "chroma";
-      const isAutoCutoutNeedsPreview = newConfig.mode === "auto" && !updatedSynchronously;
+      const modeChanged =
+        newConfig.mode !== config.mode || (!config.enabled && newConfig.enabled);
+      const chromaParamChanged =
+        isChroma &&
+        (newConfig.keyColor !== config.keyColor ||
+          newConfig.intensity !== config.intensity ||
+          newConfig.shadow !== config.shadow);
+      const autoSmoothnessNeedsPreview =
+        !isChroma &&
+        !instantUpdated &&
+        newConfig.shadow !== config.shadow;
 
-      if (modeChanged || isChroma || isAutoCutoutNeedsPreview) {
+      if (modeChanged || autoSmoothnessNeedsPreview || (chromaParamChanged && Platform.OS !== "web")) {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        const delay = modeChanged ? 0 : 50;
+        const delay = modeChanged ? 0 : 120;
         debounceTimerRef.current = setTimeout(() => {
           void runPreview(selectedClip, clipId, targetIdx, targetTime, newConfig).then((ok) => {
             if (ok) {
@@ -412,10 +426,11 @@ function CutoutModalComponent({
 
     try {
       setProcessingError(null);
-      const rawThresh = (processingConfig.intensity ?? 45) / 100;
-      const rawFeath = (processingConfig.shadow ?? 25) / 100;
-      const threshold = Math.max(0, Math.min(1, rawThresh));
-      const feather = Math.max(0, Math.min(1, rawFeath));
+      const isChroma = processingConfig.mode === "chroma";
+      const threshold = isChroma
+        ? Math.max(0, Math.min(1, (processingConfig.intensity ?? 45) / 100))
+        : 0.45;
+      const feather = Math.max(0, Math.min(1, (processingConfig.shadow ?? 25) / 100));
       const processed = await processVideoUnified(
         selectedClip.url,
         clipId,
@@ -663,12 +678,12 @@ const s = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#27272A",
+    borderColor: "#00F2FE",
   },
   resetText: {
-    color: "#8E8E93",
+    color: "#00F2FE",
     fontSize: 9,
-    fontWeight: "400",
+    fontWeight: "600",
   },
   doneBtn: {
     width: 32,

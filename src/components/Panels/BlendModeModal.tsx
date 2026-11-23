@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 5,
-    backgroundColor: 'rgba(0, 242, 254, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -334,20 +334,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetBtnText: {
     fontSize: 9.5,
     color: '#00F2FE',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   applyBtn: {
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -399,8 +399,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   opacityPillActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#141416',
+    borderColor: '#00F2FE',
   },
   opacityPillText: {
     fontSize: 9,
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   opacityPillTextActive: {
-    color: '#000000',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   presetGrid: {
@@ -429,8 +429,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   presetCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   cardIconBox: {
     width: 24,
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
     color: '#EDEDED',
   },
   cardNameActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   cardDesc: {

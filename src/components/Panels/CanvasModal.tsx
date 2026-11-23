@@ -120,7 +120,7 @@ export default function CanvasModal({
                   <Ionicons
                     name={item.icon}
                     size={14}
-                    color={isSelected ? "#FFFFFF" : "#8E95A5"}
+                    color={isSelected ? "#00F2FE" : "#8E95A5"}
                   />
                 </View>
                 <Text
@@ -136,7 +136,7 @@ export default function CanvasModal({
                 </Text>
                 {isSelected && (
                   <View style={styles.checkBadge}>
-                    <Ionicons name="checkmark" size={7} color="#000000" />
+                    <Ionicons name="checkmark" size={7} color="#08090E" />
                   </View>
                 )}
               </TouchableOpacity>
@@ -269,8 +269,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   ratioCardActive: {
-    borderColor: "#FFFFFF",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#00F2FE",
+    backgroundColor: "#18181A",
   },
   ratioIconBox: {
     width: 22,
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   ratioIconBoxActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   ratioLabel: {
     fontSize: 8.5,
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   ratioLabelActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   ratioDesc: {
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -327,8 +327,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#10B981",
   },
   inlineApplyText: {
-    color: "#000000",
+    color: "#08090E",
     fontSize: 9.5,
-    fontWeight: "500",
+    fontWeight: "700",
   },
 });

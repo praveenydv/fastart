@@ -177,8 +177,8 @@ function FiltersModalComponent({
               style={[
                 styles.categoryPill,
                 {
-                  borderColor: 'rgba(0, 242, 254, 0.35)',
-                  backgroundColor: 'rgba(0, 242, 254, 0.12)',
+                  borderColor: '#00F2FE',
+                  backgroundColor: '#18181A',
                   flexDirection: 'row',
                   alignItems: 'center',
                 },
@@ -548,14 +548,14 @@ const styles: any = StyleSheet.create({
     paddingHorizontal: 6,
     height: 22,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetText: {
     color: '#00F2FE',
     fontSize: 9.5,
-    fontWeight: '600',
+    fontWeight: '500',
     flexShrink: 0,
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
@@ -589,8 +589,8 @@ const styles: any = StyleSheet.create({
     borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: '#18181A',
+    borderColor: '#00F2FE',
   },
   categoryPillText: {
     color: '#8E8E93',
@@ -600,7 +600,7 @@ const styles: any = StyleSheet.create({
     ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
   },
   categoryPillTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   sheetBody: {
@@ -644,8 +644,8 @@ const styles: any = StyleSheet.create({
     alignItems: 'center',
   },
   cardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   faceFrame: {
     height: 48,
@@ -687,7 +687,7 @@ const styles: any = StyleSheet.create({
     textAlign: 'center',
   },
   filterNameActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   filterDescText: {

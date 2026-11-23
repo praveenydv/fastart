@@ -678,6 +678,43 @@ export function generateCanvasBridgeHtml(
       const stickerClips = PROJECT.tracks?.stickers || [];
       const effectClips = PROJECT.tracks?.effects || [];
 
+      function findContiguousPrecedingClip(clip, allClips) {
+        if (!clip || clip.type !== "video" || clip.reverse) return null;
+        const clipTrack = clip.trackIndex || 0;
+        const clipStart = clip.startTime || 0;
+        const clipTrimIn = clip.trimIn || 0;
+        const clipSpeed = clip.speed || 1.0;
+        if (clip.speedCurve) return null;
+
+        for (let j = 0; j < allClips.length; j++) {
+          const prev = allClips[j];
+          if (!prev || prev.id === clip.id || prev.type !== "video" || prev.reverse || prev.speedCurve) continue;
+          if ((prev.trackIndex || 0) !== clipTrack) continue;
+
+          const sameUrl = Boolean(clip.url && prev.url && clip.url === prev.url);
+          const sameSourceId = Boolean(
+            clip.sourceMediaId && prev.sourceMediaId && clip.sourceMediaId === prev.sourceMediaId
+          );
+          if (!sameUrl && !sameSourceId) continue;
+
+          const prevEnd = (prev.startTime || 0) + (prev.duration || 0);
+          if (Math.abs(prevEnd - clipStart) > 0.05) continue;
+
+          const prevSpeed = prev.speed || 1.0;
+          if (Math.abs(prevSpeed - clipSpeed) > 0.01) continue;
+          const prevMediaEnd = (prev.trimIn || 0) + (prev.duration || 0) * prevSpeed;
+          if (Math.abs(prevMediaEnd - clipTrimIn) > 0.05) continue;
+
+          const trans = prev.transition;
+          if (trans && trans.type && trans.type !== "none" && trans.type !== "cut" && (trans.duration || 0) > 0) {
+            continue;
+          }
+
+          return prev;
+        }
+        return null;
+      }
+
       async function preloadAllMedia() {
         const promises = [];
 
@@ -685,39 +722,46 @@ export function generateCanvasBridgeHtml(
         for (const clip of videoClips) {
           if (!clip.url) continue;
           if (clip.type === "video") {
-            const v = document.createElement("video");
-            v.muted = true;
-            v.defaultMuted = true;
-            v.playsInline = true;
-            v.setAttribute("playsinline", "true");
-            v.setAttribute("webkit-playsinline", "true");
-            if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
-              v.crossOrigin = "anonymous";
-            }
-            v.preload = "auto";
-            v.src = clip.url;
-            v.style.position = "fixed";
-            v.style.top = "-9999px";
-            v.style.left = "-9999px";
-            v.style.width = "1px";
-            v.style.height = "1px";
-            v.style.opacity = "0.01";
-            v.style.pointerEvents = "none";
-            document.body.appendChild(v);
-            try { v.load(); } catch(e) {}
-            promises.push(new Promise((resolve) => {
-              if (v.readyState >= 1) {
-                resolve();
-                return;
+            const contiguousPrev = findContiguousPrecedingClip(clip, videoClips);
+            let v;
+            if (contiguousPrev && mediaMap.has(contiguousPrev.id)) {
+              v = mediaMap.get(contiguousPrev.id);
+            } else {
+              v = document.createElement("video");
+              v.muted = true;
+              v.defaultMuted = true;
+              v.playsInline = true;
+              v.setAttribute("playsinline", "true");
+              v.setAttribute("webkit-playsinline", "true");
+              if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+                v.crossOrigin = "anonymous";
               }
-              let done = false;
-              const finish = () => { if (!done) { done = true; resolve(); } };
-              v.onloadedmetadata = finish;
-              v.onloadeddata = finish;
-              v.oncanplay = finish;
-              v.onerror = finish;
-              setTimeout(finish, 15000);
-            }));
+              v.preload = "auto";
+              v.src = clip.url;
+              v.style.position = "fixed";
+              v.style.left = "0px";
+              v.style.top = "0px";
+              v.style.width = "64px";
+              v.style.height = "64px";
+              v.style.opacity = "0.001";
+              v.style.pointerEvents = "none";
+              v.style.zIndex = "-9999";
+              document.body.appendChild(v);
+              try { v.load(); } catch(e) {}
+              promises.push(new Promise((resolve) => {
+                if (v.readyState >= 1) {
+                  resolve();
+                  return;
+                }
+                let done = false;
+                const finish = () => { if (!done) { done = true; resolve(); } };
+                v.onloadedmetadata = finish;
+                v.onloadeddata = finish;
+                v.oncanplay = finish;
+                v.onerror = finish;
+                setTimeout(finish, 15000);
+              }));
+            }
             mediaMap.set(clip.id, v);
             if (!mediaMap.has(clip.url)) {
               mediaMap.set(clip.url, v);
@@ -1807,11 +1851,12 @@ export function generateCanvasBridgeHtml(
             if (moovOffset >= 0) {
               var moovEnd = Math.min(fileLen, moovOffset + moovSize);
 
-              // PASS 1: Find mvhd first to guarantee movieTimescale is known before patching tracks
+              // PASS 1: Find mvhd timescale and detect if MP4 is fragmented (has mvex or moof)
               var movieTimescale = 1000;
               var foundMovieTimescale = false;
+              var isFragmented = false;
 
-              function findMvhd(start, end) {
+              function findMvhdAndMvex(start, end) {
                 var cur = start;
                 while (cur + 8 <= end) {
                   var bSize = dv.getUint32(cur);
@@ -1836,16 +1881,37 @@ export function generateCanvasBridgeHtml(
                       var ts = dv.getUint32(cur + headerLen + 20);
                       if (ts > 0) { movieTimescale = ts; foundMovieTimescale = true; }
                     }
-                    return;
-                  } else if (bType === "trak" || bType === "mdia" || bType === "minf" || bType === "mvex") {
-                    findMvhd(cur + headerLen, bEnd);
-                    if (foundMovieTimescale) return;
+                  } else if (bType === "mvex") {
+                    isFragmented = true;
+                  } else if (bType === "trak" || bType === "mdia" || bType === "minf") {
+                    findMvhdAndMvex(cur + headerLen, bEnd);
                   }
                   cur += bSize;
                 }
               }
 
-              findMvhd(moovOffset, moovEnd);
+              findMvhdAndMvex(moovOffset, moovEnd);
+
+              // Check top-level boxes for 'moof' fragments
+              if (!isFragmented) {
+                var off = 0;
+                while (off + 8 <= fileLen) {
+                  var bSize = dv.getUint32(off);
+                  var bType = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+                  if (bType === "moof") {
+                    isFragmented = true;
+                    break;
+                  }
+                  if (bSize === 1 && off + 16 <= fileLen) {
+                    var h = dv.getUint32(off + 8);
+                    var l = dv.getUint32(off + 12);
+                    bSize = h * 4294967296 + l;
+                  } else if (bSize < 8) {
+                    break;
+                  }
+                  off += bSize;
+                }
+              }
 
               // PASS 2: Patch mvhd, tkhd, mdhd, and mehd with correct timescales & 64-bit offsets
               function scanBoxes(start, end) {
@@ -1875,30 +1941,28 @@ export function generateCanvasBridgeHtml(
                     }
                   } else if (bType === "tkhd") {
                     var v = bytes[cur + headerLen];
-                    var dur = Math.round(durationSec * movieTimescale);
+                    // CRITICAL ISO/IEC 14496-12 RULE:
+                    // In fragmented MP4 (fMP4 with mvex/moof), tkhd duration in moov MUST be 0.
+                    // If set to durationSec, demuxers (AVFoundation, QuickTime, VLC, Chromium) compute:
+                    //   Track Duration = (tkhd moov duration) + sum(moof fragment durations)
+                    // which DOUBLES the presentation duration and freezes on the last frame for the 2nd half!
+                    var dur = isFragmented ? 0 : Math.round(durationSec * movieTimescale);
                     if (v === 0 && cur + headerLen + 24 <= bEnd) {
                       dv.setUint32(cur + headerLen + 20, dur);
                     } else if (v === 1 && cur + headerLen + 36 <= bEnd) {
-                      // In tkhd v1: creation(8) + mod(8) + track_id(4) + reserved(4) = 24 bytes from header
-                      // duration is 64-bit located at offset 28..35
                       dv.setUint32(cur + headerLen + 28, Math.floor(dur / 4294967296));
                       dv.setUint32(cur + headerLen + 32, dur >>> 0);
                     }
                   } else if (bType === "mdhd") {
                     var v = bytes[cur + headerLen];
+                    // In fragmented MP4, media samples reside inside moof fragments, so mdhd duration in moov must be 0.
+                    var mdTimescale = dv.getUint32(cur + headerLen + (v === 0 ? 12 : 20));
+                    var mdDur = (isFragmented || !mdTimescale || mdTimescale <= 0) ? 0 : Math.round(durationSec * mdTimescale);
                     if (v === 0 && cur + headerLen + 20 <= bEnd) {
-                      var mdTimescale = dv.getUint32(cur + headerLen + 12);
-                      if (mdTimescale > 0) {
-                        var mdDur = Math.round(durationSec * mdTimescale);
-                        dv.setUint32(cur + headerLen + 16, mdDur);
-                      }
+                      dv.setUint32(cur + headerLen + 16, mdDur);
                     } else if (v === 1 && cur + headerLen + 32 <= bEnd) {
-                      var mdTimescale = dv.getUint32(cur + headerLen + 20);
-                      if (mdTimescale > 0) {
-                        var mdDur = Math.round(durationSec * mdTimescale);
-                        dv.setUint32(cur + headerLen + 24, Math.floor(mdDur / 4294967296));
-                        dv.setUint32(cur + headerLen + 28, mdDur >>> 0);
-                      }
+                      dv.setUint32(cur + headerLen + 24, Math.floor(mdDur / 4294967296));
+                      dv.setUint32(cur + headerLen + 28, mdDur >>> 0);
                     }
                   } else if (bType === "mehd") {
                     var v = bytes[cur + headerLen];
@@ -3277,7 +3341,41 @@ export function generateCanvasBridgeHtml(
               return;
             }
 
-          // Synchronize active video playback with exact seek and micro-adjustments
+          // 1. Identify which video elements are active across all tracks in this frame
+          var activeVideoElements = new Set();
+          for (var vi = 0; vi < videoClips.length; vi++) {
+            var c = videoClips[vi];
+            if (c.type !== "video") continue;
+            var tLead = 0;
+            for (var oi = 0; oi < videoClips.length; oi++) {
+              var oth = videoClips[oi];
+              if (oth.id !== c.id && (oth.trackIndex || 0) === (c.trackIndex || 0)) {
+                var oEnd = (oth.startTime || 0) + (oth.duration || 0);
+                var oTrans = oth.transition;
+                if (
+                  oTrans &&
+                  oTrans.duration > 0 &&
+                  oTrans.type &&
+                  oTrans.type !== "none" &&
+                  oTrans.type !== "cut" &&
+                  Math.abs(oEnd - c.startTime) < 0.35
+                ) {
+                  tLead = oTrans.duration;
+                  break;
+                }
+              }
+            }
+            var aStart = Math.max(0, c.startTime - tLead);
+            var aEnd = c.startTime + c.duration;
+            if (curTime >= aStart && curTime < aEnd) {
+              var vel = mediaMap.get(c.id) || (c.sourceMediaId ? mediaMap.get(c.sourceMediaId) : null) || mediaMap.get(c.url);
+              if (vel && vel instanceof HTMLVideoElement) {
+                activeVideoElements.add(vel);
+              }
+            }
+          }
+
+          // 2. Synchronize active video playback with exact seek and micro-adjustments
           for (const clip of videoClips) {
             if (clip.type !== "video") continue;
             const el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
@@ -3307,6 +3405,20 @@ export function generateCanvasBridgeHtml(
             var activeStart = Math.max(0, clip.startTime - transLead);
             var activeEnd = clip.startTime + clip.duration;
             var isInside = curTime >= activeStart && curTime < activeEnd;
+
+            // Warm pre-cue (seek only, never play early!)
+            var isPreRolling = curTime >= activeStart - 0.50 && curTime < activeStart;
+            if (isPreRolling && !activeVideoElements.has(el)) {
+              var targetTrim = clip.reverse
+                ? (clip.trimOut || (clip.trimIn || 0) + (clip.duration || 0))
+                : Math.max(0, clip.trimIn || 0);
+              if (!el._preRollCued) {
+                el._preRollCued = true;
+                if (Math.abs(el.currentTime - targetTrim) > 0.05) {
+                  try { el.currentTime = targetTrim; } catch(e) {}
+                }
+              }
+            }
 
             const vGain = videoGainNodes.get(clip.id);
             if (vGain && audioCtx) {
@@ -3358,8 +3470,10 @@ export function generateCanvasBridgeHtml(
               } else {
                 el._playStarted = false;
                 const drift = el.currentTime - targetTime;
-                if (Math.abs(drift) > 0.08) {
-                  const comp = Math.max(0.80, Math.min(1.20, 1 - drift * 0.4));
+                if (Math.abs(drift) > 0.45 && !el.seeking) {
+                  try { el.currentTime = targetTime; } catch(e) {}
+                } else if (Math.abs(drift) > 0.06) {
+                  const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.5));
                   try { el.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
                 } else if (Math.abs(el.playbackRate - speed) > 0.01) {
                   try { el.playbackRate = speed; } catch(e) {}
@@ -3388,8 +3502,9 @@ export function generateCanvasBridgeHtml(
                   }
                 }
               }
-            } else {
+            } else if (!isPreRolling && !activeVideoElements.has(el)) {
               el._playStarted = false;
+              el._preRollCued = false;
               if (!el.paused) {
                 try { el.pause(); } catch(e) {}
               }

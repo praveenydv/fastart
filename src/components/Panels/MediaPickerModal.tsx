@@ -353,7 +353,7 @@ export default function MediaPickerModal({ visible, onClose, onAddMedia, project
                           activeOpacity={0.7}
                           accessibilityLabel="Add to timeline"
                         >
-                          <Ionicons name="add" size={13} color="#121214" />
+                          <Ionicons name="add" size={13} color="#08090E" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     justifyContent: 'center',
     alignItems: 'center',
   },

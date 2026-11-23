@@ -239,7 +239,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "rgba(0, 229, 201, 0.12)",
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -278,14 +280,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   activeRow: {
-    backgroundColor: "rgba(0, 229, 201, 0.08)",
-    borderColor: "rgba(0, 229, 201, 0.3)",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   activeDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: "#00F2FE",
   },
   rowIconCircle: {
     width: 28,
@@ -306,18 +308,18 @@ const styles = StyleSheet.create({
   activeRowTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: THEME_COLORS.accent,
+    color: "#00F2FE",
   },
   nowBadge: {
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: "#00F2FE",
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
   },
   nowBadgeText: {
-    color: "#000000",
+    color: "#08090E",
     fontSize: 9,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   rowTitle: {
     fontSize: 13,

@@ -188,8 +188,8 @@ export const cropStyles = {
     borderColor: "#27272F",
   },
   cropPresetChipActive: {
-    backgroundColor: "#202026",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181C",
+    borderColor: "#00F2FE",
   },
   cropPresetText: {
     color: "#71717A",
@@ -197,8 +197,8 @@ export const cropStyles = {
     fontWeight: "600" as const,
   },
   cropPresetTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "700" as const,
+    color: "#00F2FE",
+    fontWeight: "600" as const,
   },
   cropActionsRow: {
     flexDirection: "row" as const,
@@ -213,9 +213,11 @@ export const cropStyles = {
     paddingVertical: 6,
     borderRadius: 6,
     backgroundColor: "#18181C",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   cropResetText: {
-    color: "#A1A1AA",
+    color: "#00F2FE",
     fontSize: 12,
     fontWeight: "600" as const,
   },
@@ -247,7 +249,7 @@ export const cropStyles = {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -255,7 +257,7 @@ export const cropStyles = {
     elevation: 3,
   },
   cropApplyText: {
-    color: "#000000",
+    color: "#08090E",
     fontSize: 12,
     fontWeight: "700" as const,
   },

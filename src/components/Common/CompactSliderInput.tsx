@@ -7,6 +7,7 @@ import {
   Platform,
   StyleProp,
   ViewStyle,
+  TextStyle,
 } from 'react-native';
 import { TactileTouchable as TouchableOpacity } from './TactileTouchable';
 import Slider from '@react-native-community/slider';
@@ -102,8 +103,10 @@ export interface CompactSliderInputProps {
   accentColor?: string;
   icon?: React.ReactNode;
   hint?: string;
-  layout?: 'stack' | 'inline';    // 'stack' (label + input on top, slider below) or 'inline' (label, slider, input in 1 row)
-  inputWidth?: number;            // width of numeric input box (default ~54)
+  layout?: 'stack' | 'inline';    // 'stack' (label + input on top, full-width slider below) or 'inline'
+  labelWidth?: number;            // custom width for inline label
+  labelStyle?: StyleProp<TextStyle>;
+  inputWidth?: number;            // width of numeric input box (default ~48)
   containerStyle?: StyleProp<ViewStyle>;
   disabled?: boolean;
   onChange: (value: number) => void;
@@ -147,6 +150,8 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
   icon,
   hint,
   layout = 'stack',
+  labelWidth,
+  labelStyle,
   inputWidth = 48,
   containerStyle,
   disabled = false,
@@ -536,11 +541,25 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     return (
       <View style={[styles.inlineContainer, containerStyle]}>
         {label ? (
-          <View style={styles.inlineLabelBox}>
+          <View
+            style={[
+              styles.inlineLabelBox,
+              labelWidth != null
+                ? { width: labelWidth, minWidth: labelWidth, maxWidth: labelWidth }
+                : null,
+            ]}
+          >
             {icon ? <View style={styles.iconBox}>{icon}</View> : null}
-            <Text style={styles.labelTitle} numberOfLines={1}>
+            <Text
+              style={[styles.labelTitle, labelStyle]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {label}
             </Text>
+            {prefix && value > 0 ? (
+              <Text style={styles.positivePrefix}>({prefix})</Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -563,13 +582,13 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
     );
   }
 
-  // Default 'stack' layout (Label + Small Input on top, Slider below)
+  // Fallback 'stack' layout (Label + Small Input on top, Slider below)
   return (
     <View style={[styles.stackContainer, containerStyle]}>
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           {icon ? <View style={styles.iconBox}>{icon}</View> : null}
-          <Text style={styles.labelTitle}>{label}</Text>
+          <Text style={[styles.labelTitle, labelStyle]}>{label}</Text>
           {prefix && value > 0 ? (
             <Text style={styles.positivePrefix}>({prefix})</Text>
           ) : null}
@@ -601,47 +620,48 @@ export const CompactSliderInput: React.FC<CompactSliderInputProps> = ({
 const styles = StyleSheet.create({
   stackContainer: {
     width: '100%',
-    paddingVertical: 1,
+    paddingVertical: 3,
   },
   inlineContainer: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 1,
+    gap: 8,
+    paddingVertical: 2,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     flex: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
   inlineLabelBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    minWidth: 65,
-    maxWidth: 105,
+    minWidth: 54,
+    maxWidth: 95,
+    flexShrink: 0,
   },
   iconBox: {
     marginRight: 2,
   },
   labelTitle: {
     color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '400',
-    letterSpacing: 0,
+    fontSize: 10.5,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   positivePrefix: {
     color: '#FFFFFF',
@@ -650,7 +670,7 @@ const styles = StyleSheet.create({
   },
   sliderRow: {
     width: '100%',
-    marginTop: 0,
+    marginTop: 1,
   },
   trackWithSteppersRow: {
     flexDirection: 'row',
@@ -713,19 +733,19 @@ const styles = StyleSheet.create({
   // Native slider container with comfortable height & hit targets
   sliderTrackContainer: {
     width: '100%',
-    height: 18,
+    height: 22,
     justifyContent: 'center',
   },
   nativeSlider: {
     width: '100%',
-    height: 18,
+    height: 22,
   },
   tinyResetBtn: {
     padding: 2,
     borderRadius: 3,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetBadgeBtn: {
     flexDirection: 'row',
@@ -734,9 +754,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetBadgeText: {
     color: '#00F2FE',

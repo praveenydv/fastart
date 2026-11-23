@@ -1075,15 +1075,15 @@ function Player({
                   paddingVertical: 2,
                   borderRadius: 4,
                   borderWidth: 1,
-                  borderColor: "rgba(0, 229, 201, 0.4)",
+                  borderColor: "rgba(0, 242, 254, 0.4)",
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 3,
                   zIndex: 10,
                 }}
               >
-                <Ionicons name="shield-checkmark-outline" size={10} color="#00E5C9" />
-                <Text style={{ color: "#00E5C9", fontSize: 8.5, fontWeight: "700" }}>
+                <Ionicons name="shield-checkmark-outline" size={10} color="#00F2FE" />
+                <Text style={{ color: "#00F2FE", fontSize: 8.5, fontWeight: "700" }}>
                   SAFE ZONE ACTIVE
                 </Text>
               </View>

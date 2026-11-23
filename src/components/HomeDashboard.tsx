@@ -185,7 +185,7 @@ function HomeDashboard({
                 }}
                 activeOpacity={0.85}
               >
-                <Ionicons name="add" size={18} color="#000000" />
+                <Ionicons name="add" size={18} color="#08090E" />
                 <Text style={styles.desktopNewProjectBtnText}>New Project</Text>
               </TouchableOpacity>
             )}
@@ -326,7 +326,7 @@ function HomeDashboard({
                     }}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="add" size={18} color="#000000" />
+                    <Ionicons name="add" size={18} color="#08090E" />
                     <Text style={styles.emptyCreateBtnText}>Create Project</Text>
                   </TouchableOpacity>
                 )}
@@ -426,7 +426,7 @@ function HomeDashboard({
         itemType="Project"
         itemDetails={
           projectToDelete
-            ? `${projectToDelete.aspectRatio || "9:16"} • ${projectToDelete.resolution || "1080p"} • ${formatDuration(getProjectDuration(projectToDelete))}`
+            ? `${projectToDelete.aspectRatio || "9:16"} • ${formatDuration(getProjectDuration(projectToDelete))}`
             : undefined
         }
         confirmText="Delete"

@@ -31,7 +31,7 @@ export const SpeedPresetCurvesTab: React.FC<SpeedPresetCurvesTabProps> = ({
                 <Ionicons
                   name="trending-up-outline"
                   size={24}
-                  color={isActive ? '#FFFFFF' : '#8E8E93'}
+                  color={isActive ? '#00F2FE' : '#8E8E93'}
                 />
               </View>
               <Text style={[styles.curveLabel, isActive && styles.curveLabelActive]}>

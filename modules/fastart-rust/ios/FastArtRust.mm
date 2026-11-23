@@ -256,7 +256,10 @@ RCT_EXPORT_METHOD(processVideoFrameNative:(NSString *)videoUri clipId:(NSString 
         sCutoutDir = [NSTemporaryDirectory() stringByAppendingPathComponent:@"fastart-cutout"];
         [[NSFileManager defaultManager] createDirectoryAtPath:sCutoutDir withIntermediateDirectories:YES attributes:nil error:nil];
       });
-      NSString *path = [sCutoutDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%ld.png", safeId, (long)frameIdx]];
+      NSString *paramTag = [mode isEqualToString:@"chroma"]
+        ? [NSString stringWithFormat:@"chroma_%@_%d_%d", [keyColor stringByReplacingOccurrencesOfString:@"#" withString:@""], (int)(threshold * 100), (int)(feather * 100)]
+        : @"auto";
+      NSString *path = [sCutoutDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%ld_%@.png", safeId, (long)frameIdx, paramTag]];
       if (![png writeToFile:path atomically:NO]) { reject(@"MASK_WRITE", @"Could not save native cutout mask", nil); return; }
       resolve([NSURL fileURLWithPath:path].absoluteString);
     }

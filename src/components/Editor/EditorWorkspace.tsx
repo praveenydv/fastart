@@ -351,10 +351,14 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const [localShortcutsOpen, setLocalShortcutsOpen] = React.useState(false);
   const [localHistoryOpen, setLocalHistoryOpen] = React.useState(false);
 
-  const isShortcutsOpen = propIsShortcutsOpen !== undefined ? propIsShortcutsOpen : localShortcutsOpen;
+  const isShortcutsOpen =
+    propIsShortcutsOpen !== undefined
+      ? propIsShortcutsOpen
+      : localShortcutsOpen;
   const setIsShortcutsOpen = propSetIsShortcutsOpen || setLocalShortcutsOpen;
 
-  const isHistoryOpen = propIsHistoryOpen !== undefined ? propIsHistoryOpen : localHistoryOpen;
+  const isHistoryOpen =
+    propIsHistoryOpen !== undefined ? propIsHistoryOpen : localHistoryOpen;
   const setIsHistoryOpen = propSetIsHistoryOpen || setLocalHistoryOpen;
 
   // Desktop panels state
@@ -529,7 +533,14 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
         }
       }
     },
-    [project, activeModal, openModal, setSelectedClipId, setSelectedClipType, setIsConfigPanelExpanded],
+    [
+      project,
+      activeModal,
+      openModal,
+      setSelectedClipId,
+      setSelectedClipType,
+      setIsConfigPanelExpanded,
+    ],
   );
 
   const resolveActiveClipId = React.useCallback(
@@ -561,10 +572,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       // 1. VISUAL CLIP ATTACHED: If a video or photo/image clip is currently selected, attach the filter to that clip!
       const isVisualClip = Boolean(
         selectedClipId &&
-          (selectedClipType === "video" ||
-            selectedClipType === "photo" ||
-            selectedClipType === "image" ||
-            (project.tracks?.video || []).some((c: any) => c.id === selectedClipId))
+        (selectedClipType === "video" ||
+          selectedClipType === "photo" ||
+          selectedClipType === "image" ||
+          (project.tracks?.video || []).some(
+            (c: any) => c.id === selectedClipId,
+          )),
       );
 
       if (isVisualClip) {
@@ -780,10 +793,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       // 1. VISUAL CLIP ATTACHED: If a video or photo/image clip is currently selected, attach the effect to that clip!
       const isVisualClip = Boolean(
         selectedClipId &&
-          (selectedClipType === "video" ||
-            selectedClipType === "photo" ||
-            selectedClipType === "image" ||
-            (project.tracks?.video || []).some((c: any) => c.id === selectedClipId))
+        (selectedClipType === "video" ||
+          selectedClipType === "photo" ||
+          selectedClipType === "image" ||
+          (project.tracks?.video || []).some(
+            (c: any) => c.id === selectedClipId,
+          )),
       );
 
       if (isVisualClip) {
@@ -889,7 +904,9 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
   // Measure actual root workspace height from Yoga layout to accurately exclude status bar & safe area insets
   const [workspaceRealHeight, setWorkspaceRealHeight] = React.useState<number>(
-    () => windowHeight - (Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 0),
+    () =>
+      windowHeight -
+      (Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 0),
   );
 
   const handleWorkspaceLayout = React.useCallback((e: any) => {
@@ -985,9 +1002,10 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
 
   const maxBottomHeight = React.useMemo(() => {
     // Guarantees at least 220px vertical clearance for Header + Player at all times
-    const effectiveTotalH = workspaceRealHeight > 0 ? workspaceRealHeight : windowHeight;
+    const effectiveTotalH =
+      workspaceRealHeight > 0 ? workspaceRealHeight : windowHeight;
     return Math.min(
-      Math.round(effectiveTotalH * 0.70),
+      Math.round(effectiveTotalH * 0.7),
       Math.max(minBottomHeight, effectiveTotalH - 220),
     );
   }, [workspaceRealHeight, windowHeight, minBottomHeight]);
@@ -995,7 +1013,10 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   // Active height of the root draggable bottom container - Timeline & Modal share the exact same height and parent!
   const activeBottomHeight = React.useMemo(() => {
     if (isDesktop) return currentTimelineHeight;
-    return Math.max(minBottomHeight, Math.min(maxBottomHeight, currentTimelineHeight));
+    return Math.max(
+      minBottomHeight,
+      Math.min(maxBottomHeight, currentTimelineHeight),
+    );
   }, [isDesktop, minBottomHeight, maxBottomHeight, currentTimelineHeight]);
 
   const activeBottomHeightRef = React.useRef(activeBottomHeight);
@@ -1018,14 +1039,19 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     if (typeof evt.clientY === "number") return evt.clientY;
     if (typeof evt.pageY === "number") return evt.pageY;
     if (evt.nativeEvent) {
-      if (typeof evt.nativeEvent.clientY === "number") return evt.nativeEvent.clientY;
-      if (typeof evt.nativeEvent.pageY === "number") return evt.nativeEvent.pageY;
+      if (typeof evt.nativeEvent.clientY === "number")
+        return evt.nativeEvent.clientY;
+      if (typeof evt.nativeEvent.pageY === "number")
+        return evt.nativeEvent.pageY;
       if (evt.nativeEvent.touches && evt.nativeEvent.touches.length > 0) {
         const t = evt.nativeEvent.touches[0];
         if (typeof t.clientY === "number") return t.clientY;
         if (typeof t.pageY === "number") return t.pageY;
       }
-      if (evt.nativeEvent.changedTouches && evt.nativeEvent.changedTouches.length > 0) {
+      if (
+        evt.nativeEvent.changedTouches &&
+        evt.nativeEvent.changedTouches.length > 0
+      ) {
         const t = evt.nativeEvent.changedTouches[0];
         if (typeof t.clientY === "number") return t.clientY;
         if (typeof t.pageY === "number") return t.pageY;
@@ -1197,7 +1223,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
       keyframe: "◆ Keyframe",
       cutout: "✂️ Cutout",
       tracking: "🎯 Tracking & Blur",
-      layer: "📑 Layer Order",
       opacity: "👁️ Opacity",
       animation: "🎬 Animation",
       audio_effects: "🎙️ Audio FX",
@@ -1301,11 +1326,26 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     />
   );
 
-  const handleOpenMediaModal = useCallback(() => openModal("media"), [openModal]);
-  const handleOpenTextModalCb = useCallback(() => openModal("text"), [openModal]);
-  const handleOpenAudioModalCb = useCallback(() => openModal("audio"), [openModal]);
-  const handleOpenEffectsModalCb = useCallback(() => openModal("effects"), [openModal]);
-  const handleOpenStickersModalCb = useCallback(() => openModal("stickers"), [openModal]);
+  const handleOpenMediaModal = useCallback(
+    () => openModal("media"),
+    [openModal],
+  );
+  const handleOpenTextModalCb = useCallback(
+    () => openModal("text"),
+    [openModal],
+  );
+  const handleOpenAudioModalCb = useCallback(
+    () => openModal("audio"),
+    [openModal],
+  );
+  const handleOpenEffectsModalCb = useCallback(
+    () => openModal("effects"),
+    [openModal],
+  );
+  const handleOpenStickersModalCb = useCallback(
+    () => openModal("stickers"),
+    [openModal],
+  );
 
   const handleAdjustDuration = useCallback(
     (delta: number) => {
@@ -1506,9 +1546,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   const renderPlayer = () => {
     const isMobileLayout = !isDesktop;
     const HEADER_HEIGHT = isMobileLayout ? 52 : 54;
-    const effectiveTotalH = workspaceRealHeight > 0 ? workspaceRealHeight : windowHeight;
+    const effectiveTotalH =
+      workspaceRealHeight > 0 ? workspaceRealHeight : windowHeight;
     const expectedContainerHeight = isMobileLayout
-      ? (isFullscreen ? effectiveTotalH : Math.max(100, effectiveTotalH - HEADER_HEIGHT - activeBottomHeight))
+      ? isFullscreen
+        ? effectiveTotalH
+        : Math.max(100, effectiveTotalH - HEADER_HEIGHT - activeBottomHeight)
       : undefined;
     const expectedContainerWidth = isMobileLayout ? windowWidth : undefined;
 
@@ -1525,86 +1568,86 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
           containerWidth={expectedContainerWidth}
           containerHeight={expectedContainerHeight}
           processingMessage={processingMessage}
-        onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
-        onTogglePlay={() => {
-          if (totalDuration <= 0) {
-            pauseActiveVideoRenderer();
-            pauseAllAudio();
-            setIsPlaying(false);
-            setCurrentTime(0);
-            return;
-          }
-          if (isPlaying) {
-            pauseActiveVideoRenderer();
-            pauseAllAudio();
-            setIsPlaying(false);
-          } else {
-            const needsPermClips = [
-              ...(project?.tracks?.video || []),
-              ...(project?.tracks?.audio || []),
-            ].filter((c: any) => c.needsPermission);
-            for (const c of needsPermClips) {
-              const lookupId = c.sourceMediaId || c.id;
-              reconnectLinkedMedia(lookupId, c.title).then((res) => {
-                if (res) {
-                  handleRelinkClip(
-                    c.id,
-                    (c as any).type || "video",
-                    res.url,
-                    lookupId,
-                  );
-                }
-              });
-            }
-            if (
-              getPlaybackTime() >= totalDuration - 0.05 ||
-              getPlaybackTime() >= totalDuration
-            ) {
+          onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+          onTogglePlay={() => {
+            if (totalDuration <= 0) {
+              pauseActiveVideoRenderer();
+              pauseAllAudio();
+              setIsPlaying(false);
               setCurrentTime(0);
+              return;
             }
-            setIsPlaying(true);
+            if (isPlaying) {
+              pauseActiveVideoRenderer();
+              pauseAllAudio();
+              setIsPlaying(false);
+            } else {
+              const needsPermClips = [
+                ...(project?.tracks?.video || []),
+                ...(project?.tracks?.audio || []),
+              ].filter((c: any) => c.needsPermission);
+              for (const c of needsPermClips) {
+                const lookupId = c.sourceMediaId || c.id;
+                reconnectLinkedMedia(lookupId, c.title).then((res) => {
+                  if (res) {
+                    handleRelinkClip(
+                      c.id,
+                      (c as any).type || "video",
+                      res.url,
+                      lookupId,
+                    );
+                  }
+                });
+              }
+              if (
+                getPlaybackTime() >= totalDuration - 0.05 ||
+                getPlaybackTime() >= totalDuration
+              ) {
+                setCurrentTime(0);
+              }
+              setIsPlaying(true);
+            }
+          }}
+          onSeek={(t) => setCurrentTime(t)}
+          onAddKeyframe={onAddKeyframe}
+          onOpenKeyframeModal={onOpenKeyframeModal}
+          hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
+          onOpenMediaPicker={() => openModal("media")}
+          selectedClipId={selectedClipId}
+          selectedClipType={selectedClipType}
+          onSelectClip={(id, type) => handleSelectClipWithMenuSwitch(id, type)}
+          onUpdateClipTransform={handleUpdateClipTransform}
+          onOpenEditModal={handleOpenEditModal}
+          onDeleteClip={(clipId, clipType) => {
+            handleDeleteClip(clipId, clipType);
+          }}
+          onDuplicateClip={(clipId, clipType) => {
+            handleDuplicateClip(clipId, clipType);
+          }}
+          onSplitClip={handleSplitClip}
+          onOpenCropModal={handleOpenCropModal}
+          onOpenMaskModal={handleOpenMaskModal}
+          onOpenAnimationModal={() => openModal("animation")}
+          isCroppingPreview={isCroppingPreview}
+          onToggleCropPreview={setIsCroppingPreview}
+          onUpdateClipCrop={handleUpdateClipCrop}
+          isMaskingPreview={activeModal === "mask"}
+          onToggleMaskPreview={(val) => {
+            if (!val) {
+              handleCloseMenu();
+            }
+          }}
+          onUpdateClipMask={(clipId, mask, isFinal) =>
+            handleUpdateClipMask &&
+            handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
           }
-        }}
-        onSeek={(t) => setCurrentTime(t)}
-        onAddKeyframe={onAddKeyframe}
-        onOpenKeyframeModal={onOpenKeyframeModal}
-        hasKeyframeAtCurrentTime={isKeyframeAtPlayhead}
-        onOpenMediaPicker={() => openModal("media")}
-        selectedClipId={selectedClipId}
-        selectedClipType={selectedClipType}
-        onSelectClip={(id, type) => handleSelectClipWithMenuSwitch(id, type)}
-        onUpdateClipTransform={handleUpdateClipTransform}
-        onOpenEditModal={handleOpenEditModal}
-        onDeleteClip={(clipId, clipType) => {
-          handleDeleteClip(clipId, clipType);
-        }}
-        onDuplicateClip={(clipId, clipType) => {
-          handleDuplicateClip(clipId, clipType);
-        }}
-        onSplitClip={handleSplitClip}
-        onOpenCropModal={handleOpenCropModal}
-        onOpenMaskModal={handleOpenMaskModal}
-        onOpenAnimationModal={() => openModal("animation")}
-        isCroppingPreview={isCroppingPreview}
-        onToggleCropPreview={setIsCroppingPreview}
-        onUpdateClipCrop={handleUpdateClipCrop}
-        isMaskingPreview={activeModal === "mask"}
-        onToggleMaskPreview={(val) => {
-          if (!val) {
-            handleCloseMenu();
-          }
-        }}
-        onUpdateClipMask={(clipId, mask, isFinal) =>
-          handleUpdateClipMask &&
-          handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
-        }
-        activeModal={activeModal}
-        onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
-        onRelinkClip={handleRelinkClip}
-      />
-    </ErrorBoundary>
-  );
-};
+          activeModal={activeModal}
+          onUpdateClipMotionTrack={handleUpdateClipMotionTrack}
+          onRelinkClip={handleRelinkClip}
+        />
+      </ErrorBoundary>
+    );
+  };
 
   // ─────────────────────────────────────────────
   // DESKTOP LAYOUT:
@@ -1779,7 +1822,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       }
                       onUpdateClipMask={(clipId, mask, isFinal) =>
                         handleUpdateClipMask &&
-                        handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
+                        handleUpdateClipMask(
+                          clipId,
+                          mask,
+                          isFinal,
+                          getPlaybackTime(),
+                        )
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
@@ -2059,7 +2107,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                       }
                       onUpdateClipMask={(clipId, mask, isFinal) =>
                         handleUpdateClipMask &&
-                        handleUpdateClipMask(clipId, mask, isFinal, getPlaybackTime())
+                        handleUpdateClipMask(
+                          clipId,
+                          mask,
+                          isFinal,
+                          getPlaybackTime(),
+                        )
                       }
                       onApplyVolume={(vol, fIn, fOut) =>
                         handleApplyVolume(vol, { in: fIn, out: fOut })
@@ -2213,9 +2266,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
               isMobileInlineActive && { display: "none" },
             ]}
           >
-            <View style={styles.timelineBodyWrap}>
-              {renderTimelineOnly()}
-            </View>
+            <View style={styles.timelineBodyWrap}>{renderTimelineOnly()}</View>
             {renderToolbar("horizontal")}
           </View>
 
@@ -2331,7 +2382,7 @@ const styles = StyleSheet.create({
     cursor: "pointer" as any,
   } as any,
   desktopNavItemActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
   desktopNavIconWrap: {
     alignItems: "center",

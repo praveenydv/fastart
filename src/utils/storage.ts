@@ -614,7 +614,7 @@ export const defaultSettings: AppSettings = {
   cachedSizeMb: 142.8,
   language: 'English (US)',
   themePreset: 'obsidian',
-  accentColor: '#00E5C9',
+  accentColor: '#00F2FE',
   timelineTrackHeight: 'standard',
   pinnedTools: ['split', 'speed', 'volume', 'animation', 'cutout', 'filters'],
 };

@@ -260,11 +260,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(0, 229, 201, 0.12)",
+    backgroundColor: "#18181A",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(0, 229, 201, 0.25)",
+    borderColor: "#00F2FE",
   },
   modalTitle: {
     fontSize: 16,
@@ -319,8 +319,8 @@ const styles = StyleSheet.create({
     borderColor: THEME_COLORS.border,
   },
   categoryPillActive: {
-    backgroundColor: "rgba(0, 229, 201, 0.14)",
-    borderColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.surface,
+    borderColor: "#00F2FE",
   },
   categoryPillText: {
     fontSize: 12,
@@ -328,8 +328,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   categoryPillTextActive: {
-    color: THEME_COLORS.accent,
-    fontWeight: "600",
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   listContainer: {
     flex: 1,

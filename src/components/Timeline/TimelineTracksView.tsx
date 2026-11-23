@@ -975,7 +975,7 @@ const TimelineTracksViewComponent: React.FC<TimelineTracksViewProps> = ({
                             color={
                               clip.rawClip?.transition?.type &&
                               clip.rawClip?.transition?.type !== "none"
-                                ? "#FFFFFF"
+                                ? "#00F2FE"
                                 : "#71717A"
                             }
                           />

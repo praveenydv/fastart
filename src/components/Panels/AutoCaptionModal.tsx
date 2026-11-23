@@ -1330,7 +1330,7 @@ function AutoCaptionModalComponent({
                           <Ionicons
                             name={opt.icon as any}
                             size={11}
-                            color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                            color={isSelected ? "#00F2FE" : THEME_COLORS.textSecondary}
                           />
                           <Text
                             style={[
@@ -1523,7 +1523,7 @@ function AutoCaptionModalComponent({
                         <Ionicons
                           name={al.icon as any}
                           size={12}
-                          color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                          color={isSelected ? "#00F2FE" : THEME_COLORS.textSecondary}
                         />
                       </TouchableOpacity>
                     );
@@ -1717,7 +1717,7 @@ function AutoCaptionModalComponent({
                       <Ionicons
                         name={eff.icon as any}
                         size={11}
-                        color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                        color={isSelected ? "#00F2FE" : THEME_COLORS.textSecondary}
                       />
                       <Text
                         style={[
@@ -1755,7 +1755,7 @@ function AutoCaptionModalComponent({
                       <Ionicons
                         name={pos.icon as any}
                         size={12}
-                        color={isSelected ? "#000000" : THEME_COLORS.textSecondary}
+                        color={isSelected ? "#00F2FE" : THEME_COLORS.textSecondary}
                       />
                       <Text
                         style={[
@@ -1940,7 +1940,9 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   segmentBtnActive: {
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.background,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.accent,
   },
   segmentText: {
     color: THEME_COLORS.textSecondary,
@@ -1948,7 +1950,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   segmentTextActive: {
-    color: "#000000",
+    color: THEME_COLORS.accent,
     fontWeight: "800",
   },
   quickActionsGroup: {
@@ -2081,10 +2083,10 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    backgroundColor: "#18181A",
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.3)",
+    borderColor: "#00F2FE",
   },
   rechunkActionText: {
     color: THEME_COLORS.accent,
@@ -2109,7 +2111,7 @@ const styles = StyleSheet.create({
   },
   chunkChipActive: {
     borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: THEME_COLORS.background,
   },
   chunkChipText: {
     color: THEME_COLORS.textSecondary,
@@ -2185,8 +2187,8 @@ const styles = StyleSheet.create({
     borderColor: THEME_COLORS.borderSubtle,
   },
   cueCardSelected: {
-    borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.05)",
+    borderColor: "#00F2FE",
+    backgroundColor: THEME_COLORS.surfaceElevated,
   },
   cueMetaRow: {
     flexDirection: "row",
@@ -2271,9 +2273,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
   },
   resetPresetText: {
     color: "#00F2FE",
@@ -2298,7 +2300,7 @@ const styles = StyleSheet.create({
   },
   presetGridCardActive: {
     borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: THEME_COLORS.background,
   },
   presetBadge: {
     width: 38,
@@ -2339,7 +2341,7 @@ const styles = StyleSheet.create({
   },
   pillSwitchActive: {
     borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: THEME_COLORS.background,
   },
   pillSwitchText: {
     color: THEME_COLORS.textMuted,
@@ -2381,7 +2383,7 @@ const styles = StyleSheet.create({
     borderColor: THEME_COLORS.borderSubtle,
   },
   highlightChipActive: {
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.background,
     borderColor: THEME_COLORS.accent,
   },
   swatchesRow: {
@@ -2403,7 +2405,7 @@ const styles = StyleSheet.create({
     borderColor: THEME_COLORS.borderSubtle,
   },
   chipBtnActive: {
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.background,
     borderColor: THEME_COLORS.accent,
   },
   chipText: {
@@ -2412,7 +2414,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   chipTextActive: {
-    color: "#000000",
+    color: THEME_COLORS.accent,
     fontWeight: "800",
   },
   swatchCircle: {
@@ -2474,7 +2476,7 @@ const styles = StyleSheet.create({
   },
   fontChipActive: {
     borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: THEME_COLORS.background,
   },
   fontChipText: {
     color: THEME_COLORS.textSecondary,
@@ -2502,7 +2504,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   microBtnActive: {
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.background,
     borderColor: THEME_COLORS.accent,
   },
   microBtnText: {
@@ -2511,7 +2513,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   microBtnTextActive: {
-    color: "#000000",
+    color: THEME_COLORS.accent,
     fontWeight: "800",
   },
   alignPillGroup: {
@@ -2529,7 +2531,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   alignItemActive: {
-    backgroundColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.background,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.accent,
   },
   boxGrid: {
     flexDirection: "row",
@@ -2551,7 +2555,7 @@ const styles = StyleSheet.create({
   },
   boxChipActive: {
     borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: THEME_COLORS.background,
   },
   boxChipText: {
     color: THEME_COLORS.textSecondary,
@@ -2588,7 +2592,7 @@ const styles = StyleSheet.create({
   },
   posChipActive: {
     borderColor: THEME_COLORS.accent,
-    backgroundColor: "rgba(0, 242, 254, 0.1)",
+    backgroundColor: THEME_COLORS.background,
   },
   posChipText: {
     color: THEME_COLORS.textSecondary,

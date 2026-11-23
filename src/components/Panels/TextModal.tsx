@@ -462,7 +462,9 @@ export default function TextModal({
                 borderRadius: 4,
                 backgroundColor: isListening
                   ? "rgba(255, 0, 80, 0.2)"
-                  : "rgba(0, 242, 254, 0.08)",
+                  : "#18181A",
+                borderWidth: 1,
+                borderColor: isListening ? "#FF0050" : "#27272A",
               }}
               accessibilityLabel={
                 isListening ? "Stop voice dictation" : "Speech to Text"
@@ -485,9 +487,9 @@ export default function TextModal({
                 disabled={!inputText.trim()}
                 activeOpacity={0.8}
               >
-                <Ionicons name="add" size={13} color="#000000" />
+                <Ionicons name="add" size={13} color="#08090E" />
                 <Text
-                  style={{ color: "#000000", fontSize: 10.5, fontWeight: "700" }}
+                  style={{ color: "#08090E", fontSize: 10.5, fontWeight: "700" }}
                 >
                   Add
                 </Text>
@@ -498,18 +500,13 @@ export default function TextModal({
 
         {/* 2. TYPOGRAPHY & FONT SIZE */}
         <View style={styles.controlGroup}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Font Size</Text>
-          </View>
-
-          {/* Full-Width Inline Slider (No Left Label) */}
           <CompactSliderInput
+            label="Font Size"
             value={selectedFontSize}
             min={10}
             max={96}
             step={1}
             unit="px"
-            layout="inline"
             accentColor="#FFFFFF"
             showSteppers
             onChange={setSelectedFontSize}
@@ -1090,14 +1087,13 @@ export default function TextModal({
 
               {/* Stroke Thickness Contextual Slider */}
               <View style={styles.tabSlidersContainer}>
-                <Text style={styles.subSliderTitle}>Stroke Thickness</Text>
                 <CompactSliderInput
+                  label="Stroke Thickness"
                   value={selectedStrokeWidth}
                   min={0}
                   max={16}
                   step={0.5}
                   unit="px"
-                  layout="inline"
                   accentColor="#FFFFFF"
                   showSteppers
                   onChange={(val) => {
@@ -1191,14 +1187,13 @@ export default function TextModal({
 
               {/* Corner Radius Slider */}
               <View style={styles.tabSlidersContainer}>
-                <Text style={styles.subSliderTitle}>Corner Radius</Text>
                 <CompactSliderInput
+                  label="Corner Radius"
                   value={selectedBorderRadius}
                   min={0}
                   max={40}
                   step={1}
                   unit="px"
-                  layout="inline"
                   accentColor="#00F2FE"
                   showSteppers
                   onChange={setSelectedBorderRadius}
@@ -1307,14 +1302,13 @@ export default function TextModal({
 
               {/* Border Thickness Contextual Slider */}
               <View style={styles.tabSlidersContainer}>
-                <Text style={styles.subSliderTitle}>Border Thickness</Text>
                 <CompactSliderInput
+                  label="Border Thickness"
                   value={selectedBorderWidth}
                   min={0}
                   max={10}
                   step={1}
                   unit="px"
-                  layout="inline"
                   accentColor="#00F2FE"
                   showSteppers
                   onChange={(val) => {

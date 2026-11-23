@@ -159,7 +159,7 @@ export default function ExportResultView({
       <View style={styles.doneContainer}>
         {/* Glowing Success Emblem */}
         <View style={styles.successIconBox}>
-          <Ionicons name="checkmark" size={32} color="#10B981" />
+          <Ionicons name="checkmark" size={32} color="#00F2FE" />
         </View>
 
         <Text style={styles.doneTitle}>Export Complete!</Text>
@@ -223,7 +223,6 @@ export default function ExportResultView({
         <TouchableOpacity
           style={[
             styles.downloadBtn,
-            isSaved && !isSaving && { backgroundColor: "#FFFFFF" },
             isSaving && { backgroundColor: "#FFE600", opacity: 0.95 },
           ]}
           onPress={onDownload}
@@ -231,12 +230,12 @@ export default function ExportResultView({
           activeOpacity={0.8}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#121214" />
+            <ActivityIndicator size="small" color="#08090E" />
           ) : (
             <Ionicons
               name={isSaved ? "checkmark-done" : "cloud-download"}
               size={18}
-              color="#121214"
+              color="#08090E"
             />
           )}
           <Text style={styles.downloadBtnText}>{getButtonText()}</Text>
@@ -301,7 +300,7 @@ export default function ExportResultView({
             "Unable to encode video in the selected format. Please try PNG cover or GIF."}
         </Text>
         <TouchableOpacity style={styles.downloadBtn} onPress={onReExport} activeOpacity={0.8}>
-          <Ionicons name="refresh-outline" size={18} color="#121214" />
+          <Ionicons name="refresh-outline" size={18} color="#08090E" />
           <Text style={styles.downloadBtnText}>Try Another Format</Text>
         </TouchableOpacity>
       </View>

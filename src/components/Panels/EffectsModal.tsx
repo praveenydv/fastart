@@ -444,8 +444,8 @@ export default function EffectsModal({
                   style={[
                     styles.categoryPill,
                     {
-                      borderColor: 'rgba(255, 255, 255, 0.25)',
-                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                      borderColor: '#00F2FE',
+                      backgroundColor: '#18181A',
                       flexDirection: 'row',
                       alignItems: 'center',
                     },
@@ -453,11 +453,11 @@ export default function EffectsModal({
                   onPress={handleClear}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="refresh-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Ionicons name="refresh-outline" size={11} color="#00F2FE" style={{ marginRight: 4 }} />
                   <Text
                     style={[
                       styles.categoryPillText,
-                      { color: '#FFFFFF', fontWeight: '500', flexShrink: 0 },
+                      { color: '#00F2FE', fontWeight: '500', flexShrink: 0 },
                       Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : null,
                     ]}
                     numberOfLines={1}
@@ -587,7 +587,7 @@ export default function EffectsModal({
                           </View>
                           {isCurrentActive && (
                             <View style={styles.activeCheckBadge}>
-                              <Ionicons name="checkmark" size={9} color="#000000" />
+                              <Ionicons name="checkmark" size={9} color="#08090E" />
                             </View>
                           )}
                         </>
@@ -681,9 +681,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -696,9 +696,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#27272A',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -723,8 +721,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: '#18181A',
+    borderColor: '#00F2FE',
   },
   categoryPillText: {
     color: '#8E8E93',
@@ -732,7 +730,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   categoryPillTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   intensityCard: {
@@ -776,8 +774,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   quickPresetPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#141416',
+    borderColor: '#00F2FE',
   },
   quickPresetText: {
     color: '#8E95A5',
@@ -785,7 +783,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   quickPresetTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   sheetBody: {
@@ -810,8 +808,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   effectCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   previewBox: {
     width: '100%',
@@ -848,7 +846,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -1005,7 +1003,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   iconBoxActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#141416',
   },
   iconBoxNone: {
     backgroundColor: '#141416',
@@ -1017,7 +1015,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   effectLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   effectDescText: {
@@ -1027,7 +1025,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     paddingHorizontal: 8,
     height: 22,
     borderRadius: 5,
@@ -1036,8 +1034,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#27272A',
   },
   inlineApplyText: {
-    color: '#121214',
+    color: '#08090E',
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: '700',
   },
 });

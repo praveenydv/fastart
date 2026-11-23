@@ -18,6 +18,56 @@ import {
 import { patchMediaContainerDuration } from "./mediaDurationPatcher";
 import { getMediaContainer } from "./rendererMediaSync";
 
+/**
+ * Helper to detect if a clip is a seamless continuation of an immediately preceding clip
+ * on the same track (same media source, adjacent timeline cut, continuous trim range, same speed).
+ * When contiguous, the clips can share a single HTMLVideoElement during export, eliminating
+ * decoder flushes, seek stalls, and playback jerks across splits.
+ */
+function findContiguousPrecedingClip(
+  clip: any,
+  allClips: any[]
+): any | null {
+  if (!clip || clip.type !== "video" || clip.reverse) return null;
+  const clipTrack = clip.trackIndex || 0;
+  const clipStart = clip.startTime || 0;
+  const clipTrimIn = clip.trimIn || 0;
+  const clipSpeed = clip.speed || 1.0;
+  if (clip.speedCurve) return null;
+
+  for (let j = 0; j < allClips.length; j++) {
+    const prev = allClips[j];
+    if (!prev || prev.id === clip.id || prev.type !== "video" || prev.reverse || prev.speedCurve) continue;
+    if ((prev.trackIndex || 0) !== clipTrack) continue;
+
+    // Check matching media source
+    const sameUrl = Boolean(clip.url && prev.url && clip.url === prev.url);
+    const sameSourceId = Boolean(
+      clip.sourceMediaId && prev.sourceMediaId && clip.sourceMediaId === prev.sourceMediaId
+    );
+    if (!sameUrl && !sameSourceId) continue;
+
+    // Timeline adjacency: preceding clip ends exactly where current begins
+    const prevEnd = (prev.startTime || 0) + (prev.duration || 0);
+    if (Math.abs(prevEnd - clipStart) > 0.05) continue;
+
+    // Media continuity: preceding clip playback ends exactly where current begins
+    const prevSpeed = prev.speed || 1.0;
+    if (Math.abs(prevSpeed - clipSpeed) > 0.01) continue;
+    const prevMediaEnd = (prev.trimIn || 0) + (prev.duration || 0) * prevSpeed;
+    if (Math.abs(prevMediaEnd - clipTrimIn) > 0.05) continue;
+
+    // No overlapping cross-fade transition
+    const trans = prev.transition;
+    if (trans && trans.type && trans.type !== "none" && trans.type !== "cut" && (trans.duration || 0) > 0) {
+      continue;
+    }
+
+    return prev;
+  }
+  return null;
+}
+
 export async function exportBrowserVideo(
   renderer: VideoRenderer,
   project: FastArtProject,
@@ -67,10 +117,9 @@ export async function exportBrowserVideo(
   // Set export mode for highest quality bicubic filtering
   exportRenderer.isExporting = true;
 
-  // Dedicated, isolated video and image element instances for export:
-  // Each project clip gets its own independent HTMLVideoElement keyed by clip.id,
-  // preventing play/pause collisions across multiple clips, split segments, or transitions,
-  // and ensuring the live preview player's media cache is never corrupted or destroyed!
+  // Dedicated video and image element instances for export:
+  // Distinct visual tracks and discontinuous cuts get independent HTMLVideoElement instances,
+  // while seamless contiguous splits on the same track reuse the same element without interruptions.
   exportRenderer.videoElements = new Map();
   const createdExportMediaElements: (HTMLVideoElement | HTMLImageElement)[] = [];
 
@@ -81,26 +130,34 @@ export async function exportBrowserVideo(
     const clipKey = clip.id || `export_clip_${i}`;
 
     if (clip.type === "video") {
-      const vid = document.createElement("video");
-      vid.muted = true;
-      vid.defaultMuted = true;
-      vid.playsInline = true;
-      (vid as any).playsinline = true;
-      vid.preload = "auto";
-      if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
-        vid.crossOrigin = "anonymous";
+      const contiguousPrev = findContiguousPrecedingClip(clip, videoClips);
+      let vid: HTMLVideoElement;
+      if (contiguousPrev && exportRenderer.videoElements.has(contiguousPrev.id)) {
+        vid = exportRenderer.videoElements.get(contiguousPrev.id) as HTMLVideoElement;
+      } else {
+        vid = document.createElement("video");
+        vid.muted = true;
+        vid.defaultMuted = true;
+        vid.playsInline = true;
+        (vid as any).playsinline = true;
+        vid.preload = "auto";
+        if (!clip.url.startsWith("blob:") && !clip.url.startsWith("data:")) {
+          vid.crossOrigin = "anonymous";
+        }
+        vid.src = clip.url;
+        try {
+          vid.load();
+        } catch (e) {}
+        if (domContainer) {
+          domContainer.appendChild(vid);
+        }
+        createdExportMediaElements.push(vid);
       }
-      vid.src = clip.url;
-      try {
-        vid.load();
-      } catch (e) {}
-      if (domContainer) {
-        domContainer.appendChild(vid);
-      }
-      createdExportMediaElements.push(vid);
       exportRenderer.videoElements.set(clipKey, vid);
       if (clip.id) exportRenderer.videoElements.set(clip.id, vid);
-      if (clip.sourceMediaId) exportRenderer.videoElements.set(clip.sourceMediaId, vid);
+      if (clip.sourceMediaId && !exportRenderer.videoElements.has(clip.sourceMediaId)) {
+        exportRenderer.videoElements.set(clip.sourceMediaId, vid);
+      }
       if (!exportRenderer.videoElements.has(clip.url)) {
         exportRenderer.videoElements.set(clip.url, vid);
       }
@@ -119,7 +176,8 @@ export async function exportBrowserVideo(
     }
   }
 
-  // Pre-cue all media elements to readyState >= 2 and exact trimIn before rendering frame 0
+  // Pre-cue all media elements to readyState >= 2 and exact initial trimIn before rendering frame 0
+  const cuedElements = new Set<HTMLVideoElement | HTMLImageElement>();
   const cuePromises = (project.tracks.video || []).map(async (c, idx) => {
     if (!c) return;
     const clipKey = c.id || `export_clip_${idx}`;
@@ -137,12 +195,20 @@ export async function exportBrowserVideo(
       }
       return;
     }
+
+    // If this clip is a contiguous split continuation, its element was already cued by the chain leader
+    const contiguousPrev = findContiguousPrecedingClip(c, project.tracks.video || []);
+    if (contiguousPrev) {
+      return;
+    }
+
     const el =
       (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
       (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
       exportRenderer.videoElements.get(clipKey) ||
       exportRenderer.videoElements.get(c.url);
-    if (el && el instanceof HTMLVideoElement) {
+    if (el && el instanceof HTMLVideoElement && !cuedElements.has(el)) {
+      cuedElements.add(el);
       el.muted = true;
       el.defaultMuted = true;
       const targetTrim = c.reverse
@@ -642,9 +708,11 @@ export async function exportBrowserVideo(
           if (onProgress) onProgress(99, duration, duration);
 
           // 1. Immediately pause video elements
-          (project.tracks.video || []).forEach((c) => {
+          (project.tracks.video || []).forEach((c, idx) => {
+            const clipKey = c.id || `export_clip_${idx}`;
             const el =
               (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+              exportRenderer.videoElements.get(clipKey) ||
               (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
               exportRenderer.videoElements.get(c.url);
             if (el && el instanceof HTMLVideoElement) {
@@ -691,12 +759,53 @@ export async function exportBrowserVideo(
 
         const videoClips = project.tracks.video || [];
 
-        // Synchronize video element playback across timeline cuts and transitions
+        // 1. Identify which video elements are active across all tracks in this frame
+        const activeElementsThisTick = new Set<HTMLVideoElement>();
         for (let i = 0; i < videoClips.length; i++) {
           const c = videoClips[i];
           if (c.type !== "video") continue;
+          let transLead = 0;
+          for (let j = 0; j < videoClips.length; j++) {
+            const other = videoClips[j];
+            if (other.id !== c.id && (other.trackIndex || 0) === (c.trackIndex || 0)) {
+              const otherEnd = (other.startTime || 0) + (other.duration || 0);
+              const otherTrans = other.transition;
+              if (
+                otherTrans &&
+                otherTrans.duration > 0 &&
+                otherTrans.type &&
+                otherTrans.type !== "none" &&
+                otherTrans.type !== "cut" &&
+                Math.abs(otherEnd - c.startTime) < 0.35
+              ) {
+                transLead = otherTrans.duration;
+                break;
+              }
+            }
+          }
+          const activeStart = Math.max(0, c.startTime - transLead);
+          const activeEnd = c.startTime + c.duration;
+          if (curTime >= activeStart && curTime < activeEnd) {
+            const clipKey = c.id || `export_clip_${i}`;
+            const el =
+              (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+              exportRenderer.videoElements.get(clipKey) ||
+              (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
+              exportRenderer.videoElements.get(c.url);
+            if (el && el instanceof HTMLVideoElement) {
+              activeElementsThisTick.add(el);
+            }
+          }
+        }
+
+        // 2. Synchronize video element playback across timeline cuts and transitions
+        for (let i = 0; i < videoClips.length; i++) {
+          const c = videoClips[i];
+          if (c.type !== "video") continue;
+          const clipKey = c.id || `export_clip_${i}`;
           const el =
             (c.id ? exportRenderer.videoElements.get(c.id) : null) ||
+            exportRenderer.videoElements.get(clipKey) ||
             (c.sourceMediaId ? exportRenderer.videoElements.get(c.sourceMediaId) : null) ||
             exportRenderer.videoElements.get(c.url);
           if (!el || !(el instanceof HTMLVideoElement)) continue;
@@ -726,14 +835,17 @@ export async function exportBrowserVideo(
           const activeEnd = c.startTime + c.duration;
           const isInside = curTime >= activeStart && curTime < activeEnd;
 
-          // Pre-cue upcoming clip if it drifted while dormant so it's ready at the cut
-          const isApproaching = curTime >= c.startTime - 1.0 && curTime < c.startTime;
-          if (isApproaching && el.paused && !el.seeking) {
+          // Warm pre-cue (seek only, NEVER play early!): Ensure element is cued to targetTrim without running forward
+          const isPreRolling = curTime >= activeStart - 0.50 && curTime < activeStart;
+          if (isPreRolling && !activeElementsThisTick.has(el)) {
             const targetTrim = c.reverse
               ? (c.trimOut || (c.trimIn || 0) + (c.duration || 0))
               : Math.max(0, c.trimIn || 0);
-            if (Math.abs(el.currentTime - targetTrim) > 0.05) {
-              try { el.currentTime = targetTrim; } catch {}
+            if (!(el as any)._isPreRollCued) {
+              (el as any)._isPreRollCued = true;
+              if (Math.abs(el.currentTime - targetTrim) > 0.05) {
+                try { el.currentTime = targetTrim; } catch {}
+              }
             }
           }
 
@@ -775,10 +887,12 @@ export async function exportBrowserVideo(
             } else {
               (el as any)._isPlayPending = false;
               const drift = el.currentTime - expectedMediaTime;
-              // Smooth micro-adjustment via playbackRate WITHOUT decoder-flushing hard seeks.
-              // Hard seeking during playback flushes the hardware decoder pipeline, stalling frames!
-              if (Math.abs(drift) > 0.08) {
-                const comp = Math.max(0.80, Math.min(1.20, 1 - drift * 0.4));
+              if (Math.abs(drift) > 0.45 && !el.seeking) {
+                // Hard seek fallback if drift exceeds 450ms or playback stalled
+                try { el.currentTime = expectedMediaTime; } catch {}
+              } else if (Math.abs(drift) > 0.06) {
+                // Smooth speed nudge without decoder flush
+                const comp = Math.max(0.75, Math.min(1.25, 1 - drift * 0.5));
                 try {
                   el.playbackRate = Math.max(0.1, Math.min(16, speed * comp));
                 } catch {}
@@ -786,7 +900,9 @@ export async function exportBrowserVideo(
                 el.playbackRate = speed;
               }
             }
-          } else {
+          } else if (!isPreRolling && !activeElementsThisTick.has(el)) {
+            // Only pause if this element is NOT currently playing for another active clip
+            (el as any)._isPreRollCued = false;
             (el as any)._isExportStarted = false;
             (el as any)._isPlayPending = false;
             if (!el.paused) {

@@ -319,34 +319,25 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
               </View>
 
               {/* Sliders */}
-              <View style={sc.sliderRow}>
-                <Text style={sc.sliderLabel}>Tolerance</Text>
-                <View style={sc.sliderWrapper}>
-                  <CompactSliderInput
-                    label=""
-                    value={intensity}
-                    unit="%"
-                    min={0}
-                    max={100}
-                    step={1}
-                    onChange={(v) => onChange({ ...config, enabled: true, mode: "chroma", intensity: v })}
-                  />
-                </View>
-              </View>
-
-              <View style={sc.sliderRow}>
-                <Text style={sc.sliderLabel}>Softness</Text>
-                <View style={sc.sliderWrapper}>
-                  <CompactSliderInput
-                    label=""
-                    value={shadow}
-                    unit="%"
-                    min={0}
-                    max={100}
-                    step={1}
-                    onChange={(v) => onChange({ ...config, enabled: true, mode: "chroma", shadow: v })}
-                  />
-                </View>
+              <View style={{ gap: 8, marginTop: 6 }}>
+                <CompactSliderInput
+                  label="Tolerance"
+                  value={intensity}
+                  unit="%"
+                  min={0}
+                  max={100}
+                  step={1}
+                  onChange={(v) => onChange({ ...config, enabled: true, mode: "chroma", intensity: v })}
+                />
+                <CompactSliderInput
+                  label="Softness"
+                  value={shadow}
+                  unit="%"
+                  min={0}
+                  max={100}
+                  step={1}
+                  onChange={(v) => onChange({ ...config, enabled: true, mode: "chroma", shadow: v })}
+                />
               </View>
             </>
           ) : (
@@ -436,6 +427,19 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                       </View>
                     )}
 
+                    {/* Edge Smoothness */}
+                    <View style={{ marginTop: 6, marginBottom: 8 }}>
+                      <CompactSliderInput
+                        label="Smoothness"
+                        value={shadow}
+                        unit="%"
+                        min={0}
+                        max={100}
+                        step={1}
+                        onChange={(v) => onChange({ ...config, enabled: true, mode: "auto", shadow: v })}
+                      />
+                    </View>
+
                     {(!isAlreadyProcessed || isVideoClip) && (
                       <TouchableOpacity
                         onPress={() => {
@@ -455,12 +459,12 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                         disabled={isProcessingActiveFrame}
                       >
                         {isProcessingActiveFrame ? (
-                          <ActivityIndicator size="small" color={isAlreadyProcessed ? "#FFFFFF" : "#121214"} />
+                          <ActivityIndicator size="small" color={isAlreadyProcessed ? "#00F2FE" : "#08090E"} />
                         ) : (
                           <Ionicons
                             name={isAlreadyProcessed ? "refresh" : "sparkles"}
                             size={14}
-                            color={isAlreadyProcessed ? "#EDEDED" : "#121214"}
+                            color={isAlreadyProcessed ? "#EDEDED" : "#08090E"}
                           />
                         )}
                         <Text style={[sc.heroBtnText, isAlreadyProcessed && sc.heroBtnSecondaryText]}>
@@ -506,39 +510,6 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                           </Text>
                         </TouchableOpacity>
                       )}
-                    </View>
-                  </View>
-
-                  {/* Sliders */}
-                  <View style={{ marginTop: 6 }}>
-                    <View style={sc.sliderRow}>
-                      <Text style={sc.sliderLabel}>Threshold</Text>
-                      <View style={sc.sliderWrapper}>
-                        <CompactSliderInput
-                          label=""
-                          value={intensity}
-                          unit="%"
-                          min={0}
-                          max={100}
-                          step={1}
-                          onChange={(v) => onChange({ ...config, enabled: true, mode: "auto", intensity: v })}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={sc.sliderRow}>
-                      <Text style={sc.sliderLabel}>Softness</Text>
-                      <View style={sc.sliderWrapper}>
-                        <CompactSliderInput
-                          label=""
-                          value={shadow}
-                          unit="%"
-                          min={0}
-                          max={100}
-                          step={1}
-                          onChange={(v) => onChange({ ...config, enabled: true, mode: "auto", shadow: v })}
-                        />
-                      </View>
                     </View>
                   </View>
                 </View>
@@ -765,20 +736,17 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                     })}
                   </View>
 
-                  {/* Width Slider */}
-                  <View style={[sc.sliderRow, { marginTop: 6 }]}>
-                    <Text style={sc.sliderLabel}>Width ({strokeWidth}px)</Text>
-                    <View style={sc.sliderWrapper}>
-                      <CompactSliderInput
-                        label=""
-                        value={strokeWidth}
-                        unit="px"
-                        min={1}
-                        max={24}
-                        step={1}
-                        onChange={(w) => onChange({ ...config, strokeWidth: w })}
-                      />
-                    </View>
+                  {/* Width Slider (Clean stacked layout: title on row 1, full-width slider on row 2) */}
+                  <View style={{ marginTop: 8 }}>
+                    <CompactSliderInput
+                      label="Stroke Width"
+                      value={strokeWidth}
+                      unit="px"
+                      min={1}
+                      max={24}
+                      step={1}
+                      onChange={(w) => onChange({ ...config, strokeWidth: w })}
+                    />
                   </View>
                 </View>
               )}
@@ -833,7 +801,9 @@ const sc = StyleSheet.create({
     borderRadius: 5,
   },
   modeSegmentItemActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   modeSegmentText: {
     fontSize: 10,
@@ -841,7 +811,7 @@ const sc = StyleSheet.create({
     color: "#8E8E93",
   },
   modeSegmentTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   compactNoneBox: {
@@ -941,21 +911,6 @@ const sc = StyleSheet.create({
     fontWeight: "500",
     color: "#EDEDED",
   },
-  sliderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  sliderLabel: {
-    fontSize: 9.5,
-    fontWeight: "400",
-    color: "#8E8E93",
-    flex: 1,
-  },
-  sliderWrapper: {
-    flex: 1.8,
-  },
   autoCutoutPanel: {
     gap: 6,
   },
@@ -996,7 +951,7 @@ const sc = StyleSheet.create({
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     borderRadius: 1,
   },
   actionsContainer: {
@@ -1014,8 +969,8 @@ const sc = StyleSheet.create({
     justifyContent: "center",
   },
   qualityTabBtnSelected: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   qualityTabLabel: {
     fontSize: 10.5,
@@ -1023,7 +978,7 @@ const sc = StyleSheet.create({
     color: "#8E8E93",
   },
   qualityTabLabelSelected: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
   },
   qualityTabSublabel: {
     fontSize: 8.5,
@@ -1059,31 +1014,31 @@ const sc = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "#18181A",
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#27272A",
+    borderColor: "#00F2FE",
   },
   reprocessChipText: {
     fontSize: 9,
-    fontWeight: "500",
-    color: "#EDEDED",
+    fontWeight: "600",
+    color: "#00F2FE",
   },
   heroBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     paddingVertical: 7,
     borderRadius: 6,
   },
   heroBtnText: {
     fontSize: 11,
-    fontWeight: "500",
-    color: "#121214",
+    fontWeight: "600",
+    color: "#08090E",
   },
   heroBtnSecondary: {
     backgroundColor: "#141416",
@@ -1140,7 +1095,9 @@ const sc = StyleSheet.create({
     borderRadius: 4,
   },
   stylingTabBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   stylingTabText: {
     fontSize: 10,
@@ -1148,14 +1105,14 @@ const sc = StyleSheet.create({
     color: "#8E8E93",
   },
   stylingTabTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   activeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
   },
   resetStylingBtn: {
     flexDirection: "row",
@@ -1164,9 +1121,9 @@ const sc = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
   },
   resetStylingText: {
     fontSize: 9.5,
@@ -1192,9 +1149,9 @@ const sc = StyleSheet.create({
     justifyContent: "center",
   },
   paletteSwatchSelected: {
-    borderColor: "#FFFFFF",
-    borderWidth: 1.5,
-    transform: [{ scale: 1.06 }],
+    borderColor: "#00F2FE",
+    borderWidth: 2,
+    transform: [{ scale: 1.08 }],
   },
   transparentSwatch: {
     backgroundColor: "#141416",
@@ -1223,8 +1180,8 @@ const sc = StyleSheet.create({
     borderColor: "#27272A",
   },
   thicknessPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   thicknessPillText: {
     fontSize: 9.5,
@@ -1232,7 +1189,7 @@ const sc = StyleSheet.create({
     color: "#8E8E93",
   },
   thicknessPillTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
 });

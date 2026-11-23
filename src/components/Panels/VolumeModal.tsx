@@ -182,7 +182,7 @@ function VolumeModalComponent({
                   <Ionicons
                     name={p.icon as any}
                     size={12}
-                    color={isSelected ? "#FFFFFF" : "#8A8A8E"}
+                    color={isSelected ? "#00F2FE" : "#8A8A8E"}
                   />
                   <Text
                     style={[
@@ -203,7 +203,7 @@ function VolumeModalComponent({
           <Text style={styles.sectionTitle}>Fades</Text>
 
           {/* Fade In */}
-          <View style={{ marginVertical: 2 }}>
+          <View style={{ marginVertical: 4 }}>
             <CompactSliderInput
               label="Fade In"
               icon={<Ionicons name="trending-up" size={12} color="#94A3B8" />}
@@ -223,7 +223,7 @@ function VolumeModalComponent({
           </View>
 
           {/* Fade Out */}
-          <View style={{ marginVertical: 2 }}>
+          <View style={{ marginVertical: 4 }}>
             <CompactSliderInput
               label="Fade Out"
               icon={<Ionicons name="trending-down" size={12} color="#94A3B8" />}
@@ -260,7 +260,7 @@ function VolumeModalComponent({
                 <Ionicons
                   name={denoise ? "ear" : "ear-outline"}
                   size={14}
-                  color={denoise ? "#FFFFFF" : "#71717A"}
+                  color={denoise ? "#00F2FE" : "#71717A"}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -396,14 +396,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
   },
   resetBtnText: {
     color: "#00F2FE",
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   doneBtn: {
     flexDirection: "row",
@@ -520,8 +520,8 @@ const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   presetCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   presetCardText: {
     color: "#8A8A8E",
@@ -529,8 +529,8 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   presetCardTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "400",
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   fadeRow: {
     flexDirection: "row",
@@ -617,8 +617,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   denoiseCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   denoiseLeft: {
     flexDirection: "row",
@@ -638,8 +638,8 @@ const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   denoiseIconBoxActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   denoiseTitle: {
     color: "#CBD5E1",
@@ -647,8 +647,8 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   denoiseTitleActive: {
-    color: "#FFFFFF",
-    fontWeight: "500",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
   denoiseSubtitle: {
     color: "#71717A",
@@ -664,8 +664,8 @@ const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   denoiseBadgeActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   denoiseBadgeText: {
     color: "#8E8E93",
@@ -674,7 +674,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   denoiseBadgeTextActive: {
-    color: "#000000",
+    color: "#00F2FE",
+    fontWeight: "700",
   },
   toggleTrack: {
     width: 36,
@@ -685,7 +686,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toggleTrackActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
   },
   toggleThumb: {
     width: 16,
@@ -694,7 +695,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#71717A",
   },
   toggleThumbActive: {
-    backgroundColor: "#000000",
+    backgroundColor: "#08090E",
     alignSelf: "flex-end",
   },
 });

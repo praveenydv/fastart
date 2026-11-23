@@ -65,7 +65,7 @@ const PlayerCropBarComponent: React.FC<PlayerCropBarProps> = ({
           onPress={onReset}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh-outline" size={13} color="#94A3B8" />
+          <Ionicons name="refresh-outline" size={13} color="#00F2FE" />
           <Text style={styles.cropResetText}>Reset</Text>
         </TouchableOpacity>
 
@@ -84,7 +84,7 @@ const PlayerCropBarComponent: React.FC<PlayerCropBarProps> = ({
             onPress={onConfirm}
             activeOpacity={0.8}
           >
-            <Ionicons name="checkmark" size={14} color="#000000" />
+            <Ionicons name="checkmark" size={14} color="#08090E" />
             <Text style={styles.cropApplyText}>Apply Crop</Text>
           </TouchableOpacity>
         </View>

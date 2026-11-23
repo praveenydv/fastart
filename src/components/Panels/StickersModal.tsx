@@ -163,7 +163,7 @@ export default function StickersModal({
                     <Text style={[styles.stickerEmoji, isBadge && styles.badgeText]}>
                       {item.char}
                     </Text>
-                    <Text style={[styles.stickerLabel, isSelected && { color: '#FFFFFF', fontWeight: '500' }]} numberOfLines={1}>
+                    <Text style={[styles.stickerLabel, isSelected && { color: '#00F2FE', fontWeight: '500' }]} numberOfLines={1}>
                       {item.label}
                     </Text>
                   </TouchableOpacity>
@@ -286,8 +286,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#18181A',
+    borderColor: '#00F2FE',
   },
   categoryPillText: {
     color: '#8E8E93',
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   categoryPillTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   sheetBody: {
@@ -345,18 +345,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     borderRadius: 5,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   doneBtnText: {
-    color: '#121214',
+    color: '#08090E',
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: '700',
   },
   selectedStickerCard: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
 });

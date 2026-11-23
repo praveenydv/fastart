@@ -640,8 +640,13 @@ class FastArtRustModule : Module() {
         val context = appContext.reactContext ?: throw IllegalStateException("React context is unavailable")
         val directory = getCutoutDirectory(context)
         val safeClipId = clipId.replace(Regex("[^A-Za-z0-9_-]"), "_")
-        val webpOutput = File(directory, "${safeClipId}_${frameIdx}.webp")
-        val pngOutput = File(directory, "${safeClipId}_${frameIdx}.png")
+        val paramTag = if (mode == "chroma") {
+            "chroma_${keyColor.replace("#", "")}_${(threshold * 100).toInt()}_${(feather * 100).toInt()}"
+        } else {
+            "auto"
+        }
+        val webpOutput = File(directory, "${safeClipId}_${frameIdx}_${paramTag}.webp")
+        val pngOutput = File(directory, "${safeClipId}_${frameIdx}_${paramTag}.png")
         if (webpOutput.exists() && webpOutput.length() > 0) {
             return Uri.fromFile(webpOutput).toString()
         }
@@ -775,8 +780,8 @@ class FastArtRustModule : Module() {
                 )
                 ByteArray(targetWidth * targetHeight) { index -> processed[index * 4 + 3] }
             } else {
-                val effThresh = if (threshold <= 0.001f) 0.04f else threshold.coerceIn(0.001f, 0.60f)
-                val effFeath = if (feather <= 0.001f) 0.72f else feather.coerceIn(0.02f, 0.95f)
+                val effThresh = if (threshold <= 0.001f) 0.45f else threshold.coerceIn(0.001f, 0.60f)
+                val effFeath = if (feather <= 0.001f) 0.25f else feather.coerceIn(0.02f, 0.95f)
                 inferAlphaRgba(rgba, targetWidth, targetHeight, effThresh, effFeath)
             }
 

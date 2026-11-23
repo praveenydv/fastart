@@ -270,19 +270,20 @@ function NativeAnimationModal(props: AnimationModalProps) {
               onPress={() => handlePresetSelect(item)}
               style={[styles.preset, selected && styles.selectedPreset]}
             >
-              <Ionicons name={item.icon} size={20} color={selected ? "#FFFFFF" : "#8E8E93"} />
-              <Text numberOfLines={1} style={styles.presetLabel}>{item.name}</Text>
+              <Ionicons name={item.icon} size={20} color={selected ? "#00F2FE" : "#8E8E93"} />
+              <Text numberOfLines={1} style={[styles.presetLabel, selected && { color: "#00F2FE" }]}>{item.name}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
       <View style={styles.durationRow}>
-        <Text style={styles.durationLabel}>Duration · {duration.toFixed(1)}s</Text>
         <CompactSliderInput
+          label="Duration"
           min={0.1}
           max={maxDuration}
           step={0.1}
+          unit="s"
           value={duration}
           onChange={handleDurationChange}
         />
@@ -368,7 +369,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   activeTab: {
-    borderBottomColor: "#FFFFFF",
+    borderBottomColor: "#00F2FE",
   },
   tabText: {
     color: "#8E8E93",
@@ -376,7 +377,7 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   activeTabText: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   presetGrid: {
@@ -398,8 +399,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   selectedPreset: {
-    borderColor: "#FFFFFF",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#00F2FE",
+    backgroundColor: "#18181A",
   },
   presetLabel: {
     marginTop: 4,

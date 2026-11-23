@@ -84,7 +84,7 @@ export default function SettingsScreen({
     { id: "high_contrast", label: "High Contrast" },
   ];
   const accentColors = [
-    { color: "#00E5C9", label: "Cyan" },
+    { color: "#00F2FE", label: "Cyan" },
     { color: "#A855F7", label: "Purple" },
     { color: "#F59E0B", label: "Gold" },
     { color: "#3B82F6", label: "Blue" },
@@ -421,7 +421,7 @@ export default function SettingsScreen({
               </View>
               <View style={{ flexDirection: "row", gap: 10, marginTop: 8, paddingHorizontal: 4 }}>
                 {accentColors.map((item) => {
-                  const isSelected = (localSettings.accentColor || "#00E5C9") === item.color;
+                  const isSelected = (localSettings.accentColor || "#00F2FE") === item.color;
                   return (
                     <TouchableOpacity
                       key={item.color}
@@ -739,19 +739,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   segmentBtnActive: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   segmentText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   segmentTextActive: {
-    color: "#000000",
-    fontWeight: "700",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
 
   // Toggle Switch Item

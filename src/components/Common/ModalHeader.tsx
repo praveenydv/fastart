@@ -145,11 +145,11 @@ export function ModalHeader({
             {doneLoading ? (
               <ActivityIndicator
                 size="small"
-                color="#121214"
+                color="#08090E"
               />
             ) : (
               <>
-                <Ionicons name={doneIconName} size={13} color={showApplyText ? "#0E0E10" : "#FFFFFF"} />
+                <Ionicons name={doneIconName} size={13} color={showApplyText ? "#08090E" : "#00F2FE"} />
                 {showApplyText && (
                   <Text style={styles.applyButtonText}>{displayDoneText}</Text>
                 )}
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: 8,
     borderRadius: 3,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -253,9 +253,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   applyButtonText: {
-    color: "#0E0E10",
+    color: "#08090E",
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: "700",
     letterSpacing: 0,
   },
   resetChip: {
@@ -264,14 +264,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     height: 20,
     borderRadius: 3,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
   },
   resetChipText: {
     color: "#00F2FE",
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   disabledButton: {
     opacity: 0.35,

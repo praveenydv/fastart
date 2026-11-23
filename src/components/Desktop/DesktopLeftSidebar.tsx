@@ -64,7 +64,7 @@ export const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({
               <Ionicons
                 name={item.icon as any}
                 size={18}
-                color={isActive ? "#FFFFFF" : "#8E8E93"}
+                color={isActive ? "#00F2FE" : "#9CA3AF"}
               />
               <Text
                 style={[styles.btnLabel, isActive && styles.btnLabelActive]}
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   sidebarBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
   activeBar: {
     position: 'absolute',
@@ -177,18 +177,18 @@ const styles = StyleSheet.create({
     bottom: 6,
     width: 2,
     borderRadius: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
   },
   btnLabel: {
-    color: "#71717A",
+    color: "#9CA3AF",
     fontSize: 8.5,
     fontWeight: '400',
     marginTop: 1,
     letterSpacing: 0,
   },
   btnLabelActive: {
-    color: "#FFFFFF",
-    fontWeight: '500',
+    color: "#00F2FE",
+    fontWeight: '600',
   },
   clipSection: {
     width: '100%',

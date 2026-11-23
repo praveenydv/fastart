@@ -460,7 +460,12 @@ const TimelineClipItemComponent: React.FC<TimelineClipItemProps> = ({
                   : "flash-outline"
               }
               size={11}
-              color="#FFFFFF"
+              color={
+                clip.rawClip?.transition?.type &&
+                clip.rawClip?.transition?.type !== "none"
+                  ? "#00F2FE"
+                  : "#71717A"
+              }
             />
           </TouchableOpacity>
         )}

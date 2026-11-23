@@ -29,7 +29,7 @@ class CutoutWorkerBridge {
   private desiredWorkerCount(): number {
     const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { deviceMemory?: number }) : null;
     const cores = nav?.hardwareConcurrency ?? 4;
-    return cores >= 8 ? 4 : cores >= 6 ? 3 : cores >= 4 ? 2 : 1;
+    return cores >= 4 ? 2 : 1;
   }
 
   private createWorker(): CutoutWorkerSlot | null {
@@ -39,6 +39,14 @@ class CutoutWorkerBridge {
     const ortScriptUrl = resolveAssetUrl('/onnxruntime/ort.all.min.js');
     const ortWasmPaths = resolveAssetUrl('/onnxruntime/');
     const workerCode = `
+      self.onerror = function(msg, src, line, col, err) {
+        console.warn('[CutoutWorker] Uncaught error:', msg, err);
+        return true;
+      };
+      self.onunhandledrejection = function(e) {
+        console.warn('[CutoutWorker] Unhandled promise rejection:', e && e.reason);
+        if (e && e.preventDefault) e.preventDefault();
+      };
       const cutoutWasmUrl = ${JSON.stringify(cutoutWasmUrl)};
       const modnetModelUrl = ${JSON.stringify(modnetModelUrl)};
       const ortScriptUrl = ${JSON.stringify(ortScriptUrl)};
@@ -59,27 +67,32 @@ class CutoutWorkerBridge {
       const RGBA_BYTES = 4 * OUTPUT, RLE_CAPACITY = 2 * OUTPUT;
       async function initializeCutoutCore() {
         if (cutoutWasm) return true;
-        const response = await fetch(cutoutWasmUrl);
-        if (!response.ok) throw new Error('Rust cutout WASM request failed (' + response.status + ')');
-        const result = await WebAssembly.instantiate(await response.arrayBuffer(), {
-          env: { fastart_fill_random: (ptr, len) => {
-            const cryptoApi = self.crypto;
-            if (!cryptoApi || !cutoutWasmInstance) return 0;
-            const bytes = new Uint8Array(cutoutWasmInstance.exports.memory.buffer, ptr, len);
-            for (let offset = 0; offset < len; offset += 65536) cryptoApi.getRandomValues(bytes.subarray(offset, Math.min(len, offset + 65536)));
-            return 1;
-          } },
-          wasi_snapshot_preview1: {}
-        });
-        cutoutWasmInstance = result.instance;
-        cutoutWasm = cutoutWasmInstance.exports;
-        if (!persistentRgbaPtr) {
-          persistentRgbaPtr = cutoutWasm.fastart_cutout_alloc(RGBA_BYTES);
-          persistentInputPtr = cutoutWasm.fastart_cutout_alloc(INPUT * 4);
-          persistentAlphaPtr = cutoutWasm.fastart_cutout_alloc(OUTPUT * 4);
-          persistentRlePtr = cutoutWasm.fastart_cutout_alloc(RLE_CAPACITY);
+        try {
+          const response = await fetch(cutoutWasmUrl);
+          if (!response.ok) throw new Error('Rust cutout WASM request failed (' + response.status + ')');
+          const result = await WebAssembly.instantiate(await response.arrayBuffer(), {
+            env: { fastart_fill_random: (ptr, len) => {
+              const cryptoApi = self.crypto;
+              if (!cryptoApi || !cutoutWasmInstance) return 0;
+              const bytes = new Uint8Array(cutoutWasmInstance.exports.memory.buffer, ptr, len);
+              for (let offset = 0; offset < len; offset += 65536) cryptoApi.getRandomValues(bytes.subarray(offset, Math.min(len, offset + 65536)));
+              return 1;
+            } },
+            wasi_snapshot_preview1: {}
+          });
+          cutoutWasmInstance = result.instance;
+          cutoutWasm = cutoutWasmInstance.exports;
+          if (!persistentRgbaPtr) {
+            persistentRgbaPtr = cutoutWasm.fastart_cutout_alloc(RGBA_BYTES);
+            persistentInputPtr = cutoutWasm.fastart_cutout_alloc(INPUT * 4);
+            persistentAlphaPtr = cutoutWasm.fastart_cutout_alloc(OUTPUT * 4);
+            persistentRlePtr = cutoutWasm.fastart_cutout_alloc(RLE_CAPACITY);
+          }
+          return true;
+        } catch (wasmErr) {
+          console.warn('[CutoutWorker] Cutout WASM initialization note:', wasmErr);
+          return false;
         }
-        return true;
       }
       async function initializeOnnxRuntime() {
         if (typeof importScripts !== 'function') return false;
@@ -106,34 +119,37 @@ class CutoutWorkerBridge {
           }
 
           let session = null;
-          if (typeof navigator !== 'undefined' && navigator.gpu) {
+          if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
             try {
-              session = await Promise.race([
-                self.ort.InferenceSession.create(modelBytes, {
-                  executionProviders: [{ name: 'webgpu', powerPreference: 'high-performance' }, 'wasm'],
-                  graphOptimizationLevel: 'all'
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('WebGPU session timeout')), 15000))
-              ]);
+              session = await self.ort.InferenceSession.create(modelBytes, {
+                executionProviders: [{ name: 'webgpu', powerPreference: 'high-performance' }, 'wasm'],
+                graphOptimizationLevel: 'all'
+              });
               backend = 'webgpu';
-            } catch (gpuError) {
-              console.warn('[CutoutWorker] WebGPU unavailable or timed out, using WASM SIMD:', gpuError);
+            } catch (gpuErr) {
               session = null;
             }
           }
 
           if (!session) {
-            session = await self.ort.InferenceSession.create(modelBytes, {
-              executionProviders: ['wasm'],
-              graphOptimizationLevel: 'all'
-            });
-            backend = 'wasm';
+            try {
+              session = await self.ort.InferenceSession.create(modelBytes, {
+                executionProviders: ['wasm'],
+                graphOptimizationLevel: 'all'
+              });
+              backend = 'wasm';
+            } catch (sessionErr) {
+              console.warn('[CutoutWorker] WASM session creation error:', sessionErr);
+              session = null;
+            }
           }
 
           ortSession = session;
-          ready = true;
-          console.info('[CutoutWorker] Studio MODNet ready:', backend.toUpperCase(), '(512x512 Portrait Matting)');
-          return true;
+          ready = Boolean(session);
+          if (ready) {
+            console.info('[CutoutWorker] Studio MODNet ready:', (backend || 'wasm').toUpperCase(), '(512x512 Portrait Matting)');
+          }
+          return ready;
         } catch (error) {
           console.warn('[CutoutWorker] ONNX Runtime initialization failed:', String(error));
           ortSession = null;
@@ -163,24 +179,80 @@ class CutoutWorkerBridge {
             if (type === 'init') { const success = await initialize(); self.postMessage({id, success, backend, rawAlpha: success ? new Float32Array(0) : null}); return; }
             if (type === 'infer-frame') {
               if (!rgbaData || rgbaData.length !== RGBA_BYTES) throw new Error('Invalid RGBA frame');
-              if (!await initialize() || !cutoutWasm) throw new Error('Rust cutout worker is unavailable');
+              if (!await initialize()) throw new Error('Rust cutout worker is unavailable');
               
-              new Uint8Array(cutoutWasm.memory.buffer, persistentRgbaPtr, RGBA_BYTES).set(rgbaData);
-              cutoutWasm.fastart_cutout_prepare_modnet_input(persistentRgbaPtr, 512, 512, persistentInputPtr);
-              const tensor = new Float32Array(cutoutWasm.memory.buffer, persistentInputPtr, INPUT);
-              const input = new self.ort.Tensor('float32', tensor, [1, 3, 512, 512]);
-              const inputName = ortSession.inputNames[0] || 'input';
-              const outputName = ortSession.outputNames[0] || 'output';
-              const result = await ortSession.run({ [inputName]: input });
-              const output = result[outputName] || Object.values(result)[0];
-              new Float32Array(cutoutWasm.memory.buffer, persistentAlphaPtr, OUTPUT).set(output.data);
+              let rle = null;
+              let rawAlphaOutput = null;
+              if (cutoutWasm && persistentRgbaPtr && persistentInputPtr && persistentAlphaPtr && persistentRlePtr) {
+                new Uint8Array(cutoutWasm.memory.buffer, persistentRgbaPtr, RGBA_BYTES).set(rgbaData);
+                cutoutWasm.fastart_cutout_prepare_modnet_input(persistentRgbaPtr, 512, 512, persistentInputPtr);
+                const tensor = new Float32Array(cutoutWasm.memory.buffer, persistentInputPtr, INPUT);
+                const input = new self.ort.Tensor('float32', tensor, [1, 3, 512, 512]);
+                const inputName = ortSession.inputNames[0] || 'input';
+                const outputName = ortSession.outputNames[0] || 'output';
+                const result = await ortSession.run({ [inputName]: input });
+                const output = result[outputName] || Object.values(result)[0];
+                new Float32Array(cutoutWasm.memory.buffer, persistentAlphaPtr, OUTPUT).set(output.data);
 
-              const alphaView = new Float32Array(cutoutWasm.memory.buffer, persistentAlphaPtr, OUTPUT);
-              const rleLength = cutoutWasm.fastart_cutout_modnet_alpha_to_rle(persistentAlphaPtr, threshold, feather, persistentRlePtr, RLE_CAPACITY);
-              if (!rleLength) throw new Error('Rust MODNet RLE encoding failed');
-              const rle = new Uint8Array(new Uint8Array(cutoutWasm.memory.buffer, persistentRlePtr, rleLength));
-              const resultMsg = {id, success: true, rle, rawAlpha: includeRawAlpha ? new Float32Array(alphaView) : null};
-              const transfers = includeRawAlpha ? [rle.buffer, resultMsg.rawAlpha.buffer] : [rle.buffer];
+                const alphaView = new Float32Array(cutoutWasm.memory.buffer, persistentAlphaPtr, OUTPUT);
+                const rleLength = cutoutWasm.fastart_cutout_modnet_alpha_to_rle(persistentAlphaPtr, threshold, feather, persistentRlePtr, RLE_CAPACITY);
+                if (!rleLength) throw new Error('Rust MODNet RLE encoding failed');
+                rle = new Uint8Array(new Uint8Array(cutoutWasm.memory.buffer, persistentRlePtr, rleLength));
+                rawAlphaOutput = includeRawAlpha ? new Float32Array(alphaView) : null;
+              } else {
+                const inputTensor = new Float32Array(INPUT);
+                const invScale = 1.0 / 127.5;
+                for (let i = 0; i < OUTPUT; i++) {
+                  const idx = i * 4;
+                  inputTensor[i] = (rgbaData[idx] - 127.5) * invScale;
+                  inputTensor[OUTPUT + i] = (rgbaData[idx + 1] - 127.5) * invScale;
+                  inputTensor[2 * OUTPUT + i] = (rgbaData[idx + 2] - 127.5) * invScale;
+                }
+                const input = new self.ort.Tensor('float32', inputTensor, [1, 3, 512, 512]);
+                const inputName = ortSession.inputNames[0] || 'input';
+                const outputName = ortSession.outputNames[0] || 'output';
+                const result = await ortSession.run({ [inputName]: input });
+                const output = result[outputName] || Object.values(result)[0];
+                rawAlphaOutput = new Float32Array(output.data);
+
+                const tNorm = (threshold <= 0.001 && feather <= 0.001) ? 0.45 : Math.max(0, Math.min(1, threshold));
+                const sNorm = (threshold <= 0.001 && feather <= 0.001) ? 0.25 : Math.max(0, Math.min(1, feather));
+                const center = 0.10 + tNorm * 0.55;
+                const halfW = 0.015 + sNorm * 0.235;
+                const vMin = Math.max(0.01, center - halfW);
+                const vMax = Math.min(0.98, center + halfW);
+                const span = Math.max(0.02, vMax - vMin);
+                const invSpan = 1.0 / span;
+
+                const rleChunks = [];
+                let curByte = 0;
+                let curCount = 0;
+                for (let i = 0; i < OUTPUT; i++) {
+                  const val = rawAlphaOutput[i];
+                  let byteVal = 0;
+                  if (val <= vMin) byteVal = 0;
+                  else if (val >= vMax) byteVal = 255;
+                  else {
+                    const norm = (val - vMin) * invSpan;
+                    byteVal = Math.round(norm * norm * (3 - 2 * norm) * 255);
+                  }
+                  if (curCount === 0) {
+                    curByte = byteVal;
+                    curCount = 1;
+                  } else if (curByte === byteVal && curCount < 255) {
+                    curCount++;
+                  } else {
+                    rleChunks.push(curCount, curByte);
+                    curByte = byteVal;
+                    curCount = 1;
+                  }
+                }
+                if (curCount > 0) rleChunks.push(curCount, curByte);
+                rle = new Uint8Array(rleChunks);
+              }
+
+              const resultMsg = {id, success: true, rle, rawAlpha: rawAlphaOutput};
+              const transfers = (includeRawAlpha && rawAlphaOutput) ? [rle.buffer, rawAlphaOutput.buffer] : [rle.buffer];
               self.postMessage(resultMsg, transfers);
               return;
             }
@@ -221,8 +293,7 @@ class CutoutWorkerBridge {
       pending.resolve(data.success ? { rawAlpha: data.rawAlpha ?? null, rle: data.rle ?? null } : null);
     };
     worker.onerror = (err) => {
-      console.warn("[CutoutWorkerBridge] Worker error:", err);
-      this.terminate();
+      console.warn("[CutoutWorkerBridge] Worker error:", (err as ErrorEvent)?.message || err);
     };
     return slot;
   }
@@ -231,19 +302,28 @@ class CutoutWorkerBridge {
     if (this.ready) return true;
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
-      while (this.workers.length < this.desiredWorkerCount()) {
-        const slot = this.createWorker();
-        if (!slot) break;
-        this.workers.push(slot);
+      const primary = this.createWorker();
+      if (!primary) return false;
+      this.workers.push(primary);
+      const ok = await this.requestOnWorker(primary, "init", undefined, undefined, 20_000);
+      if (!ok) {
+        this.terminate();
+        return false;
       }
-      if (this.workers.length === 0) return false;
-      const results = await Promise.all(
-        this.workers.map((slot) => this.requestOnWorker(slot, "init", undefined, undefined, 45_000)),
-      );
-      this.workers = this.workers.filter((_slot, index) => !!results[index]);
-      this.ready = this.workers.length > 0;
-      if (!this.ready) this.terminate();
-      return this.ready;
+      this.ready = true;
+
+      const maxWorkers = this.desiredWorkerCount();
+      if (maxWorkers > 1) {
+        setTimeout(async () => {
+          const secondary = this.createWorker();
+          if (secondary) {
+            this.workers.push(secondary);
+            await this.requestOnWorker(secondary, "init", undefined, undefined, 20_000);
+          }
+        }, 50);
+      }
+
+      return true;
     })().finally(() => { this.initPromise = null; });
     return this.initPromise;
   }

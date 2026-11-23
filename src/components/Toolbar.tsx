@@ -545,14 +545,14 @@ function ToolbarComponent({
                   name={item.icon}
                   size={17}
                   color={
-                    isDelete ? "#EF4444" : isActive ? "#FFFFFF" : "#8E8E93"
+                    isDelete ? "#EF4444" : isActive ? "#00F2FE" : "#8E8E93"
                   }
                 />
                 <Text
                   style={[
                     styles.verticalToolLabel,
                     isDelete && { color: "#EF4444" },
-                    isActive && { color: "#FFFFFF", fontWeight: "500" },
+                    isActive && { color: "#00F2FE", fontWeight: "600" },
                   ]}
                   numberOfLines={1}
                 >
@@ -614,13 +614,13 @@ function ToolbarComponent({
               <MaterialCommunityIcons
                 name={tool.icon}
                 size={19}
-                color={isDelete ? "#EF4444" : isActive ? "#FFFFFF" : "#8E8E93"}
+                color={isDelete ? "#EF4444" : isActive ? "#00F2FE" : "#8E8E93"}
               />
               <Text
                 style={[
                   styles.horizontalToolLabel,
                   isDelete && { color: "#EF4444" },
-                  isActive && { color: "#FFFFFF", fontWeight: "500" },
+                  isActive && { color: "#00F2FE", fontWeight: "600" },
                 ]}
                 numberOfLines={1}
               >
@@ -659,7 +659,8 @@ const styles = StyleSheet.create({
     marginVertical: 1,
   },
   verticalToolBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 6,
   },
   verticalToolLabel: {
     color: "#71717A",
@@ -777,10 +778,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   horizontalToolBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.16)",
   },
   horizontalToolBtnDelete: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",

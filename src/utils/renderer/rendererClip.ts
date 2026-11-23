@@ -384,16 +384,26 @@ export function drawClip(
     clip.filterIntensity !== undefined ? clip.filterIntensity : 1.0,
   );
 
-  let mediaEl =
-    (clip.id ? renderCtx.videoElements.get(clip.id) : null) ||
-    (clip.sourceMediaId ? renderCtx.videoElements.get(clip.sourceMediaId) : null) ||
-    (clip.url ? renderCtx.videoElements.get(clip.url) : null) ||
-    (clip.id ? globalActiveVideoElements.get(clip.id) : null) ||
-    (clip.sourceMediaId ? globalActiveVideoElements.get(clip.sourceMediaId) : null) ||
-    (clip.url ? globalActiveVideoElements.get(clip.url) : null);
+  let mediaEl: any = null;
+  if (renderCtx.isExporting) {
+    // In export mode, each timeline clip has its own isolated, pre-cued media element keyed by clip.id.
+    // Never fall back to globalActiveVideoElements or cross-clip URL aliases to prevent multi-clip cut stalls.
+    mediaEl =
+      (clip.id ? renderCtx.videoElements.get(clip.id) : null) ||
+      (clip.id ? null : (clip.sourceMediaId ? renderCtx.videoElements.get(clip.sourceMediaId) : null)) ||
+      (clip.id ? null : (clip.url ? renderCtx.videoElements.get(clip.url) : null));
+  } else {
+    mediaEl =
+      (clip.id ? renderCtx.videoElements.get(clip.id) : null) ||
+      (clip.sourceMediaId ? renderCtx.videoElements.get(clip.sourceMediaId) : null) ||
+      (clip.url ? renderCtx.videoElements.get(clip.url) : null) ||
+      (clip.id ? globalActiveVideoElements.get(clip.id) : null) ||
+      (clip.sourceMediaId ? globalActiveVideoElements.get(clip.sourceMediaId) : null) ||
+      (clip.url ? globalActiveVideoElements.get(clip.url) : null);
+  }
 
   // If not found directly, perform suffix/prefix matching on cached elements to handle blob or relative URL variances
-  if (!mediaEl && clip.url) {
+  if (!mediaEl && clip.url && !renderCtx.isExporting) {
     for (const [key, el] of renderCtx.videoElements.entries()) {
       if (el && (key.endsWith(clip.url) || clip.url.endsWith(key))) {
         mediaEl = el;
@@ -415,11 +425,13 @@ export function drawClip(
     if (clip.id && !renderCtx.videoElements.has(clip.id)) {
       renderCtx.videoElements.set(clip.id, mediaEl);
     }
-    if (clip.sourceMediaId && !renderCtx.videoElements.has(clip.sourceMediaId)) {
-      renderCtx.videoElements.set(clip.sourceMediaId, mediaEl);
-    }
-    if (clip.url && !renderCtx.videoElements.has(clip.url)) {
-      renderCtx.videoElements.set(clip.url, mediaEl);
+    if (!renderCtx.isExporting) {
+      if (clip.sourceMediaId && !renderCtx.videoElements.has(clip.sourceMediaId)) {
+        renderCtx.videoElements.set(clip.sourceMediaId, mediaEl);
+      }
+      if (clip.url && !renderCtx.videoElements.has(clip.url)) {
+        renderCtx.videoElements.set(clip.url, mediaEl);
+      }
     }
   } else {
     renderCtx.preloadClip(clip);

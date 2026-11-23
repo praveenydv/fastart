@@ -24,10 +24,10 @@ export function getMediaContainer(): HTMLElement | null {
     container = document.createElement("div");
     container.id = "fastart-media-sync-container";
     container.style.position = "fixed";
-    container.style.top = "-9999px";
-    container.style.left = "-9999px";
-    container.style.width = "1px";
-    container.style.height = "1px";
+    container.style.left = "0px";
+    container.style.top = "0px";
+    container.style.width = "64px";
+    container.style.height = "64px";
     container.style.opacity = "0.001";
     container.style.pointerEvents = "none";
     container.style.overflow = "hidden";

@@ -333,7 +333,7 @@ function MaskModalComponent({
                   <Ionicons
                     name={m.icon as any}
                     size={15}
-                    color={isSelected ? "#FFFFFF" : "#8A8A8E"}
+                    color={isSelected ? "#00F2FE" : "#8A8A8E"}
                   />
                   <Text
                     style={[
@@ -807,7 +807,7 @@ function MaskModalComponent({
                 <Ionicons
                   name={maskInverted ? "checkbox" : "square-outline"}
                   size={18}
-                  color={maskInverted ? "#FFFFFF" : "#71717A"}
+                  color={maskInverted ? "#00F2FE" : "#71717A"}
                 />
               </TouchableOpacity>
             </View>
@@ -915,7 +915,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -923,9 +923,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
     flexDirection: "row",
     alignItems: "center",
   },
@@ -961,8 +961,8 @@ const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   maskCardActive: {
-    borderColor: "#FFFFFF",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#00F2FE",
+    backgroundColor: "#18181A",
   },
   maskCardTitle: {
     color: "#8A8A8E",
@@ -972,8 +972,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   maskCardTitleActive: {
-    color: "#FFFFFF",
-    fontWeight: "400",
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   controlsCard: {
     backgroundColor: "#18181A",
@@ -1057,8 +1057,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   lockBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   lockBtnText: {
     color: "#8E8E93",
@@ -1066,7 +1066,7 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   lockBtnTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   ratioPillsRow: {
@@ -1084,8 +1084,8 @@ const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   ratioPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   ratioPillText: {
     color: "#8E8E93",
@@ -1093,7 +1093,7 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   ratioPillTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   keyframeBar: {
@@ -1211,8 +1211,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   kfDiamondBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   kfDiamondBtnAdd: {
     backgroundColor: "rgba(255, 255, 255, 0.06)",
@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   kfDiamondTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
   },
   kfDiamondTextAdd: {
     color: "#FFFFFF",
@@ -1251,12 +1251,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
   kfCountBadgeActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.25)",
+    borderColor: "#00F2FE",
   },
   kfCountTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
   },
   kfNoKeyframesBadge: {
     backgroundColor: "#161B26",

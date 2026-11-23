@@ -122,10 +122,6 @@ const ProjectCardItemComponent: React.FC<ProjectCardItemProps> = ({
               <Text style={styles.gridMetaText}>
                 {numClips} {numClips === 1 ? 'clip' : 'clips'}
               </Text>
-              <Text style={styles.gridDot}>•</Text>
-              <Text style={styles.gridResolutionText}>
-                {project.resolution || '1080P'}
-              </Text>
             </View>
           </View>
 
@@ -341,11 +337,6 @@ const styles = StyleSheet.create({
   gridMetaText: {
     color: theme.colors.textMuted,
     fontSize: 11,
-  },
-  gridResolutionText: {
-    color: theme.colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '700',
   },
   gridDot: {
     color: theme.colors.borderLight,

@@ -601,7 +601,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.graphActionBtn, { borderColor: 'rgba(0, 242, 254, 0.35)', backgroundColor: 'rgba(0, 242, 254, 0.12)' }]}
+            style={[styles.graphActionBtn, { borderColor: '#00F2FE', backgroundColor: '#18181A' }]}
             onPress={handleResetCurve}
             activeOpacity={0.7}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -634,7 +634,7 @@ export const SpeedCustomCurveTab: React.FC<SpeedCustomCurveTabProps> = ({
       {selectedPointIndex >= 0 && customPoints[selectedPointIndex] && (
         <View style={styles.pointFineTuneBox}>
           <CompactSliderInput
-            label={`Point #${selectedPointIndex + 1} Velocity`}
+            label={`Point #${selectedPointIndex + 1}`}
             value={parseFloat(customPoints[selectedPointIndex].s.toFixed(1))}
             min={0.1}
             max={5.0}

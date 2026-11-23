@@ -19,20 +19,20 @@ export const THEME_COLORS = {
   border: "#25262B",           // Standard 1px crisp CapCut divider
   borderLight: "#32343C",      // Highlight border for modals & popovers
   borderSubtle: "rgba(255, 255, 255, 0.08)", // Inner card lines & timeline clip separation
-  borderGlow: "rgba(0, 229, 201, 0.35)",      // Focus ring for selected tools (CapCut Cyan Glow)
+  borderGlow: "rgba(0, 242, 254, 0.35)",      // Focus ring for selected tools (CapCut Cyan Glow)
 
   // --- Signature CapCut Cyan Palette ---
-  primary: "#00E5C9",          // Export button, New Project CTA, CapCut Teal Hero
-  primaryDark: "#00B39D",      // Deep contrast cyan
-  primaryText: "#000000",      // Bold text on cyan buttons
-  primaryHover: "#33EBCE",
+  primary: "#00F2FE",          // Export button, New Project CTA, CapCut Teal Hero
+  primaryDark: "#00C2CC",      // Deep contrast cyan
+  primaryText: "#08090E",      // Bold text on cyan buttons
+  primaryHover: "#33F5FE",
 
-  accent: "#00E5C9",           // CapCut Cyan accent: playhead scrub handle, active tab, active tool, keyframe diamond
-  accentHover: "#33EBCE",
-  accentGlow: "rgba(0, 229, 201, 0.15)",      // Active chip background tint, studio badge
-  cyan: "#00E5C9",
-  cyanBg: "rgba(0, 229, 201, 0.12)",
-  cyanBorder: "rgba(0, 229, 201, 0.35)",
+  accent: "#00F2FE",           // CapCut Cyan accent: playhead scrub handle, active tab, active tool, keyframe diamond
+  accentHover: "#33F5FE",
+  accentGlow: "rgba(0, 242, 254, 0.15)",      // Active chip background tint, studio badge
+  cyan: "#00F2FE",
+  cyanBg: "rgba(0, 242, 254, 0.12)",
+  cyanBorder: "rgba(0, 242, 254, 0.35)",
 
   // --- Typography Colors ---
   textPrimary: "#FFFFFF",      // 100% white for titles, active buttons, root toolbar icons
@@ -60,7 +60,7 @@ export const THEME_COLORS = {
   clipVideoBg: "#1E3A5F",      // Muted Navy Blue (Main Video Track)
   clipVideoBorder: "#3B82F6",
   clipPhotoBg: "#16384C",      // Muted Teal Cyan (Photo/Image Track)
-  clipPhotoBorder: "#00E5C9",
+  clipPhotoBorder: "#00F2FE",
   clipTextBg: "#8C483A",       // Terra-cotta / Rust Red (Text Track)
   clipTextBorder: "#EF4444",
   clipAudioBg: "#1E5A44",      // Forest Green (Audio Track)
@@ -80,7 +80,7 @@ export const THEME_COLORS = {
   capcutBorder: "#24262C",
   capcutBorderLight: "#32353E",
   capcutTabActive: "#24262E",
-  capcutTeal: "#00E5C9",
+  capcutTeal: "#00F2FE",
   capcutPlayhead: "#FFFFFF",
 } as const;
 
@@ -203,11 +203,11 @@ export const DESIGN_CONSTANTS = {
       display: 24,  // Empty state hero icons, media picker icons
     },
     colors: {
-      active: "#00E5C9",
+      active: "#00F2FE",
       inactive: "#94A3B8",
       muted: "#64748B",
-      primaryOnWhite: "#000000",
-      cyan: "#00E5C9",
+      primaryOnWhite: "#08090E",
+      cyan: "#00F2FE",
       danger: "#EF4444",
       success: "#10B981",
     },

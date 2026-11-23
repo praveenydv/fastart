@@ -139,10 +139,10 @@ export default function AIEnhanceModal({
               <Ionicons
                 name="person-outline"
                 size={12}
-                color={activeTab === 'beauty' ? '#FFFFFF' : '#8A8A8E'}
+                color={activeTab === 'beauty' ? '#00F2FE' : '#8A8A8E'}
               />
               <Text
-                style={[styles.tabText, activeTab === 'beauty' && { color: '#FFFFFF', fontWeight: '400' }]}
+                style={[styles.tabText, activeTab === 'beauty' && { color: '#00F2FE', fontWeight: '500' }]}
               >
                 Beauty
               </Text>
@@ -159,10 +159,10 @@ export default function AIEnhanceModal({
               <Ionicons
                 name="color-wand-outline"
                 size={12}
-                color={activeTab === 'clarity' ? '#FFFFFF' : '#8A8A8E'}
+                color={activeTab === 'clarity' ? '#00F2FE' : '#8A8A8E'}
               />
               <Text
-                style={[styles.tabText, activeTab === 'clarity' && { color: '#FFFFFF', fontWeight: '400' }]}
+                style={[styles.tabText, activeTab === 'clarity' && { color: '#00F2FE', fontWeight: '500' }]}
               >
                 Clarity
               </Text>
@@ -247,7 +247,7 @@ export default function AIEnhanceModal({
                   <Ionicons
                     name={hdr ? 'checkbox' : 'square-outline'}
                     size={16}
-                    color={hdr ? '#FFFFFF' : '#71717A'}
+                    color={hdr ? '#00F2FE' : '#71717A'}
                   />
                 </TouchableOpacity>
 
@@ -368,9 +368,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: "rgba(0, 242, 254, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(0, 242, 254, 0.35)",
+    borderColor: "#00F2FE",
     flexDirection: "row",
     alignItems: "center",
   },
@@ -411,9 +411,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   tabBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   tabText: {
     fontSize: 9.5,
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     position: 'absolute',
     top: 4,
     right: 8,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     position: 'absolute',
     top: 4,
     right: 8,

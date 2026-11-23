@@ -126,8 +126,8 @@ export const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   templateCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#27272A',
+    borderColor: '#00F2FE',
+    backgroundColor: '#141416',
   },
   templateHeader: {
     flexDirection: 'row',
@@ -142,7 +142,7 @@ export const styles = StyleSheet.create({
     marginBottom: 1,
   },
   templateNameActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
   },
   templateDesc: {
     color: '#8E8E93',
@@ -181,7 +181,7 @@ export const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   clipCardActive: {
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   clipThumb: {
     width: '100%',
@@ -226,8 +226,8 @@ export const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   paceCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#27272A',
+    borderColor: '#00F2FE',
+    backgroundColor: '#141416',
   },
   paceLabel: {
     color: '#EDEDED',
@@ -235,7 +235,7 @@ export const styles = StyleSheet.create({
     fontWeight: '500',
   },
   paceLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
   },
   paceDesc: {
     color: '#8E8E93',
@@ -259,8 +259,8 @@ export const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   audioCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#27272A',
+    borderColor: '#00F2FE',
+    backgroundColor: '#141416',
   },
   audioIconCircle: {
     width: 24,
@@ -279,7 +279,7 @@ export const styles = StyleSheet.create({
     fontWeight: '500',
   },
   audioTitleActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
   },
   audioArtist: {
     color: '#8E8E93',
@@ -294,7 +294,7 @@ export const styles = StyleSheet.create({
     paddingTop: 4,
   },
   generateBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -303,7 +303,7 @@ export const styles = StyleSheet.create({
     gap: 5,
   },
   generateBtnText: {
-    color: '#121214',
+    color: '#08090E',
     fontSize: 11,
     fontWeight: '600',
   },

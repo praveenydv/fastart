@@ -54,9 +54,9 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
   },
   tabBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   tabText: {
     color: '#8E8E93',
@@ -64,7 +64,7 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   closeBtn: {
@@ -115,8 +115,8 @@ export const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   categoryPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#18181A',
+    borderColor: '#00F2FE',
   },
   categoryPillText: {
     color: '#8E8E93',
@@ -124,7 +124,7 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
   },
   categoryPillTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   sheetBody: {
@@ -228,8 +228,8 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playIconBtnActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#141416',
+    borderColor: '#00F2FE',
   },
   audioTitle: {
     color: '#EDEDED',
@@ -260,15 +260,15 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
   },
   usePill: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     paddingHorizontal: 8,
     paddingVertical: 3.5,
     borderRadius: 4,
   },
   usePillText: {
-    color: '#121214',
+    color: '#08090E',
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   loadingBox: {
     paddingVertical: 20,
@@ -322,16 +322,16 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
     marginTop: 10,
   },
   emptyUploadCtaText: {
-    color: '#121214',
+    color: '#08090E',
     fontSize: 10.5,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   sheetTitle: {
     color: '#EDEDED',

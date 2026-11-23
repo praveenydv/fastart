@@ -277,7 +277,7 @@ const TransitionLivePreview = React.memo(({ id, isActive }: { id: string; isActi
         <Ionicons
           name={getTransitionIcon(id)}
           size={12}
-          color={isActive ? '#FFFFFF' : '#8E8E93'}
+          color={isActive ? '#00F2FE' : '#8E8E93'}
         />
       </View>
     </View>
@@ -499,7 +499,7 @@ export default function TransitionsModal({
                       {/* Active badge */}
                       {isActive && (
                         <View style={styles.activeCheckBadge}>
-                          <Ionicons name="checkmark" size={10} color="#000000" />
+                          <Ionicons name="checkmark" size={10} color="#08090E" />
                         </View>
                       )}
                     </View>
@@ -591,9 +591,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -640,8 +640,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   durationPillActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#141416',
+    borderColor: '#00F2FE',
   },
   durationText: {
     color: '#8E8E93',
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   durationTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   sheetBody: {
@@ -674,8 +674,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   transitionCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   transPreviewStage: {
     width: '100%',
@@ -767,8 +767,8 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   transPillCenterActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#141416',
   },
   transitionDescText: {
     display: 'none' as any,
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -795,7 +795,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   iconBoxActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#141416',
   },
   transitionLabel: {
     color: '#8E8E93',
@@ -804,14 +804,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   transitionLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   inlineApplyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -820,8 +820,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
-    color: '#000000',
+    color: '#08090E',
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });

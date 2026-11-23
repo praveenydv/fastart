@@ -772,9 +772,9 @@ const PlayerTransformOverlayComponent: React.FC<PlayerTransformOverlayProps> = (
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityLabel="Copy"
               >
-                <Ionicons name="copy-outline" size={isSmallScreen ? 14 : 13} color="#00E5C9" />
+                <Ionicons name="copy-outline" size={isSmallScreen ? 14 : 13} color="#00F2FE" />
                 {!isSmallScreen && (
-                  <Text style={[styles.floatingBtnText, { color: "#00E5C9" }]}>
+                  <Text style={[styles.floatingBtnText, { color: "#00F2FE" }]}>
                     Copy
                   </Text>
                 )}

@@ -28,7 +28,7 @@ export const AudioTrackItem: React.FC<AudioTrackItemProps> = ({
         <Ionicons
           name={isPlaying ? 'pause' : 'play'}
           size={16}
-          color={isPlaying ? '#121214' : '#EDEDED'}
+          color={isPlaying ? '#00F2FE' : '#EDEDED'}
         />
       </TouchableOpacity>
 

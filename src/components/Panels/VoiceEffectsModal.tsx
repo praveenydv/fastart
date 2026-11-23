@@ -162,13 +162,13 @@ export default function VoiceEffectsModal({
                   <View
                     style={[
                       styles.cardIconBox,
-                      { backgroundColor: preset.color + '22' },
+                      { backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.04)' : preset.color + '22' },
                     ]}
                   >
                     <MaterialCommunityIcons
                       name={preset.icon as any}
                       size={16}
-                      color={preset.color}
+                      color={isSelected ? '#00F2FE' : preset.color}
                     />
                   </View>
 
@@ -185,10 +185,10 @@ export default function VoiceEffectsModal({
                       <View
                         style={[
                           styles.tagBadge,
-                          { backgroundColor: preset.color + '26' },
+                          { backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.05)' : preset.color + '26' },
                         ]}
                       >
-                        <Text style={[styles.tagBadgeText, { color: preset.color }]}>
+                        <Text style={[styles.tagBadgeText, { color: isSelected ? '#00F2FE' : preset.color }]}>
                           {preset.badge}
                         </Text>
                       </View>
@@ -200,7 +200,7 @@ export default function VoiceEffectsModal({
 
                   {isSelected && (
                     <View style={styles.selectedCheck}>
-                      <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />
+                      <Ionicons name="checkmark-circle" size={14} color="#00F2FE" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -274,20 +274,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetBtnText: {
     fontSize: 9.5,
     color: '#00F2FE',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   applyBtn: {
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -320,8 +320,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   presetCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   cardIconBox: {
     width: 28,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     color: '#EDEDED',
   },
   cardNameActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   tagBadge: {

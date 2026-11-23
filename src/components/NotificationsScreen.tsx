@@ -485,9 +485,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   filterPillActive: {
-    backgroundColor: "#27272A",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#3F3F46",
+    borderColor: "#00F2FE",
   },
   filterPillText: {
     color: "#71717A",
@@ -495,8 +495,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   filterPillTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+    color: "#00F2FE",
+    fontWeight: "500",
   },
   cardList: {
     gap: 8,

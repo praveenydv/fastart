@@ -81,11 +81,12 @@ export function patchMediaContainerDuration(
       if (moovOffset >= 0) {
         const moovEnd = Math.min(fileLen, moovOffset + moovSize);
 
-        // PASS 1: Find mvhd first to guarantee movieTimescale is known before patching tracks
+        // PASS 1: Find mvhd timescale and detect if MP4 is fragmented (has mvex or moof)
         let movieTimescale = 1000;
         let foundMovieTimescale = false;
+        let isFragmented = false;
 
-        const findMvhd = (start: number, end: number) => {
+        const findMvhdAndMvex = (start: number, end: number) => {
           let cur = start;
           while (cur + 8 <= end) {
             let bSize = dv.getUint32(cur);
@@ -121,21 +122,46 @@ export function patchMediaContainerDuration(
                   foundMovieTimescale = true;
                 }
               }
-              return;
+            } else if (bType === "mvex") {
+              isFragmented = true;
             } else if (
               bType === "trak" ||
               bType === "mdia" ||
-              bType === "minf" ||
-              bType === "mvex"
+              bType === "minf"
             ) {
-              findMvhd(cur + headerLen, bEnd);
-              if (foundMovieTimescale) return;
+              findMvhdAndMvex(cur + headerLen, bEnd);
             }
             cur += bSize;
           }
         };
 
-        findMvhd(moovOffset, moovEnd);
+        findMvhdAndMvex(moovOffset, moovEnd);
+
+        // Check top-level boxes for 'moof' fragments
+        if (!isFragmented) {
+          let off = 0;
+          while (off + 8 <= fileLen) {
+            let bSize = dv.getUint32(off);
+            const bType = String.fromCharCode(
+              bytes[off + 4],
+              bytes[off + 5],
+              bytes[off + 6],
+              bytes[off + 7]
+            );
+            if (bType === "moof") {
+              isFragmented = true;
+              break;
+            }
+            if (bSize === 1 && off + 16 <= fileLen) {
+              const h = dv.getUint32(off + 8);
+              const l = dv.getUint32(off + 12);
+              bSize = h * 4294967296 + l;
+            } else if (bSize < 8) {
+              break;
+            }
+            off += bSize;
+          }
+        }
 
         // PASS 2: Patch mvhd, tkhd, mdhd, and mehd with correct timescales & 64-bit offsets
         const scanBoxes = (start: number, end: number) => {
@@ -170,7 +196,12 @@ export function patchMediaContainerDuration(
               }
             } else if (bType === "tkhd") {
               const v = bytes[cur + headerLen];
-              const dur = Math.round(durationSec * movieTimescale);
+              // CRITICAL ISO/IEC 14496-12 RULE:
+              // In fragmented MP4 (fMP4 with mvex/moof), tkhd duration in moov MUST be 0.
+              // If set to durationSec, demuxers (AVFoundation, QuickTime, VLC, Chromium) compute:
+              //   Track Duration = (tkhd moov duration) + sum(moof fragment durations)
+              // which DOUBLES the presentation duration and freezes on the last frame for the 2nd half!
+              const dur = isFragmented ? 0 : Math.round(durationSec * movieTimescale);
               if (v === 0 && cur + headerLen + 24 <= bEnd) {
                 dv.setUint32(cur + headerLen + 20, dur);
               } else if (v === 1 && cur + headerLen + 36 <= bEnd) {
@@ -179,19 +210,14 @@ export function patchMediaContainerDuration(
               }
             } else if (bType === "mdhd") {
               const v = bytes[cur + headerLen];
+              // In fragmented MP4, media samples reside inside moof fragments, so mdhd duration in moov must be 0.
+              const mdTimescale = dv.getUint32(cur + headerLen + (v === 0 ? 12 : 20));
+              const mdDur = (isFragmented || !mdTimescale || mdTimescale <= 0) ? 0 : Math.round(durationSec * mdTimescale);
               if (v === 0 && cur + headerLen + 20 <= bEnd) {
-                const mdTimescale = dv.getUint32(cur + headerLen + 12);
-                if (mdTimescale > 0) {
-                  const mdDur = Math.round(durationSec * mdTimescale);
-                  dv.setUint32(cur + headerLen + 16, mdDur);
-                }
+                dv.setUint32(cur + headerLen + 16, mdDur);
               } else if (v === 1 && cur + headerLen + 32 <= bEnd) {
-                const mdTimescale = dv.getUint32(cur + headerLen + 20);
-                if (mdTimescale > 0) {
-                  const mdDur = Math.round(durationSec * mdTimescale);
-                  dv.setUint32(cur + headerLen + 24, Math.floor(mdDur / 4294967296));
-                  dv.setUint32(cur + headerLen + 28, mdDur >>> 0);
-                }
+                dv.setUint32(cur + headerLen + 24, Math.floor(mdDur / 4294967296));
+                dv.setUint32(cur + headerLen + 28, mdDur >>> 0);
               }
             } else if (bType === "mehd") {
               const v = bytes[cur + headerLen];

@@ -56,19 +56,19 @@ export function PresetGridCard({
           <Ionicons
             name={icon}
             size={24}
-            color={isSelected ? "#FFFFFF" : "#71717A"}
+            color={isSelected ? "#00F2FE" : "#71717A"}
           />
         ) : (
           <Ionicons
             name="cube-outline"
             size={24}
-            color={isSelected ? "#FFFFFF" : "#71717A"}
+            color={isSelected ? "#00F2FE" : "#71717A"}
           />
         )}
 
         {isSelected && (
           <View style={styles.selectedBadge}>
-            <Ionicons name="checkmark" size={10} color="#121214" />
+            <Ionicons name="checkmark" size={10} color="#08090E" />
           </View>
         )}
 
@@ -101,8 +101,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   cardActive: {
-    borderColor: "#FFFFFF",
-    backgroundColor: "#222226",
+    borderColor: "#00F2FE",
+    borderWidth: 1.5,
+    backgroundColor: "#18181A",
   },
   thumbnailContainer: {
     flex: 1,
@@ -123,7 +124,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -134,14 +135,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: "#00F2FE",
   },
   topBadgeText: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontSize: 8.5,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   label: {
     color: "#A1A1AA",
@@ -152,8 +153,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   labelActive: {
-    color: "#FFFFFF",
-    fontWeight: "500",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
 });
 

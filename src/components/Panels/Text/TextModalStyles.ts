@@ -183,12 +183,12 @@ export const styles = StyleSheet.create({
   // Spacious Color Target Mode Selector Bar (Text | Stroke | Background | Border)
   colorModeBar: {
     flexDirection: "row",
-    backgroundColor: "#101522",
+    backgroundColor: "#141416",
     borderRadius: 8,
     padding: 3,
     gap: 4,
     borderWidth: 1,
-    borderColor: "#182030",
+    borderColor: "#27272A",
   },
   colorModeBtn: {
     flex: 1,
@@ -201,13 +201,9 @@ export const styles = StyleSheet.create({
     borderRadius: 6,
   },
   colorModeBtnActive: {
-    backgroundColor: "#161E2E",
+    backgroundColor: "#18181A",
     borderWidth: 1,
     borderColor: "#00F2FE",
-    shadowColor: "#00F2FE",
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
   },
   colorModeBtnText: {
     fontSize: 9.5,
@@ -215,7 +211,7 @@ export const styles = StyleSheet.create({
     color: "#8E9AA8",
   },
   colorModeBtnTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "700",
   },
   colorModeDot: {
@@ -245,8 +241,8 @@ export const styles = StyleSheet.create({
     minHeight: 28,
   },
   formatBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   formatBtnText: {
     fontSize: 10,
@@ -254,8 +250,8 @@ export const styles = StyleSheet.create({
     color: "#8E9AA8",
   },
   formatBtnTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
 
   // Spacious Font Chips
@@ -270,8 +266,8 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fontChipActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   fontChipText: {
     fontSize: 11,
@@ -279,8 +275,8 @@ export const styles = StyleSheet.create({
     color: "#CBD5E1",
   },
   fontChipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
 
   // Spacious Color Swatches (24px diameter)
@@ -307,9 +303,9 @@ export const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#131926",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#1F293D",
+    borderColor: "#27272A",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 8,
@@ -334,8 +330,8 @@ export const styles = StyleSheet.create({
     height: 30,
   },
   effectChipActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   effectChipText: {
     color: "#94A3B8",
@@ -343,15 +339,14 @@ export const styles = StyleSheet.create({
     fontWeight: "500",
   },
   effectChipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
 
   // Sliders container inside tabs
   tabSlidersContainer: {
-    gap: 10,
-    marginTop: 8,
-    paddingTop: 10,
+    marginTop: 4,
+    paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: "#161D2C",
   },
@@ -370,8 +365,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   animPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   animPillText: {
     color: "#94A3B8",
@@ -379,7 +374,7 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
   },
   animPillTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   templatePill: {
@@ -408,8 +403,8 @@ export const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   effectPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   effectPillTitle: {
     color: "#94A3B8",
@@ -417,7 +412,7 @@ export const styles = StyleSheet.create({
     fontWeight: "500",
   },
   effectPillTitleActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   effectPillDesc: {
@@ -437,8 +432,8 @@ export const styles = StyleSheet.create({
     padding: 2,
   },
   fontCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   fontCardPreview: {
     fontSize: 13,
@@ -447,7 +442,7 @@ export const styles = StyleSheet.create({
     marginBottom: 1,
   },
   fontCardPreviewActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
   },
   fontCardLabel: {
     fontSize: 7.5,
@@ -457,7 +452,7 @@ export const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   fontCardLabelActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   sizeSection: {
@@ -515,9 +510,9 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
   },
   tabBtnActive: {
-    backgroundColor: "#161E2E",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: "#00F2FE",
   },
   tabBtnText: {
     color: "#8E9AA8",
@@ -525,7 +520,7 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
   },
   tabBtnTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   subTabBar: {
@@ -546,9 +541,9 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
   },
   subTabBtnActive: {
-    backgroundColor: "#161E2E",
+    backgroundColor: "#18181A",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.35)",
+    borderColor: "#00F2FE",
   },
   subTabBtnText: {
     color: "#8E9AA8",
@@ -556,7 +551,7 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
   },
   subTabBtnTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   tabSectionHeader: {
@@ -575,8 +570,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   categoryChipActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "rgba(255, 255, 255, 0.4)",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   categoryChipText: {
     color: "#8E9AA8",
@@ -584,7 +579,7 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
   },
   categoryChipTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   fontPill: {
@@ -600,8 +595,8 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fontPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   fontPillText: {
     color: "#94A3B8",
@@ -609,7 +604,7 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
   },
   fontPillTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   bgOptionPill: {
@@ -625,8 +620,8 @@ export const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   bgOptionPillActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   bgPreviewDot: {
     width: 7,
@@ -639,7 +634,7 @@ export const styles = StyleSheet.create({
     fontWeight: "500",
   },
   bgOptionTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "600",
   },
   presetGroup: {
@@ -656,8 +651,8 @@ export const styles = StyleSheet.create({
     borderColor: "#1E2638",
   },
   presetChipActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   presetChipText: {
     color: "#8E9AA8",
@@ -665,8 +660,8 @@ export const styles = StyleSheet.create({
     fontWeight: "500",
   },
   presetChipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: "#00F2FE",
+    fontWeight: "600",
   },
   sectionBlock: {
     backgroundColor: "#121214",

@@ -179,7 +179,7 @@ function HeaderComponent({
           />
         </TouchableOpacity>
 
-        {/* Monochromatic Pro Export CTA Button */}
+        {/* Signature CapCut Cyan Export CTA Button */}
         <TouchableOpacity
           style={[styles.exportButton, isSmallScreen && styles.exportButtonCompact]}
           onPress={onOpenExport}
@@ -187,7 +187,7 @@ function HeaderComponent({
           hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
           accessibilityLabel="Export Project"
         >
-          <Ionicons name="arrow-up" size={14} color="#000000" style={{ marginRight: 2 }} />
+          <Ionicons name="arrow-up" size={13} color="#08090E" style={{ marginRight: 2 }} />
           <Text style={styles.exportText}>Export</Text>
         </TouchableOpacity>
       </View>
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#10B981",
   },
   autoSaveDotSaving: {
-    backgroundColor: "#00E5C9",
+    backgroundColor: "#00F2FE",
   },
   autoSaveText: {
     fontSize: 9.5,
@@ -393,20 +393,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     height: 28,
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     borderRadius: 5,
+    shadowColor: "#00F2FE",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   exportButtonCompact: {
     height: 28,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     borderRadius: 5,
   },
   exportText: {
-    color: "#000000",
-    fontSize: 11,
-    fontWeight: "500",
+    color: "#08090E",
+    fontSize: 11.5,
+    fontWeight: "700",
+    letterSpacing: 0.1,
   },
   modalOverlay: {
     flex: 1,
@@ -465,7 +471,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 5,
     borderRadius: 5,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -473,9 +479,9 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   saveBtnText: {
-    color: "#000000",
+    color: "#08090E",
     fontSize: 10.5,
-    fontWeight: "500",
+    fontWeight: "700",
   },
 });
 

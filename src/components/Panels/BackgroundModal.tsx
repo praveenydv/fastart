@@ -269,12 +269,12 @@ function BackgroundModalContent({
               <Ionicons
                 name="color-palette-outline"
                 size={12}
-                color={activeTab === 'color' ? '#FFFFFF' : '#8E8E93'}
+                color={activeTab === 'color' ? '#00F2FE' : '#8E8E93'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'color' && { color: '#FFFFFF', fontWeight: '500' },
+                  activeTab === 'color' && { color: '#00F2FE', fontWeight: '500' },
                 ]}
               >
                 Color
@@ -291,12 +291,12 @@ function BackgroundModalContent({
               <Ionicons
                 name="image-outline"
                 size={12}
-                color={activeTab === 'image' ? '#FFFFFF' : '#8E8E93'}
+                color={activeTab === 'image' ? '#00F2FE' : '#8E8E93'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'image' && { color: '#FFFFFF', fontWeight: '500' },
+                  activeTab === 'image' && { color: '#00F2FE', fontWeight: '500' },
                 ]}
               >
                 Image
@@ -313,12 +313,12 @@ function BackgroundModalContent({
               <Ionicons
                 name="water-outline"
                 size={12}
-                color={activeTab === 'blur' ? '#FFFFFF' : '#8E8E93'}
+                color={activeTab === 'blur' ? '#00F2FE' : '#8E8E93'}
               />
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === 'blur' && { color: '#FFFFFF', fontWeight: '500' },
+                  activeTab === 'blur' && { color: '#00F2FE', fontWeight: '500' },
                 ]}
               >
                 Blur
@@ -509,10 +509,10 @@ function BackgroundModalContent({
                       </View>
                       {rawBg === `image:${livePreviewUri}` ? (
                         <View style={styles.liveSelectedBadge}>
-                          <Ionicons name="checkmark" size={9} color="#000000" />
+                          <Ionicons name="checkmark" size={9} color="#08090E" />
                         </View>
                       ) : (
-                        <Ionicons name="add-circle-outline" size={16} color="#FFFFFF" />
+                        <Ionicons name="add-circle-outline" size={16} color="#8E8E93" />
                       )}
                     </TouchableOpacity>
                   </>
@@ -549,7 +549,7 @@ function BackgroundModalContent({
                           </Text>
                           {isSelected && (
                             <View style={styles.wallpaperCheckBadge}>
-                              <Ionicons name="checkmark" size={8} color="#000000" />
+                              <Ionicons name="checkmark" size={8} color="#08090E" />
                             </View>
                           )}
                         </View>
@@ -608,7 +608,7 @@ function BackgroundModalContent({
                           )}
                           {isSelected && (
                             <View style={styles.blurSelectedCheckBadge}>
-                              <Ionicons name="checkmark" size={8} color="#000000" />
+                              <Ionicons name="checkmark" size={8} color="#08090E" />
                             </View>
                           )}
                         </View>
@@ -706,9 +706,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -748,9 +748,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   tabBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   tabText: {
     fontSize: 9.5,
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   colorLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   hexInputRow: {
@@ -885,8 +885,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   liveFrameCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   liveFrameThumb: {
     width: 44,
@@ -898,7 +898,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
   },
   liveFrameTitle: {
     color: '#EDEDED',
@@ -914,7 +914,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -953,7 +953,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   wallpaperCardActive: {
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   wallpaperCardImage: {
     width: '100%',
@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1017,8 +1017,8 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   blurPresetCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   blurThumbnailContainer: {
     width: '100%',
@@ -1047,7 +1047,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1057,7 +1057,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   blurCardTitleActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   blurCardDesc: {
@@ -1069,7 +1069,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
@@ -1078,7 +1078,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   inlineApplyText: {
-    color: '#000000',
+    color: '#08090E',
     fontSize: 9.5,
     fontWeight: '500',
   },

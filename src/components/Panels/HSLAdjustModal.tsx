@@ -322,20 +322,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetBtnText: {
     fontSize: 9.5,
     color: '#00F2FE',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   applyBtn: {
     width: 24,
     height: 24,
     borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -379,8 +379,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   swatchBtnSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#18181A',
+    borderColor: '#00F2FE',
   },
   swatchDot: {
     width: 16,
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   swatchLabelSelected: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   tuningCard: {
@@ -444,9 +444,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
   },
   resetChannelText: {
     fontSize: 9,

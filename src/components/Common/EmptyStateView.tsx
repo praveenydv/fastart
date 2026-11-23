@@ -83,12 +83,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
   },
   actionText: {
-    color: "#121214",
+    color: "#08090E",
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });
 

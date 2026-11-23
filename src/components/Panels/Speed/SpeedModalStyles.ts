@@ -77,9 +77,9 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
   },
   tabBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: '#00F2FE',
   },
   tabText: {
     color: '#8E8E93',
@@ -87,23 +87,23 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   resetBtn: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
+    backgroundColor: '#18181A',
     borderWidth: 1,
-    borderColor: 'rgba(0, 242, 254, 0.35)',
+    borderColor: '#00F2FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
   resetText: {
     color: '#00F2FE',
     fontSize: 9.5,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   closeBtn: {
     width: 22,
@@ -151,8 +151,8 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   speedPillActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   speedText: {
     color: '#8E8E93',
@@ -160,8 +160,8 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
   },
   speedTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '400',
+    color: '#00F2FE',
+    fontWeight: '500',
   },
   sliderBox: {
     backgroundColor: '#18181A',
@@ -209,7 +209,7 @@ export const styles = StyleSheet.create({
   },
   fillFallback: {
     height: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     borderRadius: 1,
   },
   curveGrid: {
@@ -229,8 +229,8 @@ export const styles = StyleSheet.create({
     borderColor: '#27272A',
   },
   curveCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#18181A',
   },
   curveGraphBox: {
     width: 32,
@@ -249,7 +249,7 @@ export const styles = StyleSheet.create({
     fontWeight: '400',
   },
   curveLabelActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   
@@ -393,14 +393,14 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#00F2FE',
     paddingVertical: 7,
     borderRadius: 6,
   },
   applyCustomBtnText: {
     fontSize: 11,
-    fontWeight: '500',
-    color: '#121214',
+    fontWeight: '600',
+    color: '#08090E',
   },
   slowMoSection: {
     backgroundColor: '#18181A',
@@ -439,8 +439,8 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   slowMoCardActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#00F2FE',
+    backgroundColor: '#141416',
   },
   slowMoCardTitle: {
     fontSize: 10,
@@ -449,7 +449,7 @@ export const styles = StyleSheet.create({
     marginTop: 3,
   },
   slowMoCardTitleActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '500',
   },
   slowMoCardDesc: {

@@ -830,7 +830,7 @@ const EditorModalsComponent: React.FC<EditorModalsProps> = ({
       {activeModal === "opacity" && selectedClip && (
         <View style={modalStyles.panelContainer}>
           <CompactSliderInput
-            label="Layer Opacity"
+            label="Opacity"
             value={
               selectedClip?.opacity !== undefined
                 ? Math.round(selectedClip.opacity * 100)
@@ -1105,8 +1105,9 @@ const modalStyles = StyleSheet.create({
     borderColor: "#27272A",
   },
   chipBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   chipText: {
     fontSize: 9.5,
@@ -1114,7 +1115,7 @@ const modalStyles = StyleSheet.create({
     fontWeight: "400",
   },
   chipTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   chipGrid: {
@@ -1134,8 +1135,9 @@ const modalStyles = StyleSheet.create({
     gap: 3,
   },
   animCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   animCardText: {
     fontSize: 9.5,
@@ -1143,7 +1145,7 @@ const modalStyles = StyleSheet.create({
     fontWeight: "400",
   },
   animCardTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
 });

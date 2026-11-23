@@ -166,16 +166,17 @@ export const controlStyles = {
     justifyContent: "center",
   },
   smallBtnActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
-    borderColor: THEME_COLORS.accent,
+    backgroundColor: THEME_COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: "#00F2FE",
   },
   keyframeBtn: {
     position: "relative" as any,
   },
   keyframeActive: {
-    backgroundColor: THEME_COLORS.cyanBg,
+    backgroundColor: THEME_COLORS.surfaceElevated,
     borderWidth: 1,
-    borderColor: THEME_COLORS.accent,
+    borderColor: "#00F2FE",
     borderRadius: 7,
   },
   kfBadgeIcon: {

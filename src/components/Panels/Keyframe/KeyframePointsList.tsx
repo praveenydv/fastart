@@ -72,7 +72,7 @@ export default function KeyframePointsList({
                     <Ionicons
                       name="diamond"
                       size={12}
-                      color={isCurrent ? "#121214" : "#EDEDED"}
+                      color={isCurrent ? "#08090E" : "#EDEDED"}
                     />
                   </View>
                   <View>

@@ -474,13 +474,15 @@ export const computeTotalDuration = (tracks?: ProjectTracks | null): number => {
   let videoMax = 0;
   if (Array.isArray(tracks.video) && tracks.video.length > 0) {
     tracks.video.forEach((clip: any) => {
-      const dur =
-        typeof clip.duration === 'number' && clip.duration > 0
-          ? clip.duration
-          : typeof clip.mediaDuration === 'number' && clip.mediaDuration > 0
-            ? clip.mediaDuration
-            : 0;
-      const end = (clip.startTime || 0) + dur;
+      const parsedDur = typeof clip.duration === 'number' ? clip.duration : parseFloat(clip.duration);
+      const parsedMediaDur = typeof clip.mediaDuration === 'number' ? clip.mediaDuration : parseFloat(clip.mediaDuration);
+      const dur = (!isNaN(parsedDur) && parsedDur > 0)
+        ? parsedDur
+        : (!isNaN(parsedMediaDur) && parsedMediaDur > 0)
+          ? parsedMediaDur
+          : 0;
+      const start = typeof clip.startTime === 'number' ? clip.startTime : parseFloat(clip.startTime);
+      const end = (isNaN(start) ? 0 : start) + dur;
       if (end > videoMax) videoMax = end;
     });
   }
@@ -491,7 +493,9 @@ export const computeTotalDuration = (tracks?: ProjectTracks | null): number => {
   visualTracks.forEach((trackList) => {
     if (Array.isArray(trackList)) {
       trackList.forEach((clip: any) => {
-        const end = (clip.startTime || 0) + (clip.duration || 0);
+        const dur = typeof clip.duration === 'number' ? clip.duration : parseFloat(clip.duration);
+        const start = typeof clip.startTime === 'number' ? clip.startTime : parseFloat(clip.startTime);
+        const end = (isNaN(start) ? 0 : start) + (isNaN(dur) ? 0 : dur);
         if (end > visualMax) visualMax = end;
       });
     }
@@ -503,7 +507,9 @@ export const computeTotalDuration = (tracks?: ProjectTracks | null): number => {
     let audioMax = 0;
     if (Array.isArray(tracks.audio)) {
       tracks.audio.forEach((clip: any) => {
-        const end = (clip.startTime || 0) + (clip.duration || 0);
+        const dur = typeof clip.duration === 'number' ? clip.duration : parseFloat(clip.duration);
+        const start = typeof clip.startTime === 'number' ? clip.startTime : parseFloat(clip.startTime);
+        const end = (isNaN(start) ? 0 : start) + (isNaN(dur) ? 0 : dur);
         if (end > audioMax) audioMax = end;
       });
     }

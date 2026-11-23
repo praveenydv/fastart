@@ -42,7 +42,7 @@ export interface DesktopMediaAudioPanelProps {
 // CapCut style text title templates
 const TEXT_TEMPLATES = [
   { id: 'text-default', title: 'Default Text', text: 'Add Headline', color: '#FFFFFF', bg: '#1E2024' },
-  { id: 'text-cyan', title: 'Cyan Neon', text: 'GLOW UP', color: '#00E5C9', bg: '#082928' },
+  { id: 'text-cyan', title: 'Cyan Neon', text: 'GLOW UP', color: '#00F2FE', bg: '#082928' },
   { id: 'text-gold', title: 'Cinematic Gold', text: 'CHAPTER ONE', color: '#F59E0B', bg: '#291F09' },
   { id: 'text-bold-red', title: 'Bold Red', text: 'DON’T MISS', color: '#EF4444', bg: '#2B0E0E' },
   { id: 'text-purple', title: 'Vlog Daily', text: 'Daily Vlog', color: '#A855F7', bg: '#250E36' },
@@ -702,18 +702,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   tabBtnActive: {
-    backgroundColor: '#27272A',
-    borderWidth: 1,
-    borderColor: '#3F3F46',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   tabBtnText: {
-    color: '#71717A',
+    color: '#9CA3AF',
     fontSize: 11,
     fontWeight: '500',
     letterSpacing: 0.1,
   },
   tabBtnTextActive: {
-    color: '#FFFFFF',
+    color: '#00F2FE',
     fontWeight: '600',
   },
   collapseToggleBtn: {

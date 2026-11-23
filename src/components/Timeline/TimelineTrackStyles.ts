@@ -248,8 +248,8 @@ export const trackStyles = {
     cursor: "pointer",
   } as any,
   transitionButtonActive: {
-    backgroundColor: "#27272F",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#18181A",
+    borderColor: "#00F2FE",
   },
   activeClipTimeframePill: {
     flexDirection: "row" as const,

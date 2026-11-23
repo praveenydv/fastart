@@ -265,8 +265,8 @@ export const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   presetChipActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
   },
   presetChipText: {
     color: "#8E8E93",
@@ -274,7 +274,7 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
   },
   presetChipTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   // Animation Easing Curve Grid & Cards
@@ -315,8 +315,8 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
   },
   easingCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderColor: "#FFFFFF",
+    backgroundColor: "#141416",
+    borderColor: "#00F2FE",
     borderWidth: 1,
   },
   easingCardText: {
@@ -332,7 +332,7 @@ export const styles = StyleSheet.create({
       : {}),
   },
   easingCardTextActive: {
-    color: "#FFFFFF",
+    color: "#00F2FE",
     fontWeight: "500",
   },
   // Nudge Pad
@@ -389,8 +389,8 @@ export const styles = StyleSheet.create({
     borderColor: "#27272A",
   },
   keyframeItemActive: {
-    borderColor: "#FFFFFF",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "#00F2FE",
+    backgroundColor: "#141416",
   },
   keyframeItemLeft: {
     flexDirection: "row",
@@ -409,7 +409,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   kfDiamondBadgeActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
   },
   keyframeItemTime: {
     color: "#EDEDED",
@@ -507,15 +507,15 @@ export const styles = StyleSheet.create({
     backgroundColor: "#121214",
   },
   doneBtn: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#00F2FE",
     paddingVertical: 6,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
   },
   doneBtnText: {
-    color: "#121214",
+    color: "#08090E",
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: "700",
   },
 });

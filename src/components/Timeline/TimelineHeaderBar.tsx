@@ -112,20 +112,20 @@ const TimelineHeaderBarComponent: React.FC<TimelineHeaderBarProps> = ({
               style={[
                 styles.actionBtn,
                 {
-                  paddingHorizontal: 6,
+                  paddingHorizontal: 7,
                   height: 20,
-                  backgroundColor: "rgba(255, 255, 255, 0.08)",
-                  borderColor: "rgba(255, 255, 255, 0.16)",
+                  backgroundColor: "#18181A",
+                  borderColor: "#00F2FE",
                 },
               ]}
               onPress={onSplitClip}
               accessibilityLabel="Split clip at playhead"
             >
-              <Ionicons name="cut-outline" size={10} color="#FFFFFF" />
+              <Ionicons name="cut-outline" size={10} color="#00F2FE" />
               <Text
                 style={[
                   styles.actionBtnText,
-                  { color: "#FFFFFF", fontSize: 9.5, fontWeight: "400" },
+                  { color: "#00F2FE", fontSize: 9.5, fontWeight: "600" },
                 ]}
               >
                 Split
