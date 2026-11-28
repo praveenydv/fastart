@@ -122,6 +122,7 @@ export class VideoRenderer {
   public isPlaying: boolean = false;
   public isScrubbing: boolean = false;
   public isExporting: boolean = false;
+  private _mediaSyncCtx: MediaSyncContext | null = null;
   private maskFramePending: boolean = false;
   private blurCanvas: HTMLCanvasElement | null = null;
   private blurCtx: CanvasRenderingContext2D | null = null;
@@ -154,7 +155,7 @@ export class VideoRenderer {
   private snapshotCanvas: HTMLCanvasElement | null = null;
   private snapshotCtx: CanvasRenderingContext2D | null = null;
 
-  constructor(canvas: HTMLCanvasElement | null) {
+  constructor(canvas: HTMLCanvasElement | null, options?: { registerAsActive?: boolean }) {
     this.canvas = canvas;
     this.ctx = canvas
       ? ((canvas.getContext("2d", { alpha: false }) as CanvasRenderingContext2D | null) ||
@@ -165,7 +166,9 @@ export class VideoRenderer {
       this.ctx.imageSmoothingQuality = "high";
     }
     this.videoElements = new Map();
-    activeVideoRenderer = this;
+    if (options?.registerAsActive !== false) {
+      activeVideoRenderer = this;
+    }
 
     setOnMaskUpdated(() => {
       // If background frame extraction is in progress, skip intermediate mask updates
@@ -287,15 +290,23 @@ export class VideoRenderer {
   }
 
   private getMediaSyncContext(): MediaSyncContext {
-    return {
-      videoElements: this.videoElements,
-      thumbnailElements: this.thumbnailElements,
-      lastUsedTimestamp: this.lastUsedTimestamp,
-      maxDecoders: this.maxDecoders,
-      onFrameNeeded: this.onFrameNeeded,
-      isPlaying: this.isPlaying,
-      isScrubbing: this.isScrubbing,
-    };
+    if (!this._mediaSyncCtx) {
+      this._mediaSyncCtx = {
+        videoElements: this.videoElements,
+        thumbnailElements: this.thumbnailElements,
+        lastUsedTimestamp: this.lastUsedTimestamp,
+        maxDecoders: this.maxDecoders,
+        onFrameNeeded: this.onFrameNeeded,
+        isPlaying: this.isPlaying,
+        isScrubbing: this.isScrubbing,
+      };
+    } else {
+      this._mediaSyncCtx.maxDecoders = this.maxDecoders;
+      this._mediaSyncCtx.onFrameNeeded = this.onFrameNeeded;
+      this._mediaSyncCtx.isPlaying = this.isPlaying;
+      this._mediaSyncCtx.isScrubbing = this.isScrubbing;
+    }
+    return this._mediaSyncCtx;
   }
 
   cleanup() {

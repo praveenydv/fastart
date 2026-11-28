@@ -108,11 +108,6 @@ function HSLAdjustModalComponent({
     onApply({});
   };
 
-  const handleDone = () => {
-    onApply(adjustments);
-    onClose();
-  };
-
   const currentDef = CHANNELS.find((c) => c.id === activeChannel)!;
 
   return (
@@ -126,7 +121,6 @@ function HSLAdjustModalComponent({
             onClose={onClose}
             onReset={handleResetAll}
             resetText="Reset All"
-            onDone={handleDone}
           />
         )}
 

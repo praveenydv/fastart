@@ -151,11 +151,12 @@ export default function AutoReframeModal({
   return (
     <View style={[styles.inlineWrapper, isInline && styles.inlineWrapperDocked]}>
       <View style={styles.sheetContainer}>
-        <ModalHeader
-          title="Auto-Reframe"
-          onClose={onClose}
-          onDone={onClose}
-        />
+        {!isInline && (
+          <ModalHeader
+            title="Auto-Reframe"
+            onClose={onClose}
+          />
+        )}
 
         {/* Master AI Tracking Toggle Card */}
         <View style={styles.toggleCard}>

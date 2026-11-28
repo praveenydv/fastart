@@ -43,6 +43,7 @@ export function usePlayerWebRenderer({
   isPlayingRef.current = isPlaying;
   const lastRenderTimeRef = useRef<number>(0);
   const scrubSettleTimerRef = useRef<any>(null);
+  const lastDimsRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Initialize VideoRenderer for Web
   useIsomorphicLayoutEffect(() => {
@@ -159,6 +160,7 @@ export function usePlayerWebRenderer({
   // Instantly pause hardware decoders when playback stops
   useEffect(() => {
     if (!isPlaying && rendererRef.current) {
+      rendererRef.current.isScrubbing = false;
       rendererRef.current.pauseAll();
     }
   }, [isPlaying]);
@@ -169,8 +171,13 @@ export function usePlayerWebRenderer({
       if (rendererRef.current.canvas !== canvasRef.current) {
         rendererRef.current.setCanvas(canvasRef.current);
       }
-      // When playing, the hardware animation loop in usePlaybackLoop renders frames directly at 60fps
-      if (isPlaying) {
+      const dimsChanged =
+        lastDimsRef.current.w !== boxWidth || lastDimsRef.current.h !== canvasHeight;
+      lastDimsRef.current = { w: boxWidth, h: canvasHeight };
+
+      // When playing, the hardware animation loop in usePlaybackLoop renders frames at 60fps;
+      // only force a synchronous draw if the canvas dimensions just resized (e.g. fullscreen toggle).
+      if (isPlaying && !dimsChanged) {
         return;
       }
       // While actively resizing/dragging layout, skip clearing and re-rendering every sub-pixel.

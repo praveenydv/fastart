@@ -396,6 +396,49 @@ pub extern "C" fn fastart_apply_matte_c(
     );
 }
 
+/// Decontaminates edge transition pixels in WebAssembly to eliminate background color halos
+#[no_mangle]
+pub extern "C" fn fastart_defringe_rgba_c(
+    pixels_ptr: *mut u8,
+    width: u32,
+    height: u32,
+) {
+    if pixels_ptr.is_null() || width == 0 || height == 0 {
+        return;
+    }
+    let total_bytes = (width as usize) * (height as usize) * 4;
+    let pixels = unsafe { slice::from_raw_parts_mut(pixels_ptr, total_bytes) };
+    fastart_core::defringe_rgba(pixels, width as usize, height as usize);
+}
+
+/// Runs unified RGB-guided matte snapping and edge color decontamination in a single WASM call
+#[no_mangle]
+pub extern "C" fn fastart_guided_composite_defringe_c(
+    rgba_ptr: *mut u8,
+    mask_rgba_ptr: *const u8,
+    width: u32,
+    height: u32,
+    radius: u32,
+    eps: f32,
+    subsample: u32,
+) {
+    if rgba_ptr.is_null() || mask_rgba_ptr.is_null() || width == 0 || height == 0 {
+        return;
+    }
+    let total_bytes = (width as usize) * (height as usize) * 4;
+    let rgba = unsafe { slice::from_raw_parts_mut(rgba_ptr, total_bytes) };
+    let mask_rgba = unsafe { slice::from_raw_parts(mask_rgba_ptr, total_bytes) };
+    fastart_core::guided_composite_and_defringe(
+        rgba,
+        mask_rgba,
+        width as usize,
+        height as usize,
+        radius as usize,
+        eps,
+        subsample as usize,
+    );
+}
+
 /// Detects uniform studio backdrop color in WebAssembly
 #[no_mangle]
 pub extern "C" fn fastart_detect_uniform_backdrop_c(
@@ -605,6 +648,37 @@ pub extern "C" fn fastart_process_modnet_output_c(
     let raw_alpha = unsafe { slice::from_raw_parts(raw_alpha_ptr, total_pixels) };
     let out_rgba = unsafe { slice::from_raw_parts_mut(out_rgba_ptr, total_pixels * 4) };
     fastart_core::process_modnet_output_tensor(raw_alpha, out_rgba, threshold, feather);
+    total_pixels * 4
+}
+
+/// Converts raw neural model output alpha floats into packed 32-bit RGBA mask pixels with explicit crop
+#[no_mangle]
+pub extern "C" fn fastart_process_modnet_output_cropped_c(
+    raw_alpha_ptr: *const f32,
+    out_rgba_ptr: *mut u8,
+    threshold: f32,
+    feather: f32,
+    crop_x: u32,
+    crop_y: u32,
+    crop_w: u32,
+    crop_h: u32,
+) -> usize {
+    if raw_alpha_ptr.is_null() || out_rgba_ptr.is_null() {
+        return 0;
+    }
+    let total_pixels = 512 * 512;
+    let raw_alpha = unsafe { slice::from_raw_parts(raw_alpha_ptr, total_pixels) };
+    let out_rgba = unsafe { slice::from_raw_parts_mut(out_rgba_ptr, total_pixels * 4) };
+    fastart_core::process_modnet_output_tensor_cropped(
+        raw_alpha,
+        out_rgba,
+        threshold,
+        feather,
+        crop_x as usize,
+        crop_y as usize,
+        crop_w as usize,
+        crop_h as usize,
+    );
     total_pixels * 4
 }
 

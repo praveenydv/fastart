@@ -34,8 +34,8 @@ class CutoutWorkerBridge {
 
   private createWorker(): CutoutWorkerSlot | null {
     if (!this.isSupported()) return null;
-    const cutoutWasmUrl = resolveAssetUrl('/wasm/fastart_cutout_wasm.wasm');
-    const modnetModelUrl = resolveAssetUrl('/models/modnet.onnx');
+    const cutoutWasmUrl = resolveAssetUrl('/wasm/fastart_cutout_wasm.wasm?v=31');
+    const modnetModelUrl = resolveAssetUrl('/models/modnet.onnx?v=20');
     const ortScriptUrl = resolveAssetUrl('/onnxruntime/ort.all.min.js');
     const ortWasmPaths = resolveAssetUrl('/onnxruntime/');
     const workerCode = `
@@ -174,7 +174,7 @@ class CutoutWorkerBridge {
       let currentTask = Promise.resolve();
       self.onmessage = ({data}) => {
         currentTask = currentTask.then(async () => {
-          const {id, type, floatData, rgbaData, threshold, feather, includeRawAlpha} = data;
+          const {id, type, floatData, rgbaData, threshold, feather, includeRawAlpha, crop} = data;
           try {
             if (type === 'init') { const success = await initialize(); self.postMessage({id, success, backend, rawAlpha: success ? new Float32Array(0) : null}); return; }
             if (type === 'infer-frame') {
@@ -195,7 +195,15 @@ class CutoutWorkerBridge {
                 new Float32Array(cutoutWasm.memory.buffer, persistentAlphaPtr, OUTPUT).set(output.data);
 
                 const alphaView = new Float32Array(cutoutWasm.memory.buffer, persistentAlphaPtr, OUTPUT);
-                const rleLength = cutoutWasm.fastart_cutout_modnet_alpha_to_rle(persistentAlphaPtr, threshold, feather, persistentRlePtr, RLE_CAPACITY);
+                const cropX = crop ? (crop.dx | 0) : 0;
+                const cropY = crop ? (crop.dy | 0) : 0;
+                const cropW = crop ? (crop.dw | 0) : 0;
+                const cropH = crop ? (crop.dh | 0) : 0;
+                const rleLength = cutoutWasm.fastart_cutout_modnet_alpha_to_rle_rgba
+                  ? cutoutWasm.fastart_cutout_modnet_alpha_to_rle_rgba(persistentAlphaPtr, persistentRgbaPtr, threshold, feather, cropX, cropY, cropW, cropH, persistentRlePtr, RLE_CAPACITY)
+                  : cutoutWasm.fastart_cutout_modnet_alpha_to_rle_cropped
+                  ? cutoutWasm.fastart_cutout_modnet_alpha_to_rle_cropped(persistentAlphaPtr, threshold, feather, cropX, cropY, cropW, cropH, persistentRlePtr, RLE_CAPACITY)
+                  : cutoutWasm.fastart_cutout_modnet_alpha_to_rle(persistentAlphaPtr, threshold, feather, persistentRlePtr, RLE_CAPACITY);
                 if (!rleLength) throw new Error('Rust MODNet RLE encoding failed');
                 rle = new Uint8Array(new Uint8Array(cutoutWasm.memory.buffer, persistentRlePtr, rleLength));
                 rawAlphaOutput = includeRawAlpha ? new Float32Array(alphaView) : null;
@@ -217,25 +225,368 @@ class CutoutWorkerBridge {
 
                 const tNorm = (threshold <= 0.001 && feather <= 0.001) ? 0.45 : Math.max(0, Math.min(1, threshold));
                 const sNorm = (threshold <= 0.001 && feather <= 0.001) ? 0.25 : Math.max(0, Math.min(1, feather));
-                const center = 0.10 + tNorm * 0.55;
-                const halfW = 0.015 + sNorm * 0.235;
-                const vMin = Math.max(0.01, center - halfW);
-                const vMax = Math.min(0.98, center + halfW);
-                const span = Math.max(0.02, vMax - vMin);
+                const vMin = Math.max(0.04, Math.min(0.15, 0.05 + tNorm * 0.08 - sNorm * 0.03));
+                const vMax = Math.max(vMin + 0.20, Math.min(0.85, 0.58 + tNorm * 0.10 + sNorm * 0.08));
+                const span = Math.max(0.10, vMax - vMin);
                 const invSpan = 1.0 / span;
+
+                // Step 1: Find high-confidence Human Core Seeds (raw alpha >= 0.50)
+                const coreVisited = new Uint8Array(OUTPUT);
+                const labels = new Uint32Array(OUTPUT);
+                let currentLabel = 0;
+                const compSizes = [];
+                const queue = new Int32Array(OUTPUT);
+
+                for (let idx = 0; idx < OUTPUT; idx++) {
+                  if (rawAlphaOutput[idx] >= 0.50 && coreVisited[idx] === 0) {
+                    currentLabel++;
+                    let head = 0;
+                    let tail = 0;
+                    queue[tail++] = idx;
+                    coreVisited[idx] = 1;
+                    labels[idx] = currentLabel;
+                    let count = 0;
+
+                    while (head < tail) {
+                      const cur = queue[head++];
+                      count++;
+                      const cy = (cur / 512) | 0;
+                      const cx = cur % 512;
+
+                      if (cy > 0) {
+                        const n = cur - 512;
+                        if (rawAlphaOutput[n] >= 0.50 && coreVisited[n] === 0) {
+                          coreVisited[n] = 1;
+                          labels[n] = currentLabel;
+                          queue[tail++] = n;
+                        }
+                      }
+                      if (cy + 1 < 512) {
+                        const n = cur + 512;
+                        if (rawAlphaOutput[n] >= 0.50 && coreVisited[n] === 0) {
+                          coreVisited[n] = 1;
+                          labels[n] = currentLabel;
+                          queue[tail++] = n;
+                        }
+                      }
+                      if (cx > 0) {
+                        const n = cur - 1;
+                        if (rawAlphaOutput[n] >= 0.50 && coreVisited[n] === 0) {
+                          coreVisited[n] = 1;
+                          labels[n] = currentLabel;
+                          queue[tail++] = n;
+                        }
+                      }
+                      if (cx + 1 < 512) {
+                        const n = cur + 1;
+                        if (rawAlphaOutput[n] >= 0.50 && coreVisited[n] === 0) {
+                          coreVisited[n] = 1;
+                          labels[n] = currentLabel;
+                          queue[tail++] = n;
+                        }
+                      }
+                    }
+                    compSizes.push({ label: currentLabel, size: count });
+                  }
+                }
+
+                // Step 2: Geodesic Region Growing from the human core
+                const isHuman = new Uint8Array(OUTPUT);
+                let maxComp = null;
+                for (let i = 0; i < compSizes.length; i++) {
+                  if (!maxComp || compSizes[i].size > maxComp.size) {
+                    maxComp = compSizes[i];
+                  }
+                }
+
+                if (maxComp && maxComp.size >= 120) {
+                  // Step 2: Anatomical Head Crown Detection on primary body component
+                  const maxLabel = maxComp.label;
+                  let bodyMinY = 512, bodyMaxY = 0;
+                  const rowSpans = [];
+
+                  for (let y = 0; y < 512; y++) {
+                    let rowMinX = 512, rowMaxX = 0, count = 0;
+                    for (let x = 0; x < 512; x++) {
+                      if (labels[y * 512 + x] === maxLabel) {
+                        count++;
+                        if (x < rowMinX) rowMinX = x;
+                        if (x > rowMaxX) rowMaxX = x;
+                      }
+                    }
+                    if (count > 0) {
+                      if (y < bodyMinY) bodyMinY = y;
+                      if (y > bodyMaxY) bodyMaxY = y;
+                      rowSpans[y] = { span: rowMaxX - rowMinX + 1 };
+                    }
+                  }
+
+                  let crownY = bodyMinY;
+                  for (let y = bodyMinY; y <= Math.min(bodyMaxY, bodyMinY + 60); y++) {
+                    const s = rowSpans[y];
+                    if (s && s.span >= 6) {
+                      let sustained = 0;
+                      for (let k = 1; k <= 4; k++) {
+                        if (rowSpans[y + k] && rowSpans[y + k].span >= 6) sustained++;
+                      }
+                      if (sustained >= 3) {
+                        crownY = y;
+                        break;
+                      }
+                    }
+                  }
+
+                  // Step 3: Valid Core Labels — keep secondary component ONLY if it starts AT/BELOW crownY
+                  // AND has horizontal overlap with the main subject's shoulder band.
+                  // This eliminates floating trees/antennas/plants whose tops are above the head
+                  // even if their bottom pixels dip slightly below (the old compMaxY > crownY was too permissive).
+                  const validCoreLabels = new Uint8Array(currentLabel + 1);
+                  validCoreLabels[maxComp.label] = 1;
+                  const minKeepSize = (maxComp.size / 6) | 0;
+
+                  // Compute main subject's shoulder x-span at/below crownY for overlap check
+                  let mainMinXAtCrown = 512, mainMaxXAtCrown = 0;
+                  const shoulderScanEnd = Math.min(crownY + 20, 511);
+                  for (let sy = crownY; sy <= shoulderScanEnd; sy++) {
+                    for (let sx = 0; sx < 512; sx++) {
+                      if (labels[sy * 512 + sx] === maxComp.label) {
+                        if (sx < mainMinXAtCrown) mainMinXAtCrown = sx;
+                        if (sx > mainMaxXAtCrown) mainMaxXAtCrown = sx;
+                      }
+                    }
+                  }
+
+                  for (let i = 0; i < compSizes.length; i++) {
+                    if (compSizes[i].label === maxComp.label) continue;
+                    if (compSizes[i].size >= minKeepSize) {
+                      let compMinY = 512, compMaxY = 0, compMinX = 512, compMaxX = 0;
+                      for (let idx = 0; idx < OUTPUT; idx++) {
+                        if (labels[idx] === compSizes[i].label) {
+                          const cy = (idx / 512) | 0;
+                          const cx = idx % 512;
+                          if (cy < compMinY) compMinY = cy;
+                          if (cy > compMaxY) compMaxY = cy;
+                          if (cx < compMinX) compMinX = cx;
+                          if (cx > compMaxX) compMaxX = cx;
+                        }
+                      }
+                      // Must START at/below crown and horizontally overlap with main subject
+                      const startsBelowCrown = compMinY >= crownY;
+                      const overlapX = compMinX <= mainMaxXAtCrown && compMaxX >= mainMinXAtCrown;
+                      if (startsBelowCrown && overlapX) {
+                        validCoreLabels[compSizes[i].label] = 1;
+                      }
+                    }
+                  }
+
+                  // Step 4: Geodesic Region Growing from human core
+                  let head = 0;
+                  let tail = 0;
+                  for (let idx = 0; idx < OUTPUT; idx++) {
+                    const l = labels[idx];
+                    if (l > 0 && validCoreLabels[l] === 1) {
+                      const cy = (idx / 512) | 0;
+                      if (cy >= crownY) {
+                        isHuman[idx] = 1;
+                        queue[tail++] = idx;
+                      }
+                    }
+                  }
+
+                  while (head < tail) {
+                    const cur = queue[head++];
+                    const cy = (cur / 512) | 0;
+                    const cx = cur % 512;
+
+                    for (let dy = -1; dy <= 1; dy++) {
+                      for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const ny = cy + dy;
+                        const nx = cx + dx;
+                        if (ny >= crownY && ny < 512 && nx >= 0 && nx < 512) {
+                          const nIdx = ny * 512 + nx;
+                          if (isHuman[nIdx] === 0 && rawAlphaOutput[nIdx] >= vMin) {
+                            isHuman[nIdx] = 1;
+                            queue[tail++] = nIdx;
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  // Natural crown apex dome 1-2 pixels above crownY
+                  for (let y = Math.max(0, crownY - 2); y < crownY; y++) {
+                    for (let x = 0; x < 512; x++) {
+                      const idx = y * 512 + x;
+                      if (rawAlphaOutput[idx] >= 0.50 && isHuman[idx + 512] === 1) {
+                        isHuman[idx] = 1;
+                      }
+                    }
+                  }
+                } else {
+                  for (let idx = 0; idx < OUTPUT; idx++) {
+                    if (rawAlphaOutput[idx] >= vMin) isHuman[idx] = 1;
+                  }
+                }
+
+                // Step 5: Two-Pass Euclidean Distance Transform
+                const dist = new Float32Array(OUTPUT);
+                const INF = 1e6;
+                for (let idx = 0; idx < OUTPUT; idx++) {
+                  dist[idx] = isHuman[idx] === 1 ? INF : 0.0;
+                }
+
+                // Forward pass (top-left to bottom-right)
+                for (let y = 0; y < 512; y++) {
+                  const row = y * 512;
+                  const rowPrev = y > 0 ? (y - 1) * 512 : -1;
+                  for (let x = 0; x < 512; x++) {
+                    const idx = row + x;
+                    if (dist[idx] > 0.0) {
+                      let m = dist[idx];
+                      if (x > 0) {
+                        const d = dist[idx - 1] + 1.0;
+                        if (d < m) m = d;
+                      }
+                      if (rowPrev >= 0) {
+                        const d = dist[rowPrev + x] + 1.0;
+                        if (d < m) m = d;
+                        if (x > 0) {
+                          const dDiag = dist[rowPrev + x - 1] + 1.414;
+                          if (dDiag < m) m = dDiag;
+                        }
+                        if (x + 1 < 512) {
+                          const dDiag = dist[rowPrev + x + 1] + 1.414;
+                          if (dDiag < m) m = dDiag;
+                        }
+                      }
+                      dist[idx] = m;
+                    }
+                  }
+                }
+
+                // Backward pass (bottom-right to top-left)
+                for (let y = 511; y >= 0; y--) {
+                  const row = y * 512;
+                  const rowNext = y + 1 < 512 ? (y + 1) * 512 : -1;
+                  for (let x = 511; x >= 0; x--) {
+                    const idx = row + x;
+                    if (dist[idx] > 0.0) {
+                      let m = dist[idx];
+                      if (x + 1 < 512) {
+                        const d = dist[idx + 1] + 1.0;
+                        if (d < m) m = d;
+                      }
+                      if (rowNext >= 0) {
+                        const d = dist[rowNext + x] + 1.0;
+                        if (d < m) m = d;
+                        if (x + 1 < 512) {
+                          const dDiag = dist[rowNext + x + 1] + 1.414;
+                          if (dDiag < m) m = dDiag;
+                        }
+                        if (x > 0) {
+                          const dDiag = dist[rowNext + x - 1] + 1.414;
+                          if (dDiag < m) m = dDiag;
+                        }
+                      }
+                      dist[idx] = m;
+                    }
+                  }
+                }
+
+                // Step 6: Level-Set Gaussian Curvature Smoothing for Sharp & Smooth Curves
+                const phi = new Float32Array(OUTPUT);
+                for (let idx = 0; idx < OUTPUT; idx++) {
+                  if (isHuman[idx] === 1) {
+                    const d = dist[idx];
+                    const r = rawAlphaOutput[idx];
+                    if (d >= 2.5) {
+                      phi[idx] = Math.max(r, 0.85);
+                    } else if (d >= 1.0) {
+                      const w = (d - 1.0) / 1.5;
+                      phi[idx] = Math.max(r, r * (1.0 - w) + 0.85 * w);
+                    } else {
+                      phi[idx] = r;
+                    }
+                  }
+                }
+
+                // Separable 5-tap Gaussian Blur to eliminate raster discretization ripples
+                const kernel = [0.06136, 0.24477, 0.38774, 0.24477, 0.06136];
+                const temp = new Float32Array(OUTPUT);
+                const smoothed = new Float32Array(OUTPUT);
+
+                // Horizontal pass
+                for (let y = 0; y < 512; y++) {
+                  const row = y * 512;
+                  for (let x = 0; x < 512; x++) {
+                    let sum = 0.0;
+                    for (let k = -2; k <= 2; k++) {
+                      const nx = Math.max(0, Math.min(511, x + k));
+                      sum += phi[row + nx] * kernel[k + 2];
+                    }
+                    temp[row + x] = sum;
+                  }
+                }
+
+                // Vertical pass
+                for (let y = 0; y < 512; y++) {
+                  for (let x = 0; x < 512; x++) {
+                    let sum = 0.0;
+                    for (let k = -2; k <= 2; k++) {
+                      const ny = Math.max(0, Math.min(511, y + k));
+                      sum += temp[ny * 512 + x] * kernel[k + 2];
+                    }
+                    smoothed[y * 512 + x] = sum;
+                  }
+                }
+
+                // Sharp & Smooth Curve Sigmoid Mapping (synced with Rust v31 cutoff=0.58)
+                const cutoff = Math.max(0.45, Math.min(0.70, 0.58 + (tNorm - 0.45) * 0.20));
+                const halfW = Math.max(0.05, Math.min(0.14, 0.08 + (sNorm - 0.25) * 0.06));
+                const minThresh = cutoff - halfW;
+                const maxThresh = cutoff + halfW;
+                const invW = 1.0 / (2.0 * halfW);
+
+                const alphaBuffer = new Uint8Array(OUTPUT);
+
+                for (let idx = 0; idx < OUTPUT; idx++) {
+                  if (isHuman[idx] === 1) {
+                    const cy = (idx / 512) | 0;
+                    if (cy >= 510 && rawAlphaOutput[idx] >= 0.15) {
+                      alphaBuffer[idx] = 255;
+                      continue;
+                    }
+
+                    const d = dist[idx];
+                    const val = smoothed[idx];
+                    let opacity = 0;
+                    if (val <= minThresh) {
+                      opacity = 0;
+                    } else if (val >= maxThresh) {
+                      opacity = 255;
+                    } else {
+                      const u = (val - minThresh) * invW;
+                      const s = u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
+                      opacity = Math.round(s * 255.0);
+                    }
+
+                    if (d < 1.5 && opacity > 0) {
+                      const boundaryWeight = Math.min(1.0, d / 1.45);
+                      alphaBuffer[idx] = Math.min(254, Math.max(1, Math.round(opacity * boundaryWeight)));
+                    } else {
+                      alphaBuffer[idx] = opacity;
+                    }
+                  } else {
+                    alphaBuffer[idx] = 0;
+                  }
+                }
 
                 const rleChunks = [];
                 let curByte = 0;
                 let curCount = 0;
                 for (let i = 0; i < OUTPUT; i++) {
-                  const val = rawAlphaOutput[i];
-                  let byteVal = 0;
-                  if (val <= vMin) byteVal = 0;
-                  else if (val >= vMax) byteVal = 255;
-                  else {
-                    const norm = (val - vMin) * invSpan;
-                    byteVal = Math.round(norm * norm * (3 - 2 * norm) * 255);
-                  }
+                  const byteVal = alphaBuffer[i];
                   if (curCount === 0) {
                     curByte = byteVal;
                     curCount = 1;
@@ -332,7 +683,13 @@ class CutoutWorkerBridge {
     slot: CutoutWorkerSlot,
     type: "init" | "infer" | "infer-frame",
     floatData?: Float32Array,
-    frameData?: { rgbaData: Uint8ClampedArray; threshold: number; feather: number; includeRawAlpha: boolean },
+    frameData?: {
+      rgbaData: Uint8ClampedArray;
+      threshold: number;
+      feather: number;
+      includeRawAlpha: boolean;
+      crop?: { dx: number; dy: number; dw: number; dh: number };
+    },
     timeout = 30_000,
   ): Promise<CutoutWorkerResult | null> {
     const id = ++this.nextId;
@@ -377,12 +734,13 @@ class CutoutWorkerBridge {
     threshold: number,
     feather: number,
     includeRawAlpha: boolean,
+    crop?: { dx: number; dy: number; dw: number; dh: number },
   ): Promise<CutoutWorkerResult | null> {
     if (rgbaData.length !== 512 * 512 * 4 || !(await this.init())) return null;
     if (this.workers.length === 0) return null;
     const idleSlot = this.workers.find((w) => w.active === 0);
     const slot = idleSlot || this.workers.reduce((best, candidate) => candidate.active < best.active ? candidate : best);
-    return this.requestOnWorker(slot, "infer-frame", undefined, { rgbaData, threshold, feather, includeRawAlpha });
+    return this.requestOnWorker(slot, "infer-frame", undefined, { rgbaData, threshold, feather, includeRawAlpha, crop });
   }
 
   public terminate(): void {

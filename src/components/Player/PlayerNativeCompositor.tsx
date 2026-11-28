@@ -443,20 +443,31 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
   maskUri: string | null;
   isInside?: boolean;
 }) {
-  // Continuous temporal hold: smoothly bridge frame gaps without flashing raw background
+  // Continuous temporal hold: bridge brief seek gaps when paused, but clear stale frame during playback if unbaked
   const lastValidMaskUriRef = React.useRef<string | null>(maskUri);
   if (maskUri) {
     lastValidMaskUriRef.current = maskUri;
+  } else if (isPlaying || !cutout?.enabled || cutout?.mode === "none") {
+    lastValidMaskUriRef.current = null;
   }
   const effectiveMaskUri = maskUri || lastValidMaskUriRef.current;
-  const isCutoutActive = !!(cutout?.enabled && effectiveMaskUri);
+  const isCutoutActive = !!(cutout?.enabled && cutout?.mode !== "none" && effectiveMaskUri);
+
+  const [hasDecodedCutoutFrame, setHasDecodedCutoutFrame] = React.useState(false);
+  React.useEffect(() => {
+    if (!cutout?.enabled || cutout?.mode === "none" || !effectiveMaskUri) {
+      setHasDecodedCutoutFrame(false);
+    }
+  }, [cutout?.enabled, cutout?.mode, effectiveMaskUri, clip.id]);
+
+  const isCutoutOverlayReady = Boolean(isCutoutActive && hasDecodedCutoutFrame);
   const hasBackground =
-    isCutoutActive &&
+    isCutoutOverlayReady &&
     cutout.bgColor &&
     cutout.bgColor !== "none" &&
     cutout.bgColor !== "transparent";
   const hasStroke =
-    isCutoutActive &&
+    isCutoutOverlayReady &&
     cutout.strokeColor &&
     cutout.strokeColor !== "none" &&
     cutout.strokeColor !== "transparent" &&
@@ -477,11 +488,14 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
     30;
   const sourceFrameIdx = Math.max(0, Math.round(targetMediaTime * maskFps));
 
-  // High-performance lookahead mask prefetching into native memory cache
+  // Lookahead cutout frame prefetching (throttled every 4 frames to avoid 30fps native bridge churn)
+  const lastPrefetchWindowRef = React.useRef<number>(-999);
   React.useEffect(() => {
-    if (!isPlaying || !isCutoutActive) return;
+    if (!isCutoutActive) return;
+    if (Math.abs(sourceFrameIdx - lastPrefetchWindowRef.current) < 4) return;
+    lastPrefetchWindowRef.current = sourceFrameIdx;
     const prefetchUris: string[] = [];
-    for (let offset = 1; offset <= 5; offset++) {
+    for (let offset = 1; offset <= 6; offset++) {
       const nextIdx = clip.reverse ? Math.max(0, sourceFrameIdx - offset) : sourceFrameIdx + offset;
       const nextUri =
         getNativeMaskUri(`${clip.id}_src`, nextIdx, true, 2) ||
@@ -493,23 +507,9 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
       }
     }
     if (prefetchUris.length > 0) {
-      ExpoImage.prefetch(prefetchUris, "disk").catch(() => {});
+      ExpoImage.prefetch(prefetchUris, "memory-disk").catch(() => {});
     }
-  }, [isPlaying, isCutoutActive, sourceFrameIdx, clip.id, clip.sourceMediaId, clip.reverse, effectiveMaskUri]);
-
-  const maskElement = useMemo(() => {
-    if (!isCutoutActive || !effectiveMaskUri) return null;
-    return (
-      <ExpoImage
-        source={{ uri: effectiveMaskUri }}
-        style={StyleSheet.absoluteFill}
-        contentFit="contain"
-        cachePolicy="disk"
-        priority="high"
-        transition={{ duration: 40, effect: "cross-dissolve" }}
-      />
-    );
-  }, [isCutoutActive, effectiveMaskUri]);
+  }, [isCutoutActive, sourceFrameIdx, clip.id, clip.sourceMediaId, clip.reverse, effectiveMaskUri]);
 
   const strokeStyle = cutout?.strokeStyle || "solid";
   const isGlow = strokeStyle === "glow";
@@ -546,36 +546,58 @@ const NativeVideoCutout = React.memo(function NativeVideoCutout({
               },
             ]}
             contentFit="contain"
-            cachePolicy="disk"
+            cachePolicy="memory-disk"
             priority="high"
-            transition={{ duration: 40, effect: "cross-dissolve" }}
+            transition={0}
           />
         ))}
       </View>
     );
   }, [hasStroke, effectiveMaskUri, strokeWidth, strokeColor, isGlow, strokeOffsets]);
 
-  const video = (
-    <NativeVideoClipPlayer
-      clip={clip}
-      currentTime={currentTime}
-      isPlaying={isPlaying}
-      opacity={opacity}
-      isInside={isInside}
-    />
-  );
-
-  if (!isCutoutActive || !maskElement) return video;
-
+  // Keep NativeVideoClipPlayer continuously mounted in a fixed View position so audio & VideoView
+  // never unmount/remount or go black when Cutout is toggled or waiting for a frame decode.
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {hasBackground && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: cutout.bgColor }]} />
-      )}
-      {strokeElements}
-      <MaskedView style={StyleSheet.absoluteFill} maskElement={maskElement}>
-        {video}
-      </MaskedView>
+      <NativeVideoClipPlayer
+        clip={clip}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        opacity={isCutoutOverlayReady ? 0 : opacity}
+        isInside={isInside}
+      />
+      {isCutoutActive && effectiveMaskUri ? (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { opacity: isCutoutOverlayReady ? opacity : 0 },
+          ]}
+        >
+          {hasBackground && (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: cutout.bgColor }]} />
+          )}
+          {strokeElements}
+          <ExpoImage
+            source={{ uri: effectiveMaskUri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            priority="high"
+            transition={0}
+            onLoad={() => {
+              if (!hasDecodedCutoutFrame) {
+                setHasDecodedCutoutFrame(true);
+              }
+            }}
+            onError={() => {
+              if (hasDecodedCutoutFrame) {
+                setHasDecodedCutoutFrame(false);
+              }
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 });

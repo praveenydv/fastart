@@ -387,7 +387,8 @@ mod tests {
         assert_eq!(out_rgba[2], 255);
         assert_eq!(out_rgba[3], 255);
 
-        assert_eq!(out_rgba[4], 255);
+        // Pixel 1 (raw alpha 0.5) must have smooth continuous anti-aliased edge alpha, not hard-clipped binary 255
+        assert!(out_rgba[4] > 0 && out_rgba[4] < 255);
         assert_eq!(out_rgba[8], 0);
     }
 

@@ -203,16 +203,28 @@ export function generateCanvasBridgeHtml(
         luminosity: "luminosity"
       };
 
-      var chromaOffCanvas = document.createElement("canvas");
-      var cutoutSourceCanvas = document.createElement("canvas");
-      var autoCutoutMaskCanvas = document.createElement("canvas");
-      autoCutoutMaskCanvas.width = 512;
-      autoCutoutMaskCanvas.height = 512;
-      var autoCutoutMaskCtx = autoCutoutMaskCanvas.getContext("2d");
-      var autoCutoutImgData = autoCutoutMaskCtx ? autoCutoutMaskCtx.createImageData(512, 512) : null;
+      var chromaOffCanvas = null;
+      var cutoutSourceCanvas = null;
+      var autoCutoutMaskCanvas = null;
+      var autoCutoutMaskCtx = null;
+      var autoCutoutImgData = null;
+      var blurBgCanvas = null;
+      var blurBgCtx = null;
       var rleScratchBuffer = new Uint8Array(65536);
 
+      function ensureAutoCutoutMaskCanvas() {
+        if (!autoCutoutMaskCanvas) {
+          autoCutoutMaskCanvas = document.createElement("canvas");
+          autoCutoutMaskCanvas.width = 512;
+          autoCutoutMaskCanvas.height = 512;
+          autoCutoutMaskCtx = autoCutoutMaskCanvas.getContext("2d");
+          autoCutoutImgData = autoCutoutMaskCtx ? autoCutoutMaskCtx.createImageData(512, 512) : null;
+        }
+        return autoCutoutMaskCanvas;
+      }
+
       function unpackRleMaskToCanvas(base64Rle) {
+        ensureAutoCutoutMaskCanvas();
         if (!base64Rle || !autoCutoutMaskCtx || !autoCutoutImgData) return null;
         try {
           var bin = atob(base64Rle);
@@ -248,6 +260,7 @@ export function generateCanvasBridgeHtml(
       }
 
       function applyChromaCutout(sourceCanvas, w, h, keyHex, intensity, shadow, despill) {
+        if (!chromaOffCanvas) chromaOffCanvas = document.createElement("canvas");
         if (chromaOffCanvas.width !== w || chromaOffCanvas.height !== h) {
           chromaOffCanvas.width = w;
           chromaOffCanvas.height = h;
@@ -665,10 +678,10 @@ export function generateCanvasBridgeHtml(
       }
 
       // -----------------------------------------------------------------------
-      // 4. Preload Media Elements (Videos, Images, Audio)
+      // 4. Windowed / On-Demand Media Decoder Pool (prevents mobile OOM & codec exhaustion)
       // -----------------------------------------------------------------------
       const mediaMap = new Map();
-      // Pre-sort video clips by layer/trackIndex once at initialization to eliminate per-frame allocations & sorting
+      const mediaSourceNodeMap = new Map();
       const videoClips = (PROJECT.tracks?.video || []).slice().sort(function(a, b) {
         return (a.layer || a.trackIndex || 0) - (b.layer || b.trackIndex || 0);
       });
@@ -677,6 +690,62 @@ export function generateCanvasBridgeHtml(
       const captionClips = PROJECT.tracks?.captions || [];
       const stickerClips = PROJECT.tracks?.stickers || [];
       const effectClips = PROJECT.tracks?.effects || [];
+
+      // Precompute incoming transition lead time per clip once (O(1) lookup inside tick)
+      const transLeadByClipId = new Map();
+      for (let vi = 0; vi < videoClips.length; vi++) {
+        const c = videoClips[vi];
+        if (!c || c.type !== "video") continue;
+        let tLead = 0;
+        for (let oi = 0; oi < videoClips.length; oi++) {
+          const oth = videoClips[oi];
+          if (oth.id !== c.id && (oth.trackIndex || 0) === (c.trackIndex || 0)) {
+            const oEnd = (oth.startTime || 0) + (oth.duration || 0);
+            const oTrans = oth.transition;
+            if (
+              oTrans &&
+              oTrans.duration > 0 &&
+              oTrans.type &&
+              oTrans.type !== "none" &&
+              oTrans.type !== "cut" &&
+              Math.abs(oEnd - c.startTime) < 0.35
+            ) {
+              tLead = oTrans.duration;
+              break;
+            }
+          }
+        }
+        transLeadByClipId.set(c.id, tLead);
+      }
+
+      // Track last timeline endTime per media element so decoders are disposed immediately after final use
+      const elementMaxEndMap = new Map();
+      const disposedElements = new Set();
+
+      function registerElementEndTime(el, endTime) {
+        if (!el) return;
+        const prev = elementMaxEndMap.get(el) || 0;
+        if (endTime > prev) elementMaxEndMap.set(el, endTime);
+      }
+
+      function disposeMediaElement(el) {
+        if (!el || disposedElements.has(el)) return;
+        disposedElements.add(el);
+        try {
+          const srcNode = mediaSourceNodeMap.get(el);
+          if (srcNode) {
+            try { srcNode.disconnect(); } catch (_) {}
+            mediaSourceNodeMap.delete(el);
+          }
+          if (el instanceof HTMLMediaElement) {
+            el.pause();
+            el.removeAttribute("src");
+            el.src = "";
+            el.load();
+            if (el.parentNode) el.parentNode.removeChild(el);
+          }
+        } catch (_) {}
+      }
 
       function findContiguousPrecedingClip(clip, allClips) {
         if (!clip || clip.type !== "video" || clip.reverse) return null;
@@ -715,85 +784,102 @@ export function generateCanvasBridgeHtml(
         return null;
       }
 
+      function createVideoElementForClip(clip, waitReady) {
+        const contiguousPrev = findContiguousPrecedingClip(clip, videoClips);
+        let v;
+        if (contiguousPrev && mediaMap.has(contiguousPrev.id)) {
+          v = mediaMap.get(contiguousPrev.id);
+          mediaMap.set(clip.id, v);
+          registerElementEndTime(v, (clip.startTime || 0) + (clip.duration || 0));
+          return { element: v, promise: Promise.resolve() };
+        }
+
+        v = document.createElement("video");
+        v.muted = true;
+        v.defaultMuted = true;
+        v.playsInline = true;
+        v.setAttribute("playsinline", "true");
+        v.setAttribute("webkit-playsinline", "true");
+        if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+          v.crossOrigin = "anonymous";
+        }
+        v.preload = "auto";
+        v.src = clip.url;
+        v.style.position = "fixed";
+        v.style.left = "0px";
+        v.style.top = "0px";
+        v.style.width = "32px";
+        v.style.height = "32px";
+        v.style.opacity = "0.001";
+        v.style.pointerEvents = "none";
+        v.style.zIndex = "-9999";
+        document.body.appendChild(v);
+        try { v.load(); } catch(e) {}
+
+        mediaMap.set(clip.id, v);
+        if (!mediaMap.has(clip.url)) {
+          mediaMap.set(clip.url, v);
+        }
+        registerElementEndTime(v, (clip.startTime || 0) + (clip.duration || 0));
+
+        const readyPromise = waitReady ? new Promise((resolve) => {
+          if (v.readyState >= 2) {
+            resolve();
+            return;
+          }
+          let done = false;
+          const finish = () => { if (!done) { done = true; resolve(); } };
+          v.onloadeddata = finish;
+          v.oncanplay = finish;
+          v.onerror = finish;
+          setTimeout(finish, 4500);
+        }) : Promise.resolve();
+
+        return { element: v, promise: readyPromise };
+      }
+
+      function createAudioElementForClip(clip, waitReady) {
+        const a = new Audio();
+        if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
+          a.crossOrigin = "anonymous";
+        }
+        a.preload = "auto";
+        a.src = clip.url;
+        mediaMap.set("audio_" + clip.id, a);
+        mediaMap.set("audio_" + clip.url, a);
+        registerElementEndTime(a, (clip.startTime || 0) + (clip.duration || 0));
+
+        const readyPromise = waitReady ? new Promise((resolve) => {
+          if (a.readyState >= 2) {
+            resolve();
+            return;
+          }
+          let done = false;
+          const finish = () => { if (!done) { done = true; resolve(); } };
+          a.oncanplaythrough = finish;
+          a.onloadeddata = finish;
+          a.onerror = finish;
+          setTimeout(finish, 2500);
+        }) : Promise.resolve();
+
+        return { element: a, promise: readyPromise };
+      }
+
       async function preloadAllMedia() {
         const promises = [];
+        const INITIAL_PRELOAD_WINDOW_SEC = 3.5;
 
-        // Preload Video Clips
+        // Preload Video Clips active near t=0 (later clips load lazily right before playback)
         for (const clip of videoClips) {
           if (!clip.url) continue;
           if (clip.type === "video") {
-            const contiguousPrev = findContiguousPrecedingClip(clip, videoClips);
-            let v;
-            if (contiguousPrev && mediaMap.has(contiguousPrev.id)) {
-              v = mediaMap.get(contiguousPrev.id);
-            } else {
-              v = document.createElement("video");
-              v.muted = true;
-              v.defaultMuted = true;
-              v.playsInline = true;
-              v.setAttribute("playsinline", "true");
-              v.setAttribute("webkit-playsinline", "true");
-              if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
-                v.crossOrigin = "anonymous";
-              }
-              v.preload = "auto";
-              v.src = clip.url;
-              v.style.position = "fixed";
-              v.style.left = "0px";
-              v.style.top = "0px";
-              v.style.width = "64px";
-              v.style.height = "64px";
-              v.style.opacity = "0.001";
-              v.style.pointerEvents = "none";
-              v.style.zIndex = "-9999";
-              document.body.appendChild(v);
-              try { v.load(); } catch(e) {}
-              promises.push(new Promise((resolve) => {
-                if (v.readyState >= 1) {
-                  resolve();
-                  return;
-                }
-                let done = false;
-                const finish = () => { if (!done) { done = true; resolve(); } };
-                v.onloadedmetadata = finish;
-                v.onloadeddata = finish;
-                v.oncanplay = finish;
-                v.onerror = finish;
-                setTimeout(finish, 15000);
-              }));
+            const lead = transLeadByClipId.get(clip.id) || 0;
+            const effectiveStart = Math.max(0, (clip.startTime || 0) - lead);
+            if (effectiveStart <= INITIAL_PRELOAD_WINDOW_SEC) {
+              const res = createVideoElementForClip(clip, true);
+              promises.push(res.promise);
             }
-            mediaMap.set(clip.id, v);
-            if (!mediaMap.has(clip.url)) {
-              mediaMap.set(clip.url, v);
-            }
-
-            // Preload isolated Audio element for video soundtrack so canvas muting never silences the export
-            if (!clip.muted) {
-              const va = new Audio();
-              if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
-                va.crossOrigin = "anonymous";
-              }
-              va.preload = "auto";
-              va.src = clip.url;
-              promises.push(new Promise((resolve) => {
-                if (va.readyState >= 2) {
-                  resolve();
-                  return;
-                }
-                let done = false;
-                const finish = () => { if (!done) { done = true; resolve(); } };
-                va.oncanplaythrough = finish;
-                va.onloadeddata = finish;
-                va.onerror = finish;
-                setTimeout(finish, 15000);
-              }));
-              mediaMap.set("video_audio_" + clip.id, va);
-              if (!mediaMap.has("video_audio_" + clip.url)) {
-                mediaMap.set("video_audio_" + clip.url, va);
-              }
-            }
-
-            if (clip.thumbnail) {
+            if (clip.thumbnail && !clip.thumbnail.startsWith("data:")) {
               const thumbImg = new Image();
               if (clip.thumbnail.startsWith("http://") || clip.thumbnail.startsWith("https://")) {
                 thumbImg.crossOrigin = "anonymous";
@@ -827,7 +913,7 @@ export function generateCanvasBridgeHtml(
                 img.src = clip.url;
                 resolve();
               };
-              setTimeout(resolve, 500);
+              setTimeout(resolve, 800);
             }));
             img.src = clip.url;
             mediaMap.set(clip.id, img);
@@ -837,29 +923,13 @@ export function generateCanvasBridgeHtml(
           }
         }
 
-        // Preload Audio Clips
+        // Preload Audio Clips starting near t=0
         for (const clip of audioClips) {
           if (!clip.url) continue;
-          const a = new Audio();
-          if (clip.url.startsWith("http://") || clip.url.startsWith("https://")) {
-            a.crossOrigin = "anonymous";
+          if ((clip.startTime || 0) <= INITIAL_PRELOAD_WINDOW_SEC) {
+            const res = createAudioElementForClip(clip, true);
+            promises.push(res.promise);
           }
-          a.preload = "auto";
-          a.src = clip.url;
-          promises.push(new Promise((resolve) => {
-            if (a.readyState >= 2) {
-              resolve();
-              return;
-            }
-            let done = false;
-            const finish = () => { if (!done) { done = true; resolve(); } };
-            a.oncanplaythrough = finish;
-            a.onloadeddata = finish;
-            a.onerror = finish;
-            setTimeout(finish, 600);
-          }));
-          mediaMap.set("audio_" + clip.id, a);
-          mediaMap.set("audio_" + clip.url, a);
         }
 
         // Preload Sticker Images
@@ -908,8 +978,8 @@ export function generateCanvasBridgeHtml(
       // -----------------------------------------------------------------------
       // 5. Core Composite Frame Renderer
       // -----------------------------------------------------------------------
-      const maskOffCanvas = document.createElement("canvas");
-      const maskShapeCanvas = document.createElement("canvas");
+      var maskOffCanvas = null;
+      var maskShapeCanvas = null;
 
       function renderFrame(time) {
         ctx.save();
@@ -947,7 +1017,7 @@ export function generateCanvasBridgeHtml(
           if (blurMedia) {
             const mw = blurMedia.videoWidth || blurMedia.naturalWidth || blurMedia.width || width;
             const mh = blurMedia.videoHeight || blurMedia.naturalHeight || blurMedia.height || height;
-            const mAspect = mw / mh;
+            const mAspect = mw / Math.max(1, mh);
             const cAspect = width / height;
             let dw = width, dh = height;
             if (mAspect > cAspect) {
@@ -963,10 +1033,30 @@ export function generateCanvasBridgeHtml(
             const fh = dh * scale;
             const fx = (width - fw) / 2;
             const fy = (height - fh) / 2;
-            ctx.save();
-            ctx.filter = "blur(" + blurPx + "px) brightness(0.72) saturate(1.2)";
-            ctx.drawImage(blurMedia, fx, fy, fw, fh);
-            ctx.restore();
+
+            // Downsample blur background to <=160px before CSS filter to avoid full-res GPU blur OOM & stalls
+            if (!blurBgCanvas) {
+              blurBgCanvas = document.createElement("canvas");
+              blurBgCtx = blurBgCanvas.getContext("2d");
+            }
+            const thumbW = 160;
+            const thumbH = Math.max(64, Math.round(thumbW * (height / width)));
+            if (blurBgCanvas.width !== thumbW || blurBgCanvas.height !== thumbH) {
+              blurBgCanvas.width = thumbW;
+              blurBgCanvas.height = thumbH;
+            }
+            if (blurBgCtx) {
+              const sFactor = thumbW / width;
+              blurBgCtx.save();
+              blurBgCtx.clearRect(0, 0, thumbW, thumbH);
+              blurBgCtx.filter = "blur(" + Math.max(2, Math.round(blurPx * sFactor * 1.4)) + "px) brightness(0.72) saturate(1.2)";
+              blurBgCtx.drawImage(blurMedia, fx * sFactor, fy * sFactor, fw * sFactor, fh * sFactor);
+              blurBgCtx.restore();
+              ctx.drawImage(blurBgCanvas, 0, 0, width, height);
+            } else {
+              ctx.fillStyle = "#0B0D13";
+              ctx.fillRect(0, 0, width, height);
+            }
           } else {
             ctx.fillStyle = "#0B0D13";
             ctx.fillRect(0, 0, width, height);
@@ -1134,9 +1224,12 @@ export function generateCanvasBridgeHtml(
                 ctx.fillRect(dx, dy, dw, dh);
                 ctx.restore();
               }
-              const maxDim = 3840;
-              const procW = Math.max(16, Math.min(maxDim, Math.round(dw)));
-              const procH = Math.max(16, Math.min(maxDim, Math.round(dh)));
+              const isChroma = cutout.mode === "chroma" || cutout.mode === "custom";
+              const maxDim = isChroma ? 720 : 1080;
+              const scaleCap = Math.min(1, maxDim / Math.max(16, Math.max(dw, dh)));
+              const procW = Math.max(16, Math.round(dw * scaleCap));
+              const procH = Math.max(16, Math.round(dh * scaleCap));
+              if (!cutoutSourceCanvas) cutoutSourceCanvas = document.createElement("canvas");
               if (cutoutSourceCanvas.width !== procW || cutoutSourceCanvas.height !== procH) {
                 cutoutSourceCanvas.width = procW;
                 cutoutSourceCanvas.height = procH;
@@ -1153,12 +1246,16 @@ export function generateCanvasBridgeHtml(
                   const speed = Math.max(0.1, Math.min(16, vid.speed || 1.0));
                   const sourceTime = (vid.trimIn || 0) + clipLocalTime * speed;
                   const frameIdx = Math.max(0, Math.round(sourceTime * maskFps));
+                  if (vid._firstMaskKey === undefined) {
+                    const ks = Object.keys(vid.cutoutMasks.masks);
+                    vid._firstMaskKey = ks.length > 0 ? ks[0] : "";
+                  }
                   const rleB64 = vid.cutoutMasks.masks[frameIdx] ||
                     vid.cutoutMasks.masks[String(frameIdx)] ||
                     vid.cutoutMasks.masks[vid.id + "_" + frameIdx] ||
                     (vid.sourceMediaId ? vid.cutoutMasks.masks[vid.sourceMediaId + "_" + frameIdx] : null) ||
                     vid.cutoutMasks.masks[0] ||
-                    vid.cutoutMasks.masks[Object.keys(vid.cutoutMasks.masks)[0]];
+                    (vid._firstMaskKey ? vid.cutoutMasks.masks[vid._firstMaskKey] : null);
                   if (rleB64) {
                     const maskCanvas = unpackRleMaskToCanvas(rleB64);
                     if (maskCanvas) {
@@ -1177,7 +1274,7 @@ export function generateCanvasBridgeHtml(
                 }
 
                 if (!isHandled) {
-                  if (cutout.mode === "chroma" || cutout.mode === "custom") {
+                  if (isChroma) {
                     drawSource = applyChromaCutout(
                       cutoutSourceCanvas,
                       procW,
@@ -1207,8 +1304,11 @@ export function generateCanvasBridgeHtml(
               const minDim = Math.min(dw, dh);
               const featherPx = rawFeather > 0 ? (minDim * (rawFeather / 100) * 0.45) : 0;
 
-              const maskW = Math.max(1, Math.ceil(dw));
-              const maskH = Math.max(1, Math.ceil(dh));
+              const maskScaleCap = Math.min(1, 1080 / Math.max(1, Math.max(dw, dh)));
+              const maskW = Math.max(1, Math.ceil(dw * maskScaleCap));
+              const maskH = Math.max(1, Math.ceil(dh * maskScaleCap));
+              if (!maskOffCanvas) maskOffCanvas = document.createElement("canvas");
+              if (!maskShapeCanvas) maskShapeCanvas = document.createElement("canvas");
               if (maskOffCanvas.width !== maskW || maskOffCanvas.height !== maskH) {
                 maskOffCanvas.width = maskW;
                 maskOffCanvas.height = maskH;
@@ -1232,15 +1332,16 @@ export function generateCanvasBridgeHtml(
 
                 if (flipX || flipY) {
                   offCtx.save();
-                  offCtx.translate(dw / 2, dh / 2);
+                  offCtx.translate(maskW / 2, maskH / 2);
                   offCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-                  offCtx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, -dw / 2, -dh / 2, dw, dh);
+                  offCtx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, -maskW / 2, -maskH / 2, maskW, maskH);
                   offCtx.restore();
                 } else {
-                  offCtx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, 0, 0, dw, dh);
+                  offCtx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, 0, 0, maskW, maskH);
                 }
 
                 sCtx.save();
+                sCtx.scale(maskScaleCap, maskScaleCap);
                 sCtx.translate(dw / 2 + mPosX, dh / 2 + mPosY);
                 sCtx.rotate(mRot);
                 if (featherPx > 0) {
@@ -1350,11 +1451,11 @@ export function generateCanvasBridgeHtml(
             ctx.translate(-posX, -posY);
           }
 
-          const isItalic = Boolean(txt.italic || (txt as any).style?.fontStyle === "italic");
-          const isBold = Boolean(txt.bold || (txt as any).style?.fontWeight === "bold" || (txt as any).style?.fontWeight === "800");
-          const fontFam = (txt as any).style?.fontFamily || txt.fontFamily || "sans-serif";
+          const isItalic = Boolean(txt.italic || (txt.style && txt.style.fontStyle === "italic"));
+          const isBold = Boolean(txt.bold || (txt.style && (txt.style.fontWeight === "bold" || txt.style.fontWeight === "800")));
+          const fontFam = (txt.style && txt.style.fontFamily) || txt.fontFamily || "sans-serif";
           ctx.font = (isItalic ? "italic " : "") + (isBold ? "bold " : "") + fontSize + "px " + fontFam;
-          ctx.textAlign = (((txt as any).style?.textAlign || txt.textAlign || "center").toLowerCase()) as CanvasTextAlign;
+          ctx.textAlign = ((txt.style && txt.style.textAlign) || txt.textAlign || "center").toLowerCase();
           ctx.textBaseline = "middle";
 
           // Optional Background Badge
@@ -1800,11 +1901,14 @@ export function generateCanvasBridgeHtml(
         for (var i = 0; i < formatted.length; i++) {
           out.set(formatted[i], off);
           off += formatted[i].length;
+          formatted[i] = null;
+          if (samples[i]) samples[i].data = null;
         }
         if (hasAudio) {
           for (var i = 0; i < audioSamples.length; i++) {
             out.set(audioSamples[i].data, off);
             off += audioSamples[i].data.length;
+            audioSamples[i].data = null;
           }
         }
         out.set(moov, off);
@@ -2467,18 +2571,55 @@ export function generateCanvasBridgeHtml(
           var offlineCtx = new OfflineCtxClass(2, totalAudioFrames, sampleRate);
           var audioCtx = new AudioCtxClass();
 
+          var MAX_AUDIO_DECODE_BYTES = 150 * 1024 * 1024;
+          async function fetchArrayBufferSafely(url) {
+            if (!url) return null;
+            try {
+              var resp = await fetch(url);
+              if (resp.ok) {
+                var cl = Number(resp.headers && resp.headers.get ? resp.headers.get("content-length") : 0);
+                if (cl && cl > MAX_AUDIO_DECODE_BYTES) return null;
+                var buf = await resp.arrayBuffer();
+                return buf && buf.byteLength <= MAX_AUDIO_DECODE_BYTES ? buf : null;
+              }
+            } catch (_) {}
+            // WebView file:// fallback via XMLHttpRequest
+            if (typeof XMLHttpRequest !== "undefined") {
+              try {
+                return await new Promise(function(resolve) {
+                  var xhr = new XMLHttpRequest();
+                  xhr.open("GET", url, true);
+                  xhr.responseType = "arraybuffer";
+                  xhr.onprogress = function(ev) {
+                    if (ev.loaded > MAX_AUDIO_DECODE_BYTES) xhr.abort();
+                  };
+                  xhr.onload = function() {
+                    if ((xhr.status === 200 || xhr.status === 0) && xhr.response && xhr.response.byteLength <= MAX_AUDIO_DECODE_BYTES) {
+                      resolve(xhr.response);
+                    } else {
+                      resolve(null);
+                    }
+                  };
+                  xhr.onerror = function() { resolve(null); };
+                  xhr.onabort = function() { resolve(null); };
+                  xhr.send();
+                });
+              } catch (_) {}
+            }
+            return null;
+          }
+
           for (var vi = 0; vi < videoClips.length; vi++) {
             var c = videoClips[vi];
             if (c.type === "video" && !c.muted && !c.isMuted && (c.volume === undefined || c.volume > 0)) {
               try {
-                var resp = await fetch(c.url);
-                if (resp.ok) {
-                  var rawBuf = await resp.arrayBuffer();
+                var rawBuf = await fetchArrayBufferSafely(c.url);
+                if (rawBuf) {
                   var audioBuf = null;
                   try {
-                    audioBuf = await audioCtx.decodeAudioData(rawBuf.slice(0));
+                    audioBuf = await audioCtx.decodeAudioData(rawBuf);
                   } catch (decErr) {
-                    var m4aBuf = convertMp4ToAudioOnlyBuffer(rawBuf.slice(0));
+                    var m4aBuf = convertMp4ToAudioOnlyBuffer(rawBuf);
                     if (m4aBuf) {
                       try { audioBuf = await audioCtx.decodeAudioData(m4aBuf); } catch (_) {}
                     }
@@ -2497,9 +2638,8 @@ export function generateCanvasBridgeHtml(
             var ac = audioClips[ai];
             if (ac.url && !ac.muted && !ac.isMuted) {
               try {
-                var aResp = await fetch(ac.url);
-                if (aResp.ok) {
-                  var aRaw = await aResp.arrayBuffer();
+                var aRaw = await fetchArrayBufferSafely(ac.url);
+                if (aRaw) {
                   var aDecoded = await audioCtx.decodeAudioData(aRaw);
                   if (aDecoded) {
                     scheduleAudioBuffer(offlineCtx, aDecoded, ac);
@@ -2553,6 +2693,35 @@ export function generateCanvasBridgeHtml(
         }
       }
 
+      async function sendBytesChunked(bytes, mimeType, extension, extraEndFields) {
+        sendToNative({ type: "CHUNK_START", mimeType: mimeType, extension: extension });
+        var chunkSize = 196608; // Multiple of 3 (65536 * 3) => zero '=' padding in intermediate chunks
+        var binarySliceSize = 8192;
+        var chunkIdx = 0;
+        for (var i = 0; i < bytes.length; i += chunkSize) {
+          var sub = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+          var binary = "";
+          for (var j = 0; j < sub.length; j += binarySliceSize) {
+            binary += String.fromCharCode.apply(null, sub.subarray(j, Math.min(j + binarySliceSize, sub.length)));
+          }
+          sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
+          chunkIdx++;
+          if (chunkIdx % 4 === 0) {
+            await new Promise(function(r) { setTimeout(r, 0); });
+          }
+        }
+        var endMsg = {
+          type: "CHUNK_END",
+          mimeType: mimeType,
+          extension: extension,
+          fileSize: bytes.length
+        };
+        if (extraEndFields) {
+          for (var k in extraEndFields) endMsg[k] = extraEndFields[k];
+        }
+        sendToNative(endMsg);
+      }
+
       // -----------------------------------------------------------------------
       // 7. Main Export Pipeline
       // -----------------------------------------------------------------------
@@ -2560,17 +2729,31 @@ export function generateCanvasBridgeHtml(
         var durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         var is4K = width >= 3840 || height >= 3840 || width >= 2160 || height >= 2160;
         var is1080p = width >= 1920 || height >= 1920 || width >= 1080 || height >= 1080;
-        var targetBps = is4K ? 22000000 : is1080p ? 8500000 : 4500000;
-        if (EXPORT_OPTIONS.fps >= 60) targetBps = Math.round(targetBps * 1.4);
+        var targetBps = is4K ? 16000000 : is1080p ? 6000000 : 3500000;
+        if (EXPORT_OPTIONS.fps >= 60) targetBps = Math.round(targetBps * 1.3);
 
         sendToNative({ type: "PROGRESS", progress: 0, status: "Preloading assets..." });
         await preloadAllMedia();
         sendToNative({ type: "PROGRESS", progress: 0, status: "Assets ready, initiating render..." });
 
-        // A. Snapshot PNG Export
+        // A. Snapshot PNG Export (chunk-streamed to avoid monolithic WebView bridge spikes on 1080p/4K)
         if (EXPORT_OPTIONS.format === "png") {
           sendToNative({ type: "PROGRESS", progress: 0, status: "Rendering composite frame..." });
           renderFrame(EXPORT_OPTIONS.currentTime || 0);
+          var pngBlob = typeof canvas.toBlob === "function"
+            ? await new Promise(function(resolve) {
+                try {
+                  canvas.toBlob(function(b) { resolve(b); }, "image/png", 0.98);
+                } catch (_) {
+                  resolve(null);
+                }
+              })
+            : null;
+          if (pngBlob) {
+            var pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+            await sendBytesChunked(pngBytes, "image/png", "png");
+            return;
+          }
           const dataUrl = canvas.toDataURL("image/png", 0.98);
           const base64 = dataUrl.split(",")[1];
           sendToNative({
@@ -2780,22 +2963,9 @@ export function generateCanvasBridgeHtml(
               audioRes.audioChannels,
               audioRes.audioDescription
             );
+            videoSamples.length = 0;
 
-            sendToNative({ type: "CHUNK_START", mimeType: "video/mp4", extension: "mp4" });
-            var chunkSize = 65535; // Multiple of 3 (21845 * 3) guarantees zero Base64 '=' padding on chunks
-            for (var i = 0; i < mp4Bytes.length; i += chunkSize) {
-              var sub = mp4Bytes.subarray(i, Math.min(i + chunkSize, mp4Bytes.length));
-              var binary = "";
-              for (var j = 0; j < sub.length; j++) binary += String.fromCharCode(sub[j]);
-              sendToNative({ type: "CHUNK_DATA", chunk: btoa(binary) });
-            }
-            sendToNative({
-              type: "CHUNK_END",
-              mimeType: "video/mp4",
-              extension: "mp4",
-              duration: durationSec,
-              fileSize: mp4Bytes.length
-            });
+            await sendBytesChunked(mp4Bytes, "video/mp4", "mp4", { duration: durationSec });
             return;
           } catch (turboFallbackErr) {
             console.warn("[mobileWebBridge] Turbo WebCodecs fallback to MediaRecorder:", turboFallbackErr);
@@ -2827,53 +2997,57 @@ export function generateCanvasBridgeHtml(
           }
         }
 
-        // Web Audio API Stereo Track Mixdown
+        // Web Audio API Stereo Track Mixdown (single-element video+audio routing, zero duplicate decoders)
         let audioCtx = null;
         let audioDest = null;
+        var videoGainNodes = new Map();
+        var audioGainNodes = new Map();
+        var elementGainNodeMap = new Map();
+
+        function attachMediaElementToAudio(clip, el, gainMap) {
+          if (!audioCtx || !audioDest || !el) return false;
+          if (!(el instanceof HTMLAudioElement || el instanceof HTMLVideoElement)) return false;
+          try {
+            let gain = elementGainNodeMap.get(el);
+            if (!gain) {
+              const source = audioCtx.createMediaElementSource(el);
+              gain = audioCtx.createGain();
+              source.connect(gain).connect(audioDest);
+              mediaSourceNodeMap.set(el, source);
+              elementGainNodeMap.set(el, gain);
+            }
+            const isMuted = clip.muted || clip.isMuted;
+            const rawVol = clip.volume !== undefined ? clip.volume : 1.0;
+            gain.gain.value = isMuted ? 0 : (rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol));
+            gainMap.set(clip.id, gain);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+
         try {
           const AudioContextClass = window.AudioContext || window.webkitAudioContext;
           if (AudioContextClass) {
             audioCtx = new AudioContextClass();
             if (audioCtx.state === "suspended") {
-              await audioCtx.resume();
+              await Promise.race([
+                audioCtx.resume().catch(function() {}),
+                new Promise(function(r) { setTimeout(r, 400); })
+              ]);
             }
             audioDest = audioCtx.createMediaStreamDestination();
 
-            var videoGainNodes = new Map();
-            var audioGainNodes = new Map();
-
-            // Connect video clip soundtrack to audio destination (via dedicated Audio element or video element)
             for (const clip of videoClips) {
               if (clip.type === "video") {
-                const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-                const el = va || mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
-                if (el && (el instanceof HTMLAudioElement || el instanceof HTMLVideoElement)) {
-                  try {
-                    const source = audioCtx.createMediaElementSource(el);
-                    const gain = audioCtx.createGain();
-                    const isMuted = clip.muted || clip.isMuted;
-                    const rawVol = clip.volume !== undefined ? clip.volume : 1.0;
-                    gain.gain.value = isMuted ? 0 : (rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol));
-                    source.connect(gain).connect(audioDest);
-                    videoGainNodes.set(clip.id, gain);
-                  } catch (e) {}
-                }
+                const el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
+                if (el) attachMediaElementToAudio(clip, el, videoGainNodes);
               }
             }
 
-            // Connect audio clips to audio destination
             for (const clip of audioClips) {
               const a = mediaMap.get("audio_" + clip.id);
-              if (a && a instanceof HTMLAudioElement) {
-                try {
-                  const source = audioCtx.createMediaElementSource(a);
-                  const gain = audioCtx.createGain();
-                  const isMuted = clip.muted || clip.isMuted;
-                  gain.gain.value = isMuted ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
-                  source.connect(gain).connect(audioDest);
-                  audioGainNodes.set(clip.id, gain);
-                } catch (e) {}
-              }
+              if (a) attachMediaElementToAudio(clip, a, audioGainNodes);
             }
 
             const audioTracks = audioDest.stream.getAudioTracks();
@@ -3167,21 +3341,16 @@ export function generateCanvasBridgeHtml(
           if (stream) {
             try { stream.getTracks().forEach(function(t) { t.stop(); }); } catch(e) {}
           }
+          mediaMap.forEach(function(el) {
+            disposeMediaElement(el);
+          });
+          mediaMap.clear();
+          elementGainNodeMap.clear();
+          elementMaxEndMap.clear();
           if (audioCtx) {
             try { audioCtx.close(); } catch(e) {}
             audioCtx = null;
           }
-          mediaMap.forEach(function(el) {
-            try {
-              if (el instanceof HTMLMediaElement) {
-                el.pause();
-                el.src = "";
-                el.load();
-                if (el.parentNode) el.parentNode.removeChild(el);
-              }
-            } catch(e) {}
-          });
-          mediaMap.clear();
           headerBuffer = [];
           pendingBytes = new Uint8Array(0);
           chunkQueue.length = 0;
@@ -3193,6 +3362,7 @@ export function generateCanvasBridgeHtml(
             if (autoCutoutMaskCanvas) { autoCutoutMaskCanvas.width = 1; autoCutoutMaskCanvas.height = 1; }
             if (maskOffCanvas) { maskOffCanvas.width = 1; maskOffCanvas.height = 1; }
             if (maskShapeCanvas) { maskShapeCanvas.width = 1; maskShapeCanvas.height = 1; }
+            if (blurBgCanvas) { blurBgCanvas.width = 1; blurBgCanvas.height = 1; }
           } catch(e) {}
         }
 
@@ -3200,14 +3370,40 @@ export function generateCanvasBridgeHtml(
           sendToNative({ type: "ERROR", message: "MediaRecorder error: " + (err.message || "Unknown") });
         };
 
-        // Pre-cue all video elements to exact trimIn and initial speed before starting
+        function syncVideoMuteForAudioRouting(clip, el) {
+          if (!el || !(el instanceof HTMLVideoElement)) return;
+          var clipMuted = Boolean(clip.muted || clip.isMuted || (clip.volume !== undefined && clip.volume <= 0));
+          if (!clipMuted && mediaSourceNodeMap.has(el)) {
+            el.muted = false;
+            el.defaultMuted = false;
+            el.volume = 1.0;
+          } else {
+            el.muted = true;
+            el.defaultMuted = true;
+          }
+        }
+
+        function safePlayMedia(el) {
+          try {
+            var p = el.play();
+            if (p && typeof p.catch === "function") {
+              p.catch(function() {
+                try {
+                  el.muted = true;
+                  el.play().catch(function() {});
+                } catch(_) {}
+              });
+            }
+          } catch(_) {}
+        }
+
+        // Pre-cue loaded video elements to exact trimIn and initial speed before starting
         for (var vi = 0; vi < videoClips.length; vi++) {
           var clip = videoClips[vi];
           if (clip.type !== "video") continue;
           var el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
           if (el && el instanceof HTMLVideoElement) {
-            el.muted = true;
-            el.defaultMuted = true;
+            syncVideoMuteForAudioRouting(clip, el);
             var targetTrim = Math.max(0, clip.trimIn || 0);
             el.playbackRate = Math.max(0.1, Math.min(16, clip.speed || 1.0));
             if (Math.abs(el.currentTime - targetTrim) > 0.05) {
@@ -3238,9 +3434,15 @@ export function generateCanvasBridgeHtml(
           var firstEl = mediaMap.get(firstClip.id) || (firstClip.sourceMediaId ? mediaMap.get(firstClip.sourceMediaId) : null) || mediaMap.get(firstClip.url);
           if (firstEl && firstEl instanceof HTMLVideoElement) {
             try {
+              syncVideoMuteForAudioRouting(firstClip, firstEl);
               firstEl.currentTime = Math.max(0, firstClip.trimIn || 0);
               firstEl.playbackRate = Math.max(0.1, Math.min(16, firstClip.speed || 1.0));
-              await firstEl.play().catch(function() {});
+              try {
+                await firstEl.play();
+              } catch(_) {
+                firstEl.muted = true;
+                await firstEl.play().catch(function() {});
+              }
               await new Promise(function(resolve) {
                 var timer = null;
                 var onFrame = function() {
@@ -3279,7 +3481,15 @@ export function generateCanvasBridgeHtml(
         sendToNative({ type: "CHUNK_START", mimeType: mimeType, extension: extension });
         sendToNative({ type: "PROGRESS", progress: 0, status: "Encoding video stream..." });
         // Start recording with 250ms timeslice to stream chunks rapidly to native with minimal buffer bloat
-        recorder.start(250);
+        try {
+          recorder.start(250);
+        } catch (startErr) {
+          try {
+            recorder.start(1000);
+          } catch (startErr2) {
+            recorder.start();
+          }
+        }
         const startTime = performance.now();
         durationSec = Math.max(1.0, EXPORT_OPTIONS.duration || 10.0);
         const targetFps = Math.max(1, EXPORT_OPTIONS.fps || 30);
@@ -3299,10 +3509,6 @@ export function generateCanvasBridgeHtml(
                 const el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
                 if (el && el instanceof HTMLVideoElement && !el.paused) {
                   try { el.pause(); } catch(e) {}
-                }
-                const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-                if (va && va instanceof HTMLAudioElement && !va.paused) {
-                  try { va.pause(); } catch(e) {}
                 }
               }
               for (const clip of audioClips) {
@@ -3341,70 +3547,46 @@ export function generateCanvasBridgeHtml(
               return;
             }
 
-          // 1. Identify which video elements are active across all tracks in this frame
+          // 1. Identify active video elements & lazily warm upcoming clips within 2.5s window
           var activeVideoElements = new Set();
           for (var vi = 0; vi < videoClips.length; vi++) {
             var c = videoClips[vi];
             if (c.type !== "video") continue;
-            var tLead = 0;
-            for (var oi = 0; oi < videoClips.length; oi++) {
-              var oth = videoClips[oi];
-              if (oth.id !== c.id && (oth.trackIndex || 0) === (c.trackIndex || 0)) {
-                var oEnd = (oth.startTime || 0) + (oth.duration || 0);
-                var oTrans = oth.transition;
-                if (
-                  oTrans &&
-                  oTrans.duration > 0 &&
-                  oTrans.type &&
-                  oTrans.type !== "none" &&
-                  oTrans.type !== "cut" &&
-                  Math.abs(oEnd - c.startTime) < 0.35
-                ) {
-                  tLead = oTrans.duration;
-                  break;
-                }
-              }
-            }
+            var tLead = transLeadByClipId.get(c.id) || 0;
             var aStart = Math.max(0, c.startTime - tLead);
             var aEnd = c.startTime + c.duration;
+            if (c.url && !mediaMap.has(c.id) && curTime >= aStart - 2.5 && curTime < aEnd) {
+              var createdVid = createVideoElementForClip(c, false);
+              if (createdVid && createdVid.element) {
+                attachMediaElementToAudio(c, createdVid.element, videoGainNodes);
+                syncVideoMuteForAudioRouting(c, createdVid.element);
+              }
+            }
             if (curTime >= aStart && curTime < aEnd) {
               var vel = mediaMap.get(c.id) || (c.sourceMediaId ? mediaMap.get(c.sourceMediaId) : null) || mediaMap.get(c.url);
-              if (vel && vel instanceof HTMLVideoElement) {
+              if (vel && vel instanceof HTMLVideoElement && !disposedElements.has(vel)) {
                 activeVideoElements.add(vel);
               }
             }
           }
 
-          // 2. Synchronize active video playback with exact seek and micro-adjustments
+          // 2. Synchronize active video playback and release finished decoders
           for (const clip of videoClips) {
             if (clip.type !== "video") continue;
             const el = mediaMap.get(clip.id) || (clip.sourceMediaId ? mediaMap.get(clip.sourceMediaId) : null) || mediaMap.get(clip.url);
-            if (!el || !(el instanceof HTMLVideoElement)) continue;
+            if (!el || !(el instanceof HTMLVideoElement) || disposedElements.has(el)) continue;
 
-            // Check if an incoming transition from a preceding clip requires this clip to play early
-            var transLead = 0;
-            for (var oi = 0; oi < videoClips.length; oi++) {
-              var other = videoClips[oi];
-              if (other.id !== clip.id && (other.trackIndex || 0) === (clip.trackIndex || 0)) {
-                var otherEnd = (other.startTime || 0) + (other.duration || 0);
-                var otherTrans = other.transition;
-                if (
-                  otherTrans &&
-                  otherTrans.duration > 0 &&
-                  otherTrans.type &&
-                  otherTrans.type !== "none" &&
-                  otherTrans.type !== "cut" &&
-                  Math.abs(otherEnd - clip.startTime) < 0.35
-                ) {
-                  transLead = otherTrans.duration;
-                  break;
-                }
-              }
-            }
-
+            var transLead = transLeadByClipId.get(clip.id) || 0;
             var activeStart = Math.max(0, clip.startTime - transLead);
             var activeEnd = clip.startTime + clip.duration;
             var isInside = curTime >= activeStart && curTime < activeEnd;
+
+            // Dispose hardware decoder once its final usage across all sharing clips has passed
+            var elMaxEnd = elementMaxEndMap.get(el) || activeEnd;
+            if (curTime > elMaxEnd + 0.35 && !activeVideoElements.has(el)) {
+              disposeMediaElement(el);
+              continue;
+            }
 
             // Warm pre-cue (seek only, never play early!)
             var isPreRolling = curTime >= activeStart - 0.50 && curTime < activeStart;
@@ -3422,7 +3604,9 @@ export function generateCanvasBridgeHtml(
 
             const vGain = videoGainNodes.get(clip.id);
             if (vGain && audioCtx) {
-              const baseVol = (clip.muted || clip.isMuted) ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
+              const rawVol = clip.volume !== undefined ? clip.volume : 1.0;
+              const normVol = rawVol > 2 ? rawVol / 100 : Math.max(0, rawVol);
+              const baseVol = (clip.muted || clip.isMuted) ? 0 : normVol;
               if (isInside) {
                 const clipLocalTime = Math.max(0, curTime - clip.startTime);
                 let vol = baseVol;
@@ -3440,6 +3624,7 @@ export function generateCanvasBridgeHtml(
             }
 
             if (isInside) {
+              syncVideoMuteForAudioRouting(clip, el);
               var clipLocalTime = Math.max(0, curTime - clip.startTime);
               if (curTime < clip.startTime && transLead > 0) {
                 var transProg = Math.max(0, Math.min(1, (curTime - (clip.startTime - transLead)) / transLead));
@@ -3465,7 +3650,7 @@ export function generateCanvasBridgeHtml(
                     try { el.currentTime = targetTime; } catch(e) {}
                   }
                   el.playbackRate = speed;
-                  el.play().catch(function() {});
+                  safePlayMedia(el);
                 }
               } else {
                 el._playStarted = false;
@@ -3479,54 +3664,36 @@ export function generateCanvasBridgeHtml(
                   try { el.playbackRate = speed; } catch(e) {}
                 }
               }
-
-              const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-              if (va && va instanceof HTMLAudioElement) {
-                if (va.paused) {
-                  if (!va._playStarted) {
-                    va._playStarted = true;
-                    if (Math.abs(va.currentTime - targetTime) > 0.08) {
-                      try { va.currentTime = targetTime; } catch(e) {}
-                    }
-                    va.playbackRate = speed;
-                    va.play().catch(function() {});
-                  }
-                } else {
-                  va._playStarted = false;
-                  const drift = va.currentTime - targetTime;
-                  if (Math.abs(drift) > 0.08) {
-                    const comp = Math.max(0.80, Math.min(1.20, 1 - drift * 0.4));
-                    try { va.playbackRate = Math.max(0.1, Math.min(16, speed * comp)); } catch(e) {}
-                  } else if (Math.abs(va.playbackRate - speed) > 0.01) {
-                    try { va.playbackRate = speed; } catch(e) {}
-                  }
-                }
-              }
             } else if (!isPreRolling && !activeVideoElements.has(el)) {
               el._playStarted = false;
               el._preRollCued = false;
               if (!el.paused) {
                 try { el.pause(); } catch(e) {}
               }
-              const va = mediaMap.get("video_audio_" + clip.id) || mediaMap.get("video_audio_" + clip.url);
-              if (va) {
-                va._playStarted = false;
-                if (!va.paused) {
-                  try { va.pause(); } catch(e) {}
-                }
-              }
             }
           }
 
-          // Synchronize active audio playback
+          // Synchronize active audio playback (lazy warm + immediate disposal)
           for (const clip of audioClips) {
+            if (clip.url && !mediaMap.has("audio_" + clip.id) && curTime >= clip.startTime - 2.0 && curTime < clip.startTime + clip.duration) {
+              var createdAud = createAudioElementForClip(clip, false);
+              if (createdAud && createdAud.element) {
+                attachMediaElementToAudio(clip, createdAud.element, audioGainNodes);
+              }
+            }
             const a = mediaMap.get("audio_" + clip.id);
-            if (!a || !(a instanceof HTMLAudioElement)) continue;
+            if (!a || !(a instanceof HTMLAudioElement) || disposedElements.has(a)) continue;
+
+            if (curTime > (clip.startTime + clip.duration) + 0.35) {
+              disposeMediaElement(a);
+              continue;
+            }
 
             const isInside = curTime >= clip.startTime && curTime < clip.startTime + clip.duration;
             const aGain = audioGainNodes.get(clip.id);
             if (aGain && audioCtx) {
-              const baseVol = (clip.muted || clip.isMuted) ? 0 : (clip.volume !== undefined ? clip.volume : 1.0);
+              const rawAVol = clip.volume !== undefined ? clip.volume : 1.0;
+              const baseVol = (clip.muted || clip.isMuted) ? 0 : (rawAVol > 2 ? rawAVol / 100 : Math.max(0, rawAVol));
               if (isInside) {
                 const clipLocalTime = Math.max(0, curTime - clip.startTime);
                 let vol = baseVol;
@@ -3556,7 +3723,7 @@ export function generateCanvasBridgeHtml(
                     try { a.currentTime = targetTime; } catch(e) {}
                   }
                   a.playbackRate = speed;
-                  a.play().catch(function() {});
+                  safePlayMedia(a);
                 }
               } else {
                 a._playStarted = false;
@@ -3574,7 +3741,11 @@ export function generateCanvasBridgeHtml(
             }
           }
 
-          renderFrame(curTime);
+          try {
+            renderFrame(curTime);
+          } catch (frameErr) {
+            console.warn("[mobileWebBridge] Non-fatal frame render notice:", frameErr);
+          }
 
           const progress = Math.min(99, Math.floor((curTime / durationSec) * 100));
           sendToNative({ type: "PROGRESS", progress: progress, currentTime: curTime, duration: durationSec });

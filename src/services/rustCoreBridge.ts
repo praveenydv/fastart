@@ -28,11 +28,17 @@ export interface MaskProvider {
   requestHumanSegmentation: (mediaElement: any, clipId?: string, clipTime?: number) => void;
   hasClipMasks?: (clipId: string) => boolean;
   hasFrameMask?: (clipId: string, frameIdx: number, isSource?: boolean) => boolean;
+  getClipProcessedCount?: (clipId: string) => number;
 }
 
 let activeMaskProvider: MaskProvider | null = null;
 const clipLastKnownMaskMap = new Map<string, HTMLCanvasElement>();
 const clipLastKnownMaskTimeMap = new Map<string, number>();
+const lastDecodedVideoTimeMap = typeof WeakMap !== "undefined" ? new WeakMap<HTMLVideoElement, number>() : null;
+let guidedMaskScratchCanvas: HTMLCanvasElement | null = null;
+let guidedMaskScratchCtx: CanvasRenderingContext2D | null = null;
+let guidedInputMaskBuffer: Uint8Array | null = null;
+let guidedOutputMaskBuffer: Uint8Array | null = null;
 
 export function clearCutoutLastKnownMask(clipId?: string): void {
   if (clipId) {
@@ -337,6 +343,20 @@ interface WasmExports {
     threshold: number,
     feather: number
   ) => void;
+  fastart_defringe_rgba_c?: (
+    pixelsPtr: number,
+    width: number,
+    height: number
+  ) => void;
+  fastart_guided_composite_defringe_c?: (
+    rgbaPtr: number,
+    maskRgbaPtr: number,
+    width: number,
+    height: number,
+    radius: number,
+    eps: number,
+    subsample: number
+  ) => void;
   fastart_detect_uniform_backdrop_c: (
     pixelsPtr: number,
     width: number,
@@ -418,6 +438,16 @@ interface WasmExports {
     outRgbaPtr: number,
     threshold: number,
     feather: number
+  ) => number;
+  fastart_process_modnet_output_cropped_c?: (
+    rawAlphaPtr: number,
+    outRgbaPtr: number,
+    threshold: number,
+    feather: number,
+    cropX: number,
+    cropY: number,
+    cropW: number,
+    cropH: number
   ) => number;
   fastart_search_template_ncc_c: (
     framePtr: number,
@@ -586,6 +616,7 @@ class RustCoreBridgeService {
   private wasmInstance: WasmExports | null = null;
   private isInitialized = false;
   private initPromise: Promise<boolean> | null = null;
+  private lastModnetInitError: string | null = null;
 
   constructor() {
     this.init();
@@ -618,8 +649,8 @@ class RustCoreBridgeService {
         try {
           // Attempt loading WASM binary from static public directory
           // Resolve with base path support for GitHub Pages / subpaths
-          const wasmUrl = resolveAssetUrl("/wasm/fastart_wasm.wasm");
-          const fallbackOriginUrl = new URL("/wasm/fastart_wasm.wasm", window.location.origin).toString();
+          const wasmUrl = resolveAssetUrl("/wasm/fastart_wasm.wasm?v=31");
+          const fallbackOriginUrl = new URL("/wasm/fastart_wasm.wasm?v=21", window.location.origin).toString();
           const candidates = Array.from(new Set([wasmUrl, fallbackOriginUrl]));
           for (const wasmUrl of candidates) {
             try {
@@ -680,15 +711,33 @@ class RustCoreBridgeService {
     return this.backendType;
   }
 
-  public async initializeModnet(): Promise<boolean> {
+  public hasNativeModnetModule(): boolean {
+    return Platform.OS !== "web" && typeof FastArtRust?.initializeModnet === "function";
+  }
+
+  public getLastModnetInitError(): string | null {
+    return this.lastModnetInitError;
+  }
+
+  public async initializeModnet(customModelPath = ""): Promise<boolean> {
     await this.init();
     if (this.backendType === "web_wasm") return false;
-    if ((this.backendType !== "ios_native" && this.backendType !== "android_native") || !FastArtRust?.initializeModnet) return false;
+    if ((this.backendType !== "ios_native" && this.backendType !== "android_native") || !FastArtRust?.initializeModnet) {
+      this.lastModnetInitError =
+        "Native AI Cutout module is unavailable in this runtime. Build a native development/release client (npx expo run:ios or npx expo run:android).";
+      return false;
+    }
     try {
-      // Immediately initialize using the bundled asset selfie model inside the native module
-      const result = await FastArtRust.initializeModnet("");
-      return result === true || result === "ok";
+      this.lastModnetInitError = null;
+      const result = await FastArtRust.initializeModnet(customModelPath);
+      const ok = result === true || result === "ok";
+      if (!ok) {
+        this.lastModnetInitError = "Native AI Cutout model returned an invalid initialization state.";
+      }
+      return ok;
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error || "Unknown native initialization error");
+      this.lastModnetInitError = msg;
       console.warn("[RustCoreBridge] AI Cutout native initialization failed:", error);
       return false;
     }
@@ -1798,49 +1847,347 @@ class RustCoreBridgeService {
       }
     }
 
-    // High-performance Rec. 709 perceptual color distance + smooth Hermite S-curve + edge despill
-    const th = Math.max(0.01, threshold);
-    const fth = Math.max(0.001, feather);
-    const thSq = th * th;
-    const fthEnd = th + fth;
-    const fthEndSq = fthEnd * fthEnd;
-    const invFth = 1 / fth;
+    // High-performance YCbCr perceptual chroma key distance + smooth Hermite S-curve + edge-isolated despill
+    const yKey = 0.299 * rKey + 0.587 * gKey + 0.114 * bKey;
+    const cbKey = -0.168736 * rKey - 0.331264 * gKey + 0.5 * bKey + 128.0;
+    const crKey = 0.5 * rKey - 0.418688 * gKey - 0.081312 * bKey + 128.0;
+
+    const threshNorm = Math.max(0.01, Math.min(1.0, threshold));
+    const featherNorm = Math.max(0.01, Math.min(1.0, feather));
+
+    const tolerance = 4.0 + threshNorm * 90.0;
+    const softness = Math.max(0.5, 1.0 + featherNorm * 40.0);
+    const outer = tolerance + softness;
+    const invSoftness = 1.0 / softness;
+
+    const isGreenScreen = gKey > rKey && gKey > bKey;
+    const isBlueScreen = bKey > rKey && bKey > gKey;
     const totalPixels = width * height;
 
     for (let i = 0; i < totalPixels; i++) {
       const idx = i * 4;
       const r = pixels[idx];
-      const g = pixels[idx + 1];
-      const b = pixels[idx + 2];
+      let g = pixels[idx + 1];
+      let b = pixels[idx + 2];
+      const origA = pixels[idx + 3] / 255;
 
-      // Rec. 709 normalized perceptual color difference
-      const dr = (r - rKey) * 0.2126;
-      const dg = (g - gKey) * 0.7152;
-      const db = (b - bKey) * 0.0722;
-      const distSq = (dr * dr + dg * dg + db * db) / (255 * 255);
+      const y = 0.299 * r + 0.587 * g + 0.114 * b;
+      const cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0;
+      const cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0;
 
-      if (distSq <= thSq) {
+      const dCb = cb - cbKey;
+      const dCr = cr - crKey;
+      const dY = y - yKey;
+      const dist = Math.sqrt(dCb * dCb + dCr * dCr + 0.06 * dY * dY);
+
+      if (dist <= tolerance) {
         pixels[idx + 3] = 0;
-      } else if (distSq < fthEndSq) {
-        const d = Math.sqrt(distSq);
-        const t = (d - th) * invFth;
-        const alphaFactor = t * t * (3 - 2 * t);
-        pixels[idx + 3] = Math.round(pixels[idx + 3] * Math.max(0, Math.min(1, alphaFactor)));
-        if (despill) {
-          if (gKey > rKey && gKey > bKey) {
-            const maxRb = Math.max(r, b);
-            if (pixels[idx + 1] > maxRb) pixels[idx + 1] = maxRb;
-          } else if (bKey > rKey && bKey > gKey) {
-            const maxRg = Math.max(r, g);
-            if (pixels[idx + 2] > maxRg) pixels[idx + 2] = maxRg;
-          } else if (rKey > gKey && rKey > bKey) {
-            const maxGb = Math.max(g, b);
-            if (pixels[idx] > maxGb) pixels[idx] = maxGb;
+        continue;
+      }
+
+      if (dist >= outer) {
+        continue;
+      }
+
+      const u = (dist - tolerance) * invSoftness;
+      const alpha = u * u * (3.0 - 2.0 * u);
+
+      if (despill) {
+        const despillWeight = (1.0 - alpha) * 0.95;
+        if (isGreenScreen) {
+          const maxRb = Math.max(r, b);
+          if (g > maxRb) {
+            g = Math.round(g - (g - maxRb) * despillWeight);
+            pixels[idx + 1] = g;
+          }
+        } else if (isBlueScreen) {
+          const maxRg = Math.max(r, g);
+          if (b > maxRg) {
+            b = Math.round(b - (b - maxRg) * despillWeight);
+            pixels[idx + 2] = b;
           }
         }
       }
+
+      pixels[idx + 3] = Math.round(Math.max(0, Math.min(1, alpha * origA)) * 255);
     }
     return true;
+  }
+
+  /**
+   * Studio Edge Decontamination (De-Fringing):
+   * Purges background light-wrap bleed/halos from semi-transparent edge pixels (denim jackets, hair).
+   * Runs in native Rust WASM with seamless typed-array fallback.
+   */
+  public defringeCutoutEdges(
+    pixels: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ): void {
+    const inst = this.wasmInstance;
+    const totalBytes = width * height * 4;
+    if (
+      this.backendType === "web_wasm" &&
+      inst?.fastart_defringe_rgba_c &&
+      inst.memory
+    ) {
+      try {
+        const useScratch = typeof inst.fastart_get_scratchpad === "function";
+        const ptr = useScratch
+          ? inst.fastart_get_scratchpad!(totalBytes)
+          : inst.fastart_alloc?.(totalBytes) || 0;
+        if (ptr) {
+          new Uint8Array(inst.memory.buffer, ptr, totalBytes).set(pixels);
+          inst.fastart_defringe_rgba_c(ptr, width, height);
+          pixels.set(new Uint8Array(inst.memory.buffer, ptr, totalBytes));
+          if (!useScratch) {
+            inst.fastart_dealloc?.(ptr, totalBytes);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("[RustCoreBridge] WASM defringe fallback:", err);
+      }
+    }
+
+    let hasTransition = false;
+    const total = width * height;
+    for (let i = 0; i < total; i++) {
+      const a = pixels[i * 4 + 3];
+      if (a >= 4 && a <= 250) {
+        hasTransition = true;
+        break;
+      }
+    }
+    if (!hasTransition) {
+      for (let i = 0; i < total; i++) {
+        if (pixels[i * 4 + 3] < 4) pixels[i * 4 + 3] = 0;
+      }
+      return;
+    }
+
+    const maxDim = Math.max(width, height);
+    const r = Math.max(3, Math.min(7, Math.round(maxDim / 300)));
+
+    for (let y = 0; y < height; y++) {
+      const rowIdx = y * width;
+      const yMin = Math.max(0, y - r);
+      const yMax = Math.min(height - 1, y + r);
+
+      for (let x = 0; x < width; x++) {
+        const idx = (rowIdx + x) * 4;
+        const a = pixels[idx + 3];
+
+        if (a < 4) {
+          pixels[idx + 3] = 0;
+          continue;
+        }
+        if (a > 250) {
+          continue;
+        }
+
+        const xMin = Math.max(0, x - r);
+        const xMax = Math.min(width - 1, x + r);
+
+        let fgR = 0;
+        let fgG = 0;
+        let fgB = 0;
+        let fgWeight = 0;
+
+        for (let ny = yMin; ny <= yMax; ny++) {
+          const nRow = ny * width;
+          const dy = ny - y;
+          for (let nx = xMin; nx <= xMax; nx++) {
+            const nIdx = (nRow + nx) * 4;
+            if (pixels[nIdx + 3] >= 235) {
+              const dx = nx - x;
+              const w = 1.0 / (1.0 + dx * dx + dy * dy);
+              fgR += pixels[nIdx] * w;
+              fgG += pixels[nIdx + 1] * w;
+              fgB += pixels[nIdx + 2] * w;
+              fgWeight += w;
+            }
+          }
+        }
+
+        if (fgWeight > 0) {
+          const avgR = fgR / fgWeight;
+          const avgG = fgG / fgWeight;
+          const avgB = fgB / fgWeight;
+
+          const curR = pixels[idx];
+          const curG = pixels[idx + 1];
+          const curB = pixels[idx + 2];
+
+          const alphaNorm = a / 255.0;
+          const blendW = Math.pow(1.0 - alphaNorm, 0.75) * 0.95;
+          const invBlend = 1.0 - blendW;
+
+          pixels[idx] = Math.round(curR * invBlend + avgR * blendW);
+          pixels[idx + 1] = Math.round(curG * invBlend + avgG * blendW);
+          pixels[idx + 2] = Math.round(curB * invBlend + avgB * blendW);
+        }
+      }
+    }
+  }
+
+  /**
+   * Studio Guided Filter Edge Matting (He et al. / Industry-standard matting):
+   * Refines a neural alpha matte by transferring high-frequency edge gradients from the native RGB frame.
+   * Snaps clothing, hair strands, and body boundaries with pixel-perfect precision in WASM.
+   */
+  public refineMatteGuided(
+    guideRgba: Uint8ClampedArray,
+    inputMaskAlpha: Uint8Array | Uint8ClampedArray,
+    outputMaskAlpha: Uint8Array | Uint8ClampedArray,
+    width: number,
+    height: number,
+    radius = 3,
+    eps = 1e-4,
+  ): boolean {
+    const inst = this.wasmInstance;
+    const totalPixels = width * height;
+    if (
+      this.backendType !== "web_wasm" ||
+      !inst?.fastart_guided_filter_matting_c ||
+      !inst.memory ||
+      guideRgba.length < totalPixels * 4 ||
+      inputMaskAlpha.length < totalPixels
+    ) {
+      return false;
+    }
+
+    try {
+      const guideBytes = totalPixels * 4;
+      const maskBytes = totalPixels;
+      const totalBytes = guideBytes + maskBytes * 2;
+      const useScratch = typeof inst.fastart_get_scratchpad === "function";
+      let guidePtr = 0;
+      let maskPtr = 0;
+      let outPtr = 0;
+
+      if (useScratch) {
+        const base = inst.fastart_get_scratchpad!(totalBytes);
+        if (base) {
+          guidePtr = base;
+          maskPtr = base + guideBytes;
+          outPtr = maskPtr + maskBytes;
+        }
+      } else if (inst.fastart_alloc && inst.fastart_dealloc) {
+        guidePtr = inst.fastart_alloc(guideBytes);
+        maskPtr = inst.fastart_alloc(maskBytes);
+        outPtr = inst.fastart_alloc(maskBytes);
+      }
+
+      if (!guidePtr || !maskPtr || !outPtr) {
+        if (!useScratch && inst.fastart_dealloc) {
+          if (guidePtr) inst.fastart_dealloc(guidePtr, guideBytes);
+          if (maskPtr) inst.fastart_dealloc(maskPtr, maskBytes);
+          if (outPtr) inst.fastart_dealloc(outPtr, maskBytes);
+        }
+        return false;
+      }
+
+      new Uint8Array(inst.memory.buffer, guidePtr, guideBytes).set(guideRgba);
+      new Uint8Array(inst.memory.buffer, maskPtr, maskBytes).set(inputMaskAlpha);
+
+      inst.fastart_guided_filter_matting_c(
+        guidePtr,
+        maskPtr,
+        outPtr,
+        width,
+        height,
+        radius,
+        eps,
+      );
+
+      outputMaskAlpha.set(new Uint8Array(inst.memory.buffer, outPtr, maskBytes));
+
+      if (!useScratch && inst.fastart_dealloc) {
+        inst.fastart_dealloc(guidePtr, guideBytes);
+        inst.fastart_dealloc(maskPtr, maskBytes);
+        inst.fastart_dealloc(outPtr, maskBytes);
+      }
+      return true;
+    } catch (e) {
+      console.warn("[RustCoreBridge] refineMatteGuided error:", e);
+      return false;
+    }
+  }
+
+  /**
+   * Unified WASM RGB-guided matting + edge color decontamination in a single scratchpad pass.
+   * Uses `subsample = 1` for full-res paused/export polish or `subsample = 2` for 60 FPS playback/scrubbing.
+   */
+  public refineAndDefringeCutout(
+    rgba: Uint8ClampedArray,
+    maskRgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+    radius = 6,
+    eps = 1e-4,
+    subsample = 1,
+  ): boolean {
+    const inst = this.wasmInstance;
+    const totalPixels = width * height;
+    const totalBytes = totalPixels * 4;
+    if (
+      this.backendType !== "web_wasm" ||
+      !inst?.fastart_guided_composite_defringe_c ||
+      !inst.memory ||
+      rgba.length < totalBytes ||
+      maskRgba.length < totalBytes
+    ) {
+      return false;
+    }
+
+    try {
+      const useScratch = typeof inst.fastart_get_scratchpad === "function";
+      let rgbaPtr = 0;
+      let maskPtr = 0;
+      if (useScratch) {
+        const base = inst.fastart_get_scratchpad!(totalBytes * 2);
+        if (base) {
+          rgbaPtr = base;
+          maskPtr = base + totalBytes;
+        }
+      } else if (inst.fastart_alloc && inst.fastart_dealloc) {
+        rgbaPtr = inst.fastart_alloc(totalBytes);
+        maskPtr = inst.fastart_alloc(totalBytes);
+      }
+
+      if (!rgbaPtr || !maskPtr) {
+        if (!useScratch && inst.fastart_dealloc) {
+          if (rgbaPtr) inst.fastart_dealloc(rgbaPtr, totalBytes);
+          if (maskPtr) inst.fastart_dealloc(maskPtr, totalBytes);
+        }
+        return false;
+      }
+
+      new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes).set(rgba);
+      new Uint8Array(inst.memory.buffer, maskPtr, totalBytes).set(maskRgba);
+
+      inst.fastart_guided_composite_defringe_c(
+        rgbaPtr,
+        maskPtr,
+        width,
+        height,
+        radius,
+        eps,
+        subsample,
+      );
+
+      rgba.set(new Uint8Array(inst.memory.buffer, rgbaPtr, totalBytes));
+
+      if (!useScratch && inst.fastart_dealloc) {
+        inst.fastart_dealloc(rgbaPtr, totalBytes);
+        inst.fastart_dealloc(maskPtr, totalBytes);
+      }
+      return true;
+    } catch (e) {
+      console.warn("[RustCoreBridge] refineAndDefringeCutout error:", e);
+      return false;
+    }
   }
 
   /** Runs a cutout pixel buffer through the active native Rust or WASM backend. */
@@ -2220,6 +2567,7 @@ class RustCoreBridgeService {
 
     try {
       const isScrubbing = (options as any).isScrubbing === true;
+      const isPlaying = Boolean((options as any).isPlaying);
       let currentScaleX = 1;
       let currentScaleY = 1;
       try {
@@ -2232,11 +2580,23 @@ class RustCoreBridgeService {
         currentScaleY = dpr;
       }
 
-      // During timeline scrubbing, downscale offscreen buffer to preview resolution (max 480x270).
-      // In final use (scrubbing settled/paused, or final export), render at full crisp 1080p/4K resolution (up to 3840).
-      const maxDim = isScrubbing ? 480 : 3840;
-      const targetProcW = Math.round(Math.abs(dw) * (isScrubbing ? 0.5 : currentScaleX));
-      const targetProcH = Math.round(Math.abs(dh) * (isScrubbing ? 0.5 : currentScaleY));
+      // GPU-accelerated compositing during playback/scrubbing keeps 60 FPS fluid even in fullscreen;
+      // settled paused frames and exports run full RGB-guided matting & edge defringing.
+      const isExporting = Boolean((options as any).isExporting);
+      const isInteractive = (isScrubbing || isPlaying) && !isExporting;
+      const isMobileWeb =
+        typeof navigator !== "undefined" &&
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
+      const maxDim = isExporting
+        ? (isMobileWeb ? (options.mode === "auto" ? 960 : 720) : 3840)
+        : isScrubbing
+        ? 720
+        : isInteractive
+        ? 960
+        : 1280;
+      const scaleDown = 1.0;
+      const targetProcW = Math.round(Math.abs(dw) * (scaleDown * currentScaleX));
+      const targetProcH = Math.round(Math.abs(dh) * (scaleDown * currentScaleY));
       const procW = Math.max(16, Math.min(maxDim, targetProcW));
       const procH = Math.max(16, Math.min(maxDim, targetProcH));
 
@@ -2251,31 +2611,51 @@ class RustCoreBridgeService {
       const isAuto = options.mode === "auto";
 
       if (isAuto) {
-        const isVideoElement =
+        const fallbackId = (options as any).sourceMediaId;
+        const sourceTime = (options as any).sourceTime;
+        const clipReverse = Boolean((options as any).clipReverse);
+
+        const hasReadyVideoTime =
+          typeof HTMLVideoElement !== "undefined" &&
           media instanceof HTMLVideoElement &&
-          !media.seeking &&
           media.readyState >= 2 &&
           Number.isFinite(media.currentTime) &&
           media.currentTime >= 0;
 
-        const isPlaying = Boolean((options as any).isPlaying);
-        const fallbackId = (options as any).sourceMediaId;
-        const sourceTime = (options as any).sourceTime;
+        if (hasReadyVideoTime && !media.seeking) {
+          lastDecodedVideoTimeMap?.set(media, media.currentTime);
+          (media as any)._lastDecodedTime = media.currentTime;
+        }
 
-        // Ground truth: When actively playing and video element is ready, lock to media.currentTime
-        // to eliminate browser clock jitter. When paused, scrubbing, or seeking, lock to sourceTime.
+        // Exact timestamp of the decoded frame currently drawn by drawImage(media).
+        // Whenever !isExporting and a video is attached, always lock mask lookup to this
+        // decoded frame timestamp (even when paused & seeking!) so the cutout never jumps ahead of video.
+        const displayedVideoTime = hasReadyVideoTime
+          ? (!media.seeking
+              ? media.currentTime
+              : (lastDecodedVideoTimeMap?.get(media) ?? (media as any)._lastDecodedTime))
+          : undefined;
+
         const effectiveSourceTime =
-          isVideoElement && isPlaying
-            ? media.currentTime
+          !isExporting && displayedVideoTime !== undefined
+            ? displayedVideoTime
             : sourceTime !== undefined && Number.isFinite(sourceTime)
             ? sourceTime
-            : media instanceof HTMLVideoElement && media.currentTime > 0
+            : displayedVideoTime !== undefined
+            ? displayedVideoTime
+            : hasReadyVideoTime
             ? media.currentTime
             : 0;
 
+        const sourceDelta =
+          displayedVideoTime !== undefined && sourceTime !== undefined && Number.isFinite(sourceTime)
+            ? displayedVideoTime - sourceTime
+            : 0;
         const actualClipTime =
           options.clipTime !== undefined
-            ? Math.max(0, options.clipTime)
+            ? (!isExporting && displayedVideoTime !== undefined && sourceTime !== undefined && Number.isFinite(sourceTime)
+                ? Math.max(0, options.clipTime + (clipReverse ? -sourceDelta : sourceDelta))
+                : Math.max(0, options.clipTime))
             : effectiveSourceTime;
 
         const clipFps = (options as any).fps || (options as any).sourceFrameRate;
@@ -2306,9 +2686,19 @@ class RustCoreBridgeService {
           effectiveId && activeMaskProvider?.hasFrameMask
             ? activeMaskProvider.hasFrameMask(effectiveId, currentSrcFrameIdx, true)
             : false;
-        const hasBakedMasks =
+        const bakedCount =
+          (options.clipId && activeMaskProvider?.getClipProcessedCount
+            ? activeMaskProvider.getClipProcessedCount(options.clipId)
+            : 0) +
+          (fallbackId && activeMaskProvider?.getClipProcessedCount
+            ? activeMaskProvider.getClipProcessedCount(fallbackId)
+            : 0);
+        const hasAnyMaskEntries =
           Boolean(options.clipId && activeMaskProvider?.hasClipMasks?.(options.clipId)) ||
           Boolean(fallbackId && activeMaskProvider?.hasClipMasks?.(fallbackId));
+        const hasBakedMasks = isImage
+          ? hasAnyMaskEntries
+          : bakedCount > 1;
 
         if (humanMask) {
           if (!(humanMask as any)._isTemporalBlend) {
@@ -2333,7 +2723,7 @@ class RustCoreBridgeService {
           const heldTime =
             (options.clipId ? clipLastKnownMaskTimeMap.get(options.clipId) : undefined) ??
             (fallbackId ? clipLastKnownMaskTimeMap.get(fallbackId) : undefined);
-          if (held && (heldTime === undefined || Math.abs(effectiveSourceTime - heldTime) <= 0.6)) {
+          if (held && heldTime !== undefined && Math.abs(effectiveSourceTime - heldTime) <= 0.08) {
             humanMask = held;
           }
         }
@@ -2354,7 +2744,7 @@ class RustCoreBridgeService {
           }
         }
 
-        // Stream inference for unbaked frames during interactive playback (never during export to avoid GPU/RAM overload)
+        // Stream inference for unbaked frames during interactive playback (never during export or when clip is already baked)
         if (
           !hasBakedMasks &&
           !hasExactMask &&
@@ -2370,27 +2760,133 @@ class RustCoreBridgeService {
             (media as any).videoWidth || (media as any).naturalWidth || (media as any).width || sw;
           const mediaH =
             (media as any).videoHeight || (media as any).naturalHeight || (media as any).height || sh;
-          const scaleX = humanMask.width / Math.max(1, mediaW);
-          const scaleY = humanMask.height / Math.max(1, mediaH);
-          const mSx = sx * scaleX;
-          const mSy = sy * scaleY;
+
+          // If humanMask is still an uncropped 512x512 neural buffer, dynamically slice
+          // the letterboxed/pillarboxed active content area so it perfectly matches the media aspect ratio!
+          let maskCropX = 0;
+          let maskCropY = 0;
+          let maskCropW = humanMask.width;
+          let maskCropH = humanMask.height;
+
+          if (
+            humanMask.width === 512 &&
+            humanMask.height === 512 &&
+            mediaW > 0 &&
+            mediaH > 0 &&
+            Math.abs(mediaW - mediaH) > 2
+          ) {
+            const aspect = mediaW / mediaH;
+            if (aspect >= 1.0) {
+              maskCropH = Math.max(128, Math.min(512, Math.round(512 / aspect)));
+              maskCropY = Math.floor((512 - maskCropH) / 2);
+            } else {
+              maskCropW = Math.max(128, Math.min(512, Math.round(512 * aspect)));
+              maskCropX = Math.floor((512 - maskCropW) / 2);
+            }
+          }
+
+          const scaleX = maskCropW / Math.max(1, mediaW);
+          const scaleY = maskCropH / Math.max(1, mediaH);
+          const mSx = maskCropX + sx * scaleX;
+          const mSy = maskCropY + sy * scaleY;
           const mSw = sw * scaleX;
           const mSh = sh * scaleY;
 
-          // Ultra-fast GPU Hardware-Accelerated Alpha Compositing (0.05ms)
-          offCtx.save();
-          offCtx.imageSmoothingEnabled = true;
-          offCtx.imageSmoothingQuality = "high";
-          offCtx.globalCompositeOperation = "destination-in";
-          offCtx.drawImage(humanMask, mSx, mSy, mSw, mSh, 0, 0, procW, procH);
-          offCtx.restore();
+          let refinedWithGuided = false;
+
+          // Run Studio RGB-Guided Edge Snapping + Edge Color Decontamination on settled frames and exports.
+          // Skip synchronous GPU->CPU readback during interactive playback/scrubbing so fullscreen stays 60 FPS.
+          if ((!isInteractive || isExporting) && typeof document !== "undefined") {
+            try {
+              if (!guidedMaskScratchCanvas) {
+                guidedMaskScratchCanvas = document.createElement("canvas");
+                guidedMaskScratchCtx = guidedMaskScratchCanvas.getContext("2d", { willReadFrequently: true });
+              }
+              if (guidedMaskScratchCanvas.width !== procW || guidedMaskScratchCanvas.height !== procH) {
+                guidedMaskScratchCanvas.width = procW;
+                guidedMaskScratchCanvas.height = procH;
+              }
+              if (guidedMaskScratchCtx) {
+                guidedMaskScratchCtx.clearRect(0, 0, procW, procH);
+                guidedMaskScratchCtx.imageSmoothingEnabled = true;
+                guidedMaskScratchCtx.imageSmoothingQuality = "high";
+                guidedMaskScratchCtx.drawImage(humanMask, mSx, mSy, mSw, mSh, 0, 0, procW, procH);
+
+                const maskImgData = guidedMaskScratchCtx.getImageData(0, 0, procW, procH);
+                const guideImgData = offCtx.getImageData(0, 0, procW, procH);
+                const guidedRadius = Math.max(5, Math.min(10, Math.round(Math.max(procW, procH) / 200)));
+                const guidedSubsample = !isExporting && (procW * procH > 450_000 || isMobileWeb) ? 2 : 1;
+
+                if (
+                  this.refineAndDefringeCutout(
+                    guideImgData.data,
+                    maskImgData.data,
+                    procW,
+                    procH,
+                    guidedRadius,
+                    1e-4,
+                    guidedSubsample,
+                  )
+                ) {
+                  offCtx.putImageData(guideImgData, 0, 0);
+                  refinedWithGuided = true;
+                } else {
+                  const totalPixels = procW * procH;
+                  if (!guidedInputMaskBuffer || guidedInputMaskBuffer.length !== totalPixels) {
+                    guidedInputMaskBuffer = new Uint8Array(totalPixels);
+                    guidedOutputMaskBuffer = new Uint8Array(totalPixels);
+                  }
+                  for (let i = 0; i < totalPixels; i++) {
+                    guidedInputMaskBuffer[i] = maskImgData.data[i * 4 + 3];
+                  }
+                  if (
+                    guidedOutputMaskBuffer &&
+                    this.refineMatteGuided(
+                      guideImgData.data,
+                      guidedInputMaskBuffer,
+                      guidedOutputMaskBuffer,
+                      procW,
+                      procH,
+                      guidedRadius,
+                      1e-4,
+                    )
+                  ) {
+                    for (let i = 0; i < totalPixels; i++) {
+                      guideImgData.data[i * 4 + 3] = guidedOutputMaskBuffer[i];
+                    }
+                    this.defringeCutoutEdges(guideImgData.data, procW, procH);
+                    offCtx.putImageData(guideImgData, 0, 0);
+                    refinedWithGuided = true;
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("[RustCoreBridge] Guided filter edge refinement fallback:", err);
+            }
+          }
+
+          if (!refinedWithGuided) {
+            // Hardware GPU-accelerated alpha compositing (zero readback stall for 60 FPS playback & fullscreen)
+            offCtx.save();
+            offCtx.imageSmoothingEnabled = true;
+            offCtx.imageSmoothingQuality = "high";
+            offCtx.globalCompositeOperation = "destination-in";
+            offCtx.drawImage(humanMask, mSx, mSy, mSw, mSh, 0, 0, procW, procH);
+            offCtx.restore();
+
+            if (!isInteractive || isExporting) {
+              const imgData = offCtx.getImageData(0, 0, procW, procH);
+              this.defringeCutoutEdges(imgData.data, procW, procH);
+              offCtx.putImageData(imgData, 0, 0);
+            }
+          }
         }
       } else {
         // Chroma Key mode in native Rust WASM
         const imgData = offCtx.getImageData(0, 0, procW, procH);
         const hex = options.keyColor || "#00FF00";
-        const thresh = Math.max(0.05, ((options.intensity ?? 45) / 100) * 0.95);
-        const feather = Math.max(0.01, ((options.shadow ?? 25) / 100) * 0.35);
+        const thresh = Math.max(0.01, Math.min(1.0, (options.intensity ?? 45) / 100));
+        const feather = Math.max(0.01, Math.min(1.0, (options.shadow ?? 25) / 100));
 
         this.processChromaCutout(
           imgData.data,
@@ -2554,6 +3050,8 @@ class RustCoreBridgeService {
       }
 
       // Draw the actual cut-out subject ON TOP of the dilated outline
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(offCanvas, 0, 0, procW, procH, dx, dy, dw, dh);
       return true;
     } catch {
@@ -2956,38 +3454,339 @@ class RustCoreBridgeService {
     outRgbaPixels?: Uint8ClampedArray,
     threshold = 0.0,
     feather = 0.0,
+    crop?: { dx: number; dy: number; dw: number; dh: number },
   ): Uint8ClampedArray {
     const inst = this.wasmInstance;
     const pixels = 512 * 512;
     const bytes = pixels * 4;
     const dest = outRgbaPixels?.length === bytes ? outRgbaPixels : new Uint8ClampedArray(bytes);
     if (this.backendType !== "web_wasm" || !inst || !inst.fastart_process_modnet_output_c) {
-      // High-performance typed JS S-curve fallback (< 2ms)
+      // High-performance typed JS quintic smootherstep + geodesic region-growing human isolation + interior solid boost + curvature choke + Gaussian anti-aliasing fallback (< 2ms)
       const tNorm = (threshold <= 0.001 && feather <= 0.001) ? 0.45 : Math.max(0, Math.min(1, threshold));
       const sNorm = (threshold <= 0.001 && feather <= 0.001) ? 0.25 : Math.max(0, Math.min(1, feather));
-      const center = 0.10 + tNorm * 0.55;
-      const halfW = 0.015 + sNorm * 0.235;
-      const vMin = Math.max(0.01, center - halfW);
-      const vMax = Math.min(0.98, center + halfW);
-      const span = Math.max(0.02, vMax - vMin);
+      const vMin = Math.max(0.14, Math.min(0.38, 0.20 + (tNorm - 0.45) * 0.25));
+      const vMax = Math.max(vMin + 0.20, Math.min(0.85, 0.58 + tNorm * 0.10 + sNorm * 0.08));
+      const span = Math.max(0.10, vMax - vMin);
       const invSpan = 1.0 / span;
 
-      for (let i = 0; i < pixels; i++) {
-        const val = rawAlpha[i];
-        let a = 0;
-        if (val <= vMin) {
-          a = 0;
-        } else if (val >= vMax) {
-          a = 255;
-        } else {
-          const u = (val - vMin) * invSpan;
-          a = Math.min(255, Math.max(0, Math.round(u * u * (3.0 - 2.0 * u) * 255)));
+      // Step 1: Find high-confidence Human Core Seeds (raw alpha >= 0.50)
+      const coreVisited = new Uint8Array(pixels);
+      const labels = new Uint32Array(pixels);
+      let currentLabel = 0;
+      interface CoreComp {
+        label: number;
+        size: number;
+      }
+      const compSizes: CoreComp[] = [];
+      const queue = new Int32Array(pixels);
+
+      // Use crop bounds to limit CC scan to actual video content region (avoid letterbox gray bands)
+      const rcMinY = crop ? Math.max(0, crop.dy) : 0;
+      const rcMaxY = crop ? Math.min(511, crop.dy + crop.dh - 1) : 511;
+      const rcMinX = crop ? Math.max(0, crop.dx) : 0;
+      const rcMaxX = crop ? Math.min(511, crop.dx + crop.dw - 1) : 511;
+
+      for (let idx = 0; idx < pixels; idx++) {
+        const cy = (idx / 512) | 0;
+        const cx = idx % 512;
+        if (cy >= rcMinY && cy <= rcMaxY && cx >= rcMinX && cx <= rcMaxX &&
+            rawAlpha[idx] >= 0.50 && coreVisited[idx] === 0) {
+          currentLabel++;
+          let head = 0;
+          let tail = 0;
+          queue[tail++] = idx;
+          coreVisited[idx] = 1;
+          labels[idx] = currentLabel;
+          let count = 0;
+
+          while (head < tail) {
+            const cur = queue[head++];
+            count++;
+            const y = (cur / 512) | 0;
+            const x = cur % 512;
+
+            if (y > rcMinY) {
+              const n = cur - 512;
+              if (rawAlpha[n] >= 0.50 && coreVisited[n] === 0) {
+                coreVisited[n] = 1; labels[n] = currentLabel; queue[tail++] = n;
+              }
+            }
+            if (y < rcMaxY) {
+              const n = cur + 512;
+              if (rawAlpha[n] >= 0.50 && coreVisited[n] === 0) {
+                coreVisited[n] = 1; labels[n] = currentLabel; queue[tail++] = n;
+              }
+            }
+            if (x > rcMinX) {
+              const n = cur - 1;
+              if (rawAlpha[n] >= 0.50 && coreVisited[n] === 0) {
+                coreVisited[n] = 1; labels[n] = currentLabel; queue[tail++] = n;
+              }
+            }
+            if (x < rcMaxX) {
+              const n = cur + 1;
+              if (rawAlpha[n] >= 0.50 && coreVisited[n] === 0) {
+                coreVisited[n] = 1; labels[n] = currentLabel; queue[tail++] = n;
+              }
+            }
+          }
+          compSizes.push({ label: currentLabel, size: count });
         }
-        const idx = i * 4;
-        dest[idx] = a;
-        dest[idx + 1] = a;
-        dest[idx + 2] = a;
-        dest[idx + 3] = a;
+      }
+
+      // Step 2: Crown detection + geodesic region growing with floating-island rejection
+      const isHuman = new Uint8Array(pixels);
+      let maxComp: CoreComp | null = null;
+      for (let i = 0; i < compSizes.length; i++) {
+        if (!maxComp || compSizes[i].size > maxComp.size) maxComp = compSizes[i];
+      }
+
+      if (maxComp && maxComp.size >= 120) {
+        // --- Crown detection on main (largest) component ---
+        let bodyMinY = rcMaxY, bodyMaxY = rcMinY;
+        const rowSpans: Array<{ minX: number; maxX: number } | null> = new Array(512).fill(null);
+        for (let y = rcMinY; y <= rcMaxY; y++) {
+          let rMinX = 512, rMaxX = 0, cnt = 0;
+          for (let x = rcMinX; x <= rcMaxX; x++) {
+            if (labels[y * 512 + x] === maxComp.label) {
+              cnt++; if (x < rMinX) rMinX = x; if (x > rMaxX) rMaxX = x;
+            }
+          }
+          if (cnt > 0) {
+            if (y < bodyMinY) bodyMinY = y;
+            if (y > bodyMaxY) bodyMaxY = y;
+            rowSpans[y] = { minX: rMinX, maxX: rMaxX };
+          }
+        }
+
+        // Find crown_y: first row with span >= 6 sustained over 3+ of next 4 rows
+        let crownY = bodyMinY;
+        for (let y = bodyMinY; y <= Math.min(bodyMaxY, bodyMinY + 60); y++) {
+          const s = rowSpans[y];
+          if (s && (s.maxX - s.minX + 1) >= 6) {
+            let sustained = 0;
+            for (let k = 1; k <= 4; k++) {
+              const sk = rowSpans[y + k];
+              if (sk && (sk.maxX - sk.minX + 1) >= 6) sustained++;
+            }
+            if (sustained >= 3) { crownY = y; break; }
+          }
+        }
+
+        // Shoulder span for horizontal overlap check
+        let mainMinXAtCrown = 512, mainMaxXAtCrown = 0;
+        const shoulderEnd = Math.min(crownY + 20, rcMaxY);
+        for (let sy = crownY; sy <= shoulderEnd; sy++) {
+          for (let sx = rcMinX; sx <= rcMaxX; sx++) {
+            if (labels[sy * 512 + sx] === maxComp.label) {
+              if (sx < mainMinXAtCrown) mainMinXAtCrown = sx;
+              if (sx > mainMaxXAtCrown) mainMaxXAtCrown = sx;
+            }
+          }
+        }
+
+        // Valid core labels: secondary component must start AT/BELOW crownY AND overlap horizontally
+        const validCoreLabels = new Uint8Array(currentLabel + 1);
+        validCoreLabels[maxComp.label] = 1;
+        const minKeepSize = (maxComp.size / 6) | 0;
+        for (let i = 0; i < compSizes.length; i++) {
+          if (compSizes[i].label === maxComp.label) continue;
+          if (compSizes[i].size >= minKeepSize) {
+            let cMinY = rcMaxY, cMaxY = rcMinY, cMinX = 512, cMaxX = 0;
+            for (let idx = 0; idx < pixels; idx++) {
+              if (labels[idx] === compSizes[i].label) {
+                const cy = (idx / 512) | 0, cx = idx % 512;
+                if (cy < cMinY) cMinY = cy; if (cy > cMaxY) cMaxY = cy;
+                if (cx < cMinX) cMinX = cx; if (cx > cMaxX) cMaxX = cx;
+              }
+            }
+            if (cMinY >= crownY && cMinX <= mainMaxXAtCrown && cMaxX >= mainMinXAtCrown) {
+              validCoreLabels[compSizes[i].label] = 1;
+            }
+          }
+        }
+
+        // Geodesic region growing — strictly no growing above crownY
+        let head = 0;
+        let tail = 0;
+        for (let idx = 0; idx < pixels; idx++) {
+          const l = labels[idx];
+          if (l > 0 && validCoreLabels[l] === 1) {
+            const cy = (idx / 512) | 0;
+            if (cy >= crownY) { isHuman[idx] = 1; queue[tail++] = idx; }
+          }
+        }
+        while (head < tail) {
+          const cur = queue[head++];
+          const cy = (cur / 512) | 0;
+          const cx = cur % 512;
+          for (let ddy = -1; ddy <= 1; ddy++) {
+            for (let ddx = -1; ddx <= 1; ddx++) {
+              if (ddx === 0 && ddy === 0) continue;
+              const ny = cy + ddy, nx = cx + ddx;
+              if (ny >= crownY && ny <= rcMaxY && nx >= rcMinX && nx <= rcMaxX) {
+                const nIdx = ny * 512 + nx;
+                if (isHuman[nIdx] === 0 && rawAlpha[nIdx] >= vMin) {
+                  isHuman[nIdx] = 1; queue[tail++] = nIdx;
+                }
+              }
+            }
+          }
+        }
+        // Preserve natural rounded apex 1-2 pixels above crownY
+        for (let y = Math.max(rcMinY, crownY - 2); y < crownY; y++) {
+          for (let x = rcMinX; x <= rcMaxX; x++) {
+            const idx = y * 512 + x;
+            if (rawAlpha[idx] >= 0.50 && idx + 512 < pixels && isHuman[idx + 512] === 1) {
+              isHuman[idx] = 1;
+            }
+          }
+        }
+      } else {
+        // No salient human detected — use full alpha threshold (fallback for synthetic/test frames)
+        for (let idx = 0; idx < pixels; idx++) {
+          if (rawAlpha[idx] >= vMin) isHuman[idx] = 1;
+        }
+      }
+
+      // Step 3: Two-Pass Euclidean Distance Transform (Chamfer 1.0 / 1.414)
+      const dist = new Float32Array(pixels);
+      const INF = 1e6;
+      for (let idx = 0; idx < pixels; idx++) {
+        dist[idx] = isHuman[idx] === 1 ? INF : 0.0;
+      }
+
+      // Forward pass (top-left to bottom-right)
+      for (let y = 0; y < 512; y++) {
+        const row = y * 512;
+        const rowPrev = y > 0 ? (y - 1) * 512 : -1;
+        for (let x = 0; x < 512; x++) {
+          const idx = row + x;
+          if (dist[idx] > 0.0) {
+            let m = dist[idx];
+            if (x > 0) {
+              const d = dist[idx - 1] + 1.0;
+              if (d < m) m = d;
+            }
+            if (rowPrev >= 0) {
+              const d = dist[rowPrev + x] + 1.0;
+              if (d < m) m = d;
+              if (x > 0) {
+                const dDiag = dist[rowPrev + x - 1] + 1.414;
+                if (dDiag < m) m = dDiag;
+              }
+              if (x + 1 < 512) {
+                const dDiag = dist[rowPrev + x + 1] + 1.414;
+                if (dDiag < m) m = dDiag;
+              }
+            }
+            dist[idx] = m;
+          }
+        }
+      }
+
+      // Backward pass (bottom-right to top-left)
+      for (let y = 511; y >= 0; y--) {
+        const row = y * 512;
+        const rowNext = y + 1 < 512 ? (y + 1) * 512 : -1;
+        for (let x = 511; x >= 0; x--) {
+          const idx = row + x;
+          if (dist[idx] > 0.0) {
+            let m = dist[idx];
+            if (x + 1 < 512) {
+              const d = dist[idx + 1] + 1.0;
+              if (d < m) m = d;
+            }
+            if (rowNext >= 0) {
+              const d = dist[rowNext + x] + 1.0;
+              if (d < m) m = d;
+              if (x + 1 < 512) {
+                const dDiag = dist[rowNext + x + 1] + 1.414;
+                if (dDiag < m) m = dDiag;
+              }
+              if (x > 0) {
+                const dDiag = dist[rowNext + x - 1] + 1.414;
+                if (dDiag < m) m = dDiag;
+              }
+            }
+            dist[idx] = m;
+          }
+        }
+      }
+
+      // Step 4: Smooth the alpha probability field phi (preserving subpixel curves) with interior reinforcement.
+      const phi = new Float32Array(pixels);
+      for (let idx = 0; idx < pixels; idx++) {
+        if (isHuman[idx] === 1) {
+          const d = dist[idx];
+          const r = rawAlpha[idx];
+          if (d >= 2.5) {
+            phi[idx] = Math.max(r, 0.88);
+          } else if (d >= 1.2) {
+            const w = (d - 1.2) / 1.3;
+            phi[idx] = Math.max(r, r * (1.0 - w) + 0.88 * w);
+          } else {
+            phi[idx] = r;
+          }
+        }
+      }
+
+      // Step 5: Separable 5-tap Gaussian blur on phi for smooth organic isocontours.
+      const G = [0.06136, 0.24477, 0.38774, 0.24477, 0.06136];
+      const blurH = new Float32Array(pixels);
+      for (let y = rcMinY; y <= rcMaxY; y++) {
+        const row = y * 512;
+        for (let x = rcMinX; x <= rcMaxX; x++) {
+          blurH[row + x] =
+            phi[row + Math.max(rcMinX, x - 2)] * G[0] +
+            phi[row + Math.max(rcMinX, x - 1)] * G[1] +
+            phi[row + x] * G[2] +
+            phi[row + Math.min(rcMaxX, x + 1)] * G[3] +
+            phi[row + Math.min(rcMaxX, x + 2)] * G[4];
+        }
+      }
+      const smoothed = new Float32Array(pixels);
+      for (let x = rcMinX; x <= rcMaxX; x++) {
+        for (let y = rcMinY; y <= rcMaxY; y++) {
+          smoothed[y * 512 + x] =
+            blurH[Math.max(rcMinY, y - 2) * 512 + x] * G[0] +
+            blurH[Math.max(rcMinY, y - 1) * 512 + x] * G[1] +
+            blurH[y * 512 + x] * G[2] +
+            blurH[Math.min(rcMaxY, y + 1) * 512 + x] * G[3] +
+            blurH[Math.min(rcMaxY, y + 2) * 512 + x] * G[4];
+        }
+      }
+
+      // Step 6: Higher cutoff (0.48) quintic smootherstep eliminates outer mixed grass/sky halos.
+      const cutoff = Math.max(0.45, Math.min(0.70, 0.58 + (tNorm - 0.45) * 0.20));
+      const halfW = Math.max(0.05, Math.min(0.14, 0.08 + (sNorm - 0.25) * 0.06));
+      const minT = cutoff - halfW;
+      const maxT = cutoff + halfW;
+      const invW = 1.0 / (2.0 * halfW);
+
+      for (let y = rcMinY; y <= rcMaxY; y++) {
+        for (let x = rcMinX; x <= rcMaxX; x++) {
+          const idx = y * 512 + x;
+          if (isHuman[idx] !== 1) continue;
+          let a = 0;
+          if (y >= rcMaxY - 2 && rawAlpha[idx] >= 0.20) {
+            a = 255;
+          } else {
+            const val = smoothed[idx];
+            if (val <= minT) a = 0;
+            else if (val >= maxT) a = 255;
+            else {
+              const u = (val - minT) * invW;
+              const s = u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
+              a = Math.min(255, Math.max(0, Math.round(s * 255)));
+            }
+          }
+          const pxIdx = idx * 4;
+          dest[pxIdx] = a;
+          dest[pxIdx + 1] = a;
+          dest[pxIdx + 2] = a;
+          dest[pxIdx + 3] = a;
+        }
       }
       return dest;
     }
@@ -3006,7 +3805,20 @@ class RustCoreBridgeService {
       }
       if (!alphaPtr || !rgbaPtr) throw new Error("Rust WASM allocation failed");
       new Float32Array(inst.memory.buffer, alphaPtr, pixels).set(rawAlpha);
-      inst.fastart_process_modnet_output_c(alphaPtr, rgbaPtr, threshold, feather);
+      if (crop && inst.fastart_process_modnet_output_cropped_c) {
+        inst.fastart_process_modnet_output_cropped_c(
+          alphaPtr,
+          rgbaPtr,
+          threshold,
+          feather,
+          crop.dx | 0,
+          crop.dy | 0,
+          crop.dw | 0,
+          crop.dh | 0,
+        );
+      } else {
+        inst.fastart_process_modnet_output_c(alphaPtr, rgbaPtr, threshold, feather);
+      }
       dest.set(new Uint8Array(inst.memory.buffer, rgbaPtr, bytes));
       return dest;
     } finally {

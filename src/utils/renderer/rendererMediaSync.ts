@@ -240,12 +240,20 @@ export async function preloadClip(
     vid.preload = "auto";
     vid.src = clip.url;
 
+    const recordDecodedTime = () => {
+      if (vid.readyState >= 2 && !vid.seeking && Number.isFinite(vid.currentTime)) {
+        (vid as any)._lastDecodedTime = vid.currentTime;
+      }
+    };
+
     const trigger = () => {
+      recordDecodedTime();
       if (!ctx.isPlaying && ctx.onFrameNeeded) ctx.onFrameNeeded();
     };
 
     // Hardware-synchronized video frame delivery (zero duplicate draws, locked vsync)
     const onRvfc = () => {
+      recordDecodedTime();
       // During active playback, usePlaybackLoop RAF loop already drives frame rendering at 60fps.
       // Only request extra frames here if paused / scrubbing to avoid double-draw overhead.
       if (!ctx.isPlaying && ctx.onFrameNeeded) ctx.onFrameNeeded();
@@ -264,10 +272,14 @@ export async function preloadClip(
     vid.addEventListener("canplay", trigger);
     const onSeeked = () => {
       if (isMotionTrackingActive()) return;
+      recordDecodedTime();
       trigger();
       if (vid.paused && typeof (vid as any)._targetMediaTime === "number") {
         const target = (vid as any)._targetMediaTime;
-        if (Math.abs(vid.currentTime - target) > 0.02) {
+        if (Math.abs(vid.currentTime - target) > 0.008) {
+          recordDecodedTime();
+          (vid as any)._lastHardSeek = Date.now();
+          (vid as any)._seekStartTime = Date.now();
           try {
             vid.currentTime = Math.max(0, target);
           } catch {}
@@ -690,11 +702,14 @@ export function syncPlayback(
       (vid as any)._targetMediaTime = mediaTime;
       const diff = Math.abs(vid.currentTime - mediaTime);
 
-      if (diff > 0.02) {
+      if (diff > 0.008) {
         const timeSinceLastSeek = now - lastHardSeek;
-        const MIN_SEEK_INTERVAL_MS = 24; // Smooth ~40 FPS seek cadence while moving playhead
+        const MIN_SEEK_INTERVAL_MS = 16; // Smooth 60 FPS frame-accurate seek cadence while moving playhead
 
         const performSeek = (target: number) => {
+          if (vid.readyState >= 2 && !vid.seeking && Number.isFinite(vid.currentTime)) {
+            (vid as any)._lastDecodedTime = vid.currentTime;
+          }
           (vid as any)._lastHardSeek = Date.now();
           (vid as any)._seekStartTime = Date.now();
           if ((vid as any)._pendingSeekTimer) {
@@ -703,7 +718,10 @@ export function syncPlayback(
           }
           try {
             const clampedTarget = Math.max(0, target);
-            if (ctx.isScrubbing && typeof (vid as any).fastSeek === "function") {
+            // Cutout clips must use exact currentTime (never fastSeek to distant keyframes)
+            // so the video frame stays 1:1 aligned with the cutout mask while scrubbing.
+            const isCutoutActive = Boolean(activeClip.cutout?.enabled);
+            if (!isCutoutActive && ctx.isScrubbing && typeof (vid as any).fastSeek === "function") {
               (vid as any).fastSeek(clampedTarget);
             } else {
               vid.currentTime = clampedTarget;
@@ -725,11 +743,11 @@ export function syncPlayback(
               (vid as any)._pendingSeekTimer = null;
               if (vid.paused && typeof (vid as any)._targetMediaTime === "number") {
                 const finalTarget = (vid as any)._targetMediaTime;
-                if (Math.abs(vid.currentTime - finalTarget) > 0.02) {
+                if (Math.abs(vid.currentTime - finalTarget) > 0.008) {
                   performSeek(finalTarget);
                 }
               }
-            }, 35);
+            }, 24);
           }
         }
       }

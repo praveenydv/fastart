@@ -1024,7 +1024,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   }, []);
 
   // Unified Root Draggable Bottom Container (Hosts either Tool Modal OR Timeline in the exact same space)
-  const minBottomHeight = !isDesktop ? 180 : 100;
+  const minBottomHeight = !isDesktop ? 216 : 100;
 
   const maxBottomHeight = React.useMemo(() => {
     // Guarantees at least 220px vertical clearance for Header + Player at all times
@@ -1716,7 +1716,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
   // [Vertical Toolbar] | [Config Panel (LEFT, when tool active)] | [Player (CENTER, flex:1)] | [Media & Audio Panel (RIGHT)]
   // Bottom: Full-width Timeline
   // ─────────────────────────────────────────────
-  if (isDesktop && !isFullscreen) {
+  if (isDesktop) {
     const addMediaFn = (clip: any) => {
       if (handleAddMedia) handleAddMedia(clip);
       else
@@ -1743,33 +1743,37 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
     return (
       <View style={styles.desktopContainer}>
         {/* ① Full-Height Vertical Toolbar */}
-        <View style={styles.desktopSidebarArea}>
-          {renderToolbar("vertical")}
-        </View>
+        {!isFullscreen && (
+          <View style={styles.desktopSidebarArea}>
+            {renderToolbar("vertical")}
+          </View>
+        )}
 
         {/* ② Main Content Column */}
         <View style={styles.desktopContentArea}>
           {/* Top Header Bar (no back button on desktop) */}
-          <Header
-            project={project}
-            onUpdateProject={updateProjectWithHistory}
-            onBackToHome={onBackToHome}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            onUndo={onUndo}
-            onRedo={onRedo}
-            onOpenExport={onOpenExport}
-            onOpenCanvasModal={handleOpenCanvasModal}
-            onOpenUndoHistory={() => setIsHistoryOpen(true)}
-            onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
-          />
+          {!isFullscreen && (
+            <Header
+              project={project}
+              onUpdateProject={updateProjectWithHistory}
+              onBackToHome={onBackToHome}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              onOpenExport={onOpenExport}
+              onOpenCanvasModal={handleOpenCanvasModal}
+              onOpenUndoHistory={() => setIsHistoryOpen(true)}
+              onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
+            />
+          )}
 
           {/* Middle Row: Config Panel & Media Panel & Player with Draggable Splitters */}
           <View style={styles.desktopPlayerRow}>
             {desktopPanelOrder === "config_left" ? (
               <>
                 {/* [1] Config / Inspector Panel (LEFT) */}
-                {isConfigPanelExpanded ? (
+                {!isFullscreen && (isConfigPanelExpanded ? (
                   hasDesktopRightPanel ? (
                     <View
                       style={[
@@ -1931,10 +1935,10 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                           : "Inspector"}
                     </Text>
                   </TouchableOpacity>
-                )}
+                ))}
 
                 {/* Resizer Splitter between Left Panel & Center Player */}
-                {isConfigPanelExpanded && (
+                {!isFullscreen && isConfigPanelExpanded && (
                   <View
                     style={styles.desktopResizeSplitter}
                     {...(Platform.OS === "web"
@@ -1949,10 +1953,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                 )}
 
                 {/* [2] Player (CENTER) */}
-                <View style={styles.desktopPlayerArea}>{renderPlayer()}</View>
+                <View style={[styles.desktopPlayerArea, isFullscreen && styles.desktopPlayerAreaFullscreen]}>
+                  {renderPlayer()}
+                </View>
 
                 {/* Resizer Splitter between Center Player & Right Media Panel */}
-                {!isMediaPanelCollapsed && (
+                {!isFullscreen && !isMediaPanelCollapsed && (
                   <View
                     style={styles.desktopResizeSplitter}
                     {...(Platform.OS === "web"
@@ -1967,6 +1973,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                 )}
 
                 {/* [3] Media & Resource Library Panel (RIGHT) - Default Opened */}
+                {!isFullscreen && (
                 <DesktopMediaAudioPanel
                   project={project}
                   activeTab={desktopTab}
@@ -1990,10 +1997,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                     setIsMediaPanelCollapsed((prev) => !prev)
                   }
                 />
+                )}
               </>
             ) : (
               <>
                 {/* [1] Media & Resource Library Panel (LEFT) - Default Opened */}
+                {!isFullscreen && (
                 <DesktopMediaAudioPanel
                   project={project}
                   activeTab={desktopTab}
@@ -2017,9 +2026,10 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                     setIsMediaPanelCollapsed((prev) => !prev)
                   }
                 />
+                )}
 
                 {/* Resizer Splitter between Left Media Panel & Center Player */}
-                {!isMediaPanelCollapsed && (
+                {!isFullscreen && !isMediaPanelCollapsed && (
                   <View
                     style={styles.desktopResizeSplitter}
                     {...(Platform.OS === "web"
@@ -2034,10 +2044,12 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                 )}
 
                 {/* [2] Player (CENTER) */}
-                <View style={styles.desktopPlayerArea}>{renderPlayer()}</View>
+                <View style={[styles.desktopPlayerArea, isFullscreen && styles.desktopPlayerAreaFullscreen]}>
+                  {renderPlayer()}
+                </View>
 
                 {/* Resizer Splitter between Center Player & Right Config/Inspector Panel */}
-                {isConfigPanelExpanded && (
+                {!isFullscreen && isConfigPanelExpanded && (
                   <View
                     style={styles.desktopResizeSplitter}
                     {...(Platform.OS === "web"
@@ -2052,7 +2064,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                 )}
 
                 {/* [3] Config / Inspector Panel (RIGHT) */}
-                {isConfigPanelExpanded ? (
+                {!isFullscreen && (isConfigPanelExpanded ? (
                   hasDesktopRightPanel ? (
                     <View
                       style={[
@@ -2226,13 +2238,13 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                           : "Inspector"}
                     </Text>
                   </TouchableOpacity>
-                )}
+                ))}
               </>
             )}
           </View>
 
           {/* ⑤ Bottom: Full-width Timeline */}
-          {isTimelineHidden ? (
+          {!isFullscreen && (isTimelineHidden ? (
             <TouchableOpacity
               style={styles.desktopTimelineCollapsedRail}
               onPress={handleToggleHideTimeline}
@@ -2256,7 +2268,7 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
             <View style={styles.desktopTimelineArea}>
               {renderTimelineOnly()}
             </View>
-          )}
+          ))}
         </View>
 
         {/* Global Modals for Desktop */}
@@ -2381,8 +2393,6 @@ const EditorWorkspaceComponent: React.FC<EditorWorkspaceProps> = ({
                     title={getConfigPanelTitle()}
                     onClose={onCancelModal || handleCloseMenu}
                     closeAriaLabel="Close tool"
-                    onDone={onApplyModal || handleCloseMenu}
-                    doneAriaLabel="Apply"
                   />
 
                   <View style={styles.modalBodyWrap}>
@@ -2649,6 +2659,11 @@ const styles = StyleSheet.create({
     backgroundColor: THEME_COLORS.background,
     overflow: "hidden" as any,
     minWidth: 0,
+  } as any,
+  desktopPlayerAreaFullscreen: {
+    width: "100%",
+    height: "100%",
+    zIndex: 100,
   } as any,
 
   // Config panel (shows when tool is open)

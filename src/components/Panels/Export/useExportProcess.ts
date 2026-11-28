@@ -6,6 +6,7 @@ import {
   ExportFormat,
   ExportResult,
   pauseActiveVideoRenderer,
+  getActiveVideoRenderer,
 } from "../../../utils/videoRenderer";
 import { pauseAllAudio } from "../../Player/usePlayerAudioSync";
 import { addNotification } from "../../../utils/storage";
@@ -48,6 +49,8 @@ export function useExportProcess(
   const isCancelledRef = useRef(false);
   const lastSeenProgressRef = useRef(0);
   const [isMobileCanvasRendering, setIsMobileCanvasRendering] = useState(false);
+  const [mobileBridgeResolution, setMobileBridgeResolution] = useState<string | null>(null);
+  const [mobileBridgeFps, setMobileBridgeFps] = useState<number | null>(null);
   const mobileCanvasResolverRef = useRef<{
     resolve: (res: ExportResult) => void;
     reject: (err: any) => void;
@@ -171,6 +174,15 @@ export function useExportProcess(
       pauseActiveVideoRenderer();
       pauseAllAudio();
       cancelLiveSegmentation();
+      // On mobile web browsers, flush the preview player's <video> decoders so hardware
+      // decoder slots are freed for export (Player re-attaches them automatically after export).
+      if (
+        Platform.OS === "web" &&
+        typeof navigator !== "undefined" &&
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+      ) {
+        getActiveVideoRenderer()?.pruneUnusedMedia(new Set());
+      }
     } catch {}
 
     try {
@@ -205,10 +217,72 @@ export function useExportProcess(
             nativeErr?.message?.includes("could not be rendered"))
         ) {
           console.log(`[useExportProcess] Native Rust unavailable, engaging Headless Canvas WebView bridge fallback for ${mediaType.toUpperCase()}...`);
-          setIsMobileCanvasRendering(true);
-          result = await new Promise<ExportResult>((resolve, reject) => {
-            mobileCanvasResolverRef.current = { resolve, reject };
+          const fallbackSteps: Array<{ res: string; fpsVal: number }> = [];
+          fallbackSteps.push({ res: resolution, fpsVal: fps });
+          if (resolution === "2K/4K") {
+            fallbackSteps.push({ res: "1080p", fpsVal: Math.min(fps, 30) });
+            fallbackSteps.push({ res: "720p", fpsVal: 30 });
+          } else if (resolution === "1080p") {
+            if (fps >= 60) fallbackSteps.push({ res: "1080p", fpsVal: 30 });
+            fallbackSteps.push({ res: "720p", fpsVal: 30 });
+          } else if (fps >= 60) {
+            fallbackSteps.push({ res: "720p", fpsVal: 30 });
+          }
+
+          let attemptErr: any = null;
+          let finalExportRes = resolution;
+          for (let attemptIdx = 0; attemptIdx < fallbackSteps.length; attemptIdx++) {
+            if (isCancelledRef.current) throw new Error("Export cancelled");
+            const step = fallbackSteps[attemptIdx];
+            finalExportRes = step.res;
+            setMobileBridgeResolution(step.res);
+            setMobileBridgeFps(step.fpsVal);
+            if (attemptIdx > 0) {
+              setResolution(step.res);
+              setFps(step.fpsVal);
+              // Remount WebView cleanly after OOM process termination
+              setIsMobileCanvasRendering(false);
+              lastSeenProgressRef.current = 0;
+              setProgress(0);
+              await new Promise((r) => setTimeout(r, 250));
+              if (isCancelledRef.current) throw new Error("Export cancelled");
+            }
+            setIsMobileCanvasRendering(true);
+            try {
+              result = await new Promise<ExportResult>((resolve, reject) => {
+                mobileCanvasResolverRef.current = { resolve, reject };
+              });
+              attemptErr = null;
+              break;
+            } catch (bridgeErr: any) {
+              attemptErr = bridgeErr;
+              const isOomTermination =
+                typeof bridgeErr?.message === "string" &&
+                bridgeErr.message.includes("WEBVIEW_PROCESS_TERMINATED");
+              if (!isOomTermination || attemptIdx === fallbackSteps.length - 1 || isCancelledRef.current) {
+                throw bridgeErr;
+              }
+              console.warn(
+                `[useExportProcess] WebView terminated at ${step.res}@${step.fpsVal}fps; retrying at lower memory profile...`
+              );
+            }
+          }
+          if (attemptErr) throw attemptErr;
+          if (isCancelledRef.current || !result) return;
+
+          updateProgressMonotonic(100);
+          setExportedResult(result);
+          setExportedUrl(result.videoUrl);
+          setStatus("done");
+          addNotification({
+            title: "Export Ready",
+            message: `"${project?.title || "Project"}" exported as ${finalExportRes} ${mediaType.toUpperCase()}.`,
+            projectId: project?.id,
+            projectTitle: project?.title,
+            actionText: "Open Project",
+            icon: "videocam",
           });
+          return;
         } else {
           throw nativeErr;
         }
@@ -236,10 +310,19 @@ export function useExportProcess(
       }
       console.warn("Export error:", err);
       setStatus("error");
-      setErrorMessage("Export could not be completed. Please try another format.");
+      const msg = typeof err?.message === "string" ? err.message : "";
+      if (msg.includes("WEBVIEW_PROCESS_TERMINATED")) {
+        setErrorMessage(
+          "Your device ran low on memory during export. Try exporting at 720p or closing background apps."
+        );
+      } else {
+        setErrorMessage("Export could not be completed. Please try another format or lower resolution.");
+      }
     } finally {
       setExportingActive(false);
       setIsMobileCanvasRendering(false);
+      setMobileBridgeResolution(null);
+      setMobileBridgeFps(null);
       mobileCanvasResolverRef.current = null;
     }
   };
@@ -314,6 +397,8 @@ export function useExportProcess(
     exportFilename,
     setExportFilename,
     isMobileCanvasRendering,
+    mobileBridgeResolution,
+    mobileBridgeFps,
     handleMobileCanvasComplete,
     handleMobileCanvasError,
     handleMobileCanvasProgress,

@@ -621,6 +621,7 @@ export function drawClip(
           fps: bakedFps,
           isImage: clip.type === "photo",
           isPlaying: renderCtx.isPlaying || false,
+          clipReverse: Boolean(clip.reverse),
         }
       : rawCutout;
 

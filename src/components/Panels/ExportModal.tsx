@@ -47,6 +47,8 @@ function ExportModalComponent({
     exportFilename,
     setExportFilename,
     isMobileCanvasRendering,
+    mobileBridgeResolution,
+    mobileBridgeFps,
     handleMobileCanvasComplete,
     handleMobileCanvasError,
     handleMobileCanvasProgress,
@@ -54,17 +56,31 @@ function ExportModalComponent({
 
   const mobileExportOptions = React.useMemo(
     () => ({
-      fps,
+      fps: mobileBridgeFps ?? fps,
       duration: Math.max(totalDuration || 2.0, 1.0),
       format: mediaType,
-      resolution,
+      resolution: mobileBridgeResolution ?? resolution,
       currentTime: project?.currentTime || 0,
     }),
-    [fps, totalDuration, mediaType, resolution, project?.currentTime]
+    [fps, mobileBridgeFps, totalDuration, mediaType, resolution, mobileBridgeResolution, project?.currentTime]
   );
 
   return (
-    <Modal visible={visible} animationType={Platform.OS === "web" ? "fade" : "none"} transparent>
+    <Modal
+      visible={visible}
+      animationType={Platform.OS === "web" ? "fade" : "none"}
+      transparent
+      onRequestClose={() => {
+        if (noticeDialog?.visible) {
+          setNoticeDialog(null);
+          return;
+        }
+        if (status === "rendering") {
+          handleCancelExport();
+        }
+        onClose();
+      }}
+    >
       <View style={[styles.modalOverlay, isDesktop && styles.modalOverlayDesktop]}>
         {/* Clickable Backdrop Dismiss for Desktop & Mobile */}
         <TouchableOpacity
@@ -167,60 +183,53 @@ function ExportModalComponent({
         </View>
       </View>
 
-      {/* Sleek Modern In-App Notice Dialog */}
+      {/* Sleek Modern In-App Notice Dialog (inline overlay avoids nested Modal crashes on iOS) */}
       {noticeDialog?.visible && (
-        <Modal
-          visible={true}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setNoticeDialog(null)}
-        >
-          <View style={styles.noticeBackdrop}>
-            <View style={styles.noticeModalCard}>
-              <View
-                style={[
-                  styles.noticeIconCircle,
-                  {
-                    backgroundColor: `${noticeDialog.iconColor || "#FFFFFF"}1A`,
-                    borderColor: `${noticeDialog.iconColor || "#FFFFFF"}44`,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={noticeDialog.icon || "information-circle-outline"}
-                  size={32}
-                  color={noticeDialog.iconColor || "#FFFFFF"}
-                />
-              </View>
-              <Text style={styles.noticeTitle}>{noticeDialog.title}</Text>
-              <Text style={styles.noticeMessage}>{noticeDialog.message}</Text>
-              <View style={styles.noticeActions}>
-                {noticeDialog.primaryText && noticeDialog.onPrimary && (
-                  <TouchableOpacity
-                    style={styles.noticePrimaryBtn}
-                    onPress={noticeDialog.onPrimary}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.noticePrimaryText}>
-                      {noticeDialog.primaryText}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                {noticeDialog.secondaryText && noticeDialog.onSecondary && (
-                  <TouchableOpacity
-                    style={styles.noticeSecondaryBtn}
-                    onPress={noticeDialog.onSecondary}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.noticeSecondaryText}>
-                      {noticeDialog.secondaryText}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+        <View style={[StyleSheet.absoluteFill, styles.noticeBackdrop, { zIndex: 10000 }]}>
+          <View style={styles.noticeModalCard}>
+            <View
+              style={[
+                styles.noticeIconCircle,
+                {
+                  backgroundColor: `${noticeDialog.iconColor || "#FFFFFF"}1A`,
+                  borderColor: `${noticeDialog.iconColor || "#FFFFFF"}44`,
+                },
+              ]}
+            >
+              <Ionicons
+                name={noticeDialog.icon || "information-circle-outline"}
+                size={32}
+                color={noticeDialog.iconColor || "#FFFFFF"}
+              />
+            </View>
+            <Text style={styles.noticeTitle}>{noticeDialog.title}</Text>
+            <Text style={styles.noticeMessage}>{noticeDialog.message}</Text>
+            <View style={styles.noticeActions}>
+              {noticeDialog.primaryText && noticeDialog.onPrimary && (
+                <TouchableOpacity
+                  style={styles.noticePrimaryBtn}
+                  onPress={noticeDialog.onPrimary}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.noticePrimaryText}>
+                    {noticeDialog.primaryText}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {noticeDialog.secondaryText && noticeDialog.onSecondary && (
+                <TouchableOpacity
+                  style={styles.noticeSecondaryBtn}
+                  onPress={noticeDialog.onSecondary}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.noticeSecondaryText}>
+                    {noticeDialog.secondaryText}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
-        </Modal>
+        </View>
       )}
 
       {/* Hardware-accelerated Skia Canvas & MediaRecorder engine on mobile */}

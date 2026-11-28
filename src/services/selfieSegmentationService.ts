@@ -34,8 +34,62 @@ let _cachedFS: any = null;
 let _cachedThumbnails: any = null;
 let _cachedJpeg: any = null;
 
+const MODNET_DOWNLOAD_URL =
+  "https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx";
+const MODNET_MIN_BYTES = 20_000_000;
+
+export type CutoutModelStatus =
+  | "idle"
+  | "checking"
+  | "downloading"
+  | "initializing"
+  | "ready"
+  | "error"
+  | "unsupported";
+
+export interface CutoutModelState {
+  status: CutoutModelStatus;
+  progress: number;
+  error: string | null;
+  backend: string | null;
+  source: "bundle" | "cached" | "downloaded" | "web_worker" | "web_direct" | null;
+}
+
 let isModnetReady = false;
 let modnetInitPromise: Promise<boolean> | null = null;
+let cutoutModelState: CutoutModelState = {
+  status: "idle",
+  progress: 0,
+  error: null,
+  backend: null,
+  source: null,
+};
+const modelStateListeners = new Set<(state: CutoutModelState) => void>();
+
+function setCutoutModelState(partial: Partial<CutoutModelState>): void {
+  cutoutModelState = { ...cutoutModelState, ...partial };
+  for (const listener of modelStateListeners) {
+    try {
+      listener(cutoutModelState);
+    } catch {}
+  }
+}
+
+export function getCutoutModelState(): CutoutModelState {
+  return cutoutModelState;
+}
+
+export function subscribeCutoutModelState(
+  listener: (state: CutoutModelState) => void,
+): () => void {
+  modelStateListeners.add(listener);
+  try {
+    listener(cutoutModelState);
+  } catch {}
+  return () => {
+    modelStateListeners.delete(listener);
+  };
+}
 
 // Mask cache & state
 let _isExporting = false;
@@ -104,8 +158,41 @@ export function registerMediaProvider(
 const clipMaskRLECache = new LruCache<string, Uint8Array>(2400);
 const clipMaskFpsMap = new Map<string, number>();
 const clipFrameIndicesMap = new Map<string, number[]>();
+const clipCropMap = new Map<string, { dx: number; dy: number; dw: number; dh: number }>();
 const storageRestoreAttempted = new Set<string>();
 export const UNIFIED_CUTOUT_SAMPLE_FPS = 15;
+
+export function computeLetterboxParams(srcW: number, srcH: number, targetSize = 512): {
+  dx: number;
+  dy: number;
+  dw: number;
+  dh: number;
+} {
+  const aspect = srcW / Math.max(1, srcH);
+  let dw = targetSize;
+  let dh = targetSize;
+  let dx = 0;
+  let dy = 0;
+
+  if (aspect >= 1.0) {
+    // Landscape (e.g. 16:9): fit width, letterbox top and bottom
+    dh = Math.max(128, Math.min(targetSize, Math.round(targetSize / aspect)));
+    dy = Math.floor((targetSize - dh) / 2);
+  } else {
+    // Portrait (e.g. 9:16): fit height, pillarbox left and right
+    dw = Math.max(128, Math.min(targetSize, Math.round(targetSize * aspect)));
+    dx = Math.floor((targetSize - dw) / 2);
+  }
+  return { dx, dy, dw, dh };
+}
+
+function getClipIdFromKey(key: string): string {
+  const srcIdx = key.indexOf("_src_");
+  if (srcIdx !== -1) return key.substring(0, srcIdx);
+  const lastUnderscore = key.lastIndexOf("_");
+  if (lastUnderscore !== -1) return key.substring(0, lastUnderscore);
+  return key;
+}
 
 export function getCutoutQualityFps(quality?: string, sourceFps = 30): number {
   const norm = (quality || "best").toLowerCase();
@@ -215,7 +302,7 @@ function findNearestFrameIndex(
 
 // High-speed LRU canvas buffer: keeps only active frames in uncompressed canvas form
 const lruCanvasCache = new Map<string, HTMLCanvasElement>();
-const MAX_LRU_CANVASES = 256;
+const MAX_LRU_CANVASES = 1200;
 const canvasPool: HTMLCanvasElement[] = [];
 
 function getPooledCanvas(w = 512, h = 512): HTMLCanvasElement {
@@ -307,15 +394,62 @@ function blendMasks(
   return temporalBlendCanvas;
 }
 
-function decompressRLEToCanvas(rle: Uint8Array): HTMLCanvasElement | null {
-  if (typeof document === "undefined") return null;
+function decompressRLEToCanvas(
+  rle: Uint8Array,
+  crop?: { dx: number; dy: number; dw: number; dh: number } | null,
+): HTMLCanvasElement | null {
+  if (typeof document === "undefined" || !rle || rle.length < 2) return null;
+
+  // 1. Calculate exact total decoded pixel count from RLE run counts
+  let decodedPixels = 0;
+  for (let i = 0; i < rle.length; i += 2) {
+    decodedPixels += rle[i];
+  }
+
+  // 2. Case A: Mask was already cropped to native aspect ratio (e.g. 512x288)
+  if (decodedPixels > 0 && decodedPixels < 512 * 512) {
+    let w = crop && crop.dw > 0 ? crop.dw : 512;
+    let h =
+      crop && crop.dh > 0 && crop.dw * crop.dh === decodedPixels
+        ? crop.dh
+        : decodedPixels % 512 === 0
+          ? decodedPixels / 512
+          : Math.round(Math.sqrt(decodedPixels));
+
+    if (w * h !== decodedPixels && decodedPixels % 512 === 0) {
+      w = 512;
+      h = decodedPixels / 512;
+    }
+
+    const canvas = getPooledCanvas(w, h);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+
+    const imgData = ctx.createImageData(w, h);
+    try {
+      rustCoreBridge.unpackAlphaRLEToRGBA(rle, imgData.data);
+    } catch {
+      const alpha = rustCoreBridge.unpackAlphaRLE(rle, decodedPixels);
+      for (let i = 0; i < decodedPixels; i++) {
+        const a = alpha[i];
+        const idx = i * 4;
+        imgData.data[idx] = a;
+        imgData.data[idx + 1] = a;
+        imgData.data[idx + 2] = a;
+        imgData.data[idx + 3] = a;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+  }
+
+  // 3. Case B: Full 512x512 letterboxed mask
   const canvas = getPooledCanvas(512, 512);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
   const imgData = ctx.createImageData(512, 512);
   imgData.data.fill(0);
-  // Direct Rust WASM single-pass decompression: zero JS loops, zero intermediate allocations
   try {
     rustCoreBridge.unpackAlphaRLEToRGBA(rle, imgData.data);
   } catch {
@@ -331,6 +465,26 @@ function decompressRLEToCanvas(rle: Uint8Array): HTMLCanvasElement | null {
     }
   }
   ctx.putImageData(imgData, 0, 0);
+
+  if (crop && (crop.dw !== 512 || crop.dh !== 512 || crop.dx !== 0 || crop.dy !== 0)) {
+    const cropped = getPooledCanvas(crop.dw, crop.dh);
+    const cCtx = cropped.getContext("2d");
+    if (cCtx) {
+      cCtx.drawImage(
+        canvas,
+        crop.dx,
+        crop.dy,
+        crop.dw,
+        crop.dh,
+        0,
+        0,
+        crop.dw,
+        crop.dh,
+      );
+      return cropped;
+    }
+  }
+
   return canvas;
 }
 
@@ -496,7 +650,20 @@ function getCanvasForKey(key: string): HTMLCanvasElement | null {
   }
   if (clipMaskRLECache.has(key)) {
     const rle = clipMaskRLECache.get(key)!;
-    const canvas = decompressRLEToCanvas(rle);
+    const clipId = getClipIdFromKey(key);
+    let crop = clipCropMap.get(clipId);
+    if (!crop && activeMediaProvider) {
+      const media = activeMediaProvider(clipId);
+      if (media) {
+        const mw = (media as any).videoWidth || (media as any).naturalWidth || (media as any).width || 0;
+        const mh = (media as any).videoHeight || (media as any).naturalHeight || (media as any).height || 0;
+        if (mw > 0 && mh > 0) {
+          crop = computeLetterboxParams(mw, mh, 512);
+          clipCropMap.set(clipId, crop);
+        }
+      }
+    }
+    const canvas = decompressRLEToCanvas(rle, crop);
     if (canvas) {
       putInLRUCache(key, canvas);
       return canvas;
@@ -514,8 +681,8 @@ function lookupSourceMask(
   let canvas = getCanvasForKey(`${id}_src_${sourceFrameIdx}`);
   if (canvas) return canvas;
 
-  // 2. Nearest match in _src_ indices (within +/- 15 frames = 0.5s)
-  const nearestSrcIdx = findNearestFrameIndex(`${id}_src`, sourceFrameIdx, 15);
+  // 2. Nearest match in _src_ indices (strictly within +/- 1 frame = 33ms to prevent spatial shift)
+  const nearestSrcIdx = findNearestFrameIndex(`${id}_src`, sourceFrameIdx, 1);
   if (nearestSrcIdx !== null) {
     canvas = getCanvasForKey(`${id}_src_${nearestSrcIdx}`);
     if (canvas) return canvas;
@@ -532,8 +699,8 @@ function lookupClipMask(
   let canvas = getCanvasForKey(`${id}_${clipFrameIdx}`);
   if (canvas) return canvas;
 
-  // 2. Nearest match in direct indices (within +/- 15 frames = 0.5s)
-  const nearestIdx = findNearestFrameIndex(id, clipFrameIdx, 15);
+  // 2. Nearest match in direct indices (strictly within +/- 1 frame = 33ms to prevent spatial shift)
+  const nearestIdx = findNearestFrameIndex(id, clipFrameIdx, 1);
   if (nearestIdx !== null) {
     canvas = getCanvasForKey(`${id}_${nearestIdx}`);
     if (canvas) return canvas;
@@ -617,93 +784,68 @@ export function getFrameMask(
   }
 
   // 1. Priority 1: Match by canonical source frame index (absolute video media time)
-  // This guarantees 100% frame-accurate synchronization across trimmed, split, reversed, or speed-adjusted clips!
+  // Guarantees 100% frame-accurate alignment with zero inter-frame ghosting or background patches.
   if (sourceTime !== undefined && Number.isFinite(sourceTime)) {
-    const continuousFrame = Math.max(0, sourceTime * effectiveFps);
-    const frameIdx1 = Math.floor(continuousFrame);
-    const fraction = continuousFrame - frameIdx1;
-    const frameIdx2 = frameIdx1 + 1;
+    const sourceFrameIdx = Math.max(0, Math.round(sourceTime * effectiveFps));
+    const m =
+      getCanvasForKey(`${clipId}_src_${sourceFrameIdx}`) ||
+      (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_src_${sourceFrameIdx}`) : null) ||
+      lookupSourceMask(clipId, sourceFrameIdx) ||
+      (fallbackClipId ? lookupSourceMask(fallbackClipId, sourceFrameIdx) : null);
 
-    const m1 =
-      getCanvasForKey(`${clipId}_src_${frameIdx1}`) ||
-      (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_src_${frameIdx1}`) : null);
+    if (m) return m;
 
-    if (m1) {
-      if (!isImage && fraction > 0.02 && fraction < 0.98) {
-        const m2 =
-          getCanvasForKey(`${clipId}_src_${frameIdx2}`) ||
-          (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_src_${frameIdx2}`) : null);
-        if (m2) {
-          return blendMasks(m1, m2, fraction);
-        }
-      }
-      return m1;
+    // Search nearest source frame within 150ms before falling back to clip timeline index
+    // (which diverges on trimmed/split/reversed/retimed clips).
+    const maxSrcDist = Math.max(3, Math.ceil(effectiveFps * 0.15));
+    const nearClipSrcIdx = findNearestFrameIndex(`${clipId}_src`, sourceFrameIdx, maxSrcDist);
+    if (nearClipSrcIdx !== null) {
+      const nearMask = getCanvasForKey(`${clipId}_src_${nearClipSrcIdx}`);
+      if (nearMask) return nearMask;
     }
-
-    const sourceFrameIdx = Math.max(0, Math.round(continuousFrame));
-    let srcCanvas = lookupSourceMask(clipId, sourceFrameIdx);
-    if (srcCanvas) return srcCanvas;
-
     if (fallbackClipId && fallbackClipId !== clipId) {
-      srcCanvas = lookupSourceMask(fallbackClipId, sourceFrameIdx);
-      if (srcCanvas) return srcCanvas;
+      const nearFallbackSrcIdx = findNearestFrameIndex(`${fallbackClipId}_src`, sourceFrameIdx, maxSrcDist);
+      if (nearFallbackSrcIdx !== null) {
+        const nearFallbackMask = getCanvasForKey(`${fallbackClipId}_src_${nearFallbackSrcIdx}`);
+        if (nearFallbackMask) return nearFallbackMask;
+      }
     }
   }
 
   // 2. Priority 2: Match by direct timeline frame index on clipId
-  const continuousClipFrame = Math.max(0, clipTime * effectiveFps);
-  const cFrameIdx1 = Math.floor(continuousClipFrame);
-  const cFraction = continuousClipFrame - cFrameIdx1;
-  const cFrameIdx2 = cFrameIdx1 + 1;
+  const clipFrameIdx = Math.max(0, Math.round(clipTime * effectiveFps));
+  const cm =
+    getCanvasForKey(`${clipId}_${clipFrameIdx}`) ||
+    (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_${clipFrameIdx}`) : null) ||
+    lookupClipMask(clipId, clipFrameIdx) ||
+    (fallbackClipId ? lookupClipMask(fallbackClipId, clipFrameIdx) : null);
 
-  const cm1 =
-    getCanvasForKey(`${clipId}_${cFrameIdx1}`) ||
-    (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_${cFrameIdx1}`) : null);
+  if (cm) return cm;
 
-  if (cm1) {
-    if (!isImage && cFraction > 0.02 && cFraction < 0.98) {
-      const cm2 =
-        getCanvasForKey(`${clipId}_${cFrameIdx2}`) ||
-        (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_${cFrameIdx2}`) : null);
-      if (cm2) {
-        return blendMasks(cm1, cm2, cFraction);
-      }
-    }
-    return cm1;
-  }
-
-  const clipFrameIdx = Math.max(0, Math.round(continuousClipFrame));
-  let canvas = lookupClipMask(clipId, clipFrameIdx);
-  if (canvas) return canvas;
-
-  if (fallbackClipId && fallbackClipId !== clipId) {
-    canvas = lookupClipMask(fallbackClipId, clipFrameIdx);
-    if (canvas) return canvas;
-  }
-
-  // 3. Fallback to frame 0 or any registered mask for this clip
+  // 3. Fallback to frame 0 strictly for static images or start of clip (<= 0.25s)
   const zeroMask =
     getCanvasForKey(`${clipId}_0`) ||
     (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_0`) : null) ||
     getCanvasForKey(`${clipId}_src_0`) ||
     (fallbackClipId ? getCanvasForKey(`${fallbackClipId}_src_0`) : null);
-  if (zeroMask && clipTime <= 0.25) return zeroMask;
+  if (zeroMask && (isImage || clipTime <= 0.25)) return zeroMask;
 
-  // 4. Continuous temporal coverage: Return closest available frame
-  const anyClipIdx = findNearestFrameIndex(clipId, clipFrameIdx, 60);
+  // 4. Continuous temporal coverage: Return closest available frame strictly within narrow window (+/- 2 frames = 66ms)
+  const anyClipIdx = findNearestFrameIndex(clipId, clipFrameIdx, 2);
   if (anyClipIdx !== null) {
     const fallbackCanvas = getCanvasForKey(`${clipId}_${anyClipIdx}`);
     if (fallbackCanvas) return fallbackCanvas;
   }
   if (fallbackClipId && fallbackClipId !== clipId) {
-    const anyParentIdx = findNearestFrameIndex(fallbackClipId, clipFrameIdx, 60);
+    const anyParentIdx = findNearestFrameIndex(fallbackClipId, clipFrameIdx, 2);
     if (anyParentIdx !== null) {
       const fallbackParent = getCanvasForKey(`${fallbackClipId}_${anyParentIdx}`);
       if (fallbackParent) return fallbackParent;
     }
   }
 
-  if (zeroMask) return zeroMask;
+  // Static photo images retain frame 0 indefinitely; video clips must NOT project frame 0 onto later timecodes!
+  if (isImage && zeroMask) return zeroMask;
 
   return null;
 }
@@ -750,7 +892,8 @@ export function updateActiveFrameMatteParams(
 ): boolean {
   if (
     !lastModnetRawAlpha ||
-    (lastModnetRawAlphaClipId && lastModnetRawAlphaClipId !== clipId)
+    (lastModnetRawAlphaClipId && lastModnetRawAlphaClipId !== clipId) ||
+    lastModnetRawAlphaFrameIdx !== frameIdx
   ) {
     return false;
   }
@@ -769,19 +912,28 @@ export function updateActiveFrameMatteParams(
     return false;
   }
 
+  const udCrop = {
+    dx: lastModnetCropDx,
+    dy: lastModnetCropDy,
+    dw: lastModnetCropDw,
+    dh: lastModnetCropDh,
+  };
   rustCoreBridge.processModnetOutput(
     lastModnetRawAlpha,
     modnetMaskImgData.data,
     threshold,
     feather,
+    udCrop,
   );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-  const updated = getPooledCanvas(512, 512);
+  const udW = udCrop.dw > 0 ? udCrop.dw : 512;
+  const udH = udCrop.dh > 0 ? udCrop.dh : 512;
+  const updated = getPooledCanvas(udW, udH);
   const uCtx = updated.getContext("2d");
   if (uCtx) {
-    uCtx.clearRect(0, 0, 512, 512);
-    uCtx.drawImage(modnetMaskCanvas, 0, 0);
+    uCtx.clearRect(0, 0, udW, udH);
+    uCtx.drawImage(modnetMaskCanvas, udCrop.dx, udCrop.dy, udW, udH, 0, 0, udW, udH);
     setMaskInCache(`${clipId}_${frameIdx}`, updated);
     if (frameIdx === 0) {
       setMaskInCache(`${clipId}_0`, updated);
@@ -959,6 +1111,10 @@ export async function restoreClipMasksFromStorage(
     const saved = await loadMasksRLE(clipId);
     if (saved && saved.masks && Object.keys(saved.masks).length > 0) {
       storageRestoredClips.add(clipId);
+      if (saved.crop) {
+        clipCropMap.set(clipId, saved.crop);
+      }
+      const crop = clipCropMap.get(clipId);
       let prewarmedCount = 0;
       for (const [key, rle] of Object.entries(saved.masks)) {
         clipMaskRLECache.set(key, rle);
@@ -966,7 +1122,7 @@ export async function restoreClipMasksFromStorage(
 
         // Pre-warm active canvas LRU cache for immediate zero-lag playback after restore
         if (prewarmedCount < 60) {
-          const prewarmed = decompressRLEToCanvas(rle);
+          const prewarmed = decompressRLEToCanvas(rle, crop);
           if (prewarmed) {
             putInLRUCache(key, prewarmed);
             prewarmedCount++;
@@ -1096,30 +1252,223 @@ export function getHumanSegmentationMask(
 
 let lastNeuralInitAttempt = 0;
 
+async function ensureNativeModnetFileAndInit(): Promise<boolean> {
+  await rustCoreBridge.init();
+  if (!rustCoreBridge.hasNativeModnetModule()) {
+    setCutoutModelState({
+      status: "unsupported",
+      progress: 0,
+      backend: Platform.OS,
+      source: null,
+      error:
+        "On-device Auto Cutout is not available in Expo Go. Use a development or release native build (npx expo run:ios or npx expo run:android).",
+    });
+    return false;
+  }
+
+  // 1. Try bundled / already-installed native asset first
+  setCutoutModelState({
+    status: "checking",
+    progress: 0,
+    error: null,
+    backend: rustCoreBridge.getBackendType(),
+  });
+  if (await rustCoreBridge.initializeModnet("")) {
+    setCutoutModelState({
+      status: "ready",
+      progress: 100,
+      error: null,
+      backend: rustCoreBridge.getBackendType(),
+      source: "bundle",
+    });
+    return true;
+  }
+
+  const bundleErr = rustCoreBridge.getLastModnetInitError();
+  // 2. Check cached local file in Expo FileSystem (or download it once on demand)
+  try {
+    const FS: any = await import("expo-file-system/legacy").catch(
+      () => import("expo-file-system"),
+    );
+    const baseDir = FS.documentDirectory || FS.cacheDirectory || "";
+    if (!baseDir) {
+      setCutoutModelState({
+        status: "error",
+        progress: 0,
+        error: bundleErr || "Device storage directory is unavailable to store AI Cutout model.",
+      });
+      return false;
+    }
+
+    const modelsDir = `${baseDir}models/`;
+    const localModelPath = `${modelsDir}modnet.onnx`;
+    const cacheCandidate = FS.cacheDirectory ? `${FS.cacheDirectory}models/modnet.onnx` : "";
+
+    let readyPath: string | null = null;
+    for (const candidate of [localModelPath, cacheCandidate]) {
+      if (!candidate) continue;
+      try {
+        const info = await FS.getInfoAsync(candidate);
+        if (info?.exists && typeof info.size === "number" && info.size >= MODNET_MIN_BYTES) {
+          readyPath = candidate;
+          break;
+        }
+      } catch {}
+    }
+
+    let sourceKind: "cached" | "downloaded" = "cached";
+    if (!readyPath) {
+      await FS.makeDirectoryAsync(modelsDir, { intermediates: true }).catch(() => {});
+      const tempPath = `${localModelPath}.download`;
+      await FS.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
+      setCutoutModelState({
+        status: "downloading",
+        progress: 0,
+        error: null,
+        backend: rustCoreBridge.getBackendType(),
+      });
+
+      const downloadResumable = FS.createDownloadResumable(
+        MODNET_DOWNLOAD_URL,
+        tempPath,
+        {},
+        (dp: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => {
+          const total = dp?.totalBytesExpectedToWrite || 26_000_000;
+          const pct = Math.max(0, Math.min(99, Math.round((dp.totalBytesWritten / total) * 100)));
+          setCutoutModelState({ status: "downloading", progress: pct, error: null });
+        },
+      );
+      const result = await downloadResumable.downloadAsync();
+      const downloadedUri = result?.uri || tempPath;
+      const downloadedInfo = await FS.getInfoAsync(downloadedUri);
+      if (!downloadedInfo?.exists || (downloadedInfo.size || 0) < MODNET_MIN_BYTES) {
+        await FS.deleteAsync(downloadedUri, { idempotent: true }).catch(() => {});
+        setCutoutModelState({
+          status: "error",
+          progress: 0,
+          error: "Downloaded AI Cutout model file was incomplete. Check your internet connection and tap Retry.",
+        });
+        return false;
+      }
+      await FS.deleteAsync(localModelPath, { idempotent: true }).catch(() => {});
+      await FS.moveAsync({ from: downloadedUri, to: localModelPath });
+      readyPath = localModelPath;
+      sourceKind = "downloaded";
+    }
+
+    setCutoutModelState({
+      status: "initializing",
+      progress: 100,
+      error: null,
+      backend: rustCoreBridge.getBackendType(),
+    });
+    if (await rustCoreBridge.initializeModnet(readyPath)) {
+      setCutoutModelState({
+        status: "ready",
+        progress: 100,
+        error: null,
+        backend: rustCoreBridge.getBackendType(),
+        source: sourceKind,
+      });
+      return true;
+    }
+    setCutoutModelState({
+      status: "error",
+      progress: 0,
+      error:
+        rustCoreBridge.getLastModnetInitError() ||
+        bundleErr ||
+        "Could not start on-device AI Cutout neural runtime.",
+    });
+    return false;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    setCutoutModelState({
+      status: "error",
+      progress: 0,
+      error: `AI Cutout model setup failed: ${errMsg}. Check your connection and tap Retry.`,
+    });
+    return false;
+  }
+}
+
 /** Initializes the shared Rust MODNet runtime for the current platform. */
-export function initStudioNeuralEngine(): Promise<boolean> {
-  if (isModnetRuntimeReady()) return Promise.resolve(true);
+export function initStudioNeuralEngine(forceRetry = false): Promise<boolean> {
+  if (isModnetRuntimeReady()) {
+    if (cutoutModelState.status !== "ready") {
+      setCutoutModelState({ status: "ready", progress: 100, error: null });
+    }
+    return Promise.resolve(true);
+  }
   if (modnetInitPromise) return modnetInitPromise;
   const now = Date.now();
-  if (now - lastNeuralInitAttempt < 6000) return Promise.resolve(false);
+  if (!forceRetry && now - lastNeuralInitAttempt < 6000 && cutoutModelState.status === "error") {
+    return Promise.resolve(false);
+  }
   lastNeuralInitAttempt = now;
   modnetInitPromise = (async () => {
     try {
-      const ok =
-        Platform.OS === "web"
-          ? (await cutoutWorkerBridge.init()) ||
-            (await getDirectWebSession()) !== null
-          : await rustCoreBridge.initializeModnet();
-      isModnetReady = ok;
-      return ok;
+      if (Platform.OS !== "web") {
+        const ok = await ensureNativeModnetFileAndInit();
+        isModnetReady = ok;
+        return ok;
+      }
+
+      setCutoutModelState({
+        status: "initializing",
+        progress: 0,
+        error: null,
+        backend: "web",
+      });
+      const workerOk = await cutoutWorkerBridge.init();
+      if (workerOk) {
+        isModnetReady = true;
+        setCutoutModelState({
+          status: "ready",
+          progress: 100,
+          error: null,
+          backend: "web_worker",
+          source: "web_worker",
+        });
+        return true;
+      }
+      const directSession = await getDirectWebSession();
+      if (directSession !== null) {
+        isModnetReady = true;
+        setCutoutModelState({
+          status: "ready",
+          progress: 100,
+          error: null,
+          backend: "web_direct",
+          source: "web_direct",
+        });
+        return true;
+      }
+      setCutoutModelState({
+        status: "error",
+        progress: 0,
+        backend: "web",
+        error: "Could not load AI Cutout model (modnet.onnx) or ONNX Runtime in this browser.",
+      });
+      return false;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.warn("[StudioCutout] Rust MODNet initialization failed:", err);
+      setCutoutModelState({
+        status: "error",
+        progress: 0,
+        error: msg || "AI Cutout initialization failed.",
+      });
       return false;
     } finally {
       modnetInitPromise = null;
     }
   })();
   return modnetInitPromise;
+}
+
+export function ensureCutoutModelReady(forceRetry = false): Promise<boolean> {
+  return initStudioNeuralEngine(forceRetry);
 }
 
 let directWebSession: any = null;
@@ -1227,8 +1576,8 @@ async function runDirectWebInference(
  */
 export async function segmentWithStudioEngine(
   sourceMedia: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
-  threshold = 0.15,
-  feather = 0.08,
+  threshold = 0.45,
+  feather = 0.25,
   clipId?: string,
   frameIdx?: number,
 ): Promise<HTMLCanvasElement | null> {
@@ -1266,14 +1615,30 @@ export async function segmentWithStudioEngine(
         modnetMaskImgData.data,
         threshold,
         feather,
+        {
+          dx: lastModnetCropDx,
+          dy: lastModnetCropDy,
+          dw: lastModnetCropDw,
+          dh: lastModnetCropDh,
+        },
       );
       modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-      const cached = getPooledCanvas(512, 512);
+      const cached = getPooledCanvas(lastModnetCropDw, lastModnetCropDh);
       const cCtx = cached.getContext("2d");
       if (cCtx) {
-        cCtx.clearRect(0, 0, 512, 512);
-        cCtx.drawImage(modnetMaskCanvas, 0, 0);
+        cCtx.clearRect(0, 0, lastModnetCropDw, lastModnetCropDh);
+        cCtx.drawImage(
+          modnetMaskCanvas,
+          lastModnetCropDx,
+          lastModnetCropDy,
+          lastModnetCropDw,
+          lastModnetCropDh,
+          0,
+          0,
+          lastModnetCropDw,
+          lastModnetCropDh,
+        );
         return cached;
       }
     }
@@ -1305,8 +1670,18 @@ export async function segmentWithStudioEngine(
   }
   if (!modnetInputCtx) return null;
 
-  modnetInputCtx.clearRect(0, 0, 512, 512);
-  modnetInputCtx.drawImage(sourceMedia as any, 0, 0, 512, 512);
+  const { dx, dy, dw, dh } = computeLetterboxParams(vw, vh, 512);
+  lastModnetCropDx = dx;
+  lastModnetCropDy = dy;
+  lastModnetCropDw = dw;
+  lastModnetCropDh = dh;
+  if (clipId) {
+    clipCropMap.set(clipId, { dx, dy, dw, dh });
+  }
+
+  modnetInputCtx.fillStyle = "#808080";
+  modnetInputCtx.fillRect(0, 0, 512, 512);
+  modnetInputCtx.drawImage(sourceMedia as any, 0, 0, vw, vh, dx, dy, dw, dh);
   const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
 
   const total = 512 * 512;
@@ -1375,14 +1750,15 @@ export async function segmentWithStudioEngine(
     modnetMaskImgData.data,
     threshold,
     feather,
+    { dx, dy, dw, dh },
   );
   modnetMaskCtx.putImageData(modnetMaskImgData, 0, 0);
 
-  // Return clean independent 512x512 canvas for distortion-free compositing
-  const finalCanvas = getPooledCanvas(512, 512);
+  // Return clean independent cropped canvas preserving the exact native aspect ratio of the media
+  const finalCanvas = getPooledCanvas(dw, dh);
   const finalCtx = finalCanvas.getContext("2d");
   if (!finalCtx) return null;
-  finalCtx.drawImage(modnetMaskCanvas, 0, 0);
+  finalCtx.drawImage(modnetMaskCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
 
   return finalCanvas;
 }
@@ -1408,7 +1784,7 @@ export function requestHumanSegmentation(
       mediaElement.tagName === "VIDEO";
     if (
       isVideo &&
-      (mediaElement.readyState < 2 || mediaElement.videoWidth === 0)
+      (mediaElement.readyState < 2 || mediaElement.videoWidth === 0 || mediaElement.seeking)
     )
       return;
     const isImg =
@@ -1449,7 +1825,7 @@ export function requestHumanSegmentation(
         return;
       }
       const now = performance.now();
-      if (now - lastProcessedTime < 24) return;
+      if (now - lastProcessedTime < 66) return;
 
       lastProcessedTime = now;
       lastProcessedMediaTime = currentMediaTime;
@@ -1464,12 +1840,30 @@ export function requestHumanSegmentation(
         }
         if (!modnetLiveCtx) return;
         try {
-          modnetLiveCtx.clearRect(0, 0, 512, 512);
-          modnetLiveCtx.drawImage(mediaElement, 0, 0, 512, 512);
+          const vw = mediaElement.videoWidth || 640;
+          const vh = mediaElement.videoHeight || 360;
+          const cropParams = computeLetterboxParams(vw, vh, 512);
+          if (clipId) {
+            clipCropMap.set(clipId, cropParams);
+          }
+
+          modnetLiveCtx.fillStyle = "#808080";
+          modnetLiveCtx.fillRect(0, 0, 512, 512);
+          modnetLiveCtx.drawImage(
+            mediaElement,
+            0,
+            0,
+            vw,
+            vh,
+            cropParams.dx,
+            cropParams.dy,
+            cropParams.dw,
+            cropParams.dh,
+          );
           const imgData = modnetLiveCtx.getImageData(0, 0, 512, 512);
           liveInFlightCount++;
           cutoutWorkerBridge
-            .runFrame(imgData.data, 0.45, 0.25, false)
+            .runFrame(imgData.data, 0.45, 0.25, false, cropParams)
             .then((result) => {
               liveInFlightCount = Math.max(0, liveInFlightCount - 1);
               if (sessionGen !== liveSessionGeneration) {
@@ -1484,7 +1878,7 @@ export function requestHumanSegmentation(
                 );
                 clipMaskRLECache.set(`${clipId}_src_${sourceFrameIdx}`, result.rle);
                 registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
-                const canvas = decompressRLEToCanvas(result.rle);
+                const canvas = decompressRLEToCanvas(result.rle, cropParams);
                 if (canvas) {
                   putInLRUCache(`${clipId}_${frameIdx}`, canvas);
                   putInLRUCache(`${clipId}_src_${sourceFrameIdx}`, canvas);
@@ -1507,15 +1901,19 @@ export function requestHumanSegmentation(
       return;
     }
 
-    // 2. Debounce paused/scrubbing inference by 150ms to keep UI snappy
+    // 2. Debounce paused/scrubbing inference by 40ms to keep UI responsive while syncing newly settled seeks
     const now = performance.now();
-    if (now - lastProcessedTime < 150) return;
+    if (now - lastProcessedTime < 40) return;
 
+    const pausedSourceFrameIdx = Math.max(
+      0,
+      Math.round(currentMediaTime * effectiveFps),
+    );
     const pausedFrameIdx = Math.max(
       0,
-      Math.floor(effectiveClipTime * effectiveFps),
+      Math.round(effectiveClipTime * effectiveFps),
     );
-    if (clipId && hasFrameMask(clipId, pausedFrameIdx)) {
+    if (clipId && hasFrameMask(clipId, pausedSourceFrameIdx, true) && hasFrameMask(clipId, pausedFrameIdx)) {
       return;
     }
 
@@ -1563,7 +1961,7 @@ export function requestHumanSegmentation(
     // Studio MODNet neural matting. Output quality depends on the model,
     // source footage, and runtime backend.
     if (isStudioCutoutReady() || cutoutWorkerBridge.isSupported()) {
-      segmentWithStudioEngine(sourceToFeed)
+      segmentWithStudioEngine(sourceToFeed, 0.45, 0.25, clipId, pausedFrameIdx)
         .then((matte) => {
           if (sessionGen !== liveSessionGeneration) {
             isProcessingFrame = false;
@@ -1573,21 +1971,13 @@ export function requestHumanSegmentation(
             lastSegmentedMask = matte;
             hasValidHumanSubject = true;
             if (clipId) {
-              const frameIdx = Math.max(
-                0,
-                Math.floor(effectiveClipTime * effectiveFps),
-              );
-              setMaskInCache(`${clipId}_${frameIdx}`, matte);
-              putInLRUCache(`${clipId}_${frameIdx}`, matte);
-              registerClipFrameIndex(clipId, frameIdx);
-              const sourceFrameIdx = Math.max(
-                0,
-                Math.round(currentMediaTime * effectiveFps),
-              );
-              setMaskInCache(`${clipId}_src_${sourceFrameIdx}`, matte);
-              putInLRUCache(`${clipId}_src_${sourceFrameIdx}`, matte);
-              registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
-              if (frameIdx === 0) {
+              setMaskInCache(`${clipId}_${pausedFrameIdx}`, matte);
+              putInLRUCache(`${clipId}_${pausedFrameIdx}`, matte);
+              registerClipFrameIndex(clipId, pausedFrameIdx);
+              setMaskInCache(`${clipId}_src_${pausedSourceFrameIdx}`, matte);
+              putInLRUCache(`${clipId}_src_${pausedSourceFrameIdx}`, matte);
+              registerClipFrameIndex(`${clipId}_src`, pausedSourceFrameIdx);
+              if (pausedFrameIdx === 0) {
                 setMaskInCache(`${clipId}_0`, matte);
                 putInLRUCache(`${clipId}_0`, matte);
                 registerClipFrameIndex(clipId, 0);
@@ -2006,6 +2396,22 @@ export async function processVideoFrameByFrame(
       decoders.push(createDecoderVideo());
     }
 
+    const sampleDecoder = decoders[0];
+    const activeMedia = activeMediaProvider ? activeMediaProvider(clipId) : null;
+    let sW =
+      sampleDecoder?.videoWidth ||
+      (activeMedia as any)?.videoWidth ||
+      (activeMedia as any)?.naturalWidth ||
+      640;
+    let sH =
+      sampleDecoder?.videoHeight ||
+      (activeMedia as any)?.videoHeight ||
+      (activeMedia as any)?.naturalHeight ||
+      360;
+    let cropParams = computeLetterboxParams(sW, sH, 512);
+    clipCropMap.set(clipId, cropParams);
+    if (sourceMediaId) clipCropMap.set(sourceMediaId, cropParams);
+
     const cleanup = () => {
       for (const v of decoders) {
         try {
@@ -2035,7 +2441,7 @@ export async function processVideoFrameByFrame(
         if (key.startsWith(`${clipId}_`)) rleData[key] = value;
       }
       if (Object.keys(rleData).length > 0) {
-        persistMasksRLE(clipId, rleData, effectiveFps).catch(() => {});
+        persistMasksRLE(clipId, rleData, effectiveFps, cropParams).catch(() => {});
       }
       if (sourceMediaId && sourceMediaId !== clipId) {
         const srcRleData: Record<string, Uint8Array> = {};
@@ -2043,7 +2449,7 @@ export async function processVideoFrameByFrame(
           if (key.startsWith(`${sourceMediaId}_`)) srcRleData[key] = value;
         }
         if (Object.keys(srcRleData).length > 0) {
-          persistMasksRLE(sourceMediaId, srcRleData, effectiveFps).catch(
+          persistMasksRLE(sourceMediaId, srcRleData, effectiveFps, cropParams).catch(
             () => {},
           );
         }
@@ -2089,14 +2495,27 @@ export async function processVideoFrameByFrame(
           modnetInputCanvas.height = 512;
         }
         if (modnetInputCtx) {
-          modnetInputCtx.clearRect(0, 0, 512, 512);
-          modnetInputCtx.drawImage(decoder, 0, 0, 512, 512);
+          modnetInputCtx.fillStyle = "#808080";
+          modnetInputCtx.fillRect(0, 0, 512, 512);
+          const curW = decoder.videoWidth || sW;
+          const curH = decoder.videoHeight || sH;
+          modnetInputCtx.drawImage(
+            decoder,
+            0,
+            0,
+            curW,
+            curH,
+            cropParams.dx,
+            cropParams.dy,
+            cropParams.dw,
+            cropParams.dh,
+          );
           const imgData = modnetInputCtx.getImageData(0, 0, 512, 512);
           if (cutoutWorkerBridge.isSupported()) {
             inferenceSubmitted = true;
             let task: Promise<void>;
             task = cutoutWorkerBridge
-              .runFrame(imgData.data, threshold, feather, outputFrameIdx === 0)
+              .runFrame(imgData.data, threshold, feather, outputFrameIdx === 0, cropParams)
               .then((result) => {
                 if (result?.rle) {
                   const rawAlpha = result.rawAlpha;
@@ -2131,8 +2550,8 @@ export async function processVideoFrameByFrame(
                   registerClipFrameIndex(`${clipId}_src`, sourceFrameIdx);
 
                   // Pre-warm active canvas LRU cache for immediate 0ms playback
-                  if (outputFrameIdx < 200) {
-                    const prewarmed = decompressRLEToCanvas(rle);
+                  if (outputFrameIdx < 400) {
+                    const prewarmed = decompressRLEToCanvas(rle, cropParams);
                     if (prewarmed) {
                       putInLRUCache(`${clipId}_src_${sourceFrameIdx}`, prewarmed);
                       putInLRUCache(`${clipId}_${clipFrameIdx}`, prewarmed);
@@ -2217,14 +2636,11 @@ export async function processVideoFrameByFrame(
         };
 
         v.addEventListener("seeked", onSeeked, { once: true });
-        timeoutId = setTimeout(finish, 350);
+        timeoutId = setTimeout(finish, 1500);
 
         try {
-          if (typeof (v as any).fastSeek === "function") {
-            (v as any).fastSeek(targetTime);
-          } else {
-            v.currentTime = targetTime;
-          }
+          // ALWAYS use exact v.currentTime (never fastSeek, which snaps to keyframes seconds away!)
+          v.currentTime = targetTime;
         } catch {
           finish();
         }
@@ -2257,6 +2673,18 @@ export async function processVideoFrameByFrame(
               }),
           ),
         );
+
+        // Recompute exact letterbox/pillarbox cropParams once decoders have loaded metadata
+        // (before loadeddata, videoWidth/videoHeight are 0 and defaulted to 640x360!).
+        const loadedW = decoders[0]?.videoWidth || sW;
+        const loadedH = decoders[0]?.videoHeight || sH;
+        if (loadedW > 0 && loadedH > 0 && (loadedW !== sW || loadedH !== sH)) {
+          sW = loadedW;
+          sH = loadedH;
+          cropParams = computeLetterboxParams(sW, sH, 512);
+          clipCropMap.set(clipId, cropParams);
+          if (sourceMediaId) clipCropMap.set(sourceMediaId, cropParams);
+        }
 
         const sampleTimes: number[] = [];
         const sampleOutputIndices: number[] = [];
@@ -2755,20 +3183,39 @@ async function _cacheMaskAsUri(
 ): Promise<boolean> {
   try {
     const total = w * h;
+    const isNativeSurface = typeof document === "undefined";
     const out = new Uint8Array(total * 4);
-    for (let i = 0; i < total; i++) {
-      const i4 = i * 4;
-      out[i4] = 255;
-      out[i4 + 1] = 255;
-      out[i4 + 2] = 255;
-      out[i4 + 3] = alpha[i];
+    if (isNativeSurface) {
+      for (let i = 0; i < total; i++) {
+        const i4 = i * 4;
+        const a = alpha[i];
+        if (a < 4) {
+          out[i4] = 0;
+          out[i4 + 1] = 0;
+          out[i4 + 2] = 0;
+          out[i4 + 3] = 0;
+        } else {
+          out[i4] = origRgba[i4];
+          out[i4 + 1] = origRgba[i4 + 1];
+          out[i4 + 2] = origRgba[i4 + 2];
+          out[i4 + 3] = a;
+        }
+      }
+    } else {
+      for (let i = 0; i < total; i++) {
+        const i4 = i * 4;
+        out[i4] = 255;
+        out[i4 + 1] = 255;
+        out[i4 + 2] = 255;
+        out[i4 + 3] = alpha[i];
+      }
     }
 
     const pngBytes = await rustCoreBridge.encodeRGBAPngForPlatform(out, w, h);
 
     let uri: string;
 
-    if (typeof document !== "undefined") {
+    if (!isNativeSurface) {
       const blob = new Blob([pngBytes as any], { type: "image/png" });
       uri = URL.createObjectURL(blob);
       try {
@@ -2797,7 +3244,7 @@ async function _cacheMaskAsUri(
       try {
         await FS.makeDirectoryAsync(dir, { intermediates: true });
       } catch {}
-      const fname = `${clipId.replace(/[^a-zA-Z0-9]/g, "_")}_${frameIdx}.png`;
+      const fname = `${clipId.replace(/[^a-zA-Z0-9]/g, "_")}_${frameIdx}_v2.png`;
       const path = dir + fname;
 
       // Ultra-fast Buffer base64 encoding (< 0.5ms instead of seconds)
@@ -2821,6 +3268,66 @@ async function _cacheMaskAsUri(
 }
 
 /**
+ * Joint bilateral color-guided edge sharpening on upsampled transition pixels (4 <= alpha <= 250).
+ * Snaps bilinear-upsampled 512x512 edges to true high-res RGB color boundaries and applies
+ * a steep quintic contrast S-curve to eliminate upsampling blur and background halos.
+ */
+function sharpenAlphaWithColorGuidance(
+  alpha: Uint8Array,
+  rgba: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+): void {
+  const total = width * height;
+  if (alpha.length < total || rgba.length < total * 4 || width < 4 || height < 4) return;
+  const src = new Uint8Array(alpha);
+  const invTwoSigmaColorSq = 1.0 / 3200.0; // sharper color selectivity
+
+  for (let y = 1; y < height - 1; y++) {
+    const row = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = row + x;
+      const a = src[idx];
+      if (a < 4 || a > 250) continue;
+
+      const pIdx = idx * 4;
+      const cr = rgba[pIdx];
+      const cg = rgba[pIdx + 1];
+      const cb = rgba[pIdx + 2];
+
+      let sumW = 0;
+      let sumA = 0;
+
+      for (let dy = -2; dy <= 2; dy += 1) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        const nRow = ny * width;
+        for (let dx = -2; dx <= 2; dx += 1) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          const nIdx = nRow + nx;
+          const npIdx = nIdx * 4;
+          const dr = rgba[npIdx] - cr;
+          const dg = rgba[npIdx + 1] - cg;
+          const db = rgba[npIdx + 2] - cb;
+          const colorDistSq = dr * dr + dg * dg + db * db;
+          const w = Math.exp(-colorDistSq * invTwoSigmaColorSq);
+          sumW += w;
+          sumA += w * src[nIdx];
+        }
+      }
+
+      if (sumW > 0) {
+        const guidedNorm = (sumA / sumW) / 255.0;
+        const u = Math.max(0, Math.min(1, (guidedNorm - 0.44) / 0.16));
+        const s = u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
+        alpha[idx] = Math.min(255, Math.max(0, Math.round(s * 255)));
+      }
+    }
+  }
+}
+
+/**
  * Process raw RGBA pixel data through Rust/JS segmentation -> store RLE in clipMaskRLECache.
  * Supports both Auto Cutout and Chroma Key cutout with blazing fast downsampling.
  */
@@ -2836,8 +3343,8 @@ export async function processFramePixelsUnified(
   keyColor = "#00FF00",
 ): Promise<boolean> {
   try {
-    // Downscale large frames to standard max 256px for ultra-fast 20-30 FPS mobile processing
-    const MAX_DIM = 256;
+    // Keep native fallback frame resolution crisp enough for guided matting
+    const MAX_DIM = 512;
     let procRgba = rgba;
     let procW = w;
     let procH = h;
@@ -2930,18 +3437,28 @@ export async function processFramePixelsUnified(
         lastModnetRawAlphaMediaTime = frameIdx / fps;
       }
 
-      alpha = new Uint8Array(procW * procH);
+      // Compute letterbox/pillarbox crop for procW×procH aspect ratio
+      const pfCrop = computeLetterboxParams(procW, procH, 512);
+      // Keep global crop state in sync so slider adjustments (updateActiveFrameMatteParams) work correctly
+      lastModnetCropDx = pfCrop.dx;
+      lastModnetCropDy = pfCrop.dy;
+      lastModnetCropDw = pfCrop.dw;
+      lastModnetCropDh = pfCrop.dh;
+      if (clipId) clipCropMap.set(clipId, pfCrop);
       const rgbaMatte = new Uint8ClampedArray(512 * 512 * 4);
       rustCoreBridge.processModnetOutput(
         rawAlpha,
         rgbaMatte,
         threshold,
         feather,
+        pfCrop,
       );
-      const scaleY = (512 - 1) / Math.max(1, procH - 1);
-      const scaleX = (512 - 1) / Math.max(1, procW - 1);
+      // Sample alpha ONLY from the letterboxed content region [pfCrop.dx..dx+dw] x [pfCrop.dy..dy+dh]
+      alpha = new Uint8Array(procW * procH);
+      const pfScaleY = (pfCrop.dh - 1) / Math.max(1, procH - 1);
+      const pfScaleX = (pfCrop.dw - 1) / Math.max(1, procW - 1);
       for (let y = 0; y < procH; y++) {
-        const sy = y * scaleY;
+        const sy = pfCrop.dy + y * pfScaleY;
         const y0 = Math.floor(sy);
         const y1 = Math.min(511, y0 + 1);
         const fy = sy - y0;
@@ -2949,7 +3466,7 @@ export async function processFramePixelsUnified(
         const r1 = y1 * 512 * 4 + 3;
         const dstRow = y * procW;
         for (let x = 0; x < procW; x++) {
-          const sx = x * scaleX;
+          const sx = pfCrop.dx + x * pfScaleX;
           const x0 = Math.floor(sx);
           const x1 = Math.min(511, x0 + 1);
           const fx = sx - x0;
@@ -2962,6 +3479,7 @@ export async function processFramePixelsUnified(
           alpha[dstRow + x] = Math.round(top + fy * (btm - top));
         }
       }
+      sharpenAlphaWithColorGuidance(alpha, procRgba, procW, procH);
     }
 
     const rle = await rustCoreBridge.packAlphaRLEForPlatform(alpha);
@@ -3201,8 +3719,10 @@ export async function processVideoUnified(
   }
 
   if (Platform.OS === "android" || Platform.OS === "ios") {
-    if (mode === "auto" && !(await initStudioNeuralEngine())) {
-      throw new Error("Native accelerated MODNet is unavailable");
+    if (mode === "auto" && !(await initStudioNeuralEngine(true))) {
+      throw new Error(
+        cutoutModelState.error || "Native AI Cutout neural model is unavailable",
+      );
     }
     const frameInfo = await rustCoreBridge.getNativeVideoFrameInfo(videoUri);
     if (!frameInfo)
@@ -3359,6 +3879,7 @@ registerMaskProvider({
   requestHumanSegmentation,
   hasClipMasks,
   hasFrameMask,
+  getClipProcessedCount,
 });
 
 // Auto-initialize when in browser environment

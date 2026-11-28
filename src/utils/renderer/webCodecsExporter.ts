@@ -122,6 +122,10 @@ export async function exportWebCodecsVideo(
     logicalHeight,
   } = options;
 
+  const isMobileDevice =
+    typeof navigator !== "undefined" &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   const width = exportCanvas.width;
   const height = exportCanvas.height;
 
@@ -363,13 +367,15 @@ export async function exportWebCodecsVideo(
     encoder.encode(frame, { keyFrame: isKeyFrame });
     frame.close();
 
-    // Hardware encoder backpressure: if encoder queue has > 12 frames,
+    // Hardware encoder backpressure: if encoder queue exceeds limit,
     // let hardware video encoder finish compressing to prevent memory growth or GPU stalls.
-    // Includes fail-safe timeout, encoder state validation, and cancellation checks to prevent 3% freeze.
-    if (encoder.encodeQueueSize > 12) {
+    // On mobile browsers keep the queue shallower (5 frames vs 12) so RAM and thermal headroom stay clean.
+    const maxQueueSize = isMobileDevice ? 5 : 12;
+    const stallTimeoutMs = isMobileDevice ? 2500 : 5000;
+    if (encoder.encodeQueueSize > maxQueueSize) {
       let lastQueueSize = encoder.encodeQueueSize;
       let lastDrainTime = performance.now();
-      while (encoder.encodeQueueSize > 12) {
+      while (encoder.encodeQueueSize > maxQueueSize) {
         if (encodeError) {
           throw encodeError;
         }
@@ -384,18 +390,21 @@ export async function exportWebCodecsVideo(
         if (curQueue < lastQueueSize) {
           lastQueueSize = curQueue;
           lastDrainTime = performance.now();
-        } else if (performance.now() - lastDrainTime > 5000) {
+        } else if (performance.now() - lastDrainTime > stallTimeoutMs) {
           throw new Error("Hardware VideoEncoder queue stalled; falling back to MediaRecorder");
         }
-        await new Promise((r) => setTimeout(r, 6));
+        await new Promise((r) => setTimeout(r, isMobileDevice ? 10 : 6));
       }
     }
 
-    // Responsive progress calculation & smooth cooperative event-loop yield
-    if (f % 2 === 0 || f === totalFrames - 1) {
+    // Responsive progress calculation & cooperative event-loop yield
+    // On mobile browsers yield on every frame with setTimeout(0) so UI touches & Cancel stay instant.
+    if (isMobileDevice || f % 2 === 0 || f === totalFrames - 1) {
       const pct = Math.min(90, Math.floor((f / totalFrames) * 90));
       onProgress?.(pct, curTime, duration);
-      if (typeof (globalThis as any).scheduler?.yield === "function") {
+      if (isMobileDevice) {
+        await new Promise((r) => setTimeout(r, 0));
+      } else if (typeof (globalThis as any).scheduler?.yield === "function") {
         await (globalThis as any).scheduler.yield();
       } else {
         await new Promise((r) => setTimeout(r, 0));
@@ -486,7 +495,12 @@ export async function exportWebCodecsVideo(
         const sampleCount = Math.floor(pcmData.length / 2);
         const chunkSize = 1024; // AAC-LC requires exact 1024 frame blocks
 
+        let audioChunkIter = 0;
         for (let i = 0; i < sampleCount; i += chunkSize) {
+          if (options.isCancelled?.()) {
+            try { aEncoder.close(); } catch {}
+            throw new Error("Export cancelled");
+          }
           const available = Math.min(chunkSize, sampleCount - i);
           const left = new Float32Array(chunkSize);
           const right = new Float32Array(chunkSize);
@@ -510,6 +524,10 @@ export async function exportWebCodecsVideo(
 
           aEncoder.encode(audioData);
           audioData.close();
+          audioChunkIter++;
+          if (audioChunkIter % 64 === 0) {
+            await new Promise((r) => setTimeout(r, 0));
+          }
         }
 
         await aEncoder.flush();
@@ -547,6 +565,10 @@ export async function exportWebCodecsVideo(
     },
     "video/mp4",
   );
+
+  // Release chunk sample arrays promptly so GC can reclaim memory on mobile browsers
+  videoSamples.length = 0;
+  audioSamples.length = 0;
 
   const videoUrl = URL.createObjectURL(finalBlob);
 

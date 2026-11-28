@@ -196,8 +196,15 @@ export function drawClipWithMask(
     scaleY = 1;
   }
 
-  const canvasW = Math.max(1, Math.ceil(dw * scaleX));
-  const canvasH = Math.max(1, Math.ceil(dh * scaleY));
+  const isMobileWeb =
+    typeof navigator !== "undefined" &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const rawCanvasW = Math.max(1, Math.ceil(dw * scaleX));
+  const rawCanvasH = Math.max(1, Math.ceil(dh * scaleY));
+  const maxMaskDim = isMobileWeb ? 1080 : 3840;
+  const maskCapScale = Math.min(1, maxMaskDim / Math.max(1, rawCanvasW, rawCanvasH));
+  const canvasW = Math.max(1, Math.ceil(rawCanvasW * maskCapScale));
+  const canvasH = Math.max(1, Math.ceil(rawCanvasH * maskCapScale));
 
   if (!maskClipCanvas) {
     maskClipCanvas = document.createElement("canvas");
@@ -269,7 +276,8 @@ export function drawClipWithMask(
 
   const rawFeather = Math.max(0, Math.min(100, mask.feather ?? 0));
   const minDim = Math.min(canvasW, canvasH);
-  const featherPx = rawFeather > 0 ? Math.max(1, (minDim * (rawFeather / 100)) * 0.35) : 0;
+  const maxBlurPx = isMobileWeb ? 28 : 120;
+  const featherPx = rawFeather > 0 ? Math.min(maxBlurPx, Math.max(1, (minDim * (rawFeather / 100)) * 0.35)) : 0;
   const pad = featherPx > 0 ? Math.ceil(featherPx * 3.0 + 16) : 0;
   const shapeCanvasW = canvasW + pad * 2;
   const shapeCanvasH = canvasH + pad * 2;

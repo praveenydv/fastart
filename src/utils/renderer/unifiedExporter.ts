@@ -5,6 +5,8 @@
 import { Buffer } from "buffer";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
+import { File, FileMode } from "expo-file-system";
+import type { FileHandle } from "expo-file-system";
 import { FastArtProject } from "../../types/project";
 import { rustCoreBridge } from "../../services/rustCoreBridge";
 import {
@@ -44,11 +46,28 @@ export class BinaryFileWriter {
   private bufferOffset = 0;
   private totalBytesWritten = 0;
   private chunkSize = 786432; // 768KB chunks (guaranteed divisible by 3 for clean Base64 appends)
+  private handle: FileHandle | null = null;
+  private handleInitAttempted = false;
 
   constructor(targetUri: string, chunkSize = 786432) {
     this.targetUri = targetUri;
     this.chunkSize = chunkSize;
     this.buffer = new Uint8Array(this.chunkSize);
+  }
+
+  private ensureHandle(): FileHandle | null {
+    if (this.handleInitAttempted) return this.handle;
+    this.handleInitAttempted = true;
+    try {
+      if (!this.targetUri.startsWith("content://")) {
+        const f = new File(this.targetUri);
+        f.create({ overwrite: true });
+        this.handle = f.open(FileMode.WriteOnly);
+      }
+    } catch {
+      this.handle = null;
+    }
+    return this.handle;
   }
 
   public async write(bytes: Uint8Array): Promise<void> {
@@ -61,7 +80,7 @@ export class BinaryFileWriter {
       offset += toCopy;
 
       if (this.bufferOffset >= this.chunkSize) {
-        await this.flush(true);
+        await this.flush(this.totalBytesWritten > 0);
       }
     }
   }
@@ -69,20 +88,32 @@ export class BinaryFileWriter {
   public async flush(append = false): Promise<void> {
     if (this.bufferOffset === 0) return;
     const chunk = this.buffer.subarray(0, this.bufferOffset);
+    const activeHandle = this.ensureHandle();
+    if (activeHandle) {
+      await activeHandle.writeBytes(chunk);
+    } else {
+      const b64 = uint8ToBase64(chunk);
+      await FileSystem.writeAsStringAsync(this.targetUri, b64, {
+        encoding: FileSystem.EncodingType.Base64,
+        append,
+      });
+    }
     this.totalBytesWritten += chunk.length;
-
-    const b64 = uint8ToBase64(chunk);
-    await FileSystem.writeAsStringAsync(this.targetUri, b64, {
-      encoding: FileSystem.EncodingType.Base64,
-      append,
-    });
-
     this.bufferOffset = 0;
   }
 
   public async close(): Promise<number> {
-    await this.flush(this.totalBytesWritten > 0);
-    return this.totalBytesWritten;
+    try {
+      await this.flush(this.totalBytesWritten > 0);
+      return this.totalBytesWritten;
+    } finally {
+      if (this.handle) {
+        try {
+          this.handle.close();
+        } catch {}
+        this.handle = null;
+      }
+    }
   }
 }
 
@@ -189,14 +220,17 @@ export async function exportFastArtProject(
 
     // Web Canvas snapshot
     if (Platform.OS === "web" && typeof document !== "undefined") {
+      let tempSnapCanvas: HTMLCanvasElement | null = null;
+      let tempSnapRenderer: any = null;
       try {
         let renderer = existingRenderer;
         if (!renderer || !renderer.canvas) {
-          const offscreenCanvas = document.createElement("canvas");
-          offscreenCanvas.width = snapW;
-          offscreenCanvas.height = snapH;
+          tempSnapCanvas = document.createElement("canvas");
+          tempSnapCanvas.width = snapW;
+          tempSnapCanvas.height = snapH;
           const { VideoRenderer } = require("../videoRenderer");
-          renderer = new VideoRenderer(offscreenCanvas);
+          tempSnapRenderer = new VideoRenderer(tempSnapCanvas, { registerAsActive: false });
+          renderer = tempSnapRenderer;
           for (const clip of project.tracks?.video || []) {
             try {
               await renderer.preloadClip(clip);
@@ -223,6 +257,16 @@ export async function exportFastArtProject(
         };
       } catch (canvasErr) {
         console.warn("[unifiedExporter] Canvas PNG snapshot fallback failed:", canvasErr);
+      } finally {
+        try {
+          tempSnapRenderer?.cleanup?.();
+        } catch {}
+        if (tempSnapCanvas) {
+          try {
+            tempSnapCanvas.width = 1;
+            tempSnapCanvas.height = 1;
+          } catch {}
+        }
       }
     }
 
@@ -278,30 +322,42 @@ export async function exportFastArtProject(
   if (format === "mp4" || format === "webm") {
     // A. Web Browser: Hardware Canvas + MediaRecorder with Web Audio mixdown
     if (Platform.OS === "web" && typeof document !== "undefined") {
-      let renderer = existingRenderer;
+      const { VideoRenderer, getActiveVideoRenderer } = require("../videoRenderer");
+      let renderer = existingRenderer || getActiveVideoRenderer?.();
+      let stubCanvas: HTMLCanvasElement | null = null;
       if (!renderer || !renderer.canvas) {
-        const offscreenCanvas = document.createElement("canvas");
-        offscreenCanvas.width = targetW;
-        offscreenCanvas.height = targetH;
-        const { VideoRenderer } = require("../videoRenderer");
-        renderer = new VideoRenderer(offscreenCanvas);
+        // Minimal 1x1 stub; exportBrowserVideo creates and owns the actual targetW x targetH exportCanvas
+        stubCanvas = document.createElement("canvas");
+        stubCanvas.width = 1;
+        stubCanvas.height = 1;
+        renderer = new VideoRenderer(stubCanvas, { registerAsActive: false });
       }
 
-      return await exportBrowserVideo(
-        renderer,
-        project,
-        {
-          fps,
-          duration,
-          format,
-          resolution,
-          currentTime,
-          logicalWidth: baseW,
-          logicalHeight: baseH,
-          isCancelled,
-        },
-        onProgress
-      );
+      try {
+        return await exportBrowserVideo(
+          renderer,
+          project,
+          {
+            fps,
+            duration,
+            format,
+            resolution,
+            currentTime,
+            logicalWidth: baseW,
+            logicalHeight: baseH,
+            isCancelled,
+          },
+          onProgress,
+          (canvas) => new VideoRenderer(canvas, { registerAsActive: false })
+        );
+      } finally {
+        if (stubCanvas) {
+          try {
+            stubCanvas.width = 1;
+            stubCanvas.height = 1;
+          } catch {}
+        }
+      }
     }
 
     // B. Native Mobile (Android & iOS): Engage Headless WebView Canvas Bridge

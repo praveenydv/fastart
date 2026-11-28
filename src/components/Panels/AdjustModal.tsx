@@ -112,12 +112,14 @@ export default function AdjustModal({
   return (
     <View style={[styles.inlineWrapper, isInline && styles.inlineWrapperDocked]}>
       <View style={styles.sheetContainer}>
-        {/* Real-time Live Header without Apply button */}
-        <ModalHeader
-          title={isLayer ? "Adjustment Layer" : "Color Adjust"}
-          iconName="color-filter-outline"
-          onClose={onClose}
-        />
+        {/* Real-time Live Header without Apply button - only shown in standalone modal */}
+        {!isInline && (
+          <ModalHeader
+            title={isLayer ? "Adjustment Layer" : "Color Adjust"}
+            iconName="color-filter-outline"
+            onClose={onClose}
+          />
+        )}
 
         {/* Top Action Bar: Add Adjustment Layer + Reset */}
         <View style={styles.actionBar}>

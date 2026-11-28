@@ -625,7 +625,7 @@ function ToolbarComponent({
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="Back to root tools"
           >
-            <Ionicons name="chevron-back" size={18} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.mobileBackDivider} />
         </View>
@@ -656,12 +656,12 @@ function ToolbarComponent({
               ]}
               onPress={() => handleToolAction(tool.id)}
               activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             >
               <MaterialCommunityIcons
                 name={tool.icon}
-                size={19}
-                color={isDelete ? "#EF4444" : isActive ? "#00F2FE" : "#8E8E93"}
+                size={22}
+                color={isDelete ? "#EF4444" : isActive ? "#00F2FE" : "#94A3B8"}
               />
               <Text
                 style={[
@@ -821,58 +821,60 @@ const styles = StyleSheet.create({
     backgroundColor: "#121214",
     borderTopWidth: 1,
     borderTopColor: "#1F1F23",
-    height: 52,
-    paddingHorizontal: 6,
+    height: 70,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   horizontalToolBtnActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 6,
+    backgroundColor: "rgba(0, 242, 254, 0.08)",
+    borderRadius: 10,
   },
   horizontalToolBtnDelete: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
   mobileBackBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    width: 42,
+    height: 50,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
     borderColor: "#1F1F23",
-    marginRight: 6,
+    marginRight: 8,
   },
   mobileBackDivider: {
     width: 1,
-    height: 20,
+    height: 28,
     backgroundColor: "#1F1F23",
-    marginRight: 6,
+    marginRight: 8,
   },
   mobileBackText: {
     color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "400",
+    fontSize: 11,
+    fontWeight: "500",
   },
   horizontalScrollContent: {
     alignItems: "center",
-    paddingHorizontal: 2,
-    gap: 2,
+    paddingHorizontal: 4,
+    gap: 8,
   },
   horizontalToolBtn: {
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 46,
-    height: 44,
-    paddingHorizontal: 3,
-    borderRadius: 6,
+    minWidth: 62,
+    height: 56,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   horizontalToolLabel: {
-    color: "#71717A",
-    fontSize: 9.5,
-    fontWeight: "400",
-    marginTop: 2,
+    color: "#94A3B8",
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 4,
     textAlign: "center",
-    letterSpacing: 0,
+    letterSpacing: 0.1,
   },
 });
 

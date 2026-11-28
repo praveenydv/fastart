@@ -301,6 +301,11 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
     return null;
   }
 
+  const isMobileWeb =
+    typeof navigator !== 'undefined' &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  const maxAudioDecodeBytes = isMobileWeb ? 48 * 1024 * 1024 : 192 * 1024 * 1024;
+
   try {
     let arrayBuf: ArrayBuffer | null = null;
     if (
@@ -311,13 +316,46 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
       try {
         const resp = await fetch(url);
         if (resp.ok) {
-          arrayBuf = await resp.arrayBuffer();
+          const contentLength = Number(resp.headers?.get?.('content-length'));
+          if (Number.isFinite(contentLength) && contentLength > maxAudioDecodeBytes) {
+            return null;
+          }
+          const reader = resp.body?.getReader?.();
+          if (reader) {
+            const chunks: Uint8Array[] = [];
+            let totalBytes = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (!value) continue;
+              totalBytes += value.byteLength;
+              if (totalBytes > maxAudioDecodeBytes) {
+                await reader.cancel().catch(() => {});
+                return null;
+              }
+              chunks.push(value);
+            }
+            if (totalBytes > 0) {
+              const merged = new Uint8Array(totalBytes);
+              let off = 0;
+              for (const ch of chunks) {
+                merged.set(ch, off);
+                off += ch.byteLength;
+              }
+              arrayBuf = merged.buffer;
+            }
+          } else {
+            const buf = await resp.arrayBuffer();
+            if (buf.byteLength <= maxAudioDecodeBytes) {
+              arrayBuf = buf;
+            }
+          }
         }
       } catch (_) {}
     }
 
     if (!arrayBuf || arrayBuf.byteLength === 0) {
-      arrayBuf = await getMediaBinaryBuffer(url, clipId, 1024 * 1024 * 1024);
+      arrayBuf = await getMediaBinaryBuffer(url, clipId, maxAudioDecodeBytes);
     }
     if (!arrayBuf || arrayBuf.byteLength === 0) return null;
 
@@ -330,35 +368,38 @@ export async function decodeMediaAudio(url: string, clipId?: string): Promise<De
           let decoded: AudioBuffer | null = null;
 
           try {
-            decoded = await new Promise((resolve, reject) => {
-              const res = ctx.decodeAudioData(
-                arrayBuf!.slice(0),
-                (buf: AudioBuffer) => resolve(buf),
-                (err: any) => reject(err)
-              );
-              if (res && typeof (res as any).then === 'function') {
-                (res as any).then(resolve).catch(reject);
+            const mp4FallbackBuf = arrayBuf.slice(0);
+            try {
+              decoded = await new Promise((resolve, reject) => {
+                const res = ctx.decodeAudioData(
+                  arrayBuf!,
+                  (buf: AudioBuffer) => resolve(buf),
+                  (err: any) => reject(err)
+                );
+                if (res && typeof (res as any).then === 'function') {
+                  (res as any).then(resolve).catch(reject);
+                }
+              });
+            } catch (_) {
+              // Strategy 2: If standard decodeAudioData rejected an MP4 container with video streams,
+              // neutralize the video track to 'free' and change brand to M4A so AudioContext decodes the audio stream!
+              const audioOnlyBuf = convertMp4ToAudioOnlyBuffer(mp4FallbackBuf);
+              if (audioOnlyBuf) {
+                try {
+                  decoded = await new Promise((resolve, reject) => {
+                    const res = ctx.decodeAudioData(
+                      audioOnlyBuf,
+                      (buf: AudioBuffer) => resolve(buf),
+                      (err: any) => reject(err)
+                    );
+                    if (res && typeof (res as any).then === 'function') {
+                      (res as any).then(resolve).catch(reject);
+                    }
+                  });
+                } catch (_) {}
               }
-            });
-          } catch (_) {
-            // Strategy 2: If standard decodeAudioData rejected an MP4 container with video streams,
-            // neutralize the video track to 'free' and change brand to M4A so AudioContext decodes the audio stream!
-            const audioOnlyBuf = convertMp4ToAudioOnlyBuffer(arrayBuf!.slice(0));
-            if (audioOnlyBuf) {
-              try {
-                decoded = await new Promise((resolve, reject) => {
-                  const res = ctx.decodeAudioData(
-                    audioOnlyBuf,
-                    (buf: AudioBuffer) => resolve(buf),
-                    (err: any) => reject(err)
-                  );
-                  if (res && typeof (res as any).then === 'function') {
-                    (res as any).then(resolve).catch(reject);
-                  }
-                });
-              } catch (_) {}
             }
-          }
+          } catch (_) {}
 
           if (decoded && decoded.length > 0) {
             const left = decoded.getChannelData(0);
@@ -584,6 +625,9 @@ export async function exportProjectAudioToWavBytes(
     const envRelAlpha = 1.0 - Math.exp(-dt / 0.045); // 45ms release
 
     for (let i = startSample; i < endSample; i++, srcFrame += step) {
+      if ((i - startSample) > 0 && ((i - startSample) & 65535) === 0) {
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
       if (srcFrame >= 0 && srcFrame < srcLen - 1) {
         const idx0 = srcFrame | 0;
         const frac = srcFrame - idx0;

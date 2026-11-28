@@ -13,6 +13,7 @@ import { CompactSliderInput } from "../../Common/CompactSliderInput";
 import { CustomColorPickerButton } from "../../Common/CustomColorPickerButton";
 import { SegmentedPillTabs } from "../../Common/SegmentedPillTabs";
 import { rustCoreBridge } from "../../../services/rustCoreBridge";
+import type { CutoutModelState } from "../../../services/selfieSegmentationService";
 import { getActiveMediaElement } from "../../../utils/videoRenderer";
 import { CutoutColorDropperModal } from "./CutoutColorDropperModal";
 import {
@@ -51,6 +52,8 @@ export interface CutoutControlsProps {
   isAlreadyProcessed?: boolean;
   processedCount?: number;
   errorMessage?: string | null;
+  modelState?: CutoutModelState;
+  onRetryModelInit?: () => void;
   onPreviewFrame?: () => void;
   onProcessVideo?: () => void;
   onCancelProcessing?: () => void;
@@ -70,6 +73,8 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
   isAlreadyProcessed = false,
   processedCount = 0,
   errorMessage,
+  modelState,
+  onRetryModelInit,
   onPreviewFrame,
   onProcessVideo,
   onCancelProcessing,
@@ -230,9 +235,15 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
       />
 
       {errorMessage ? (
-        <Text accessibilityRole="alert" style={{ color: "#FCA5A5", fontSize: 12, lineHeight: 17 }}>
-          {errorMessage}
-        </Text>
+        <View accessibilityRole="alert" style={sc.errorBanner}>
+          <Ionicons name="alert-circle-outline" size={15} color="#FCA5A5" style={{ marginTop: 1 }} />
+          <Text style={sc.errorBannerText}>{errorMessage}</Text>
+          {onRetryModelInit ? (
+            <TouchableOpacity onPress={onRetryModelInit} style={sc.retryBadgeBtn} activeOpacity={0.8}>
+              <Text style={sc.retryBadgeText}>Retry</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : null}
 
       {/* Mode Content */}
@@ -342,6 +353,49 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
             </>
           ) : (
             <View style={sc.autoCutoutPanel}>
+              {/* AI Model Provisioning / Error Status Banner */}
+              {modelState && (modelState.status === "checking" || modelState.status === "downloading" || modelState.status === "initializing") && (
+                <View style={sc.compactProcessingBanner}>
+                  <View style={sc.compactProcessingHeader}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                      <ActivityIndicator size="small" color="#00F2FE" />
+                      <Text style={sc.compactProgressPct} numberOfLines={1}>
+                        {modelState.status === "downloading"
+                          ? `Downloading AI Cutout model... ${modelState.progress}%`
+                          : modelState.status === "checking"
+                          ? "Checking on-device AI model..."
+                          : "Loading AI Cutout neural engine..."}
+                      </Text>
+                    </View>
+                  </View>
+                  {modelState.status === "downloading" && (
+                    <View style={sc.progressBarTrack}>
+                      <View style={[sc.progressBarFill, { width: `${Math.max(4, modelState.progress)}%` }]} />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {modelState && (modelState.status === "error" || modelState.status === "unsupported") && (
+                <View accessibilityRole="alert" style={sc.errorBanner}>
+                  <Ionicons name="warning-outline" size={15} color="#FCA5A5" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={sc.errorBannerTitle}>
+                      {modelState.status === "unsupported" ? "Native Build Required" : "AI Model Unavailable"}
+                    </Text>
+                    <Text style={sc.errorBannerText}>
+                      {modelState.error || "Could not load AI Cutout model."}
+                    </Text>
+                  </View>
+                  {modelState.status === "error" && onRetryModelInit ? (
+                    <TouchableOpacity onPress={onRetryModelInit} style={sc.retryBadgeBtn} activeOpacity={0.8}>
+                      <Ionicons name="refresh" size={11} color="#00F2FE" />
+                      <Text style={sc.retryBadgeText}>Retry</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              )}
+
               {/* Active Processing Banner */}
               {isProcessingFrames && (
                 <View style={sc.compactProcessingBanner}>
@@ -486,11 +540,26 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                         style={[
                           sc.heroBtn,
                           isAlreadyProcessed && sc.heroBtnSecondary,
+                          (isProcessingActiveFrame ||
+                            modelState?.status === "checking" ||
+                            modelState?.status === "downloading" ||
+                            modelState?.status === "initializing" ||
+                            modelState?.status === "unsupported") &&
+                            { opacity: 0.6 },
                         ]}
                         activeOpacity={0.8}
-                        disabled={isProcessingActiveFrame}
+                        disabled={
+                          isProcessingActiveFrame ||
+                          modelState?.status === "checking" ||
+                          modelState?.status === "downloading" ||
+                          modelState?.status === "initializing" ||
+                          modelState?.status === "unsupported"
+                        }
                       >
-                        {isProcessingActiveFrame ? (
+                        {isProcessingActiveFrame ||
+                        modelState?.status === "checking" ||
+                        modelState?.status === "downloading" ||
+                        modelState?.status === "initializing" ? (
                           <ActivityIndicator size="small" color={isAlreadyProcessed ? "#00F2FE" : "#08090E"} />
                         ) : (
                           <Ionicons
@@ -500,7 +569,11 @@ const CutoutControlsComponent: React.FC<CutoutControlsProps> = ({
                           />
                         )}
                         <Text style={[sc.heroBtnText, isAlreadyProcessed && sc.heroBtnSecondaryText]}>
-                          {isProcessingActiveFrame
+                          {modelState?.status === "downloading"
+                            ? `Downloading AI Model (${modelState.progress}%)...`
+                            : modelState?.status === "checking" || modelState?.status === "initializing"
+                            ? "Loading AI Model..."
+                            : isProcessingActiveFrame
                             ? "Processing Frame..."
                             : isAlreadyProcessed
                             ? "Reprocess Video"
@@ -1044,6 +1117,46 @@ const sc = StyleSheet.create({
     fontSize: 8.5,
     fontWeight: "500",
     color: "#EF4444",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(248, 113, 113, 0.35)",
+    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  errorBannerTitle: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#FCA5A5",
+    marginBottom: 2,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 14,
+    color: "#FECACA",
+  },
+  retryBadgeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 5,
+    backgroundColor: "#141416",
+    borderWidth: 1,
+    borderColor: "#00F2FE",
+  },
+  retryBadgeText: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#00F2FE",
   },
   progressBarTrack: {
     height: 2,

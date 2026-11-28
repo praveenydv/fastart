@@ -18,7 +18,10 @@ import {
   clearPreviewFrame,
   getClipBakedFps,
   getCutoutQualityFps,
-  initStudioNeuralEngine,
+  ensureCutoutModelReady,
+  getCutoutModelState,
+  subscribeCutoutModelState,
+  CutoutModelState,
   notifyMaskUpdated,
   restoreClipMasksFromStorage,
   setCutoutProcessingActive,
@@ -97,6 +100,7 @@ function CutoutModalComponent({
   const [processedFrames, setProcessedFrames] = useState<number>(0);
   const [totalFramesToProcess, setTotalFramesToProcess] = useState<number>(0);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const [modelState, setModelState] = useState<CutoutModelState>(() => getCutoutModelState());
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState<boolean>(false);
   const abortCtrlRef = useRef<AbortController | null>(null);
   const previewInFlightRef = useRef(false);
@@ -165,7 +169,7 @@ function CutoutModalComponent({
       setConfig(newCfg);
       if (newCfg.enabled && newCfg.mode !== "none") {
         onApplyCutout(newCfg, clipId);
-        if (!hasClipMasks(clipId) && selectedClip?.url) {
+        if (selectedClip?.url) {
           setTimeout(() => {
             const targetIdx = isVideoClip ? frameIdx : 0;
             const targetTime = isVideoClip ? mediaTime : 0;
@@ -183,10 +187,15 @@ function CutoutModalComponent({
     }
   }, [visible, clipId, initialMode]);
 
-  // Prewarm neural engine and restore persistent masks on both Web and Mobile
+  // Prewarm neural engine, subscribe to model loading/download state, and restore persistent masks
   useEffect(() => {
-    if (visible && clipId) {
-      initStudioNeuralEngine().catch(() => {});
+    if (!visible) {
+      setHasAttemptedRestore(false);
+      return;
+    }
+    const unsubModel = subscribeCutoutModelState(setModelState);
+    void ensureCutoutModelReady(false);
+    if (clipId) {
       setHasAttemptedRestore(false);
       const fps = selectedClip?.sourceFrameRate ?? selectedClip?.frameRate ?? 30;
       const tasks = [restoreClipMasksFromStorage(clipId, fps)];
@@ -196,9 +205,10 @@ function CutoutModalComponent({
       Promise.all(tasks).finally(() => {
         setHasAttemptedRestore(true);
       });
-    } else if (!visible) {
-      setHasAttemptedRestore(false);
     }
+    return () => {
+      unsubModel();
+    };
   }, [visible, clipId, selectedClip?.sourceMediaId, selectedClip?.sourceFrameRate, selectedClip?.frameRate]);
 
   // Clean up debounce timer and preview flag on modal close, but preserve background video extraction
@@ -225,6 +235,13 @@ function CutoutModalComponent({
     }
   }, [visible, currentCutout?.enabled, currentCutout?.mode, clipId, selectedClip?.sourceMediaId]);
 
+  const onApplyCutoutRef = useRef(onApplyCutout);
+  onApplyCutoutRef.current = onApplyCutout;
+
+  const clipIdRef = useRef(clipId);
+  clipIdRef.current = clipId;
+
+  // Cleanup on unmount only - never trigger state updates or re-run cleanup on function reference changes
   useEffect(() => {
     return () => {
       if (abortCtrlRef.current) {
@@ -236,16 +253,15 @@ function CutoutModalComponent({
         debounceTimerRef.current = null;
       }
       previewInFlightRef.current = false;
-      setIsProcessingFrames(false);
-      setIsProcessingActiveFrame(false);
 
       // Save and persist active cutout config when leaving or unmounting the tool panel
-      if (configRef.current?.enabled && configRef.current?.mode !== "none" && clipId) {
-        onApplyCutout(configRef.current, clipId);
+      const targetClipId = clipIdRef.current;
+      if (configRef.current?.enabled && configRef.current?.mode !== "none" && targetClipId) {
+        onApplyCutoutRef.current?.(configRef.current, targetClipId);
         notifyMaskUpdated();
       }
     };
-  }, [clipId, onApplyCutout]);
+  }, []);
 
   const debounceTimerRef = useRef<any>(null);
 
@@ -263,6 +279,17 @@ function CutoutModalComponent({
     setProcessingError(null);
     try {
       const isChroma = previewConfig.mode === "chroma";
+      if (!isChroma) {
+        const modelReady = await ensureCutoutModelReady(false);
+        if (!modelReady) {
+          const latestModel = getCutoutModelState();
+          setProcessingError(
+            latestModel.error ||
+              "AI Cutout model could not be loaded. Check your connection or build and tap Retry.",
+          );
+          return false;
+        }
+      }
       const threshold = isChroma
         ? Math.max(0, Math.min(1, (previewConfig.intensity ?? 45) / 100))
         : 0.45;
@@ -283,9 +310,11 @@ function CutoutModalComponent({
         return false;
       }
       if (!ok) {
+        const latestModel = getCutoutModelState();
         setProcessingError(
           previewConfig.mode === "auto"
-            ? "Auto Cutout could not create a mask. Check model initialization and try another frame."
+            ? latestModel.error ||
+                "Auto Cutout could not create a mask for this frame. Tap Retry or try another frame."
             : "Chroma Key could not process this frame. Check the clip and try again.",
         );
       }
@@ -635,6 +664,20 @@ function CutoutModalComponent({
     onClose,
   ]);
 
+  const handleRetryModelInit = useCallback(async () => {
+    setProcessingError(null);
+    const ok = await ensureCutoutModelReady(true);
+    if (ok && configRef.current?.enabled && configRef.current?.mode === "auto" && selectedClip?.url) {
+      const targetIdx = isVideoClip ? frameIdx : 0;
+      const targetTime = isVideoClip ? mediaTime : 0;
+      const previewOk = await runPreview(selectedClip, clipId, targetIdx, targetTime, configRef.current);
+      if (previewOk) {
+        onApplyCutout(configRef.current, clipId);
+        notifyMaskUpdated();
+      }
+    }
+  }, [clipId, frameIdx, isVideoClip, mediaTime, onApplyCutout, runPreview, selectedClip]);
+
   if (!visible) return null;
 
   return (
@@ -673,6 +716,8 @@ function CutoutModalComponent({
             isAlreadyProcessed={isAlreadyProcessed}
             processedCount={currentProcessedCount}
             errorMessage={processingError}
+            modelState={modelState}
+            onRetryModelInit={handleRetryModelInit}
             onPreviewFrame={handleProcessActiveFrame}
             onProcessVideo={handleProcessVideo}
             onCancelProcessing={handleCancelProcessing}

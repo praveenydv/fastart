@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import * as ExpoSplashScreen from "expo-splash-screen";
-import { deleteMedia, rehydrateProjectMedia, rehydrateProjectsMedia, setupAutoReconnectListener } from "../utils/largeMediaStorage";
+import {
+  deleteMedia,
+  cleanupOrphanedProjectStorage,
+  rehydrateProjectMedia,
+  rehydrateProjectsMedia,
+  setupAutoReconnectListener,
+} from "../utils/largeMediaStorage";
 import { restoreClipMasksFromStorage, restoreProjectCutoutMasks } from "../services/selfieSegmentationService";
 import {
   FastArtProject,
@@ -330,13 +336,25 @@ export function useAppBootstrap({
     }
     navigate("/", { replace: true });
 
-    if (target && target.tracks) {
-      const clipIds = [
-        ...(target.tracks.video || []).map((v: any) => v.id),
-        ...(target.tracks.audio || []).map((a: any) => a.id),
-      ];
-      clipIds.forEach((cid) => deleteMedia(cid).catch(() => {}));
+    const candidateIds: string[] = [];
+    if (target) {
+      (target.assets || []).forEach((a: any) => {
+        if (a?.id) candidateIds.push(String(a.id));
+      });
+      if (target.tracks) {
+        (target.tracks.video || []).forEach((v: any) => {
+          if (v?.id) candidateIds.push(String(v.id));
+          if (v?.sourceMediaId) candidateIds.push(String(v.sourceMediaId));
+        });
+        (target.tracks.audio || []).forEach((a: any) => {
+          if (a?.id) candidateIds.push(String(a.id));
+          if (a?.sourceMediaId) candidateIds.push(String(a.sourceMediaId));
+        });
+      }
     }
+    cleanupOrphanedProjectStorage(updated, candidateIds).catch(() => {
+      candidateIds.forEach((cid) => deleteMedia(cid).catch(() => {}));
+    });
 
     addNotification({
       title: "Project Deleted",

@@ -132,11 +132,6 @@ function BlendModeModalComponent({
     onApply(mode, opacity);
   };
 
-  const handleDone = () => {
-    onApply(selectedMode, opacity);
-    onClose();
-  };
-
   const handleReset = () => {
     setSelectedMode('normal');
     setOpacity(1.0);
@@ -154,7 +149,6 @@ function BlendModeModalComponent({
             onClose={onClose}
             onReset={handleReset}
             resetText="Reset"
-            onDone={handleDone}
           />
         )}
 

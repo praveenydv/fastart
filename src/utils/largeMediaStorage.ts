@@ -65,16 +65,78 @@ export function cacheMediaHandle(id: string, handle: any, name?: string): void {
   }
 }
 
-let dbPromise: Promise<IDBDatabase> | null = null;
+interface GlobalMediaDbState {
+  dbPromise: Promise<IDBDatabase> | null;
+  activeDb: IDBDatabase | null;
+  externallyDeleted: boolean;
+}
 
-function getIndexedDB(): Promise<IDBDatabase> {
+const GLOBAL_MEDIA_DB_KEY = '__fastartMediaDbState__';
+
+function getGlobalDbState(): GlobalMediaDbState {
+  const root = globalThis as unknown as Record<string, GlobalMediaDbState | undefined>;
+  if (!root[GLOBAL_MEDIA_DB_KEY]) {
+    root[GLOBAL_MEDIA_DB_KEY] = { dbPromise: null, activeDb: null, externallyDeleted: false };
+  }
+  return root[GLOBAL_MEDIA_DB_KEY]!;
+}
+
+function resetGlobalDbState(externallyDeleted: boolean = false): void {
+  const state = getGlobalDbState();
+  state.dbPromise = null;
+  inFlightGetAllMediaPromise = null;
+  if (externallyDeleted) {
+    state.externallyDeleted = true;
+  }
+  if (state.activeDb) {
+    try {
+      state.activeDb.close();
+    } catch {}
+    state.activeDb = null;
+  }
+}
+
+function attachIndexedDBLifecycle(db: IDBDatabase): IDBDatabase {
+  const state = getGlobalDbState();
+  if (state.activeDb && state.activeDb !== db) {
+    try {
+      state.activeDb.close();
+    } catch {}
+  }
+  state.activeDb = db;
+  state.externallyDeleted = false;
+  db.onversionchange = (event: IDBVersionChangeEvent) => {
+    // When DevTools or deleteDatabase triggers deletion (newVersion === null),
+    // immediately close the open connection and pause background re-opening.
+    resetGlobalDbState(event.newVersion === null);
+  };
+  db.onclose = () => {
+    state.dbPromise = null;
+    if (state.activeDb === db) {
+      state.activeDb = null;
+    }
+  };
+  return db;
+}
+
+function getIndexedDB(allowRecreateAfterExternalDelete: boolean = false): Promise<IDBDatabase> {
   if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.indexedDB) {
     return Promise.reject(new Error('IndexedDB not supported in this environment'));
   }
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
+  const state = getGlobalDbState();
+  if (state.externallyDeleted) {
+    if (!allowRecreateAfterExternalDelete) {
+      return Promise.reject(new Error('IndexedDB database was deleted externally'));
+    }
+    state.externallyDeleted = false;
+  }
+  if (state.activeDb) {
+    return Promise.resolve(state.activeDb);
+  }
+  if (!state.dbPromise) {
+    state.dbPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = (e: any) => {
+      request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE_MEDIA)) {
           const store = db.createObjectStore(STORE_MEDIA, { keyPath: 'id' });
@@ -86,6 +148,9 @@ function getIndexedDB(): Promise<IDBDatabase> {
         if (!db.objectStoreNames.contains(STORE_PROJECTS)) {
           db.createObjectStore(STORE_PROJECTS, { keyPath: 'id' });
         }
+      };
+      request.onblocked = () => {
+        console.warn('[largeMediaStorage] IndexedDB open blocked by another open connection');
       };
       request.onsuccess = () => {
         const db = request.result;
@@ -109,25 +174,29 @@ function getIndexedDB(): Promise<IDBDatabase> {
               upDb.createObjectStore(STORE_PROJECTS, { keyPath: 'id' });
             }
           };
-          upgradeReq.onsuccess = () => resolve(upgradeReq.result);
-          upgradeReq.onerror = () => resolve(db);
+          upgradeReq.onsuccess = () => resolve(attachIndexedDBLifecycle(upgradeReq.result));
+          upgradeReq.onerror = () => resolve(attachIndexedDBLifecycle(db));
           return;
         }
-        resolve(db);
+        resolve(attachIndexedDBLifecycle(db));
       };
       request.onerror = () => {
         // Fallback: If version mismatch, open without version argument to safely read existing DB
         if (request.error?.name === 'VersionError') {
           const fallbackReq = indexedDB.open(DB_NAME);
-          fallbackReq.onsuccess = () => resolve(fallbackReq.result);
-          fallbackReq.onerror = () => reject(fallbackReq.error);
+          fallbackReq.onsuccess = () => resolve(attachIndexedDBLifecycle(fallbackReq.result));
+          fallbackReq.onerror = () => {
+            resetGlobalDbState();
+            reject(fallbackReq.error);
+          };
           return;
         }
+        resetGlobalDbState();
         reject(request.error);
       };
     });
   }
-  return dbPromise;
+  return state.dbPromise;
 }
 
 /**
@@ -533,7 +602,7 @@ export async function persistLargeMedia(
   // Save to IndexedDB if on web
   if (Platform.OS === 'web' && typeof indexedDB !== 'undefined') {
     try {
-      const db = await getIndexedDB();
+      const db = await getIndexedDB(true);
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE_MEDIA, 'readwrite');
         const store = tx.objectStore(STORE_MEDIA);
@@ -1190,30 +1259,38 @@ export async function deleteMedia(id: string): Promise<void> {
   }
 }
 
-// Retrieve all stored media records from IndexedDB
+let inFlightGetAllMediaPromise: Promise<StoredMediaRecord[]> | null = null;
+
+// Retrieve all stored media records from IndexedDB (coalescing concurrent startup scans)
 export async function getAllStoredMedia(): Promise<StoredMediaRecord[]> {
   if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return [];
-  try {
-    const db = await getIndexedDB();
-    return await new Promise<StoredMediaRecord[]>((resolve, reject) => {
-      const tx = db.transaction(STORE_MEDIA, 'readonly');
-      const store = tx.objectStore(STORE_MEDIA);
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const list = req.result || [];
-        for (const r of list) {
-          if (r.handle) {
-            cacheMediaHandle(r.id, r.handle, r.name);
+  if (inFlightGetAllMediaPromise) return inFlightGetAllMediaPromise;
+  inFlightGetAllMediaPromise = (async () => {
+    try {
+      const db = await getIndexedDB();
+      return await new Promise<StoredMediaRecord[]>((resolve, reject) => {
+        const tx = db.transaction(STORE_MEDIA, 'readonly');
+        const store = tx.objectStore(STORE_MEDIA);
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const list = req.result || [];
+          for (const r of list) {
+            if (r.handle) {
+              cacheMediaHandle(r.id, r.handle, r.name);
+            }
           }
-        }
-        resolve(list);
-      };
-      req.onerror = () => reject(req.error);
-    });
-  } catch (err) {
-    console.warn('Failed to get all stored media:', err);
-    return [];
-  }
+          resolve(list);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      console.warn('Failed to get all stored media:', err);
+      return [];
+    } finally {
+      inFlightGetAllMediaPromise = null;
+    }
+  })();
+  return inFlightGetAllMediaPromise;
 }
 
 // Prune orphaned media records from IndexedDB to free disk space
@@ -1242,6 +1319,98 @@ export async function pruneUnusedMediaFiles(activeIds: Set<string>): Promise<num
   }
 
   return deletedCount;
+}
+
+// Prune orphaned cutout mask entries from IndexedDB to free storage
+export async function pruneUnusedCutoutMasks(activeIds: Set<string>): Promise<number> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return 0;
+  let deletedCount = 0;
+
+  try {
+    const db = await getIndexedDB();
+    if (!db.objectStoreNames.contains(STORE_MASKS)) return 0;
+    const keys = await new Promise<string[]>((resolve, reject) => {
+      const tx = db.transaction(STORE_MASKS, 'readonly');
+      const store = tx.objectStore(STORE_MASKS);
+      const req = store.getAllKeys();
+      req.onsuccess = () => resolve((req.result || []).map((k) => String(k)));
+      req.onerror = () => reject(req.error);
+    });
+
+    const staleKeys = keys.filter((k) => !activeIds.has(k));
+    if (staleKeys.length > 0) {
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(STORE_MASKS, 'readwrite');
+        const store = tx.objectStore(STORE_MASKS);
+        for (const k of staleKeys) {
+          store.delete(k);
+          deletedCount++;
+        }
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to prune unused cutout masks:', err);
+  }
+
+  return deletedCount;
+}
+
+/**
+ * Deletes orphaned media blobs and cutout masks from IndexedDB when a project is deleted
+ * while keeping any media/masks still referenced by remaining projects.
+ */
+export async function cleanupOrphanedProjectStorage(
+  remainingProjects: any[],
+  candidateIds: string[] = []
+): Promise<void> {
+  const activeIds = new Set<string>();
+  for (const proj of remainingProjects || []) {
+    if (!proj) continue;
+    for (const asset of proj.assets || []) {
+      if (asset?.id) activeIds.add(String(asset.id));
+    }
+    for (const v of proj.tracks?.video || []) {
+      if (v?.id) activeIds.add(String(v.id));
+      if (v?.sourceMediaId) activeIds.add(String(v.sourceMediaId));
+    }
+    for (const a of proj.tracks?.audio || []) {
+      if (a?.id) activeIds.add(String(a.id));
+      if (a?.sourceMediaId) activeIds.add(String(a.sourceMediaId));
+    }
+  }
+
+  for (const cid of candidateIds) {
+    if (cid && !activeIds.has(cid)) {
+      await deleteMedia(cid).catch(() => {});
+      await removeMasksRLE(cid).catch(() => {});
+    }
+  }
+
+  if (Platform.OS === 'web') {
+    await pruneUnusedMediaFiles(activeIds).catch(() => {});
+    await pruneUnusedCutoutMasks(activeIds).catch(() => {});
+  }
+}
+
+/**
+ * Explicitly closes the singleton IndexedDB connection and deletes `fastart_media_db`.
+ */
+export async function deleteFastArtIndexedDB(): Promise<void> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return;
+  resetGlobalDbState(true);
+  await new Promise<void>((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(DB_NAME);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      req.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
 }
 
 // Estimate total storage used by media files in IndexedDB (in MB)
@@ -1487,6 +1656,8 @@ async function ensureMobileMaskDir(): Promise<string> {
   return dir;
 }
 
+export const CURRENT_CUTOUT_STORAGE_VERSION = 31;
+
 /**
  * Persists compressed 8-bit RLE cutout masks and frame rate into IndexedDB (web) or filesystem cache (mobile)
  * for instant, persistent recovery.
@@ -1495,6 +1666,7 @@ export async function persistMasksRLE(
   clipId: string,
   masks: Record<string, Uint8Array>,
   fps?: number,
+  crop?: { dx: number; dy: number; dw: number; dh: number } | null,
 ): Promise<void> {
   if (!clipId || !masks) return;
 
@@ -1507,7 +1679,7 @@ export async function persistMasksRLE(
       for (const [k, v] of Object.entries(masks)) {
         serializable[k] = Buffer.from(v).toString('base64');
       }
-      await FileSystemLegacy.writeAsStringAsync(filePath, JSON.stringify({ masks: serializable, fps }));
+      await FileSystemLegacy.writeAsStringAsync(filePath, JSON.stringify({ masks: serializable, fps, crop, version: CURRENT_CUTOUT_STORAGE_VERSION }));
     } catch (e) {
       console.warn('[largeMediaStorage] Failed to persist mobile masks:', e);
     }
@@ -1516,12 +1688,12 @@ export async function persistMasksRLE(
 
   if (typeof window === 'undefined') return;
   try {
-    const db = await getIndexedDB();
+    const db = await getIndexedDB(true);
     if (!db.objectStoreNames.contains(STORE_MASKS)) return;
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_MASKS, 'readwrite');
       const store = tx.objectStore(STORE_MASKS);
-      store.put({ id: clipId, masks, fps, updatedAt: Date.now() });
+      store.put({ id: clipId, masks, fps, crop, version: CURRENT_CUTOUT_STORAGE_VERSION, updatedAt: Date.now() });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -1535,7 +1707,7 @@ export async function persistMasksRLE(
  */
 export async function loadMasksRLE(
   clipId: string,
-): Promise<{ masks: Record<string, Uint8Array>; fps?: number } | null> {
+): Promise<{ masks: Record<string, Uint8Array>; fps?: number; crop?: { dx: number; dy: number; dw: number; dh: number } } | null> {
   if (!clipId) return null;
 
   if (Platform.OS !== 'web') {
@@ -1547,6 +1719,10 @@ export async function loadMasksRLE(
       if (!info.exists) return null;
       const raw = await FileSystemLegacy.readAsStringAsync(filePath);
       const parsed = JSON.parse(raw);
+      if (parsed.version !== CURRENT_CUTOUT_STORAGE_VERSION) {
+        // Discard stale masks from older engine versions
+        return null;
+      }
       const rawMasks = parsed.masks || parsed;
       const result: Record<string, Uint8Array> = {};
       for (const [k, v] of Object.entries(rawMasks)) {
@@ -1555,7 +1731,7 @@ export async function loadMasksRLE(
           result[k] = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         }
       }
-      return { masks: result, fps: typeof parsed.fps === 'number' ? parsed.fps : undefined };
+      return { masks: result, fps: typeof parsed.fps === 'number' ? parsed.fps : undefined, crop: parsed.crop };
     } catch {
       return null;
     }
@@ -1575,8 +1751,13 @@ export async function loadMasksRLE(
           resolve(null);
           return;
         }
+        if (item.version !== CURRENT_CUTOUT_STORAGE_VERSION) {
+          // Invalidate and discard stale cutout masks generated by older engine versions
+          resolve(null);
+          return;
+        }
         const masks = item.masks || item;
-        resolve({ masks, fps: typeof item.fps === 'number' ? item.fps : undefined });
+        resolve({ masks, fps: typeof item.fps === 'number' ? item.fps : undefined, crop: item.crop });
       };
       req.onerror = () => resolve(null);
     });
@@ -1654,7 +1835,7 @@ export async function persistProjectsToIndexedDB(projectsJson: string): Promise<
     return;
   }
 
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || getGlobalDbState().externallyDeleted) return;
   try {
     const db = await getIndexedDB();
     if (!db.objectStoreNames.contains(STORE_PROJECTS)) return;

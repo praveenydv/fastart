@@ -946,8 +946,8 @@ function Player({
           ) : (
             <>
               <PlayerNativeCompositor
-                activeVideos={bufferedNativeVideos}
-                activeAudios={bufferedNativeAudios}
+                activeVideos={activeModal === "export" ? EMPTY_ARRAY : bufferedNativeVideos}
+                activeAudios={activeModal === "export" ? EMPTY_ARRAY : bufferedNativeAudios}
                 activeCaptions={activeCaptions}
                 activeTexts={activeTexts}
                 activeStickers={activeStickers}

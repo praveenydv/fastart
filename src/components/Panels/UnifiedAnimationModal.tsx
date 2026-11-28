@@ -224,15 +224,17 @@ function NativeAnimationModal(props: AnimationModalProps) {
 
   return (
     <View style={[styles.container, isInline && styles.inlineContainer]}>
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Ionicons name="play-circle-outline" size={13} color="#CBD5E1" />
-          <Text style={styles.title}>Animation</Text>
+      {!isInline && (
+        <View style={styles.header}>
+          <View style={styles.titleRow}>
+            <Ionicons name="play-circle-outline" size={13} color="#CBD5E1" />
+            <Text style={styles.title}>Animation</Text>
+          </View>
+          <TouchableOpacity accessibilityRole="button" onPress={onClose} style={styles.closeButton}>
+            <Ionicons name="close" size={14} color="#8E8E93" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity accessibilityRole="button" onPress={onClose} style={styles.closeButton}>
-          <Ionicons name="close" size={14} color="#8E8E93" />
-        </TouchableOpacity>
-      </View>
+      )}
 
       <View style={styles.tabs}>
         {(["in", "out", "loop"] as const).map((category) => (

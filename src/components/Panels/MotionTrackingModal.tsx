@@ -42,7 +42,6 @@ interface MotionTrackingModalProps {
 export default function MotionTrackingModal({
   visible,
   onClose,
-  onApply,
   targetType = "video",
   currentTrack,
   onApplyTracking,
@@ -598,16 +597,6 @@ export default function MotionTrackingModal({
     pinnedClipId,
     currentTrack?.anchorTime,
   ]);
-
-  const handleDone = useCallback(() => {
-    triggerHaptic("success");
-    syncTracking({ enabled: hasTrajectory });
-    if (onApply) {
-      onApply();
-    } else {
-      onClose();
-    }
-  }, [hasTrajectory, onApply, onClose, syncTracking]);
 
   const handleReset = useCallback(() => {
     triggerHaptic("warning");
@@ -1361,18 +1350,6 @@ export default function MotionTrackingModal({
           />
         </View>
 
-        {/* Confirm / Apply Tracking Button */}
-        <TouchableOpacity
-          style={[styles.doneActionBtn, isSmallScreen && { paddingVertical: 8.5 }]}
-          onPress={handleDone}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="checkmark-circle" size={isSmallScreen ? 15 : 16} color="#08090E" />
-          <Text style={[styles.doneActionBtnText, isSmallScreen && { fontSize: 11.5 }]}>
-            {hasTrajectory ? (isSmallScreen ? "APPLY & DONE" : "APPLY TRACKING & DONE") : "DONE"}
-          </Text>
-        </TouchableOpacity>
-
         <View style={{ height: 20 }} />
       </ScrollView>
     </View>
@@ -1980,22 +1957,6 @@ const styles = StyleSheet.create({
   bakeActionBtnTextSuccess: {
     color: "#10B981",
     fontWeight: "700",
-  },
-  doneActionBtn: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#00F2FE",
-    borderRadius: 8,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  doneActionBtnText: {
-    color: "#08090E",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.3,
   },
   resetTrackActionBtn: {
     flexDirection: "row",

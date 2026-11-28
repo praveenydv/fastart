@@ -390,13 +390,27 @@ class FastArtRustModule : Module() {
         }
 
         val session = try {
-            environment.createSession(localModelFile.absolutePath, options)
-        } catch (e: Exception) {
+            val created = environment.createSession(localModelFile.absolutePath, options)
+            modnetSessionOptions = options
+            created
+        } catch (nnapiErr: Exception) {
             options.close()
-            throw IllegalStateException("Failed to create ONNX session: ${e.message}", e)
+            Log.w(TAG, "Accelerated session creation failed, retrying on CPU: ${nnapiErr.message}")
+            val cpuOptions = OrtSession.SessionOptions().apply {
+                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+                setIntraOpNumThreads(cpuThreads)
+                setInterOpNumThreads(2)
+            }
+            try {
+                val createdCpu = environment.createSession(localModelFile.absolutePath, cpuOptions)
+                modnetSessionOptions = cpuOptions
+                createdCpu
+            } catch (cpuErr: Exception) {
+                cpuOptions.close()
+                throw IllegalStateException("Failed to create ONNX session: ${cpuErr.message}", cpuErr)
+            }
         }
 
-        modnetSessionOptions = options
         modnetSession = session
 
         val inputName = session.inputNames.firstOrNull() ?: "input"
@@ -537,11 +551,9 @@ class FastArtRustModule : Module() {
                     Pair(threshold.coerceIn(0f, 1f), feather.coerceIn(0f, 1f))
                 }
 
-                val center = 0.10f + tNorm * 0.55f
-                val halfW = 0.015f + sNorm * 0.235f
-                val vMin = maxOf(0.01f, center - halfW)
-                val vMax = minOf(0.98f, center + halfW)
-                val span = maxOf(0.02f, vMax - vMin)
+                val vMin = (0.20f + (tNorm - 0.45f) * 0.25f).coerceIn(0.14f, 0.38f)
+                val vMax = (0.58f + tNorm * 0.10f + sNorm * 0.08f).coerceIn(vMin + 0.25f, 0.85f)
+                val span = maxOf(0.10f, vMax - vMin)
                 val invSpan = 1.0f / span
 
                 val alpha = ByteArray(width * height)
@@ -552,7 +564,7 @@ class FastArtRustModule : Module() {
                         else if (v >= vMax) 1f
                         else {
                             val u = (v - vMin) * invSpan
-                            u * u * (3f - 2f * u)
+                            u * u * u * (u * (u * 6f - 15f) + 10f)
                         }
                         alpha[i] = (a.coerceIn(0f, 1f) * 255f).toInt().toByte()
                     }
@@ -641,9 +653,9 @@ class FastArtRustModule : Module() {
         val directory = getCutoutDirectory(context)
         val safeClipId = clipId.replace(Regex("[^A-Za-z0-9_-]"), "_")
         val paramTag = if (mode == "chroma") {
-            "chroma_${keyColor.replace("#", "")}_${(threshold * 100).toInt()}_${(feather * 100).toInt()}"
+            "chroma_v2_${keyColor.replace("#", "")}_${(threshold * 100).toInt()}_${(feather * 100).toInt()}"
         } else {
-            "auto"
+            "auto_v2"
         }
         val webpOutput = File(directory, "${safeClipId}_${frameIdx}_${paramTag}.webp")
         val pngOutput = File(directory, "${safeClipId}_${frameIdx}_${paramTag}.png")
@@ -771,29 +783,83 @@ class FastArtRustModule : Module() {
                 argbCopy.recycle()
             }
 
-            val alpha = if (mode == "chroma") {
-                val color = keyColor.removePrefix("#").toLong(16).toInt()
-                val processed = nativeProcessChroma(
-                    rgba, targetWidth, targetHeight,
-                    (color shr 16) and 0xff, (color shr 8) and 0xff, color and 0xff,
-                    threshold, feather, true,
-                )
-                ByteArray(targetWidth * targetHeight) { index -> processed[index * 4 + 3] }
-            } else {
-                val effThresh = if (threshold <= 0.001f) 0.45f else threshold.coerceIn(0.001f, 0.60f)
-                val effFeath = if (feather <= 0.001f) 0.25f else feather.coerceIn(0.02f, 0.95f)
-                inferAlphaRgba(rgba, targetWidth, targetHeight, effThresh, effFeath)
-            }
-
             val totalPixels = targetWidth * targetHeight
             var maskPixels = threadLocalMaskPixels.get()
             if (maskPixels == null || maskPixels.size < totalPixels) {
                 maskPixels = IntArray(totalPixels)
                 threadLocalMaskPixels.set(maskPixels)
             }
-            for (i in 0 until totalPixels) {
-                val a = alpha[i].toInt() and 0xFF
-                maskPixels[i] = (a shl 24) or 0x00FFFFFF
+
+            if (mode == "chroma") {
+                val color = keyColor.removePrefix("#").toLong(16).toInt()
+                val processed = nativeProcessChroma(
+                    rgba, targetWidth, targetHeight,
+                    (color shr 16) and 0xff, (color shr 8) and 0xff, color and 0xff,
+                    threshold, feather, true,
+                )
+                for (i in 0 until totalPixels) {
+                    val i4 = i * 4
+                    val r = processed[i4].toInt() and 0xFF
+                    val g = processed[i4 + 1].toInt() and 0xFF
+                    val b = processed[i4 + 2].toInt() and 0xFF
+                    val a = processed[i4 + 3].toInt() and 0xFF
+                    maskPixels[i] = if (a < 4) 0 else (a shl 24) or (r shl 16) or (g shl 8) or b
+                }
+            } else {
+                val effThresh = if (threshold <= 0.001f) 0.45f else threshold.coerceIn(0.001f, 0.60f)
+                val effFeath = if (feather <= 0.001f) 0.25f else feather.coerceIn(0.02f, 0.95f)
+                val alpha = inferAlphaRgba(rgba, targetWidth, targetHeight, effThresh, effFeath)
+                val defringeRadius = maxOf(3, minOf(6, maxOf(targetWidth, targetHeight) / 250))
+
+                for (y in 0 until targetHeight) {
+                    val rowIdx = y * targetWidth
+                    for (x in 0 until targetWidth) {
+                        val i = rowIdx + x
+                        val a = alpha[i].toInt() and 0xFF
+                        if (a < 4) {
+                            maskPixels[i] = 0
+                            continue
+                        }
+                        val i4 = i * 4
+                        var r = rgba[i4].toInt() and 0xFF
+                        var g = rgba[i4 + 1].toInt() and 0xFF
+                        var b = rgba[i4 + 2].toInt() and 0xFF
+
+                        if (a <= 245 && targetWidth > 4 && targetHeight > 4) {
+                            var fgR = 0L
+                            var fgG = 0L
+                            var fgB = 0L
+                            var fgW = 0L
+                            val yMin = maxOf(0, y - defringeRadius)
+                            val yMax = minOf(targetHeight - 1, y + defringeRadius)
+                            val xMin = maxOf(0, x - defringeRadius)
+                            val xMax = minOf(targetWidth - 1, x + defringeRadius)
+                            for (ny in yMin..yMax) {
+                                val nRow = ny * targetWidth
+                                for (nx in xMin..xMax) {
+                                    val nIdx = nRow + nx
+                                    val na = alpha[nIdx].toInt() and 0xFF
+                                    if (na >= 242) {
+                                        val n4 = nIdx * 4
+                                        val w = (na - 239).toLong()
+                                        fgR += (rgba[n4].toInt() and 0xFF) * w
+                                        fgG += (rgba[n4 + 1].toInt() and 0xFF) * w
+                                        fgB += (rgba[n4 + 2].toInt() and 0xFF) * w
+                                        fgW += w
+                                    }
+                                }
+                            }
+                            if (fgW > 0L) {
+                                val blendW = minOf(0.95f, maxOf(0f, 1f - a / 255f) * 1.10f)
+                                val invW = 1f - blendW
+                                r = (r * invW + (fgR.toFloat() / fgW) * blendW).toInt().coerceIn(0, 255)
+                                g = (g * invW + (fgG.toFloat() / fgW) * blendW).toInt().coerceIn(0, 255)
+                                b = (b * invW + (fgB.toFloat() / fgW) * blendW).toInt().coerceIn(0, 255)
+                            }
+                        }
+                        maskPixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+                    }
+                }
             }
             val mask = Bitmap.createBitmap(maskPixels, targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
             var compressed = false

@@ -21,7 +21,7 @@ export function useTimelineResize({
 
   // Min and max limits
   // On mobile: comfortable range guaranteeing ample player preview room
-  const minTimelineHeight = isMobile ? 180 : 100;
+  const minTimelineHeight = isMobile ? 216 : 100;
   const maxTimelineHeight = isMobile
     ? Math.min(Math.round(screenHeight * 0.70), Math.max(minTimelineHeight, screenHeight - 220))
     : Math.min(600, Math.max(320, Math.round(screenHeight * 0.60)));

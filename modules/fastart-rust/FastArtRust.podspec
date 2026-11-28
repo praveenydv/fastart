@@ -13,6 +13,7 @@ Pod::Spec.new do |s|
   s.source       = { :git => "" }
 
   s.source_files = "ios/**/*.{h,m,mm,swift}"
+  s.resources = ["ios/Resources/**/*"]
   s.vendored_libraries = "ios/libfastart_ios.a"
   s.requires_arc = true
 

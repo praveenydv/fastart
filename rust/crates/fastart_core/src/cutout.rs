@@ -117,6 +117,11 @@ fn box_filter_f32(
 /// Refines coarse masks into hair-fine, halo-free alpha mattes using local linear
 /// covariance between the RGB guide image and the input mask.
 /// Optimized with reusable heap buffers and zero dynamic allocations inside filter passes.
+/// Guided Filter Alpha Matting (He et al. / Industry Standard)
+///
+/// Refines coarse masks into hair-fine, halo-free alpha mattes using local linear
+/// covariance between the RGB guide image and the input mask.
+/// Optimized with reusable heap buffers and zero dynamic allocations inside filter passes.
 pub fn guided_filter_matting(
     guide_rgb: &[u8],
     input_mask: &[u8],
@@ -144,16 +149,8 @@ pub fn guided_filter_matting(
         // Rec. 709 Luminance
         i_norm[idx] = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
 
-        // Apply contrast S-curve to input mask confidence to eliminate blurry halos
-        let raw_m = input_mask[idx] as f32;
-        if raw_m >= 135.0 {
-            p_norm[idx] = 1.0;
-        } else if raw_m <= 55.0 {
-            p_norm[idx] = 0.0;
-        } else {
-            let t = (raw_m - 55.0) / 80.0;
-            p_norm[idx] = t * t * (3.0 - 2.0 * t);
-        }
+        // Preserve smooth input mask probabilities [0..1] for continuous guided filtering
+        p_norm[idx] = input_mask[idx] as f32 / 255.0;
     }
 
     let mut mean_i = vec![0.0f32; total_pixels];
@@ -195,16 +192,178 @@ pub fn guided_filter_matting(
     box_filter_f32(&a, &mut mean_a, &mut scratch, width, height, radius);
     box_filter_f32(&b, &mut mean_b, &mut scratch, width, height, radius);
 
-    // Compute final refined alpha q = mean_a * I + mean_b
+    // Compute final refined alpha q = mean_a * I + mean_b smoothly across the entire boundary
+    // without hard m >= 250 / m <= 4 discontinuities that cause 512px grid staircase seams.
     for idx in 0..total_pixels {
-        let q = mean_a[idx] * i_norm[idx] + mean_b[idx];
-        output_mask[idx] = (q.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let m = input_mask[idx];
+        let y = idx / width;
+
+        if y >= height.saturating_sub(2) && m >= 80 {
+            output_mask[idx] = 255;
+        } else {
+            let q = (mean_a[idx] * i_norm[idx] + mean_b[idx]).clamp(0.0, 1.0);
+            output_mask[idx] = blend_guided_alpha(q, m);
+        }
     }
 }
 
-/// Chroma Key Background Removal with Automatic Despill
+#[inline]
+fn blend_guided_alpha(q: f32, coarse_mask: u8) -> u8 {
+    let m_norm = coarse_mask as f32 / 255.0;
+    // Rely primarily on RGB-guided q so coarse 512px spillover onto white background does not leave a halo
+    let blended = q * 0.90 + m_norm * 0.10;
+    let u = ((blended - 0.14f32) / 0.76f32).clamp(0.0, 1.0);
+    let s = u * u * u * (u * (u * 6.0f32 - 15.0f32) + 10.0f32);
+    ((s * 255.0f32).round() as i32).clamp(0, 255) as u8
+}
+
+/// Runs O(N) RGB-guided matting (with optional fast `subsample`d statistics and full-resolution
+/// linear guide evaluation) directly into `rgba`'s alpha channel, followed by in-place edge defringing.
+/// Used by both paused preview (`subsample = 1`) and 60 FPS playback/scrubbing (`subsample = 2`).
+pub fn guided_composite_and_defringe(
+    rgba: &mut [u8],
+    mask_rgba: &[u8],
+    width: usize,
+    height: usize,
+    radius: usize,
+    eps: f32,
+    subsample: usize,
+) {
+    let total_pixels = width * height;
+    if total_pixels == 0 || rgba.len() < total_pixels * 4 || mask_rgba.len() < total_pixels * 4 {
+        return;
+    }
+
+    let s = subsample.clamp(1, 4);
+    let mut i_full = vec![0.0f32; total_pixels];
+    let mut m_full = vec![0u8; total_pixels];
+    for idx in 0..total_pixels {
+        let px = idx * 4;
+        i_full[idx] = (0.2126 * rgba[px] as f32 + 0.7152 * rgba[px + 1] as f32 + 0.0722 * rgba[px + 2] as f32) / 255.0;
+        let a_val = mask_rgba[px + 3];
+        m_full[idx] = if a_val == 0 && mask_rgba[px] > 0 { mask_rgba[px] } else { a_val };
+    }
+
+    if s == 1 || width < 32 || height < 32 {
+        let mut out_mask = vec![0u8; total_pixels];
+        guided_filter_matting(rgba, &m_full, &mut out_mask, width, height, radius, eps);
+        for idx in 0..total_pixels {
+            rgba[idx * 4 + 3] = out_mask[idx];
+        }
+        defringe_rgba(rgba, width, height);
+        return;
+    }
+
+    // Fast Guided Filter: compute box statistics on s x s block-averaged grid,
+    // then bilinearly upsample linear coefficients (mean_a, mean_b) onto full-res luminance I.
+    let sub_w = width.div_ceil(s);
+    let sub_h = height.div_ceil(s);
+    let sub_total = sub_w * sub_h;
+    let mut i_sub = vec![0.0f32; sub_total];
+    let mut p_sub = vec![0.0f32; sub_total];
+
+    for sy in 0..sub_h {
+        let y0 = sy * s;
+        let y1 = (y0 + s).min(height);
+        for sx in 0..sub_w {
+            let x0 = sx * s;
+            let x1 = (x0 + s).min(width);
+            let mut sum_i = 0.0f32;
+            let mut sum_p = 0.0f32;
+            let mut count = 0.0f32;
+            for yy in y0..y1 {
+                let row = yy * width;
+                for xx in x0..x1 {
+                    let idx = row + xx;
+                    sum_i += i_full[idx];
+                    sum_p += m_full[idx] as f32 / 255.0;
+                    count += 1.0;
+                }
+            }
+            let sub_idx = sy * sub_w + sx;
+            i_sub[sub_idx] = sum_i / count;
+            p_sub[sub_idx] = sum_p / count;
+        }
+    }
+
+    let sub_radius = (radius / s).max(2);
+    let mut scratch = vec![0.0f32; sub_total];
+    let mut mean_i = vec![0.0f32; sub_total];
+    let mut mean_p = vec![0.0f32; sub_total];
+    box_filter_f32(&i_sub, &mut mean_i, &mut scratch, sub_w, sub_h, sub_radius);
+    box_filter_f32(&p_sub, &mut mean_p, &mut scratch, sub_w, sub_h, sub_radius);
+
+    let mut ii = vec![0.0f32; sub_total];
+    let mut ip = vec![0.0f32; sub_total];
+    for idx in 0..sub_total {
+        ii[idx] = i_sub[idx] * i_sub[idx];
+        ip[idx] = i_sub[idx] * p_sub[idx];
+    }
+    let mut mean_ii = vec![0.0f32; sub_total];
+    let mut mean_ip = vec![0.0f32; sub_total];
+    box_filter_f32(&ii, &mut mean_ii, &mut scratch, sub_w, sub_h, sub_radius);
+    box_filter_f32(&ip, &mut mean_ip, &mut scratch, sub_w, sub_h, sub_radius);
+
+    let mut a = vec![0.0f32; sub_total];
+    let mut b = vec![0.0f32; sub_total];
+    for idx in 0..sub_total {
+        let var_i = (mean_ii[idx] - mean_i[idx] * mean_i[idx]).max(0.0);
+        let cov_ip = mean_ip[idx] - mean_i[idx] * mean_p[idx];
+        let a_val = cov_ip / (var_i + eps);
+        a[idx] = a_val;
+        b[idx] = mean_p[idx] - a_val * mean_i[idx];
+    }
+
+    let mut mean_a = vec![0.0f32; sub_total];
+    let mut mean_b = vec![0.0f32; sub_total];
+    box_filter_f32(&a, &mut mean_a, &mut scratch, sub_w, sub_h, sub_radius);
+    box_filter_f32(&b, &mut mean_b, &mut scratch, sub_w, sub_h, sub_radius);
+
+    let inv_s = 1.0f32 / s as f32;
+    for y in 0..height {
+        let fy = ((y as f32 + 0.5) * inv_s - 0.5).clamp(0.0, (sub_h - 1) as f32);
+        let sy0 = fy.floor() as usize;
+        let sy1 = (sy0 + 1).min(sub_h - 1);
+        let ty = fy - sy0 as f32;
+        let row0 = sy0 * sub_w;
+        let row1 = sy1 * sub_w;
+        let y_row = y * width;
+        let is_bottom = y >= height.saturating_sub(2);
+
+        for x in 0..width {
+            let idx = y_row + x;
+            let m = m_full[idx];
+            if is_bottom && m >= 80 {
+                rgba[idx * 4 + 3] = 255;
+                continue;
+            }
+            let fx = ((x as f32 + 0.5) * inv_s - 0.5).clamp(0.0, (sub_w - 1) as f32);
+            let sx0 = fx.floor() as usize;
+            let sx1 = (sx0 + 1).min(sub_w - 1);
+            let tx = fx - sx0 as f32;
+
+            let a0 = mean_a[row0 + sx0] * (1.0 - tx) + mean_a[row0 + sx1] * tx;
+            let a1 = mean_a[row1 + sx0] * (1.0 - tx) + mean_a[row1 + sx1] * tx;
+            let ma = a0 * (1.0 - ty) + a1 * ty;
+
+            let b0 = mean_b[row0 + sx0] * (1.0 - tx) + mean_b[row0 + sx1] * tx;
+            let b1 = mean_b[row1 + sx0] * (1.0 - tx) + mean_b[row1 + sx1] * tx;
+            let mb = b0 * (1.0 - ty) + b1 * ty;
+
+            let q = (ma * i_full[idx] + mb).clamp(0.0, 1.0);
+            rgba[idx * 4 + 3] = blend_guided_alpha(q, m);
+        }
+    }
+
+    defringe_rgba(rgba, width, height);
+}
+
+/// Broadcast-Quality YCbCr Chroma Key Background Removal with Edge Despill
 ///
-/// Processes packed 32-bit RGBA buffers in memory at high performance.
+/// Converts colors to perceptual YCbCr space to decouple chromatic color difference
+/// from luminance variations (shadows, highlights, uneven studio lighting).
+/// Despill is strictly isolated to semi-transparent transition boundary pixels,
+/// preventing interior foreground colors (dresses, skin tones) from being altered or desaturated.
 pub fn process_chroma_key(
     rgba_pixels: &mut [u8],
     width: usize,
@@ -222,17 +381,19 @@ pub fn process_chroma_key(
         params.key_color.2 as f32,
     );
 
-    // Weight Euclidean distance matching human visual sensitivity (Rec. 709)
-    let w_r = 0.299f32;
-    let w_g = 0.587f32;
-    let w_b = 0.114f32;
+    // Convert key color to perceptual YCbCr space
+    let y_key = 0.299 * r_key + 0.587 * g_key + 0.114 * b_key;
+    let cb_key = -0.168736 * r_key - 0.331264 * g_key + 0.5 * b_key + 128.0;
+    let cr_key = 0.5 * r_key - 0.418688 * g_key - 0.081312 * b_key + 128.0;
 
-    let thresh = params.threshold.clamp(0.01, 1.0) * 180.0;
-    let thresh_sq = thresh * thresh;
-    let feather = (params.feather.clamp(0.01, 1.0) * 80.0).max(1.0);
-    let outer = thresh + feather;
-    let outer_sq = outer * outer;
-    let inv_feather = 1.0 / feather;
+    let thresh_norm = params.threshold.clamp(0.01, 1.0);
+    let feather_norm = params.feather.clamp(0.01, 1.0);
+
+    // Tolerance in chromatic distance space [4.0 .. 94.0]
+    let tolerance = 4.0f32 + thresh_norm * 90.0f32;
+    let softness = (1.0f32 + feather_norm * 40.0f32).max(0.5f32);
+    let outer = tolerance + softness;
+    let inv_softness = 1.0f32 / softness;
 
     let is_green_screen = g_key > r_key && g_key > b_key;
     let is_blue_screen = b_key > r_key && b_key > g_key;
@@ -244,46 +405,55 @@ pub fn process_chroma_key(
         let mut b = rgba_pixels[idx + 2] as f32;
         let orig_a = rgba_pixels[idx + 3] as f32 / 255.0;
 
-        let dr = r - r_key;
-        let dg = g - g_key;
-        let db = b - b_key;
+        let y = 0.299 * r + 0.587 * g + 0.114 * b;
+        let cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0;
+        let cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0;
 
-        let dist_sq = w_r * dr * dr + w_g * dg * dg + w_b * db * db;
+        let d_cb = cb - cb_key;
+        let d_cr = cr - cr_key;
+        let d_y = y - y_key;
 
-        if dist_sq <= thresh_sq {
-            // Completely transparent background
+        // Perceptual chroma distance with reduced luminance sensitivity (0.06 * dY^2)
+        // allows seamless keying across brightness variations, shadows, and uneven studio lighting
+        let dist = (d_cb * d_cb + d_cr * d_cr + 0.06 * d_y * d_y).sqrt();
+
+        if dist <= tolerance {
             rgba_pixels[idx + 3] = 0;
             continue;
         }
 
-        let mut alpha = 1.0f32;
-        if dist_sq < outer_sq {
-            let dist = dist_sq.sqrt();
-            let u = (dist - thresh) * inv_feather;
-            // Smooth Hermite interpolation
-            alpha = u * u * (3.0 - 2.0 * u);
+        if dist >= outer {
+            // Solid foreground: never modify RGB and never apply despill to solid subject!
+            continue;
         }
 
-        // Color Despill suppression for clean cinematic edges
+        let u = (dist - tolerance) * inv_softness;
+        // Smooth Hermite interpolation for transition edge
+        let alpha = u * u * (3.0 - 2.0 * u);
+
+        // Despill ONLY on the semi-transparent transition boundary fringe
         if params.despill {
+            let despill_weight = (1.0 - alpha) * 0.95;
             if is_green_screen {
                 let max_rb = r.max(b);
                 if g > max_rb {
-                    g = g * 0.35 + max_rb * 0.65;
+                    let excess = g - max_rb;
+                    g -= excess * despill_weight;
                 }
             } else if is_blue_screen {
                 let max_rg = r.max(g);
                 if b > max_rg {
-                    b = b * 0.35 + max_rg * 0.65;
+                    let excess = b - max_rg;
+                    b -= excess * despill_weight;
                 }
             }
         }
 
         let final_alpha = (alpha * orig_a).clamp(0.0, 1.0);
-        rgba_pixels[idx] = r.round() as u8;
-        rgba_pixels[idx + 1] = g.round() as u8;
-        rgba_pixels[idx + 2] = b.round() as u8;
-        rgba_pixels[idx + 3] = (final_alpha * 255.0).round() as u8;
+        rgba_pixels[idx] = r.round().clamp(0.0, 255.0) as u8;
+        rgba_pixels[idx + 1] = g.round().clamp(0.0, 255.0) as u8;
+        rgba_pixels[idx + 2] = b.round().clamp(0.0, 255.0) as u8;
+        rgba_pixels[idx + 3] = (final_alpha * 255.0).round().clamp(0.0, 255.0) as u8;
     }
 }
 
@@ -371,6 +541,12 @@ pub fn apply_matte_to_buffer(
         let current_a = rgba_pixels[idx + 3] as f32 / 255.0;
         rgba_pixels[idx + 3] = (alpha * current_a * 255.0).round() as u8;
     }
+}
+
+/// Decontaminates edge transition pixels by suppressing background color bleed/halos.
+/// Delegates to the shared `fastart_cutout_ops::defringe_rgba` adaptive-radius kernel.
+pub fn defringe_rgba(rgba: &mut [u8], width: usize, height: usize) {
+    fastart_cutout_ops::defringe_rgba(rgba, width, height);
 }
 
 /// Processes raw MediaPipe segmentation mask pixels (RGBA) in-place:
@@ -694,89 +870,43 @@ pub fn process_modnet_alpha_into(
     if output.len() < pixel_count {
         return Err("MODNet alpha output buffer is too small".into());
     }
-    let cut = if threshold <= 0.001 && feather <= 0.001 { 0.06f32 } else { threshold.clamp(0.01, 0.50) };
-    let soft = if threshold <= 0.001 && feather <= 0.001 { 0.72f32 } else { feather.clamp(0.10, 0.90) };
+    let (t_norm, f_norm) = if threshold <= 0.001 && feather <= 0.001 {
+        (0.45f32, 0.25f32)
+    } else {
+        (threshold.clamp(0.0, 1.0), feather.clamp(0.0, 1.0))
+    };
     let output = &mut output[..pixel_count];
 
-    #[cfg(feature = "parallel")]
-    {
-        ensure_cutout_thread_pool();
-        output.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-            process_modnet_alpha_row(raw_alpha, row, y, width, height, cut, soft);
-        });
+    if width == 512 && height == 512 {
+        fastart_cutout_ops::smooth_modnet_alpha_cropped(raw_alpha, output, t_norm, f_norm, 0, 0, 512, 512);
+        return Ok(());
     }
-    #[cfg(not(feature = "parallel"))]
-    for (y, row) in output.chunks_mut(width).enumerate() {
-        process_modnet_alpha_row(raw_alpha, row, y, width, height, cut, soft);
+
+    let mut alpha_512 = vec![0u8; MODEL_PIXELS];
+    fastart_cutout_ops::smooth_modnet_alpha_cropped(raw_alpha, &mut alpha_512, t_norm, f_norm, 0, 0, 512, 512);
+
+    let scale_y = 511.0f32 / (height - 1).max(1) as f32;
+    let scale_x = 511.0f32 / (width - 1).max(1) as f32;
+    for y in 0..height {
+        let sy = (y as f32 * scale_y).clamp(0.0, 511.0);
+        let y0 = sy.floor() as usize;
+        let y1 = (y0 + 1).min(511);
+        let ty = sy - y0 as f32;
+        let row0 = y0 * 512;
+        let row1 = y1 * 512;
+        let out_row = y * width;
+        for x in 0..width {
+            let sx = (x as f32 * scale_x).clamp(0.0, 511.0);
+            let x0 = sx.floor() as usize;
+            let x1 = (x0 + 1).min(511);
+            let tx = sx - x0 as f32;
+            let top = alpha_512[row0 + x0] as f32 * (1.0 - tx) + alpha_512[row0 + x1] as f32 * tx;
+            let btm = alpha_512[row1 + x0] as f32 * (1.0 - tx) + alpha_512[row1 + x1] as f32 * tx;
+            output[out_row + x] = (top * (1.0 - ty) + btm * ty).round().clamp(0.0, 255.0) as u8;
+        }
     }
 
     Ok(())
-}
-
-#[inline]
-fn process_modnet_alpha_row(
-    raw_alpha: &[f32],
-    output_row: &mut [u8],
-    y: usize,
-    width: usize,
-    height: usize,
-    cut: f32,
-    soft: f32,
-) {
-    let inv_soft = 1.0 / soft;
-    if width == 512 && height == 512 {
-        let row_start = y * 512;
-        for (x, alpha) in output_row.iter_mut().enumerate() {
-            let value = raw_alpha[row_start + x];
-            let opacity = if value >= cut + soft {
-                1.0
-            } else if value <= cut {
-                0.0
-            } else {
-                let u = (value - cut) * inv_soft;
-                u * u * (3.0 - 2.0 * u)
-            };
-            *alpha = (opacity * 255.0).clamp(0.0, 255.0) as u8;
-        }
-        return;
-    }
-
-    // High-precision Bilinear Interpolation: eliminates blocky pixel staircases at 1080p and 4K
-    let scale_y = 511.0f32 / (height - 1).max(1) as f32;
-    let scale_x = 511.0f32 / (width - 1).max(1) as f32;
-
-    let sy = (y as f32 * scale_y).clamp(0.0, 511.0);
-    let y0 = sy.floor() as usize;
-    let y1 = (y0 + 1).min(511);
-    let ty = sy - y0 as f32;
-    let row0 = y0 * 512;
-    let row1 = y1 * 512;
-
-    for (x, alpha) in output_row.iter_mut().enumerate() {
-        let sx = (x as f32 * scale_x).clamp(0.0, 511.0);
-        let x0 = sx.floor() as usize;
-        let x1 = (x0 + 1).min(511);
-        let tx = sx - x0 as f32;
-
-        let v00 = raw_alpha[row0 + x0];
-        let v10 = raw_alpha[row0 + x1];
-        let v01 = raw_alpha[row1 + x0];
-        let v11 = raw_alpha[row1 + x1];
-
-        let top = v00 + tx * (v10 - v00);
-        let btm = v01 + tx * (v11 - v01);
-        let value = top + ty * (btm - top);
-
-        let opacity = if value >= cut + soft {
-            1.0
-        } else if value <= cut {
-            0.0
-        } else {
-            let u = (value - cut) * inv_soft;
-            u * u * (3.0 - 2.0 * u)
-        };
-        *alpha = (opacity * 255.0).clamp(0.0, 255.0) as u8;
-    }
 }
 
 #[inline]
@@ -803,13 +933,35 @@ pub fn process_modnet_output_tensor(
     threshold: f32,
     feather: f32,
 ) {
+    process_modnet_output_tensor_cropped(raw_alpha, out_rgba, threshold, feather, 0, 0, 0, 0);
+}
+
+pub fn process_modnet_output_tensor_cropped(
+    raw_alpha: &[f32],
+    out_rgba: &mut [u8],
+    threshold: f32,
+    feather: f32,
+    crop_x: usize,
+    crop_y: usize,
+    crop_w: usize,
+    crop_h: usize,
+) {
     let total_pixels = 512 * 512;
     if raw_alpha.len() < total_pixels || out_rgba.len() < total_pixels * 4 {
         return;
     }
 
     let mut smoothed = vec![0u8; total_pixels];
-    fastart_cutout_ops::smooth_modnet_alpha(raw_alpha, &mut smoothed, threshold, feather);
+    fastart_cutout_ops::smooth_modnet_alpha_cropped(
+        raw_alpha,
+        &mut smoothed,
+        threshold,
+        feather,
+        crop_x,
+        crop_y,
+        crop_w,
+        crop_h,
+    );
 
     for i in 0..total_pixels {
         let a_byte = smoothed[i];
@@ -1276,4 +1428,54 @@ pub fn encode_rgba_to_png(rgba: &[u8], width: usize, height: usize) -> Vec<u8> {
     // 4. IEND Chunk
     png.extend_from_slice(&make_png_chunk(b"IEND", &[]));
     png
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_guided_composite_and_defringe_snaps_edge_and_decontaminates() {
+        let w = 64usize;
+        let h = 64usize;
+        let mut rgba = vec![0u8; w * h * 4];
+        let mut mask = vec![0u8; w * h * 4];
+
+        // Dark blue jacket on x >= 32, bright white background on x < 32
+        for y in 0..h {
+            for x in 0..w {
+                let px = (y * w + x) * 4;
+                if x >= 32 {
+                    rgba[px] = 28;
+                    rgba[px + 1] = 45;
+                    rgba[px + 2] = 80;
+                    rgba[px + 3] = 255;
+                } else {
+                    rgba[px] = 250;
+                    rgba[px + 1] = 250;
+                    rgba[px + 2] = 250;
+                    rgba[px + 3] = 255;
+                }
+                // Intentionally sloppy coarse mask overflowing 2px into white background
+                let ma = if x >= 34 {
+                    255
+                } else if x >= 30 {
+                    180
+                } else {
+                    0
+                };
+                mask[px + 3] = ma;
+            }
+        }
+
+        let mut fast = rgba.clone();
+        guided_composite_and_defringe(&mut rgba, &mask, w, h, 4, 1e-4, 1);
+        guided_composite_and_defringe(&mut fast, &mask, w, h, 4, 1e-4, 2);
+
+        // Deep interior stays solid; coarse mask bleeding onto white background x=30 is suppressed
+        assert_eq!(rgba[(32 * w + 48) * 4 + 3], 255);
+        assert_eq!(fast[(32 * w + 48) * 4 + 3], 255);
+        assert!(rgba[(32 * w + 30) * 4 + 3] < 40, "Full guided pass must suppress white edge spill");
+        assert!(fast[(32 * w + 30) * 4 + 3] < 60, "Fast guided pass must suppress white edge spill");
+    }
 }

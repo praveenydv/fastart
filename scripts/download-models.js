@@ -88,6 +88,9 @@ async function main() {
     const moduleAssetsDir = path.join(__dirname, '..', 'modules', 'fastart-rust', 'android', 'src', 'main', 'assets', 'models');
     if (!fs.existsSync(moduleAssetsDir)) fs.mkdirSync(moduleAssetsDir, { recursive: true });
     fs.copyFileSync(MODNET_PATH, path.join(moduleAssetsDir, 'modnet.onnx'));
+    const iosResourcesDir = path.join(__dirname, '..', 'modules', 'fastart-rust', 'ios', 'Resources');
+    if (!fs.existsSync(iosResourcesDir)) fs.mkdirSync(iosResourcesDir, { recursive: true });
+    fs.copyFileSync(MODNET_PATH, path.join(iosResourcesDir, 'modnet.onnx'));
     const appAssetsDir = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'assets', 'models');
     if (fs.existsSync(path.dirname(appAssetsDir))) {
       if (!fs.existsSync(appAssetsDir)) fs.mkdirSync(appAssetsDir, { recursive: true });

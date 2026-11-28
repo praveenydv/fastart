@@ -67,11 +67,77 @@ pub extern "C" fn fastart_cutout_modnet_alpha_to_rle(
     output_pointer: *mut u8,
     output_capacity: usize,
 ) -> usize {
+    fastart_cutout_modnet_alpha_to_rle_cropped(
+        alpha_pointer,
+        threshold,
+        feather,
+        0,
+        0,
+        0,
+        0,
+        output_pointer,
+        output_capacity,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn fastart_cutout_modnet_alpha_to_rle_cropped(
+    alpha_pointer: *const f32,
+    threshold: f32,
+    feather: f32,
+    crop_x: u32,
+    crop_y: u32,
+    crop_w: u32,
+    crop_h: u32,
+    output_pointer: *mut u8,
+    output_capacity: usize,
+) -> usize {
+    fastart_cutout_modnet_alpha_to_rle_rgba(
+        alpha_pointer,
+        std::ptr::null(),
+        threshold,
+        feather,
+        crop_x,
+        crop_y,
+        crop_w,
+        crop_h,
+        output_pointer,
+        output_capacity,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn fastart_cutout_modnet_alpha_to_rle_rgba(
+    alpha_pointer: *const f32,
+    rgba_pointer: *const u8,
+    threshold: f32,
+    feather: f32,
+    crop_x: u32,
+    crop_y: u32,
+    crop_w: u32,
+    crop_h: u32,
+    output_pointer: *mut u8,
+    output_capacity: usize,
+) -> usize {
     if alpha_pointer.is_null() || output_pointer.is_null() || output_capacity == 0 {
         return 0;
     }
     let alpha = unsafe { slice::from_raw_parts(alpha_pointer, MODNET_ALPHA_FLOATS) };
-    let encoded = fastart_cutout_ops::modnet_alpha_to_rle(alpha, threshold, feather);
+    let rgba = if !rgba_pointer.is_null() {
+        Some(unsafe { slice::from_raw_parts(rgba_pointer, MODNET_ALPHA_FLOATS * 4) })
+    } else {
+        None
+    };
+    let encoded = fastart_cutout_ops::modnet_alpha_to_rle_rgba(
+        alpha,
+        rgba,
+        threshold,
+        feather,
+        crop_x as usize,
+        crop_y as usize,
+        crop_w as usize,
+        crop_h as usize,
+    );
     if encoded.len() > output_capacity {
         return 0;
     }
@@ -79,6 +145,20 @@ pub extern "C" fn fastart_cutout_modnet_alpha_to_rle(
         slice::from_raw_parts_mut(output_pointer, encoded.len()).copy_from_slice(&encoded);
     }
     encoded.len()
+}
+
+#[no_mangle]
+pub extern "C" fn fastart_cutout_defringe_rgba(
+    rgba_pointer: *mut u8,
+    width: u32,
+    height: u32,
+) {
+    if rgba_pointer.is_null() || width == 0 || height == 0 {
+        return;
+    }
+    let total_bytes = (width as usize) * (height as usize) * 4;
+    let rgba = unsafe { slice::from_raw_parts_mut(rgba_pointer, total_bytes) };
+    fastart_cutout_ops::defringe_rgba(rgba, width as usize, height as usize);
 }
 
 #[no_mangle]

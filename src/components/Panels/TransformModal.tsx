@@ -355,12 +355,6 @@ function TransformModalComponent({
     });
   };
 
-  const handleApplyCrop = () => {
-    syncTransform({
-      crop: { x: cropX, y: cropY, width: cropWidth, height: cropHeight },
-    });
-  };
-
   // Dedicated Flip Handlers
   const handleToggleFlipX = () => {
     const next = !flipX;
@@ -730,7 +724,7 @@ function TransformModalComponent({
               />
             </View>
 
-            {/* Separate Apply & Reset for Crop */}
+            {/* Reset for Crop */}
             <View style={styles.actionBtnRow}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
@@ -739,15 +733,6 @@ function TransformModalComponent({
               >
                 <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
                 <Text style={styles.secondaryBtnText}>Reset Crop</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.primaryActionBtn}
-                onPress={handleApplyCrop}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-                <Text style={styles.primaryActionBtnText}>Apply Crop</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -874,7 +859,7 @@ function TransformModalComponent({
               </View>
             </View>
 
-            {/* Separate Reset & Apply for Rotate */}
+            {/* Reset for Rotate */}
             <View style={styles.actionBtnRow}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
@@ -883,17 +868,6 @@ function TransformModalComponent({
               >
                 <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
                 <Text style={styles.secondaryBtnText}>Reset Rotate</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.primaryActionBtn}
-                onPress={() => {
-                  syncTransform({ rotation });
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-                <Text style={styles.primaryActionBtnText}>Apply Rotate</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -966,7 +940,7 @@ function TransformModalComponent({
               </View>
             </View>
 
-            {/* Separate Reset & Apply for Flip */}
+            {/* Reset for Flip */}
             <View style={styles.actionBtnRow}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
@@ -975,17 +949,6 @@ function TransformModalComponent({
               >
                 <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
                 <Text style={styles.secondaryBtnText}>Reset Flip</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.primaryActionBtn}
-                onPress={() => {
-                  syncTransform({ flipX, flipY });
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-                <Text style={styles.primaryActionBtnText}>Apply Flip</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1180,7 +1143,7 @@ function TransformModalComponent({
               </View>
             </View>
 
-            {/* Separate Reset & Apply for Stretch */}
+            {/* Reset for Stretch */}
             <View style={styles.actionBtnRow}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
@@ -1189,17 +1152,6 @@ function TransformModalComponent({
               >
                 <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
                 <Text style={styles.secondaryBtnText}>Reset Stretch</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.primaryActionBtn}
-                onPress={() => {
-                  syncTransform({ scaleX, scaleY });
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-                <Text style={styles.primaryActionBtnText}>Apply Stretch</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1487,7 +1439,7 @@ function TransformModalComponent({
               </View>
             </View>
 
-            {/* Separate Reset & Apply for Angle */}
+            {/* Reset for Angle */}
             <View style={styles.actionBtnRow}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
@@ -1496,17 +1448,6 @@ function TransformModalComponent({
               >
                 <Ionicons name="refresh-outline" size={16} color="#8E95A5" />
                 <Text style={styles.secondaryBtnText}>Reset 3D Angle</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.primaryActionBtn}
-                onPress={() => {
-                  syncTransform({ rotateX, rotateY, skewX, perspective });
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color="#000000" />
-                <Text style={styles.primaryActionBtnText}>Apply 3D Angle</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1815,21 +1756,6 @@ const styles = StyleSheet.create({
     color: "#8E95A5",
     fontSize: 9.5,
     fontWeight: "400",
-  },
-  primaryActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    backgroundColor: "#00F2FE",
-    paddingVertical: 5,
-    borderRadius: 5,
-  },
-  primaryActionBtnText: {
-    color: "#08090E",
-    fontSize: 9.5,
-    fontWeight: "600",
   },
   flipGrid: {
     flexDirection: "row",

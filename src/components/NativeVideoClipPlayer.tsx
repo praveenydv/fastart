@@ -305,6 +305,12 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     const curTarget = targetMediaTimeRef.current;
     const now = Date.now();
     try {
+      try {
+        // Never leave scrubbingModeEnabled=true because Android ExpoVideo suppresses playback while enabled
+        if ((player as any).scrubbingModeOptions?.scrubbingModeEnabled) {
+          (player as any).scrubbingModeOptions = { scrubbingModeEnabled: false };
+        }
+      } catch {}
       if (isPlaying && isInside) {
         wasPlayingRef.current = true;
         pauseTimestampRef.current = 0;
@@ -325,7 +331,7 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
         // If paused and not actively playing across a cut, seek to target frame so it is pre-warmed & ready
         if (
           !isPlaying &&
-          Math.abs(lastSeekTargetRef.current - curTarget) > 0.03
+          Math.abs(lastSeekTargetRef.current - curTarget) > 0.008
         ) {
           player.currentTime = curTarget;
           lastSeekTargetRef.current = curTarget;
@@ -340,10 +346,10 @@ const VideoClipRenderer = React.memo(function VideoClipRenderer({
     const now = Date.now();
 
     const diff = Math.abs(lastSeekTargetRef.current - targetMediaTime);
-    if (diff <= 0.03) return;
+    if (diff <= 0.008) return;
 
     const timeSinceLastSeek = now - lastSeekTimestampRef.current;
-    const MIN_SEEK_INTERVAL_MS = 45; // ~22 FPS maximum seek cadence to protect hardware decoders
+    const MIN_SEEK_INTERVAL_MS = 20; // Frame-accurate scrub cadence keeping cutout mask & video aligned
 
     if (timeSinceLastSeek >= MIN_SEEK_INTERVAL_MS) {
       if (pendingSeekTimeoutRef.current) {

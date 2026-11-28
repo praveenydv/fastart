@@ -130,11 +130,6 @@ export default function VoiceEffectsModal({
     onApply(effectId);
   };
 
-  const handleDone = () => {
-    onApply(selectedEffect);
-    onClose();
-  };
-
   const handleReset = () => {
     setSelectedEffect('none');
     onApply('none');
@@ -151,7 +146,6 @@ export default function VoiceEffectsModal({
             onClose={onClose}
             onReset={handleReset}
             resetText="Reset"
-            onDone={handleDone}
           />
         )}
 

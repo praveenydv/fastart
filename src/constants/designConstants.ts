@@ -106,9 +106,9 @@ export const DESIGN_CONSTANTS = {
     timelineZoomDefault: 60,
 
     // Bottom Docks & Sidebars
-    mobileDockHeight: 52,
-    mobileToolBtnWidth: 46,
-    mobileToolBtnHeight: 44,
+    mobileDockHeight: 70,
+    mobileToolBtnWidth: 62,
+    mobileToolBtnHeight: 56,
     desktopSidebarWidth: 62,
     desktopToolBtnWidth: 52,
     desktopToolBtnHeight: 44,

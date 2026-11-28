@@ -97,6 +97,22 @@ pub extern "C" fn fastart_ios_infer_modnet_rgba(
 }
 
 #[no_mangle]
+pub extern "C" fn fastart_ios_defringe_rgba(
+    rgba_ptr: *mut u8,
+    rgba_len: usize,
+    width: usize,
+    height: usize,
+) -> bool {
+    let Some(expected_len) = width.checked_mul(height).and_then(|n| n.checked_mul(4)) else { return false; };
+    if rgba_ptr.is_null() || width == 0 || height == 0 || rgba_len < expected_len {
+        return false;
+    }
+    let rgba = unsafe { slice::from_raw_parts_mut(rgba_ptr, expected_len) };
+    fastart_core::defringe_rgba(rgba, width, height);
+    true
+}
+
+#[no_mangle]
 pub extern "C" fn fastart_ios_detect_beats(
     samples_ptr: *const f32,
     count: usize,
